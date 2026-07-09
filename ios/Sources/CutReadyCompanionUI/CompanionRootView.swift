@@ -362,7 +362,11 @@ public struct CompanionRootView: View {
                 path: path,
                 storyboard: storyboard(for: path, in: workspace),
                 fallbackTitle: title(for: path, in: workspace.allStoryboards),
-                project: workspace
+                project: workspace,
+                githubAccessToken: githubAccessToken,
+                loadAsset: { path in
+                    try await draftlineStore.readAsset(path: path)
+                }
             )
         case .rehearse:
             RehearsalPreview(project: workspace)
@@ -2242,9 +2246,21 @@ private struct StoryboardDetailView: View {
     let storyboard: FileSummary?
     let fallbackTitle: String
     let project: CompanionProject
+    let githubAccessToken: String?
+    let loadAsset: (String) async throws -> Data?
+    @State private var playerSettings = PlayerDisplaySettingsStore.load()
+    @State private var isShowingPlayer = false
 
     private var decodedStoryboard: Storyboard? {
         try? decodeStoryboard()
+    }
+
+    private var playerTimeline: PlayerTimeline? {
+        guard let decodedStoryboard else {
+            return nil
+        }
+        let timeline = buildPlayerTimeline(for: decodedStoryboard)
+        return timeline.beats.isEmpty ? nil : timeline
     }
 
     private var unavailableDetails: [String] {
@@ -2286,6 +2302,31 @@ private struct StoryboardDetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    openPlayer()
+                } label: {
+                    Image(systemName: "play.rectangle")
+                }
+                .disabled(playerTimeline == nil)
+                .accessibilityLabel("Open player")
+            }
+        }
+        .playerPresentation(isPresented: $isShowingPlayer) {
+            if let playerTimeline {
+                PlayerView(
+                    timeline: playerTimeline,
+                    project: project,
+                    githubAccessToken: githubAccessToken,
+                    loadAsset: loadAsset,
+                    settings: $playerSettings
+                )
+            }
+        }
+        .onChange(of: playerSettings) { _, newValue in
+            PlayerDisplaySettingsStore.save(newValue)
+        }
     }
 
     private func decodeStoryboard() throws -> Storyboard {
@@ -2326,8 +2367,14 @@ private struct StoryboardDetailView: View {
                     WorkspaceStatPill(value: "\(storyboard.items.mobileSketchCount)", label: "Sketches", tint: CutReadyTheme.sketch)
                     WorkspaceStatPill(value: "\(storyboard.items.mobileSectionCount)", label: "Sections", tint: CutReadyTheme.storyboard)
                 }
+
             }
         }
+    }
+
+    private func openPlayer() {
+        playerSettings = PlayerDisplaySettingsStore.load()
+        isShowingPlayer = true
     }
 
     @ViewBuilder
@@ -2424,6 +2471,30 @@ private struct StoryboardDetailView: View {
             candidates.append("\(projectPath)/\(normalized)")
         }
         return Array(NSOrderedSet(array: candidates).compactMap { $0 as? String })
+    }
+
+    private func buildPlayerTimeline(for storyboard: Storyboard) -> PlayerTimeline {
+        var sketchesByPath: [String: Sketch] = [:]
+
+        for referencedPath in storyboard.items.mobileReferencedSketchPaths {
+            guard
+                let summary = resolvedSketch(for: referencedPath),
+                let contents = summary.contents,
+                let data = contents.data(using: .utf8),
+                let sketch = try? JSONDecoder().decode(Sketch.self, from: data)
+            else {
+                continue
+            }
+
+            sketchesByPath[referencedPath] = sketch
+            sketchesByPath[summary.path] = sketch
+        }
+
+        return PlayerTimeline.storyboard(
+            title: storyboard.title,
+            storyboard: storyboard,
+            sketchesByPath: sketchesByPath
+        )
     }
 }
 
@@ -2553,12 +2624,22 @@ private struct SketchDetailView: View {
     let onOpenSync: () -> Void
     let onSave: (Sketch) async throws -> Void
     @State private var layout = SketchReaderLayoutStore.load()
+    @State private var playerSettings = PlayerDisplaySettingsStore.load()
     @State private var isShowingLayout = false
+    @State private var isShowingPlayer = false
     @State private var rowEdit: SketchRowEditDraft?
     @State private var saveError: String?
 
     private var decodedSketch: Sketch? {
         try? decodeSketch()
+    }
+
+    private var playerTimeline: PlayerTimeline? {
+        guard let decodedSketch else {
+            return nil
+        }
+        let timeline = PlayerTimeline.sketch(path: path, sketch: decodedSketch)
+        return timeline.beats.isEmpty ? nil : timeline
     }
 
     private var unavailableDetails: [String] {
@@ -2661,6 +2742,16 @@ private struct SketchDetailView: View {
                 WorkspaceSyncToolbarButton(status: syncStatus, action: onOpenSync)
             }
 
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    openPlayer()
+                } label: {
+                    Image(systemName: "play.rectangle")
+                }
+                .disabled(playerTimeline == nil)
+                .accessibilityLabel("Open player")
+            }
+
             ToolbarItem {
                 Button {
                     isShowingLayout = true
@@ -2672,6 +2763,17 @@ private struct SketchDetailView: View {
         }
         .sheet(isPresented: $isShowingLayout) {
             SketchLayoutSheet(layout: $layout)
+        }
+        .playerPresentation(isPresented: $isShowingPlayer) {
+            if let playerTimeline {
+                PlayerView(
+                    timeline: playerTimeline,
+                    project: project,
+                    githubAccessToken: githubAccessToken,
+                    loadAsset: loadAsset,
+                    settings: $playerSettings
+                )
+            }
         }
         .sheet(item: $rowEdit) { draft in
             SketchRowEditSheet(
@@ -2693,6 +2795,9 @@ private struct SketchDetailView: View {
         .onChange(of: layout) { _, newValue in
             SketchReaderLayoutStore.save(newValue)
         }
+        .onChange(of: playerSettings) { _, newValue in
+            PlayerDisplaySettingsStore.save(newValue)
+        }
     }
 
     private func sketchHeader(_ sketch: Sketch) -> some View {
@@ -2711,8 +2816,14 @@ private struct SketchDetailView: View {
                 if let description = sketch.description.mobileDisplayText, !description.isEmpty {
                     SketchMarkdownContent(markdown: description, emptyLabel: "")
                 }
+
             }
         }
+    }
+
+    private func openPlayer() {
+        playerSettings = PlayerDisplaySettingsStore.load()
+        isShowingPlayer = true
     }
 
     private func saveRow(_ draft: SketchRowEditDraft) async throws {
@@ -3893,6 +4004,811 @@ private struct SketchLayoutSheet: View {
     }
 }
 
+private struct PlayerView: View {
+    let timeline: PlayerTimeline
+    let project: CompanionProject
+    let githubAccessToken: String?
+    let loadAsset: (String) async throws -> Data?
+    @Binding var settings: PlayerDisplaySettings
+    @Environment(\.dismiss) private var dismiss
+    @State private var elapsed: TimeInterval = 0
+    @State private var isPlaying = false
+    @State private var isChromeVisible = true
+    @State private var isShowingSettings = false
+    @State private var countdown: Int?
+    @State private var countdownTask: Task<Void, Never>?
+    @State private var lastTick: Date?
+
+    private let timer = Timer.publish(every: 1.0 / 60.0, on: .main, in: .common).autoconnect()
+
+    private var totalDuration: TimeInterval {
+        max(timeline.totalDuration, 1)
+    }
+
+    private var currentBeatIndex: Int {
+        var cursor: TimeInterval = 0
+        for (index, beat) in timeline.beats.enumerated() {
+            cursor += beat.duration
+            if elapsed < cursor {
+                return index
+            }
+        }
+        return max(0, timeline.beats.count - 1)
+    }
+
+    private var currentBeat: PlayerTimelineBeat? {
+        timeline.beats.indices.contains(currentBeatIndex) ? timeline.beats[currentBeatIndex] : nil
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                CutReadyTheme.surface.ignoresSafeArea()
+
+                playerContent(geometry: geometry)
+
+                if isChromeVisible || !settings.controlsAutoHide {
+                    playerChrome()
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+
+                if let countdown {
+                    Text("\(countdown)")
+                        .font(.system(size: 76, weight: .bold, design: .rounded))
+                        .foregroundStyle(CutReadyTheme.text)
+                        .padding(34)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .transition(.scale.combined(with: .opacity))
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .onReceive(timer) { tick in
+            guard isPlaying else {
+                lastTick = tick
+                return
+            }
+
+            let delta = tick.timeIntervalSince(lastTick ?? tick)
+            lastTick = tick
+            elapsed = min(totalDuration, elapsed + delta * settings.speed)
+            if elapsed >= totalDuration {
+                isPlaying = false
+                lastTick = nil
+            }
+        }
+        .sheet(isPresented: $isShowingSettings) {
+            PlayerSettingsSheet(settings: $settings)
+        }
+        .onDisappear {
+            countdownTask?.cancel()
+        }
+    }
+
+    private func playerContent(geometry: GeometryProxy) -> some View {
+        let isLandscape = geometry.size.width > geometry.size.height
+        let topInset: CGFloat = 34
+        let bottomInset: CGFloat = 28
+        let hasScreenshotCue = settings.showsScreenshotCue && currentBeat?.screenshotPath != nil
+        let screenshotHeight = hasScreenshotCue
+            ? settings.portraitScreenshotHeight(screenHeight: geometry.size.height)
+            : 0
+        let viewportHeight = max(
+            320,
+            geometry.size.height - topInset - bottomInset - screenshotHeight
+        )
+
+        return Group {
+            if isLandscape && hasScreenshotCue {
+                HStack(spacing: 16) {
+                    scriptView(viewportHeight: max(260, geometry.size.height - topInset - bottomInset))
+                        .frame(maxWidth: .infinity)
+                    screenshotCue(maxHeight: geometry.size.height * 0.72)
+                        .frame(width: min(geometry.size.width * 0.38, 360))
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, topInset)
+                .padding(.bottom, bottomInset)
+            } else {
+                VStack(spacing: 16) {
+                    if hasScreenshotCue {
+                        screenshotCue(maxHeight: screenshotHeight)
+                    }
+                    scriptView(viewportHeight: viewportHeight)
+                }
+                .padding(.horizontal, 18)
+                .padding(.top, topInset)
+                .padding(.bottom, bottomInset)
+            }
+        }
+
+    }
+
+    private func scriptView(viewportHeight: CGFloat) -> some View {
+        PlayerTeleprompterView(
+            beats: visibleBeats,
+            currentBeatID: currentBeat?.id,
+            settings: settings,
+            elapsed: $elapsed,
+            totalDuration: totalDuration,
+            viewportHeight: viewportHeight,
+            onManualScroll: pausePlayback,
+            onTap: toggleChrome
+        )
+    }
+
+    private var visibleBeats: [PlayerTimelineBeat] {
+        timeline.beats
+    }
+
+    @ViewBuilder
+    private func screenshotCue(maxHeight: CGFloat) -> some View {
+        if
+            let beat = currentBeat,
+            let screenshotPath = beat.screenshotPath
+        {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "photo")
+                    Text("Cue")
+                    Spacer()
+                    Text(beat.sketchTitle)
+                        .lineLimit(1)
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(CutReadyTheme.textSecondary)
+
+                ScreenshotAssetView(
+                    path: screenshotPath,
+                    candidatePaths: project.assetPathCandidates(for: screenshotPath, referencedFrom: beat.sketchPath),
+                    source: project.source,
+                    githubAccessToken: githubAccessToken,
+                    loadAsset: loadAsset
+                )
+                .frame(maxHeight: maxHeight)
+            }
+            .padding(10)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(CutReadyTheme.border.opacity(0.58), lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+            .onTapGesture(perform: toggleChrome)
+        }
+    }
+
+    private func playerChrome(alwaysHideTransport: Bool = false) -> some View {
+        VStack {
+            HStack(spacing: 10) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.headline)
+                        .frame(width: 38, height: 38)
+                }
+                .buttonStyle(.plain)
+                .background(.regularMaterial, in: Circle())
+                .overlay(
+                    Circle()
+                        .stroke(CutReadyTheme.border.opacity(0.55), lineWidth: 1)
+                )
+                .accessibilityLabel("Close player")
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(timeline.title)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text(timingLabel)
+                        .font(.caption)
+                        .foregroundStyle(CutReadyTheme.textSecondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Button {
+                    isShowingSettings = true
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.headline)
+                        .frame(width: 38, height: 38)
+                }
+                .buttonStyle(.plain)
+                .background(.regularMaterial, in: Circle())
+                .overlay(
+                    Circle()
+                        .stroke(CutReadyTheme.border.opacity(0.55), lineWidth: 1)
+                )
+                .accessibilityLabel("Player display settings")
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+
+            Spacer()
+
+            if !alwaysHideTransport {
+                VStack(spacing: 10) {
+                if settings.showProgress {
+                    HStack(spacing: 8) {
+                        Text(formattedTime(elapsed))
+                        Slider(value: Binding(
+                            get: { elapsed },
+                            set: { newValue in
+                                elapsed = min(max(0, newValue), totalDuration)
+                                lastTick = nil
+                            }
+                        ), in: 0...totalDuration)
+                        Text("-\(formattedTime(max(0, totalDuration - elapsed)))")
+                    }
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(CutReadyTheme.textSecondary)
+                }
+
+                HStack(spacing: 12) {
+                    Button {
+                        togglePlayback()
+                    } label: {
+                        Image(systemName: isPlaying || countdown != nil ? "pause.fill" : "play.fill")
+                            .font(.title3.weight(.bold))
+                            .frame(width: 42, height: 42)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(CutReadyTheme.accent)
+                    .accessibilityLabel(isPlaying ? "Pause player" : "Play player")
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Speed")
+                                .font(.caption.weight(.semibold))
+                            Spacer()
+                            Text("\(settings.speed, specifier: "%.2g")x")
+                                .font(.caption.monospacedDigit().weight(.semibold))
+                        }
+                        Slider(value: $settings.speed, in: 0.5...8.0, step: 0.25)
+                    }
+
+                    Button {
+                        elapsed = 0
+                        pausePlayback()
+                    } label: {
+                        Image(systemName: "backward.end.fill")
+                            .font(.headline)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel("Restart player")
+                }
+                }
+                .padding(14)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(CutReadyTheme.border.opacity(0.6), lineWidth: 1)
+                )
+                .padding(.horizontal, 14)
+                .padding(.bottom, 10)
+            }
+        }
+    }
+
+    private var timingLabel: String {
+        let timing = timeline.usesNarrationTiming ? "Narration-timed" : "Estimated timing"
+        return "\(currentBeatIndex + 1) of \(timeline.beats.count) - \(timing)"
+    }
+
+    private func togglePlayback() {
+        if isPlaying || countdown != nil {
+            pausePlayback()
+        } else {
+            startCountdown()
+        }
+    }
+
+    private func startCountdown() {
+        if elapsed >= totalDuration {
+            elapsed = 0
+        }
+        countdownTask?.cancel()
+
+        if !settings.showCountdown {
+            Task {
+                await hideChromeBeforeCountdown()
+                await hideChromeThenStart()
+            }
+            return
+        }
+
+        countdownTask = Task {
+            await hideChromeBeforeCountdown()
+            guard !Task.isCancelled else {
+                return
+            }
+
+            for value in [3, 2, 1] {
+                guard !Task.isCancelled else {
+                    return
+                }
+                await MainActor.run {
+                    withAnimation(.snappy) {
+                        countdown = value
+                    }
+                }
+                try? await Task.sleep(nanoseconds: 650_000_000)
+            }
+            guard !Task.isCancelled else {
+                return
+            }
+            await hideChromeThenStart()
+        }
+    }
+
+    @MainActor
+    private func hideChromeBeforeCountdown() async {
+        guard settings.controlsAutoHide else {
+            return
+        }
+
+        withAnimation(.snappy) {
+            isChromeVisible = false
+        }
+        try? await Task.sleep(nanoseconds: 260_000_000)
+    }
+
+    @MainActor
+    private func hideChromeThenStart() async {
+        withAnimation(.snappy) {
+            countdown = nil
+        }
+
+        guard !Task.isCancelled else {
+            return
+        }
+        isPlaying = true
+        lastTick = Date()
+    }
+
+    private func pausePlayback() {
+        countdownTask?.cancel()
+        countdown = nil
+        isPlaying = false
+        lastTick = nil
+        if settings.controlsAutoHide {
+            withAnimation(.snappy) {
+                isChromeVisible = true
+            }
+        }
+    }
+
+    private func toggleChrome() {
+        guard settings.controlsAutoHide else {
+            return
+        }
+        withAnimation(.snappy) {
+            isChromeVisible.toggle()
+        }
+    }
+
+    private func formattedTime(_ value: TimeInterval) -> String {
+        let seconds = max(0, Int(value.rounded()))
+        return "\(seconds / 60):\(String(format: "%02d", seconds % 60))"
+    }
+}
+
+private struct PlayerTeleprompterView: View {
+    let beats: [PlayerTimelineBeat]
+    let currentBeatID: String?
+    let settings: PlayerDisplaySettings
+    @Binding var elapsed: TimeInterval
+    let totalDuration: TimeInterval
+    let viewportHeight: CGFloat
+    let onManualScroll: () -> Void
+    let onTap: () -> Void
+    @State private var contentHeight: CGFloat = 0
+    @State private var dragStartElapsed: TimeInterval?
+    @State private var markerBeatID: String?
+
+    private var emphasizedBeatID: String? {
+        markerBeatID ?? currentBeatID
+    }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(beats) { beat in
+                    PlayerBeatCard(
+                        beat: beat,
+                        isCurrent: beat.id == emphasizedBeatID,
+                        settings: settings
+                    )
+                    .id(beat.id)
+                    .background(
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: PlayerBeatMidpointKey.self,
+                                value: [beat.id: proxy.frame(in: .named("teleprompter")).midY]
+                            )
+                        }
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, viewportHeight * 0.36)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear.preference(key: PlayerContentHeightKey.self, value: proxy.size.height)
+                }
+            )
+            .offset(y: scriptOffset)
+        }
+        .frame(height: viewportHeight, alignment: .top)
+        .clipped()
+        .coordinateSpace(name: "teleprompter")
+        .onPreferenceChange(PlayerContentHeightKey.self) { height in
+            contentHeight = height
+        }
+        .onPreferenceChange(PlayerBeatMidpointKey.self) { midpoints in
+            markerBeatID = midpoints.min { lhs, rhs in
+                abs(lhs.value - viewportHeight / 2) < abs(rhs.value - viewportHeight / 2)
+            }?.key
+        }
+        .overlay(alignment: .center) {
+            Rectangle()
+                .fill(CutReadyTheme.accent.opacity(0.32))
+                .frame(width: 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 1)
+                .allowsHitTesting(false)
+        }
+        .overlay(alignment: .center) {
+            Rectangle()
+                .fill(CutReadyTheme.accent.opacity(0.10))
+                .frame(height: 2)
+                .allowsHitTesting(false)
+        }
+        .overlay(alignment: .top) {
+            LinearGradient(
+                colors: [CutReadyTheme.surface, CutReadyTheme.surface.opacity(0)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 92)
+            .allowsHitTesting(false)
+        }
+        .overlay(alignment: .bottom) {
+            LinearGradient(
+                colors: [CutReadyTheme.surface.opacity(0), CutReadyTheme.surface],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 108)
+            .allowsHitTesting(false)
+        }
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    guard abs(value.translation.height) > 4 || abs(value.translation.width) > 4 else {
+                        return
+                    }
+
+                    if dragStartElapsed == nil {
+                        dragStartElapsed = elapsed
+                        onManualScroll()
+                    }
+
+                    let travel = max(1, contentHeight - viewportHeight)
+                    let progressDelta = -value.translation.height / travel
+                    let startElapsed = dragStartElapsed ?? elapsed
+                    elapsed = min(max(0, startElapsed + progressDelta * totalDuration), totalDuration)
+                }
+                .onEnded { value in
+                    if abs(value.translation.height) <= 4 && abs(value.translation.width) <= 4 {
+                        onTap()
+                    }
+                    dragStartElapsed = nil
+                }
+        )
+    }
+
+    private var scriptOffset: CGFloat {
+        let progress = min(max(elapsed / max(totalDuration, 1), 0), 1)
+        let travel = max(0, contentHeight - viewportHeight)
+        return -travel * progress
+    }
+}
+
+private struct PlayerContentHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+private struct PlayerBeatMidpointKey: PreferenceKey {
+    static var defaultValue: [String: CGFloat] = [:]
+
+    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, newValue in newValue })
+    }
+}
+
+private struct PlayerBeatCard: View {
+    let beat: PlayerTimelineBeat
+    let isCurrent: Bool
+    let settings: PlayerDisplaySettings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            PlayerStageDirectionText(sceneLabel, isCurrent: isCurrent, size: .small)
+
+            if settings.showDescriptions && !beat.sketchDescription.isEmpty {
+                HStack(alignment: .top, spacing: 10) {
+                    Rectangle()
+                        .fill(CutReadyTheme.storyboard.opacity(isCurrent ? 0.55 : 0.28))
+                        .frame(width: 3)
+                        .clipShape(Capsule())
+
+                    VStack(alignment: .leading, spacing: 7) {
+                        PlayerStageDirectionText("Description", isCurrent: isCurrent, tint: CutReadyTheme.storyboard, size: .small)
+                        PlayerStageDirectionText(beat.sketchDescription, isCurrent: isCurrent, tint: CutReadyTheme.storyboard, size: .body)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Text(beat.narrationText)
+                .font(.system(size: settings.scriptFontSize, weight: .regular, design: .rounded))
+                .lineSpacing(settings.lineSpacing)
+                .foregroundStyle(isCurrent ? CutReadyTheme.text : CutReadyTheme.text.opacity(0.72))
+                .fixedSize(horizontal: false, vertical: true)
+
+            if settings.showActions && !beat.stageDirectionText.isEmpty {
+                HStack(alignment: .top, spacing: 10) {
+                    Rectangle()
+                        .fill(CutReadyTheme.note.opacity(isCurrent ? 0.55 : 0.28))
+                        .frame(width: 3)
+                        .clipShape(Capsule())
+
+                    VStack(alignment: .leading, spacing: 7) {
+                        PlayerStageDirectionText("Actions", isCurrent: isCurrent, tint: CutReadyTheme.note, size: .small)
+                        PlayerStageDirectionText(beat.stageDirectionText, isCurrent: isCurrent, tint: CutReadyTheme.note, size: .body)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var sceneLabel: String {
+        var parts = ["BEAT \(beat.sequence + 1)"]
+        if let sectionTitle = beat.sectionTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !sectionTitle.isEmpty {
+            parts.append(sectionTitle.uppercased())
+        }
+        parts.append(beat.sketchTitle.uppercased())
+        return parts.joined(separator: " / ")
+    }
+}
+
+private struct PlayerStageDirectionText: View {
+    enum Size {
+        case small
+        case body
+    }
+
+    let text: String
+    let isCurrent: Bool
+    let tint: Color
+    let size: Size
+
+    init(_ text: String, isCurrent: Bool, tint: Color = CutReadyTheme.note, size: Size) {
+        self.text = text
+        self.isCurrent = isCurrent
+        self.tint = tint
+        self.size = size
+    }
+
+    var body: some View {
+        if size == .body {
+            styledText.italic()
+        } else {
+            styledText
+        }
+    }
+
+    private var styledText: some View {
+        Text(text)
+            .font(font)
+            .tracking(size == .small ? 1.25 : 0)
+            .lineSpacing(size == .body ? 5 : 0)
+            .foregroundStyle(foreground)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var font: Font {
+        switch size {
+        case .small:
+            return .caption2.weight(.bold)
+        case .body:
+            return .system(size: 18, weight: .regular, design: .serif)
+        }
+    }
+
+    private var foreground: Color {
+        isCurrent ? tint : CutReadyTheme.textSecondary
+    }
+}
+
+private struct PlayerSettingsSheet: View {
+    @Binding var settings: PlayerDisplaySettings
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Script") {
+                    Toggle("Show descriptions", isOn: $settings.showDescriptions)
+                    Toggle("Show actions", isOn: $settings.showActions)
+                }
+
+                Section("Screenshot cue") {
+                    Picker("Screenshot size", selection: $settings.screenshotSize) {
+                        ForEach(PlayerScreenshotSize.allCases) { size in
+                            Text(size.label).tag(size)
+                        }
+                    }
+                }
+
+                Section("Reading") {
+                    VStack(alignment: .leading) {
+                        Text("Text size")
+                        Slider(value: $settings.textScale, in: 0.85...1.35, step: 0.05)
+                    }
+                    VStack(alignment: .leading) {
+                        Text("Line spacing")
+                        Slider(value: $settings.lineSpacing, in: 2...14, step: 1)
+                    }
+                }
+
+                Section("Controls") {
+                    Toggle("Show progress", isOn: $settings.showProgress)
+                    Toggle("Show countdown before playing", isOn: $settings.showCountdown)
+                    Toggle("Auto-hide controls while playing", isOn: $settings.controlsAutoHide)
+                }
+            }
+            .navigationTitle("Player display")
+            .toolbar {
+                ToolbarItem {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+private enum PlayerScreenshotSize: String, CaseIterable, Codable, Identifiable, Sendable {
+    case hidden
+    case peek
+    case compact
+    case prominent
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .hidden:
+            return "Hidden"
+        case .peek:
+            return "Peek"
+        case .compact:
+            return "Compact"
+        case .prominent:
+            return "Prominent"
+        }
+    }
+}
+
+private struct PlayerDisplaySettings: Codable, Equatable {
+    var screenshotSize: PlayerScreenshotSize = .hidden
+    var showDescriptions = true
+    var showActions = true
+    var showProgress = true
+    var showCountdown = true
+    var controlsAutoHide = true
+    var speed = 1.0
+    var textScale = 1.0
+    var lineSpacing = 7.0
+
+    var scriptFontSize: CGFloat {
+        26 * textScale
+    }
+
+    var showsScreenshotCue: Bool {
+        screenshotSize != .hidden
+    }
+
+    var reservedTopChromeHeight: CGFloat {
+        86
+    }
+
+    var reservedControlHeight: CGFloat {
+        showProgress ? 178 : 142
+    }
+
+    func portraitScreenshotHeight(screenHeight: CGFloat) -> CGFloat {
+        switch screenshotSize {
+        case .hidden:
+            return 0
+        case .peek:
+            return min(92, screenHeight * 0.16)
+        case .compact:
+            return min(170, screenHeight * 0.28)
+        case .prominent:
+            return min(260, screenHeight * 0.36)
+        }
+    }
+}
+
+private enum PlayerDisplaySettingsStore {
+    private static let key = "com.cutready.companion.playerDisplaySettings.v8"
+
+    static func load(defaults: UserDefaults = .standard) -> PlayerDisplaySettings {
+        guard let data = defaults.data(forKey: key) else {
+            return PlayerDisplaySettings()
+        }
+        return (try? JSONDecoder().decode(PlayerDisplaySettings.self, from: data)) ?? PlayerDisplaySettings()
+    }
+
+    static func save(_ settings: PlayerDisplaySettings, defaults: UserDefaults = .standard) {
+        guard let data = try? JSONEncoder().encode(settings) else {
+            return
+        }
+        defaults.set(data, forKey: key)
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func playerPresentation<Content: View>(
+        isPresented: Binding<Bool>,
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View {
+        #if os(iOS)
+        fullScreenCover(isPresented: isPresented, content: content)
+        #else
+        sheet(isPresented: isPresented, content: content)
+        #endif
+    }
+}
+
+private extension PlayerTimelineBeat.TimingSource {
+    var label: String {
+        switch self {
+        case .narration:
+            return "Audio"
+        case .rowDuration:
+            return "Timed"
+        case .estimated:
+            return "Estimate"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .narration:
+            return "waveform"
+        case .rowDuration:
+            return "timer"
+        case .estimated:
+            return "textformat"
+        }
+    }
+}
+
 private enum SketchReaderSection: String, CaseIterable, Codable, Identifiable, Sendable {
     case assets
     case narration
@@ -4117,6 +5033,17 @@ private extension String {
 }
 
 private extension Array where Element == StoryboardItem {
+    var mobileReferencedSketchPaths: [String] {
+        flatMap { item in
+            switch item {
+            case .sketchRef(let path):
+                return [path]
+            case .section(_, _, let sketches):
+                return sketches
+            }
+        }
+    }
+
     var mobileSketchCount: Int {
         reduce(0) { count, item in
             switch item {
