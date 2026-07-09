@@ -23,6 +23,7 @@ public struct CompanionRootView: View {
     @State private var isShowingRepositories = false
     @State private var isShowingSync = false
     @State private var isSyncingWorkspace = false
+    @State private var syncProgressMessage = "Syncing"
     @State private var isConfirmingParkAndReload = false
     @State private var syncError: String?
     @State private var syncConflicts: [MobileConflict] = []
@@ -75,6 +76,7 @@ public struct CompanionRootView: View {
                     WorkspaceSyncSheet(
                         project: project,
                         isSyncing: isSyncingWorkspace,
+                        progressMessage: syncProgressMessage,
                         errorMessage: syncError,
                         conflicts: syncConflicts,
                         onSyncNow: { syncWorkspace() },
@@ -422,7 +424,7 @@ public struct CompanionRootView: View {
     private func refreshSyncStatus() {
         Task {
             let generation = await MainActor.run { () -> Int? in
-                guard beginWorkspaceOperation() else {
+                guard beginWorkspaceOperation(message: "Checking GitHub for shared changes") else {
                     return nil
                 }
                 return syncStatusGeneration
@@ -430,9 +432,11 @@ public struct CompanionRootView: View {
             guard let generation else {
                 return
             }
-            defer { Task { @MainActor in finishWorkspaceOperation() } }
             do {
                 let status = try await draftlineStore.syncStatus()
+                if status.state == .conflict {
+                    await MainActor.run { updateWorkspaceOperationMessage("Preparing change review") }
+                }
                 let conflicts = await conflicts(for: status)
                 await MainActor.run {
                     guard generation == syncStatusGeneration else {
@@ -448,18 +452,21 @@ public struct CompanionRootView: View {
                     syncError = error.localizedDescription
                 }
             }
+            await MainActor.run { finishWorkspaceOperation() }
         }
     }
 
     private func syncWorkspace() {
         Task {
-            let didStart = await MainActor.run { beginWorkspaceOperation() }
+            let didStart = await MainActor.run { beginWorkspaceOperation(message: "Checking sync direction") }
             guard didStart else {
                 return
             }
-            defer { Task { @MainActor in finishWorkspaceOperation() } }
             do {
                 let (status, snapshot) = try await draftlineStore.syncNow()
+                await MainActor.run {
+                    updateWorkspaceOperationMessage(status.state == .conflict ? "Preparing change review" : "Updating workspace view")
+                }
                 let conflicts = await conflicts(for: status)
                 await MainActor.run {
                     applyWorkspaceSync(status: status, snapshot: snapshot, conflicts: conflicts)
@@ -470,40 +477,47 @@ public struct CompanionRootView: View {
             } catch {
                 await MainActor.run { syncError = error.localizedDescription }
             }
+            await MainActor.run { finishWorkspaceOperation() }
         }
     }
 
     private func pullWorkspace() {
         Task {
-            let didStart = await MainActor.run { beginWorkspaceOperation() }
+            let didStart = await MainActor.run { beginWorkspaceOperation(message: "Pulling latest shared changes") }
             guard didStart else {
                 return
             }
-            defer { Task { @MainActor in finishWorkspaceOperation() } }
             do {
                 let (status, snapshot) = try await draftlineStore.pull()
+                await MainActor.run {
+                    updateWorkspaceOperationMessage(status.state == .conflict ? "Preparing change review" : "Updating workspace view")
+                }
                 let conflicts = await conflicts(for: status)
                 await MainActor.run { applyWorkspaceSync(status: status, snapshot: snapshot, conflicts: conflicts) }
             } catch {
                 await MainActor.run { syncError = error.localizedDescription }
             }
+            await MainActor.run { finishWorkspaceOperation() }
         }
     }
 
     private func pushWorkspace() {
         Task {
-            let didStart = await MainActor.run { beginWorkspaceOperation() }
+            let didStart = await MainActor.run { beginWorkspaceOperation(message: "Publishing mobile snapshot") }
             guard didStart else {
                 return
             }
-            defer { Task { @MainActor in finishWorkspaceOperation() } }
             do {
                 let (status, snapshot) = try await draftlineStore.push()
+                await MainActor.run {
+                    updateWorkspaceOperationMessage(status.state == .conflict ? "Preparing change review" : "Updating workspace view")
+                }
                 let conflicts = await conflicts(for: status)
                 await MainActor.run { applyWorkspaceSync(status: status, snapshot: snapshot, conflicts: conflicts) }
             } catch {
                 await MainActor.run { syncError = error.localizedDescription }
             }
+            await MainActor.run { finishWorkspaceOperation() }
         }
     }
 
@@ -527,15 +541,9 @@ public struct CompanionRootView: View {
                 updatedAt: nil
             )
 
-            let didStart = await MainActor.run { beginWorkspaceOperation() }
+            let didStart = await MainActor.run { beginWorkspaceOperation(message: "Parking mobile edits and reloading latest") }
             guard didStart else {
                 return
-            }
-            var shouldFinishOperation = true
-            defer {
-                if shouldFinishOperation {
-                    Task { @MainActor in finishWorkspaceOperation() }
-                }
             }
             do {
                 let snapshot = try await draftlineStore.parkLocalEditsAndReloadLatest(
@@ -551,23 +559,29 @@ public struct CompanionRootView: View {
                     isShowingSync = false
                 }
                 await MainActor.run { finishWorkspaceOperation() }
-                shouldFinishOperation = false
                 refreshSyncStatus()
             } catch {
-                await MainActor.run { syncError = error.localizedDescription }
+                await MainActor.run {
+                    syncError = error.localizedDescription
+                    finishWorkspaceOperation()
+                }
             }
         }
     }
 
     private func resolveWorkspaceConflicts(_ resolutions: [MobileConflictResolutionRequest]) {
         Task {
-            let didStart = await MainActor.run { beginWorkspaceOperation() }
+            let didStart = await MainActor.run { beginWorkspaceOperation(message: "Merging and publishing changes") }
             guard didStart else {
                 return
             }
-            defer { Task { @MainActor in finishWorkspaceOperation() } }
             do {
                 let (status, snapshot) = try await draftlineStore.resolveConflicts(resolutions)
+                await MainActor.run {
+                    updateWorkspaceOperationMessage(
+                        status.state == .clean ? "Updating workspace view" : "Checking remaining changes"
+                    )
+                }
                 let conflicts = await conflicts(for: status)
                 await MainActor.run {
                     applyWorkspaceSync(status: status, snapshot: snapshot, conflicts: conflicts)
@@ -578,14 +592,16 @@ public struct CompanionRootView: View {
             } catch {
                 await MainActor.run { syncError = error.localizedDescription }
             }
+            await MainActor.run { finishWorkspaceOperation() }
         }
     }
 
     @MainActor
-    private func beginWorkspaceOperation() -> Bool {
+    private func beginWorkspaceOperation(message: String) -> Bool {
         guard !isSyncingWorkspace else {
             return false
         }
+        syncProgressMessage = message
         isSyncingWorkspace = true
         return true
     }
@@ -593,6 +609,12 @@ public struct CompanionRootView: View {
     @MainActor
     private func finishWorkspaceOperation() {
         isSyncingWorkspace = false
+        syncProgressMessage = "Syncing"
+    }
+
+    @MainActor
+    private func updateWorkspaceOperationMessage(_ message: String) {
+        syncProgressMessage = message
     }
 
     @MainActor
@@ -873,6 +895,7 @@ private struct ProjectNavigationRow: View {
 private struct WorkspaceSyncSheet: View {
     let project: CompanionProject
     let isSyncing: Bool
+    let progressMessage: String
     let errorMessage: String?
     let conflicts: [MobileConflict]
     let onSyncNow: () -> Void
@@ -900,9 +923,16 @@ private struct WorkspaceSyncSheet: View {
             #endif
             .overlay {
                 if isSyncing {
-                    ProgressView("Syncing")
-                        .padding()
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text(progressMessage)
+                            .font(.callout.weight(.medium))
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(CutReadyTheme.text)
+                    }
+                    .frame(maxWidth: 260)
+                    .padding()
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
             }
         }
