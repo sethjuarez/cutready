@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 #if os(iOS)
 import DraftlineMobileC
@@ -245,6 +246,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
 #if os(iOS)
     private var workspaceHandle: OpaquePointer?
 #endif
+    private let logger = Logger(subsystem: "com.cutready.companion", category: "DraftlineMobile")
     private let nativeQueue = DispatchQueue(label: "CutReady.DraftlineMobile.native")
     private var workspaceRoot: URL?
     private var credential: DraftlineMobileCredentialDescriptor?
@@ -435,6 +437,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
 
     public func pull() async throws -> MobileSyncStatus {
 #if os(iOS)
+        logger.info("pull: fetch_remote starting")
         try await nativeStatus { workspace in
             self.withCredentialCallback(self.credential) { callback, userData in
                 "origin".withCString { remotePointer in
@@ -442,17 +445,22 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
                 }
             }
         }
+        logger.info("pull: fetch_remote finished")
 
+        logger.info("pull: preflight_apply_incoming starting")
         let preflightJSON = try await nativeString { workspace in
             "origin".withCString { remotePointer in
                 draftline_mobile_workspace_preflight_apply_incoming_json(workspace, remotePointer)
             }
         }
+        logger.info("pull: preflight_apply_incoming finished")
         let preflight = try Self.applyIncomingReport(fromJSON: preflightJSON)
         guard preflight.canProceed else {
+            logger.info("pull: preflight blocked")
             return try Self.mobileSyncStatus(fromApplyPreflightJSON: preflightJSON)
         }
 
+        logger.info("pull: apply_incoming starting")
         let json = try await nativeString { workspace in
             self.withCredentialCallback(self.credential) { callback, userData in
                 "origin".withCString { remotePointer in
@@ -460,12 +468,15 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
                 }
             }
         }
+        logger.info("pull: apply_incoming finished")
         let applyStatus = try Self.mobileSyncStatus(fromApplyResultJSON: json)
+        logger.info("pull: sync_status starting")
         let statusJSON = try await nativeString { workspace in
             "origin".withCString { remotePointer in
                 draftline_mobile_workspace_sync_status_json(workspace, remotePointer)
             }
         }
+        logger.info("pull: sync_status finished")
         var status = try Self.mobileSyncStatus(fromJSON: statusJSON)
         status.message = applyStatus.message
         return status
@@ -476,6 +487,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
 
     public func push() async throws -> MobileSyncStatus {
 #if os(iOS)
+        logger.info("push: preflight_publish starting")
         let preflightJSON = try await nativeString { workspace in
             self.withCredentialCallback(self.credential) { callback, userData in
                 "origin".withCString { remotePointer in
@@ -483,14 +495,17 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
                 }
             }
         }
+        logger.info("push: preflight_publish finished")
         let preflight = try Self.publishPreflight(fromJSON: preflightJSON)
         guard preflight.canPublish else {
+            logger.info("push: preflight blocked")
             return Self.mobileSyncStatus(
                 from: preflight.syncStatus,
                 fallbackMessage: "Pull latest changes before publishing mobile edits."
             )
         }
         let publishToken = try Self.publishTokenJSON(from: preflight.token)
+        logger.info("push: publish starting")
         let json = try await nativeString { workspace in
             self.withCredentialCallback(self.credential) { callback, userData in
                 publishToken.withCString { tokenPointer in
@@ -498,6 +513,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
                 }
             }
         }
+        logger.info("push: publish finished")
         return try Self.mobileSyncStatus(fromPublishResultJSON: json)
 #else
         throw DraftlineMobileBridgeError.nativeBridgeUnavailable
@@ -531,12 +547,16 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
 
     public func listConflicts() async throws -> [MobileConflict] {
 #if os(iOS)
+        logger.info("list_conflicts: fetch_remote starting")
         try await fetchRemote()
+        logger.info("list_conflicts: fetch_remote finished")
+        logger.info("list_conflicts: preflight_merge_incoming starting")
         let json = try await nativeString { workspace in
             "origin".withCString { remotePointer in
                 draftline_mobile_workspace_preflight_merge_incoming_json(workspace, remotePointer)
             }
         }
+        logger.info("list_conflicts: preflight_merge_incoming finished")
         return try Self.mobileConflicts(fromJSON: json)
 #else
         throw DraftlineMobileBridgeError.nativeBridgeUnavailable
@@ -545,12 +565,16 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
 
     public func resolveConflicts(_ resolutions: [MobileConflictResolutionRequest]) async throws -> MobileSyncStatus {
 #if os(iOS)
+        logger.info("resolve_conflicts: fetch_remote starting")
         try await fetchRemote()
+        logger.info("resolve_conflicts: fetch_remote finished")
+        logger.info("resolve_conflicts: preflight_merge_incoming starting")
         let preflightJSON = try await nativeString { workspace in
             "origin".withCString { remotePointer in
                 draftline_mobile_workspace_preflight_merge_incoming_json(workspace, remotePointer)
             }
         }
+        logger.info("resolve_conflicts: preflight_merge_incoming finished")
         let preflight = try Self.mergeIncomingReport(fromJSON: preflightJSON)
         guard let token = preflight.token else {
             throw DraftlineMobileBridgeError.invalidNativeResponse("Draftline did not return a merge token.")
@@ -563,6 +587,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
 
         if preflight.conflicts.isEmpty, preflight.canMergeCleanly {
             let tokenJSON = try Self.mergeTokenJSON(from: token)
+            logger.info("resolve_conflicts: merge_incoming starting")
             _ = try await nativeString { workspace in
                 self.withCredentialCallback(self.credential) { callback, userData in
                     tokenJSON.withCString { tokenPointer in
@@ -578,6 +603,8 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
                     }
                 }
             }
+            logger.info("resolve_conflicts: merge_incoming finished")
+            logger.info("resolve_conflicts: post-merge push starting")
             return try await push()
         }
 
@@ -587,6 +614,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
         )
         let tokenJSON = try Self.mergeTokenJSON(from: token)
         let resolutionsJSON = try Self.mergeResolutionsJSON(from: draftlineResolutions)
+        logger.info("resolve_conflicts: merge_incoming_with_resolutions starting")
         _ = try await nativeString { workspace in
             self.withCredentialCallback(self.credential) { callback, userData in
                 tokenJSON.withCString { tokenPointer in
@@ -605,6 +633,8 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
                 }
             }
         }
+        logger.info("resolve_conflicts: merge_incoming_with_resolutions finished")
+        logger.info("resolve_conflicts: post-resolution push starting")
         return try await push()
 #else
         _ = resolutions
@@ -614,6 +644,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
 
 #if os(iOS)
     private func fetchRemote() async throws {
+        logger.info("fetch_remote: starting")
         try await nativeStatus { workspace in
             self.withCredentialCallback(self.credential) { callback, userData in
                 "origin".withCString { remotePointer in
@@ -621,6 +652,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
                 }
             }
         }
+        logger.info("fetch_remote: finished")
     }
 #endif
 
