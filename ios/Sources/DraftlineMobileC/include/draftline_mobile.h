@@ -14,6 +14,8 @@ typedef enum DraftlineMobileStatusCode {
   DraftlineError = 4,
   Panic = 5,
   CredentialRejected = 6,
+  RemoteTimeout = 7,
+  RemoteNetwork = 8,
 } DraftlineMobileStatusCode;
 
 /**
@@ -148,6 +150,23 @@ struct DraftlineMobileWorkspaceResult draftline_mobile_workspace_clone(const cha
                                                                        void *credential_user_data);
 
 /**
+ * Clones a shared workspace with an explicit native network timeout in milliseconds.
+ *
+ * `timeout_ms == 0` disables Draftline's native network timeout for this call.
+ *
+ * # Safety
+ *
+ * String pointers must be valid null-terminated UTF-8. `policy`, when non-null,
+ * and callback pointers must remain valid for the duration of this call.
+ */
+struct DraftlineMobileWorkspaceResult draftline_mobile_workspace_clone_with_timeout(const char *remote_url,
+                                                                                    const char *path,
+                                                                                    const struct DraftlineMobileContentPolicy *policy,
+                                                                                    DraftlineMobileCredentialCallback credential_callback,
+                                                                                    void *credential_user_data,
+                                                                                    uint64_t timeout_ms);
+
+/**
  * Reads a policy-tracked UTF-8 file from the workspace.
  *
  * # Safety
@@ -206,6 +225,22 @@ struct DraftlineMobileStatus draftline_mobile_workspace_fetch_remote(struct Draf
                                                                      void *credential_user_data);
 
 /**
+ * Fetches remote-tracking state with an explicit native network timeout in milliseconds.
+ *
+ * `timeout_ms == 0` disables Draftline's native network timeout for this call.
+ *
+ * # Safety
+ *
+ * `workspace` must be valid and `remote` must be valid null-terminated UTF-8.
+ * Callback pointers must remain valid for the duration of this call.
+ */
+struct DraftlineMobileStatus draftline_mobile_workspace_fetch_remote_with_timeout(struct DraftlineMobileWorkspace *workspace,
+                                                                                  const char *remote,
+                                                                                  DraftlineMobileCredentialCallback credential_callback,
+                                                                                  void *credential_user_data,
+                                                                                  uint64_t timeout_ms);
+
+/**
  * Returns current variation sync status for a fetched remote as JSON.
  *
  * # Safety
@@ -237,6 +272,22 @@ struct DraftlineMobileStringResult draftline_mobile_workspace_apply_incoming_jso
                                                                                   const char *remote,
                                                                                   DraftlineMobileCredentialCallback credential_callback,
                                                                                   void *credential_user_data);
+
+/**
+ * Applies incoming changes with an explicit native network timeout in milliseconds.
+ *
+ * `timeout_ms == 0` disables Draftline's native network timeout for this call.
+ *
+ * # Safety
+ *
+ * `workspace` must be valid and `remote` must be valid null-terminated UTF-8.
+ * Callback pointers must remain valid for the duration of this call.
+ */
+struct DraftlineMobileStringResult draftline_mobile_workspace_apply_incoming_json_with_timeout(struct DraftlineMobileWorkspace *workspace,
+                                                                                               const char *remote,
+                                                                                               DraftlineMobileCredentialCallback credential_callback,
+                                                                                               void *credential_user_data,
+                                                                                               uint64_t timeout_ms);
 
 /**
  * Preflights shelving selected policy-tracked files, or all dirty files when `paths_json` is null.
@@ -346,6 +397,23 @@ struct DraftlineMobileStringResult draftline_mobile_workspace_merge_incoming_jso
                                                                                   void *credential_user_data);
 
 /**
+ * Writes a clean incoming merge with an explicit native network timeout in milliseconds.
+ *
+ * `timeout_ms == 0` disables Draftline's native network timeout for this call.
+ *
+ * # Safety
+ *
+ * `workspace` must be valid. String pointers must be valid null-terminated UTF-8.
+ * Callback pointers must remain valid for this call.
+ */
+struct DraftlineMobileStringResult draftline_mobile_workspace_merge_incoming_json_with_timeout(struct DraftlineMobileWorkspace *workspace,
+                                                                                               const char *token_json,
+                                                                                               const char *label,
+                                                                                               DraftlineMobileCredentialCallback credential_callback,
+                                                                                               void *credential_user_data,
+                                                                                               uint64_t timeout_ms);
+
+/**
  * Writes an incoming merge with explicit resolution JSON and returns result JSON.
  *
  * # Safety
@@ -362,6 +430,25 @@ struct DraftlineMobileStringResult draftline_mobile_workspace_merge_incoming_wit
                                                                                                    void *credential_user_data);
 
 /**
+ * Writes an incoming merge with explicit resolutions and a native network timeout.
+ *
+ * `timeout_ms == 0` disables Draftline's native network timeout for this call.
+ *
+ * # Safety
+ *
+ * `workspace` must be valid. String pointers must be valid null-terminated UTF-8.
+ * `resolutions_json` must be a JSON array of `MergeConflictResolution` values.
+ * Callback pointers must remain valid for this call.
+ */
+struct DraftlineMobileStringResult draftline_mobile_workspace_merge_incoming_with_resolutions_json_with_timeout(struct DraftlineMobileWorkspace *workspace,
+                                                                                                                const char *token_json,
+                                                                                                                const char *label,
+                                                                                                                const char *resolutions_json,
+                                                                                                                DraftlineMobileCredentialCallback credential_callback,
+                                                                                                                void *credential_user_data,
+                                                                                                                uint64_t timeout_ms);
+
+/**
  * Preflights guarded publication and returns JSON containing the publish token.
  *
  * # Safety
@@ -375,6 +462,22 @@ struct DraftlineMobileStringResult draftline_mobile_workspace_preflight_publish_
                                                                                      void *credential_user_data);
 
 /**
+ * Preflights guarded publication with an explicit native network timeout in milliseconds.
+ *
+ * `timeout_ms == 0` disables Draftline's native network timeout for this call.
+ *
+ * # Safety
+ *
+ * `workspace` must be valid and `remote` must be valid null-terminated UTF-8.
+ * Callback pointers must remain valid for the duration of this call.
+ */
+struct DraftlineMobileStringResult draftline_mobile_workspace_preflight_publish_json_with_timeout(struct DraftlineMobileWorkspace *workspace,
+                                                                                                  const char *remote,
+                                                                                                  DraftlineMobileCredentialCallback credential_callback,
+                                                                                                  void *credential_user_data,
+                                                                                                  uint64_t timeout_ms);
+
+/**
  * Publishes with a JSON token returned by preflight publish.
  *
  * # Safety
@@ -386,3 +489,19 @@ struct DraftlineMobileStringResult draftline_mobile_workspace_publish_json(struc
                                                                            const char *publish_token_json,
                                                                            DraftlineMobileCredentialCallback credential_callback,
                                                                            void *credential_user_data);
+
+/**
+ * Publishes with an explicit native network timeout in milliseconds.
+ *
+ * `timeout_ms == 0` disables Draftline's native network timeout for this call.
+ *
+ * # Safety
+ *
+ * `workspace` must be valid and `publish_token_json` must be valid
+ * null-terminated UTF-8. Callback pointers must remain valid for this call.
+ */
+struct DraftlineMobileStringResult draftline_mobile_workspace_publish_json_with_timeout(struct DraftlineMobileWorkspace *workspace,
+                                                                                        const char *publish_token_json,
+                                                                                        DraftlineMobileCredentialCallback credential_callback,
+                                                                                        void *credential_user_data,
+                                                                                        uint64_t timeout_ms);

@@ -588,6 +588,79 @@ final class DraftlineMobileWorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(conflicts, client.conflicts)
     }
 
+    func testListConflictsFillsMissingLocalContentFromWorkspaceSnapshot() async throws {
+        let client = MockDraftlineWorkspaceClient()
+        client.notes = [
+            FileSummary(path: "github-session/new-item.md", title: "New item", contents: "# Local draft")
+        ]
+        client.conflicts = [
+            MobileConflict(
+                path: "github-session/new-item.md",
+                summary: "This item changed on your device and in the shared workspace.",
+                canResolveOnMobile: true
+            )
+        ]
+        let store = DraftlineMobileWorkspaceStore(client: client)
+
+        let conflicts = try await store.listConflicts()
+
+        XCTAssertEqual(conflicts.first?.mine, "# Local draft")
+        XCTAssertEqual(conflicts.first?.latestShared, nil)
+    }
+
+    func testMyVersionResolutionUsesExplicitDisplayedContentWhenNativeSideIsMissing() throws {
+        let conflicts = [
+            DraftlineMergeConflict(
+                path: "github-session/new-item.md",
+                label: "github-session/new-item.md",
+                base: nil,
+                ours: nil,
+                theirs: nil,
+                resolution: ""
+            )
+        ]
+        let resolutions = [
+            MobileConflictResolutionRequest(
+                path: "github-session/new-item.md",
+                choice: .myVersion,
+                resolvedContent: "# Local draft"
+            )
+        ]
+
+        let draftlineResolutions = try DraftlineNativeMobileClient.draftlineMergeResolutions(
+            conflicts: conflicts,
+            mobileResolutions: resolutions
+        )
+
+        XCTAssertEqual(draftlineResolutions.first?.choice, .useContent("# Local draft"))
+    }
+
+    func testMyVersionResolutionFailsWhenNoContentIsAvailable() throws {
+        let conflicts = [
+            DraftlineMergeConflict(
+                path: "github-session/new-item.md",
+                label: "github-session/new-item.md",
+                base: nil,
+                ours: nil,
+                theirs: nil,
+                resolution: ""
+            )
+        ]
+        let resolutions = [
+            MobileConflictResolutionRequest(
+                path: "github-session/new-item.md",
+                choice: .myVersion
+            )
+        ]
+
+        XCTAssertThrowsError(
+            try DraftlineNativeMobileClient.draftlineMergeResolutions(
+                conflicts: conflicts,
+                mobileResolutions: resolutions
+            )
+        )
+    }
+
     func testResolveConflictsUsesDraftlineWorkspaceClientAndRefreshesSnapshot() async throws {
         let client = MockDraftlineWorkspaceClient()
         client.resolveStatus = MobileSyncStatus(state: .clean, message: "merged")

@@ -95,6 +95,9 @@ public enum DraftlineMobileBridgeError: Error, Equatable, LocalizedError, Sendab
     case workspaceNotOpen
     case operationInProgress
     case invalidPath(String)
+    case credentialRejected(String)
+    case remoteTimeout(String)
+    case remoteNetwork(String)
     case nativeFailure(String)
     case invalidNativeResponse(String)
 
@@ -108,6 +111,12 @@ public enum DraftlineMobileBridgeError: Error, Equatable, LocalizedError, Sendab
             return "A workspace operation is already in progress."
         case .invalidPath(let path):
             return "The path is not allowed in this mobile workspace: \(path)"
+        case .credentialRejected(let message):
+            return message
+        case .remoteTimeout(let message):
+            return message
+        case .remoteNetwork(let message):
+            return message
         case .nativeFailure(let message):
             return message
         case .invalidNativeResponse(let message):
@@ -180,17 +189,20 @@ public struct MobileConflictResolutionRequest: Codable, Equatable, Sendable {
     public var path: String
     public var fieldPath: String?
     public var choice: MobileConflictResolutionChoice
+    public var resolvedContent: String?
     public var customContent: String?
 
     public init(
         path: String,
         fieldPath: String? = nil,
         choice: MobileConflictResolutionChoice,
+        resolvedContent: String? = nil,
         customContent: String? = nil
     ) {
         self.path = path
         self.fieldPath = fieldPath
         self.choice = choice
+        self.resolvedContent = resolvedContent
         self.customContent = customContent
     }
 }
@@ -960,7 +972,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
         return json
     }
 
-    private static func draftlineMergeResolutions(
+    static func draftlineMergeResolutions(
         conflicts: [DraftlineMergeConflict],
         mobileResolutions: [MobileConflictResolutionRequest]
     ) throws -> [DraftlineMergeConflictResolution] {
@@ -977,9 +989,19 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
                 }
                 switch mobileResolution.choice {
                 case .myVersion:
-                    choice = .useOurs
+                    choice = .useContent(try resolvedContent(
+                        mobileResolution.resolvedContent,
+                        fallback: conflict.ours,
+                        label: "My version",
+                        path: conflict.path
+                    ))
                 case .latestShared:
-                    choice = .useTheirs
+                    choice = .useContent(try resolvedContent(
+                        mobileResolution.resolvedContent,
+                        fallback: conflict.theirs,
+                        label: "Latest shared version",
+                        path: conflict.path
+                    ))
                 case .custom:
                     choice = .useContent(mobileResolution.customContent ?? conflict.ours ?? conflict.theirs ?? "")
                 }
@@ -992,6 +1014,21 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
                 choice: choice
             )
         }
+    }
+
+    private static func resolvedContent(
+        _ content: String?,
+        fallback: String?,
+        label: String,
+        path: String
+    ) throws -> String {
+        if let content {
+            return content
+        }
+        if let fallback {
+            return fallback
+        }
+        throw DraftlineMobileBridgeError.invalidNativeResponse("\(label) content is unavailable for \(path).")
     }
 
     private static func conflictKey(path: String, fieldPath: String?) -> String {
@@ -1047,7 +1084,16 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
             } else {
                 message = "Draftline mobile bridge failed with status code \(status.code.rawValue)."
             }
-            throw DraftlineMobileBridgeError.nativeFailure(message)
+            switch status.code.rawValue {
+            case 6:
+                throw DraftlineMobileBridgeError.credentialRejected(message)
+            case 7:
+                throw DraftlineMobileBridgeError.remoteTimeout(message)
+            case 8:
+                throw DraftlineMobileBridgeError.remoteNetwork(message)
+            default:
+                throw DraftlineMobileBridgeError.nativeFailure(message)
+            }
         }
     }
 

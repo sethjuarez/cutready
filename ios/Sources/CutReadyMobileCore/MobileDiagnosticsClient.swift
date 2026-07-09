@@ -264,6 +264,7 @@ public enum CutReadyMobileDiagnosticEvent: String, Sendable {
     case storyboardOpen = "cutready.storyboard.open"
     case sketchOpen = "cutready.sketch.open"
     case sketchEdit = "cutready.sketch.edit"
+    case syncRefresh = "cutready.sync.refresh"
     case syncPull = "cutready.sync.pull"
     case syncPush = "cutready.sync.push"
     case syncFailed = "cutready.sync.failed"
