@@ -4,6 +4,11 @@ function newestFirst(nodes: GraphNode[]): GraphNode[] {
   return [...nodes].sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
 }
 
+function cleanupOrder(nodes: GraphNode[]): GraphNode[] {
+  const firstParent = firstParentTimelineNodes(nodes);
+  return firstParent.length > 1 ? firstParent : newestFirst(nodes);
+}
+
 export function firstParentTimelineNodes(nodes: GraphNode[]): GraphNode[] {
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const head = nodes.find((node) => node.is_head) ?? newestFirst(nodes)[0];
@@ -25,7 +30,7 @@ export function firstParentTimelineIds(nodes: GraphNode[]): Set<string> {
 }
 
 export function cleanupRange(nodes: GraphNode[], newestId: string, oldestId: string): GraphNode[] | null {
-  const ordered = newestFirst(nodes);
+  const ordered = cleanupOrder(nodes);
   const newestIndex = ordered.findIndex((node) => node.id === newestId);
   const oldestIndex = ordered.findIndex((node) => node.id === oldestId);
   if (newestIndex < 0 || oldestIndex < 0 || oldestIndex < newestIndex) return null;
@@ -33,7 +38,7 @@ export function cleanupRange(nodes: GraphNode[], newestId: string, oldestId: str
 }
 
 export function isExactHeadCleanupSelection(nodes: GraphNode[], selectedIds: Set<string>): boolean {
-  const ordered = newestFirst(nodes);
+  const ordered = cleanupOrder(nodes);
   const head = ordered.find((node) => node.is_head);
   if (!head || !selectedIds.has(head.id) || selectedIds.size < 2) return false;
   const selectedOldest = [...ordered].reverse().find((node) => selectedIds.has(node.id));
@@ -43,7 +48,7 @@ export function isExactHeadCleanupSelection(nodes: GraphNode[], selectedIds: Set
 }
 
 export function isExactCleanupSelection(nodes: GraphNode[], selectedIds: Set<string>): boolean {
-  const ordered = newestFirst(nodes);
+  const ordered = cleanupOrder(nodes);
   if (selectedIds.size < 2) return false;
   const selectedNewest = ordered.find((node) => selectedIds.has(node.id));
   const selectedOldest = [...ordered].reverse().find((node) => selectedIds.has(node.id));
@@ -53,7 +58,7 @@ export function isExactCleanupSelection(nodes: GraphNode[], selectedIds: Set<str
 }
 
 export function headAnchoredCleanupSelection(nodes: GraphNode[], clickedId: string): Set<string> {
-  const ordered = newestFirst(nodes);
+  const ordered = cleanupOrder(nodes);
   const headIndex = ordered.findIndex((node) => node.is_head);
   const clickedIndex = ordered.findIndex((node) => node.id === clickedId);
   if (headIndex < 0 || clickedIndex < headIndex) return new Set();
@@ -61,7 +66,7 @@ export function headAnchoredCleanupSelection(nodes: GraphNode[], clickedId: stri
 }
 
 export function twoPointCleanupSelection(nodes: GraphNode[], firstId: string, secondId: string): Set<string> {
-  const ordered = newestFirst(nodes);
+  const ordered = cleanupOrder(nodes);
   const firstIndex = ordered.findIndex((node) => node.id === firstId);
   const secondIndex = ordered.findIndex((node) => node.id === secondId);
   if (firstIndex < 0 || secondIndex < 0 || firstIndex === secondIndex) return new Set();

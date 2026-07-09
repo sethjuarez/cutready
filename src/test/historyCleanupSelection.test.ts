@@ -22,23 +22,28 @@ function node(id: string, index: number, isHead = false, parents: string[] = [])
   };
 }
 
-const nodes = [node("head", 0, true), node("second", 1), node("third", 2), node("fourth", 3)];
+const chainedNodes = [
+  node("head", 0, true, ["second"]),
+  node("second", 1, false, ["third"]),
+  node("third", 2, false, ["fourth"]),
+  node("fourth", 3),
+];
 
 describe("history cleanup selection", () => {
   it("builds the exact HEAD-anchored range for a clicked older snapshot", () => {
-    expect([...headAnchoredCleanupSelection(nodes, "third")]).toEqual(["head", "second", "third"]);
+    expect([...headAnchoredCleanupSelection(chainedNodes, "third")]).toEqual(["head", "second", "third"]);
   });
 
   it("accepts exact contiguous HEAD selections", () => {
-    expect(isExactHeadCleanupSelection(nodes, new Set(["head", "second", "third"]))).toBe(true);
+    expect(isExactHeadCleanupSelection(chainedNodes, new Set(["head", "second", "third"]))).toBe(true);
   });
 
   it("rejects selections with holes because cleanup applies to the whole range", () => {
-    expect(isExactHeadCleanupSelection(nodes, new Set(["head", "third"]))).toBe(false);
+    expect(isExactHeadCleanupSelection(chainedNodes, new Set(["head", "third"]))).toBe(false);
   });
 
   it("returns the contiguous range used for Draftline cleanup requests", () => {
-    expect(cleanupRange(nodes, "head", "third")?.map((rangeNode) => rangeNode.id)).toEqual([
+    expect(cleanupRange(chainedNodes, "head", "third")?.map((rangeNode) => rangeNode.id)).toEqual([
       "head",
       "second",
       "third",
@@ -46,15 +51,32 @@ describe("history cleanup selection", () => {
   });
 
   it("builds a contiguous range between two explicit points", () => {
-    expect([...twoPointCleanupSelection(nodes, "second", "fourth")]).toEqual(["second", "third", "fourth"]);
+    expect([...twoPointCleanupSelection(chainedNodes, "second", "fourth")]).toEqual(["second", "third", "fourth"]);
   });
 
   it("accepts exact contiguous non-HEAD selections", () => {
-    expect(isExactCleanupSelection(nodes, new Set(["second", "third", "fourth"]))).toBe(true);
+    expect(isExactCleanupSelection(chainedNodes, new Set(["second", "third", "fourth"]))).toBe(true);
   });
 
   it("rejects non-HEAD selections with holes", () => {
-    expect(isExactCleanupSelection(nodes, new Set(["second", "fourth"]))).toBe(false);
+    expect(isExactCleanupSelection(chainedNodes, new Set(["second", "fourth"]))).toBe(false);
+  });
+
+  it("uses first-parent order instead of timestamps when they disagree", () => {
+    const skewed = [
+      node("head", 10, true, ["second"]),
+      node("second", 30, false, ["third"]),
+      node("third", 1, false, ["fourth"]),
+      node("fourth", 20),
+    ];
+
+    expect(cleanupRange(skewed, "head", "fourth")?.map((rangeNode) => rangeNode.id)).toEqual([
+      "head",
+      "second",
+      "third",
+      "fourth",
+    ]);
+    expect([...twoPointCleanupSelection(skewed, "head", "third")]).toEqual(["head", "second", "third"]);
   });
 
   it("follows only first-parent ancestry from the head", () => {

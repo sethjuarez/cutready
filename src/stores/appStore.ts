@@ -3070,31 +3070,43 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().applySnapshotCleanup(preview.plan_id);
     } catch (err) {
       console.error("Failed to compact snapshots:", err);
-      useToastStore.getState().show(`Milestone failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Compaction failed: ${err}`, 5000, "error");
     }
   },
 
   findSnapshotCleanupCandidates: async (selectedCommitId) => {
     const { currentRemote, timelines } = get();
     const targetVariation = timelines.find((timeline) => timeline.is_active)?.name ?? null;
-    return listDraftlineSnapshotCleanupCandidates(selectedCommitId, targetVariation, currentRemote?.name ?? null);
+    if (!currentRemote) {
+      return listDraftlineSnapshotCleanupCandidates(selectedCommitId, targetVariation, null);
+    }
+    try {
+      return await listDraftlineSnapshotCleanupCandidates(selectedCommitId, targetVariation, currentRemote.name);
+    } catch (err) {
+      if (!errorMessage(err).includes("401")) throw err;
+      return listDraftlineSnapshotCleanupCandidates(selectedCommitId, targetVariation, null);
+    }
   },
 
   previewSnapshotCleanup: async (oldestCommitId, newestCommitId, label, selectedRangeCommitIds) => {
     const { currentRemote, graphNodes, timelines } = get();
+    const range = cleanupRange(graphNodes, newestCommitId, oldestCommitId);
     if (selectedRangeCommitIds) {
       const selected = new Set(selectedRangeCommitIds);
       const allKnown = selectedRangeCommitIds.every((id) => graphNodes.some((node) => node.id === id));
+      const rangeIds = range?.map((node) => node.id) ?? [];
       if (
         selectedRangeCommitIds.length < 2
         || selected.size !== selectedRangeCommitIds.length
         || selectedRangeCommitIds[0] !== newestCommitId
         || selectedRangeCommitIds[selectedRangeCommitIds.length - 1] !== oldestCommitId
         || !allKnown
+        || rangeIds.length !== selectedRangeCommitIds.length
+        || !rangeIds.every((id, index) => id === selectedRangeCommitIds[index])
       ) {
         throw new Error("Select a contiguous range of snapshots to compact.");
       }
-    } else if (!cleanupRange(graphNodes, newestCommitId, oldestCommitId)) {
+    } else if (!range) {
       throw new Error("Select a contiguous range of snapshots to compact.");
     }
     const targetVariation = timelines.find((timeline) => timeline.is_active)?.name ?? null;
@@ -3129,7 +3141,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
     const squashed = result.commit_map.filter((entry) => entry.disposition.kind === "squashed_into").length;
     useToastStore.getState().show(
-      squashed > 0 ? `Milestone created. ${squashed} old snapshots are mapped to the new milestone.` : "Milestone created.",
+      squashed > 0 ? `History compacted. ${squashed} old snapshots are mapped to the compacted snapshot.` : "History compacted.",
       5000,
       "success",
     );
@@ -3336,8 +3348,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
           if (published) {
             return;
           }
-          await get().loadPendingHistoryCleanup();
-          return;
+          const pendingAfterCleanup = await get().loadPendingHistoryCleanup();
+          if (pendingAfterCleanup) {
+            return;
+          }
         }
       }
       await publishDraftlineChanges(currentRemote.name);
