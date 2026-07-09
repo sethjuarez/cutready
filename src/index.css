@@ -238,6 +238,45 @@ body.recording-prompter-root #root {
   }
 }
 
+/* ── History Graph Header ─────────────────────────────────── */
+
+.history-graph-header {
+  container-type: inline-size;
+}
+
+@container (max-width: 58rem) {
+  .history-graph-toolbar-label,
+  .history-graph-author-control {
+    display: none;
+  }
+
+  .history-graph-timeline-control {
+    max-width: 8rem;
+  }
+}
+
+@container (max-width: 48rem) {
+  .history-graph-subtitle {
+    display: none;
+  }
+}
+
+@container (max-width: 42rem) {
+  .history-graph-toolbar button {
+    padding-inline: 0.375rem;
+  }
+
+  .history-graph-timeline-control {
+    max-width: 6.5rem;
+  }
+}
+
+@container (max-width: 30rem) {
+  .history-graph-title-icon {
+    display: none;
+  }
+}
+
 .script-table-th {
   text-align: left;
   font-size: 0.6875rem;

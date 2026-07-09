@@ -67,6 +67,7 @@ export function HistoryGraphTab() {
   const [cleanupError, setCleanupError] = useState<string | null>(null);
   const [cleanupPreview, setCleanupPreview] = useState<DraftlineHistoryCleanupPreview | null>(null);
   const [cleanupCandidates, setCleanupCandidates] = useState<DraftlineHistoryCompactionCandidates | null>(null);
+  const [cleanupCandidateFallback, setCleanupCandidateFallback] = useState(false);
   const [loadingCleanupCandidates, setLoadingCleanupCandidates] = useState(false);
   const [previewingCleanup, setPreviewingCleanup] = useState(false);
   const [applyingCleanup, setApplyingCleanup] = useState(false);
@@ -186,8 +187,7 @@ export function HistoryGraphTab() {
 
   const selectedNodes = useMemo(
     () => activeCleanupNodes
-      .filter((node) => selectedForCleanup.has(node.id))
-      .sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp)),
+      .filter((node) => selectedForCleanup.has(node.id)),
     [activeCleanupNodes, selectedForCleanup],
   );
   const selectedNewest = selectedNodes[0];
@@ -211,17 +211,18 @@ export function HistoryGraphTab() {
   const cleanupSelectableIds = useMemo(() => {
     if (!cleanupMode) return new Set<string>();
     if (cleanupPointIds.length !== 1) return firstParentCleanupIds;
+    if (cleanupCandidateFallback) return firstParentCleanupIds;
     return new Set(Array.from(cleanupCandidateByEndpoint.entries())
       .filter(([, candidate]) => candidate.can_compact)
       .map(([endpointId]) => endpointId));
-  }, [cleanupCandidateByEndpoint, cleanupMode, cleanupPointIds.length, firstParentCleanupIds]);
+  }, [cleanupCandidateByEndpoint, cleanupCandidateFallback, cleanupMode, cleanupPointIds.length, firstParentCleanupIds]);
   const effectiveCleanupLabel = useMemo(() => {
     const explicit = cleanupLabel.trim();
     if (explicit) return explicit;
     if (selectedOldest && selectedNewest) {
       return `Compact ${selectedOldest.message} to ${selectedNewest.message}`;
     }
-    return "Milestone history";
+    return "Compacted history";
   }, [cleanupLabel, selectedNewest, selectedOldest]);
   const canPreviewCleanup = cleanupMode
     && hasContiguousCleanupSelection
@@ -263,17 +264,21 @@ export function HistoryGraphTab() {
     cleanupCandidateRequestRef.current = requestId;
     setLoadingCleanupCandidates(true);
     setCleanupCandidates(null);
+    setCleanupCandidateFallback(false);
     try {
       const candidates = await findSnapshotCleanupCandidates(commitId);
       if (cleanupCandidateRequestRef.current !== requestId) return;
       setCleanupCandidates(candidates);
       const validCount = candidates.candidates.filter((candidate) => candidate.can_compact).length;
       if (validCount === 0) {
-        setCleanupError("Draftline could not find a valid milestone range endpoint for that snapshot.");
+        setCleanupError("Draftline could not find a valid compaction range endpoint for that snapshot.");
+      } else {
+        setCleanupError(null);
       }
     } catch (err) {
       if (cleanupCandidateRequestRef.current !== requestId) return;
-      setCleanupError(`Could not load milestone range targets: ${errorMessage(err)}`);
+      setCleanupCandidateFallback(true);
+      setCleanupError(null);
     } finally {
       if (cleanupCandidateRequestRef.current === requestId) setLoadingCleanupCandidates(false);
     }
@@ -295,30 +300,33 @@ export function HistoryGraphTab() {
       setCleanupPreview(null);
       setCleanupError(null);
       setCleanupCandidates(null);
+      setCleanupCandidateFallback(false);
       cleanupCandidateRequestRef.current += 1;
       setLoadingCleanupCandidates(false);
       return;
     }
 
     if (loadingCleanupCandidates) {
-      setCleanupError("Still finding valid milestone range targets. Try again in a moment.");
+      setCleanupError("Still finding valid compaction range targets. Try again in a moment.");
       return;
     }
 
-    if (!cleanupCandidates) {
-      setCleanupError("Draftline milestone range targets are not ready. Pick the first point again to retry.");
+    if (!cleanupCandidates && !cleanupCandidateFallback) {
+      setCleanupError("Draftline compaction range targets are not ready. Pick the first point again to retry.");
       return;
     }
 
-    const candidate = cleanupCandidateByEndpoint.get(commitId);
-    if (!candidate) {
-      setCleanupError("Choose one of the Draftline-approved milestone range targets.");
-      return;
-    }
+    if (!cleanupCandidateFallback) {
+      const candidate = cleanupCandidateByEndpoint.get(commitId);
+      if (!candidate) {
+        setCleanupError("Choose one of the Draftline-approved compaction range targets.");
+        return;
+      }
 
-    if (candidate && !candidate.can_compact) {
-      setCleanupError(cleanupCandidateBlockerMessage(candidate));
-      return;
+      if (!candidate.can_compact) {
+        setCleanupError(cleanupCandidateBlockerMessage(candidate));
+        return;
+      }
     }
 
     const anchorId = cleanupPointIds[cleanupPointIds.length - 1];
@@ -326,8 +334,8 @@ export function HistoryGraphTab() {
     setCleanupPointIds([anchorId, commitId]);
     setSelectedForCleanup(selection);
     setCleanupPreview(null);
-    setCleanupError(selection.size > 1 ? null : "Choose two snapshots on the active timeline to turn into a milestone.");
-  }, [activeCleanupNodes, cleanupCandidateByEndpoint, cleanupCandidates, cleanupPointIds, loadCleanupCandidates, loadingCleanupCandidates]);
+    setCleanupError(selection.size > 1 ? null : "Choose two snapshots on the active timeline to compact.");
+  }, [activeCleanupNodes, cleanupCandidateByEndpoint, cleanupCandidateFallback, cleanupCandidates, cleanupPointIds, loadCleanupCandidates, loadingCleanupCandidates]);
 
   const cancelCleanup = useCallback(() => {
     setCleanupMode(false);
@@ -337,6 +345,7 @@ export function HistoryGraphTab() {
     setCleanupError(null);
     setCleanupPreview(null);
     setCleanupCandidates(null);
+    setCleanupCandidateFallback(false);
     cleanupCandidateRequestRef.current += 1;
     setLoadingCleanupCandidates(false);
   }, []);
@@ -364,16 +373,17 @@ export function HistoryGraphTab() {
 
   const handleApplyCleanup = useCallback(async () => {
     if (!cleanupPreview) return;
+    const warnings = cleanupPreview.warnings.map((warning) => cleanupWarningMessage(warning.message));
     const warningText = cleanupPreview.warnings.length > 0
-      ? `\n\nWarnings:\n${cleanupPreview.warnings.map((warning) => `- ${warning.message}`).join("\n")}`
+      ? `\n\nWarnings:\n${warnings.map((warning) => `- ${warning}`).join("\n")}`
       : "";
     const remoteText = currentRemote
-      ? "\n\nThis creates a local milestone first. Use Sync/Push afterward to publish milestone history through Draftline's guarded remote update."
+      ? "\n\nThis creates a local compaction first. Use Sync/Push afterward to publish compacted history through Draftline's guarded remote update."
       : "";
     const confirmed = await confirm({
-      title: "Create milestone history?",
-      message: `Draftline will replace ${cleanupPreview.graph_diff.old_commit_count} selected snapshots with ${cleanupPreview.graph_diff.new_commit_count} milestone snapshot and create a backup ref before moving the timeline.${warningText}${remoteText}`,
-      confirmLabel: "Create milestone history",
+      title: "Compact history?",
+      message: `Draftline will replace ${cleanupPreview.graph_diff.old_commit_count} selected snapshots with ${cleanupPreview.graph_diff.new_commit_count} compacted snapshot and create a backup ref before moving the timeline.${warningText}${remoteText}`,
+      confirmLabel: "Compact history",
       cancelLabel: "Cancel",
       variant: "warning",
     });
@@ -394,9 +404,9 @@ export function HistoryGraphTab() {
     const cleanupPlanId = pendingHistoryCleanup?.plan_id ?? lastHistoryCleanup?.plan_id;
     if (!cleanupPlanId || undoingCleanup) return;
     const confirmed = await confirm({
-      title: "Undo milestone history?",
-      message: "Draftline will restore the branch head from the backup ref created before the last milestone rewrite.",
-      confirmLabel: "Undo milestone",
+      title: "Undo history compaction?",
+      message: "Draftline will restore the branch head from the backup ref created before the last compaction rewrite.",
+      confirmLabel: "Undo compaction",
       cancelLabel: "Cancel",
       variant: "warning",
     });
@@ -429,14 +439,14 @@ export function HistoryGraphTab() {
 
   return (
     <div className="flex h-full flex-col bg-[rgb(var(--color-bg))]">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-4 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-accent))]">
+      <div className="history-graph-header flex shrink-0 items-center gap-2 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-4 py-2">
+        <div className="history-graph-title flex min-w-0 flex-1 items-center gap-2">
+          <div className="history-graph-title-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-accent))]">
             <GitBranch className="h-4 w-4" />
           </div>
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-[rgb(var(--color-text))]">{workspaceName} workspace history graph</div>
-            <div className="truncate text-[10px] text-[rgb(var(--color-text-secondary))]">
+            <div className="history-graph-subtitle truncate text-[10px] text-[rgb(var(--color-text-secondary))]">
               {snapshotCount} visible snapshot{snapshotCount !== 1 ? "s" : ""} across {timelines.length} branch{timelines.length !== 1 ? "es" : ""}
               {hiddenGraphLayerCount > 0 ? ` - ${hiddenGraphLayerCount} hidden` : ""}
               {remoteTipCount > 0 ? ` - ${remoteTipCount} remote tip${remoteTipCount !== 1 ? "s" : ""}` : ""}
@@ -444,19 +454,22 @@ export function HistoryGraphTab() {
           </div>
         </div>
 
-        <div className="flex min-w-0 flex-1 items-center justify-end">
-          <div className="flex max-w-full items-center gap-1 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/80 p-1">
-            <TimelineSelector />
+        <div className="history-graph-toolbar-wrap flex shrink-0 items-center justify-end">
+          <div className="history-graph-toolbar flex max-w-full items-center justify-end gap-1 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/80 p-1">
+            <div className="history-graph-timeline-control min-w-0 max-w-44">
+              <TimelineSelector />
+            </div>
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setGraphFiltersOpen((open) => !open)}
                 aria-expanded={graphFiltersOpen}
+                aria-label="Choose which graph layers are visible"
                 className="inline-flex h-6 items-center gap-1.5 rounded-md px-1.5 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
                 title="Choose which graph layers are visible"
               >
                 <GitBranch className="h-3 w-3" />
-                View
+                <span className="history-graph-toolbar-label">View</span>
                 <ChevronDown className="h-2.5 w-2.5 opacity-60" />
               </button>
               {graphFiltersOpen && (
@@ -495,7 +508,7 @@ export function HistoryGraphTab() {
               )}
             </div>
             {authorOptions.length > 0 && (
-              <label className="relative flex h-6 min-w-0 max-w-[180px] items-center gap-1.5 rounded-md px-1.5 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]">
+              <label className="history-graph-author-control relative flex h-6 min-w-0 max-w-[180px] items-center gap-1.5 rounded-md px-1.5 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]">
                 <Users className="h-3 w-3 shrink-0" />
                 <select
                   value={authorFilter}
@@ -558,10 +571,11 @@ export function HistoryGraphTab() {
                   ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
                   : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
               }`}
-              title="Create a milestone from selected timeline history"
+              aria-label="Compact selected timeline history"
+              title="Compact selected timeline history"
             >
               <GitPullRequestArrow className="h-3.5 w-3.5" />
-              Milestone
+              <span className="history-graph-toolbar-label">Compact</span>
             </button>
             {(pendingHistoryCleanup || lastHistoryCleanup) && (
               <button
@@ -569,20 +583,22 @@ export function HistoryGraphTab() {
                 onClick={handleUndoCleanup}
                 disabled={undoingCleanup}
                 className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] disabled:pointer-events-none disabled:opacity-40"
-                title="Undo the last milestone rewrite"
+                aria-label="Undo the last history compaction"
+                title="Undo the last history compaction"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                {undoingCleanup ? "Undoing" : "Undo milestone"}
+                <span className="history-graph-toolbar-label">{undoingCleanup ? "Undoing" : "Undo compaction"}</span>
               </button>
             )}
             <button
               type="button"
               onClick={focusCurrentSnapshot}
               className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+              aria-label="Focus current snapshot"
               title="Focus current snapshot"
             >
               <LocateFixed className="h-3.5 w-3.5" />
-              Current
+              <span className="history-graph-toolbar-label">Current</span>
             </button>
           </div>
         </div>
@@ -623,6 +639,7 @@ export function HistoryGraphTab() {
             cleanupError={cleanupError}
             cleanupPointCount={cleanupPointIds.length}
             loadingCandidates={loadingCleanupCandidates}
+            candidateFallback={cleanupCandidateFallback}
             validCandidateCount={validCleanupCandidateCount}
             sharedHistoryCandidateCount={sharedHistoryCandidateCount}
             canPreview={canPreviewCleanup}
@@ -715,6 +732,7 @@ function FloatingCleanupPanel({
   cleanupError,
   cleanupPointCount,
   loadingCandidates,
+  candidateFallback,
   validCandidateCount,
   sharedHistoryCandidateCount,
   canPreview,
@@ -737,6 +755,7 @@ function FloatingCleanupPanel({
   cleanupError: string | null;
   cleanupPointCount: number;
   loadingCandidates: boolean;
+  candidateFallback: boolean;
   validCandidateCount: number;
   sharedHistoryCandidateCount: number;
   canPreview: boolean;
@@ -808,10 +827,10 @@ function FloatingCleanupPanel({
         onPointerMove={moveDrag}
         onPointerUp={stopDrag}
         onPointerCancel={stopDrag}
-        title="Drag to move milestone history panel"
+        title="Drag to move compaction panel"
       >
         <div>
-          <div className="text-xs font-semibold text-[rgb(var(--color-accent))]">Milestone history</div>
+          <div className="text-xs font-semibold text-[rgb(var(--color-accent))]">History compaction</div>
           <p className="mt-0.5 text-[11px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
             Pick two snapshots to compact the contiguous range between them. Draftline will preview the rewrite before anything is applied.
           </p>
@@ -820,7 +839,7 @@ function FloatingCleanupPanel({
           type="button"
           onClick={onCancel}
           className="rounded p-1 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
-          title="Cancel milestone mode"
+          title="Cancel compaction mode"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -829,7 +848,7 @@ function FloatingCleanupPanel({
         <input
           value={label}
           onChange={(event) => onLabelChange(event.target.value)}
-          placeholder="Milestone snapshot name (optional)..."
+          placeholder="Compacted snapshot name (optional)..."
           className="min-w-[220px] flex-1 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2 text-xs text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:border-[rgb(var(--color-accent))]"
         />
         <button
@@ -845,6 +864,7 @@ function FloatingCleanupPanel({
         cleanupError={cleanupError}
         cleanupPointCount={cleanupPointCount}
         loadingCandidates={loadingCandidates}
+        candidateFallback={candidateFallback}
         validCandidateCount={validCandidateCount}
         sharedHistoryCandidateCount={sharedHistoryCandidateCount}
         currentRemote={currentRemote}
@@ -909,6 +929,7 @@ function CleanupStatus({
   cleanupError,
   cleanupPointCount,
   loadingCandidates,
+  candidateFallback,
   validCandidateCount,
   sharedHistoryCandidateCount,
   currentRemote,
@@ -919,6 +940,7 @@ function CleanupStatus({
   cleanupError: string | null;
   cleanupPointCount: number;
   loadingCandidates: boolean;
+  candidateFallback: boolean;
   validCandidateCount: number;
   sharedHistoryCandidateCount: number;
   currentRemote: boolean;
@@ -926,29 +948,31 @@ function CleanupStatus({
   isDirty: boolean;
   isRewound: boolean;
 }) {
-  let message = "Pick two graph nodes to turn the contiguous range between them into a milestone.";
+  let message = "Pick two graph nodes to compact the contiguous range between them.";
   let className = "text-[rgb(var(--color-text-secondary))]";
 
   if (isDirty) {
-    message = "Save or discard unsaved workspace changes before creating a milestone.";
+    message = "Save or discard unsaved workspace changes before compacting history.";
     className = "text-warning";
   } else if (isRewound) {
-    message = "Return to the current timeline tip before creating a milestone.";
+    message = "Return to the current timeline tip before compacting history.";
     className = "text-warning";
   } else if (cleanupPointCount === 1 && loadingCandidates) {
     message = "First point selected. Finding valid Draftline range targets...";
+  } else if (cleanupPointCount === 1 && candidateFallback) {
+    message = "First point selected. Draftline suggestions are unavailable, so choose another point on the active timeline; Preview will validate the range.";
   } else if (cleanupPointCount === 1 && validCandidateCount > 0 && currentRemote && sharedHistoryCandidateCount > 0) {
     message = `${validCandidateCount} valid target${validCandidateCount === 1 ? "" : "s"} found; ${sharedHistoryCandidateCount} touch published history and can be shared afterward with guarded publish.`;
   } else if (cleanupPointCount === 1 && validCandidateCount > 0) {
     message = `First point selected. Choose one of ${validCandidateCount} valid Draftline range target${validCandidateCount === 1 ? "" : "s"}.`;
   } else if (cleanupPointCount === 1) {
-    message = "First point selected, but Draftline did not find a valid milestone range target.";
+    message = "First point selected, but Draftline did not find a valid compaction range target.";
     className = "text-warning";
   } else if (cleanupPointCount === 2 && !hasContiguousSelection) {
     message = "Choose two points that form a contiguous active-timeline range.";
     className = "text-warning";
   } else if (currentRemote) {
-    message = "Milestone creation is local-first. Sync/Push will publish rewritten history with Draftline's guarded remote update.";
+    message = "Compaction is local-first. Sync/Push will publish rewritten history with Draftline's guarded remote update.";
   }
 
   if (cleanupError) {
@@ -985,7 +1009,7 @@ function CleanupPreviewPanel({
             disabled={applying}
             className="rounded-md bg-[rgb(var(--color-accent))] px-2.5 py-1.5 text-[10px] font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-40"
           >
-            {applying ? "Applying..." : "Accept milestone"}
+            {applying ? "Applying..." : "Accept compaction"}
           </button>
         )}
       </div>
@@ -993,7 +1017,7 @@ function CleanupPreviewPanel({
         <div className="min-w-0 rounded-lg bg-[rgb(var(--color-surface-alt))] p-2">
           <div className="mb-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">Before</div>
           {selectedNodes.length < 2 ? (
-            <p className="text-[11px] text-[rgb(var(--color-text-secondary))]">Pick two points to define a milestone range.</p>
+            <p className="text-[11px] text-[rgb(var(--color-text-secondary))]">Pick two points to define a compaction range.</p>
           ) : (
             <div className="space-y-1">
               <div className="mb-1 rounded border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-text))]">
@@ -1023,19 +1047,19 @@ function CleanupPreviewPanel({
         </div>
         <div className="min-w-0 rounded-lg bg-[rgb(var(--color-surface-alt))] p-2">
           <div className="mb-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">After</div>
-          <div className="truncate rounded border border-[rgb(var(--color-accent))]/30 bg-[rgb(var(--color-accent))]/10 px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-accent))]" title={label || "Milestone"}>
-            {label || "Milestone"}
+          <div className="truncate rounded border border-[rgb(var(--color-accent))]/30 bg-[rgb(var(--color-accent))]/10 px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-accent))]" title={label || "Compacted snapshot"}>
+            {label || "Compacted snapshot"}
           </div>
           <div className="mt-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
             {preview
-              ? `${preview.graph_diff.old_commit_count} old snapshot${preview.graph_diff.old_commit_count === 1 ? "" : "s"} to ${preview.graph_diff.new_commit_count} milestone snapshot${preview.graph_diff.new_commit_count === 1 ? "" : "s"}`
+              ? `${preview.graph_diff.old_commit_count} old snapshot${preview.graph_diff.old_commit_count === 1 ? "" : "s"} to ${preview.graph_diff.new_commit_count} compacted snapshot${preview.graph_diff.new_commit_count === 1 ? "" : "s"}`
               : "Generate a Draftline preview before applying."}
           </div>
         </div>
       </div>
       {preview?.warnings.length ? (
         <div className="mt-2 rounded-lg border border-warning/25 bg-warning/5 px-2 py-1.5 text-[10px] text-warning">
-          {preview.warnings.map((warning) => warning.message).join(" ")}
+          {preview.warnings.map((warning) => cleanupWarningMessage(warning.message)).join(" ")}
         </div>
       ) : null}
     </div>
@@ -1084,5 +1108,15 @@ function cleanupCandidateEndpointId(candidate: DraftlineHistoryCompactionCandida
 
 function cleanupCandidateBlockerMessage(candidate: DraftlineHistoryCompactionCandidate): string {
   const blocker = candidate.blockers[0] ?? candidate.warnings[0];
-  return blocker?.message ?? "Draftline marked that milestone range target as unavailable.";
+  return blocker?.message ?? "Draftline marked that compaction range target as unavailable.";
+}
+
+function cleanupWarningMessage(message: string): string {
+  if (
+    message.includes("apply_history_cleanup is local-first")
+    || message.includes("preflight_replace_remote_history")
+  ) {
+    return "Compaction is applied locally first. Use Sync/Push afterward to safely publish the rewritten history to the remote.";
+  }
+  return message;
 }

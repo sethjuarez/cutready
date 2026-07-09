@@ -175,10 +175,10 @@ export function FullHistoryGraph({
             const isMutedNode = isSideAncestry || isAuxiliaryNode;
             const nodeOpacity = selectionMode && !selected && !selectable ? 0.38 : isSideAncestry ? 0.74 : isAuxiliaryNode ? 0.66 : 1;
             const selectTitle = selected
-              ? "Selected milestone range point"
+              ? "Selected compaction range point"
               : selectable
-                ? "Select this snapshot for the milestone range"
-                : "This snapshot is not on the active timeline milestone path";
+                ? "Select this snapshot for the compaction range"
+                : "This snapshot is not on the active timeline compaction path";
             return (
               <g
                 key={node.id}

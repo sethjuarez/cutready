@@ -255,6 +255,46 @@ describe("appStore remote sync status", () => {
     expect(useAppStore.getState().isSyncing).toBe(false);
   });
 
+  it("publishes the milestone commit when cleanup does not require guarded remote publishing", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    mockPublishDraftlineChanges.mockResolvedValueOnce(undefined);
+    mockGetDraftlineSyncStatus.mockResolvedValueOnce({ ahead: 0, behind: 0 });
+    const requestPrePushMilestone = vi.fn(async () => ({ type: "milestone" as const, label: "Auditaur milestone validation" }));
+    const previewSnapshotCleanup = vi.fn(async () => ({ plan_id: "plan-1" }) as DraftlineHistoryCleanupPreview);
+    const applySnapshotCleanup = vi.fn(async () => ({}) as DraftlineTimelineCleanupResult);
+    const publishSnapshotCleanup = vi.fn(async () => null);
+
+    useAppStore.setState({
+      currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
+      timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 4, color_index: 0 }],
+      syncStatus: { ahead: 3, behind: 0 },
+      graphNodes: [
+        { id: "e", message: "Wed afternoon 12:31", timestamp: "2026-07-08T18:31:00Z", timeline: "main", parents: ["d"], lane: 0, is_head: true },
+        { id: "d", message: "Refine intro", timestamp: "2026-07-08T18:20:00Z", timeline: "main", parents: ["c"], lane: 0, is_head: false },
+        { id: "c", message: "Quick save", timestamp: "2026-07-08T18:12:00Z", timeline: "main", parents: ["a"], lane: 0, is_head: false },
+        { id: "a", message: "Shared base", timestamp: "2026-07-08T18:00:00Z", timeline: "main", parents: [], lane: 0, is_head: false },
+      ],
+      checkLargeFiles: async () => [],
+      requestPrePushMilestone,
+      previewSnapshotCleanup,
+      applySnapshotCleanup,
+      publishSnapshotCleanup,
+      checkDirty: async () => {},
+      refreshChangedFiles: async () => {},
+      loadGraphData: async () => {},
+      loadTimelines: async () => {},
+      loadVersions: async () => {},
+    });
+
+    await useAppStore.getState().pushToRemote();
+
+    expect(previewSnapshotCleanup).toHaveBeenCalledWith("c", "e", "Auditaur milestone validation", ["e", "d", "c"]);
+    expect(applySnapshotCleanup).toHaveBeenCalledWith("plan-1");
+    expect(publishSnapshotCleanup).toHaveBeenCalledWith("plan-1", "origin");
+    expect(mockListDraftlinePendingSnapshotCleanups).toHaveBeenCalled();
+    expect(mockPublishDraftlineChanges).toHaveBeenCalledWith("origin");
+  });
+
   it("pushes snapshots as-is when the user skips the milestone", async () => {
     mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
     mockPublishDraftlineChanges.mockResolvedValueOnce(undefined);
