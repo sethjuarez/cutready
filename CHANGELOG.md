@@ -10,6 +10,14 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.26.1](https://github.com/sethjuarez/cutready/compare/v1.26.0...v1.26.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* **versioning:** stabilize compacted history publishing ([c6f8b92](https://github.com/sethjuarez/cutready/commit/c6f8b92ac45839732fc1429075583cb47d1e2be6))
+* **versioning:** stabilize compacted history publishing ([292398d](https://github.com/sethjuarez/cutready/commit/292398de574326ecdf4acd2e3a45340fc009cf3d))
+
 ## [1.26.0](https://github.com/sethjuarez/cutready/compare/v1.25.0...v1.26.0) (2026-07-08)
 
 
