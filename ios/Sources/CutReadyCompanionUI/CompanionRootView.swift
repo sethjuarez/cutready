@@ -316,7 +316,7 @@ public struct CompanionRootView: View {
                 recentWorkspaceStore.record(repository: repository)
                 recentWorkspaces = recentWorkspaceStore.load()
                 isShowingRepositories = false
-                refreshSyncStatus()
+                loadCachedSyncStatus()
             } catch {
                 authError = describeGitHubError(error)
             }
@@ -427,6 +427,7 @@ public struct CompanionRootView: View {
                 guard beginWorkspaceOperation(message: "Checking GitHub for shared changes") else {
                     return nil
                 }
+                syncStatusGeneration += 1
                 return syncStatusGeneration
             }
             guard let generation else {
@@ -437,7 +438,7 @@ public struct CompanionRootView: View {
                 if status.state == .conflict {
                     await MainActor.run { updateWorkspaceOperationMessage("Preparing change review") }
                 }
-                let conflicts = await conflicts(for: status)
+                let conflicts = await conflicts(for: status, refreshRemote: false)
                 await MainActor.run {
                     guard generation == syncStatusGeneration else {
                         return
@@ -456,6 +457,31 @@ public struct CompanionRootView: View {
         }
     }
 
+    private func loadCachedSyncStatus() {
+        Task {
+            let generation = await MainActor.run { () -> Int in
+                syncStatusGeneration += 1
+                return syncStatusGeneration
+            }
+            do {
+                let status = try await draftlineStore.cachedSyncStatus()
+                await MainActor.run {
+                    guard generation == syncStatusGeneration else {
+                        return
+                    }
+                    updateSyncStatus(status, conflicts: [])
+                }
+            } catch {
+                await MainActor.run {
+                    guard generation == syncStatusGeneration else {
+                        return
+                    }
+                    syncError = error.localizedDescription
+                }
+            }
+        }
+    }
+
     private func syncWorkspace() {
         Task {
             let didStart = await MainActor.run { beginWorkspaceOperation(message: "Checking sync direction") }
@@ -467,7 +493,7 @@ public struct CompanionRootView: View {
                 await MainActor.run {
                     updateWorkspaceOperationMessage(status.state == .conflict ? "Preparing change review" : "Updating workspace view")
                 }
-                let conflicts = await conflicts(for: status)
+                let conflicts = await conflicts(for: status, refreshRemote: false)
                 await MainActor.run {
                     applyWorkspaceSync(status: status, snapshot: snapshot, conflicts: conflicts)
                     if status.state == .clean {
@@ -475,6 +501,10 @@ public struct CompanionRootView: View {
                     }
                 }
             } catch {
+                guard !isOperationInProgress(error) else {
+                    await MainActor.run { finishWorkspaceOperation() }
+                    return
+                }
                 await MainActor.run { syncError = error.localizedDescription }
             }
             await MainActor.run { finishWorkspaceOperation() }
@@ -492,9 +522,13 @@ public struct CompanionRootView: View {
                 await MainActor.run {
                     updateWorkspaceOperationMessage(status.state == .conflict ? "Preparing change review" : "Updating workspace view")
                 }
-                let conflicts = await conflicts(for: status)
+                let conflicts = await conflicts(for: status, refreshRemote: false)
                 await MainActor.run { applyWorkspaceSync(status: status, snapshot: snapshot, conflicts: conflicts) }
             } catch {
+                guard !isOperationInProgress(error) else {
+                    await MainActor.run { finishWorkspaceOperation() }
+                    return
+                }
                 await MainActor.run { syncError = error.localizedDescription }
             }
             await MainActor.run { finishWorkspaceOperation() }
@@ -515,6 +549,10 @@ public struct CompanionRootView: View {
                 let conflicts = await conflicts(for: status)
                 await MainActor.run { applyWorkspaceSync(status: status, snapshot: snapshot, conflicts: conflicts) }
             } catch {
+                guard !isOperationInProgress(error) else {
+                    await MainActor.run { finishWorkspaceOperation() }
+                    return
+                }
                 await MainActor.run { syncError = error.localizedDescription }
             }
             await MainActor.run { finishWorkspaceOperation() }
@@ -590,6 +628,10 @@ public struct CompanionRootView: View {
                     }
                 }
             } catch {
+                guard !isOperationInProgress(error) else {
+                    await MainActor.run { finishWorkspaceOperation() }
+                    return
+                }
                 await MainActor.run { syncError = error.localizedDescription }
             }
             await MainActor.run { finishWorkspaceOperation() }
@@ -644,11 +686,11 @@ public struct CompanionRootView: View {
         syncError = nil
     }
 
-    private func conflicts(for status: MobileSyncStatus) async -> [MobileConflict] {
+    private func conflicts(for status: MobileSyncStatus, refreshRemote: Bool = true) async -> [MobileConflict] {
         guard status.state == .conflict else {
             return []
         }
-        return (try? await draftlineStore.listConflicts()) ?? []
+        return (try? await draftlineStore.listConflicts(refreshRemote: refreshRemote)) ?? []
     }
 
     private func describeGitHubError(_ error: Error) -> String {
@@ -667,6 +709,13 @@ public struct CompanionRootView: View {
         }
         let error = error as NSError
         return error.domain == NSURLErrorDomain && error.code == NSURLErrorCancelled
+    }
+
+    private func isOperationInProgress(_ error: Error) -> Bool {
+        if let error = error as? DraftlineMobileBridgeError {
+            return error == .operationInProgress
+        }
+        return false
     }
 }
 

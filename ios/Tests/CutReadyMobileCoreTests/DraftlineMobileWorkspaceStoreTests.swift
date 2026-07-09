@@ -259,6 +259,20 @@ final class DraftlineMobileWorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(client.syncStatusCount, 1)
     }
 
+    func testCachedSyncStatusReadsLocalStatusWithoutRemoteRefresh() async throws {
+        let client = MockDraftlineWorkspaceClient()
+        client.status = MobileSyncStatus(state: .dirty, ahead: 1, message: "mobile snapshot ready")
+        client.statusAfterRefresh = MobileSyncStatus(state: .incoming, behind: 1, message: "incoming after fetch")
+        let store = DraftlineMobileWorkspaceStore(client: client)
+        _ = try await store.openWorkspace(repository: repository(id: 34), accessToken: "token")
+
+        let status = try await store.cachedSyncStatus()
+
+        XCTAssertEqual(status, MobileSyncStatus(state: .dirty, ahead: 1, message: "mobile snapshot ready"))
+        XCTAssertEqual(client.refreshRemoteCount, 0)
+        XCTAssertEqual(client.syncStatusCount, 1)
+    }
+
     func testSyncStatusReportsOfflineWhenRemoteRefreshFails() async throws {
         let client = MockDraftlineWorkspaceClient()
         client.status = MobileSyncStatus(state: .dirty, ahead: 2, message: "local edits")
@@ -586,6 +600,20 @@ final class DraftlineMobileWorkspaceStoreTests: XCTestCase {
         let conflicts = try await store.listConflicts()
 
         XCTAssertEqual(conflicts, client.conflicts)
+        XCTAssertEqual(client.listConflictsRefreshRequests, [true])
+    }
+
+    func testListConflictsCanReuseCurrentRemoteState() async throws {
+        let client = MockDraftlineWorkspaceClient()
+        client.conflicts = [
+            MobileConflict(path: "intro.sk", summary: "Review changes.", canResolveOnMobile: true)
+        ]
+        let store = DraftlineMobileWorkspaceStore(client: client)
+
+        let conflicts = try await store.listConflicts(refreshRemote: false)
+
+        XCTAssertEqual(conflicts, client.conflicts)
+        XCTAssertEqual(client.listConflictsRefreshRequests, [false])
     }
 
     func testResolveConflictsUsesDraftlineWorkspaceClientAndRefreshesSnapshot() async throws {
@@ -716,6 +744,7 @@ private final class MockDraftlineWorkspaceClient: DraftlineMobileWorkspaceClient
     var listStoryboardsCount = 0
     var listSketchesCount = 0
     var listNotesCount = 0
+    var listConflictsRefreshRequests: [Bool] = []
 
     func openWorkspace(_ workspace: MobileWorkspaceDescriptor) async throws {}
 
@@ -830,8 +859,9 @@ private final class MockDraftlineWorkspaceClient: DraftlineMobileWorkspaceClient
         shelves
     }
 
-    func listConflicts() async throws -> [MobileConflict] {
-        conflicts
+    func listConflicts(refreshRemote: Bool) async throws -> [MobileConflict] {
+        listConflictsRefreshRequests.append(refreshRemote)
+        return conflicts
     }
 
     func resolveConflicts(_ resolutions: [MobileConflictResolutionRequest]) async throws -> MobileSyncStatus {

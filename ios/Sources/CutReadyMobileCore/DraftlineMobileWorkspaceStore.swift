@@ -63,6 +63,12 @@ public final class DraftlineMobileWorkspaceStore: @unchecked Sendable {
         }
     }
 
+    public func cachedSyncStatus() async throws -> MobileSyncStatus {
+        try await operationGate.run {
+            try await self.client.syncStatus()
+        }
+    }
+
     public func pull() async throws -> (MobileSyncStatus, MobileWorkspaceSnapshot) {
         try await operationGate.run {
             let status = try await self.client.pull()
@@ -100,9 +106,9 @@ public final class DraftlineMobileWorkspaceStore: @unchecked Sendable {
         }
     }
 
-    public func listConflicts() async throws -> [MobileConflict] {
+    public func listConflicts(refreshRemote: Bool = true) async throws -> [MobileConflict] {
         try await operationGate.run {
-            try await self.client.listConflicts()
+            try await self.client.listConflicts(refreshRemote: refreshRemote)
         }
     }
 

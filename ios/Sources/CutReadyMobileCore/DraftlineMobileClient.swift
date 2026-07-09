@@ -233,8 +233,14 @@ public protocol DraftlineMobileClient: Sendable {
     func shelveAllDirty(name: String) async throws -> MobileShelf
     func listShelves() async throws -> [MobileShelf]
 
-    func listConflicts() async throws -> [MobileConflict]
+    func listConflicts(refreshRemote: Bool) async throws -> [MobileConflict]
     func resolveConflicts(_ resolutions: [MobileConflictResolutionRequest]) async throws -> MobileSyncStatus
+}
+
+public extension DraftlineMobileClient {
+    func listConflicts() async throws -> [MobileConflict] {
+        try await listConflicts(refreshRemote: true)
+    }
 }
 
 public protocol DraftlineMobileWorkspaceClient: DraftlineMobileClient {
@@ -545,11 +551,13 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
 #endif
     }
 
-    public func listConflicts() async throws -> [MobileConflict] {
+    public func listConflicts(refreshRemote: Bool = true) async throws -> [MobileConflict] {
 #if os(iOS)
-        logger.info("list_conflicts: fetch_remote starting")
-        try await fetchRemote()
-        logger.info("list_conflicts: fetch_remote finished")
+        if refreshRemote {
+            logger.info("list_conflicts: fetch_remote starting")
+            try await fetchRemote()
+            logger.info("list_conflicts: fetch_remote finished")
+        }
         logger.info("list_conflicts: preflight_merge_incoming starting")
         let json = try await nativeString { workspace in
             "origin".withCString { remotePointer in
