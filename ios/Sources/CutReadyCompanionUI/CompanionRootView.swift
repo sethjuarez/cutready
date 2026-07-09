@@ -27,7 +27,11 @@ public struct CompanionRootView: View {
     @State private var isConfirmingParkAndReload = false
     @State private var syncError: String?
     @State private var syncConflicts: [MobileConflict] = []
+    @State private var syncDiagnostics: [SyncDiagnosticEntry] = []
+    @State private var syncDiagnosticReportURL: URL?
+    @State private var syncDiagnosticReportError: String?
     @State private var syncStatusGeneration = 0
+    @State private var workspaceOperationGeneration = 0
     @State private var workspaceNavigationPath = NavigationPath()
     @State private var authError: String?
     @State private var workspaceOpenProgress: GitHubWorkspaceOpenProgress?
@@ -75,9 +79,9 @@ public struct CompanionRootView: View {
                 .sheet(isPresented: $isShowingSync) {
                     WorkspaceSyncSheet(
                         project: project,
-                        isSyncing: isSyncingWorkspace,
-                        progressMessage: syncProgressMessage,
-                        errorMessage: syncError,
+                        isSyncing: $isSyncingWorkspace,
+                        progressMessage: $syncProgressMessage,
+                        errorMessage: $syncError,
                         conflicts: syncConflicts,
                         onSyncNow: { syncWorkspace() },
                         onRefresh: { refreshSyncStatus() },
@@ -86,7 +90,10 @@ public struct CompanionRootView: View {
                         onResolveConflicts: { resolutions in
                             resolveWorkspaceConflicts(resolutions)
                         },
-                        onParkAndReload: { isConfirmingParkAndReload = true }
+                        onParkAndReload: { isConfirmingParkAndReload = true },
+                        diagnosticReportURL: $syncDiagnosticReportURL,
+                        diagnosticReportError: $syncDiagnosticReportError,
+                        onPrepareDiagnosticReport: { prepareDiagnosticReport() }
                     )
                 }
                 .alert("Park mobile edits?", isPresented: $isConfirmingParkAndReload) {
@@ -431,21 +438,28 @@ public struct CompanionRootView: View {
                 guard beginWorkspaceOperation(message: "Checking GitHub for shared changes") else {
                     return nil
                 }
+                recordSyncDiagnostic("sync.refresh.started")
                 return syncStatusGeneration
             }
             guard let generation else {
                 return
             }
             do {
-                let status = try await draftlineStore.syncStatus()
+                let status = try await withSyncOperationTimeout {
+                    try await draftlineStore.syncStatus()
+                }
                 if status.state == .conflict {
                     await MainActor.run { updateWorkspaceOperationMessage("Preparing change review") }
                 }
-                let conflicts = await conflicts(for: status)
+                let conflicts = await conflicts(for: status, operationName: "sync.refresh.conflicts")
                 await MainActor.run {
                     guard generation == syncStatusGeneration else {
                         return
                     }
+                    recordSyncDiagnostic(
+                        "sync.refresh.finished",
+                        attributes: diagnosticAttributes(for: status)
+                    )
                     updateSyncStatus(status, conflicts: conflicts)
                 }
             } catch {
@@ -453,7 +467,7 @@ public struct CompanionRootView: View {
                     guard generation == syncStatusGeneration else {
                         return
                     }
-                    syncError = error.localizedDescription
+                    handleSyncOperationError(error, operationName: "sync.refresh")
                 }
             }
             await MainActor.run { finishWorkspaceOperation() }
@@ -467,19 +481,23 @@ public struct CompanionRootView: View {
                 return
             }
             do {
-                let (status, snapshot) = try await draftlineStore.syncNow()
+                await MainActor.run { recordSyncDiagnostic("sync.now.started") }
+                let (status, snapshot) = try await withSyncOperationTimeout {
+                    try await draftlineStore.syncNow()
+                }
                 await MainActor.run {
                     updateWorkspaceOperationMessage(status.state == .conflict ? "Preparing change review" : "Updating workspace view")
                 }
-                let conflicts = await conflicts(for: status)
+                let conflicts = await conflicts(for: status, operationName: "sync.now.conflicts")
                 await MainActor.run {
+                    recordSyncDiagnostic("sync.now.finished", attributes: diagnosticAttributes(for: status))
                     applyWorkspaceSync(status: status, snapshot: snapshot, conflicts: conflicts)
                     if status.state == .clean {
                         isShowingSync = false
                     }
                 }
             } catch {
-                await MainActor.run { syncError = error.localizedDescription }
+                await MainActor.run { handleSyncOperationError(error, operationName: "sync.now") }
             }
             await MainActor.run { finishWorkspaceOperation() }
         }
@@ -492,14 +510,20 @@ public struct CompanionRootView: View {
                 return
             }
             do {
-                let (status, snapshot) = try await draftlineStore.pull()
+                await MainActor.run { recordSyncDiagnostic("sync.pull.started") }
+                let (status, snapshot) = try await withSyncOperationTimeout {
+                    try await draftlineStore.pull()
+                }
                 await MainActor.run {
                     updateWorkspaceOperationMessage(status.state == .conflict ? "Preparing change review" : "Updating workspace view")
                 }
-                let conflicts = await conflicts(for: status)
-                await MainActor.run { applyWorkspaceSync(status: status, snapshot: snapshot, conflicts: conflicts) }
+                let conflicts = await conflicts(for: status, operationName: "sync.pull.conflicts")
+                await MainActor.run {
+                    recordSyncDiagnostic("sync.pull.finished", attributes: diagnosticAttributes(for: status))
+                    applyWorkspaceSync(status: status, snapshot: snapshot, conflicts: conflicts)
+                }
             } catch {
-                await MainActor.run { syncError = error.localizedDescription }
+                await MainActor.run { handleSyncOperationError(error, operationName: "sync.pull") }
             }
             await MainActor.run { finishWorkspaceOperation() }
         }
@@ -512,14 +536,20 @@ public struct CompanionRootView: View {
                 return
             }
             do {
-                let (status, snapshot) = try await draftlineStore.push()
+                await MainActor.run { recordSyncDiagnostic("sync.push.started") }
+                let (status, snapshot) = try await withSyncOperationTimeout {
+                    try await draftlineStore.push()
+                }
                 await MainActor.run {
                     updateWorkspaceOperationMessage(status.state == .conflict ? "Preparing change review" : "Updating workspace view")
                 }
-                let conflicts = await conflicts(for: status)
-                await MainActor.run { applyWorkspaceSync(status: status, snapshot: snapshot, conflicts: conflicts) }
+                let conflicts = await conflicts(for: status, operationName: "sync.push.conflicts")
+                await MainActor.run {
+                    recordSyncDiagnostic("sync.push.finished", attributes: diagnosticAttributes(for: status))
+                    applyWorkspaceSync(status: status, snapshot: snapshot, conflicts: conflicts)
+                }
             } catch {
-                await MainActor.run { syncError = error.localizedDescription }
+                await MainActor.run { handleSyncOperationError(error, operationName: "sync.push") }
             }
             await MainActor.run { finishWorkspaceOperation() }
         }
@@ -580,21 +610,25 @@ public struct CompanionRootView: View {
                 return
             }
             do {
-                let (status, snapshot) = try await draftlineStore.resolveConflicts(resolutions)
+                await MainActor.run { recordSyncDiagnostic("sync.resolve.started") }
+                let (status, snapshot) = try await withSyncOperationTimeout {
+                    try await draftlineStore.resolveConflicts(resolutions)
+                }
                 await MainActor.run {
                     updateWorkspaceOperationMessage(
                         status.state == .clean ? "Updating workspace view" : "Checking remaining changes"
                     )
                 }
-                let conflicts = await conflicts(for: status)
+                let conflicts = await conflicts(for: status, operationName: "sync.resolve.conflicts")
                 await MainActor.run {
+                    recordSyncDiagnostic("sync.resolve.finished", attributes: diagnosticAttributes(for: status))
                     applyWorkspaceSync(status: status, snapshot: snapshot, conflicts: conflicts)
                     if status.state == .clean {
                         isShowingSync = false
                     }
                 }
             } catch {
-                await MainActor.run { syncError = error.localizedDescription }
+                await MainActor.run { handleSyncOperationError(error, operationName: "sync.resolve") }
             }
             await MainActor.run { finishWorkspaceOperation() }
         }
@@ -605,13 +639,19 @@ public struct CompanionRootView: View {
         guard !isSyncingWorkspace else {
             return false
         }
+        workspaceOperationGeneration += 1
+        let operationGeneration = workspaceOperationGeneration
         syncProgressMessage = message
         isSyncingWorkspace = true
+        syncDiagnosticReportURL = nil
+        syncDiagnosticReportError = nil
+        scheduleWorkspaceOperationWatchdog(generation: operationGeneration)
         return true
     }
 
     @MainActor
     private func finishWorkspaceOperation() {
+        workspaceOperationGeneration += 1
         isSyncingWorkspace = false
         syncProgressMessage = "Syncing"
     }
@@ -619,6 +659,31 @@ public struct CompanionRootView: View {
     @MainActor
     private func updateWorkspaceOperationMessage(_ message: String) {
         syncProgressMessage = message
+    }
+
+    @MainActor
+    private func scheduleWorkspaceOperationWatchdog(generation: Int) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: syncOperationWatchdogNanoseconds)
+            guard isSyncingWorkspace, workspaceOperationGeneration == generation else {
+                return
+            }
+            if var project {
+                project.syncStatus = MobileSyncStatus(
+                    state: .offline,
+                    ahead: project.syncStatus.ahead,
+                    behind: project.syncStatus.behind,
+                    message: "GitHub sync did not finish before CutReady's device watchdog. Try again or share diagnostics."
+                )
+                self.project = project
+            }
+            syncError = "GitHub sync did not finish before CutReady's device watchdog."
+            recordSyncDiagnostic(
+                "sync.watchdog.timeout",
+                attributes: ["message": syncProgressMessage]
+            )
+            finishWorkspaceOperation()
+        }
     }
 
     @MainActor
@@ -648,11 +713,137 @@ public struct CompanionRootView: View {
         syncError = nil
     }
 
-    private func conflicts(for status: MobileSyncStatus) async -> [MobileConflict] {
+    private func conflicts(for status: MobileSyncStatus, operationName: String) async -> [MobileConflict] {
         guard status.state == .conflict else {
             return []
         }
-        return (try? await draftlineStore.listConflicts()) ?? []
+        do {
+            return try await withSyncOperationTimeout {
+                try await draftlineStore.listConflicts()
+            }
+        } catch {
+            await MainActor.run {
+                handleSyncOperationError(error, operationName: operationName)
+            }
+            return []
+        }
+    }
+
+    @MainActor
+    private func handleSyncOperationError(_ error: Error, operationName: String) {
+        let message: String
+        if let timeout = error as? SyncOperationTimeoutError {
+            message = timeout.localizedDescription
+            if var project {
+                project.syncStatus = MobileSyncStatus(
+                    state: .offline,
+                    ahead: project.syncStatus.ahead,
+                    behind: project.syncStatus.behind,
+                    message: "GitHub did not respond before CutReady's mobile timeout. Try again on a stronger network or send diagnostics."
+                )
+                self.project = project
+            }
+        } else if case DraftlineMobileBridgeError.remoteTimeout(let remoteMessage) = error {
+            message = remoteMessage
+            if var project {
+                project.syncStatus = MobileSyncStatus(
+                    state: .offline,
+                    ahead: project.syncStatus.ahead,
+                    behind: project.syncStatus.behind,
+                    message: "GitHub did not respond before Draftline's native timeout. Try again or share diagnostics."
+                )
+                self.project = project
+            }
+        } else if case DraftlineMobileBridgeError.remoteNetwork(let remoteMessage) = error {
+            message = remoteMessage
+            if var project {
+                project.syncStatus = MobileSyncStatus(
+                    state: .offline,
+                    ahead: project.syncStatus.ahead,
+                    behind: project.syncStatus.behind,
+                    message: "GitHub sync hit a network error. Check connectivity, then try again or share diagnostics."
+                )
+                self.project = project
+            }
+        } else if case DraftlineMobileBridgeError.operationInProgress = error {
+            message = "The previous GitHub sync check is still finishing. Wait a moment, then try again or share diagnostics if it does not recover."
+        } else {
+            message = error.localizedDescription
+        }
+
+        syncError = message
+        recordSyncDiagnostic(
+            "\(operationName).failed",
+            attributes: [
+                "error": message,
+                "errorType": String(describing: type(of: error))
+            ]
+        )
+    }
+
+    @MainActor
+    private func recordSyncDiagnostic(_ name: String, attributes: [String: String] = [:]) {
+        syncDiagnostics.append(
+            SyncDiagnosticEntry(
+                timestamp: Date(),
+                name: name,
+                attributes: attributes
+            )
+        )
+        if syncDiagnostics.count > 120 {
+            syncDiagnostics.removeFirst(syncDiagnostics.count - 120)
+        }
+    }
+
+    @MainActor
+    private func diagnosticAttributes(for status: MobileSyncStatus) -> [String: String] {
+        [
+            "state": status.state.rawValue,
+            "ahead": "\(status.ahead)",
+            "behind": "\(status.behind)",
+            "message": status.message ?? ""
+        ]
+    }
+
+    private func prepareDiagnosticReport() {
+        Task {
+            do {
+                let url = try await MainActor.run { try createDiagnosticReport() }
+                await MainActor.run {
+                    syncDiagnosticReportURL = url
+                    syncDiagnosticReportError = nil
+                }
+            } catch {
+                await MainActor.run {
+                    syncDiagnosticReportURL = nil
+                    syncDiagnosticReportError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func createDiagnosticReport() throws -> URL {
+        let report = SyncDiagnosticReport(
+            createdAt: Date(),
+            app: AppDiagnosticInfo.current,
+            device: DeviceDiagnosticInfo.current,
+            workspace: project.map(WorkspaceDiagnosticInfo.init(project:)),
+            sync: project.map { SyncDiagnosticInfo(project: $0, isSyncing: isSyncingWorkspace, progressMessage: syncProgressMessage, errorMessage: syncError) },
+            breadcrumbs: syncDiagnostics
+        )
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CutReadyDiagnostics", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let stamp = ISO8601DateFormatter()
+            .string(from: report.createdAt)
+            .replacingOccurrences(of: ":", with: "-")
+        let url = directory.appendingPathComponent("cutready-ios-diagnostics-\(stamp).json")
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(report).write(to: url, options: .atomic)
+        recordSyncDiagnostic("diagnostics.report.created", attributes: ["path": url.lastPathComponent])
+        return url
     }
 
     private func describeGitHubError(_ error: Error) -> String {
@@ -671,6 +862,180 @@ public struct CompanionRootView: View {
         }
         let error = error as NSError
         return error.domain == NSURLErrorDomain && error.code == NSURLErrorCancelled
+    }
+}
+
+private let syncOperationTimeoutNanoseconds: UInt64 = 25_000_000_000
+private let syncOperationWatchdogNanoseconds: UInt64 = 30_000_000_000
+
+private enum SyncOperationTimeoutError: LocalizedError {
+    case timedOut(seconds: Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .timedOut(let seconds):
+            return "GitHub sync check timed out after \(seconds) seconds. The native fetch may still be finishing in the background."
+        }
+    }
+}
+
+private func withSyncOperationTimeout<T>(
+    _ operation: @escaping () async throws -> T
+) async throws -> T {
+    try await withCheckedThrowingContinuation { continuation in
+        let gate = TimeoutContinuationGate(continuation: continuation)
+        let operationTask = Task {
+            do {
+                let value = try await operation()
+                gate.resume(returning: value)
+            } catch {
+                gate.resume(throwing: error)
+            }
+        }
+
+        Task {
+            try? await Task.sleep(nanoseconds: syncOperationTimeoutNanoseconds)
+            let seconds = Int(syncOperationTimeoutNanoseconds / 1_000_000_000)
+            if gate.resume(throwing: SyncOperationTimeoutError.timedOut(seconds: seconds)) {
+                operationTask.cancel()
+            }
+        }
+    }
+}
+
+private final class TimeoutContinuationGate<T>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var didResume = false
+    private let continuation: CheckedContinuation<T, Error>
+
+    init(continuation: CheckedContinuation<T, Error>) {
+        self.continuation = continuation
+    }
+
+    @discardableResult
+    func resume(returning value: T) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !didResume else {
+            return false
+        }
+        didResume = true
+        continuation.resume(returning: value)
+        return true
+    }
+
+    @discardableResult
+    func resume(throwing error: Error) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !didResume else {
+            return false
+        }
+        didResume = true
+        continuation.resume(throwing: error)
+        return true
+    }
+}
+
+private struct SyncDiagnosticEntry: Codable, Identifiable {
+    let id: UUID
+    let timestamp: Date
+    let name: String
+    let attributes: [String: String]
+
+    init(id: UUID = UUID(), timestamp: Date, name: String, attributes: [String: String]) {
+        self.id = id
+        self.timestamp = timestamp
+        self.name = name
+        self.attributes = attributes
+    }
+}
+
+private struct SyncDiagnosticReport: Codable {
+    let createdAt: Date
+    let app: AppDiagnosticInfo
+    let device: DeviceDiagnosticInfo
+    let workspace: WorkspaceDiagnosticInfo?
+    let sync: SyncDiagnosticInfo?
+    let breadcrumbs: [SyncDiagnosticEntry]
+}
+
+private struct AppDiagnosticInfo: Codable {
+    let version: String
+    let build: String
+    let bundleIdentifier: String
+
+    static var current: AppDiagnosticInfo {
+        AppDiagnosticInfo(
+            version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown",
+            build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown",
+            bundleIdentifier: Bundle.main.bundleIdentifier ?? "unknown"
+        )
+    }
+}
+
+private struct DeviceDiagnosticInfo: Codable {
+    let model: String
+    let systemName: String
+    let systemVersion: String
+
+    static var current: DeviceDiagnosticInfo {
+        #if os(iOS)
+        let device = UIDevice.current
+        return DeviceDiagnosticInfo(
+            model: device.model,
+            systemName: device.systemName,
+            systemVersion: device.systemVersion
+        )
+        #else
+        let processInfo = ProcessInfo.processInfo
+        return DeviceDiagnosticInfo(
+            model: processInfo.hostName,
+            systemName: "macOS",
+            systemVersion: processInfo.operatingSystemVersionString
+        )
+        #endif
+    }
+}
+
+private struct WorkspaceDiagnosticInfo: Codable {
+    let name: String
+    let source: String
+    let projectCount: Int
+    let storyboardCount: Int
+    let sketchCount: Int
+    let noteCount: Int
+
+    init(project: CompanionProject) {
+        self.name = project.workspaceName
+        switch project.source {
+        case .github(let repository):
+            self.source = repository.displayName
+        }
+        self.projectCount = project.projects.count
+        self.storyboardCount = project.allStoryboards.count
+        self.sketchCount = project.allSketches.count
+        self.noteCount = project.allNotes.count
+    }
+}
+
+private struct SyncDiagnosticInfo: Codable {
+    let state: String
+    let ahead: Int
+    let behind: Int
+    let message: String?
+    let isSyncing: Bool
+    let progressMessage: String
+    let errorMessage: String?
+
+    init(project: CompanionProject, isSyncing: Bool, progressMessage: String, errorMessage: String?) {
+        self.state = project.syncStatus.state.rawValue
+        self.ahead = project.syncStatus.ahead
+        self.behind = project.syncStatus.behind
+        self.message = project.syncStatus.message
+        self.isSyncing = isSyncing
+        self.progressMessage = progressMessage
+        self.errorMessage = errorMessage
     }
 }
 
@@ -898,9 +1263,9 @@ private struct ProjectNavigationRow: View {
 
 private struct WorkspaceSyncSheet: View {
     let project: CompanionProject
-    let isSyncing: Bool
-    let progressMessage: String
-    let errorMessage: String?
+    @Binding var isSyncing: Bool
+    @Binding var progressMessage: String
+    @Binding var errorMessage: String?
     let conflicts: [MobileConflict]
     let onSyncNow: () -> Void
     let onRefresh: () -> Void
@@ -908,22 +1273,33 @@ private struct WorkspaceSyncSheet: View {
     let onPush: () -> Void
     let onResolveConflicts: ([MobileConflictResolutionRequest]) -> Void
     let onParkAndReload: () -> Void
+    @Binding var diagnosticReportURL: URL?
+    @Binding var diagnosticReportError: String?
+    let onPrepareDiagnosticReport: () -> Void
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                statusCard
-                errorSection
-                conflictSection
-                actionButtons
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Sync")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(CutReadyTheme.text)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, 6)
+                        .padding(.bottom, 6)
 
-                Spacer()
+                    statusCard
+                    errorSection
+                    conflictSection
+                    actionButtons
+                    diagnosticsSection
+                }
+                .padding(18)
+                .padding(.top, statusTopPadding)
             }
-            .padding(18)
             .background(CutReadyTheme.surface)
-            .navigationTitle("Sync")
             #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
             #endif
             .overlay {
                 if isSyncing {
@@ -961,6 +1337,15 @@ private struct WorkspaceSyncSheet: View {
                         .lineLimit(5)
                 }
             }
+        }
+    }
+
+    private var statusTopPadding: CGFloat {
+        switch project.syncStatus.state {
+        case .conflict, .offline:
+            return 12
+        case .clean, .dirty, .incoming, .pulling, .pushing:
+            return 0
         }
     }
 
@@ -1090,6 +1475,38 @@ private struct WorkspaceSyncSheet: View {
         }
         .controlSize(.large)
         .disabled(isSyncing)
+    }
+
+    private var diagnosticsSection: some View {
+        CompanionCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Diagnostics", systemImage: "waveform.path.ecg")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(CutReadyTheme.accent)
+
+                Text("Create a local JSON report with app, device, workspace, and recent sync breadcrumbs. It does not include GitHub tokens.")
+                    .font(.caption)
+                    .foregroundStyle(CutReadyTheme.textSecondary)
+
+                Button(action: onPrepareDiagnosticReport) {
+                    syncLabel("Prepare diagnostic report", systemImage: "doc.badge.gearshape")
+                }
+                .buttonStyle(.bordered)
+
+                if let diagnosticReportURL {
+                    ShareLink(item: diagnosticReportURL) {
+                        syncLabel("Share diagnostic report", systemImage: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+
+                if let diagnosticReportError {
+                    Text(diagnosticReportError)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
     }
 
     private var canParkAndReload: Bool {
@@ -1279,7 +1696,7 @@ private struct MobileConflictResolutionWizard: View {
 
     @ViewBuilder
     private func selectedVersionPreview(for group: MobileConflictGroup) -> some View {
-        switch choices[group.path] ?? .myVersion {
+        switch selectedChoice(for: group) {
         case .myVersion:
             versionPreview(title: "My version", conflicts: group.conflicts, keyPath: \.mine)
         case .latestShared:
@@ -1301,7 +1718,7 @@ private struct MobileConflictResolutionWizard: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(CutReadyTheme.textSecondary)
             ForEach(conflicts) { conflict in
-                Text(conflict[keyPath: keyPath] ?? "No content in this version.")
+                Text(versionPreviewText(for: conflict, keyPath: keyPath))
                     .font(.caption)
                     .foregroundStyle(CutReadyTheme.text)
                     .lineLimit(6)
@@ -1312,9 +1729,19 @@ private struct MobileConflictResolutionWizard: View {
         }
     }
 
+    private func versionPreviewText(
+        for conflict: MobileConflict,
+        keyPath: KeyPath<MobileConflict, String?>
+    ) -> String {
+        if let content = conflict[keyPath: keyPath] {
+            return content.isEmpty ? "This version is empty." : content
+        }
+        return "Preview unavailable for this version."
+    }
+
     private var canApply: Bool {
         groups.allSatisfy { group in
-            let choice = choices[group.path] ?? .myVersion
+            let choice = selectedChoice(for: group)
             guard choice == .custom else {
                 return true
             }
@@ -1326,12 +1753,13 @@ private struct MobileConflictResolutionWizard: View {
 
     private var resolutions: [MobileConflictResolutionRequest] {
         groups.flatMap { group in
-            let choice = choices[group.path] ?? .myVersion
+            let choice = selectedChoice(for: group)
             return group.conflicts.map { conflict in
                 MobileConflictResolutionRequest(
                     path: conflict.path,
                     fieldPath: conflict.fieldPath,
                     choice: choice,
+                    resolvedContent: resolvedContent(for: conflict, choice: choice),
                     customContent: choice == .custom ? customContent(for: conflict) : nil
                 )
             }
@@ -1340,9 +1768,27 @@ private struct MobileConflictResolutionWizard: View {
 
     private func choiceBinding(for group: MobileConflictGroup) -> Binding<MobileConflictResolutionChoice> {
         Binding(
-            get: { choices[group.path] ?? .myVersion },
+            get: { selectedChoice(for: group) },
             set: { choices[group.path] = $0 }
         )
+    }
+
+    private func selectedChoice(for group: MobileConflictGroup) -> MobileConflictResolutionChoice {
+        choices[group.path] ?? .myVersion
+    }
+
+    private func resolvedContent(
+        for conflict: MobileConflict,
+        choice: MobileConflictResolutionChoice
+    ) -> String? {
+        switch choice {
+        case .myVersion:
+            return conflict.mine
+        case .latestShared:
+            return conflict.latestShared
+        case .custom:
+            return customContent(for: conflict)
+        }
     }
 
     private func customContentBinding(for conflict: MobileConflict) -> Binding<String> {
@@ -3808,7 +4254,10 @@ private struct ScreenshotAssetView: View {
             }
         }
         .task(id: candidatePaths.joined(separator: "|")) {
-            guard data == nil, !candidatePaths.isEmpty else {
+            data = nil
+            attemptedLoad = false
+
+            guard !candidatePaths.isEmpty else {
                 return
             }
             attemptedLoad = true
@@ -4018,6 +4467,7 @@ private struct PlayerView: View {
     @State private var countdown: Int?
     @State private var countdownTask: Task<Void, Never>?
     @State private var lastTick: Date?
+    @State private var prompterBeatID: String?
 
     private let timer = Timer.publish(every: 1.0 / 60.0, on: .main, in: .common).autoconnect()
 
@@ -4038,6 +4488,13 @@ private struct PlayerView: View {
 
     private var currentBeat: PlayerTimelineBeat? {
         timeline.beats.indices.contains(currentBeatIndex) ? timeline.beats[currentBeatIndex] : nil
+    }
+
+    private var cueBeat: PlayerTimelineBeat? {
+        if let prompterBeatID, let beat = timeline.beats.first(where: { $0.id == prompterBeatID }) {
+            return beat
+        }
+        return currentBeat
     }
 
     var body: some View {
@@ -4080,6 +4537,7 @@ private struct PlayerView: View {
         .sheet(isPresented: $isShowingSettings) {
             PlayerSettingsSheet(settings: $settings)
         }
+        .preferredColorScheme(settings.appearance.colorScheme)
         .onDisappear {
             countdownTask?.cancel()
         }
@@ -4089,7 +4547,7 @@ private struct PlayerView: View {
         let isLandscape = geometry.size.width > geometry.size.height
         let topInset: CGFloat = 34
         let bottomInset: CGFloat = 28
-        let hasScreenshotCue = settings.showsScreenshotCue && currentBeat?.screenshotPath != nil
+        let hasScreenshotCue = settings.showsScreenshotCue && cueBeat?.screenshotPath != nil
         let screenshotHeight = hasScreenshotCue
             ? settings.portraitScreenshotHeight(screenHeight: geometry.size.height)
             : 0
@@ -4133,6 +4591,9 @@ private struct PlayerView: View {
             totalDuration: totalDuration,
             viewportHeight: viewportHeight,
             onManualScroll: pausePlayback,
+            onMarkerBeatChanged: { beatID in
+                prompterBeatID = beatID
+            },
             onTap: toggleChrome
         )
     }
@@ -4144,7 +4605,7 @@ private struct PlayerView: View {
     @ViewBuilder
     private func screenshotCue(maxHeight: CGFloat) -> some View {
         if
-            let beat = currentBeat,
+            let beat = cueBeat,
             let screenshotPath = beat.screenshotPath
         {
             VStack(alignment: .leading, spacing: 8) {
@@ -4175,6 +4636,7 @@ private struct PlayerView: View {
             )
             .contentShape(Rectangle())
             .onTapGesture(perform: toggleChrome)
+            .id("\(beat.id)#\(screenshotPath)")
         }
     }
 
@@ -4223,6 +4685,18 @@ private struct PlayerView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
+            .padding(.bottom, 12)
+            .frame(maxWidth: .infinity)
+            .background(alignment: .top) {
+                Rectangle()
+                    .fill(CutReadyTheme.surface.opacity(0.96))
+                    .overlay(alignment: .bottom) {
+                        Rectangle()
+                            .fill(CutReadyTheme.border.opacity(0.55))
+                            .frame(height: 1)
+                    }
+                    .ignoresSafeArea(edges: .top)
+            }
 
             Spacer()
 
@@ -4401,6 +4875,7 @@ private struct PlayerTeleprompterView: View {
     let totalDuration: TimeInterval
     let viewportHeight: CGFloat
     let onManualScroll: () -> Void
+    let onMarkerBeatChanged: (String?) -> Void
     let onTap: () -> Void
     @State private var contentHeight: CGFloat = 0
     @State private var dragStartElapsed: TimeInterval?
@@ -4446,9 +4921,13 @@ private struct PlayerTeleprompterView: View {
             contentHeight = height
         }
         .onPreferenceChange(PlayerBeatMidpointKey.self) { midpoints in
-            markerBeatID = midpoints.min { lhs, rhs in
+            let nextBeatID = midpoints.min { lhs, rhs in
                 abs(lhs.value - viewportHeight / 2) < abs(rhs.value - viewportHeight / 2)
             }?.key
+            if markerBeatID != nextBeatID {
+                markerBeatID = nextBeatID
+                onMarkerBeatChanged(nextBeatID)
+            }
         }
         .overlay(alignment: .center) {
             Rectangle()
@@ -4503,6 +4982,14 @@ private struct PlayerTeleprompterView: View {
                 .onEnded { value in
                     if abs(value.translation.height) <= 4 && abs(value.translation.width) <= 4 {
                         onTap()
+                    } else {
+                        let travel = max(1, contentHeight - viewportHeight)
+                        let progressDelta = -value.predictedEndTranslation.height / travel
+                        let startElapsed = dragStartElapsed ?? elapsed
+                        let targetElapsed = min(max(0, startElapsed + progressDelta * totalDuration), totalDuration)
+                        withAnimation(.interactiveSpring(response: 0.38, dampingFraction: 0.86)) {
+                            elapsed = targetElapsed
+                        }
                     }
                     dragStartElapsed = nil
                 }
@@ -4653,6 +5140,15 @@ private struct PlayerSettingsSheet: View {
                     Toggle("Show actions", isOn: $settings.showActions)
                 }
 
+                Section("Appearance") {
+                    Picker("Theme", selection: $settings.appearance) {
+                        ForEach(PlayerDisplayAppearance.allCases) { appearance in
+                            Text(appearance.label).tag(appearance)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
                 Section("Screenshot cue") {
                     Picker("Screenshot size", selection: $settings.screenshotSize) {
                         ForEach(PlayerScreenshotSize.allCases) { size in
@@ -4690,6 +5186,36 @@ private struct PlayerSettingsSheet: View {
     }
 }
 
+private enum PlayerDisplayAppearance: String, CaseIterable, Codable, Identifiable, Sendable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .system:
+            return "System"
+        case .light:
+            return "Light"
+        case .dark:
+            return "Dark"
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system:
+            return nil
+        case .light:
+            return .light
+        case .dark:
+            return .dark
+        }
+    }
+}
+
 private enum PlayerScreenshotSize: String, CaseIterable, Codable, Identifiable, Sendable {
     case hidden
     case peek
@@ -4713,6 +5239,7 @@ private enum PlayerScreenshotSize: String, CaseIterable, Codable, Identifiable, 
 }
 
 private struct PlayerDisplaySettings: Codable, Equatable {
+    var appearance: PlayerDisplayAppearance = .system
     var screenshotSize: PlayerScreenshotSize = .hidden
     var showDescriptions = true
     var showActions = true
@@ -4722,6 +5249,35 @@ private struct PlayerDisplaySettings: Codable, Equatable {
     var speed = 1.0
     var textScale = 1.0
     var lineSpacing = 7.0
+
+    init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case appearance
+        case screenshotSize
+        case showDescriptions
+        case showActions
+        case showProgress
+        case showCountdown
+        case controlsAutoHide
+        case speed
+        case textScale
+        case lineSpacing
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        appearance = try values.decodeIfPresent(PlayerDisplayAppearance.self, forKey: .appearance) ?? .system
+        screenshotSize = try values.decodeIfPresent(PlayerScreenshotSize.self, forKey: .screenshotSize) ?? .hidden
+        showDescriptions = try values.decodeIfPresent(Bool.self, forKey: .showDescriptions) ?? true
+        showActions = try values.decodeIfPresent(Bool.self, forKey: .showActions) ?? true
+        showProgress = try values.decodeIfPresent(Bool.self, forKey: .showProgress) ?? true
+        showCountdown = try values.decodeIfPresent(Bool.self, forKey: .showCountdown) ?? true
+        controlsAutoHide = try values.decodeIfPresent(Bool.self, forKey: .controlsAutoHide) ?? true
+        speed = try values.decodeIfPresent(Double.self, forKey: .speed) ?? 1.0
+        textScale = try values.decodeIfPresent(Double.self, forKey: .textScale) ?? 1.0
+        lineSpacing = try values.decodeIfPresent(Double.self, forKey: .lineSpacing) ?? 7.0
+    }
 
     var scriptFontSize: CGFloat {
         26 * textScale

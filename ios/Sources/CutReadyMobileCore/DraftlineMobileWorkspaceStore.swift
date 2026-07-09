@@ -102,7 +102,7 @@ public final class DraftlineMobileWorkspaceStore: @unchecked Sendable {
 
     public func listConflicts() async throws -> [MobileConflict] {
         try await operationGate.run {
-            try await self.client.listConflicts()
+            try await self.enrichedConflictsUnlocked()
         }
     }
 
@@ -154,6 +154,36 @@ public final class DraftlineMobileWorkspaceStore: @unchecked Sendable {
             sketches: documents.sketches,
             notes: documents.notes
         )
+    }
+
+    private func enrichedConflictsUnlocked() async throws -> [MobileConflict] {
+        let conflicts = try await client.listConflicts()
+        guard conflicts.contains(where: { $0.mine == nil && $0.fieldPath == nil }) else {
+            return conflicts
+        }
+
+        let documents = try await client.listDocuments()
+        let localContents = Dictionary(
+            uniqueKeysWithValues: (documents.notes + documents.sketches + documents.storyboards)
+                .compactMap { summary -> (String, String)? in
+                    guard let contents = summary.contents else {
+                        return nil
+                    }
+                    return (summary.path, contents)
+                }
+        )
+
+        return conflicts.map { conflict in
+            guard conflict.mine == nil,
+                  conflict.fieldPath == nil,
+                  let contents = localContents[conflict.path] else {
+                return conflict
+            }
+
+            var enriched = conflict
+            enriched.mine = contents
+            return enriched
+        }
     }
 
     private func saveNoteUnlocked(_ markdown: String, path: String, label: String? = nil) async throws -> MobileWorkspaceSnapshot {
