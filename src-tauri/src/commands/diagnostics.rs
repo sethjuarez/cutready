@@ -49,6 +49,7 @@ pub struct DiagnosticCheck {
 #[derive(Debug, Serialize)]
 pub struct VisualDiagnostics {
     sketch_path: String,
+    row_number: usize,
     row_index: usize,
     visual_path: Option<String>,
     inline_visual: bool,
@@ -419,6 +420,7 @@ pub async fn clear_auditaur_logs() -> Result<ClearAuditaurLogsResult, String> {
 #[auditaur_command(skip_all, err)]
 pub async fn dump_diagnostics(
     sketch_path: Option<String>,
+    row_number: Option<usize>,
     row_index: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<DiagnosticsDump, String> {
@@ -441,6 +443,7 @@ pub async fn dump_diagnostics(
         elucim_bridge_value: std::env::var("CUTREADY_ELUCIM_BRIDGE").ok(),
     };
 
+    let row_index = parse_diagnostics_row_target(row_number, row_index)?;
     let visual = match (project.as_ref(), sketch_path, row_index) {
         (Some(project), Some(sketch_path), Some(row_index)) => {
             Some(visual_diagnostics(&project.root, sketch_path, row_index)?)
@@ -706,6 +709,29 @@ fn diagnostic_checks(
     checks
 }
 
+fn parse_diagnostics_row_target(
+    row_number: Option<usize>,
+    row_index: Option<usize>,
+) -> Result<Option<usize>, String> {
+    let Some(row_number) = row_number else {
+        return Ok(row_index);
+    };
+    if row_number == 0 {
+        return Err("rowNumber must be a positive 1-based row number".to_string());
+    }
+
+    let normalized_index = row_number - 1;
+    if let Some(row_index) = row_index {
+        if row_index != normalized_index {
+            return Err(format!(
+                "Conflicting row targets: rowNumber {row_number} refers to rowIndex {normalized_index}, but rowIndex {row_index} was also provided"
+            ));
+        }
+    }
+
+    Ok(Some(normalized_index))
+}
+
 fn visual_diagnostics(
     root: &std::path::Path,
     sketch_path: String,
@@ -713,13 +739,16 @@ fn visual_diagnostics(
 ) -> Result<VisualDiagnostics, String> {
     let abs_path = project::safe_resolve(root, &sketch_path).map_err(|e| e.to_string())?;
     let sketch = project::read_sketch_with_migration(&abs_path, root).map_err(|e| e.to_string())?;
-    let row = sketch
-        .rows
-        .get(row_index)
-        .ok_or_else(|| format!("Row index {row_index} does not exist in {sketch_path}"))?;
+    let row = sketch.rows.get(row_index).ok_or_else(|| {
+        format!(
+            "Row number {} does not exist in {sketch_path}",
+            row_index + 1
+        )
+    })?;
     let Some(visual_ref) = row.visual.as_ref() else {
         return Err(format!(
-            "Row index {row_index} in {sketch_path} does not have a visual"
+            "Row number {} in {sketch_path} does not have a visual",
+            row_index + 1
         ));
     };
 
@@ -753,6 +782,7 @@ fn visual_diagnostics(
 
     Ok(VisualDiagnostics {
         sketch_path,
+        row_number: row_index + 1,
         row_index,
         visual_path,
         inline_visual,
@@ -786,4 +816,40 @@ fn object_keys(value: &Value, key: &str) -> Vec<String> {
         .unwrap_or_default();
     keys.sort();
     keys
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_diagnostics_row_target;
+
+    #[test]
+    fn diagnostics_row_number_is_one_based() {
+        assert_eq!(
+            parse_diagnostics_row_target(Some(1), None).unwrap(),
+            Some(0)
+        );
+        assert_eq!(
+            parse_diagnostics_row_target(Some(3), None).unwrap(),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn diagnostics_row_target_preserves_legacy_index_when_no_row_number() {
+        assert_eq!(
+            parse_diagnostics_row_target(None, Some(0)).unwrap(),
+            Some(0)
+        );
+        assert_eq!(parse_diagnostics_row_target(None, None).unwrap(), None);
+    }
+
+    #[test]
+    fn diagnostics_row_target_rejects_zero_and_conflicts() {
+        assert!(parse_diagnostics_row_target(Some(0), None).is_err());
+        assert!(parse_diagnostics_row_target(Some(2), Some(0)).is_err());
+        assert_eq!(
+            parse_diagnostics_row_target(Some(2), Some(1)).unwrap(),
+            Some(1)
+        );
+    }
 }

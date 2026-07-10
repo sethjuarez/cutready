@@ -141,8 +141,30 @@ interface AgentChatResult {
   response: string;
 }
 
-const SKETCH_MUTATION_TOOLS = new Set(["write_sketch", "update_planning_row", "set_row_visual", "design_plan"]);
+const ROW_TARGETED_SKETCH_MUTATION_TOOLS = new Set([
+  "update_planning_row",
+  "set_row_visual",
+  "design_plan",
+  "apply_row_visual_nudge",
+  "apply_row_visual_command",
+]);
+const SKETCH_MUTATION_TOOLS = new Set(["write_sketch", ...ROW_TARGETED_SKETCH_MUTATION_TOOLS]);
 const STORYBOARD_MUTATION_TOOLS = new Set(["write_storyboard"]);
+
+function parseNonNegativeInteger(value: unknown): number | null {
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) return value;
+  if (typeof value === "string" && /^\d+$/.test(value.trim())) return Number(value);
+  return null;
+}
+
+function parseRowMutationIndex(args: Record<string, unknown>): number | null {
+  const rowNumber = parseNonNegativeInteger(args.row_number);
+  const index = parseNonNegativeInteger(args.index);
+  if (rowNumber === 0) return null;
+  const rowNumberIndex = rowNumber === null ? null : rowNumber - 1;
+  if (rowNumberIndex !== null && index !== null && rowNumberIndex !== index) return null;
+  return rowNumberIndex ?? index;
+}
 
 function consumeQueuedToolArgs(queue: Record<string, string[]>, toolName: string): string {
   const entries = queue[toolName];
@@ -158,9 +180,9 @@ function sketchMutationInfo(toolName: string, argsJson: string, fallbackPath: st
     const args = JSON.parse(argsJson || "{}");
     const path = typeof args.path === "string" ? args.path : fallbackPath;
     const changedRows: number[] = [];
-    if (toolName === "update_planning_row" || toolName === "set_row_visual" || toolName === "design_plan") {
-      const idx = typeof args.index === "number" ? args.index : parseInt(String(args.index), 10);
-      if (!Number.isNaN(idx)) changedRows.push(idx);
+    if (ROW_TARGETED_SKETCH_MUTATION_TOOLS.has(toolName)) {
+      const idx = parseRowMutationIndex(args);
+      if (idx !== null) changedRows.push(idx);
     }
     return { path, rows: changedRows, toolName };
   } catch {
