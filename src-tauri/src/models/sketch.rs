@@ -320,6 +320,29 @@ impl Storyboard {
         }
         before.saturating_sub(self.sketch_count())
     }
+
+    pub fn replace_sketch_references(&mut self, old_path: &str, new_path: &str) -> usize {
+        let mut replaced = 0;
+        for item in &mut self.items {
+            match item {
+                StoryboardItem::SketchRef { path } => {
+                    if path.replace('\\', "/") == old_path {
+                        *path = new_path.to_owned();
+                        replaced += 1;
+                    }
+                }
+                StoryboardItem::Section { sketches, .. } => {
+                    for path in sketches {
+                        if path.replace('\\', "/") == old_path {
+                            *path = new_path.to_owned();
+                            replaced += 1;
+                        }
+                    }
+                }
+            }
+        }
+        replaced
+    }
 }
 
 impl<'de> Deserialize<'de> for Storyboard {

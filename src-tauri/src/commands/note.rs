@@ -95,10 +95,7 @@ pub async fn rename_note(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = project_root(&state)?;
-    let old_abs = project::safe_resolve(&root, &old_path).map_err(|e| e.to_string())?;
-    let new_abs = project::safe_resolve(&root, &new_path).map_err(|e| e.to_string())?;
-
-    project::rename_file(&old_abs, &new_abs, &root, "note").map_err(|e| e.to_string())?;
+    project::rename_project_asset(&root, &old_path, &new_path).map_err(|e| e.to_string())?;
     Ok(())
 }
 
