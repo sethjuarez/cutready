@@ -260,6 +260,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       });
       return {
         sketch_path: "sketches/imported-demo-video.sk",
+        note_path: "sketches/imported-demo-video-summary.md",
         title: "Imported Demo Video",
         row_count: 3,
         screenshot_count: 3,

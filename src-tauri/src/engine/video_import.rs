@@ -37,6 +37,7 @@ const DURATION_LIMIT_PREFIX: &str = "VIDEO_IMPORT_DURATION_LIMIT:";
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct VideoImportResult {
     pub sketch_path: String,
+    pub note_path: String,
     pub title: String,
     pub row_count: usize,
     pub screenshot_count: usize,
@@ -62,6 +63,7 @@ pub struct VideoImportManifest {
     pub sidecar_transcript: String,
     pub audio_path: Option<String>,
     pub sketch_path: String,
+    pub note_path: String,
     pub imported_at: chrono::DateTime<Utc>,
     pub transcript_segments: Vec<TranscriptSegment>,
     pub heuristic_evidence: VideoImportHeuristicEvidence,
@@ -182,6 +184,7 @@ pub async fn import_video_from_sidecar(
     project_root: &Path,
     video_path: &Path,
     sketch_relative_path: &str,
+    note_relative_path: &str,
     title: &str,
     llm_options: Option<VideoImportLlmOptions>,
 ) -> anyhow::Result<VideoImportResult> {
@@ -189,6 +192,7 @@ pub async fn import_video_from_sidecar(
         project_root,
         video_path,
         sketch_relative_path,
+        note_relative_path,
         title,
         llm_options,
         |_| {},
@@ -200,6 +204,7 @@ pub async fn import_video_from_sidecar_with_progress<F>(
     project_root: &Path,
     video_path: &Path,
     sketch_relative_path: &str,
+    note_relative_path: &str,
     title: &str,
     llm_options: Option<VideoImportLlmOptions>,
     mut on_progress: F,
@@ -237,12 +242,11 @@ where
 
     emit_progress(
         &mut on_progress,
-        "audio",
+        "grouping",
         2,
         total_steps,
-        "Extracting import audio for local reference",
+        "Preparing import workspace",
     );
-    let audio_path = extract_audio(video_path, &import_dir).ok();
     emit_progress(
         &mut on_progress,
         "grouping",
@@ -330,7 +334,7 @@ where
         "saving",
         6,
         total_steps,
-        "Saving imported sketch and manifest",
+        "Saving imported sketch, summary note, and manifest",
     );
     let mut sketch = Sketch::new(title);
     sketch.description = serde_json::Value::String(format!(
@@ -349,14 +353,24 @@ where
 
     let sketch_abs = project::safe_resolve(project_root, sketch_relative_path)?;
     project::write_sketch(&sketch, &sketch_abs, project_root)?;
+    let note = build_summary_note(
+        title,
+        video_path,
+        &transcript_path,
+        &scenes,
+        llm_refinement.1.as_ref(),
+    );
+    let note_abs = project::safe_resolve(project_root, note_relative_path)?;
+    project::write_note(&note_abs, &note)?;
 
     let manifest = VideoImportManifest {
         schema_version: 1,
         import_id,
         source_video: video_path.display().to_string(),
         sidecar_transcript: transcript_path.display().to_string(),
-        audio_path: audio_path.map(|path| path.to_string_lossy().replace('\\', "/")),
+        audio_path: None,
         sketch_path: sketch_relative_path.to_string(),
+        note_path: note_relative_path.to_string(),
         imported_at: Utc::now(),
         transcript_segments,
         heuristic_evidence,
@@ -378,13 +392,15 @@ where
     tracing::info!(
         target: "cutready::video_import",
         sketch_path = %sketch_relative_path,
+        note_path = %note_relative_path,
         rows = scenes.len(),
         screenshots = scenes.iter().filter(|scene| scene.screenshot.is_some()).count(),
-        "imported video sidecar transcript as sketch"
+        "imported video sidecar transcript as sketch and summary note"
     );
 
     Ok(VideoImportResult {
         sketch_path: sketch_relative_path.to_string(),
+        note_path: note_relative_path.to_string(),
         title: title.to_string(),
         row_count: sketch.rows.len(),
         screenshot_count: scenes
@@ -396,6 +412,91 @@ where
         llm_refined: llm_refinement.2,
         llm_refinement_status: llm_refinement.0.map(|summary| summary.summary),
     })
+}
+
+fn build_summary_note(
+    title: &str,
+    video_path: &Path,
+    transcript_path: &Path,
+    scenes: &[SceneCandidate],
+    row_plan: Option<&AnalyzerRowPlan>,
+) -> String {
+    let video_name = video_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("video");
+    let transcript_name = transcript_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("transcript");
+    let total_duration = scenes.last().map(|scene| scene.end_ms).unwrap_or_default();
+    let row_count = scenes.len();
+    let mut note = String::new();
+    note.push_str(&format!("# {title} - Video Summary\n\n"));
+    note.push_str(&format!(
+        "Imported from `{video_name}` using sidecar transcript `{transcript_name}`.\n\n"
+    ));
+    note.push_str("## At a Glance\n\n");
+    note.push_str(&format!(
+        "- Duration: {}\n",
+        format_timestamp(total_duration)
+    ));
+    note.push_str(&format!("- Sketch rows: {row_count}\n"));
+    note.push_str("- Sketch narrative: verbatim transcript text\n");
+    note.push_str("- Demo actions: intentionally blank for transcript-only import\n\n");
+    note.push_str("## Main Points\n\n");
+
+    for (index, scene) in scenes.iter().enumerate() {
+        let plan = row_plan
+            .and_then(|plan| plan.rows.get(index))
+            .filter(|row| row.segment_ids == scene.transcript_segment_ids);
+        let label = plan
+            .and_then(|row| row.label.as_deref())
+            .unwrap_or("Transcript section");
+        let reason = plan
+            .and_then(|row| row.reason.as_deref())
+            .or(scene.refinement_notes.as_deref());
+        let excerpt = transcript_excerpt(&scene.transcript_text, 240);
+        note.push_str(&format!(
+            "{}. **{} ({} - {})**\n",
+            index + 1,
+            label,
+            format_timestamp(scene.start_ms),
+            format_timestamp(scene.end_ms)
+        ));
+        note.push_str(&format!("   - Transcript gist: {excerpt}\n"));
+        if let Some(reason) = reason {
+            note.push_str(&format!("   - Why this is one row: {}\n", reason.trim()));
+        }
+        if let Some(confidence) = plan.and_then(|row| row.confidence) {
+            note.push_str(&format!(
+                "   - Analyzer confidence: {:.0}%\n",
+                confidence * 100.0
+            ));
+        }
+        note.push('\n');
+    }
+
+    note.push_str("## Verbatim Transcript\n\n");
+    note.push_str("The full verbatim transcript remains in the generated sketch rows.\n");
+    note
+}
+
+fn transcript_excerpt(text: &str, max_chars: usize) -> String {
+    let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.chars().count() <= max_chars {
+        return normalized;
+    }
+
+    let mut excerpt = normalized.chars().take(max_chars).collect::<String>();
+    if let Some((boundary, _)) = excerpt
+        .char_indices()
+        .rev()
+        .find(|(_, ch)| ch.is_whitespace())
+    {
+        excerpt.truncate(boundary);
+    }
+    format!("{}...", excerpt.trim_end_matches(['.', ',', ';', ':']))
 }
 
 fn emit_progress<F>(
@@ -1166,28 +1267,6 @@ fn format_timestamp(ms: u64) -> String {
     format!("{minutes}:{seconds:02}")
 }
 
-fn extract_audio(video_path: &Path, import_dir: &Path) -> anyhow::Result<PathBuf> {
-    let output_path = import_dir.join("audio.wav");
-    let output = ffmpeg::run_ffmpeg([
-        "-y",
-        "-i",
-        &video_path.to_string_lossy(),
-        "-vn",
-        "-ac",
-        "1",
-        "-ar",
-        "16000",
-        &output_path.to_string_lossy(),
-    ])?;
-    if !output.status.success() {
-        anyhow::bail!(
-            "FFmpeg audio extraction failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-    Ok(output_path)
-}
-
 fn extract_scene_screenshots(
     project_root: &Path,
     video_path: &Path,
@@ -1491,6 +1570,7 @@ This is a short-form WebVTT cue.
             root.path(),
             &sample,
             "observe-agent-performance-v2.sk",
+            "observe-agent-performance-v2-summary.md",
             "Observe Agent Performance V2",
             None,
         )
@@ -1501,6 +1581,63 @@ This is a short-form WebVTT cue.
         assert!(result.row_count >= 3);
         assert_eq!(result.row_count, result.screenshot_count);
         assert!(root.path().join(&result.sketch_path).is_file());
-        assert!(root.path().join(&result.manifest_path).is_file());
+        assert!(root.path().join(&result.note_path).is_file());
+        let manifest_path = root.path().join(&result.manifest_path);
+        assert!(manifest_path.is_file());
+        let manifest: VideoImportManifest =
+            serde_json::from_str(&std::fs::read_to_string(manifest_path).unwrap()).unwrap();
+        assert_eq!(manifest.audio_path, None);
+        let import_dir = root
+            .path()
+            .join(result.manifest_path.trim_end_matches("/manifest.json"));
+        assert!(!import_dir.join("audio.wav").exists());
+    }
+
+    #[test]
+    fn builds_summary_note_without_changing_verbatim_sketch_content() {
+        let scene = SceneCandidate {
+            id: "scene-1".into(),
+            start_ms: 0,
+            end_ms: 12_000,
+            transcript_segment_ids: vec!["seg-1".into()],
+            transcript_text: "Welcome to the demo. We will tune the model and review the results."
+                .into(),
+            narrative: None,
+            demo_actions: Vec::new(),
+            screenshot: None,
+            frame_timestamp_ms: 6_000,
+            grouping_reason: "single transcript segment".into(),
+            refinement_notes: Some("The transcript introduces the tuning workflow.".into()),
+        };
+        let row_plan = AnalyzerRowPlan {
+            rows: vec![AnalyzerRow {
+                segment_ids: vec!["seg-1".into()],
+                representative_segment_id: Some("seg-1".into()),
+                representative_timestamp_ms: Some(6_000),
+                confidence: Some(0.82),
+                reason: Some("This is the setup for the workflow.".into()),
+                label: Some("setup".into()),
+            }],
+        };
+
+        let note = build_summary_note(
+            "Tune Complete V3",
+            Path::new("D:/cutready/scratch/tune-complete-v3.mp4"),
+            Path::new("D:/cutready/scratch/tune-complete-v3.vtt"),
+            std::slice::from_ref(&scene),
+            Some(&row_plan),
+        );
+        let row = scene_to_row(&scene);
+
+        assert_eq!(
+            row.narrative,
+            "Welcome to the demo. We will tune the model and review the results."
+        );
+        assert_eq!(row.demo_actions, "");
+        assert!(note.contains("# Tune Complete V3 - Video Summary"));
+        assert!(note.contains("**setup (0:00 - 0:12)**"));
+        assert!(note.contains("Sketch narrative: verbatim transcript text"));
+        assert!(note.contains("Demo actions: intentionally blank"));
+        assert!(note.contains("Analyzer confidence: 82%"));
     }
 }

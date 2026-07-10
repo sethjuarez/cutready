@@ -768,9 +768,9 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
           if (msg.startsWith("FILE_EXISTS:")) {
             const existing = msg.slice("FILE_EXISTS:".length);
             const result = await showMessage(
-              `"${existing}" already exists in this workspace.\n\nOverwrite will replace the file and its images.`,
+              `"${existing}" already exists in this workspace.\n\nOverwrite will replace the existing import output and its images.`,
               {
-                title: "File Already Exists",
+                title: existing.includes(" and ") ? "Files Already Exist" : "File Already Exists",
                 buttons: { yes: "Overwrite", no: "Keep Both", cancel: "Cancel" },
               },
             );
@@ -841,6 +841,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
           });
           const result = await importWithConflict<{
             sketch_path: string;
+            note_path?: string;
             row_count: number;
             llm_refined: boolean;
             llm_refinement_status?: string | null;
@@ -854,6 +855,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
           );
           if (result && typeof result !== "string") {
             importedSketch = result.sketch_path;
+            if (result.note_path) importedNote = result.note_path;
             setVideoImportProgress({
               phase: "complete",
               current: 7,
@@ -864,8 +866,8 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             });
             showToast(
               result.llm_refined
-                ? `Imported analyzer-assisted video sketch with ${result.row_count} rows`
-                : `Imported video sketch with ${result.row_count} heuristic scenes`,
+                ? `Imported analyzer-assisted video sketch with ${result.row_count} rows and a summary note`
+                : `Imported video sketch with ${result.row_count} heuristic scenes and a summary note`,
               4000,
               "success",
             );
@@ -877,7 +879,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
       await loadNotes();
       await loadAssets();
       if (importedSketch) await openSketch(importedSketch);
-      else if (importedNote) openNote(importedNote);
+      if (importedNote) await openNote(importedNote);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error("[import] Import failed:", errMsg);

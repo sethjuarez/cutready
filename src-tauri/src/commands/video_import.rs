@@ -57,16 +57,13 @@ async fn import_video_inner(
             .and_then(|stem| stem.to_str())
             .unwrap_or("imported-video"),
     );
-    let natural_path = format!(
-        "{}.sk",
-        if slug.is_empty() {
-            "imported-video".to_string()
-        } else {
-            slug
-        }
-    );
-    let final_path =
-        resolve_import_path(&root, &natural_path, conflict.as_deref().unwrap_or("check"))?;
+    let base_slug = if slug.is_empty() {
+        "imported-video".to_string()
+    } else {
+        slug
+    };
+    let final_paths =
+        resolve_video_import_paths(&root, &base_slug, conflict.as_deref().unwrap_or("check"))?;
 
     let llm_options = llm_config.map(|config| {
         let provider_label = config
@@ -87,7 +84,8 @@ async fn import_video_inner(
     let result = video_import::import_video_from_sidecar_with_progress(
         &root,
         video_path,
-        &final_path,
+        &final_paths.sketch_path,
+        &final_paths.note_path,
         &title,
         llm_options,
         |event| {
@@ -118,28 +116,55 @@ async fn import_video_inner(
     result.map_err(|err| err.to_string())
 }
 
-fn resolve_import_path(root: &Path, relative_path: &str, conflict: &str) -> Result<String, String> {
-    let exists = root.join(relative_path).exists();
+#[derive(Debug)]
+struct VideoImportPaths {
+    sketch_path: String,
+    note_path: String,
+}
+
+fn resolve_video_import_paths(
+    root: &Path,
+    base_slug: &str,
+    conflict: &str,
+) -> Result<VideoImportPaths, String> {
+    let natural = import_paths_for_base(base_slug);
     match conflict {
-        "overwrite" => Ok(relative_path.to_string()),
-        "rename" => Ok(find_available_path(root, relative_path)),
-        _ if exists => Err(format!("FILE_EXISTS:{relative_path}")),
-        _ => Ok(relative_path.to_string()),
+        "overwrite" => Ok(natural),
+        "rename" => Ok(find_available_video_import_paths(root, base_slug)),
+        _ => {
+            let existing = [natural.sketch_path.as_str(), natural.note_path.as_str()]
+                .into_iter()
+                .filter(|path| root.join(path).exists())
+                .collect::<Vec<_>>();
+            if existing.is_empty() {
+                Ok(natural)
+            } else {
+                Err(format!("FILE_EXISTS:{}", existing.join(" and ")))
+            }
+        }
     }
 }
 
-fn find_available_path(root: &Path, relative_path: &str) -> String {
-    let base = relative_path.trim_end_matches(".sk");
-    if !root.join(relative_path).exists() {
-        return relative_path.to_string();
+fn import_paths_for_base(base_slug: &str) -> VideoImportPaths {
+    VideoImportPaths {
+        sketch_path: format!("{base_slug}.sk"),
+        note_path: format!("{base_slug}-summary.md"),
+    }
+}
+
+fn find_available_video_import_paths(root: &Path, base_slug: &str) -> VideoImportPaths {
+    let natural = import_paths_for_base(base_slug);
+    if !root.join(&natural.sketch_path).exists() && !root.join(&natural.note_path).exists() {
+        return natural;
     }
     for index in 2..100 {
-        let candidate = format!("{base}-{index}.sk");
-        if !root.join(&candidate).exists() {
+        let candidate = import_paths_for_base(&format!("{base_slug}-{index}"));
+        if !root.join(&candidate.sketch_path).exists() && !root.join(&candidate.note_path).exists()
+        {
             return candidate;
         }
     }
-    format!("{base}-{}.sk", chrono::Utc::now().timestamp())
+    import_paths_for_base(&format!("{base_slug}-{}", chrono::Utc::now().timestamp()))
 }
 
 fn slugify(name: &str) -> String {
@@ -168,22 +193,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn resolve_import_path_reports_existing_file_by_default() {
+    fn resolve_video_import_paths_checks_sketch_and_note_conflicts() {
         let root = tempfile::tempdir().unwrap();
-        std::fs::write(root.path().join("demo.sk"), "{}").unwrap();
+        std::fs::write(root.path().join("demo-summary.md"), "# Existing").unwrap();
 
-        let err = resolve_import_path(root.path(), "demo.sk", "check").unwrap_err();
+        let err = resolve_video_import_paths(root.path(), "demo", "check").unwrap_err();
 
-        assert_eq!(err, "FILE_EXISTS:demo.sk");
+        assert_eq!(err, "FILE_EXISTS:demo-summary.md");
     }
 
     #[test]
-    fn resolve_import_path_can_rename_conflicts() {
+    fn resolve_video_import_paths_renames_pair_together() {
         let root = tempfile::tempdir().unwrap();
         std::fs::write(root.path().join("demo.sk"), "{}").unwrap();
+        std::fs::write(root.path().join("demo-2-summary.md"), "# Existing").unwrap();
 
-        let path = resolve_import_path(root.path(), "demo.sk", "rename").unwrap();
+        let paths = resolve_video_import_paths(root.path(), "demo", "rename").unwrap();
 
-        assert_eq!(path, "demo-2.sk");
+        assert_eq!(paths.sketch_path, "demo-3.sk");
+        assert_eq!(paths.note_path, "demo-3-summary.md");
     }
 }
