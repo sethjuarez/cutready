@@ -151,6 +151,18 @@ function localPrePushMilestoneRange(nodes: GraphNode[], ahead: number | null | u
   return range[0]?.is_head ? range : null;
 }
 
+function hasCompactableCleanupRange(
+  candidates: DraftlineHistoryCompactionCandidates,
+  oldestCommitId: string,
+  newestCommitId: string,
+): boolean {
+  return candidates.candidates.some((candidate) =>
+    candidate.can_compact
+    && candidate.include_range.start === oldestCommitId
+    && candidate.include_range.end === newestCommitId
+  );
+}
+
 function suggestedMilestoneLabel(nodes: GraphNode[]): string {
   const meaningful = nodes
     .map((node) => node.message.trim())
@@ -3321,36 +3333,46 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       if (milestoneRange && get().syncStatus?.behind === 0) {
         const newest = milestoneRange[0];
         const oldest = milestoneRange[milestoneRange.length - 1];
-        const decision = await get().requestPrePushMilestone({
-          snapshotCount: milestoneRange.length,
-          newestCommitId: newest.id,
-          oldestCommitId: oldest.id,
-          latestSnapshotLabel: newest.message,
-          suggestedLabel: suggestedMilestoneLabel(milestoneRange),
-          remoteName: currentRemote.name,
-        });
-        if (decision.type === "cancel") {
-          return;
+        let canCompactMilestoneRange = false;
+        try {
+          const candidates = await get().findSnapshotCleanupCandidates(newest.id);
+          canCompactMilestoneRange = hasCompactableCleanupRange(candidates, oldest.id, newest.id);
+        } catch (err) {
+          console.warn("Could not validate automatic pre-push milestone range; pushing snapshots as-is.", err);
         }
-        if (decision.type === "milestone") {
-          const label = decision.label.trim();
-          if (!label) {
-            throw new Error("Milestone label is required before compacting local snapshots.");
-          }
-          const preview = await get().previewSnapshotCleanup(
-            oldest.id,
-            newest.id,
-            label,
-            milestoneRange.map((node) => node.id),
-          );
-          await get().applySnapshotCleanup(preview.plan_id);
-          const published = await get().publishSnapshotCleanup(preview.plan_id, currentRemote.name);
-          if (published) {
+
+        if (canCompactMilestoneRange) {
+          const decision = await get().requestPrePushMilestone({
+            snapshotCount: milestoneRange.length,
+            newestCommitId: newest.id,
+            oldestCommitId: oldest.id,
+            latestSnapshotLabel: newest.message,
+            suggestedLabel: suggestedMilestoneLabel(milestoneRange),
+            remoteName: currentRemote.name,
+          });
+          if (decision.type === "cancel") {
             return;
           }
-          const pendingAfterCleanup = await get().loadPendingHistoryCleanup();
-          if (pendingAfterCleanup) {
-            return;
+          if (decision.type === "milestone") {
+            const label = decision.label.trim();
+            if (!label) {
+              throw new Error("Milestone label is required before compacting local snapshots.");
+            }
+            const preview = await get().previewSnapshotCleanup(
+              oldest.id,
+              newest.id,
+              label,
+              milestoneRange.map((node) => node.id),
+            );
+            await get().applySnapshotCleanup(preview.plan_id);
+            const published = await get().publishSnapshotCleanup(preview.plan_id, currentRemote.name);
+            if (published) {
+              return;
+            }
+            const pendingAfterCleanup = await get().loadPendingHistoryCleanup();
+            if (pendingAfterCleanup) {
+              return;
+            }
           }
         }
       }

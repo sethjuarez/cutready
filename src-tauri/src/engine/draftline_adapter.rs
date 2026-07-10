@@ -966,6 +966,119 @@ mod tests {
     }
 
     #[test]
+    fn automatic_pre_push_milestone_range_is_blocked_when_it_crosses_merge_commit() {
+        let temp = tempfile::tempdir().unwrap();
+        let remote = temp.path().join("remote.git");
+        init_bare_main_remote(&remote);
+
+        let first_root = temp.path().join("first");
+        write(first_root.join("intro.sk"), r#"{"title":"Base"}"#);
+        let first = CutReadyDraftlineAdapter::open_project(&first_root).unwrap();
+        configure_identity(&first_root, "Seth", "seth@example.com");
+        first
+            .add_remote("origin", remote.to_str().unwrap())
+            .unwrap();
+        first.save_version("Base").unwrap();
+        first
+            .publish_changes_with_options("origin", &mut cutready_remote_options(None))
+            .unwrap();
+
+        let second_root = temp.path().join("second");
+        let second = CutReadyDraftlineAdapter::clone_project_with_options(
+            remote.to_str().unwrap(),
+            &second_root,
+            &mut cutready_remote_options(None),
+        )
+        .unwrap();
+        configure_identity(&second_root, "Maria", "maria@example.com");
+        write(second_root.join("remote.md"), "# Remote note\n");
+        second.save_version("Remote note").unwrap();
+        second
+            .publish_changes_with_options("origin", &mut cutready_remote_options(None))
+            .unwrap();
+
+        write(first_root.join("local.md"), "# Local note\n");
+        first.save_version("Local note").unwrap();
+        first
+            .fetch_remote_with_options("origin", &mut cutready_remote_options(None))
+            .unwrap();
+        let merge_report = first.preflight_merge_incoming("origin").unwrap();
+        assert!(merge_report.can_merge_cleanly);
+        let merge_result = first
+            .merge_incoming_with_options(
+                merge_report.token.unwrap(),
+                "Merge incoming note",
+                &mut cutready_remote_options(None),
+            )
+            .unwrap();
+
+        write(first_root.join("post-merge-one.md"), "# Post merge one\n");
+        first.save_version("Post merge one").unwrap();
+        write(first_root.join("post-merge-two.md"), "# Post merge two\n");
+        let head = first.save_version("Post merge two").unwrap();
+
+        let status = first.sync_status("origin").unwrap();
+        assert_eq!(status.behind, 0);
+        assert!(status.ahead >= 3);
+
+        let candidates = first
+            .workspace
+            .history_compaction_candidates(draftline::HistoryCompactionCandidatesRequest {
+                target_variation: Some(draftline::VariationId::from("main")),
+                selected_version: head.id().clone(),
+                remote: Some("origin".to_string()),
+                preserve_named_branches: true,
+                preserve_merge_boundaries: true,
+            })
+            .unwrap();
+        let merge_endpoint = candidates
+            .candidates
+            .iter()
+            .find(|candidate| {
+                candidate.include_range.start == *merge_result.version.id()
+                    && candidate.include_range.end == *head.id()
+            })
+            .expect("candidate should include the full local-ahead range ending at the merge commit");
+
+        assert!(!merge_endpoint.can_compact);
+        assert!(merge_endpoint.blockers.iter().any(|blocker| {
+            blocker.code == draftline::CleanupWarningCode::MergeBoundaryRequiresUserChoice
+                && blocker.message.contains("crosses merge commit")
+        }));
+
+        let error = first
+            .workspace
+            .preview_history_cleanup(draftline::HistoryCleanupRequest {
+                target_variation: Some(draftline::VariationId::from("main")),
+                base: draftline::CleanupBase::Auto,
+                mode: draftline::CleanupMode::CompactMilestones {
+                    milestones: vec![draftline::MilestoneSpec {
+                        title: "Invalid merge-crossing milestone".to_string(),
+                        description: None,
+                        include_range: draftline::CommitRange {
+                            start: merge_result.version.id().clone(),
+                            end: head.id().clone(),
+                        },
+                    }],
+                    preserve_named_branches: true,
+                    preserve_merge_boundaries: true,
+                },
+                safety: draftline::CleanupSafety {
+                    create_backup_ref: true,
+                    backup_ref_name: None,
+                    require_clean_worktree: true,
+                },
+                remote_policy: draftline::RemoteRewritePolicy::LocalOnly,
+            })
+            .unwrap_err();
+
+        assert!(
+            matches!(error, draftline::DraftlineError::InvalidHistoryCleanup(ref message) if message.contains("crosses merge commit")),
+            "expected invalid cleanup across merge commit, got {error:?}"
+        );
+    }
+
+    #[test]
     fn two_client_remote_conflict_drill_preserves_resolved_content_and_runtime_state() {
         let temp = tempfile::tempdir().unwrap();
         let remote = temp.path().join("remote.git");

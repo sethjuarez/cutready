@@ -28,8 +28,39 @@ import { useToastStore } from "../stores/toastStore";
 import type {
   DraftlineHistoryCleanupPreview,
   DraftlineHistoryCleanupPublishResult,
+  DraftlineHistoryCompactionCandidates,
   DraftlineTimelineCleanupResult,
 } from "../services/draftlineVersioning";
+
+function cleanupCandidates(start: string, end: string, canCompact = true): DraftlineHistoryCompactionCandidates {
+  return {
+    target_variation: "main",
+    selected_version: end,
+    target_head: end,
+    candidates: [{
+      version: {
+        id: start,
+        label: "Range start",
+        author: { name: "CutReady", email: null },
+        saved_by: { name: "CutReady", email: null },
+        time_seconds: 1_783_537_920,
+      },
+      include_range: { start, end },
+      selected_role: "range_end",
+      can_compact: canCompact,
+      requires_descendant_replay: false,
+      selected_commit_count: 3,
+      descendant_rewrite_count: 0,
+      blockers: canCompact ? [] : [{
+        code: "merge_boundary_requires_user_choice",
+        message: "cleanup range crosses merge commit `merge-commit`",
+        related_versions: ["merge-commit"],
+        safe_next_actions: ["normal_work"],
+      }],
+      warnings: [],
+    }],
+  };
+}
 
 describe("appStore remote sync status", () => {
   beforeEach(() => {
@@ -53,6 +84,7 @@ describe("appStore remote sync status", () => {
       pendingHistoryCleanup: null,
       prePushMilestonePrompt: null,
       requestPrePushMilestone: useAppStore.getInitialState().requestPrePushMilestone,
+      findSnapshotCleanupCandidates: useAppStore.getInitialState().findSnapshotCleanupCandidates,
       previewSnapshotCleanup: useAppStore.getInitialState().previewSnapshotCleanup,
       applySnapshotCleanup: useAppStore.getInitialState().applySnapshotCleanup,
       publishSnapshotCleanup: useAppStore.getInitialState().publishSnapshotCleanup,
@@ -220,6 +252,7 @@ describe("appStore remote sync status", () => {
     const previewSnapshotCleanup = vi.fn(async () => ({ plan_id: "plan-1" }) as DraftlineHistoryCleanupPreview);
     const applySnapshotCleanup = vi.fn(async () => ({}) as DraftlineTimelineCleanupResult);
     const publishSnapshotCleanup = vi.fn(async () => ({}) as DraftlineHistoryCleanupPublishResult);
+    const findSnapshotCleanupCandidates = vi.fn(async () => cleanupCandidates("c", "e"));
 
     useAppStore.setState({
       currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
@@ -232,6 +265,7 @@ describe("appStore remote sync status", () => {
         { id: "a", message: "Shared base", timestamp: "2026-07-08T18:00:00Z", timeline: "main", parents: [], lane: 0, is_head: false },
       ],
       checkLargeFiles: async () => [],
+      findSnapshotCleanupCandidates,
       requestPrePushMilestone,
       previewSnapshotCleanup,
       applySnapshotCleanup,
@@ -248,6 +282,7 @@ describe("appStore remote sync status", () => {
       suggestedLabel: "Refine intro",
       remoteName: "origin",
     }));
+    expect(findSnapshotCleanupCandidates).toHaveBeenCalledWith("e");
     expect(previewSnapshotCleanup).toHaveBeenCalledWith("c", "e", "Finalize onboarding walkthrough", ["e", "d", "c"]);
     expect(applySnapshotCleanup).toHaveBeenCalledWith("plan-1");
     expect(publishSnapshotCleanup).toHaveBeenCalledWith("plan-1", "origin");
@@ -263,6 +298,7 @@ describe("appStore remote sync status", () => {
     const previewSnapshotCleanup = vi.fn(async () => ({ plan_id: "plan-1" }) as DraftlineHistoryCleanupPreview);
     const applySnapshotCleanup = vi.fn(async () => ({}) as DraftlineTimelineCleanupResult);
     const publishSnapshotCleanup = vi.fn(async () => null);
+    const findSnapshotCleanupCandidates = vi.fn(async () => cleanupCandidates("c", "e"));
 
     useAppStore.setState({
       currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
@@ -275,6 +311,7 @@ describe("appStore remote sync status", () => {
         { id: "a", message: "Shared base", timestamp: "2026-07-08T18:00:00Z", timeline: "main", parents: [], lane: 0, is_head: false },
       ],
       checkLargeFiles: async () => [],
+      findSnapshotCleanupCandidates,
       requestPrePushMilestone,
       previewSnapshotCleanup,
       applySnapshotCleanup,
@@ -288,10 +325,48 @@ describe("appStore remote sync status", () => {
 
     await useAppStore.getState().pushToRemote();
 
+    expect(findSnapshotCleanupCandidates).toHaveBeenCalledWith("e");
     expect(previewSnapshotCleanup).toHaveBeenCalledWith("c", "e", "Auditaur milestone validation", ["e", "d", "c"]);
     expect(applySnapshotCleanup).toHaveBeenCalledWith("plan-1");
     expect(publishSnapshotCleanup).toHaveBeenCalledWith("plan-1", "origin");
     expect(mockListDraftlinePendingSnapshotCleanups).toHaveBeenCalled();
+    expect(mockPublishDraftlineChanges).toHaveBeenCalledWith("origin");
+  });
+
+  it("pushes snapshots as-is when the automatic milestone range crosses a merge boundary", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    mockPublishDraftlineChanges.mockResolvedValueOnce(undefined);
+    mockGetDraftlineSyncStatus.mockResolvedValueOnce({ ahead: 0, behind: 0 });
+    const requestPrePushMilestone = vi.fn(async () => ({ type: "milestone" as const, label: "Should not be used" }));
+    const previewSnapshotCleanup = vi.fn(async () => ({ plan_id: "plan-1" }) as DraftlineHistoryCleanupPreview);
+    const findSnapshotCleanupCandidates = vi.fn(async () => cleanupCandidates("c", "e", false));
+
+    useAppStore.setState({
+      currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
+      timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 4, color_index: 0 }],
+      syncStatus: { ahead: 3, behind: 0 },
+      graphNodes: [
+        { id: "e", message: "Wed afternoon 12:31", timestamp: "2026-07-08T18:31:00Z", timeline: "main", parents: ["d"], lane: 0, is_head: true },
+        { id: "d", message: "Merge shared edits", timestamp: "2026-07-08T18:20:00Z", timeline: "main", parents: ["c", "side"], lane: 0, is_head: false },
+        { id: "c", message: "Quick save", timestamp: "2026-07-08T18:12:00Z", timeline: "main", parents: ["a"], lane: 0, is_head: false },
+        { id: "a", message: "Shared base", timestamp: "2026-07-08T18:00:00Z", timeline: "main", parents: [], lane: 0, is_head: false },
+      ],
+      checkLargeFiles: async () => [],
+      findSnapshotCleanupCandidates,
+      requestPrePushMilestone,
+      previewSnapshotCleanup,
+      checkDirty: async () => {},
+      refreshChangedFiles: async () => {},
+      loadGraphData: async () => {},
+      loadTimelines: async () => {},
+      loadVersions: async () => {},
+    });
+
+    await useAppStore.getState().pushToRemote();
+
+    expect(findSnapshotCleanupCandidates).toHaveBeenCalledWith("e");
+    expect(requestPrePushMilestone).not.toHaveBeenCalled();
+    expect(previewSnapshotCleanup).not.toHaveBeenCalled();
     expect(mockPublishDraftlineChanges).toHaveBeenCalledWith("origin");
   });
 
@@ -300,6 +375,7 @@ describe("appStore remote sync status", () => {
     mockPublishDraftlineChanges.mockResolvedValueOnce(undefined);
     mockGetDraftlineSyncStatus.mockResolvedValueOnce({ ahead: 0, behind: 0 });
     const requestPrePushMilestone = vi.fn(async () => ({ type: "pushAsIs" as const }));
+    const findSnapshotCleanupCandidates = vi.fn(async () => cleanupCandidates("b", "c"));
 
     useAppStore.setState({
       currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
@@ -311,6 +387,7 @@ describe("appStore remote sync status", () => {
         { id: "a", message: "Shared base", timestamp: "2026-07-08T18:00:00Z", timeline: "main", parents: [], lane: 0, is_head: false },
       ],
       checkLargeFiles: async () => [],
+      findSnapshotCleanupCandidates,
       requestPrePushMilestone,
       checkDirty: async () => {},
       refreshChangedFiles: async () => {},
@@ -321,6 +398,7 @@ describe("appStore remote sync status", () => {
 
     await useAppStore.getState().pushToRemote();
 
+    expect(findSnapshotCleanupCandidates).toHaveBeenCalledWith("c");
     expect(requestPrePushMilestone).toHaveBeenCalledTimes(1);
     expect(mockPublishDraftlineChanges).toHaveBeenCalledWith("origin");
   });
@@ -328,6 +406,7 @@ describe("appStore remote sync status", () => {
   it("cancels a milestone push without publishing snapshots", async () => {
     mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
     const requestPrePushMilestone = vi.fn(async () => ({ type: "cancel" as const }));
+    const findSnapshotCleanupCandidates = vi.fn(async () => cleanupCandidates("b", "c"));
 
     useAppStore.setState({
       currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
@@ -339,11 +418,13 @@ describe("appStore remote sync status", () => {
         { id: "a", message: "Shared base", timestamp: "2026-07-08T18:00:00Z", timeline: "main", parents: [], lane: 0, is_head: false },
       ],
       checkLargeFiles: async () => [],
+      findSnapshotCleanupCandidates,
       requestPrePushMilestone,
     });
 
     await useAppStore.getState().pushToRemote();
 
+    expect(findSnapshotCleanupCandidates).toHaveBeenCalledWith("c");
     expect(requestPrePushMilestone).toHaveBeenCalledTimes(1);
     expect(mockPublishDraftlineChanges).not.toHaveBeenCalled();
     expect(useAppStore.getState().isSyncing).toBe(false);
