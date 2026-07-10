@@ -12,7 +12,7 @@
 //!     ├── onboarding/           (project 2)
 //!     └── storyboards/          (repo-level storyboards)
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 use crate::engine::draftline_adapter::CutReadyDraftlineAdapter;
@@ -1046,6 +1046,730 @@ pub fn rename_sketch(
     project_root: &Path,
 ) -> Result<(), ProjectError> {
     rename_file(old_path, new_path, project_root, "sketch")
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameReferenceUpdate {
+    pub path: String,
+    pub count: usize,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameProjectAssetPlan {
+    pub old_path: String,
+    pub new_path: String,
+    pub kind: String,
+    pub updated_references: Vec<RenameReferenceUpdate>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RenameAssetKind {
+    Sketch,
+    Storyboard,
+    Note,
+    Screenshot,
+    Visual,
+}
+
+impl RenameAssetKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Sketch => "sketch",
+            Self::Storyboard => "storyboard",
+            Self::Note => "note",
+            Self::Screenshot => "screenshot",
+            Self::Visual => "visual",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct PlannedFileWrite {
+    rel_path: String,
+    abs_path: PathBuf,
+    original: Vec<u8>,
+    next: Vec<u8>,
+    reference_count: usize,
+}
+
+#[derive(Debug, Clone)]
+struct RenameProjectAssetTransaction {
+    plan: RenameProjectAssetPlan,
+    old_abs: PathBuf,
+    new_abs: PathBuf,
+    writes: Vec<PlannedFileWrite>,
+}
+
+pub fn preview_rename_project_asset(
+    project_root: &Path,
+    old_path: &str,
+    new_path: &str,
+) -> Result<RenameProjectAssetPlan, ProjectError> {
+    Ok(build_rename_project_asset_transaction(project_root, old_path, new_path)?.plan)
+}
+
+pub fn rename_project_asset(
+    project_root: &Path,
+    old_path: &str,
+    new_path: &str,
+) -> Result<RenameProjectAssetPlan, ProjectError> {
+    let transaction = build_rename_project_asset_transaction(project_root, old_path, new_path)?;
+    apply_rename_project_asset_transaction(&transaction)?;
+    Ok(transaction.plan.clone())
+}
+
+fn build_rename_project_asset_transaction(
+    project_root: &Path,
+    old_path: &str,
+    new_path: &str,
+) -> Result<RenameProjectAssetTransaction, ProjectError> {
+    let old_rel = normalize_project_asset_path(old_path)?;
+    let new_rel = normalize_project_asset_path(new_path)?;
+    let old_abs = safe_resolve(project_root, &old_rel)?;
+    let new_abs = safe_resolve(project_root, &new_rel)?;
+
+    if old_rel == new_rel {
+        let kind = classify_rename_asset_path(&old_rel)?;
+        return Ok(RenameProjectAssetTransaction {
+            plan: RenameProjectAssetPlan {
+                old_path: old_rel,
+                new_path: new_rel,
+                kind: kind.as_str().to_owned(),
+                updated_references: Vec::new(),
+            },
+            old_abs,
+            new_abs,
+            writes: Vec::new(),
+        });
+    }
+
+    if !old_abs.exists() {
+        return Err(ProjectError::NotFound(old_rel));
+    }
+    if old_abs.is_dir() {
+        return Err(ProjectError::Io(
+            "Folder renames are not supported yet. Rename files individually.".into(),
+        ));
+    }
+
+    let kind = classify_rename_asset_path(&old_rel)?;
+    validate_rename_project_asset_destination(kind, &old_rel, &new_rel)?;
+    validate_renamed_file_unlocked(kind, project_root, &old_abs, &old_rel)?;
+
+    if new_abs.exists() && !paths_refer_to_same_file(&old_abs, &new_abs) {
+        return Err(ProjectError::Io(format!(
+            "Destination already exists: {new_rel}"
+        )));
+    }
+
+    let writes = plan_reference_rewrites(project_root, kind, &old_rel, &new_rel)?;
+    let updated_references = writes
+        .iter()
+        .map(|write| RenameReferenceUpdate {
+            path: write.rel_path.clone(),
+            count: write.reference_count,
+        })
+        .collect();
+
+    Ok(RenameProjectAssetTransaction {
+        plan: RenameProjectAssetPlan {
+            old_path: old_rel,
+            new_path: new_rel,
+            kind: kind.as_str().to_owned(),
+            updated_references,
+        },
+        old_abs,
+        new_abs,
+        writes,
+    })
+}
+
+fn normalize_project_asset_path(path: &str) -> Result<String, ProjectError> {
+    let normalized = path
+        .trim()
+        .replace('\\', "/")
+        .trim_start_matches("./")
+        .trim_start_matches('/')
+        .trim_end_matches('/')
+        .to_owned();
+    if normalized.is_empty() {
+        return Err(ProjectError::PathTraversal(path.to_owned()));
+    }
+    Ok(normalized)
+}
+
+fn classify_rename_asset_path(path: &str) -> Result<RenameAssetKind, ProjectError> {
+    let lower = path.to_ascii_lowercase();
+    if lower.ends_with(".sk") {
+        return Ok(RenameAssetKind::Sketch);
+    }
+    if lower.ends_with(".sb") {
+        return Ok(RenameAssetKind::Storyboard);
+    }
+    if lower.ends_with(".md") {
+        return Ok(RenameAssetKind::Note);
+    }
+    if lower.starts_with(".cutready/screenshots/") {
+        return Ok(RenameAssetKind::Screenshot);
+    }
+    if lower.starts_with(".cutready/visuals/") && lower.ends_with(".json") {
+        return Ok(RenameAssetKind::Visual);
+    }
+    Err(ProjectError::Io(format!(
+        "Renaming is only supported for sketches, storyboards, notes, screenshots, and visual assets: {path}"
+    )))
+}
+
+fn validate_rename_project_asset_destination(
+    kind: RenameAssetKind,
+    old_path: &str,
+    new_path: &str,
+) -> Result<(), ProjectError> {
+    let new_kind = classify_rename_asset_path(new_path)?;
+    if new_kind != kind {
+        return Err(ProjectError::Io(
+            "Rename must keep the same CutReady asset type and folder.".into(),
+        ));
+    }
+    let old_ext = Path::new(old_path)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let new_ext = Path::new(new_path)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if old_ext != new_ext {
+        return Err(ProjectError::Io(
+            "Rename must preserve the original file extension.".into(),
+        ));
+    }
+    match kind {
+        RenameAssetKind::Screenshot => {
+            if !new_path
+                .to_ascii_lowercase()
+                .starts_with(".cutready/screenshots/")
+            {
+                return Err(ProjectError::Io(
+                    "Screenshots must stay under .cutready/screenshots.".into(),
+                ));
+            }
+        }
+        RenameAssetKind::Visual => {
+            if !new_path
+                .to_ascii_lowercase()
+                .starts_with(".cutready/visuals/")
+            {
+                return Err(ProjectError::Io(
+                    "Visual assets must stay under .cutready/visuals.".into(),
+                ));
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn validate_renamed_file_unlocked(
+    kind: RenameAssetKind,
+    project_root: &Path,
+    old_abs: &Path,
+    old_rel: &str,
+) -> Result<(), ProjectError> {
+    match kind {
+        RenameAssetKind::Sketch => {
+            let sketch = read_sketch(old_abs)?;
+            ensure_sketch_has_no_locked_content(&sketch)?;
+        }
+        RenameAssetKind::Storyboard => {
+            let storyboard = read_storyboard(old_abs)?;
+            ensure_storyboard_unlocked(&storyboard)?;
+        }
+        RenameAssetKind::Note => ensure_note_unlocked(project_root, old_rel)?,
+        RenameAssetKind::Screenshot | RenameAssetKind::Visual => {}
+    }
+    Ok(())
+}
+
+fn paths_refer_to_same_file(old_path: &Path, new_path: &Path) -> bool {
+    match (old_path.canonicalize(), new_path.canonicalize()) {
+        (Ok(old_canonical), Ok(new_canonical)) => old_canonical == new_canonical,
+        _ => false,
+    }
+}
+
+fn plan_reference_rewrites(
+    project_root: &Path,
+    kind: RenameAssetKind,
+    old_rel: &str,
+    new_rel: &str,
+) -> Result<Vec<PlannedFileWrite>, ProjectError> {
+    match kind {
+        RenameAssetKind::Sketch => {
+            plan_storyboard_sketch_reference_rewrites(project_root, old_rel, new_rel)
+        }
+        RenameAssetKind::Screenshot => {
+            let mut writes = plan_sketch_asset_reference_rewrites(
+                project_root,
+                old_rel,
+                new_rel,
+                RenameAssetKind::Screenshot,
+            )?;
+            writes.extend(plan_markdown_screenshot_reference_rewrites(
+                project_root,
+                old_rel,
+                new_rel,
+            )?);
+            Ok(writes)
+        }
+        RenameAssetKind::Visual => plan_sketch_asset_reference_rewrites(
+            project_root,
+            old_rel,
+            new_rel,
+            RenameAssetKind::Visual,
+        ),
+        RenameAssetKind::Storyboard | RenameAssetKind::Note => Ok(Vec::new()),
+    }
+}
+
+fn plan_storyboard_sketch_reference_rewrites(
+    project_root: &Path,
+    old_rel: &str,
+    new_rel: &str,
+) -> Result<Vec<PlannedFileWrite>, ProjectError> {
+    let mut writes = Vec::new();
+    let mut error = None;
+    scan_files_recursive(
+        project_root,
+        project_root,
+        "sb",
+        &mut |rel_path, abs_path| {
+            if error.is_some() {
+                return;
+            }
+            match std::fs::read(abs_path)
+                .map_err(|e| ProjectError::Io(e.to_string()))
+                .and_then(|original| {
+                    let mut storyboard: Storyboard = serde_json::from_slice(&original)
+                        .map_err(|e| ProjectError::Deserialize(e.to_string()))?;
+                    let count = storyboard.replace_sketch_references(old_rel, new_rel);
+                    if count == 0 {
+                        return Ok(None);
+                    }
+                    ensure_storyboard_unlocked(&storyboard)?;
+                    storyboard.updated_at = chrono::Utc::now();
+                    let next = serde_json::to_vec_pretty(&storyboard)
+                        .map_err(|e| ProjectError::Serialize(e.to_string()))?;
+                    Ok(Some(PlannedFileWrite {
+                        rel_path: rel_path.to_owned(),
+                        abs_path: abs_path.to_path_buf(),
+                        original,
+                        next,
+                        reference_count: count,
+                    }))
+                }) {
+                Ok(Some(write)) => writes.push(write),
+                Ok(None) => {}
+                Err(err) => error = Some(err),
+            }
+        },
+    )?;
+    if let Some(err) = error {
+        return Err(err);
+    }
+    Ok(writes)
+}
+
+fn plan_sketch_asset_reference_rewrites(
+    project_root: &Path,
+    old_rel: &str,
+    new_rel: &str,
+    kind: RenameAssetKind,
+) -> Result<Vec<PlannedFileWrite>, ProjectError> {
+    let mut writes = Vec::new();
+    let mut error = None;
+    scan_files_recursive(
+        project_root,
+        project_root,
+        "sk",
+        &mut |rel_path, abs_path| {
+            if error.is_some() {
+                return;
+            }
+            match std::fs::read(abs_path)
+                .map_err(|e| ProjectError::Io(e.to_string()))
+                .and_then(|original| {
+                    let mut sketch: Sketch = serde_json::from_slice(&original)
+                        .map_err(|e| ProjectError::Deserialize(e.to_string()))?;
+                    let count = match kind {
+                        RenameAssetKind::Screenshot => {
+                            replace_sketch_screenshot_references(&mut sketch, old_rel, new_rel)?
+                        }
+                        RenameAssetKind::Visual => {
+                            replace_sketch_visual_references(&mut sketch, old_rel, new_rel)?
+                        }
+                        _ => 0,
+                    };
+                    if count == 0 {
+                        return Ok(None);
+                    }
+                    sketch.updated_at = chrono::Utc::now();
+                    let next = serde_json::to_vec_pretty(&sketch)
+                        .map_err(|e| ProjectError::Serialize(e.to_string()))?;
+                    Ok(Some(PlannedFileWrite {
+                        rel_path: rel_path.to_owned(),
+                        abs_path: abs_path.to_path_buf(),
+                        original,
+                        next,
+                        reference_count: count,
+                    }))
+                }) {
+                Ok(Some(write)) => writes.push(write),
+                Ok(None) => {}
+                Err(err) => error = Some(err),
+            }
+        },
+    )?;
+    if let Some(err) = error {
+        return Err(err);
+    }
+    Ok(writes)
+}
+
+fn replace_sketch_screenshot_references(
+    sketch: &mut Sketch,
+    old_rel: &str,
+    new_rel: &str,
+) -> Result<usize, ProjectError> {
+    let mut count = 0;
+    for (idx, row) in sketch.rows.iter_mut().enumerate() {
+        let Some(screenshot) = row.screenshot.as_ref() else {
+            continue;
+        };
+        if screenshot.replace('\\', "/") != old_rel {
+            continue;
+        }
+        if sketch.locked || row.locked || row.locks.screenshot {
+            return Err(ProjectError::Locked(format!(
+                "Planning row {} screenshot cell is locked. Unlock it before renaming the screenshot.",
+                idx + 1
+            )));
+        }
+        row.screenshot = Some(new_rel.to_owned());
+        count += 1;
+    }
+    Ok(count)
+}
+
+fn replace_sketch_visual_references(
+    sketch: &mut Sketch,
+    old_rel: &str,
+    new_rel: &str,
+) -> Result<usize, ProjectError> {
+    let mut count = 0;
+    for (idx, row) in sketch.rows.iter_mut().enumerate() {
+        let Some(visual) = row.visual.as_ref().and_then(|visual| visual.as_str()) else {
+            continue;
+        };
+        if visual.replace('\\', "/") != old_rel {
+            continue;
+        }
+        if sketch.locked || row.locked || row.locks.visual {
+            return Err(ProjectError::Locked(format!(
+                "Planning row {} visual cell is locked. Unlock it before renaming the visual.",
+                idx + 1
+            )));
+        }
+        row.visual = Some(serde_json::Value::String(new_rel.to_owned()));
+        count += 1;
+    }
+    Ok(count)
+}
+
+fn plan_markdown_screenshot_reference_rewrites(
+    project_root: &Path,
+    old_rel: &str,
+    new_rel: &str,
+) -> Result<Vec<PlannedFileWrite>, ProjectError> {
+    let mut writes = Vec::new();
+    let mut error = None;
+    scan_files_recursive(
+        project_root,
+        project_root,
+        "md",
+        &mut |rel_path, abs_path| {
+            if error.is_some() {
+                return;
+            }
+            match std::fs::read(abs_path)
+                .map_err(|e| ProjectError::Io(e.to_string()))
+                .and_then(|original| {
+                    let content = String::from_utf8(original.clone())
+                        .map_err(|e| ProjectError::Deserialize(e.to_string()))?;
+                    let (next_content, count) =
+                        rewrite_markdown_screenshot_refs(&content, old_rel, new_rel);
+                    if count == 0 {
+                        return Ok(None);
+                    }
+                    ensure_note_unlocked(project_root, rel_path)?;
+                    Ok(Some(PlannedFileWrite {
+                        rel_path: rel_path.to_owned(),
+                        abs_path: abs_path.to_path_buf(),
+                        original,
+                        next: next_content.into_bytes(),
+                        reference_count: count,
+                    }))
+                }) {
+                Ok(Some(write)) => writes.push(write),
+                Ok(None) => {}
+                Err(err) => error = Some(err),
+            }
+        },
+    )?;
+    if let Some(err) = error {
+        return Err(err);
+    }
+    Ok(writes)
+}
+
+fn rewrite_markdown_screenshot_refs(
+    content: &str,
+    old_rel: &str,
+    new_rel: &str,
+) -> (String, usize) {
+    let (content, markdown_count) = rewrite_markdown_link_refs(content, old_rel, new_rel);
+    let (content, html_count) = rewrite_html_img_src_refs(&content, old_rel, new_rel);
+    (content, markdown_count + html_count)
+}
+
+fn rewrite_markdown_link_refs(content: &str, old_rel: &str, new_rel: &str) -> (String, usize) {
+    let mut output = String::with_capacity(content.len());
+    let mut rest = content;
+    let mut count = 0;
+    while let Some(pos) = rest.find("](") {
+        output.push_str(&rest[..pos + 2]);
+        let after = &rest[pos + 2..];
+        let Some(end) = after.find(')') else {
+            output.push_str(after);
+            return (output, count);
+        };
+        let target = &after[..end];
+        let (rewritten, changed) = rewrite_markdown_target_token(target, old_rel, new_rel);
+        output.push_str(&rewritten);
+        output.push(')');
+        if changed {
+            count += 1;
+        }
+        rest = &after[end + 1..];
+    }
+    output.push_str(rest);
+    (output, count)
+}
+
+fn rewrite_markdown_target_token(target: &str, old_rel: &str, new_rel: &str) -> (String, bool) {
+    let leading_len = target.len() - target.trim_start().len();
+    let trimmed = &target[leading_len..];
+    let path_len = trimmed
+        .char_indices()
+        .find_map(|(idx, ch)| ch.is_whitespace().then_some(idx))
+        .unwrap_or(trimmed.len());
+    let path = &trimmed[..path_len];
+    if path.replace('\\', "/") != old_rel {
+        return (target.to_owned(), false);
+    }
+    let mut rewritten =
+        String::with_capacity(target.len() + new_rel.len().saturating_sub(path.len()));
+    rewritten.push_str(&target[..leading_len]);
+    rewritten.push_str(new_rel);
+    rewritten.push_str(&trimmed[path_len..]);
+    (rewritten, true)
+}
+
+fn rewrite_html_img_src_refs(content: &str, old_rel: &str, new_rel: &str) -> (String, usize) {
+    let mut output = String::with_capacity(content.len());
+    let mut rest = content;
+    let mut count = 0;
+    while let Some(pos) = rest.find("<img ") {
+        output.push_str(&rest[..pos]);
+        let tag_rest = &rest[pos..];
+        let Some(tag_end) = tag_rest.find('>') else {
+            output.push_str(tag_rest);
+            return (output, count);
+        };
+        let tag = &tag_rest[..=tag_end];
+        let (rewritten, changed) = rewrite_html_img_tag_src(tag, old_rel, new_rel);
+        output.push_str(&rewritten);
+        if changed {
+            count += 1;
+        }
+        rest = &tag_rest[tag_end + 1..];
+    }
+    output.push_str(rest);
+    (output, count)
+}
+
+fn rewrite_html_img_tag_src(tag: &str, old_rel: &str, new_rel: &str) -> (String, bool) {
+    for prefix in ["src=\"", "src='"] {
+        if let Some(src_start) = tag.find(prefix) {
+            let value_start = src_start + prefix.len();
+            let quote = prefix.as_bytes()[prefix.len() - 1] as char;
+            if let Some(value_end) = tag[value_start..].find(quote) {
+                let value_end = value_start + value_end;
+                let value = &tag[value_start..value_end];
+                if value.replace('\\', "/") == old_rel {
+                    let mut rewritten = String::with_capacity(
+                        tag.len() + new_rel.len().saturating_sub(value.len()),
+                    );
+                    rewritten.push_str(&tag[..value_start]);
+                    rewritten.push_str(new_rel);
+                    rewritten.push_str(&tag[value_end..]);
+                    return (rewritten, true);
+                }
+            }
+            break;
+        }
+    }
+    (tag.to_owned(), false)
+}
+
+fn apply_rename_project_asset_transaction(
+    transaction: &RenameProjectAssetTransaction,
+) -> Result<(), ProjectError> {
+    if transaction.plan.old_path == transaction.plan.new_path {
+        return Ok(());
+    }
+
+    let temp_id = uuid::Uuid::new_v4().simple().to_string();
+    let mut staged_paths = Vec::new();
+    for (index, write) in transaction.writes.iter().enumerate() {
+        if std::fs::read(&write.abs_path).map_err(|e| ProjectError::Io(e.to_string()))?
+            != write.original
+        {
+            cleanup_paths(&staged_paths);
+            return Err(ProjectError::Io(format!(
+                "Project changed while preparing rename; refresh and try again: {}",
+                write.rel_path
+            )));
+        }
+        let staged = sidecar_path(&write.abs_path, &format!("{temp_id}-{index}.tmp"));
+        std::fs::write(&staged, &write.next).map_err(|e| ProjectError::Io(e.to_string()))?;
+        staged_paths.push(staged);
+    }
+
+    if let Some(parent) = transaction.new_abs.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
+    }
+
+    let renamed_target_temp = if transaction.new_abs.exists()
+        && paths_refer_to_same_file(&transaction.old_abs, &transaction.new_abs)
+    {
+        let temp = sidecar_path(&transaction.old_abs, &format!("{temp_id}-case-rename.tmp"));
+        std::fs::rename(&transaction.old_abs, &temp).map_err(|e| {
+            cleanup_paths(&staged_paths);
+            ProjectError::Io(format!("Failed to prepare case-only rename: {e}"))
+        })?;
+        Some(temp)
+    } else {
+        None
+    };
+
+    let target_rename_result = if let Some(temp) = renamed_target_temp.as_ref() {
+        std::fs::rename(temp, &transaction.new_abs)
+    } else {
+        std::fs::rename(&transaction.old_abs, &transaction.new_abs)
+    };
+    if let Err(error) = target_rename_result {
+        if let Some(temp) = renamed_target_temp.as_ref() {
+            let _ = std::fs::rename(temp, &transaction.old_abs);
+        }
+        cleanup_paths(&staged_paths);
+        return Err(ProjectError::Io(format!("Failed to rename asset: {error}")));
+    }
+
+    let mut backups: HashMap<PathBuf, PathBuf> = HashMap::new();
+    for (write, staged) in transaction.writes.iter().zip(staged_paths.iter()) {
+        let backup = sidecar_path(&write.abs_path, &format!("{temp_id}.bak"));
+        if let Err(error) = std::fs::rename(&write.abs_path, &backup) {
+            rollback_rename_project_asset(transaction, &backups, &staged_paths);
+            return Err(ProjectError::Io(format!(
+                "Rename rolled back after failing to back up {}: {error}",
+                write.rel_path
+            )));
+        }
+        backups.insert(write.abs_path.clone(), backup.clone());
+        if let Err(error) = std::fs::rename(staged, &write.abs_path) {
+            rollback_rename_project_asset(transaction, &backups, &staged_paths);
+            return Err(ProjectError::Io(format!(
+                "Rename rolled back after failing to update {}: {error}",
+                write.rel_path
+            )));
+        }
+    }
+
+    cleanup_paths(&backups.into_values().collect::<Vec<_>>());
+    cleanup_paths(&staged_paths);
+    Ok(())
+}
+
+fn sidecar_path(path: &Path, suffix: &str) -> PathBuf {
+    let file_name = path
+        .file_name()
+        .map(|name| name.to_string_lossy())
+        .unwrap_or_else(|| "asset".into());
+    path.with_file_name(format!(".{file_name}.cutready-rename-{suffix}"))
+}
+
+fn cleanup_paths(paths: &[PathBuf]) {
+    for path in paths {
+        if path.exists() {
+            if let Err(error) = std::fs::remove_file(path) {
+                log::warn!(
+                    "[project] failed to clean up rename sidecar {}: {error}",
+                    path.display()
+                );
+            }
+        }
+    }
+}
+
+fn rollback_rename_project_asset(
+    transaction: &RenameProjectAssetTransaction,
+    backups: &HashMap<PathBuf, PathBuf>,
+    staged_paths: &[PathBuf],
+) {
+    for (original, backup) in backups {
+        if original.exists() {
+            if let Err(error) = std::fs::remove_file(original) {
+                log::warn!(
+                    "[project] failed to remove partially updated file during rename rollback {}: {error}",
+                    original.display()
+                );
+            }
+        }
+        if backup.exists() {
+            if let Err(error) = std::fs::rename(backup, original) {
+                log::error!(
+                    "[project] failed to restore rename backup {} -> {}: {error}",
+                    backup.display(),
+                    original.display()
+                );
+            }
+        }
+    }
+    if transaction.new_abs.exists() {
+        if let Err(error) = std::fs::rename(&transaction.new_abs, &transaction.old_abs) {
+            log::error!(
+                "[project] failed to roll back renamed asset {} -> {}: {error}",
+                transaction.new_abs.display(),
+                transaction.old_abs.display()
+            );
+        }
+    }
+    cleanup_paths(staged_paths);
 }
 
 // ── Storyboard file I/O (.sb) ─────────────────────────────────────
@@ -2463,6 +3187,161 @@ mod tests {
         assert!(matches!(err, ProjectError::Locked(_)));
         assert!(old_path.exists());
         assert!(!new_path.exists());
+    }
+
+    #[test]
+    fn rename_project_asset_updates_storyboard_sketch_references() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        write_sketch(&Sketch::new("Old"), &root.join("old.sk"), root).unwrap();
+
+        let mut storyboard = Storyboard::new("Demo");
+        storyboard
+            .items
+            .push(crate::models::sketch::StoryboardItem::SketchRef {
+                path: "old.sk".into(),
+            });
+        storyboard
+            .items
+            .push(crate::models::sketch::StoryboardItem::Section {
+                title: "Part".into(),
+                description: String::new(),
+                sketches: vec!["old.sk".into(), "keep.sk".into()],
+            });
+        write_storyboard(&storyboard, &root.join("demo.sb"), root).unwrap();
+
+        let result = rename_project_asset(root, "old.sk", "renamed.sk").unwrap();
+
+        assert!(!root.join("old.sk").exists());
+        assert!(root.join("renamed.sk").exists());
+        assert_eq!(result.updated_references[0].path, "demo.sb");
+        assert_eq!(result.updated_references[0].count, 2);
+        let updated = read_storyboard(&root.join("demo.sb")).unwrap();
+        assert_eq!(
+            updated.sketch_paths(),
+            vec!["renamed.sk", "renamed.sk", "keep.sk"]
+        );
+    }
+
+    #[test]
+    fn rename_project_asset_rejects_locked_referencing_storyboard() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        write_sketch(&Sketch::new("Old"), &root.join("old.sk"), root).unwrap();
+
+        let mut storyboard = Storyboard::new("Locked");
+        storyboard.locked = true;
+        storyboard
+            .items
+            .push(crate::models::sketch::StoryboardItem::SketchRef {
+                path: "old.sk".into(),
+            });
+        write_storyboard(&storyboard, &root.join("locked.sb"), root).unwrap();
+
+        let err = rename_project_asset(root, "old.sk", "renamed.sk").unwrap_err();
+
+        assert!(matches!(err, ProjectError::Locked(_)));
+        assert!(root.join("old.sk").exists());
+        assert!(!root.join("renamed.sk").exists());
+        assert!(read_storyboard(&root.join("locked.sb"))
+            .unwrap()
+            .references_sketch("old.sk"));
+    }
+
+    #[test]
+    fn rename_project_asset_updates_screenshot_references() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join(".cutready/screenshots")).unwrap();
+        std::fs::write(root.join(".cutready/screenshots/old.png"), b"png").unwrap();
+
+        let mut sketch = Sketch::new("Shot");
+        let mut row = crate::models::sketch::PlanningRow::new();
+        row.screenshot = Some(".cutready/screenshots/old.png".into());
+        sketch.rows.push(row);
+        write_sketch(&sketch, &root.join("shot.sk"), root).unwrap();
+        write_note(
+            &root.join("notes.md"),
+            r#"before ![](.cutready/screenshots/old.png "title") after <img src=".cutready/screenshots/old.png">"#,
+        )
+        .unwrap();
+
+        let result = rename_project_asset(
+            root,
+            ".cutready/screenshots/old.png",
+            ".cutready/screenshots/new.png",
+        )
+        .unwrap();
+
+        assert_eq!(result.updated_references.len(), 2);
+        assert!(!root.join(".cutready/screenshots/old.png").exists());
+        assert!(root.join(".cutready/screenshots/new.png").exists());
+        let updated_sketch = read_sketch(&root.join("shot.sk")).unwrap();
+        assert_eq!(
+            updated_sketch.rows[0].screenshot.as_deref(),
+            Some(".cutready/screenshots/new.png")
+        );
+        let note = read_note(&root.join("notes.md")).unwrap();
+        assert!(note.contains(r#"![](.cutready/screenshots/new.png "title")"#));
+        assert!(note.contains(r#"<img src=".cutready/screenshots/new.png">"#));
+    }
+
+    #[test]
+    fn rename_project_asset_rejects_locked_screenshot_cell() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join(".cutready/screenshots")).unwrap();
+        std::fs::write(root.join(".cutready/screenshots/old.png"), b"png").unwrap();
+
+        let mut sketch = Sketch::new("Shot");
+        let mut row = crate::models::sketch::PlanningRow::new();
+        row.screenshot = Some(".cutready/screenshots/old.png".into());
+        row.locks.screenshot = true;
+        sketch.rows.push(row);
+        write_sketch(&sketch, &root.join("shot.sk"), root).unwrap();
+
+        let err = rename_project_asset(
+            root,
+            ".cutready/screenshots/old.png",
+            ".cutready/screenshots/new.png",
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ProjectError::Locked(_)));
+        assert!(root.join(".cutready/screenshots/old.png").exists());
+        assert!(!root.join(".cutready/screenshots/new.png").exists());
+    }
+
+    #[test]
+    fn rename_project_asset_updates_visual_references() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join(".cutready/visuals")).unwrap();
+        std::fs::write(root.join(".cutready/visuals/old.json"), b"{}").unwrap();
+
+        let mut sketch = Sketch::new("Visual");
+        let mut row = crate::models::sketch::PlanningRow::new();
+        row.visual = Some(serde_json::Value::String(
+            ".cutready/visuals/old.json".into(),
+        ));
+        sketch.rows.push(row);
+        write_sketch(&sketch, &root.join("visual.sk"), root).unwrap();
+
+        rename_project_asset(
+            root,
+            ".cutready/visuals/old.json",
+            ".cutready/visuals/new.json",
+        )
+        .unwrap();
+
+        let updated = read_sketch(&root.join("visual.sk")).unwrap();
+        assert_eq!(
+            updated.rows[0]
+                .visual
+                .as_ref()
+                .and_then(|value| value.as_str()),
+            Some(".cutready/visuals/new.json")
+        );
     }
 
     #[test]

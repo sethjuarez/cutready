@@ -274,6 +274,14 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "delete_sketch":
     case "rename_sketch":
       return null;
+    case "preview_rename_project_asset":
+    case "rename_project_asset":
+      return {
+        oldPath: typeof args?.oldPath === "string" ? args.oldPath : "sketches/demo-introduction.sk",
+        newPath: typeof args?.newPath === "string" ? args.newPath : "sketches/demo-renamed.sk",
+        kind: "sketch",
+        updatedReferences: [],
+      };
     case "list_notes":
       return MOCK_NOTES;
     case "get_note":

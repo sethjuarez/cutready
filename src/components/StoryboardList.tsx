@@ -15,7 +15,14 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Channel, invoke } from "../services/tauri";
 import { ArrowRight, AtSign, ChevronDown, ChevronRight, Copy, FileInput, FileText, Film, FolderOpen, Plus, SquareTerminal, Trash2 } from "lucide-react";
-import { useAppStore, type SidebarOrder } from "../stores/appStore";
+import {
+  clearSuppressedEditorFlush,
+  makeMainTabId,
+  makeSplitTabId,
+  suppressEditorFlush,
+  useAppStore,
+  type SidebarOrder,
+} from "../stores/appStore";
 import type { ProjectEntry } from "../types/project";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -80,6 +87,17 @@ const importDialogTitles: Record<ImportKind, string> = {
 };
 const VIDEO_IMPORT_MISSING_TRANSCRIPT_PREFIX = "VIDEO_IMPORT_MISSING_TRANSCRIPT:";
 const VIDEO_IMPORT_DURATION_LIMIT_PREFIX = "VIDEO_IMPORT_DURATION_LIMIT:";
+
+interface RenameProjectAssetPlan {
+  oldPath: string;
+  newPath: string;
+  updatedReferences: { path: string; count: number }[];
+}
+
+interface RenameConfirmation {
+  message: string;
+  resolve: (confirmed: boolean) => void;
+}
 
 const videoImportPhaseDetails: Record<string, string> = {
   preparing: "Getting the importer ready and checking project settings.",
@@ -507,6 +525,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const [notesExpanded, setNotesExpanded] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<{ type: "storyboard" | "sketch" | "note"; path: string; title: string; usedBy?: string[] } | null>(null);
   const [drmConfirm, setDrmConfirm] = useState<{ resolve: (ok: boolean) => void } | null>(null);
+  const [renameConfirm, setRenameConfirm] = useState<RenameConfirmation | null>(null);
   const [importing, setImporting] = useState(false);
   const [importMenu, setImportMenu] = useState<{ x: number; y: number } | null>(null);
   const [videoImportProgress, setVideoImportProgress] = useState<VideoImportProgress | null>(null);
@@ -554,6 +573,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const [renamingItem, setRenamingItem] = useState<{ type: "storyboard" | "sketch" | "note"; path: string } | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const renameInFlightRef = useRef(false);
 
   /** Derive a safe filename from user-entered text. */
   const slugify = (text: string) => text.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -615,39 +635,88 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   /** Commit the rename — call backend, update tabs, reload lists. */
   const commitRename = useCallback(async () => {
     if (!renamingItem) return;
+    if (renameInFlightRef.current) return;
+    renameInFlightRef.current = true;
     const newStem = renameValue.trim();
-    if (!newStem) { setRenamingItem(null); return; }
+    if (!newStem) {
+      renameInFlightRef.current = false;
+      setRenamingItem(null);
+      return;
+    }
 
     const slug = slugify(newStem);
-    if (!slug) { setRenamingItem(null); return; }
+    if (!slug) {
+      renameInFlightRef.current = false;
+      setRenamingItem(null);
+      return;
+    }
 
     const { type, path: oldPath } = renamingItem;
     const ext = type === "sketch" ? ".sk" : type === "storyboard" ? ".sb" : ".md";
     const dir = oldPath.includes("/") ? oldPath.substring(0, oldPath.lastIndexOf("/") + 1) : "";
     const newPath = `${dir}${slug}${ext}`;
 
-    if (newPath === oldPath) { setRenamingItem(null); return; }
+    if (newPath === oldPath) {
+      renameInFlightRef.current = false;
+      setRenamingItem(null);
+      return;
+    }
 
+    let suppressedPaths = Array.from(new Set([oldPath, newPath]));
     try {
-      const cmd = type === "sketch" ? "rename_sketch" : type === "storyboard" ? "rename_storyboard" : "rename_note";
-      await invoke(cmd, { oldPath, newPath });
+      for (const path of suppressedPaths) suppressEditorFlush(path);
+      const preview = await invoke<RenameProjectAssetPlan>("preview_rename_project_asset", { oldPath, newPath });
+      suppressedPaths = Array.from(new Set([...suppressedPaths, ...preview.updatedReferences.map((ref) => ref.path)]));
+      for (const path of suppressedPaths) suppressEditorFlush(path);
+      const referenceCount = preview.updatedReferences.reduce((sum, ref) => sum + ref.count, 0);
+      if (referenceCount > 0) {
+        const fileCount = preview.updatedReferences.length;
+        const confirmed = await new Promise<boolean>((resolve) => {
+          setRenameConfirm({
+            message: `Rename ${oldPath.split("/").pop() ?? oldPath} to ${newPath.split("/").pop() ?? newPath}?\n\nThis will update ${referenceCount} reference${referenceCount === 1 ? "" : "s"} in ${fileCount} file${fileCount === 1 ? "" : "s"}.`,
+            resolve,
+          });
+        });
+        if (!confirmed) return;
+      }
+
+      const result = await invoke<RenameProjectAssetPlan>("rename_project_asset", { oldPath, newPath });
+      suppressedPaths = Array.from(new Set([...suppressedPaths, ...result.updatedReferences.map((ref) => ref.path)]));
+      for (const path of suppressedPaths) suppressEditorFlush(path);
 
       // Update any open tab that references the old path
       const store = useAppStore.getState();
+      const oldMainId = makeMainTabId(type, oldPath);
+      const newMainId = makeMainTabId(type, newPath);
+      const oldSplitId = makeSplitTabId(type, oldPath);
+      const newSplitId = makeSplitTabId(type, newPath);
       const updatedTabs = store.openTabs.map((t) =>
-        t.path === oldPath ? { ...t, path: newPath, id: `${t.type}:${newPath}` } : t,
+        t.type === type && t.path === oldPath ? { ...t, path: newPath, id: newMainId } : t,
       );
-      const updatedActive = store.activeTabId === `${type}:${oldPath}` ? `${type}:${newPath}` : store.activeTabId;
-      useAppStore.setState({ openTabs: updatedTabs, activeTabId: updatedActive });
+      const updatedSplitTabs = store.splitTabs.map((t) =>
+        t.type === type && t.path === oldPath ? { ...t, path: newPath, id: newSplitId } : t,
+      );
+      useAppStore.setState({
+        openTabs: updatedTabs,
+        activeTabId: store.activeTabId === oldMainId ? newMainId : store.activeTabId,
+        splitTabs: updatedSplitTabs,
+        splitActiveTabId: store.splitActiveTabId === oldSplitId ? newSplitId : store.splitActiveTabId,
+      });
 
       // Reload file lists
       if (type === "storyboard") await loadStoryboards();
-      else if (type === "sketch") await loadSketches();
+      else if (type === "sketch") {
+        await loadSketches();
+        if (result.updatedReferences.length > 0) await loadStoryboards();
+      }
       else await loadNotes();
     } catch (err) {
       showToast(`Rename failed: ${err}`, 4000, "error");
+    } finally {
+      renameInFlightRef.current = false;
+      window.setTimeout(() => suppressedPaths.forEach(clearSuppressedEditorFlush), 150);
+      setRenamingItem(null);
     }
-    setRenamingItem(null);
   }, [renamingItem, renameValue, loadStoryboards, loadSketches, loadNotes, showToast]);
 
   const cancelRename = useCallback(() => setRenamingItem(null), []);
@@ -1603,6 +1672,16 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
         variant="warning"
         onConfirm={() => { drmConfirm?.resolve(true); setDrmConfirm(null); }}
         onCancel={() => { drmConfirm?.resolve(false); setDrmConfirm(null); }}
+      />
+      <ConfirmDialog
+        open={!!renameConfirm}
+        title="Rename and update references?"
+        message={renameConfirm?.message ?? ""}
+        confirmLabel="Rename and update"
+        cancelLabel="Cancel"
+        variant="warning"
+        onConfirm={() => { renameConfirm?.resolve(true); setRenameConfirm(null); }}
+        onCancel={() => { renameConfirm?.resolve(false); setRenameConfirm(null); }}
       />
       <VideoImportProgressDialog
         progress={videoImportProgress}

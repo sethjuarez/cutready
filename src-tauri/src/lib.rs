@@ -560,6 +560,8 @@ pub fn run() {
             commands::project::get_workspace_state,
             commands::project::set_workspace_state,
             commands::project::list_all_files,
+            commands::project::preview_rename_project_asset,
+            commands::project::rename_project_asset,
             commands::project::get_database_preview,
             commands::project::get_agent_state_database_preview,
             commands::project::inspect_workspace_manifest,

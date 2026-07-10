@@ -358,6 +358,26 @@ pub async fn list_all_files(state: State<'_, AppState>) -> Result<Vec<project::F
     project::scan_all_files(&root).map_err(|e| e.to_string())
 }
 
+#[auditaur_command(skip_all, err)]
+pub async fn preview_rename_project_asset(
+    old_path: String,
+    new_path: String,
+    state: State<'_, AppState>,
+) -> Result<project::RenameProjectAssetPlan, String> {
+    let root = project_root(&state)?;
+    project::preview_rename_project_asset(&root, &old_path, &new_path).map_err(|e| e.to_string())
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn rename_project_asset(
+    old_path: String,
+    new_path: String,
+    state: State<'_, AppState>,
+) -> Result<project::RenameProjectAssetPlan, String> {
+    let root = project_root(&state)?;
+    project::rename_project_asset(&root, &old_path, &new_path).map_err(|e| e.to_string())
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct DatabasePreview {
     pub path: String,
