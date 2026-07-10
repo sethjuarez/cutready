@@ -260,13 +260,14 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       });
       return {
         sketch_path: "sketches/imported-demo-video.sk",
+        note_path: "sketches/imported-demo-video-summary.md",
         title: "Imported Demo Video",
         row_count: 3,
         screenshot_count: 3,
         manifest_path: ".cutready/recordings/imports/video-mock/manifest.json",
         transcript_path: "mock-video.srt",
         llm_refined: true,
-        llm_refinement_status: "Scene analyst refined transcript boundaries.",
+        llm_refinement_status: "Scene analyst selected row boundaries and representative timestamps.",
       };
     case "create_sketch":
       return "sketches/new-sketch.sk";

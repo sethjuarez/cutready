@@ -20,6 +20,7 @@ const SCREENSHOTS_DIR: &str = ".cutready/screenshots";
 const MAX_SCENE_SECONDS: u64 = 35;
 const MAX_SCENE_CHARS: usize = 520;
 const PAUSE_BOUNDARY_MS: u64 = 2_000;
+const MAX_SKETCH_VIDEO_DURATION_MS: u64 = 15 * 60 * 1_000;
 const LLM_REFINEMENT_TIMEOUT: Duration = Duration::from_secs(240);
 const LLM_REFINEMENT_PROGRESS_INTERVAL: Duration = Duration::from_secs(20);
 const LLM_REFINEMENT_PROGRESS_MESSAGES: [&str; 6] = [
@@ -31,10 +32,12 @@ const LLM_REFINEMENT_PROGRESS_MESSAGES: [&str; 6] = [
     "Scene analyst is still working; heuristic fallback is ready if needed",
 ];
 const MISSING_TRANSCRIPT_PREFIX: &str = "VIDEO_IMPORT_MISSING_TRANSCRIPT:";
+const DURATION_LIMIT_PREFIX: &str = "VIDEO_IMPORT_DURATION_LIMIT:";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct VideoImportResult {
     pub sketch_path: String,
+    pub note_path: String,
     pub title: String,
     pub row_count: usize,
     pub screenshot_count: usize,
@@ -60,8 +63,11 @@ pub struct VideoImportManifest {
     pub sidecar_transcript: String,
     pub audio_path: Option<String>,
     pub sketch_path: String,
+    pub note_path: String,
     pub imported_at: chrono::DateTime<Utc>,
     pub transcript_segments: Vec<TranscriptSegment>,
+    pub heuristic_evidence: VideoImportHeuristicEvidence,
+    pub analyzer_row_plan: Option<AnalyzerRowPlan>,
     pub scenes: Vec<SceneCandidate>,
     pub llm_refinement: Option<LlmSceneRefinementSummary>,
 }
@@ -89,6 +95,74 @@ pub struct SceneCandidate {
     pub refinement_notes: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct VideoImportHeuristicEvidence {
+    pub max_sketch_video_duration_ms: u64,
+    pub segments: Vec<TranscriptSegmentEvidence>,
+    pub heuristic_scenes: Vec<HeuristicSceneEvidence>,
+    pub candidate_boundaries: Vec<CandidateBoundaryEvidence>,
+    pub candidate_frames: Vec<CandidateFrameEvidence>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TranscriptSegmentEvidence {
+    pub id: String,
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub duration_ms: u64,
+    pub text: String,
+    pub word_count: usize,
+    pub char_count: usize,
+    pub gap_before_ms: Option<u64>,
+    pub gap_after_ms: Option<u64>,
+    pub words_per_minute: Option<f64>,
+    pub sentence_end: bool,
+    pub topic_cue: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct HeuristicSceneEvidence {
+    pub id: String,
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub duration_ms: u64,
+    pub segment_ids: Vec<String>,
+    pub frame_timestamp_ms: u64,
+    pub grouping_reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CandidateBoundaryEvidence {
+    pub after_segment_id: String,
+    pub timestamp_ms: u64,
+    pub score: f64,
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CandidateFrameEvidence {
+    pub id: String,
+    pub scene_id: String,
+    pub segment_id: String,
+    pub timestamp_ms: u64,
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AnalyzerRowPlan {
+    pub rows: Vec<AnalyzerRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AnalyzerRow {
+    pub segment_ids: Vec<String>,
+    pub representative_segment_id: Option<String>,
+    pub representative_timestamp_ms: Option<u64>,
+    pub confidence: Option<f32>,
+    pub reason: Option<String>,
+    pub label: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmSceneRefinementSummary {
     pub provider: String,
@@ -110,6 +184,7 @@ pub async fn import_video_from_sidecar(
     project_root: &Path,
     video_path: &Path,
     sketch_relative_path: &str,
+    note_relative_path: &str,
     title: &str,
     llm_options: Option<VideoImportLlmOptions>,
 ) -> anyhow::Result<VideoImportResult> {
@@ -117,6 +192,7 @@ pub async fn import_video_from_sidecar(
         project_root,
         video_path,
         sketch_relative_path,
+        note_relative_path,
         title,
         llm_options,
         |_| {},
@@ -128,6 +204,7 @@ pub async fn import_video_from_sidecar_with_progress<F>(
     project_root: &Path,
     video_path: &Path,
     sketch_relative_path: &str,
+    note_relative_path: &str,
     title: &str,
     llm_options: Option<VideoImportLlmOptions>,
     mut on_progress: F,
@@ -144,6 +221,7 @@ where
         "Validating video and transcript sidecar",
     );
     validate_video_path(video_path)?;
+    validate_sketch_video_duration(video_path)?;
     let transcript_path = find_sidecar_transcript(video_path)?;
     emit_progress(
         &mut on_progress,
@@ -164,12 +242,11 @@ where
 
     emit_progress(
         &mut on_progress,
-        "audio",
+        "grouping",
         2,
         total_steps,
-        "Extracting import audio for local reference",
+        "Preparing import workspace",
     );
-    let audio_path = extract_audio(video_path, &import_dir).ok();
     emit_progress(
         &mut on_progress,
         "grouping",
@@ -178,6 +255,7 @@ where
         "Creating heuristic transcript scenes",
     );
     let mut scenes = group_transcript_scenes(&transcript_segments);
+    let heuristic_evidence = build_heuristic_evidence(&transcript_segments, &scenes);
     emit_progress(
         &mut on_progress,
         "llm",
@@ -193,7 +271,7 @@ where
     let refinement = if has_llm_options {
         let mut refinement = Box::pin(refine_scenes_with_llm(
             &transcript_segments,
-            &scenes,
+            &heuristic_evidence,
             llm_options,
         ));
         let mut progress_tick = 0usize;
@@ -213,12 +291,13 @@ where
             }
         }
     } else {
-        refine_scenes_with_llm(&transcript_segments, &scenes, llm_options).await
+        refine_scenes_with_llm(&transcript_segments, &heuristic_evidence, llm_options).await
     };
     let llm_refinement = match refinement {
         SceneRefinementOutcome::Refined {
             scenes: refined,
             summary,
+            row_plan,
         } => {
             tracing::info!(
                 target: "cutready::video_import",
@@ -227,9 +306,9 @@ where
                 "video import scene analyst refined transcript scenes"
             );
             scenes = refined;
-            Some(summary)
+            (Some(summary), Some(row_plan), true)
         }
-        SceneRefinementOutcome::Skipped => None,
+        SceneRefinementOutcome::Skipped => (None, None, false),
         SceneRefinementOutcome::Failed { summary } => {
             tracing::warn!(
                 target: "cutready::video_import",
@@ -238,7 +317,7 @@ where
                 reason = %summary.summary,
                 "video import scene analyst failed; using heuristic scenes"
             );
-            Some(summary)
+            (Some(summary), None, false)
         }
     };
     emit_progress(
@@ -255,7 +334,7 @@ where
         "saving",
         6,
         total_steps,
-        "Saving imported sketch and manifest",
+        "Saving imported sketch, summary note, and manifest",
     );
     let mut sketch = Sketch::new(title);
     sketch.description = serde_json::Value::String(format!(
@@ -274,18 +353,30 @@ where
 
     let sketch_abs = project::safe_resolve(project_root, sketch_relative_path)?;
     project::write_sketch(&sketch, &sketch_abs, project_root)?;
+    let note = build_summary_note(
+        title,
+        video_path,
+        &transcript_path,
+        &scenes,
+        llm_refinement.1.as_ref(),
+    );
+    let note_abs = project::safe_resolve(project_root, note_relative_path)?;
+    project::write_note(&note_abs, &note)?;
 
     let manifest = VideoImportManifest {
         schema_version: 1,
         import_id,
         source_video: video_path.display().to_string(),
         sidecar_transcript: transcript_path.display().to_string(),
-        audio_path: audio_path.map(|path| path.to_string_lossy().replace('\\', "/")),
+        audio_path: None,
         sketch_path: sketch_relative_path.to_string(),
+        note_path: note_relative_path.to_string(),
         imported_at: Utc::now(),
         transcript_segments,
+        heuristic_evidence,
+        analyzer_row_plan: llm_refinement.1.clone(),
         scenes: scenes.clone(),
-        llm_refinement: llm_refinement.clone(),
+        llm_refinement: llm_refinement.0.clone(),
     };
     let manifest_rel_path = format!("{import_rel_dir}/manifest.json");
     let manifest_abs = project::safe_resolve(project_root, &manifest_rel_path)?;
@@ -301,13 +392,15 @@ where
     tracing::info!(
         target: "cutready::video_import",
         sketch_path = %sketch_relative_path,
+        note_path = %note_relative_path,
         rows = scenes.len(),
         screenshots = scenes.iter().filter(|scene| scene.screenshot.is_some()).count(),
-        "imported video sidecar transcript as sketch"
+        "imported video sidecar transcript as sketch and summary note"
     );
 
     Ok(VideoImportResult {
         sketch_path: sketch_relative_path.to_string(),
+        note_path: note_relative_path.to_string(),
         title: title.to_string(),
         row_count: sketch.rows.len(),
         screenshot_count: scenes
@@ -316,11 +409,94 @@ where
             .count(),
         manifest_path: manifest_rel_path,
         transcript_path: transcript_path.display().to_string(),
-        llm_refined: llm_refinement
-            .as_ref()
-            .is_some_and(|summary| summary.provider != "unavailable"),
-        llm_refinement_status: llm_refinement.map(|summary| summary.summary),
+        llm_refined: llm_refinement.2,
+        llm_refinement_status: llm_refinement.0.map(|summary| summary.summary),
     })
+}
+
+fn build_summary_note(
+    title: &str,
+    video_path: &Path,
+    transcript_path: &Path,
+    scenes: &[SceneCandidate],
+    row_plan: Option<&AnalyzerRowPlan>,
+) -> String {
+    let video_name = video_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("video");
+    let transcript_name = transcript_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("transcript");
+    let total_duration = scenes.last().map(|scene| scene.end_ms).unwrap_or_default();
+    let row_count = scenes.len();
+    let mut note = String::new();
+    note.push_str(&format!("# {title} - Video Summary\n\n"));
+    note.push_str(&format!(
+        "Imported from `{video_name}` using sidecar transcript `{transcript_name}`.\n\n"
+    ));
+    note.push_str("## At a Glance\n\n");
+    note.push_str(&format!(
+        "- Duration: {}\n",
+        format_timestamp(total_duration)
+    ));
+    note.push_str(&format!("- Sketch rows: {row_count}\n"));
+    note.push_str("- Sketch narrative: verbatim transcript text\n");
+    note.push_str("- Demo actions: intentionally blank for transcript-only import\n\n");
+    note.push_str("## Main Points\n\n");
+
+    for (index, scene) in scenes.iter().enumerate() {
+        let plan = row_plan
+            .and_then(|plan| plan.rows.get(index))
+            .filter(|row| row.segment_ids == scene.transcript_segment_ids);
+        let label = plan
+            .and_then(|row| row.label.as_deref())
+            .unwrap_or("Transcript section");
+        let reason = plan
+            .and_then(|row| row.reason.as_deref())
+            .or(scene.refinement_notes.as_deref());
+        let excerpt = transcript_excerpt(&scene.transcript_text, 240);
+        note.push_str(&format!(
+            "{}. **{} ({} - {})**\n",
+            index + 1,
+            label,
+            format_timestamp(scene.start_ms),
+            format_timestamp(scene.end_ms)
+        ));
+        note.push_str(&format!("   - Transcript gist: {excerpt}\n"));
+        if let Some(reason) = reason {
+            note.push_str(&format!("   - Why this is one row: {}\n", reason.trim()));
+        }
+        if let Some(confidence) = plan.and_then(|row| row.confidence) {
+            note.push_str(&format!(
+                "   - Analyzer confidence: {:.0}%\n",
+                confidence * 100.0
+            ));
+        }
+        note.push('\n');
+    }
+
+    note.push_str("## Verbatim Transcript\n\n");
+    note.push_str("The full verbatim transcript remains in the generated sketch rows.\n");
+    note
+}
+
+fn transcript_excerpt(text: &str, max_chars: usize) -> String {
+    let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.chars().count() <= max_chars {
+        return normalized;
+    }
+
+    let mut excerpt = normalized.chars().take(max_chars).collect::<String>();
+    if let Some((boundary, _)) = excerpt
+        .char_indices()
+        .rev()
+        .find(|(_, ch)| ch.is_whitespace())
+    {
+        excerpt.truncate(boundary);
+    }
+    format!("{}...", excerpt.trim_end_matches(['.', ',', ';', ':']))
 }
 
 fn emit_progress<F>(
@@ -354,6 +530,39 @@ fn validate_video_path(video_path: &Path) -> anyhow::Result<()> {
         "mp4" | "mov" | "mkv" | "webm" | "avi" | "m4v"
     ) {
         anyhow::bail!("Unsupported video file extension: {extension}");
+    }
+    Ok(())
+}
+
+fn validate_sketch_video_duration(video_path: &Path) -> anyhow::Result<()> {
+    let output = ffmpeg::run_ffprobe([
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        &video_path.to_string_lossy(),
+    ])?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "FFprobe duration check failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    let duration_seconds = String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .parse::<f64>()?;
+    if !duration_seconds.is_finite() || duration_seconds < 0.0 {
+        anyhow::bail!("FFprobe returned an invalid video duration");
+    }
+    let duration_ms = (duration_seconds * 1_000.0).round() as u64;
+    if duration_ms > MAX_SKETCH_VIDEO_DURATION_MS {
+        anyhow::bail!(
+            "{DURATION_LIMIT_PREFIX}This video is {} long. Sketch video import supports videos up to 15:00. Use storyboard import for longer recordings once that workflow is available.",
+            format_timestamp(duration_ms)
+        );
     }
     Ok(())
 }
@@ -535,6 +744,142 @@ fn group_transcript_scenes(segments: &[TranscriptSegment]) -> Vec<SceneCandidate
     scenes
 }
 
+fn build_heuristic_evidence(
+    segments: &[TranscriptSegment],
+    heuristic_scenes: &[SceneCandidate],
+) -> VideoImportHeuristicEvidence {
+    VideoImportHeuristicEvidence {
+        max_sketch_video_duration_ms: MAX_SKETCH_VIDEO_DURATION_MS,
+        segments: build_segment_evidence(segments),
+        heuristic_scenes: heuristic_scenes
+            .iter()
+            .map(|scene| HeuristicSceneEvidence {
+                id: scene.id.clone(),
+                start_ms: scene.start_ms,
+                end_ms: scene.end_ms,
+                duration_ms: scene.end_ms.saturating_sub(scene.start_ms),
+                segment_ids: scene.transcript_segment_ids.clone(),
+                frame_timestamp_ms: scene.frame_timestamp_ms,
+                grouping_reason: scene.grouping_reason.clone(),
+            })
+            .collect(),
+        candidate_boundaries: build_candidate_boundaries(segments),
+        candidate_frames: build_candidate_frames(segments, heuristic_scenes),
+    }
+}
+
+fn build_segment_evidence(segments: &[TranscriptSegment]) -> Vec<TranscriptSegmentEvidence> {
+    segments
+        .iter()
+        .enumerate()
+        .map(|(index, segment)| {
+            let duration_ms = segment.end_ms.saturating_sub(segment.start_ms).max(1);
+            let word_count = segment.text.split_whitespace().count();
+            let words_per_minute = if word_count == 0 {
+                None
+            } else {
+                Some(((word_count as f64) / (duration_ms as f64 / 60_000.0) * 10.0).round() / 10.0)
+            };
+            TranscriptSegmentEvidence {
+                id: segment.id.clone(),
+                start_ms: segment.start_ms,
+                end_ms: segment.end_ms,
+                duration_ms,
+                text: segment.text.clone(),
+                word_count,
+                char_count: segment.text.chars().count(),
+                gap_before_ms: index
+                    .checked_sub(1)
+                    .and_then(|previous| segments.get(previous))
+                    .map(|previous| segment.start_ms.saturating_sub(previous.end_ms)),
+                gap_after_ms: segments
+                    .get(index + 1)
+                    .map(|next| next.start_ms.saturating_sub(segment.end_ms)),
+                words_per_minute,
+                sentence_end: ends_sentence(&segment.text),
+                topic_cue: starts_topic_shift(&segment.text),
+            }
+        })
+        .collect()
+}
+
+fn build_candidate_boundaries(segments: &[TranscriptSegment]) -> Vec<CandidateBoundaryEvidence> {
+    segments
+        .windows(2)
+        .filter_map(|pair| {
+            let current = &pair[0];
+            let next = &pair[1];
+            let gap_ms = next.start_ms.saturating_sub(current.end_ms);
+            let mut score = 0.0f64;
+            let mut reasons = Vec::new();
+
+            if gap_ms >= PAUSE_BOUNDARY_MS {
+                score += 0.55;
+                reasons.push(format!("pause_after_{}ms", gap_ms));
+            }
+            if ends_sentence(&current.text) {
+                score += 0.18;
+                reasons.push("sentence_end".to_string());
+            }
+            if starts_topic_shift(&next.text) {
+                score += 0.32;
+                reasons.push("next_topic_cue".to_string());
+            }
+            if current.text.chars().count() >= MAX_SCENE_CHARS / 2 {
+                score += 0.12;
+                reasons.push("dense_caption".to_string());
+            }
+
+            if reasons.is_empty() {
+                return None;
+            }
+
+            Some(CandidateBoundaryEvidence {
+                after_segment_id: current.id.clone(),
+                timestamp_ms: current.end_ms,
+                score: score.min(1.0),
+                reasons,
+            })
+        })
+        .collect()
+}
+
+fn build_candidate_frames(
+    segments: &[TranscriptSegment],
+    heuristic_scenes: &[SceneCandidate],
+) -> Vec<CandidateFrameEvidence> {
+    heuristic_scenes
+        .iter()
+        .filter_map(|scene| {
+            let representative = segments
+                .iter()
+                .filter(|segment| scene.transcript_segment_ids.contains(&segment.id))
+                .max_by_key(|segment| segment.end_ms.saturating_sub(segment.start_ms))?;
+            Some(CandidateFrameEvidence {
+                id: format!("{}-midpoint", scene.id),
+                scene_id: scene.id.clone(),
+                segment_id: representative.id.clone(),
+                timestamp_ms: representative.start_ms
+                    + (representative
+                        .end_ms
+                        .saturating_sub(representative.start_ms)
+                        / 2),
+                reasons: vec![
+                    "longest_segment_midpoint".to_string(),
+                    "heuristic_scene_candidate".to_string(),
+                ],
+            })
+        })
+        .collect()
+}
+
+fn ends_sentence(text: &str) -> bool {
+    text.trim_end()
+        .chars()
+        .last()
+        .is_some_and(|last| matches!(last, '.' | '?' | '!'))
+}
+
 fn starts_topic_shift(text: &str) -> bool {
     let normalized = text.trim().to_ascii_lowercase();
     [
@@ -592,22 +937,8 @@ fn scene_to_row(scene: &SceneCandidate) -> PlanningRow {
         format_timestamp(scene.end_ms)
     );
     row.duration_seconds = Some(((scene.end_ms - scene.start_ms) as f64 / 1_000.0).round() as u32);
-    row.narrative = scene
-        .narrative
-        .as_deref()
-        .filter(|narrative| !narrative.trim().is_empty())
-        .unwrap_or(&scene.transcript_text)
-        .to_string();
-    row.demo_actions = if scene.demo_actions.is_empty() {
-        String::new()
-    } else {
-        scene
-            .demo_actions
-            .iter()
-            .map(|action| format!("- {}", action.trim()))
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
+    row.narrative = scene.transcript_text.clone();
+    row.demo_actions = String::new();
     row.screenshot = scene.screenshot.clone();
     row
 }
@@ -616,6 +947,7 @@ enum SceneRefinementOutcome {
     Refined {
         scenes: Vec<SceneCandidate>,
         summary: LlmSceneRefinementSummary,
+        row_plan: AnalyzerRowPlan,
     },
     Skipped,
     Failed {
@@ -625,42 +957,45 @@ enum SceneRefinementOutcome {
 
 #[derive(Debug, Deserialize)]
 struct LlmSceneRefinementResponse {
-    scenes: Vec<LlmScene>,
+    rows: Vec<LlmScene>,
     #[serde(default)]
     summary: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct LlmScene {
     segment_ids: Vec<String>,
     #[serde(default)]
-    narrative: Option<String>,
-    #[serde(default)]
-    demo_actions: Vec<String>,
-    #[serde(default)]
     representative_segment_id: Option<String>,
     #[serde(default)]
-    notes: Option<String>,
+    representative_timestamp_ms: Option<u64>,
+    #[serde(default)]
+    confidence: Option<f32>,
+    #[serde(default)]
+    reason: Option<String>,
+    #[serde(default)]
+    label: Option<String>,
 }
 
 async fn refine_scenes_with_llm(
     segments: &[TranscriptSegment],
-    heuristic_scenes: &[SceneCandidate],
+    heuristic_evidence: &VideoImportHeuristicEvidence,
     options: Option<VideoImportLlmOptions>,
 ) -> SceneRefinementOutcome {
     let Some(options) = options else {
         return SceneRefinementOutcome::Skipped;
     };
 
-    let input_scene_count = heuristic_scenes.len();
+    let input_scene_count = heuristic_evidence.heuristic_scenes.len();
     let provider = llm::build_provider(&options.config, options.reported_context_length);
-    let user_prompt = build_scene_refinement_prompt(segments, heuristic_scenes);
+    let user_prompt = build_scene_refinement_prompt(heuristic_evidence);
     tracing::info!(
         target: "cutready::video_import",
         provider = %options.provider_label,
         model = %options.model,
         transcript_segments = segments.len(),
-        heuristic_scenes = heuristic_scenes.len(),
+        heuristic_scenes = heuristic_evidence.heuristic_scenes.len(),
         prompt_chars = user_prompt.len(),
         timeout_seconds = LLM_REFINEMENT_TIMEOUT.as_secs(),
         "starting video import scene analyst request"
@@ -703,7 +1038,7 @@ async fn refine_scenes_with_llm(
     };
 
     match apply_llm_scene_refinement(segments, text) {
-        Ok((scenes, summary_text)) => {
+        Ok((scenes, row_plan, summary_text)) => {
             let summary = LlmSceneRefinementSummary {
                 provider: options.provider_label,
                 model: options.model,
@@ -711,7 +1046,11 @@ async fn refine_scenes_with_llm(
                 output_scene_count: scenes.len(),
                 summary: summary_text,
             };
-            SceneRefinementOutcome::Refined { scenes, summary }
+            SceneRefinementOutcome::Refined {
+                scenes,
+                summary,
+                row_plan,
+            }
         }
         Err(err) => SceneRefinementOutcome::Failed {
             summary: failure_summary(format!("Scene analyst returned unusable boundaries: {err}")),
@@ -721,7 +1060,7 @@ async fn refine_scenes_with_llm(
 
 const VIDEO_IMPORT_SCENE_ANALYST_PROMPT: &str = r#"You are CutReady's Video Import Scene Analyst.
 
-Your job is to review timestamped demo transcript segments and the deterministic heuristic scene suggestion before screenshots are extracted. Improve scene boundaries only when the transcript evidence supports it. The backend will use your final scene timestamp ranges to extract screenshots, so keep every boundary grounded in the provided segment IDs.
+Your job is to review timestamped demo transcript segments and deterministic heuristic evidence before screenshots are extracted. You are not a script writer. The transcript text is immutable source material and the backend will copy it verbatim into the sketch.
 
 Rules:
 - Return only valid JSON. No markdown fences, no prose outside JSON.
@@ -729,71 +1068,44 @@ Rules:
 - Do not invent segment IDs or split a segment.
 - Prefer fewer useful demo scenes over many tiny transcript chunks.
 - Keep scenes coherent for a product demo sketch row: one goal, one presenter beat, or one visible task.
-- Write narrative as speakable demo narration, not a summary label.
-- Do not infer demo_actions. Only include demo_actions when the transcript explicitly states a concrete user action, such as "open the traces tab" or "select the evaluator". If the transcript does not explicitly state an action, return an empty demo_actions array. Never add placeholder actions like "review screenshot" or "refine the on-screen action".
+- Do not return narrative text, transcript text, rewritten words, summaries for sketch rows, or demo actions.
+- Choose row boundaries and representative timing only.
 - Pick representative_segment_id from within the scene. It should be the segment whose midpoint is most likely to show the key screen for the scene.
+- representative_timestamp_ms is optional. If present, it must be inside the row time range.
+- Use confidence from 0.0 to 1.0 only when the evidence supports a clear score.
 - Use plain ASCII punctuation.
 
 JSON shape:
 {
-  "summary": "One sentence explaining the refinement.",
-  "scenes": [
+  "summary": "One sentence explaining the boundary/timestamp plan.",
+  "rows": [
     {
       "segment_ids": ["seg-1", "seg-2"],
-      "narrative": "Speakable narration for this sketch row.",
-      "demo_actions": ["Open the dashboard"],
       "representative_segment_id": "seg-2",
-      "notes": "Why this boundary/frame was chosen"
+      "representative_timestamp_ms": 6400,
+      "confidence": 0.82,
+      "reason": "Pause and topic-cue evidence agree.",
+      "label": "setup"
     }
   ]
 }"#;
 
-fn build_scene_refinement_prompt(
-    segments: &[TranscriptSegment],
-    heuristic_scenes: &[SceneCandidate],
-) -> String {
-    let transcript = segments
-        .iter()
-        .map(|segment| {
-            format!(
-                "{} [{} - {}]: {}",
-                segment.id,
-                format_timestamp(segment.start_ms),
-                format_timestamp(segment.end_ms),
-                segment.text
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    let heuristic = heuristic_scenes
-        .iter()
-        .map(|scene| {
-            format!(
-                "{} [{} - {}] reason={} segments={}",
-                scene.id,
-                format_timestamp(scene.start_ms),
-                format_timestamp(scene.end_ms),
-                scene.grouping_reason,
-                scene.transcript_segment_ids.join(", ")
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-
+fn build_scene_refinement_prompt(heuristic_evidence: &VideoImportHeuristicEvidence) -> String {
+    let evidence_json =
+        serde_json::to_string_pretty(heuristic_evidence).unwrap_or_else(|_| "{}".to_string());
     format!(
-        "Review these transcript segments and heuristic scene boundaries before screenshots are extracted.\n\nTranscript segments:\n{transcript}\n\nHeuristic scenes:\n{heuristic}\n\nReturn the refined scene JSON now."
+        "Review this bounded heuristic evidence JSON. Return only the row plan JSON shape from the system instructions. Do not copy, rewrite, summarize, or output transcript text.\n\n{evidence_json}"
     )
 }
 
 fn apply_llm_scene_refinement(
     segments: &[TranscriptSegment],
     response_text: &str,
-) -> anyhow::Result<(Vec<SceneCandidate>, String)> {
+) -> anyhow::Result<(Vec<SceneCandidate>, AnalyzerRowPlan, String)> {
     let json_text = extract_json_object(response_text)?;
     let response: LlmSceneRefinementResponse = serde_json::from_str(json_text)?;
-    if response.scenes.is_empty() {
-        anyhow::bail!("no scenes returned");
+    if response.rows.is_empty() {
+        anyhow::bail!("no rows returned");
     }
 
     let segment_ids = segments
@@ -801,11 +1113,14 @@ fn apply_llm_scene_refinement(
         .map(|segment| segment.id.as_str())
         .collect::<Vec<_>>();
     let mut next_index = 0usize;
-    let mut scenes = Vec::with_capacity(response.scenes.len());
+    let mut scenes = Vec::with_capacity(response.rows.len());
+    let mut row_plan = AnalyzerRowPlan {
+        rows: Vec::with_capacity(response.rows.len()),
+    };
 
-    for (scene_index, llm_scene) in response.scenes.into_iter().enumerate() {
+    for (scene_index, llm_scene) in response.rows.into_iter().enumerate() {
         if llm_scene.segment_ids.is_empty() {
-            anyhow::bail!("scene {} has no segment IDs", scene_index + 1);
+            anyhow::bail!("row {} has no segment IDs", scene_index + 1);
         }
 
         let mut scene_segments = Vec::with_capacity(llm_scene.segment_ids.len());
@@ -828,22 +1143,13 @@ fn apply_llm_scene_refinement(
         let mut candidate = scene_from_segments(
             scene_index + 1,
             &scene_segments,
-            "LLM refined transcript scene",
+            "Analyzer selected transcript row",
         );
-        candidate.narrative = llm_scene
-            .narrative
-            .map(|text| text.trim().to_string())
-            .filter(|text| !text.is_empty());
-        candidate.demo_actions = llm_scene
-            .demo_actions
-            .into_iter()
-            .map(|action| action.trim().to_string())
-            .filter(|action| is_concrete_llm_action(action))
-            .collect();
-        candidate.refinement_notes = llm_scene
-            .notes
-            .map(|text| text.trim().to_string())
-            .filter(|text| !text.is_empty());
+        candidate.refinement_notes = analyzer_notes(
+            llm_scene.reason.as_deref(),
+            llm_scene.confidence,
+            llm_scene.label.as_deref(),
+        );
 
         if let Some(representative_id) = llm_scene.representative_segment_id {
             let representative = scene_segments
@@ -858,45 +1164,71 @@ fn apply_llm_scene_refinement(
             candidate.frame_timestamp_ms =
                 representative.start_ms + ((representative.end_ms - representative.start_ms) / 2);
         }
-
-        fn is_concrete_llm_action(action: &str) -> bool {
-            let normalized = action.trim().to_lowercase();
-            if normalized.is_empty() {
-                return false;
+        if let Some(timestamp_ms) = llm_scene.representative_timestamp_ms {
+            if timestamp_ms < candidate.start_ms || timestamp_ms > candidate.end_ms {
+                anyhow::bail!(
+                    "representative timestamp for row {} is outside the row range",
+                    scene_index + 1
+                );
             }
-
-            let placeholder_phrases = [
-                "review screenshot",
-                "review the screenshot",
-                "review captured screenshot",
-                "review the captured screenshot",
-                "refine the on-screen action",
-                "exact ui action",
-                "on-screen action",
-            ];
-            !placeholder_phrases
-                .iter()
-                .any(|phrase| normalized.contains(phrase))
+            candidate.frame_timestamp_ms = timestamp_ms;
         }
 
+        row_plan.rows.push(AnalyzerRow {
+            segment_ids: candidate.transcript_segment_ids.clone(),
+            representative_segment_id: scene_segments
+                .iter()
+                .find(|segment| {
+                    segment.start_ms <= candidate.frame_timestamp_ms
+                        && candidate.frame_timestamp_ms <= segment.end_ms
+                })
+                .map(|segment| segment.id.clone()),
+            representative_timestamp_ms: Some(candidate.frame_timestamp_ms),
+            confidence: llm_scene.confidence,
+            reason: llm_scene.reason,
+            label: llm_scene.label,
+        });
         scenes.push(candidate);
     }
 
     if next_index != segments.len() {
         anyhow::bail!(
-            "scene output omitted {} transcript segment(s)",
+            "row output omitted {} transcript segment(s)",
             segments.len() - next_index
         );
     }
 
     Ok((
         scenes,
+        row_plan,
         response
             .summary
             .map(|text| text.trim().to_string())
             .filter(|text| !text.is_empty())
             .unwrap_or_else(|| "Scene analyst refined transcript boundaries.".to_string()),
     ))
+}
+
+fn analyzer_notes(
+    reason: Option<&str>,
+    confidence: Option<f32>,
+    label: Option<&str>,
+) -> Option<String> {
+    let mut notes = Vec::new();
+    if let Some(reason) = reason.map(str::trim).filter(|reason| !reason.is_empty()) {
+        notes.push(format!("reason={reason}"));
+    }
+    if let Some(confidence) = confidence {
+        notes.push(format!("confidence={:.2}", confidence.clamp(0.0, 1.0)));
+    }
+    if let Some(label) = label.map(str::trim).filter(|label| !label.is_empty()) {
+        notes.push(format!("label={label}"));
+    }
+    if notes.is_empty() {
+        None
+    } else {
+        Some(notes.join("; "))
+    }
 }
 
 fn extract_json_object(text: &str) -> anyhow::Result<&str> {
@@ -933,28 +1265,6 @@ fn format_timestamp(ms: u64) -> String {
     let minutes = total_seconds / 60;
     let seconds = total_seconds % 60;
     format!("{minutes}:{seconds:02}")
-}
-
-fn extract_audio(video_path: &Path, import_dir: &Path) -> anyhow::Result<PathBuf> {
-    let output_path = import_dir.join("audio.wav");
-    let output = ffmpeg::run_ffmpeg([
-        "-y",
-        "-i",
-        &video_path.to_string_lossy(),
-        "-vn",
-        "-ac",
-        "1",
-        "-ar",
-        "16000",
-        &output_path.to_string_lossy(),
-    ])?;
-    if !output.status.success() {
-        anyhow::bail!(
-            "FFmpeg audio extraction failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-    Ok(output_path)
 }
 
 fn extract_scene_screenshots(
@@ -1089,7 +1399,7 @@ This is a short-form WebVTT cue.
     }
 
     #[test]
-    fn formats_row_timing_from_scene_range() {
+    fn formats_row_timing_and_preserves_verbatim_transcript_text() {
         let scene = SceneCandidate {
             id: "scene-1".into(),
             start_ms: 9_320,
@@ -1108,8 +1418,8 @@ This is a short-form WebVTT cue.
 
         assert_eq!(row.time, "0:09 - 0:23");
         assert_eq!(row.duration_seconds, Some(14));
-        assert_eq!(row.narrative, "The details tab shows the current run.");
-        assert_eq!(row.demo_actions, "- Open the details tab");
+        assert_eq!(row.narrative, "Notice I can go to the details tab.");
+        assert_eq!(row.demo_actions, "");
         assert_eq!(
             row.screenshot.as_deref(),
             Some(".cutready/screenshots/frame.png")
@@ -1163,24 +1473,22 @@ This is a short-form WebVTT cue.
         ];
         let response = r#"{
           "summary": "Merged the setup into one scene and kept trace review separate.",
-          "scenes": [
+          "rows": [
             {
               "segment_ids": ["seg-1", "seg-2"],
-              "narrative": "Start with the overview, then open the runs tab.",
-              "demo_actions": ["Show the overview", "Open Runs"],
               "representative_segment_id": "seg-2",
-              "notes": "The second segment shows the screen transition."
+              "confidence": 0.91,
+              "reason": "The second segment shows the screen transition.",
+              "label": "setup"
             },
             {
               "segment_ids": ["seg-3"],
-              "narrative": "Now review the trace for the current run.",
-              "demo_actions": ["Inspect the trace"],
               "representative_segment_id": "seg-3"
             }
           ]
         }"#;
 
-        let (scenes, summary) = apply_llm_scene_refinement(&segments, response).unwrap();
+        let (scenes, row_plan, summary) = apply_llm_scene_refinement(&segments, response).unwrap();
 
         assert_eq!(
             summary,
@@ -1188,20 +1496,16 @@ This is a short-form WebVTT cue.
         );
         assert_eq!(scenes.len(), 2);
         assert_eq!(scenes[0].transcript_segment_ids, vec!["seg-1", "seg-2"]);
-        assert_eq!(
-            scenes[0].narrative.as_deref(),
-            Some("Start with the overview, then open the runs tab.")
-        );
-        assert_eq!(
-            scenes[0].demo_actions,
-            vec!["Show the overview", "Open Runs"]
-        );
+        assert_eq!(scenes[0].narrative, None);
+        assert!(scenes[0].demo_actions.is_empty());
         assert_eq!(scenes[0].frame_timestamp_ms, 6_000);
         assert_eq!(scenes[1].transcript_segment_ids, vec!["seg-3"]);
+        assert_eq!(row_plan.rows.len(), 2);
+        assert_eq!(row_plan.rows[0].confidence, Some(0.91));
     }
 
     #[test]
-    fn removes_llm_placeholder_actions() {
+    fn rejects_llm_scene_refinement_that_outputs_narrative() {
         let segments = vec![TranscriptSegment {
             id: "seg-1".into(),
             start_ms: 0,
@@ -1210,22 +1514,18 @@ This is a short-form WebVTT cue.
         }];
         let response = r#"{
           "summary": "Kept the scene as-is.",
-          "scenes": [
+          "rows": [
             {
               "segment_ids": ["seg-1"],
               "narrative": "Start on the overview.",
-              "demo_actions": [
-                "Review the captured screenshot and refine the on-screen action.",
-                "Open the overview"
-              ],
               "representative_segment_id": "seg-1"
             }
           ]
         }"#;
 
-        let (scenes, _) = apply_llm_scene_refinement(&segments, response).unwrap();
+        let err = apply_llm_scene_refinement(&segments, response).unwrap_err();
 
-        assert_eq!(scenes[0].demo_actions, vec!["Open the overview"]);
+        assert!(err.to_string().contains("unknown field"));
     }
 
     #[test]
@@ -1245,8 +1545,8 @@ This is a short-form WebVTT cue.
             },
         ];
         let response = r#"{
-          "scenes": [
-            { "segment_ids": ["seg-2"], "narrative": "Open the runs tab." }
+          "rows": [
+            { "segment_ids": ["seg-2"] }
           ]
         }"#;
 
@@ -1270,6 +1570,7 @@ This is a short-form WebVTT cue.
             root.path(),
             &sample,
             "observe-agent-performance-v2.sk",
+            "observe-agent-performance-v2-summary.md",
             "Observe Agent Performance V2",
             None,
         )
@@ -1280,6 +1581,63 @@ This is a short-form WebVTT cue.
         assert!(result.row_count >= 3);
         assert_eq!(result.row_count, result.screenshot_count);
         assert!(root.path().join(&result.sketch_path).is_file());
-        assert!(root.path().join(&result.manifest_path).is_file());
+        assert!(root.path().join(&result.note_path).is_file());
+        let manifest_path = root.path().join(&result.manifest_path);
+        assert!(manifest_path.is_file());
+        let manifest: VideoImportManifest =
+            serde_json::from_str(&std::fs::read_to_string(manifest_path).unwrap()).unwrap();
+        assert_eq!(manifest.audio_path, None);
+        let import_dir = root
+            .path()
+            .join(result.manifest_path.trim_end_matches("/manifest.json"));
+        assert!(!import_dir.join("audio.wav").exists());
+    }
+
+    #[test]
+    fn builds_summary_note_without_changing_verbatim_sketch_content() {
+        let scene = SceneCandidate {
+            id: "scene-1".into(),
+            start_ms: 0,
+            end_ms: 12_000,
+            transcript_segment_ids: vec!["seg-1".into()],
+            transcript_text: "Welcome to the demo. We will tune the model and review the results."
+                .into(),
+            narrative: None,
+            demo_actions: Vec::new(),
+            screenshot: None,
+            frame_timestamp_ms: 6_000,
+            grouping_reason: "single transcript segment".into(),
+            refinement_notes: Some("The transcript introduces the tuning workflow.".into()),
+        };
+        let row_plan = AnalyzerRowPlan {
+            rows: vec![AnalyzerRow {
+                segment_ids: vec!["seg-1".into()],
+                representative_segment_id: Some("seg-1".into()),
+                representative_timestamp_ms: Some(6_000),
+                confidence: Some(0.82),
+                reason: Some("This is the setup for the workflow.".into()),
+                label: Some("setup".into()),
+            }],
+        };
+
+        let note = build_summary_note(
+            "Tune Complete V3",
+            Path::new("D:/cutready/scratch/tune-complete-v3.mp4"),
+            Path::new("D:/cutready/scratch/tune-complete-v3.vtt"),
+            std::slice::from_ref(&scene),
+            Some(&row_plan),
+        );
+        let row = scene_to_row(&scene);
+
+        assert_eq!(
+            row.narrative,
+            "Welcome to the demo. We will tune the model and review the results."
+        );
+        assert_eq!(row.demo_actions, "");
+        assert!(note.contains("# Tune Complete V3 - Video Summary"));
+        assert!(note.contains("**setup (0:00 - 0:12)**"));
+        assert!(note.contains("Sketch narrative: verbatim transcript text"));
+        assert!(note.contains("Demo actions: intentionally blank"));
+        assert!(note.contains("Analyzer confidence: 82%"));
     }
 }
