@@ -25,13 +25,14 @@ export function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   const confirmRef = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const defaultFocusRef = variant === "default" ? confirmRef : cancelRef;
 
-  // Auto-focus confirm button when opened
   useEffect(() => {
     if (open) {
-      requestAnimationFrame(() => confirmRef.current?.focus());
+      requestAnimationFrame(() => defaultFocusRef.current?.focus());
     }
-  }, [open]);
+  }, [defaultFocusRef, open]);
 
   if (!open) return null;
 
@@ -51,6 +52,8 @@ export function ConfirmDialog({
         </div>
         <div className="flex items-center justify-end gap-2 px-5 pb-4">
           <button
+            ref={cancelRef}
+            type="button"
             onClick={onCancel}
             className="px-3 py-1.5 rounded-lg text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
           >
@@ -58,6 +61,7 @@ export function ConfirmDialog({
           </button>
           <button
             ref={confirmRef}
+            type="button"
             onClick={onConfirm}
             className="px-4 py-1.5 rounded-lg text-xs font-medium text-[rgb(var(--color-accent-fg))] transition-colors"
             style={{ backgroundColor: colors.bg }}

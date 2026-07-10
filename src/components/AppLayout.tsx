@@ -61,6 +61,7 @@ export function AppLayout() {
   const toggleOutput = useAppStore((s) => s.toggleOutput);
   const showOutputTab = useAppStore((s) => s.showOutputTab);
   const toggleSecondaryPanel = useAppStore((s) => s.toggleSecondaryPanel);
+  const setSecondaryPanelVisible = useAppStore((s) => s.setSecondaryPanelVisible);
   const showSecondaryPanel = useAppStore((s) => s.showSecondaryPanel);
   const chatFocusMode = useAppStore((s) => s.chatFocusMode);
   const setChatFocusMode = useAppStore((s) => s.setChatFocusMode);
@@ -68,22 +69,78 @@ export function AppLayout() {
   const setTerminalFocusMode = useAppStore((s) => s.setTerminalFocusMode);
   const isMerging = useAppStore((s) => s.isMerging);
   const projectSwitching = useAppStore((s) => s.projectSwitching);
+  const currentProject = useAppStore((s) => s.currentProject);
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [recentCommands, setRecentCommands] = useState<string[]>([]);
   const [settingsBackgroundView, setSettingsBackgroundView] = useState<AppView>("home");
+  const [chatTogglePhase, setChatTogglePhase] = useState<"hidden" | "side" | "focus" | "after-focus">("hidden");
 
   const { theme: resolvedTheme, toggle: toggleTheme } = useTheme();
   const commands = useCommands();
   const mainRef = useRef<HTMLDivElement>(null);
+  const lastWorkspaceViewRef = useRef<AppView>("project");
 
   useEffect(() => {
     if (view !== "settings") {
       setSettingsBackgroundView(view);
     }
   }, [view]);
+
+  useEffect(() => {
+    if (view === "project" || view === "sketch" || view === "assets" || view === "narrations" || view === "changes") {
+      lastWorkspaceViewRef.current = view;
+    }
+  }, [view]);
+
+  useEffect(() => {
+    if (!chatFocusMode && !showSecondaryPanel && view !== "chat") {
+      setChatTogglePhase("hidden");
+    }
+  }, [chatFocusMode, showSecondaryPanel, view]);
+
+  const toggleChatSurface = useCallback(() => {
+    const restoreWorkspaceView = () => {
+      if (view === "chat") {
+        setView(currentProject ? lastWorkspaceViewRef.current : "home");
+      }
+    };
+
+    if (chatFocusMode || view === "chat") {
+      setChatFocusMode(false);
+      restoreWorkspaceView();
+      if (currentProject && !showSecondaryPanel) {
+        setSecondaryPanelVisible(true);
+      }
+      setChatTogglePhase("after-focus");
+      return;
+    }
+
+    if (showSecondaryPanel) {
+      if (chatTogglePhase === "after-focus") {
+        setSecondaryPanelVisible(false);
+        setChatTogglePhase("hidden");
+        return;
+      }
+      setChatFocusMode(true);
+      setChatTogglePhase("focus");
+      return;
+    }
+
+    if (currentProject && view === "home") {
+      setView(lastWorkspaceViewRef.current);
+    }
+    if (currentProject) {
+      setSecondaryPanelVisible(true);
+      setChatTogglePhase("side");
+      return;
+    }
+
+    setView("chat");
+    setChatTogglePhase("focus");
+  }, [chatFocusMode, chatTogglePhase, currentProject, setChatFocusMode, setSecondaryPanelVisible, setView, showSecondaryPanel, view]);
 
   // Register built-in commands
   useEffect(() => {
@@ -144,7 +201,7 @@ export function AppLayout() {
         category: "Navigate",
         keybinding: "Ctrl+Shift+C",
         icon: <MessageSquareMore className="w-4 h-4" />,
-        handler: () => setView("chat"),
+        handler: () => toggleChatSurface(),
       },
       {
         id: "view.sendFeedback",
@@ -272,7 +329,7 @@ export function AppLayout() {
         },
       },
     ]);
-  }, [setView, showOutputTab, toggleSidebar, toggleSidebarPosition, toggleOutput, toggleSecondaryPanel, toggleTheme]);
+  }, [setView, showOutputTab, toggleChatSurface, toggleSidebar, toggleSidebarPosition, toggleOutput, toggleSecondaryPanel, toggleTheme]);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -324,7 +381,7 @@ export function AppLayout() {
       }
       if (mod && e.shiftKey && (e.key === "C" || e.key === "c")) {
         e.preventDefault();
-        setView("chat");
+        toggleChatSurface();
         return;
       }
       if (mod && e.key === "b") {
@@ -357,6 +414,7 @@ export function AppLayout() {
     setChatFocusMode,
     setTerminalFocusMode,
     terminalFocusMode,
+    toggleChatSurface,
     toggleOutput,
     toggleSecondaryPanel,
     toggleSidebar,
@@ -433,11 +491,7 @@ export function AppLayout() {
       />
       <div
         data-testid="app-content-shell"
-        className={
-          chatFocusMode
-            ? "hidden"
-            : "flex flex-col w-full flex-1 min-h-0"
-        }
+        className="flex flex-col w-full flex-1 min-h-0"
         style={{
           paddingTop: isMac ? undefined : "var(--titlebar-height)",
           paddingBottom: "var(--statusbar-height)",
@@ -445,7 +499,13 @@ export function AppLayout() {
       >
         <div className="flex flex-1 overflow-hidden" ref={mainRef}>
           {/* Activity bar on left (hidden on home) */}
-          {view !== "home" && sidebarPosition === "left" && <Sidebar onFeedback={() => setFeedbackOpen(true)} />}
+          {view !== "home" && sidebarPosition === "left" && (
+            <Sidebar
+              onFeedback={() => setFeedbackOpen(true)}
+              onChatToggle={toggleChatSurface}
+              chatActive={chatFocusMode || showSecondaryPanel || view === "chat"}
+            />
+          )}
 
           {/* Primary sidebar (hidden on home and chat) */}
           {contentView !== "home" && contentView !== "chat" && !projectSwitching && sidebarVisible && sidebarPosition === "left" && <PrimarySidebar viewOverride={contentView} />}
@@ -481,7 +541,13 @@ export function AppLayout() {
           {contentView !== "home" && contentView !== "chat" && !projectSwitching && sidebarVisible && sidebarPosition === "right" && <PrimarySidebar viewOverride={contentView} />}
 
           {/* Activity bar on right (hidden on home) */}
-          {view !== "home" && sidebarPosition === "right" && <Sidebar onFeedback={() => setFeedbackOpen(true)} />}
+          {view !== "home" && sidebarPosition === "right" && (
+            <Sidebar
+              onFeedback={() => setFeedbackOpen(true)}
+              onChatToggle={toggleChatSurface}
+              chatActive={chatFocusMode || showSecondaryPanel || view === "chat"}
+            />
+          )}
         </div>
       </div>
 
@@ -498,6 +564,8 @@ export function AppLayout() {
           style={{
             top: "var(--titlebar-height)",
             bottom: "var(--statusbar-height)",
+            left: sidebarPosition === "left" ? "3rem" : 0,
+            right: sidebarPosition === "right" ? "3rem" : 0,
           }}
           role="dialog"
           aria-label="Chat focus mode"

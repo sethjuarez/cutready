@@ -14,7 +14,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Channel, invoke } from "../services/tauri";
-import { ArrowRight, AtSign, ChevronDown, ChevronRight, Copy, FileInput, FileText, Film, FolderOpen, Plus, SquareTerminal, Trash2 } from "lucide-react";
+import { ArrowRight, AtSign, ChevronDown, ChevronRight, Copy, FileInput, FileText, Film, FolderOpen, Pencil, Plus, SquareTerminal, Trash2 } from "lucide-react";
 import {
   clearSuppressedEditorFlush,
   makeMainTabId,
@@ -710,6 +710,15 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
         if (result.updatedReferences.length > 0) await loadStoryboards();
       }
       else await loadNotes();
+
+      const updated = result.updatedReferences.reduce((sum, ref) => sum + ref.count, 0);
+      showToast(
+        updated > 0
+          ? `Renamed and updated ${updated} reference${updated === 1 ? "" : "s"}.`
+          : "Renamed file.",
+        3500,
+        "success",
+      );
     } catch (err) {
       showToast(`Rename failed: ${err}`, 4000, "error");
     } finally {
@@ -820,9 +829,16 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     path: string,
     title: string,
   ): ContextMenuItem[] => {
-    const items: ContextMenuItem[] = [];
+    const items: ContextMenuItem[] = [
+      {
+        label: "Rename File...",
+        icon: <Pencil className="w-3.5 h-3.5" />,
+        action: () => startRename(type, path),
+      },
+    ];
 
     if (currentProject) {
+      items.push({ separator: true });
       items.push({
         label: "Open in Terminal",
         icon: <SquareTerminal className="w-3.5 h-3.5" />,
@@ -845,7 +861,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     }
 
     return items;
-  }, [currentProject, isMultiProject, otherProjects, handleTransfer]);
+  }, [currentProject, isMultiProject, otherProjects, handleTransfer, startRename]);
 
   useEffect(() => {
     loadStoryboards();
@@ -1274,6 +1290,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                 onClick={() => { setStoryboardsExpanded(true); setIsCreatingSb(true); }}
                 className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
                 title="New storyboard"
+                aria-label="New storyboard"
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
@@ -1282,8 +1299,12 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
           />
 
           {storyboardsExpanded && isCreatingSb && (
-            <div className="px-3 py-2 border-b border-[rgb(var(--color-border))]">
+            <div className="space-y-2 border-b border-[rgb(var(--color-border))] px-3 py-2">
+              <label className="block text-[10px] font-medium text-[rgb(var(--color-text-secondary))]" htmlFor="new-storyboard-title">
+                Storyboard name
+              </label>
               <input
+                id="new-storyboard-title"
                 type="text"
                 value={newSbTitle}
                 onChange={(e) => setNewSbTitle(e.target.value)}
@@ -1295,6 +1316,23 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                 autoFocus
                 className="w-full px-2 py-1.5 rounded-md bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40"
               />
+              <div className="flex items-center justify-end gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => { setIsCreatingSb(false); setNewSbTitle(""); }}
+                  className="rounded-md px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCreateSb()}
+                  disabled={!newSbTitle.trim()}
+                  className="rounded-md bg-[rgb(var(--color-accent))] px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-accent-fg))] transition-opacity disabled:pointer-events-none disabled:opacity-50"
+                >
+                  Create
+                </button>
+              </div>
             </div>
           )}
 
@@ -1341,6 +1379,8 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                               }}
                               onBlur={commitRename}
                               onClick={(e) => e.stopPropagation()}
+                              aria-label="Rename storyboard file"
+                              title="Rename file. Spaces become hyphens."
                               className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
                             />
                           ) : (
@@ -1353,16 +1393,30 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                           )}
                         </div>
                         {renamingItem?.path !== sb.path && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              requestDelete("storyboard", sb.path, sb.title);
-                            }}
-                            className="shrink-0 rounded p-0.5 text-[rgb(var(--color-text-secondary))] opacity-0 transition-all hover:text-[rgb(var(--color-text))] focus-visible:opacity-100 group-hover/item:opacity-100"
-                            title="Delete storyboard"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
+                          <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/item:opacity-100">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startRename("storyboard", sb.path);
+                              }}
+                              className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+                              title="Rename storyboard"
+                              aria-label={`Rename ${sb.title}`}
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                requestDelete("storyboard", sb.path, sb.title);
+                              }}
+                              className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+                              title="Delete storyboard"
+                              aria-label={`Delete ${sb.title}`}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
                         )}
                       </div>
                     </SortableSidebarItem>
@@ -1392,6 +1446,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                 onClick={() => { setSketchesExpanded(true); setIsCreatingSk(true); }}
                 className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
                 title="New sketch"
+                aria-label="New sketch"
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
@@ -1400,8 +1455,12 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
           />
 
           {sketchesExpanded && isCreatingSk && (
-            <div className="px-3 py-2 border-b border-[rgb(var(--color-border))]">
+            <div className="space-y-2 border-b border-[rgb(var(--color-border))] px-3 py-2">
+              <label className="block text-[10px] font-medium text-[rgb(var(--color-text-secondary))]" htmlFor="new-sketch-title">
+                Sketch name
+              </label>
               <input
+                id="new-sketch-title"
                 type="text"
                 value={newSkTitle}
                 onChange={(e) => setNewSkTitle(e.target.value)}
@@ -1413,6 +1472,23 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                 autoFocus
                 className="w-full px-2 py-1.5 rounded-md bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40"
               />
+              <div className="flex items-center justify-end gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => { setIsCreatingSk(false); setNewSkTitle(""); }}
+                  className="rounded-md px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCreateSk()}
+                  disabled={!newSkTitle.trim()}
+                  className="rounded-md bg-[rgb(var(--color-accent))] px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-accent-fg))] transition-opacity disabled:pointer-events-none disabled:opacity-50"
+                >
+                  Create
+                </button>
+              </div>
             </div>
           )}
 
@@ -1459,6 +1535,8 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                               }}
                               onBlur={commitRename}
                               onClick={(e) => e.stopPropagation()}
+                              aria-label="Rename sketch file"
+                              title="Rename file. Spaces become hyphens."
                               className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
                             />
                           ) : (
@@ -1471,16 +1549,30 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                           )}
                         </div>
                         {renamingItem?.path !== sk.path && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              requestDelete("sketch", sk.path, sk.title);
-                            }}
-                            className="shrink-0 rounded p-0.5 text-[rgb(var(--color-text-secondary))] opacity-0 transition-all hover:text-[rgb(var(--color-text))] focus-visible:opacity-100 group-hover/item:opacity-100"
-                            title="Delete sketch"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
+                          <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/item:opacity-100">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startRename("sketch", sk.path);
+                              }}
+                              className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+                              title="Rename sketch"
+                              aria-label={`Rename ${sk.title}`}
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                requestDelete("sketch", sk.path, sk.title);
+                              }}
+                              className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+                              title="Delete sketch"
+                              aria-label={`Delete ${sk.title}`}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
                         )}
                       </div>
                     </SortableSidebarItem>
@@ -1510,6 +1602,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                 onClick={() => { setNotesExpanded(true); setIsCreatingNote(true); }}
                 className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
                 title="New note"
+                aria-label="New note"
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
@@ -1518,8 +1611,12 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
           />
 
           {notesExpanded && isCreatingNote && (
-            <div className="px-3 py-2 border-b border-[rgb(var(--color-border))]">
+            <div className="space-y-2 border-b border-[rgb(var(--color-border))] px-3 py-2">
+              <label className="block text-[10px] font-medium text-[rgb(var(--color-text-secondary))]" htmlFor="new-note-title">
+                Note name
+              </label>
               <input
+                id="new-note-title"
                 type="text"
                 value={newNoteTitle}
                 onChange={(e) => setNewNoteTitle(e.target.value)}
@@ -1531,6 +1628,23 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                 autoFocus
                 className="w-full px-2 py-1.5 rounded-md bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40"
               />
+              <div className="flex items-center justify-end gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => { setIsCreatingNote(false); setNewNoteTitle(""); }}
+                  className="rounded-md px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCreateNote()}
+                  disabled={!newNoteTitle.trim()}
+                  className="rounded-md bg-[rgb(var(--color-accent))] px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-accent-fg))] transition-opacity disabled:pointer-events-none disabled:opacity-50"
+                >
+                  Create
+                </button>
+              </div>
             </div>
           )}
 
@@ -1594,6 +1708,8 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                               }}
                               onBlur={commitRename}
                               onClick={(e) => e.stopPropagation()}
+                              aria-label="Rename note file"
+                              title="Rename file. Spaces become hyphens."
                               className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
                             />
                           ) : (
@@ -1601,16 +1717,30 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                           )}
                         </div>
                         {renamingItem?.path !== note.path && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              requestDelete("note", note.path, note.title);
-                            }}
-                            className="shrink-0 rounded p-0.5 text-[rgb(var(--color-text-secondary))] opacity-0 transition-all hover:text-[rgb(var(--color-text))] focus-visible:opacity-100 group-hover/item:opacity-100"
-                            title="Delete note"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
+                          <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/item:opacity-100">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startRename("note", note.path);
+                              }}
+                              className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+                              title="Rename note"
+                              aria-label={`Rename ${note.title}`}
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                requestDelete("note", note.path, note.title);
+                              }}
+                              className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+                              title="Delete note"
+                              aria-label={`Delete ${note.title}`}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
                         )}
                       </div>
                     </SortableSidebarItem>

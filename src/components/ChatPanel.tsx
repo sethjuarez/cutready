@@ -55,6 +55,17 @@ export function isChatScrolledNearBottom(
   return scrollState.scrollHeight - scrollState.scrollTop - scrollState.clientHeight <= thresholdPx;
 }
 
+export function scrollChatContainerToBottom(
+  container: HTMLElement | null,
+  endMarker: HTMLElement | null,
+  behavior: ScrollBehavior = "auto",
+): boolean {
+  if (!container || !endMarker) return false;
+  container.scrollTop = container.scrollHeight;
+  endMarker.scrollIntoView({ behavior });
+  return true;
+}
+
 export function applyStreamingDeltaReset(state: { buffer: string; visible: string; drafts?: string[] }) {
   const segment = state.buffer.trim();
   const drafts = segment && !state.drafts?.includes(segment)
@@ -760,23 +771,26 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     const id = settings.aiSelectedAgent || "planner";
     return allAgents.find((a) => a.id === id) ?? BUILT_IN_AGENTS[0];
   }, [settings.aiSelectedAgent, allAgents]);
+  const [providerConfigured, setProviderConfigured] = useState<boolean | null>(null);
 
   const handleMessagesScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
     shouldStickToBottomRef.current = isChatScrolledNearBottom(event.currentTarget);
   }, []);
 
   const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
-    messagesEndRef.current?.scrollIntoView({ behavior });
+    return scrollChatContainerToBottom(messagesContainerRef.current, messagesEndRef.current, behavior);
   }, []);
 
   useLayoutEffect(() => {
+    if (!currentProject || providerConfigured !== true) return;
     if (messages.length === 0) return;
     const sessionKey = chatSessionPath ?? "__local__";
     if (initiallyScrolledSessionRef.current === sessionKey) return;
-    initiallyScrolledSessionRef.current = sessionKey;
+    if (!scrollMessagesToBottom("auto")) return;
+    requestAnimationFrame(() => scrollMessagesToBottom("auto"));
     shouldStickToBottomRef.current = true;
-    scrollMessagesToBottom("auto");
-  }, [chatSessionPath, messages.length, scrollMessagesToBottom]);
+    initiallyScrolledSessionRef.current = sessionKey;
+  }, [chatSessionPath, currentProject, messages.length, providerConfigured, scrollMessagesToBottom]);
 
   // Auto-scroll only while the user is already following the bottom of the chat.
   useEffect(() => {
@@ -839,7 +853,6 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       accessToken: secrets.accessToken,
     });
   }, [settings]);
-  const [providerConfigured, setProviderConfigured] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!settingsLoaded) {
@@ -1391,61 +1404,64 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     <div className="flex flex-col h-full">
       {/* Top toolbar — session controls */}
       <div
-        className={`flex items-center gap-1 h-9 border-b border-[rgb(var(--color-border))] shrink-0 ${
+        className={`h-9 border-b border-[rgb(var(--color-border))] shrink-0 ${
           chatFocusMode ? "px-4" : "px-2"
         }`}
       >
-        <div className="flex min-w-0 items-center gap-2 pr-2">
-          <span className="flex h-5 w-5 items-center justify-center rounded-md bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
-            <IconSparkles size={12} />
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-xs font-medium leading-none text-[rgb(var(--color-text))]">
-              {chatFocusMode ? "Chat - Focus mode" : "Chat"}
-            </p>
-            {chatFocusMode && (
-              <p className="mt-0.5 text-[10px] leading-none text-[rgb(var(--color-text-secondary))]">
-                Esc exits focus mode
+        <div className={`flex h-full items-center gap-1 ${chatFocusMode ? "mx-auto w-full max-w-5xl" : ""}`}>
+          <div className="flex min-w-0 items-center gap-2 pr-2">
+            <span className="flex h-5 w-5 items-center justify-center rounded-md bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+              <IconSparkles size={12} />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium leading-none text-[rgb(var(--color-text))]">
+                {chatFocusMode ? "Chat - Focus mode" : "Chat"}
               </p>
-            )}
+              {chatFocusMode && (
+                <p className="mt-0.5 text-[10px] leading-none text-[rgb(var(--color-text-secondary))]">
+                  Esc exits focus mode
+                </p>
+              )}
+            </div>
           </div>
+          <button
+            className="flex items-center justify-center w-[26px] h-[26px] rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-toolbar))] transition-colors"
+            onClick={clearChat}
+            title="New Chat"
+            aria-label="New Chat"
+          >
+            <IconPlus size={14} />
+          </button>
+          <div className="flex-1" />
+          <button
+            className={`flex h-[26px] items-center justify-center rounded transition-colors ${
+              chatFocusMode
+                ? "gap-1.5 px-2 text-[11px] font-medium text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10"
+                : "gap-1.5 px-2 text-[11px] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-toolbar))] hover:text-[rgb(var(--color-text))]"
+            }`}
+            onClick={() => setChatFocusMode(!chatFocusMode)}
+            title={chatFocusMode ? "Exit focus mode (Esc)" : "Expand chat to focus mode"}
+            aria-label={chatFocusMode ? "Exit focus mode" : "Expand chat to focus mode"}
+          >
+            {chatFocusMode ? (
+              <>
+                <Minimize2 className="h-3.5 w-3.5" />
+                <span>Exit focus</span>
+              </>
+            ) : (
+              <>
+                <Maximize2 className="h-3.5 w-3.5" />
+                <span>Focus</span>
+              </>
+            )}
+          </button>
         </div>
-        <button
-          className="flex items-center justify-center w-[26px] h-[26px] rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-toolbar))] transition-colors"
-          onClick={clearChat}
-          title="New Chat"
-          aria-label="New Chat"
-        >
-          <IconPlus size={14} />
-        </button>
-        <div className="flex-1" />
-        <button
-          className={`flex h-[26px] items-center justify-center rounded transition-colors ${
-            chatFocusMode
-              ? "gap-1.5 px-2 text-[11px] font-medium text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10"
-              : "gap-1.5 px-2 text-[11px] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-toolbar))] hover:text-[rgb(var(--color-text))]"
-          }`}
-          onClick={() => setChatFocusMode(!chatFocusMode)}
-          title={chatFocusMode ? "Exit focus mode (Esc)" : "Expand chat to focus mode"}
-          aria-label={chatFocusMode ? "Exit focus mode" : "Expand chat to focus mode"}
-        >
-          {chatFocusMode ? (
-            <>
-              <Minimize2 className="h-3.5 w-3.5" />
-              <span>Exit focus</span>
-            </>
-          ) : (
-            <>
-              <Maximize2 className="h-3.5 w-3.5" />
-              <span>Focus</span>
-            </>
-          )}
-        </button>
       </div>
 
       {/* Messages */}
       <div
         ref={messagesContainerRef}
+        data-testid="chat-messages-scroll"
         className={`flex-1 overflow-y-auto min-h-0 py-2 ${
           chatFocusMode ? "px-4" : ""
         }`}

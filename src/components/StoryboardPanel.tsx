@@ -75,7 +75,11 @@ export function StoryboardPanel() {
   const secondaryPanel = showSecondaryPanel ? (
     <>
       {!secondaryOnLeft && <ResizeHandle direction="horizontal" onResize={handleSecondaryResize} />}
-      <div className="shrink-0 h-full bg-[rgb(var(--color-surface-inset))] border-l border-[rgb(var(--color-border))]" style={{ width: secondaryWidth }}>
+      <div
+        data-testid="secondary-chat-panel"
+        className="shrink-0 h-full bg-[rgb(var(--color-surface-inset))] border-l border-[rgb(var(--color-border))]"
+        style={{ width: secondaryWidth }}
+      >
         <ChatPanel />
       </div>
       {secondaryOnLeft && <ResizeHandle direction="horizontal" onResize={handleSecondaryResize} />}

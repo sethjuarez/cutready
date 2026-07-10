@@ -8,6 +8,7 @@ import {
   extractInlineToolActivity,
   isChatScrolledNearBottom,
   reconcileMessagesForDisplay,
+  scrollChatContainerToBottom,
   shouldRequestChatMutationApproval,
 } from "../components/ChatPanel";
 import type { ChatMessage } from "../types/sketch";
@@ -140,6 +141,27 @@ describe("isChatScrolledNearBottom", () => {
       scrollTop: 300,
       clientHeight: 500,
     } satisfies Pick<HTMLElement, "scrollHeight" | "scrollTop" | "clientHeight">)).toBe(false);
+  });
+});
+
+describe("scrollChatContainerToBottom", () => {
+  it("sets the scroll container to the bottom when the chat body is mounted", () => {
+    const container = document.createElement("div");
+    const endMarker = document.createElement("div");
+    const scrollIntoView = vi.fn();
+    endMarker.scrollIntoView = scrollIntoView;
+    Object.defineProperty(container, "scrollHeight", { value: 1_500, configurable: true });
+
+    const didScroll = scrollChatContainerToBottom(container, endMarker);
+
+    expect(didScroll).toBe(true);
+    expect(container.scrollTop).toBe(1_500);
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "auto" });
+  });
+
+  it("does not mark scrolling as complete before the chat body is mounted", () => {
+    expect(scrollChatContainerToBottom(null, document.createElement("div"))).toBe(false);
+    expect(scrollChatContainerToBottom(document.createElement("div"), null)).toBe(false);
   });
 });
 
