@@ -10,6 +10,19 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.28.0](https://github.com/sethjuarez/cutready/compare/v1.27.0...v1.28.0) (2026-07-10)
+
+
+### Features
+
+* add transactional asset renaming ([bfdee7d](https://github.com/sethjuarez/cutready/commit/bfdee7d3ea6bb0946abeb53cf4ac70f2d1d3cea0))
+* **video:** add planning context to ingest ([c06be20](https://github.com/sethjuarez/cutready/commit/c06be2090552e441ebfcb973ebd145f733954788))
+
+
+### Bug Fixes
+
+* **agent:** use visible row numbers for planning tools ([501cc04](https://github.com/sethjuarez/cutready/commit/501cc046c3766329965768834ce0841f78754d93))
+
 ## [1.27.0](https://github.com/sethjuarez/cutready/compare/v1.26.1...v1.27.0) (2026-07-10)
 
 
