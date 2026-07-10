@@ -15,7 +15,6 @@ Release Please manages this changelog. Do not edit manually.
 
 ### Features
 
-* **import:** create summary note for video imports ([32017d5](https://github.com/sethjuarez/cutready/commit/32017d56a5d8f0ae6d3d404fb4cf24e2a2f3aa22))
 * **import:** create summary note for video imports ([2aa998c](https://github.com/sethjuarez/cutready/commit/2aa998c810d12d7d8885a9f4604a9f534064ccd7))
 
 
