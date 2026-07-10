@@ -67,6 +67,7 @@ const importDialogTitles: Record<ImportKind, string> = {
   document: "Import Document as Note",
 };
 const VIDEO_IMPORT_MISSING_TRANSCRIPT_PREFIX = "VIDEO_IMPORT_MISSING_TRANSCRIPT:";
+const VIDEO_IMPORT_DURATION_LIMIT_PREFIX = "VIDEO_IMPORT_DURATION_LIMIT:";
 
 const videoImportPhaseDetails: Record<string, string> = {
   preparing: "Getting the importer ready and checking project settings.",
@@ -790,6 +791,16 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             });
             return "";
           }
+          if (msg.startsWith(VIDEO_IMPORT_DURATION_LIMIT_PREFIX)) {
+            keepVideoImportProgressRef.current = true;
+            setVideoImportProgress({
+              phase: "failed",
+              current: 0,
+              total: 1,
+              message: msg.slice(VIDEO_IMPORT_DURATION_LIMIT_PREFIX.length),
+            });
+            return "";
+          }
           throw err;
         }
       }
@@ -848,12 +859,12 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
               current: 7,
               total: 7,
               message: result.llm_refined
-                ? "AI-refined video import complete"
+                ? "Analyzer-assisted video import complete"
                 : "Heuristic video import complete",
             });
             showToast(
               result.llm_refined
-                ? `Imported AI-refined video sketch with ${result.row_count} scenes`
+                ? `Imported analyzer-assisted video sketch with ${result.row_count} rows`
                 : `Imported video sketch with ${result.row_count} heuristic scenes`,
               4000,
               "success",

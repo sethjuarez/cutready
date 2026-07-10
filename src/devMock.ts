@@ -266,7 +266,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         manifest_path: ".cutready/recordings/imports/video-mock/manifest.json",
         transcript_path: "mock-video.srt",
         llm_refined: true,
-        llm_refinement_status: "Scene analyst refined transcript boundaries.",
+        llm_refinement_status: "Scene analyst selected row boundaries and representative timestamps.",
       };
     case "create_sketch":
       return "sketches/new-sketch.sk";
