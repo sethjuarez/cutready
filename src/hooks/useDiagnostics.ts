@@ -21,10 +21,34 @@ declare global {
       enabled: true;
       help: () => string[];
       snapshot: () => unknown;
-      dump: (options?: { sketchPath?: string; rowIndex?: number }) => Promise<DiagnosticsDump>;
-      dumpActiveVisual: (rowIndex: number) => Promise<DiagnosticsDump>;
+      dump: (options?: { sketchPath?: string; rowNumber?: number; rowIndex?: number }) => Promise<DiagnosticsDump>;
+      dumpActiveVisual: (rowNumber: number) => Promise<DiagnosticsDump>;
     };
   }
+}
+
+function parseDiagnosticsRowTarget(options: { rowNumber?: number; rowIndex?: number }) {
+  const { rowNumber, rowIndex } = options;
+  if (rowNumber !== undefined) {
+    if (!Number.isInteger(rowNumber) || rowNumber < 1) {
+      throw new Error("rowNumber must be a positive 1-based row number");
+    }
+
+    const normalizedRowIndex = rowNumber - 1;
+    if (rowIndex !== undefined && rowIndex !== normalizedRowIndex) {
+      throw new Error(
+        `Conflicting row targets: rowNumber ${rowNumber} refers to rowIndex ${normalizedRowIndex}, but rowIndex ${rowIndex} was also provided`,
+      );
+    }
+
+    return { rowNumber, rowIndex: normalizedRowIndex };
+  }
+
+  if (rowIndex !== undefined && (!Number.isInteger(rowIndex) || rowIndex < 0)) {
+    throw new Error("rowIndex must be a non-negative integer");
+  }
+
+  return { rowNumber: null, rowIndex: rowIndex ?? null };
 }
 
 export function useDiagnostics() {
@@ -43,8 +67,8 @@ export function useDiagnostics() {
           help: () => [
             "cutReadyDiagnostics.snapshot()",
             "cutReadyDiagnostics.dump()",
-            "cutReadyDiagnostics.dump({ sketchPath: 'intro.sk', rowIndex: 0 })",
-            "cutReadyDiagnostics.dumpActiveVisual(0)",
+            "cutReadyDiagnostics.dump({ sketchPath: 'intro.sk', rowNumber: 1 })",
+            "cutReadyDiagnostics.dumpActiveVisual(1)",
           ],
           snapshot: () => {
             const {
@@ -70,14 +94,20 @@ export function useDiagnostics() {
                 : null,
             };
           },
-          dump: (options = {}) =>
-            invoke<DiagnosticsDump>("dump_diagnostics", {
+          dump: (options = {}) => {
+            const rowTarget = parseDiagnosticsRowTarget(options);
+            return invoke<DiagnosticsDump>("dump_diagnostics", {
               sketchPath: options.sketchPath ?? null,
-              rowIndex: options.rowIndex ?? null,
-            }),
-          dumpActiveVisual: (rowIndex) => {
-            if (!Number.isInteger(rowIndex) || rowIndex < 0) {
-              return Promise.reject(new Error("rowIndex must be a non-negative integer"));
+              rowNumber: rowTarget.rowNumber,
+              rowIndex: rowTarget.rowIndex,
+            });
+          },
+          dumpActiveVisual: (rowNumber) => {
+            let rowTarget: ReturnType<typeof parseDiagnosticsRowTarget>;
+            try {
+              rowTarget = parseDiagnosticsRowTarget({ rowNumber });
+            } catch (error) {
+              return Promise.reject(error);
             }
 
             const { activeSketchPath } = useAppStore.getState();
@@ -87,7 +117,8 @@ export function useDiagnostics() {
 
             return invoke<DiagnosticsDump>("dump_diagnostics", {
               sketchPath: activeSketchPath,
-              rowIndex,
+              rowNumber: rowTarget.rowNumber,
+              rowIndex: rowTarget.rowIndex,
             });
           },
         };

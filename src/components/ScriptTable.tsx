@@ -857,7 +857,7 @@ function SortableRow({
             <CellActionRail persistent={narrativeLocked}>
               {onSparkle && !narrativeLocked && (
                 <SparkleButton onClick={() => onSparkle(
-                  `Improve the narrative for row ${idx + 1} of sketch "${sketchPath ?? "current"}". Current text: "${row.narrative}". Make it more engaging and natural for spoken delivery. Use update_planning_row to change only this row.`
+                  `Improve the narrative for row ${idx + 1} of sketch "${sketchPath ?? "current"}". Current text: "${row.narrative}". Make it more engaging and natural for spoken delivery. Use update_planning_row with row_number ${idx + 1} and expected_narrative ${JSON.stringify(row.narrative)} to change only this row.`
                 )} />
               )}
               {!rowLocked && onCellLockChange && (
@@ -881,7 +881,7 @@ function SortableRow({
             <CellActionRail persistent={actionsLocked}>
               {onSparkle && !actionsLocked && (
                 <SparkleButton onClick={() => onSparkle(
-                  `Improve the demo actions for row ${idx + 1} of sketch "${sketchPath ?? "current"}". Current text: "${row.demo_actions}". Make the steps clearer and more specific. Use update_planning_row to change only this row.`
+                  `Improve the demo actions for row ${idx + 1} of sketch "${sketchPath ?? "current"}". Current text: "${row.demo_actions}". Make the steps clearer and more specific. Use update_planning_row with row_number ${idx + 1} and expected_demo_actions ${JSON.stringify(row.demo_actions)} to change only this row.`
                 )} />
               )}
               {!rowLocked && onCellLockChange && (

@@ -25,7 +25,14 @@ interface BackgroundAgentActionOptions {
   label?: string;
 }
 
-const SKETCH_MUTATION_TOOLS = new Set(["write_sketch", "update_planning_row", "set_row_visual", "design_plan"]);
+const ROW_TARGETED_SKETCH_MUTATION_TOOLS = new Set([
+  "update_planning_row",
+  "set_row_visual",
+  "design_plan",
+  "apply_row_visual_nudge",
+  "apply_row_visual_command",
+]);
+const SKETCH_MUTATION_TOOLS = new Set(["write_sketch", ...ROW_TARGETED_SKETCH_MUTATION_TOOLS]);
 
 function resolveAgentModelOverride(agent: AgentPreset, overrides: Record<string, string> | undefined): string {
   return (overrides?.[agent.id] || agent.modelOverride || "").trim();
@@ -40,15 +47,30 @@ function normalizeMutationPath(path: string | null | undefined): string | null {
   return normalized ? normalized : null;
 }
 
+function parseNonNegativeInteger(value: unknown): number | null {
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) return value;
+  if (typeof value === "string" && /^\d+$/.test(value.trim())) return Number(value);
+  return null;
+}
+
+function parseRowMutationIndex(args: Record<string, unknown>): number | null {
+  const rowNumber = parseNonNegativeInteger(args.row_number);
+  const index = parseNonNegativeInteger(args.index);
+  if (rowNumber === 0) return null;
+  const rowNumberIndex = rowNumber === null ? null : rowNumber - 1;
+  if (rowNumberIndex !== null && index !== null && rowNumberIndex !== index) return null;
+  return rowNumberIndex ?? index;
+}
+
 function sketchMutationInfo(toolName: string, argsJson: string, fallbackPath: string | null) {
   if (!SKETCH_MUTATION_TOOLS.has(toolName)) return null;
   try {
     const args = JSON.parse(argsJson || "{}");
     const path = typeof args.path === "string" ? args.path : fallbackPath;
     const changedRows: number[] = [];
-    if (toolName === "update_planning_row" || toolName === "set_row_visual" || toolName === "design_plan") {
-      const idx = typeof args.index === "number" ? args.index : parseInt(String(args.index), 10);
-      if (!Number.isNaN(idx)) changedRows.push(idx);
+    if (ROW_TARGETED_SKETCH_MUTATION_TOOLS.has(toolName)) {
+      const idx = parseRowMutationIndex(args);
+      if (idx !== null) changedRows.push(idx);
     }
     return { path, rows: changedRows, toolName };
   } catch {

@@ -343,18 +343,22 @@ pub fn all_tools(
         ),
         Tool::function(
             "update_planning_row",
-            "Update a single planning row by index. Only fields provided are changed — useful for targeted edits without touching other rows.",
+            "Update a single planning row by the row_number shown in the sketch table. Only fields provided are changed — useful for targeted edits without touching other rows.",
             json!({
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "Relative path exactly as returned by list_project_files" },
-                    "index": { "type": "integer", "description": "0-based row index" },
+                    "row_number": { "type": "integer", "minimum": 1, "description": "1-based planning row number shown in the sketch table, where 1 is the first row" },
                     "time": { "type": "string", "description": "New time value (optional)" },
                     "narrative": { "type": "string", "description": "New narrative (optional)" },
                     "demo_actions": { "type": "string", "description": "New demo actions (optional)" },
-                    "screenshot": { "type": "string", "description": "New screenshot path (optional)" }
+                    "screenshot": { "type": "string", "description": "New screenshot path (optional)" },
+                    "expected_time": { "type": "string", "description": "Optional guard: current time value expected before updating. The tool rejects if the row no longer matches." },
+                    "expected_narrative": { "type": "string", "description": "Optional guard: current narrative expected before updating. The tool rejects if the row no longer matches." },
+                    "expected_demo_actions": { "type": "string", "description": "Optional guard: current demo actions expected before updating. The tool rejects if the row no longer matches." },
+                    "expected_screenshot": { "type": "string", "description": "Optional guard: current screenshot path expected before updating. Use an empty string when no screenshot is expected." }
                 },
-                "required": ["path", "index"]
+                "required": ["path", "row_number"]
             }),
         ),
         Tool::function(
@@ -364,7 +368,7 @@ pub fn all_tools(
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "Relative path to the sketch" },
-                    "index": { "type": "integer", "description": "0-based row index" },
+                    "row_number": { "type": "integer", "minimum": 1, "description": "1-based planning row number shown in the sketch table, where 1 is the first row" },
                     "visual": {
                         "description": "An Elucim document (JSON object with version, scene, and elements), legacy v1 document, or null to remove",
                         "oneOf": [
@@ -387,7 +391,7 @@ pub fn all_tools(
                         ]
                     }
                 },
-                "required": ["path", "index", "visual"]
+                "required": ["path", "row_number", "visual"]
             }),
         ),
         Tool::function(
@@ -397,9 +401,9 @@ pub fn all_tools(
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "Relative path to the sketch" },
-                    "index": { "type": "integer", "description": "0-based row index" }
+                    "row_number": { "type": "integer", "minimum": 1, "description": "1-based planning row number shown in the sketch table, where 1 is the first row" }
                 },
-                "required": ["path", "index"]
+                "required": ["path", "row_number"]
             }),
         ),
         Tool::function(
@@ -409,10 +413,10 @@ pub fn all_tools(
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "Relative path to the sketch" },
-                    "index": { "type": "integer", "description": "0-based row index" },
+                    "row_number": { "type": "integer", "minimum": 1, "description": "1-based planning row number shown in the sketch table, where 1 is the first row" },
                     "nudge_id": { "type": "string", "description": "Nudge ID returned by review_row_visual, e.g. mark-refined, normalize-root-layer-order, add-staggered-intro" }
                 },
-                "required": ["path", "index", "nudge_id"]
+                "required": ["path", "row_number", "nudge_id"]
             }),
         ),
         Tool::function(
@@ -422,29 +426,29 @@ pub fn all_tools(
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "Relative path to the sketch" },
-                    "index": { "type": "integer", "description": "0-based row index" },
+                    "row_number": { "type": "integer", "minimum": 1, "description": "1-based planning row number shown in the sketch table, where 1 is the first row" },
                     "command": {
                         "type": "object",
                         "description": "Command object. Supported ops: updateMetadata { metadata }, markRefined, annotateElementIntent, normalizeRootLayerOrder, addStaggeredIntro { timelineId?, staggerFrames?, durationFrames? }"
                     }
                 },
-                "required": ["path", "index", "command"]
+                "required": ["path", "row_number", "command"]
             }),
         ),
         Tool::function(
             "design_plan",
-            "Save an English-language design brief for a planning row's visual. Call this before generating DSL JSON to think through the design. Describe a polished 16:9 slide-like composition: title/subtitle, one hero metaphor, 3-5 main objects/steps, spatial arrangement, CutReady semantic tokens, and animation sequence. Prefer fewer large elements over many small boxes or labels. IMPORTANT: You must provide 'path', 'index', and 'plan' — all three are required.",
+            "Save an English-language design brief for a planning row's visual. Call this before generating DSL JSON to think through the design. Describe a polished 16:9 slide-like composition: title/subtitle, one hero metaphor, 3-5 main objects/steps, spatial arrangement, CutReady semantic tokens, and animation sequence. Prefer fewer large elements over many small boxes or labels. IMPORTANT: You must provide 'path', 'row_number', and 'plan' — all three are required.",
             json!({
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "REQUIRED. Relative path to the sketch (e.g. 'my-presentation.sk')" },
-                    "index": { "type": "integer", "description": "REQUIRED. 0-based row index (e.g. 0 for the first row, 5 for the sixth)" },
+                    "row_number": { "type": "integer", "minimum": 1, "description": "REQUIRED. 1-based planning row number shown in the sketch table, where 1 is the first row" },
                     "plan": {
                         "type": "string",
                          "description": "REQUIRED. English description of the visual design: what 3-5 main elements or steps to show, where they go on the 960x540 canvas, which CutReady semantic tokens to use ($title/$subtitle/$foreground/$muted/$surface/$border/$accent/etc.), and animation sequence. Keep the design presentation-grade, not crowded."
                     }
                 },
-                "required": ["path", "index", "plan"]
+                "required": ["path", "row_number", "plan"]
             }),
         ),
         Tool::function(
@@ -1028,7 +1032,8 @@ fn touched_resources_for_tool(tool_name: &str, args: &Value) -> Vec<agentive::To
         | "set_row_visual"
         | "review_row_visual"
         | "apply_row_visual_nudge"
-        | "apply_row_visual_command" => agentive::ResourceOperation::Update,
+        | "apply_row_visual_command"
+        | "design_plan" => agentive::ResourceOperation::Update,
         "fetch_url" => agentive::ResourceOperation::Read,
         "search_web" => agentive::ResourceOperation::Search,
         "create_project" => agentive::ResourceOperation::Create,
@@ -1045,7 +1050,14 @@ fn touched_resources_for_tool(tool_name: &str, args: &Value) -> Vec<agentive::To
             operation,
             tool_name,
         ),
-        "read_sketch" | "write_sketch" | "update_planning_row" | "set_row_visual" => {
+        "read_sketch"
+        | "write_sketch"
+        | "update_planning_row"
+        | "set_row_visual"
+        | "review_row_visual"
+        | "apply_row_visual_nudge"
+        | "apply_row_visual_command"
+        | "design_plan" => {
             push_path_resource(
                 &mut resources,
                 "sketch",
@@ -1173,6 +1185,96 @@ fn extract_json_object<'a>(
 
 fn resolve_path(project_root: &Path, rel: &str) -> PathBuf {
     project_root.join(rel)
+}
+
+fn parse_integer_arg(args: &Value, key: &str) -> Result<Option<usize>, String> {
+    let Some(value) = args.get(key) else {
+        return Ok(None);
+    };
+    if let Some(value) = value.as_u64() {
+        return usize::try_from(value)
+            .map(Some)
+            .map_err(|_| format!("Error: '{key}' is too large"));
+    }
+    if let Some(value) = value
+        .as_str()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return value
+            .parse::<usize>()
+            .map(Some)
+            .map_err(|_| format!("Error: '{key}' must be a non-negative integer"));
+    }
+    Err(format!("Error: '{key}' must be a non-negative integer"))
+}
+
+fn row_number_hint(row_count: usize) -> String {
+    if row_count == 0 {
+        " Sketch has no planning rows.".into()
+    } else {
+        format!(" Sketch has {row_count} rows (valid row_number values: 1–{row_count}).")
+    }
+}
+
+fn parse_row_target(args: &Value, row_count: usize) -> Result<usize, String> {
+    let row_number = parse_integer_arg(args, "row_number")?;
+    let legacy_index = parse_integer_arg(args, "index")?;
+
+    if let Some(0) = row_number {
+        return Err("Error: row_number is 1-based; use 1 for the first planning row.".into());
+    }
+
+    let row_number_index = row_number.map(|value| value - 1);
+    match (row_number_index, legacy_index) {
+        (Some(from_row_number), Some(from_index)) if from_row_number != from_index => {
+            return Err(format!(
+                "Error: row_number {} conflicts with legacy index {}. Use row_number by itself.",
+                from_row_number + 1,
+                from_index
+            ));
+        }
+        (None, None) => {
+            return Err(format!(
+                "Error: missing 'row_number' (1-based planning row number).{}",
+                row_number_hint(row_count)
+            ));
+        }
+        _ => {}
+    }
+
+    let index = row_number_index
+        .or(legacy_index)
+        .expect("row target checked");
+    if index >= row_count {
+        return Err(format!(
+            "Error: row_number {} out of range.{}",
+            index + 1,
+            row_number_hint(row_count)
+        ));
+    }
+    Ok(index)
+}
+
+fn verify_expected_row_value(
+    args: &Value,
+    key: &str,
+    actual: &str,
+    label: &str,
+    row_number: usize,
+) -> Result<(), String> {
+    let Some(expected) = args.get(key) else {
+        return Ok(());
+    };
+    let Some(expected) = expected.as_str() else {
+        return Err(format!("Error: '{key}' must be a string when provided"));
+    };
+    if expected != actual {
+        return Err(format!(
+            "Error: Planning row {row_number} {label} no longer matches the expected current value. Read the sketch again and retry the update against the correct row."
+        ));
+    }
+    Ok(())
 }
 
 fn exec_create_project(current_project_root: &Path, args: &Value) -> String {
@@ -2057,7 +2159,7 @@ fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> agentive
                 };
                 out.push_str(&format!(
                     "## Row {} [{}]\n{}**Narrative:** {}\n**Actions:** {}\n{}{}{}\n",
-                    i,
+                    i + 1,
                     row.time,
                     lock_line,
                     row.narrative,
@@ -2189,33 +2291,14 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> String {
             );
         }
     };
-    let index = match args.get("index").and_then(|v| v.as_u64()) {
-        Some(i) => i as usize,
-        None => {
-            let hint = match project::read_sketch(&path) {
-                Ok(s) => format!(
-                    " Sketch has {} rows (valid indices: 0–{}).",
-                    s.rows.len(),
-                    s.rows.len().saturating_sub(1)
-                ),
-                Err(_) => String::new(),
-            };
-            return format!("Error: missing 'index' (0-based row index).{hint}");
-        }
-    };
-
     let mut sketch = match project::read_sketch(&path) {
         Ok(s) => s,
         Err(e) => return format!("Error reading sketch: {e}"),
     };
-
-    if index >= sketch.rows.len() {
-        return format!(
-            "Error: index {} out of range (sketch has {} rows)",
-            index,
-            sketch.rows.len()
-        );
-    }
+    let index = match parse_row_target(args, sketch.rows.len()) {
+        Ok(index) => index,
+        Err(e) => return e,
+    };
 
     if sketch.locked {
         return "Error: This sketch is locked. Unlock it before editing with AI.".into();
@@ -2236,6 +2319,27 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> String {
         }
     }
 
+    let row_number = index + 1;
+    let row = &sketch.rows[index];
+    for (key, actual, label) in [
+        ("expected_time", row.time.as_str(), "time"),
+        ("expected_narrative", row.narrative.as_str(), "narrative"),
+        (
+            "expected_demo_actions",
+            row.demo_actions.as_str(),
+            "demo actions",
+        ),
+        (
+            "expected_screenshot",
+            row.screenshot.as_deref().unwrap_or(""),
+            "screenshot",
+        ),
+    ] {
+        if let Err(e) = verify_expected_row_value(args, key, actual, label, row_number) {
+            return e;
+        }
+    }
+
     let row = &mut sketch.rows[index];
     if let Some(t) = args.get("time").and_then(|v| v.as_str()) {
         row.time = t.into();
@@ -2251,7 +2355,7 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> String {
     }
 
     match project::write_sketch(&sketch, &path, root) {
-        Ok(()) => format!("Updated row {} in {}", index, path.display()),
+        Ok(()) => format!("Updated row {} in {}", index + 1, path.display()),
         Err(e) => format!("Error writing sketch: {e}"),
     }
 }
@@ -2276,7 +2380,7 @@ fn format_visual_row_context(sketch: &Sketch, index: usize) -> String {
         .map(|(i, r)| {
             format!(
                 "{}. {} / {}",
-                i,
+                i + 1,
                 truncate(&r.narrative, 72),
                 truncate(&r.demo_actions, 72)
             )
@@ -2285,9 +2389,9 @@ fn format_visual_row_context(sketch: &Sketch, index: usize) -> String {
         .join("\n");
 
     format!(
-        "Row context:\n- Sketch title: {}\n- Target row index: {}\n- Target row narrative: {}\n- Target row demo actions: {}\n- Existing screenshot: {}\n- Existing design plan: {}\n- Previous row: {}\n- Next row: {}\n- Sketch high-level flow:\n{}",
+        "Row context:\n- Sketch title: {}\n- Target row number: {}\n- Target row narrative: {}\n- Target row demo actions: {}\n- Existing screenshot: {}\n- Existing design plan: {}\n- Previous row: {}\n- Next row: {}\n- Sketch high-level flow:\n{}",
         sketch.title,
-        index,
+        index + 1,
         row.narrative,
         row.demo_actions,
         row.screenshot.as_deref().unwrap_or("none"),
@@ -2308,33 +2412,14 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
             );
         }
     };
-    let index = match args.get("index").and_then(|v| v.as_u64()) {
-        Some(i) => i as usize,
-        None => {
-            let hint = match project::read_sketch(&path) {
-                Ok(s) => format!(
-                    " Sketch has {} rows (valid indices: 0–{}).",
-                    s.rows.len(),
-                    s.rows.len().saturating_sub(1)
-                ),
-                Err(_) => String::new(),
-            };
-            return format!("Error: missing 'index' (0-based row index).{hint}");
-        }
-    };
-
     let mut sketch = match project::read_sketch(&path) {
         Ok(s) => s,
         Err(e) => return format!("Error reading sketch: {e}"),
     };
-
-    if index >= sketch.rows.len() {
-        return format!(
-            "Error: index {} out of range (sketch has {} rows)",
-            index,
-            sketch.rows.len()
-        );
-    }
+    let index = match parse_row_target(args, sketch.rows.len()) {
+        Ok(index) => index,
+        Err(e) => return e,
+    };
 
     if sketch.locked {
         return "Error: This sketch is locked. Unlock it before editing with AI.".into();
@@ -2462,13 +2547,17 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
             if sketch.rows[index].visual.is_some() {
                 format!(
                     "✓ Visual saved on row {} in {}\n\n{}{}",
-                    index,
+                    index + 1,
                     path.display(),
                     row_context,
                     critique_note
                 )
             } else {
-                format!("Removed visual from row {} in {}", index, path.display())
+                format!(
+                    "Removed visual from row {} in {}",
+                    index + 1,
+                    path.display()
+                )
             }
         }
         Err(e) => format!("Error writing sketch: {e}"),
@@ -2592,7 +2681,8 @@ fn exec_apply_row_visual_nudge(root: &Path, args: &Value) -> String {
     }
     match save_row_visual(root, &path, &mut sketch, index, &updated) {
         Ok(rel_path) => format!(
-            "Applied visual nudge '{nudge_id}' to row {index}. Changed paths: {changed}. Saved: {rel_path}"
+            "Applied visual nudge '{nudge_id}' to row {}. Changed paths: {changed}. Saved: {rel_path}",
+            index + 1
         ),
         Err(e) => e,
     }
@@ -2630,7 +2720,8 @@ fn exec_apply_row_visual_command(root: &Path, args: &Value) -> String {
         .unwrap_or("unknown");
     match save_row_visual(root, &path, &mut sketch, index, &updated) {
         Ok(rel_path) => format!(
-            "Applied visual command '{op}' to row {index}. Changed paths: {changed}. Saved: {rel_path}"
+            "Applied visual command '{op}' to row {}. Changed paths: {changed}. Saved: {rel_path}",
+            index + 1
         ),
         Err(e) => e,
     }
@@ -2646,21 +2737,6 @@ fn exec_design_plan(root: &Path, args: &Value) -> String {
             );
         }
     };
-    let index = match args.get("index").and_then(|v| v.as_u64()) {
-        Some(i) => i as usize,
-        None => {
-            // Read the sketch to tell the model how many rows exist
-            let hint = match project::read_sketch(&path) {
-                Ok(s) => format!(
-                    " Sketch has {} rows (valid indices: 0–{}).",
-                    s.rows.len(),
-                    s.rows.len().saturating_sub(1)
-                ),
-                Err(_) => String::new(),
-            };
-            return format!("Error: missing 'index' (0-based row index).{hint}");
-        }
-    };
     let plan = match args.get("plan").and_then(|v| v.as_str()) {
         Some(p) => p.to_string(),
         None => return "Error: missing 'plan' argument".into(),
@@ -2670,14 +2746,10 @@ fn exec_design_plan(root: &Path, args: &Value) -> String {
         Ok(s) => s,
         Err(e) => return format!("Error reading sketch: {e}"),
     };
-
-    if index >= sketch.rows.len() {
-        return format!(
-            "Error: index {} out of range (sketch has {} rows)",
-            index,
-            sketch.rows.len()
-        );
-    }
+    let index = match parse_row_target(args, sketch.rows.len()) {
+        Ok(index) => index,
+        Err(e) => return e,
+    };
 
     if sketch.locked {
         return "Error: This sketch is locked. Unlock it before editing with AI.".into();
@@ -2702,7 +2774,7 @@ fn exec_design_plan(root: &Path, args: &Value) -> String {
         Ok(()) => {
             format!(
                 "Design plan saved for row {}.\n\n{}\n\nSaved design plan:\n{}\n\nNow generate DSL JSON based on this plan and row context.",
-                index, row_context, plan
+                index + 1, row_context, plan
             )
         }
         Err(e) => format!("Error writing sketch: {e}"),
@@ -3660,31 +3732,11 @@ fn load_row_visual(root: &Path, args: &Value) -> Result<(PathBuf, Sketch, usize,
             ));
         }
     };
-    let index = match args.get("index").and_then(|v| v.as_u64()) {
-        Some(i) => i as usize,
-        None => {
-            let hint = match project::read_sketch(&path) {
-                Ok(s) => format!(
-                    " Sketch has {} rows (valid indices: 0–{}).",
-                    s.rows.len(),
-                    s.rows.len().saturating_sub(1)
-                ),
-                Err(_) => String::new(),
-            };
-            return Err(format!("Error: missing 'index' (0-based row index).{hint}"));
-        }
-    };
     let sketch = project::read_sketch(&path).map_err(|e| format!("Error reading sketch: {e}"))?;
-    if index >= sketch.rows.len() {
-        return Err(format!(
-            "Error: index {} out of range (sketch has {} rows)",
-            index,
-            sketch.rows.len()
-        ));
-    }
+    let index = parse_row_target(args, sketch.rows.len())?;
     let row = &sketch.rows[index];
     let Some(visual_ref) = &row.visual else {
-        return Err(format!("Error: row {index} does not have a visual"));
+        return Err(format!("Error: row {} does not have a visual", index + 1));
     };
     let visual = if let Some(rel_path) = visual_ref.as_str() {
         project::read_visual(root, rel_path).map_err(|e| format!("Error reading visual: {e}"))?
@@ -3692,7 +3744,8 @@ fn load_row_visual(root: &Path, args: &Value) -> Result<(PathBuf, Sketch, usize,
         visual_ref.clone()
     } else {
         return Err(format!(
-            "Error: row {index} visual reference must be a path string or visual document"
+            "Error: row {} visual reference must be a path string or visual document",
+            index + 1
         ));
     };
     Ok((path, sketch, index, visual))
@@ -5123,6 +5176,15 @@ mod tests {
         project::write_sketch(&sketch, &root.join(rel), root).unwrap();
     }
 
+    fn tool_output_text(output: agentive::ToolOutput) -> String {
+        match output {
+            agentive::ToolOutput::Text(text) => text,
+            agentive::ToolOutput::WithImages { text, .. } => text,
+            agentive::ToolOutput::WithMetadata { output, .. } => tool_output_text(*output),
+            _ => panic!("unexpected ToolOutput variant"),
+        }
+    }
+
     #[test]
     fn decorate_tool_output_adds_resource_and_verification_metadata() {
         let output = decorate_tool_output(
@@ -5143,6 +5205,73 @@ mod tests {
             output.verification_results()[0].status,
             agentive::VerificationStatus::Passed
         );
+    }
+
+    #[test]
+    fn row_targeted_tool_schemas_only_advertise_row_number() {
+        let tools = all_tools(false, false, true)
+            .into_iter()
+            .map(|tool| serde_json::to_value(tool).unwrap())
+            .collect::<Vec<_>>();
+
+        for name in [
+            "update_planning_row",
+            "set_row_visual",
+            "review_row_visual",
+            "apply_row_visual_nudge",
+            "apply_row_visual_command",
+            "design_plan",
+        ] {
+            let tool = tools
+                .iter()
+                .find(|tool| tool.pointer("/function/name").and_then(Value::as_str) == Some(name))
+                .unwrap_or_else(|| panic!("{name} tool should be registered"));
+            assert!(
+                tool.pointer("/function/parameters/properties/row_number")
+                    .is_some(),
+                "{name} should advertise row_number"
+            );
+            assert!(
+                tool.pointer("/function/parameters/properties/index")
+                    .is_none(),
+                "{name} should not advertise legacy index"
+            );
+            let required = tool
+                .pointer("/function/parameters/required")
+                .and_then(Value::as_array)
+                .unwrap_or_else(|| panic!("{name} should declare required fields"));
+            assert!(
+                required
+                    .iter()
+                    .any(|field| field.as_str() == Some("row_number")),
+                "{name} should require row_number"
+            );
+        }
+    }
+
+    #[test]
+    fn row_visual_tools_touch_sketch_resources() {
+        for name in [
+            "review_row_visual",
+            "apply_row_visual_nudge",
+            "apply_row_visual_command",
+            "design_plan",
+        ] {
+            let resources =
+                touched_resources_for_tool(name, &json!({ "path": "intro.sk", "row_number": 1 }));
+            assert_eq!(
+                resources.len(),
+                1,
+                "{name} should touch one sketch resource"
+            );
+            assert_eq!(resources[0].kind, "sketch");
+            assert_eq!(resources[0].id, "intro.sk");
+            assert_eq!(
+                resources[0].operation,
+                agentive::ResourceOperation::Update,
+                "{name} should be tracked as a sketch update"
+            );
+        }
     }
 
     #[test]
@@ -5553,6 +5682,134 @@ mod tests {
         assert!(result.contains("time cell is locked"), "{result}");
         let saved = project::read_sketch(&root.join(rel)).unwrap();
         assert_eq!(saved.rows[0].time, "0:10");
+    }
+
+    #[test]
+    fn update_planning_row_tool_uses_one_based_row_number() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        let mut sketch = Sketch::new("Row Number Test");
+        let mut first = PlanningRow::new();
+        first.narrative = "First row".into();
+        let mut second = PlanningRow::new();
+        second.narrative = "Second row".into();
+        sketch.rows = vec![first, second];
+        project::write_sketch(&sketch, &root.join(rel), root).unwrap();
+
+        let result = exec_update_planning_row(
+            root,
+            &json!({
+                "path": rel,
+                "row_number": 1,
+                "expected_narrative": "First row",
+                "narrative": "Updated first row"
+            }),
+        );
+
+        assert!(result.contains("Updated row 1"), "{result}");
+        let saved = project::read_sketch(&root.join(rel)).unwrap();
+        assert_eq!(saved.rows[0].narrative, "Updated first row");
+        assert_eq!(saved.rows[1].narrative, "Second row");
+    }
+
+    #[test]
+    fn update_planning_row_tool_keeps_legacy_zero_based_index() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        let mut row = PlanningRow::new();
+        row.narrative = "Legacy first row".into();
+        write_test_sketch(root, rel, row);
+
+        let result = exec_update_planning_row(
+            root,
+            &json!({
+                "path": rel,
+                "index": 0,
+                "narrative": "Legacy update"
+            }),
+        );
+
+        assert!(result.contains("Updated row 1"), "{result}");
+        let saved = project::read_sketch(&root.join(rel)).unwrap();
+        assert_eq!(saved.rows[0].narrative, "Legacy update");
+    }
+
+    #[test]
+    fn row_target_rejects_zero_and_conflicting_values() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        write_test_sketch(root, rel, PlanningRow::new());
+
+        let zero_result = exec_update_planning_row(
+            root,
+            &json!({
+                "path": rel,
+                "row_number": 0,
+                "narrative": "Should not save"
+            }),
+        );
+        assert!(
+            zero_result.contains("row_number is 1-based"),
+            "{zero_result}"
+        );
+
+        let conflict_result = exec_update_planning_row(
+            root,
+            &json!({
+                "path": rel,
+                "row_number": 1,
+                "index": 1,
+                "narrative": "Should not save"
+            }),
+        );
+        assert!(
+            conflict_result.contains("conflicts with legacy index"),
+            "{conflict_result}"
+        );
+    }
+
+    #[test]
+    fn update_planning_row_guard_rejects_stale_row_text() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        let mut row = PlanningRow::new();
+        row.narrative = "Current narrative".into();
+        write_test_sketch(root, rel, row);
+
+        let result = exec_update_planning_row(
+            root,
+            &json!({
+                "path": rel,
+                "row_number": 1,
+                "expected_narrative": "Old narrative",
+                "narrative": "Should not save"
+            }),
+        );
+
+        assert!(result.contains("no longer matches"), "{result}");
+        let saved = project::read_sketch(&root.join(rel)).unwrap();
+        assert_eq!(saved.rows[0].narrative, "Current narrative");
+    }
+
+    #[test]
+    fn read_sketch_tool_shows_one_based_row_numbers() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        let mut sketch = Sketch::new("Read Rows");
+        sketch.rows = vec![PlanningRow::new(), PlanningRow::new()];
+        project::write_sketch(&sketch, &root.join(rel), root).unwrap();
+
+        let result = exec_read_sketch(root, &json!({ "path": rel }), false);
+        let output = tool_output_text(result);
+
+        assert!(output.contains("## Row 1"), "{output}");
+        assert!(output.contains("## Row 2"), "{output}");
+        assert!(!output.contains("## Row 0"), "{output}");
     }
 
     #[test]

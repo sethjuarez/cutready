@@ -1085,9 +1085,10 @@ export function SketchForm() {
     if (visualPromptRow === null) return;
     const row = localRows[visualPromptRow];
     const instructions = visualInstructions.trim();
+    const rowNumber = visualPromptRow + 1;
     let prompt: string;
     if (instructions) {
-      prompt = `Generate an animated framing visual ONLY for sketch "${activeSketchPath ?? "current"}", row index ${visualPromptRow} (0-based).
+      prompt = `Generate an animated framing visual ONLY for sketch "${activeSketchPath ?? "current"}", row ${rowNumber}.
 
 **USER INSTRUCTIONS (HIGHEST PRIORITY — follow these exactly):**
 ${instructions}
@@ -1096,15 +1097,15 @@ Row context:
 - **Narrative:** ${row?.narrative || "(empty)"}
 - **Actions:** ${row?.demo_actions || "(empty)"}
 
-The Actions describe what happens on screen — use them as visual design hints. You may read the sketch for context, but the only persistent edit allowed is set_row_visual for row index ${visualPromptRow}. Do not call design_plan, write_sketch, update_planning_row, write_storyboard, or set_row_visual for any other row. Do not create, remove, reorder, or rewrite rows. If validation fails, fix the visual and retry set_row_visual for this same row only. Use a 960×540 canvas. The user instructions above override any defaults.`;
+The Actions describe what happens on screen — use them as visual design hints. You may read the sketch for context, but the only persistent edit allowed is set_row_visual with row_number ${rowNumber}. Do not call design_plan, write_sketch, update_planning_row, write_storyboard, or set_row_visual for any other row. Do not create, remove, reorder, or rewrite rows. If validation fails, fix the visual and retry set_row_visual for this same row only. Use a 960×540 canvas. The user instructions above override any defaults.`;
     } else {
-      prompt = `Generate an animated framing visual ONLY for sketch "${activeSketchPath ?? "current"}", row index ${visualPromptRow} (0-based).
+      prompt = `Generate an animated framing visual ONLY for sketch "${activeSketchPath ?? "current"}", row ${rowNumber}.
 
 Row context:
 - **Narrative:** ${row?.narrative || "(empty)"}
 - **Actions:** ${row?.demo_actions || "(empty)"}
 
-The Actions describe what happens on screen — use them as visual design hints. You may read the sketch for context, but the only persistent edit allowed is set_row_visual for row index ${visualPromptRow}. Do not call design_plan, write_sketch, update_planning_row, write_storyboard, or set_row_visual for any other row. Do not create, remove, reorder, or rewrite rows. If validation fails, fix the visual and retry set_row_visual for this same row only. Use a 960×540 canvas.`;
+The Actions describe what happens on screen — use them as visual design hints. You may read the sketch for context, but the only persistent edit allowed is set_row_visual with row_number ${rowNumber}. Do not call design_plan, write_sketch, update_planning_row, write_storyboard, or set_row_visual for any other row. Do not create, remove, reorder, or rewrite rows. If validation fails, fix the visual and retry set_row_visual for this same row only. Use a 960×540 canvas.`;
     }
     void runBackgroundAgentAction(prompt, { agent: "designer", label: "Generate visual" });
     setVisualPromptRow(null);
@@ -1712,7 +1713,8 @@ The Actions describe what happens on screen — use them as visual design hints.
             }}
             onNudgeVisual={(rowIndex, instruction) => {
               const row = localRows[rowIndex];
-              const prompt = `Modify the existing visual ONLY for sketch "${activeSketchPath ?? "current"}", row index ${rowIndex} (0-based).
+              const rowNumber = rowIndex + 1;
+              const prompt = `Modify the existing visual ONLY for sketch "${activeSketchPath ?? "current"}", row ${rowNumber}.
 
 **USER INSTRUCTIONS (HIGHEST PRIORITY):**
 ${instruction}
@@ -1721,7 +1723,7 @@ Row context:
 - **Narrative:** ${row?.narrative || "(empty)"}
 - **Actions:** ${row?.demo_actions || "(empty)"}
 
-The row already has a visual and design_plan. You may read the sketch for context, but the only persistent edit allowed is set_row_visual for row index ${rowIndex}. Do not call write_sketch, update_planning_row, write_storyboard, or set_row_visual for any other row. Do not create, remove, reorder, or rewrite rows. Keep the existing design but apply the requested changes. Do NOT redesign from scratch.`;
+The row already has a visual and design_plan. You may read the sketch for context, but the only persistent edit allowed is set_row_visual with row_number ${rowNumber}. Do not call write_sketch, update_planning_row, write_storyboard, or set_row_visual for any other row. Do not create, remove, reorder, or rewrite rows. Keep the existing design but apply the requested changes. Do NOT redesign from scratch.`;
               void runBackgroundAgentAction(prompt, { agent: "designer", label: "Modify visual" });
             }}
             projectRoot={projectRoot}
