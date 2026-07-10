@@ -21,9 +21,18 @@ pub async fn import_video(
     file_path: String,
     conflict: Option<String>,
     llm_config: Option<ProviderConfig>,
+    planning_context: Option<video_import::VideoImportPlanningContext>,
     state: State<'_, AppState>,
 ) -> Result<video_import::VideoImportResult, String> {
-    import_video_inner(file_path, conflict, llm_config, None, &state).await
+    import_video_inner(
+        file_path,
+        conflict,
+        llm_config,
+        planning_context,
+        None,
+        &state,
+    )
+    .await
 }
 
 #[auditaur_command(skip_all, err)]
@@ -31,16 +40,26 @@ pub async fn import_video_with_progress(
     file_path: String,
     conflict: Option<String>,
     llm_config: Option<ProviderConfig>,
+    planning_context: Option<video_import::VideoImportPlanningContext>,
     on_progress: tauri::ipc::Channel<video_import::VideoImportProgress>,
     state: State<'_, AppState>,
 ) -> Result<video_import::VideoImportResult, String> {
-    import_video_inner(file_path, conflict, llm_config, Some(on_progress), &state).await
+    import_video_inner(
+        file_path,
+        conflict,
+        llm_config,
+        planning_context,
+        Some(on_progress),
+        &state,
+    )
+    .await
 }
 
 async fn import_video_inner(
     file_path: String,
     conflict: Option<String>,
     llm_config: Option<ProviderConfig>,
+    planning_context: Option<video_import::VideoImportPlanningContext>,
     on_progress: Option<tauri::ipc::Channel<video_import::VideoImportProgress>>,
     state: &State<'_, AppState>,
 ) -> Result<video_import::VideoImportResult, String> {
@@ -88,6 +107,7 @@ async fn import_video_inner(
         &final_paths.note_path,
         &title,
         llm_options,
+        planning_context,
         |event| {
             if let Some(channel) = &on_progress {
                 if let Err(error) = channel.send(event) {

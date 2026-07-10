@@ -14,7 +14,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Channel, invoke } from "../services/tauri";
-import { ArrowRight, ChevronDown, ChevronRight, Copy, FileInput, FileText, Film, FolderOpen, Plus, SquareTerminal, Trash2 } from "lucide-react";
+import { ArrowRight, AtSign, ChevronDown, ChevronRight, Copy, FileInput, FileText, Film, FolderOpen, Plus, SquareTerminal, Trash2 } from "lucide-react";
 import { useAppStore, type SidebarOrder } from "../stores/appStore";
 import type { ProjectEntry } from "../types/project";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
@@ -32,12 +32,24 @@ import {
   providerToConfigInput,
 } from "../utils/providerConfig";
 import { Dialog } from "./Dialog";
+import type { NoteSummary, SketchSummary, StoryboardSummary } from "../types/sketch";
 
 interface VideoImportProgress {
   phase: string;
   current: number;
   total: number;
   message: string;
+}
+
+interface VideoImportPlanningContextReference {
+  kind: "sketch" | "storyboard" | "note";
+  path: string;
+  title: string;
+}
+
+interface VideoImportPlanningContext {
+  text: string;
+  references: VideoImportPlanningContextReference[];
 }
 
 type ImportKind = "all" | "video" | "sketch" | "storyboard" | "markdown" | "document";
@@ -88,6 +100,23 @@ const videoImportAnalystActivity = [
   "Keeping every transcript segment in order",
   "Sharpening the scene boundaries before frames are pulled",
 ];
+
+function mentionKey(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/\.(sk|sb|md)$/i, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function extractMentionKeys(text: string) {
+  const keys = new Set<string>();
+  for (const match of text.matchAll(/@([a-zA-Z0-9][a-zA-Z0-9._/-]*)/g)) {
+    const key = mentionKey(match[1]);
+    if (key) keys.add(key);
+  }
+  return keys;
+}
 
 /** Sort items by manifest order. Items not in the manifest go at the end. */
 function applySidebarOrder<T extends { path: string }>(items: T[], order: string[]): T[] {
@@ -243,6 +272,101 @@ function VideoImportProgressDialog({
   );
 }
 
+function VideoImportPlanningContextDialog({
+  open,
+  value,
+  references,
+  onChange,
+  onInsertMention,
+  onContinue,
+  onCancel,
+}: {
+  open: boolean;
+  value: string;
+  references: VideoImportPlanningContextReference[];
+  onChange: (value: string) => void;
+  onInsertMention: (reference: VideoImportPlanningContextReference) => void;
+  onContinue: () => void;
+  onCancel: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <Dialog
+      isOpen={open}
+      onClose={onCancel}
+      align="top"
+      topOffset="14vh"
+      width="w-full max-w-xl mx-4"
+      labelledBy="video-import-context-title"
+    >
+      <div className="cr-modal-surface overflow-hidden rounded-2xl">
+        <div className="px-5 py-5">
+          <div className="flex items-start gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+              <AtSign className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 id="video-import-context-title" className="text-sm font-semibold text-[rgb(var(--color-text))]">
+                Planning context
+              </h2>
+              <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
+                Guide how CutReady splits the video into rows and labels sections. Transcript text stays verbatim, and Actions are not inferred.
+              </p>
+            </div>
+          </div>
+
+          <textarea
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            placeholder="Example: This is a launch demo for developers. Keep setup, auth, deployment, and payoff as separate beats. Use @launch-plan for structure."
+            className="mt-4 h-32 w-full resize-none rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2 text-xs leading-5 text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/60 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/50"
+            autoFocus
+          />
+
+          {references.length > 0 && (
+            <div className="mt-3">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
+                Insert reference
+              </p>
+              <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
+                {references.map((reference) => (
+                  <button
+                    key={`${reference.kind}:${reference.path}`}
+                    type="button"
+                    onClick={() => onInsertMention(reference)}
+                    className="rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 py-1 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-accent))]/50 hover:text-[rgb(var(--color-accent))]"
+                    title={reference.path}
+                  >
+                    @{mentionKey(reference.title || reference.path)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-lg border border-[rgb(var(--color-border))] px-4 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onContinue}
+              className="rounded-lg bg-[rgb(var(--color-accent))] px-4 py-2 text-xs font-medium text-accent-fg transition-colors hover:bg-[rgb(var(--color-accent-hover))]"
+            >
+              Continue import
+            </button>
+          </div>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
 function DocumentItemText({ title, meta, active, tone }: { title: string; meta?: string; active: boolean; tone: ContentTypeTone }) {
   return (
     <div className="min-w-0 flex-1 py-0.5 leading-tight">
@@ -386,6 +510,9 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const [importing, setImporting] = useState(false);
   const [importMenu, setImportMenu] = useState<{ x: number; y: number } | null>(null);
   const [videoImportProgress, setVideoImportProgress] = useState<VideoImportProgress | null>(null);
+  const [videoImportContextOpen, setVideoImportContextOpen] = useState(false);
+  const [videoImportContextText, setVideoImportContextText] = useState("");
+  const videoImportContextResolverRef = useRef<((value: VideoImportPlanningContext | null) => void) | null>(null);
   const keepVideoImportProgressRef = useRef(false);
   const showToast = useToastStore((s) => s.show);
 
@@ -669,6 +796,23 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const storyboardTone = contentTypeTones.storyboard;
   const sketchTone = contentTypeTones.sketch;
   const noteTone = contentTypeTones.note;
+  const videoImportReferenceOptions: VideoImportPlanningContextReference[] = [
+    ...orderedStoryboards.map((storyboard: StoryboardSummary) => ({
+      kind: "storyboard" as const,
+      path: storyboard.path,
+      title: storyboard.title,
+    })),
+    ...orderedSketches.map((sketch: SketchSummary) => ({
+      kind: "sketch" as const,
+      path: sketch.path,
+      title: sketch.title,
+    })),
+    ...orderedNotes.map((note: NoteSummary) => ({
+      kind: "note" as const,
+      path: note.path,
+      title: note.title,
+    })),
+  ];
 
   // DnD sensors — require 5px movement to start drag (avoids accidental drags on click)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -744,6 +888,53 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     setImportMenu({ x: rect.left, y: rect.bottom + 6 });
   }, [importing]);
 
+  const resolveVideoImportContext = useCallback(() => {
+    const mentionKeys = extractMentionKeys(videoImportContextText);
+    const references = videoImportReferenceOptions.filter((reference) => {
+      const keys = [
+        mentionKey(reference.title),
+        mentionKey(reference.path),
+        mentionKey(reference.path.split("/").pop() ?? reference.path),
+      ];
+      return keys.some((key) => key && mentionKeys.has(key));
+    });
+    return {
+      text: videoImportContextText.trim(),
+      references,
+    };
+  }, [videoImportContextText, videoImportReferenceOptions]);
+
+  const requestVideoImportContext = useCallback(() => {
+    setVideoImportContextOpen(true);
+    return new Promise<VideoImportPlanningContext | null>((resolve) => {
+      videoImportContextResolverRef.current = resolve;
+    });
+  }, []);
+
+  const cancelVideoImportContext = useCallback(() => {
+    videoImportContextResolverRef.current?.(null);
+    videoImportContextResolverRef.current = null;
+    setVideoImportContextText("");
+    setVideoImportContextOpen(false);
+  }, []);
+
+  const continueVideoImportContext = useCallback(() => {
+    const context = resolveVideoImportContext();
+    videoImportContextResolverRef.current?.(context);
+    videoImportContextResolverRef.current = null;
+    setVideoImportContextText("");
+    setVideoImportContextOpen(false);
+  }, [resolveVideoImportContext]);
+
+  const insertVideoImportMention = useCallback((reference: VideoImportPlanningContextReference) => {
+    const mention = `@${mentionKey(reference.title || reference.path)}`;
+    setVideoImportContextText((current) => {
+      if (current.includes(mention)) return current;
+      const prefix = current.trimEnd();
+      return `${prefix}${prefix ? " " : ""}${mention} `;
+    });
+  }, []);
+
   const handleImport = useCallback(async (kind: ImportKind = "all") => {
     try {
       const { open: openDialog, message: showMessage } = await import("@tauri-apps/plugin-dialog");
@@ -753,6 +944,14 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
         filters: importDialogFilters[kind],
       });
       if (!selected) return;
+      const paths = Array.isArray(selected) ? selected : [selected];
+      const containsVideo = paths.some((raw) => {
+        const filePath = typeof raw === "string" ? raw : String(raw);
+        const ext = filePath.split(".").pop()?.toLowerCase();
+        return !!ext && ["mp4", "mov", "mkv", "webm", "avi", "m4v"].includes(ext);
+      });
+      const planningContext = containsVideo ? await requestVideoImportContext() : null;
+      if (containsVideo && planningContext === null) return;
       setImporting(true);
 
       // Helper: invoke an import command, handling file-exists conflicts.
@@ -805,7 +1004,6 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
         }
       }
 
-      const paths = Array.isArray(selected) ? selected : [selected];
       const videoImportLlmConfig = await buildVideoImportLlmConfig();
       let importedNote = "";
       let importedSketch = "";
@@ -850,6 +1048,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             filePath,
             {
               ...(videoImportLlmConfig ? { llmConfig: videoImportLlmConfig } : {}),
+              ...(planningContext && (planningContext.text || planningContext.references.length) ? { planningContext } : {}),
               onProgress: progressChannel,
             },
           );
@@ -912,7 +1111,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
         window.setTimeout(() => setVideoImportProgress(null), 700);
       }
     }
-  }, [buildVideoImportLlmConfig, loadSketches, loadStoryboards, loadNotes, loadAssets, openSketch, openNote, showDrmConfirm, showToast]);
+  }, [buildVideoImportLlmConfig, loadSketches, loadStoryboards, loadNotes, loadAssets, openSketch, openNote, requestVideoImportContext, showDrmConfirm, showToast]);
 
   const buildImportMenuItems = useCallback((): ContextMenuItem[] => [
     {
@@ -1408,6 +1607,15 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
       <VideoImportProgressDialog
         progress={videoImportProgress}
         onClose={() => setVideoImportProgress(null)}
+      />
+      <VideoImportPlanningContextDialog
+        open={videoImportContextOpen}
+        value={videoImportContextText}
+        references={videoImportReferenceOptions}
+        onChange={setVideoImportContextText}
+        onInsertMention={insertVideoImportMention}
+        onContinue={continueVideoImportContext}
+        onCancel={cancelVideoImportContext}
       />
       {importMenu && (
         <ContextMenu
