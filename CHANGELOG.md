@@ -10,6 +10,18 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.27.0](https://github.com/sethjuarez/cutready/compare/v1.26.1...v1.27.0) (2026-07-10)
+
+
+### Features
+
+* **import:** create summary note for video imports ([2aa998c](https://github.com/sethjuarez/cutready/commit/2aa998c810d12d7d8885a9f4604a9f534064ccd7))
+
+
+### Bug Fixes
+
+* **import:** preserve verbatim video transcript rows ([94e3c0d](https://github.com/sethjuarez/cutready/commit/94e3c0dd2450153dfafb9d42e58e896a3ad5fa5a))
+
 ## [1.26.1](https://github.com/sethjuarez/cutready/compare/v1.26.0...v1.26.1) (2026-07-09)
 
 
