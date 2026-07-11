@@ -26,6 +26,7 @@ const SENSITIVE_INVOKE_COMMANDS = new Set([
   "azure_device_code_poll",
   "azure_token_refresh",
   "github_device_code_poll",
+  "read_narration_asset",
   "save_feedback",
   "save_narration_recording",
 ]);

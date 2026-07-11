@@ -47,6 +47,13 @@ pub struct NarrationAssetInfo {
     pub referenced_by: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NarrationAssetData {
+    pub data: Vec<u8>,
+    pub mime_type: String,
+}
+
 fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
     let current = state.current_project.lock().map_err(|e| e.to_string())?;
     current
@@ -161,6 +168,40 @@ pub async fn delete_orphaned_narration_assets(state: State<'_, AppState>) -> Res
     }
 
     Ok(deleted)
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn read_narration_asset(
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<NarrationAssetData, String> {
+    let root = project_root(&state)?;
+    let narration_root = root.join(".cutready").join("narration");
+    let asset_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+    if !asset_path.starts_with(&narration_root) {
+        return Err(format!(
+            "Refusing to read narration asset outside .cutready/narration: {relative_path}"
+        ));
+    }
+    let Some(mime_type) = audio_mime_from_path(&asset_path) else {
+        return Err(format!(
+            "Refusing to read non-audio narration asset: {relative_path}"
+        ));
+    };
+
+    let data = std::fs::read(&asset_path)
+        .map_err(|e| format!("Failed to read narration asset {relative_path}: {e}"))?;
+    tracing::debug!(
+        target: "cutready::recording",
+        path = %relative_path,
+        bytes = data.len(),
+        mime_type,
+        "read narration asset for playback"
+    );
+    Ok(NarrationAssetData {
+        data,
+        mime_type: mime_type.to_string(),
+    })
 }
 
 #[tauri::command]
