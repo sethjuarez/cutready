@@ -10,6 +10,19 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.29.0](https://github.com/sethjuarez/cutready/compare/v1.28.0...v1.29.0) (2026-07-11)
+
+
+### Features
+
+* improve chat and document workflow UX ([5ff6ef9](https://github.com/sethjuarez/cutready/commit/5ff6ef97620b107cc2c02acadd7c32ed8be499d8))
+
+
+### Bug Fixes
+
+* **recording:** repair narration playback on macOS ([f759482](https://github.com/sethjuarez/cutready/commit/f759482aa80e2f945a235ed44d7b17cb06521e3d))
+* **sync:** skip invalid milestone compaction ([c1b9193](https://github.com/sethjuarez/cutready/commit/c1b9193d2880eb1148df50f06df3bf347b1d02bc))
+
 ## [1.28.0](https://github.com/sethjuarez/cutready/compare/v1.27.0...v1.28.0) (2026-07-10)
 
 
