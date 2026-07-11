@@ -907,6 +907,8 @@ interface AppStoreState {
   loadGraphData: () => Promise<void>;
   /** Toggle the secondary panel. */
   toggleSecondaryPanel: () => void;
+  /** Explicitly show or hide the secondary panel. */
+  setSecondaryPanelVisible: (visible: boolean) => void;
   /** Open the named snapshot flow for legacy quick-save callers. */
   quickSave: () => Promise<void>;
   /** Open snapshot name prompt (and ensure panel is visible). */
@@ -3066,6 +3068,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       saveLayout({ showSecondaryPanel: !state.showSecondaryPanel });
       return { showSecondaryPanel: !state.showSecondaryPanel };
     });
+  },
+  setSecondaryPanelVisible: (visible) => {
+    saveLayout({ showSecondaryPanel: visible });
+    set({ showSecondaryPanel: visible });
   },
 
   quickSave: async () => {

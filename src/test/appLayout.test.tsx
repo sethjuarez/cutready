@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const platform = vi.hoisted(() => ({ isMac: false }));
@@ -19,7 +19,11 @@ vi.mock("../components/SettingsPanel", () => ({
   SettingsPanel: () => <div />,
 }));
 vi.mock("../components/Sidebar", () => ({
-  Sidebar: () => <div />,
+  Sidebar: ({ onChatToggle }: { onChatToggle?: () => void }) => (
+    <button type="button" data-testid="activity-chat" onClick={onChatToggle}>
+      Chat
+    </button>
+  ),
 }));
 vi.mock("../components/StoryboardPanel", () => ({
   StoryboardPanel: () => <div />,
@@ -94,8 +98,10 @@ describe("AppLayout titlebar spacing", () => {
     act(() =>
       useAppStore.setState({
         chatFocusMode: false,
+        currentProject: null,
         view: "home",
         outputVisible: true,
+        showSecondaryPanel: false,
       }),
     );
     platform.isMac = false;
@@ -188,5 +194,44 @@ describe("AppLayout titlebar spacing", () => {
     );
 
     expect(screen.getByTestId("output-panel")).toBeInTheDocument();
+  });
+
+  it("cycles chat nav through side, focus, side, then hidden", () => {
+    act(() =>
+      useAppStore.setState({
+        chatFocusMode: false,
+        currentProject: {
+          name: "Demo",
+          root: "C:\\demo",
+          repo_root: "C:\\demo",
+        },
+        showSecondaryPanel: false,
+        view: "project",
+      }),
+    );
+
+    render(<AppLayout />);
+
+    const chatButton = screen.getByTestId("activity-chat");
+
+    fireEvent.click(chatButton);
+    expect(useAppStore.getState().showSecondaryPanel).toBe(true);
+    expect(useAppStore.getState().chatFocusMode).toBe(false);
+    expect(screen.queryByTestId("chat-focus-shell")).not.toBeInTheDocument();
+
+    fireEvent.click(chatButton);
+    expect(useAppStore.getState().showSecondaryPanel).toBe(true);
+    expect(useAppStore.getState().chatFocusMode).toBe(true);
+    expect(screen.getByTestId("chat-focus-shell")).toBeInTheDocument();
+
+    fireEvent.click(chatButton);
+    expect(useAppStore.getState().showSecondaryPanel).toBe(true);
+    expect(useAppStore.getState().chatFocusMode).toBe(false);
+    expect(screen.queryByTestId("chat-focus-shell")).not.toBeInTheDocument();
+
+    fireEvent.click(chatButton);
+    expect(useAppStore.getState().showSecondaryPanel).toBe(false);
+    expect(useAppStore.getState().chatFocusMode).toBe(false);
+    expect(screen.queryByTestId("chat-focus-shell")).not.toBeInTheDocument();
   });
 });

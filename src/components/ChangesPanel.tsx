@@ -230,6 +230,9 @@ export function ChangesPanel() {
   const projectScopeLabel = isMultiProject
     ? (selectedProjectFilter?.name ?? "All Projects")
     : "This project";
+  const actionScopeMessage = selectedProjectFilter
+    ? `Showing ${selectedProjectFilter.name}; save and discard affect all workspace changes.`
+    : "Save and discard affect all workspace changes.";
   const selectableProjects = projects.length > 0 ? projects : [];
   const otherChangeCount = changedFiles.length - filteredChangedFiles.length;
   const projectFilterMenu = showProjectFilterMenu && projectFilterMenuStyle ? createPortal(
@@ -312,11 +315,12 @@ export function ChangesPanel() {
         onToggle={() => setChangesExpanded(!changesExpanded)}
         actions={(
           <>
-            {isDirty && (
+            {isDirty && isMultiProject && (
               <button
                 onClick={() => void handleDiscard()}
                 className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-error/10 hover:text-error"
                 title="Discard workspace changes"
+                aria-label="Discard workspace changes"
               >
                 <Trash2 className="h-3 w-3" />
               </button>
@@ -349,6 +353,7 @@ export function ChangesPanel() {
                 isDirty ? "text-[rgb(var(--color-accent))]" : "text-[rgb(var(--color-text-secondary))]"
               }`}
               title="Save snapshot (Ctrl+S)"
+              aria-label="Save snapshot"
             >
               {saving ? (
                 <svg className="h-3 w-3 shrink-0 animate-spin text-[rgb(var(--color-accent))]" viewBox="0 0 24 24" fill="none">
@@ -360,6 +365,14 @@ export function ChangesPanel() {
               )}
             </button>
           </div>
+          {isDirty && (
+            <div className="mt-1 rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/70 px-2 py-1 text-[9px] leading-snug text-[rgb(var(--color-text-secondary))]">
+              {actionScopeMessage}
+              {selectedProjectFilter && otherChangeCount > 0 && (
+                <span> {otherChangeCount} change{otherChangeCount === 1 ? "" : "s"} outside this filter.</span>
+              )}
+            </div>
+          )}
 
           {hasRemote && (
             <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-[9px] leading-tight text-[rgb(var(--color-text-secondary))]/60">

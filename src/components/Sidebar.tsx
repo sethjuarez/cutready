@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback } from "react";
-import { House, Settings, Images, LayoutList, MessageSquare, GitCompareArrows, Mic2 } from "lucide-react";
+import { House, Settings, Images, LayoutList, MessageSquare, MessageSquareMore, GitCompareArrows, Mic2 } from "lucide-react";
 import type { AppView } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
 import { usePopover } from "../hooks/usePopover";
@@ -27,9 +27,22 @@ const navItems: { id: AppView; label: string; icon: ReactNode }[] = [
     label: "Changes",
     icon: <GitCompareArrows className="w-4 h-4" />,
   },
+  {
+    id: "chat",
+    label: "Chat",
+    icon: <MessageSquareMore className="w-4 h-4" />,
+  },
 ];
 
-export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
+export function Sidebar({
+  onFeedback,
+  onChatToggle,
+  chatActive = false,
+}: {
+  onFeedback?: () => void;
+  onChatToggle?: () => void;
+  chatActive?: boolean;
+}) {
   const view = useAppStore((s) => s.view);
   const setView = useAppStore((s) => s.setView);
   const currentProject = useAppStore((s) => s.currentProject);
@@ -57,18 +70,27 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
         onContextMenu={handleContextMenu}
       >
         {navItems.map((item) => {
-          const isActive = view === item.id;
+          const isChat = item.id === "chat";
+          const isActive = isChat ? chatActive : view === item.id;
           const requiresProject = item.id === "project" || item.id === "assets" || item.id === "narrations" || item.id === "changes";
           const isDisabled = requiresProject && !currentProject;
 
           return (
             <button
               key={item.id}
-              onClick={() => !isDisabled && setView(item.id)}
+              onClick={() => {
+                if (isDisabled) return;
+                if (isChat) {
+                  onChatToggle?.();
+                  return;
+                }
+                setView(item.id);
+              }}
               disabled={isDisabled}
               data-testid={`activity-${item.id}`}
               className={activityButtonClass(isActive, isDisabled)}
               title={item.label}
+              aria-label={item.label}
             >
               {item.icon}
               {/* Badge for changes count */}
@@ -101,6 +123,7 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
               onClick={() => setView("home")}
               className={activityButtonClass(isActive)}
               title="Home"
+              aria-label="Home"
               data-testid="activity-home"
             >
               <House className="w-4 h-4" />
@@ -119,6 +142,7 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
             onClick={onFeedback}
             className={activityButtonClass(false)}
             title="Send Feedback"
+            aria-label="Send feedback"
             data-testid="activity-feedback"
           >
             <MessageSquare className="w-4 h-4" />
@@ -133,6 +157,7 @@ export function Sidebar({ onFeedback }: { onFeedback?: () => void }) {
               onClick={() => setView("settings")}
               className={activityButtonClass(isActive)}
               title="Settings"
+              aria-label="Settings"
               data-testid="activity-settings"
             >
               <Settings className="w-4 h-4" />
