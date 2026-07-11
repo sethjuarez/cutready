@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { convertFileSrc, invoke } from "../services/tauri";
+import { invoke } from "../services/tauri";
 import {
   Eye,
   X,
@@ -85,15 +85,9 @@ function hasAnyLock(row: PlanningRow): boolean {
   return row.locked === true || Object.values(row.locks ?? {}).some(Boolean);
 }
 
-function projectAssetSrc(projectRoot: string | undefined, relativePath: string | null | undefined): string | null {
-  if (!projectRoot || !relativePath) return null;
-  const separator = projectRoot.includes("\\") ? "\\" : "/";
-  const root = projectRoot.replace(/[\\/]+$/, "");
-  const relative = relativePath.replace(/[\\/]+/g, separator);
-  return convertFileSrc(`${root}${separator}${relative}`);
-}
-
 import type { RowDiff } from "../utils/textDiff";
+
+type NarrationAssetData = { data: number[]; mimeType: string };
 
 interface ScriptTableProps {
   rows: PlanningRow[];
@@ -735,7 +729,7 @@ function SortableRow({
   const isRecordingNarration = narrationRecordingRow === idx;
   const isSavingNarration = narrationSavingRows?.has(idx) ?? false;
   const narrationStale = Boolean(row.narration && row.narration.source_text !== row.narrative);
-  const narrationSrc = projectAssetSrc(projectRoot, row.narration?.path);
+  const narrationPath = row.narration?.path ?? null;
   const { confirm, confirmationDialog } = useConfirmDialog();
   const {
     attributes,
@@ -1041,9 +1035,9 @@ function SortableRow({
             {row.narration ? (
               <div className="flex items-center gap-1.5">
                 <div className="min-w-0 flex-1">
-                  {narrationSrc ? (
+                  {narrationPath ? (
                     <NarrationPlayer
-                      src={narrationSrc}
+                      relativePath={narrationPath}
                       onRecord={onStartNarrationRecording && !mediaLocked ? () => onStartNarrationRecording(idx) : undefined}
                       onRemove={!readOnly && !mediaLocked ? () => void confirmRemoveNarration() : undefined}
                       onStopRecording={onStopNarrationRecording}
@@ -1435,7 +1429,7 @@ function formatPlaybackTime(seconds: number): string {
 }
 
 function NarrationPlayer({
-  src,
+  relativePath,
   onRecord,
   onRemove,
   onStopRecording,
@@ -1443,7 +1437,7 @@ function NarrationPlayer({
   saving = false,
   recordDisabled = false,
 }: {
-  src: string;
+  relativePath: string;
   onRecord?: () => void;
   onRemove?: () => void;
   onStopRecording?: () => void;
@@ -1452,9 +1446,31 @@ function NarrationPlayer({
   recordDisabled?: boolean;
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const objectUrlRef = useRef("");
+  const [src, setSrc] = useState("");
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    const objectUrl = objectUrlRef.current;
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    objectUrlRef.current = "";
+    setSrc("");
+    setLoadError("");
+    setLoading(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setPlaying(false);
+
+    return () => {
+      const currentObjectUrl = objectUrlRef.current;
+      if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+      objectUrlRef.current = "";
+    };
+  }, [relativePath]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -1466,11 +1482,34 @@ function NarrationPlayer({
     audio.load();
   }, [src]);
 
-  const togglePlayback = () => {
+  const loadNarrationForPlayback = async () => {
+    if (src) return src;
+    setLoading(true);
+    setLoadError("");
+    try {
+      const asset = await invoke<NarrationAssetData>("read_narration_asset", { relativePath });
+      const objectUrl = URL.createObjectURL(new Blob([new Uint8Array(asset.data)], { type: asset.mimeType }));
+      objectUrlRef.current = objectUrl;
+      setSrc(objectUrl);
+      return objectUrl;
+    } catch (err) {
+      setLoadError(`Could not load narration: ${err}`);
+      return "";
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const togglePlayback = async () => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || loading) return;
     if (audio.paused) {
-      void audio.play();
+      const playbackSrc = await loadNarrationForPlayback();
+      if (!playbackSrc) return;
+      if (audio.src !== playbackSrc) audio.src = playbackSrc;
+      await audio.play().catch((err: unknown) => {
+        setLoadError(`Could not play narration: ${err}`);
+      });
     } else {
       audio.pause();
     }
@@ -1488,7 +1527,7 @@ function NarrationPlayer({
     <div className="flex w-full flex-col gap-1">
       <audio
         ref={audioRef}
-        src={src}
+        src={src || undefined}
         preload="metadata"
         onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || 0)}
         onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
@@ -1496,6 +1535,11 @@ function NarrationPlayer({
         onPause={() => setPlaying(false)}
         onEnded={() => setPlaying(false)}
       />
+      {loadError && (
+        <div className="text-[11px] text-[rgb(var(--color-error))]">
+          {loadError}
+        </div>
+      )}
       <input
         type="range"
         min={0}
@@ -1511,12 +1555,19 @@ function NarrationPlayer({
         <button
           type="button"
           onClick={togglePlayback}
+            disabled={loading}
           className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] text-[rgb(var(--color-accent))] transition-colors hover:border-[rgb(var(--color-accent))]/35 hover:bg-[rgb(var(--color-accent))]/8"
-          aria-label={playing ? "Pause narration" : "Play narration"}
-          title={playing ? "Pause narration" : "Play narration"}
+            aria-label={playing ? "Pause narration" : loading ? "Loading narration" : "Play narration"}
+            title={playing ? "Pause narration" : loading ? "Loading narration" : "Play narration"}
         >
-          {playing ? <Pause className="h-3 w-3" strokeWidth={2.4} /> : <Play className="h-3.5 w-3.5 fill-current" />}
-        </button>
+            {loading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : playing ? (
+              <Pause className="h-3 w-3" strokeWidth={2.4} />
+            ) : (
+              <Play className="h-3.5 w-3.5 fill-current" />
+            )}
+          </button>
         <span className="min-w-0 flex-1 truncate text-[11px] text-[rgb(var(--color-text-secondary))]">
           {formatPlaybackTime(currentTime)} / {formatPlaybackTime(duration)}
         </span>

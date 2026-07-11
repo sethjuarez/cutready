@@ -27,6 +27,7 @@ import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } fro
 import { SketchIcon } from "./Icons";
 import type { RecordingTake } from "../types/recording";
 import { summarizeSketchDuration, type DurationDisplayMode } from "../utils/documentMetadata";
+import { preferredNarrationMimeType } from "../utils/narrationAudio";
 
 interface MonitorInfo {
   id: number;
@@ -1222,17 +1223,6 @@ The Actions describe what happens on screen — use them as visual design hints.
     setNarrationPickerRowIdx(null);
     setSelectedNarrationPath(null);
   }, [handleRowsChange, localRows, narrationPickerRowIdx]);
-
-  const preferredNarrationMimeType = useCallback(() => {
-    const candidates = [
-      "audio/webm;codecs=opus",
-      "audio/webm",
-      "audio/mp4",
-      "audio/ogg;codecs=opus",
-      "audio/ogg",
-    ];
-    return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? "";
-  }, []);
 
   const handleStopNarrationRecording = useCallback(() => {
     setNarrationDialogRow(null);

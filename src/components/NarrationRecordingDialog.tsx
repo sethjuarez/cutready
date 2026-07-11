@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Image as ImageIcon, Loader2, Play, RotateCcw, Save, Square, X } from "lucide-react";
 import { useProjectImage } from "../hooks/useProjectImage";
-import { convertFileSrc } from "../services/tauri";
+import { invoke } from "../services/tauri";
 
 export interface NarrationRecordingTake {
   audioData: number[];
@@ -13,8 +13,16 @@ export interface NarrationRecordingTake {
   silenceThresholdDb: number;
 }
 
-type RecordingStatus = "idle" | "recording" | "recorded" | "error";
+type RecordingStatus = "idle" | "preparing" | "recording" | "recorded" | "error";
+type RecordingInputStatus = "preparing" | "ready" | "error" | "unsupported";
 type SaveNarrationOptions = { navigateToRow?: number | null };
+type NarrationAssetData = { data: number[]; mimeType: string };
+type PreparedRecordingInput = {
+  stream: MediaStream;
+  context: AudioContext;
+  analyser: AnalyserNode;
+  data: Uint8Array<ArrayBuffer>;
+};
 
 const SILENCE_THRESHOLD_DB = -45;
 const SILENCE_WINDOW_MS = 10;
@@ -42,14 +50,6 @@ function formatElapsed(ms: number): string {
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
   return `${minutes}:${remainder.toString().padStart(2, "0")}`;
-}
-
-function projectAssetSrc(projectRoot: string | undefined | null, relativePath: string | null | undefined): string {
-  if (!projectRoot || !relativePath) return "";
-  const separator = projectRoot.includes("\\") ? "\\" : "/";
-  const root = projectRoot.replace(/[\\/]+$/, "");
-  const relative = relativePath.replace(/[\\/]+/g, separator);
-  return convertFileSrc(`${root}${separator}${relative}`);
 }
 
 function alignToDevicePixel(value: number, dpr: number): number {
@@ -279,9 +279,13 @@ export function NarrationRecordingDialog({
   const animationRef = useRef<number | null>(null);
   const timerRef = useRef<number | null>(null);
   const startedAtRef = useRef(0);
+  const preparedInputRef = useRef<PreparedRecordingInput | null>(null);
+  const prepareInputPromiseRef = useRef<Promise<PreparedRecordingInput> | null>(null);
   const recordedBlobRef = useRef<Blob | null>(null);
+  const recordedUrlRef = useRef("");
   const recordedUrlIsObjectRef = useRef(false);
   const [status, setStatus] = useState<RecordingStatus>("idle");
+  const [inputStatus, setInputStatus] = useState<RecordingInputStatus>("preparing");
   const [elapsedMs, setElapsedMs] = useState(0);
   const [recordedUrl, setRecordedUrl] = useState("");
   const [error, setError] = useState("");
@@ -292,10 +296,7 @@ export function NarrationRecordingDialog({
   const [waveformWidth, setWaveformWidth] = useState(0);
   const [waveformLayoutVersion, setWaveformLayoutVersion] = useState(0);
   const screenshotSrc = useProjectImage(projectRoot ?? null, screenshotPath);
-  const existingNarrationSrc = useMemo(
-    () => projectAssetSrc(projectRoot, existingNarrationPath),
-    [existingNarrationPath, projectRoot],
-  );
+  const hasExistingNarration = Boolean(existingNarrationPath);
   const playheadLeft = playbackDuration > 0 && waveformWidth > 0
     ? alignToDevicePixel(
         Math.min(waveformWidth, Math.max(0, (playbackCurrentTime / playbackDuration) * waveformWidth)),
@@ -310,13 +311,70 @@ export function NarrationRecordingDialog({
     timerRef.current = null;
   }, []);
 
+  const replaceRecordedUrl = useCallback((url: string, isObjectUrl: boolean) => {
+    const previousUrl = recordedUrlRef.current;
+    if (previousUrl && recordedUrlIsObjectRef.current && previousUrl !== url) {
+      URL.revokeObjectURL(previousUrl);
+    }
+    recordedUrlRef.current = url;
+    recordedUrlIsObjectRef.current = isObjectUrl;
+    setRecordedUrl(url);
+  }, []);
+
   const cleanupInput = useCallback(() => {
     stopVisualizer();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+    preparedInputRef.current = null;
+    prepareInputPromiseRef.current = null;
     closeAudioContext(audioContextRef.current);
     audioContextRef.current = null;
   }, [stopVisualizer]);
+
+  const prepareRecordingInput = useCallback(async (): Promise<PreparedRecordingInput> => {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setInputStatus("unsupported");
+      throw new Error("Microphone recording is not available in this WebView.");
+    }
+
+    const preparedInput = preparedInputRef.current;
+    if (preparedInput && preparedInput.stream.getAudioTracks().some((track) => track.readyState === "live")) {
+      setInputStatus("ready");
+      return preparedInput;
+    }
+
+    if (prepareInputPromiseRef.current) return prepareInputPromiseRef.current;
+
+    setInputStatus("preparing");
+    const preparePromise = navigator.mediaDevices.getUserMedia({ audio })
+      .then((stream) => {
+        const context = new AudioContext();
+        const analyser = context.createAnalyser();
+        analyser.fftSize = 2048;
+        context.createMediaStreamSource(stream).connect(analyser);
+        const prepared: PreparedRecordingInput = {
+          stream,
+          context,
+          analyser,
+          data: new Uint8Array(new ArrayBuffer(analyser.fftSize)),
+        };
+        streamRef.current = stream;
+        audioContextRef.current = context;
+        preparedInputRef.current = prepared;
+        setInputStatus("ready");
+        return prepared;
+      })
+      .catch((err: unknown) => {
+        setInputStatus("error");
+        throw err;
+      })
+      .finally(() => {
+        prepareInputPromiseRef.current = null;
+      });
+    prepareInputPromiseRef.current = preparePromise;
+
+    return preparePromise;
+  }, [audio]);
 
   const stopRecording = useCallback(() => {
     const recorder = recorderRef.current;
@@ -324,63 +382,64 @@ export function NarrationRecordingDialog({
   }, []);
 
   const startRecording = useCallback(async () => {
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      setStatus("error");
-      setError("Microphone recording is not available in this WebView.");
-      return;
-    }
-
-    if (recordedUrl && recordedUrlIsObjectRef.current) URL.revokeObjectURL(recordedUrl);
-    recordedUrlIsObjectRef.current = false;
-    setRecordedUrl("");
+    replaceRecordedUrl("", false);
     setHasUnsavedTake(false);
     setPlaybackCurrentTime(0);
     setPlaybackDuration(0);
     recordedBlobRef.current = null;
     setError("");
+    setStatus("preparing");
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio });
-      const context = new AudioContext();
-      const analyser = context.createAnalyser();
-      analyser.fftSize = 2048;
-      context.createMediaStreamSource(stream).connect(analyser);
+      const preparedInput = await prepareRecordingInput();
+      if (preparedInput.context.state === "suspended") {
+        await preparedInput.context.resume();
+      }
 
-      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-      const data = new Uint8Array(new ArrayBuffer(analyser.fftSize));
+      const recorder = mimeType ? new MediaRecorder(preparedInput.stream, { mimeType }) : new MediaRecorder(preparedInput.stream);
       const canvas = canvasRef.current;
-      chunksRef.current = [];
-      streamRef.current = stream;
-      audioContextRef.current = context;
-      recorderRef.current = recorder;
-      startedAtRef.current = performance.now();
-      setElapsedMs(0);
-      setStatus("recording");
+      let recordingUiStarted = false;
+      let startFallbackTimer: number | null = null;
+      const startRecordingUi = () => {
+        if (recordingUiStarted) return;
+        recordingUiStarted = true;
+        startedAtRef.current = performance.now();
+        setElapsedMs(0);
+        setStatus("recording");
 
-      const render = () => {
-        if (canvas) drawWaveform(canvas, analyser, data);
-        animationRef.current = requestAnimationFrame(render);
+        const render = () => {
+          if (canvas) drawWaveform(canvas, preparedInput.analyser, preparedInput.data);
+          animationRef.current = requestAnimationFrame(render);
+        };
+        render();
+        timerRef.current = window.setInterval(() => {
+          setElapsedMs(Math.max(0, Math.round(performance.now() - startedAtRef.current)));
+        }, 125);
       };
-      render();
-      timerRef.current = window.setInterval(() => {
-        setElapsedMs(Math.max(0, Math.round(performance.now() - startedAtRef.current)));
-      }, 125);
+      chunksRef.current = [];
+      recorderRef.current = recorder;
+      setElapsedMs(0);
 
       recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) startRecordingUi();
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
+      recorder.onstart = () => {
+        startRecordingUi();
+      };
       recorder.onerror = () => {
+        if (startFallbackTimer !== null) window.clearTimeout(startFallbackTimer);
         setStatus("error");
         setError("Narration recording failed.");
         cleanupInput();
       };
       recorder.onstop = () => {
+        if (startFallbackTimer !== null) window.clearTimeout(startFallbackTimer);
         const durationMs = Math.max(0, Math.round(performance.now() - startedAtRef.current));
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType || mimeType || "audio/webm" });
         recordedBlobRef.current = blob;
         setElapsedMs(durationMs);
-        recordedUrlIsObjectRef.current = true;
-        setRecordedUrl(URL.createObjectURL(blob));
+        replaceRecordedUrl(URL.createObjectURL(blob), true);
         setHasUnsavedTake(true);
         setStatus("recorded");
         recorderRef.current = null;
@@ -388,23 +447,24 @@ export function NarrationRecordingDialog({
         cleanupInput();
       };
       recorder.start();
+      startFallbackTimer = window.setTimeout(() => {
+        if (recorder.state === "recording") startRecordingUi();
+      }, 250);
     } catch (err) {
       setStatus("error");
-      setError(String(err));
+      setError(`Could not prepare microphone recording: ${err}`);
       cleanupInput();
     }
-  }, [audio, cleanupInput, mimeType, recordedUrl]);
+  }, [cleanupInput, mimeType, prepareRecordingInput, replaceRecordedUrl]);
 
   const resetTake = () => {
-    if (recordedUrl && recordedUrlIsObjectRef.current) URL.revokeObjectURL(recordedUrl);
-    recordedUrlIsObjectRef.current = false;
-    setRecordedUrl(existingNarrationSrc);
+    replaceRecordedUrl("", false);
     recordedBlobRef.current = null;
     setHasUnsavedTake(false);
     setPlaybackCurrentTime(0);
     setPlaybackDuration(0);
     setElapsedMs(existingNarrationDurationMs ?? 0);
-    setStatus(existingNarrationSrc ? "recorded" : "idle");
+    setStatus(hasExistingNarration ? "recorded" : "idle");
     setError("");
   };
 
@@ -441,7 +501,7 @@ export function NarrationRecordingDialog({
   };
 
   const navigatePrevious = async () => {
-    if (!canNavigatePrevious || status === "recording" || saving) return;
+    if (!canNavigatePrevious || status === "preparing" || status === "recording" || saving) return;
     if (hasUnsavedTake) {
       await saveTake({ navigateToRow: rowNumber - 2 });
       return;
@@ -450,7 +510,7 @@ export function NarrationRecordingDialog({
   };
 
   const navigateNext = async () => {
-    if (!canNavigateNext || status === "recording" || saving) return;
+    if (!canNavigateNext || status === "preparing" || status === "recording" || saving) return;
     if (hasUnsavedTake) {
       await saveTake({ navigateToRow: rowNumber });
       return;
@@ -461,7 +521,7 @@ export function NarrationRecordingDialog({
   const close = () => {
     if (status === "recording") stopRecording();
     cleanupInput();
-    if (recordedUrl && recordedUrlIsObjectRef.current) URL.revokeObjectURL(recordedUrl);
+    replaceRecordedUrl("", false);
     onCancel();
   };
 
@@ -485,32 +545,59 @@ export function NarrationRecordingDialog({
       if (event.code === "Space") {
         event.preventDefault();
         if (status === "recording") stopRecording();
-        else if (status === "idle" || status === "recorded") void startRecording();
+        else if ((status === "idle" || status === "recorded") && inputStatus === "ready") void startRecording();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [close, navigateNext, navigatePrevious, startRecording, status, stopRecording]);
+  }, [close, inputStatus, navigateNext, navigatePrevious, startRecording, status, stopRecording]);
 
   useEffect(() => {
     return () => {
       cleanupInput();
-      if (recordedUrl && recordedUrlIsObjectRef.current) URL.revokeObjectURL(recordedUrl);
+      replaceRecordedUrl("", false);
     };
-  }, [cleanupInput, recordedUrl]);
+  }, [cleanupInput, replaceRecordedUrl]);
 
   useEffect(() => {
-    if (status === "recording" || hasUnsavedTake) return;
-    if (recordedUrl && recordedUrlIsObjectRef.current) URL.revokeObjectURL(recordedUrl);
-    recordedUrlIsObjectRef.current = false;
+    if (status === "preparing" || status === "recording" || hasUnsavedTake) return;
+    void prepareRecordingInput().catch((err: unknown) => {
+      console.warn("[NarrationRecordingDialog] failed to prewarm microphone", { error: err });
+    });
+  }, [hasUnsavedTake, prepareRecordingInput, status]);
+
+  useEffect(() => {
+    if (status === "preparing" || status === "recording" || hasUnsavedTake) return;
     recordedBlobRef.current = null;
-    setRecordedUrl(existingNarrationSrc);
     setPlaybackCurrentTime(0);
     setPlaybackDuration(0);
     setElapsedMs(existingNarrationDurationMs ?? 0);
-    setStatus(existingNarrationSrc ? "recorded" : "idle");
     setError("");
-  }, [existingNarrationDurationMs, existingNarrationSrc, hasUnsavedTake, recordedUrl, status]);
+    if (!existingNarrationPath) {
+      replaceRecordedUrl("", false);
+      setStatus("idle");
+      return;
+    }
+
+    let cancelled = false;
+    invoke<NarrationAssetData>("read_narration_asset", { relativePath: existingNarrationPath })
+      .then((asset) => {
+        if (cancelled) return;
+        const data = new Uint8Array(asset.data);
+        replaceRecordedUrl(URL.createObjectURL(new Blob([data], { type: asset.mimeType })), true);
+        setStatus("recorded");
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        replaceRecordedUrl("", false);
+        setStatus("error");
+        setError(`Could not load saved narration: ${err}`);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [existingNarrationDurationMs, existingNarrationPath, hasUnsavedTake, replaceRecordedUrl, status === "recording"]);
 
   useEffect(() => {
     if (status === "recording") return;
@@ -612,7 +699,7 @@ export function NarrationRecordingDialog({
                 <button
                   type="button"
                   onClick={onAddScreenshot}
-                  disabled={!onAddScreenshot || status === "recording"}
+                  disabled={!onAddScreenshot || status === "preparing" || status === "recording"}
                   className="flex h-full min-h-0 w-full flex-col items-center justify-center gap-2 border border-dashed border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 hover:text-[rgb(var(--color-accent))] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <ImageIcon className="h-5 w-5 opacity-70" />
@@ -674,7 +761,7 @@ export function NarrationRecordingDialog({
                 <button
                   type="button"
                   onClick={() => void navigatePrevious()}
-                  disabled={!canNavigatePrevious || status === "recording" || saving}
+                  disabled={!canNavigatePrevious || status === "preparing" || status === "recording" || saving}
                   className="inline-flex items-center gap-1.5 rounded-xl border border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-40"
                   title={hasUnsavedTake ? "Save take and move to previous row" : "Previous row"}
                 >
@@ -684,7 +771,7 @@ export function NarrationRecordingDialog({
                 <button
                   type="button"
                   onClick={() => void navigateNext()}
-                  disabled={!canNavigateNext || status === "recording" || saving}
+                  disabled={!canNavigateNext || status === "preparing" || status === "recording" || saving}
                   className="inline-flex items-center gap-1.5 rounded-xl border border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-40"
                   title={hasUnsavedTake ? "Save take and move to next row" : "Next row"}
                 >
@@ -693,11 +780,19 @@ export function NarrationRecordingDialog({
                 </button>
               </div>
               <div className="text-xs text-[rgb(var(--color-text-secondary))]">
-                {status === "recording"
+                {status === "preparing"
+                  ? "Starting..."
+                  : status === "recording"
                   ? "Recording..."
                   : hasUnsavedTake
                     ? "New take ready to save."
-                    : existingNarrationSrc
+                    : inputStatus === "preparing"
+                      ? "Preparing microphone..."
+                    : inputStatus === "error"
+                      ? "Microphone needs attention."
+                    : inputStatus === "unsupported"
+                      ? "Microphone recording is unavailable."
+                    : hasExistingNarration
                       ? "Current saved take loaded."
                       : "Ready when you are."}
               </div>
@@ -722,14 +817,19 @@ export function NarrationRecordingDialog({
                 <button
                   type="button"
                   onClick={() => status === "recording" ? stopRecording() : void startRecording()}
-                  disabled={saving}
+                  disabled={saving || status === "preparing" || (inputStatus === "preparing" && status !== "recording")}
                   className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                     status === "recording"
                       ? "bg-[rgb(var(--color-error))]/12 text-[rgb(var(--color-error))] hover:bg-[rgb(var(--color-error))]/18"
                       : "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))]"
                   }`}
                 >
-                  {status === "recording" ? (
+                  {status === "preparing" ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Starting...
+                    </>
+                  ) : status === "recording" ? (
                     <>
                       <Square className="h-3.5 w-3.5 fill-current" />
                       Stop
@@ -737,7 +837,11 @@ export function NarrationRecordingDialog({
                   ) : (
                     <>
                       <Play className="h-3.5 w-3.5 fill-current" />
-                      {status === "recorded" ? "Record again" : "Start recording"}
+                      {inputStatus === "preparing"
+                        ? "Preparing..."
+                        : status === "recorded"
+                          ? "Record again"
+                          : "Start recording"}
                     </>
                   )}
                 </button>
