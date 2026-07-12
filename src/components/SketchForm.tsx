@@ -21,6 +21,7 @@ import { InlineDescriptionEditor } from "./InlineDescriptionEditor";
 import type { PresentationMode } from "./presentation/types";
 import VisualCell from "./VisualCell";
 import { exportSketchToWord, type WordOrientation } from "../utils/exportToWord";
+import { exportSketchToPowerPoint, type PowerPointExportContent } from "../utils/exportToPowerPoint";
 import type { PlanningRow, Sketch } from "../types/sketch";
 import { diffRow, type RowDiff } from "../utils/textDiff";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
@@ -1355,6 +1356,16 @@ The Actions describe what happens on screen — use them as visual design hints.
     }).catch(err => console.error("Word export failed:", err));
   }, [activeSketch, projectRoot]);
 
+  const handleExportPowerPoint = useCallback((content: PowerPointExportContent) => {
+    if (!activeSketch) return;
+    exportSketchToPowerPoint(activeSketch, content).then((exported) => {
+      if (!exported) return;
+      const label = content === "narrative" ? "narration" : "actions";
+      useToastStore.getState().show("Export complete");
+      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "export", content: `Exported "${activeSketch.title}" ${label} deck to PowerPoint`, level: "success" }]);
+    }).catch(err => console.error("PowerPoint export failed:", err));
+  }, [activeSketch]);
+
   const handleExportVideo = useCallback(async () => {
     if (!activeSketchPath || !activeSketch || !projectRoot || exportingVideo) return;
     const issues = getVideoExportIssues(localRows);
@@ -1534,6 +1545,18 @@ The Actions describe what happens on screen — use them as visual design hints.
       label: "Word - Portrait",
       icon: documentToolbarIcons.fileText,
       onSelect: () => handleExportWord("portrait"),
+    },
+    {
+      id: "powerpoint-narration",
+      label: "PowerPoint - Narration",
+      icon: documentToolbarIcons.fileText,
+      onSelect: () => handleExportPowerPoint("narrative"),
+    },
+    {
+      id: "powerpoint-actions",
+      label: "PowerPoint - Actions",
+      icon: documentToolbarIcons.fileText,
+      onSelect: () => handleExportPowerPoint("actions"),
     },
     {
       id: "video",

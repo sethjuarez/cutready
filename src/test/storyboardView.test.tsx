@@ -19,6 +19,10 @@ vi.mock("../utils/exportToWord", () => ({
   exportStoryboardToWord: vi.fn(),
 }));
 
+vi.mock("../utils/exportToPowerPoint", () => ({
+  exportStoryboardToPowerPoint: vi.fn(),
+}));
+
 vi.mock("../hooks/useBackgroundAgentAction", () => ({
   useBackgroundAgentAction: () => mockRunBackgroundAgentAction,
 }));
