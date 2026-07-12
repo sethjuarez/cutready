@@ -10,6 +10,13 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.30.0](https://github.com/sethjuarez/cutready/compare/v1.29.1...v1.30.0) (2026-07-12)
+
+
+### Features
+
+* add PowerPoint teleprompter export ([50283c1](https://github.com/sethjuarez/cutready/commit/50283c1900bb1ca1d891cbd42fc47543df738427))
+
 ## [1.29.1](https://github.com/sethjuarez/cutready/compare/v1.29.0...v1.29.1) (2026-07-12)
 
 
