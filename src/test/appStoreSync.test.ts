@@ -149,6 +149,51 @@ describe("appStore remote sync status", () => {
     );
   });
 
+  it("retains a discovered remote when a stale detection fails", async () => {
+    let rejectStaleDetection!: (error: Error) => void;
+    const staleDetection = new Promise<never>((_, reject) => {
+      rejectStaleDetection = reject;
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    mockListDraftlineRemotes
+      .mockReturnValueOnce(staleDetection)
+      .mockResolvedValueOnce([{ name: "origin", url: "https://github.com/sethjuarez/cutready.git" }]);
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    mockGetDraftlineSyncStatus.mockResolvedValue({ ahead: 0, behind: 0 });
+
+    try {
+      const firstDetection = useAppStore.getState().detectRemote();
+      await useAppStore.getState().detectRemote();
+      rejectStaleDetection(new Error("temporary remote lookup failure"));
+      await firstDetection;
+
+      expect(useAppStore.getState().currentRemote).toEqual({
+        name: "origin",
+        url: "https://github.com/sethjuarez/cutready.git",
+      });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("retains a configured remote when a fresh detection fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const remote = { name: "origin", url: "https://github.com/sethjuarez/cutready.git" };
+    mockListDraftlineRemotes.mockRejectedValueOnce(new Error("temporary remote lookup failure"));
+    useAppStore.setState({ currentRemote: remote, syncStatus: { ahead: 1, behind: 0 } });
+
+    try {
+      await useAppStore.getState().detectRemote();
+
+      expect(useAppStore.getState().currentRemote).toEqual(remote);
+      expect(useAppStore.getState().syncStatus).toBeNull();
+      expect(warn).toHaveBeenCalledWith("Failed to detect project remote:", expect.any(Error));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("does not fetch a GitHub remote before the user connects GitHub", async () => {
     mockGetGitHubAuthStatus.mockResolvedValueOnce({ connected: false });
     useAppStore.setState({

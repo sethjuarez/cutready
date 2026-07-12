@@ -138,6 +138,7 @@ export type PrePushMilestoneDecision =
   | { type: "cancel" };
 
 let prePushMilestoneResolve: ((decision: PrePushMilestoneDecision) => void) | null = null;
+let remoteDetectionGeneration = 0;
 
 function isGeneratedSnapshotLabel(label: string): boolean {
   return /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) (morning|afternoon|evening) \d{1,2}:\d{2}$/.test(label.trim());
@@ -1677,6 +1678,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   createProject: async (path) => {
+    remoteDetectionGeneration += 1;
     set({ loading: true });
     try {
       const project = await invoke<ProjectView>("create_project_folder", { path });
@@ -1722,6 +1724,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   openProject: async (path) => {
+    remoteDetectionGeneration += 1;
     set({ loading: true });
     try {
       const project = await invoke<ProjectView>("open_project_folder", { path });
@@ -1760,12 +1763,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().checkDirty();
       await get().checkRewound();
       await get().checkStash();
-      // Auto-detect remote and fetch in background (non-blocking)
-      get().detectRemote().then(() => {
-        if (get().currentRemote) {
-          get().fetchFromRemote({ notifyAuthRequired: false }).catch(() => {});
-        }
-      });
+      // Establish remote state before startup completes; fetching stays non-blocking.
+      await get().detectRemote();
+      if (get().currentRemote) {
+        get().fetchFromRemote({ notifyAuthRequired: false }).catch(() => {});
+      }
     } catch (err) {
       console.error("Failed to open project:", err);
       set({ error: String(err) });
@@ -1775,6 +1777,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   closeProject: () => {
+    remoteDetectionGeneration += 1;
     invoke("close_project").catch(console.error);
     setDraftlineWorkspacePath(null);
     localStorage.removeItem("cutready:lastProject");
@@ -3268,8 +3271,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   // ── Remote sync actions ────────────────────────────────────
 
   detectRemote: async () => {
+    const generation = ++remoteDetectionGeneration;
     try {
       const remotes = await listDraftlineRemotes();
+      if (generation !== remoteDetectionGeneration) return;
       const info = remotes[0] ?? null;
       set({
         currentRemote: info ?? null,
@@ -3282,10 +3287,20 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       });
       if (info) {
         if (!await ensureGitHubRemoteCredential(info)) return;
+        if (generation !== remoteDetectionGeneration) return;
         await get().refreshSyncStatus();
       }
-    } catch {
-      set({ currentRemote: null, remoteBranches: [], remoteBranchesLoading: false, syncStatus: null, incomingCommits: [], syncError: null, shareUrl: null });
+    } catch (err) {
+      if (generation !== remoteDetectionGeneration) return;
+      console.warn("Failed to detect project remote:", err);
+      set((state) => ({
+        remoteBranches: [],
+        remoteBranchesLoading: false,
+        syncStatus: null,
+        incomingCommits: [],
+        syncError: state.currentRemote ? remoteSyncErrorMessage(err) : null,
+        shareUrl: null,
+      }));
     }
   },
 
