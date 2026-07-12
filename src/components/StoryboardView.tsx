@@ -33,6 +33,7 @@ import { SketchPreview } from "./SketchPreview";
 import { ScriptTable } from "./ScriptTable";
 import { useConfirmDialog } from "./ConfirmDialog";
 import { exportStoryboardToWord, type WordOrientation } from "../utils/exportToWord";
+import { exportStoryboardToPowerPoint, type PowerPointExportContent } from "../utils/exportToPowerPoint";
 import { DocumentHeader } from "./DocumentHeader";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
 import { FieldAiButton } from "./FieldAiButton";
@@ -391,6 +392,27 @@ export function StoryboardView() {
     }).catch(err => console.error("Word export failed:", err));
   }, [activeStoryboard, currentProject, sketchCache]);
 
+  const handleExportPowerPoint = useCallback((content: PowerPointExportContent) => {
+    if (!activeStoryboard) return;
+    return exportStoryboardToPowerPoint(activeStoryboard, content, async (paths) => {
+      const map = new Map<string, Sketch>();
+      await Promise.all(paths.map(async (p) => {
+        const cached = sketchCache.get(p);
+        if (cached) { map.set(p, cached); return; }
+        try {
+          const sk = await invoke<Sketch>("get_sketch", { relativePath: p });
+          map.set(p, sk);
+        } catch { /* skip missing */ }
+      }));
+      return map;
+    }).then((exported) => {
+      if (!exported) return;
+      const label = content === "narrative" ? "narration" : "actions";
+      useToastStore.getState().show("Export complete");
+      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "export", content: `Exported "${activeStoryboard.title}" ${label} deck to PowerPoint`, level: "success" }]);
+    }).catch(err => console.error("PowerPoint export failed:", err));
+  }, [activeStoryboard, sketchCache]);
+
   const handleRecord = useCallback(async () => {
     if (!activeStoryboardPath) return;
     try {
@@ -521,6 +543,18 @@ export function StoryboardView() {
       label: "Word - Portrait",
       icon: documentToolbarIcons.fileText,
       onSelect: () => handleExportWord("portrait"),
+    },
+    {
+      id: "powerpoint-narration",
+      label: "PowerPoint - Narration",
+      icon: documentToolbarIcons.fileText,
+      onSelect: () => handleExportPowerPoint("narrative"),
+    },
+    {
+      id: "powerpoint-actions",
+      label: "PowerPoint - Actions",
+      icon: documentToolbarIcons.fileText,
+      onSelect: () => handleExportPowerPoint("actions"),
     },
   ] : [];
 
