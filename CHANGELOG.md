@@ -10,6 +10,13 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.29.1](https://github.com/sethjuarez/cutready/compare/v1.29.0...v1.29.1) (2026-07-12)
+
+
+### Bug Fixes
+
+* **versioning:** stabilize remote detection at startup ([6bd5f75](https://github.com/sethjuarez/cutready/commit/6bd5f751b347342f1adadf9bd73d725b3b3197aa))
+
 ## [1.29.0](https://github.com/sethjuarez/cutready/compare/v1.28.0...v1.29.0) (2026-07-11)
 
 
