@@ -138,9 +138,6 @@ export function TimelineSelector() {
     }
   }, [newName, graphNodes, createTimeline]);
 
-  // Only show if we have more than 1 timeline (or always show for discoverability)
-  if (timelines.length <= 1 && !active) return null;
-
   const filtered = timelines.filter((t) =>
     t.label.toLowerCase().includes(filter.toLowerCase())
   );
@@ -171,6 +168,9 @@ export function TimelineSelector() {
     setOpen(false);
     setFilter("");
   }, [checkoutRemoteTimeline, createConflict]);
+
+  // Only show if we have more than 1 timeline (or always show for discoverability)
+  if (timelines.length <= 1 && !active) return null;
 
   const dropdown = open && dropdownStyle ? createPortal(
     <div

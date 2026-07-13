@@ -196,6 +196,30 @@ describe("exportSketchToPowerPoint", () => {
     expect(secondSlide).toContain("Create");
   }, 15_000);
 
+  it("splits long narration into readable notes slides with a next cue", async () => {
+    const sketch = makeSketch("Production Notes");
+    sketch.rows[0].narrative = [
+      "Welcome to the workspace, where we keep the entire demo plan organized.",
+      "Start by opening the storyboard so everyone can see the sequence at a glance.",
+      "Each sketch holds the narration, the operator action, and the reference assets for one scene.",
+      "Use the planning table to make adjustments while the production team reviews the flow.",
+      "When the script is ready, export the notes deck for the presenter and control room.",
+      "The deck keeps every passage large enough to read without shrinking the type.",
+      "Long passages continue on a new slide at a sentence boundary instead of cramming the screen.",
+    ].join("\n");
+
+    await exportSketchToPowerPoint(sketch, "narrative");
+
+    const firstSlide = extractZipEntry(writtenPptxBytes(), "ppt/slides/slide1.xml");
+    const secondSlide = extractZipEntry(writtenPptxBytes(), "ppt/slides/slide2.xml");
+    expect(firstSlide).toContain("000000");
+    expect(firstSlide).toContain("FFF887");
+    expect(firstSlide).toContain("NEXT:");
+    expect(firstSlide).not.toContain('fit="shrink"');
+    expect(firstSlide).toContain("<a:buChar");
+    expect(secondSlide).toContain("Long passages continue");
+  }, 15_000);
+
   it("does nothing when the save dialog is canceled", async () => {
     mockSave.mockResolvedValue(null);
 
