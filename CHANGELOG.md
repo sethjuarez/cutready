@@ -15,7 +15,6 @@ Release Please manages this changelog. Do not edit manually.
 
 ### Bug Fixes
 
-* **export:** improve PowerPoint notes slides ([608df96](https://github.com/sethjuarez/cutready/commit/608df9668fea59b801937b345e880e51380a4b9e))
 * **export:** improve PowerPoint notes slides ([f87f73c](https://github.com/sethjuarez/cutready/commit/f87f73c2619542632d581c725336eb8582fe20d1))
 
 ## [1.30.0](https://github.com/sethjuarez/cutready/compare/v1.29.1...v1.30.0) (2026-07-12)
