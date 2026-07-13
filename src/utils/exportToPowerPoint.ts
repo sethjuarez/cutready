@@ -6,7 +6,7 @@ import pptxgen from "pptxgenjs";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import { openPath } from "@tauri-apps/plugin-opener";
-import type { PlanningRow, Sketch, Storyboard } from "../types/sketch";
+import type { Sketch, Storyboard } from "../types/sketch";
 import { getUniqueStoryboardSketchPaths } from "./storyboard";
 
 export type PowerPointExportContent = "narrative" | "actions";
@@ -22,12 +22,18 @@ type DeckRow = {
   sketchTitle: string;
   sectionTitle?: string;
   rowNumber: number;
+  pageNumber: number;
+  pageCount: number;
 };
 
 const SLIDE_WIDTH = 13.333;
 const SLIDE_HEIGHT = 7.5;
-const SLIDE_MARGIN = 0.7;
-const FOOTER_HEIGHT = 0.36;
+const SLIDE_MARGIN = 0.66;
+const BODY_FONT_SIZE = 36;
+const BODY_HEIGHT = 5.05;
+const NEXT_BAND_HEIGHT = 0.64;
+const MAX_BODY_LINES = 8;
+const CHARACTERS_PER_LINE = 40;
 
 function sanitizeFilename(title: string): string {
   const sanitized = title.replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-");
@@ -36,10 +42,6 @@ function sanitizeFilename(title: string): string {
 
 function contentLabel(content: PowerPointExportContent): string {
   return content === "narrative" ? "Narration" : "Actions";
-}
-
-function rowContent(row: PlanningRow, content: PowerPointExportContent): { plainText: string; text: SlideText } {
-  return markdownToSlideText(content === "narrative" ? row.narrative : row.demo_actions);
 }
 
 function removeUnsafeBlocks(value: string): string {
@@ -141,95 +143,203 @@ function collectSketchRows(
   sectionTitle?: string,
 ): DeckRow[] {
   return sketch.rows.flatMap((row, index) => {
-    const { plainText, text } = rowContent(row, content);
-    if (!plainText) return [];
-    return [{
-      plainText,
-      text,
-      time: row.time,
-      sketchTitle: sketch.title,
-      sectionTitle,
-      rowNumber: index + 1,
-    }];
+    const sourceText = content === "narrative" ? row.narrative : row.demo_actions;
+    const pages = paginateMarkdown(sourceText);
+
+    return pages.map((page, pageIndex) => {
+      const { plainText, text } = markdownToSlideText(page);
+      return {
+        plainText,
+        text,
+        time: row.time,
+        sketchTitle: sketch.title,
+        sectionTitle,
+        rowNumber: index + 1,
+        pageNumber: pageIndex + 1,
+        pageCount: pages.length,
+      };
+    });
   });
 }
 
-function addContentSlide(pptx: pptxgen, row: DeckRow, index: number, total: number) {
+function paginateMarkdown(value: string): string[] {
+  const lines = removeUnsafeBlocks(value)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map(asNoteBullet)
+    .flatMap(splitMarkdownLine);
+
+  const pages: string[] = [];
+  let pageLines: string[] = [];
+  let usedLines = 0;
+
+  for (const line of lines) {
+    const lineHeight = estimatedLineCount(line);
+    if (pageLines.length > 0 && usedLines + lineHeight > MAX_BODY_LINES) {
+      pages.push(pageLines.join("\n"));
+      pageLines = [];
+      usedLines = 0;
+    }
+    pageLines.push(line);
+    usedLines += lineHeight;
+  }
+
+  if (pageLines.length > 0) pages.push(pageLines.join("\n"));
+  return pages;
+}
+
+function asNoteBullet(line: string): string {
+  return /^(?:[-*•]\s+|\d+[.)]\s+|#{1,6}\s+|>\s*)/.test(line) ? line : `- ${line}`;
+}
+
+function splitMarkdownLine(line: string): string[] {
+  if (estimatedLineCount(line) <= MAX_BODY_LINES) return [line];
+
+  const prefixMatch = line.match(/^(\s*(?:[-*•]\s+|\d+[.)]\s+|#{1,6}\s+)?)(.*)$/);
+  const prefix = prefixMatch?.[1] ?? "";
+  const body = prefixMatch?.[2] ?? line;
+  const maxCharacters = (MAX_BODY_LINES - 1) * CHARACTERS_PER_LINE;
+  const sentences = body.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g) ?? [body];
+  const parts: string[] = [];
+  let current = "";
+
+  const addPart = (part: string) => {
+    const trimmed = part.trim();
+    if (!trimmed) return;
+    if (current && plainTextWithoutMarkdown(`${current} ${trimmed}`).length > maxCharacters) {
+      parts.push(`${prefix}${current}`.trimEnd());
+      current = trimmed;
+    } else {
+      current = `${current} ${trimmed}`.trim();
+    }
+  };
+
+  for (const sentence of sentences) {
+    const words = sentence.trim().split(/\s+/);
+    let wordGroup = "";
+    for (const word of words) {
+      if (wordGroup && plainTextWithoutMarkdown(`${wordGroup} ${word}`).length > maxCharacters) {
+        addPart(wordGroup);
+        wordGroup = word;
+      } else {
+        wordGroup = `${wordGroup} ${word}`.trim();
+      }
+    }
+    addPart(wordGroup);
+  }
+
+  if (current) parts.push(`${prefix}${current}`.trimEnd());
+  return parts.length > 0 ? parts : [line];
+}
+
+function estimatedLineCount(markdown: string): number {
+  const text = plainTextWithoutMarkdown(markdown);
+  return Math.max(1, Math.ceil(text.length / CHARACTERS_PER_LINE));
+}
+
+function slideTitle(row: DeckRow): string {
+  const title = row.sectionTitle ? `${row.sectionTitle} - ${row.sketchTitle}` : row.sketchTitle;
+  return row.pageCount > 1 ? `${title} (${row.pageNumber}/${row.pageCount})` : title;
+}
+
+function nextSlideLabel(rows: DeckRow[], index: number): string {
+  const next = rows[index + 1];
+  if (!next) return "END";
+
+  const firstSentence = next.plainText.replace(/\s+/g, " ").match(/^.*?[.!?](?:\s|$)|^.+$/)?.[0]?.trim() ?? "";
+  return firstSentence.split(/\s+/).slice(0, 6).join(" ");
+}
+
+function addContentSlide(pptx: pptxgen, row: DeckRow, index: number, rows: DeckRow[]) {
   const slide = pptx.addSlide();
-  slide.background = { color: "17151F" };
+  slide.background = { color: "000000" };
+
+  slide.addText(slideTitle(row), {
+    x: SLIDE_MARGIN,
+    y: 0.5,
+    w: SLIDE_WIDTH - SLIDE_MARGIN * 2,
+    h: 0.46,
+    margin: 0,
+    fontFace: "Aptos",
+    fontSize: 28,
+    color: "FFFFFF",
+    breakLine: false,
+    valign: "middle",
+    align: "left",
+  });
 
   slide.addText(row.text, {
     x: SLIDE_MARGIN,
-    y: 0.72,
+    y: 1.34,
     w: SLIDE_WIDTH - SLIDE_MARGIN * 2,
-    h: SLIDE_HEIGHT - 1.7,
-    margin: 4,
-    fontFace: "Aptos Display",
-    fontSize: fontSizeForText(row.plainText),
+    h: BODY_HEIGHT,
+    margin: 0,
+    fontFace: "Aptos",
+    fontSize: BODY_FONT_SIZE,
     color: "FFFFFF",
-    bold: true,
     breakLine: false,
-    fit: "shrink",
     valign: "top",
     align: "left",
   });
 
-  const footerParts = [
-    row.sectionTitle,
-    row.sketchTitle,
-    row.time?.trim() ? row.time.trim() : null,
-    `Scene ${row.rowNumber}`,
-    `${index + 1}/${total}`,
-  ].filter(Boolean);
-
-  slide.addText(footerParts.join("  ·  "), {
+  slide.addShape(pptx.ShapeType.rect, {
+    x: 0,
+    y: SLIDE_HEIGHT - NEXT_BAND_HEIGHT,
+    w: SLIDE_WIDTH,
+    h: NEXT_BAND_HEIGHT,
+    fill: { color: "FFF887" },
+    line: { color: "FFF887" },
+  });
+  slide.addText(`NEXT: ${nextSlideLabel(rows, index)}`, {
     x: SLIDE_MARGIN,
-    y: SLIDE_HEIGHT - SLIDE_MARGIN,
+    y: SLIDE_HEIGHT - NEXT_BAND_HEIGHT + 0.06,
     w: SLIDE_WIDTH - SLIDE_MARGIN * 2,
-    h: FOOTER_HEIGHT,
+    h: NEXT_BAND_HEIGHT - 0.08,
     margin: 0,
     fontFace: "Aptos",
-    fontSize: 9,
-    color: "B9B3CF",
-    align: "left",
+    fontSize: 30,
+    color: "000000",
+    align: "right",
+    valign: "middle",
   });
 }
 
 function addEmptySlide(pptx: pptxgen, title: string, content: PowerPointExportContent) {
   const slide = pptx.addSlide();
-  slide.background = { color: "17151F" };
+  slide.background = { color: "000000" };
   slide.addText(`No ${contentLabel(content).toLowerCase()} text found`, {
     x: SLIDE_MARGIN,
     y: 2.8,
     w: SLIDE_WIDTH - SLIDE_MARGIN * 2,
     h: 0.8,
     margin: 0,
-    fontFace: "Aptos Display",
+    fontFace: "Aptos",
     fontSize: 30,
     color: "FFFFFF",
     bold: true,
     align: "center",
   });
-  slide.addText(title, {
+  slide.addShape(pptx.ShapeType.rect, {
+    x: 0,
+    y: SLIDE_HEIGHT - NEXT_BAND_HEIGHT,
+    w: SLIDE_WIDTH,
+    h: NEXT_BAND_HEIGHT,
+    fill: { color: "FFF887" },
+    line: { color: "FFF887" },
+  });
+  slide.addText(`NEXT: ${title}`, {
     x: SLIDE_MARGIN,
-    y: 6.8,
+    y: SLIDE_HEIGHT - NEXT_BAND_HEIGHT + 0.06,
     w: SLIDE_WIDTH - SLIDE_MARGIN * 2,
-    h: FOOTER_HEIGHT,
+    h: NEXT_BAND_HEIGHT - 0.08,
     margin: 0,
     fontFace: "Aptos",
-    fontSize: 9,
-    color: "B9B3CF",
-    align: "center",
+    fontSize: 30,
+    color: "000000",
+    align: "right",
+    valign: "middle",
   });
-}
-
-function fontSizeForText(text: string): number {
-  const length = text.length;
-  if (length > 700) return 28;
-  if (length > 500) return 32;
-  if (length > 320) return 38;
-  if (length > 180) return 46;
-  return 56;
 }
 
 function createDeck(title: string, content: PowerPointExportContent, rows: DeckRow[]): pptxgen {
@@ -247,7 +357,7 @@ function createDeck(title: string, content: PowerPointExportContent, rows: DeckR
   if (rows.length === 0) {
     addEmptySlide(pptx, title, content);
   } else {
-    rows.forEach((row, index) => addContentSlide(pptx, row, index, rows.length));
+    rows.forEach((row, index) => addContentSlide(pptx, row, index, rows));
   }
 
   return pptx;
