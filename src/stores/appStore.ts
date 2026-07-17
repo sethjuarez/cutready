@@ -1078,6 +1078,14 @@ async function restoreWorkspaceState(get: () => AppStoreState, set: (partial: Pa
 
     if (ws.chat_session_path) {
       get().loadChatSession(ws.chat_session_path).catch(() => {});
+    } else {
+      set({
+        chatMessages: [],
+        chatSessionPath: null,
+        chatLoading: false,
+        chatError: null,
+        chatInputDraft: "",
+      });
     }
   } catch {
     // First launch or corrupted local workspace UI state; project content still loads normally.
@@ -1745,6 +1753,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeNotePath: null,
         activeNoteContent: null,
         activeNoteLocked: false,
+        chatMessages: [],
+        chatSessionPath: null,
+        chatLoading: false,
+        chatError: null,
+        chatInputDraft: "",
       });
       localStorage.setItem("cutready:lastProject", path);
       // Load multi-project state

@@ -60,6 +60,7 @@ const originalState = {
   loadSketches: useAppStore.getState().loadSketches,
   loadStoryboards: useAppStore.getState().loadStoryboards,
   loadNotes: useAppStore.getState().loadNotes,
+  loadProjects: useAppStore.getState().loadProjects,
   loadSidebarOrder: useAppStore.getState().loadSidebarOrder,
   loadVersions: useAppStore.getState().loadVersions,
   loadTimelines: useAppStore.getState().loadTimelines,
@@ -67,6 +68,7 @@ const originalState = {
   checkDirty: useAppStore.getState().checkDirty,
   checkRewound: useAppStore.getState().checkRewound,
   checkStash: useAppStore.getState().checkStash,
+  detectRemote: useAppStore.getState().detectRemote,
   loadChatSession: useAppStore.getState().loadChatSession,
   switchTimeline: useAppStore.getState().switchTimeline,
   refreshSyncStatus: useAppStore.getState().refreshSyncStatus,
@@ -88,7 +90,11 @@ describe("project switch store side effects", () => {
       notes: [],
       activeSketchPath: null,
       activeSketch: null,
+      chatMessages: [],
       chatSessionPath: null,
+      chatLoading: false,
+      chatError: null,
+      chatInputDraft: "",
       isDirty: false,
       loading: false,
       projectSwitching: false,
@@ -170,6 +176,60 @@ describe("project switch store side effects", () => {
     });
     expect(useAppStore.getState().projectSwitching).toBe(false);
     expect(loadChatSession).toHaveBeenCalledWith("cutready://legacy-chats/chat.chat");
+  });
+
+  it("clears stale chat when opening a project with no saved chat session", async () => {
+    const loadChatSession = vi.fn(() => Promise.resolve());
+
+    mockInvoke.mockImplementation((command: string) => {
+      switch (command) {
+        case "open_project_folder":
+          return Promise.resolve(newProject);
+        case "get_workspace_state":
+          return Promise.resolve({
+            open_tabs: [],
+            active_tab_id: null,
+            chat_session_path: null,
+          });
+        default:
+          return Promise.resolve([]);
+      }
+    });
+
+    useAppStore.setState({
+      currentProject: oldProject,
+      chatMessages: [
+        { role: "user", content: "old project question" },
+        { role: "assistant", content: "old project answer" },
+      ],
+      chatSessionPath: "cutready://legacy-chats/old.chat",
+      chatLoading: true,
+      chatError: "old error",
+      chatInputDraft: "old draft",
+      loadProjects: vi.fn(() => Promise.resolve()),
+      loadSketches: async () => useAppStore.setState({ sketches: [] }),
+      loadStoryboards: async () => useAppStore.setState({ storyboards: [] }),
+      loadNotes: async () => useAppStore.setState({ notes: [] }),
+      loadSidebarOrder: vi.fn(() => Promise.resolve()),
+      loadVersions: vi.fn(() => Promise.resolve()),
+      loadTimelines: vi.fn(() => Promise.resolve()),
+      loadGraphData: vi.fn(() => Promise.resolve()),
+      checkDirty: vi.fn(() => Promise.resolve()),
+      checkRewound: vi.fn(() => Promise.resolve()),
+      checkStash: vi.fn(() => Promise.resolve()),
+      detectRemote: vi.fn(() => Promise.resolve()),
+      loadChatSession,
+    });
+
+    await useAppStore.getState().openProject("D:\\workspace\\beta");
+
+    expect(useAppStore.getState().currentProject).toEqual(newProject);
+    expect(useAppStore.getState().chatMessages).toEqual([]);
+    expect(useAppStore.getState().chatSessionPath).toBeNull();
+    expect(useAppStore.getState().chatLoading).toBe(false);
+    expect(useAppStore.getState().chatError).toBeNull();
+    expect(useAppStore.getState().chatInputDraft).toBe("");
+    expect(loadChatSession).not.toHaveBeenCalled();
   });
 
   it("lists remote-only branches and adopts one before switching", async () => {

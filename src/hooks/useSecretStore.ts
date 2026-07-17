@@ -60,45 +60,69 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
-const STRONGHOLD_TIMEOUT_MS = 5000;
+const STRONGHOLD_TIMEOUT_MS = 10000;
+const STRONGHOLD_MAX_INIT_ATTEMPTS = 2;
+const STRONGHOLD_RETRY_DELAY_MS = 500;
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function initStrongholdOnce(): Promise<void> {
+  const { Stronghold } = await import("@tauri-apps/plugin-stronghold");
+  const { appDataDir } = await import("@tauri-apps/api/path");
+  const dir = await appDataDir();
+  const vaultPath = `${dir}${VAULT_FILE}`;
+  _stronghold = await withTimeout(
+    Stronghold.load(vaultPath, VAULT_PASS),
+    STRONGHOLD_TIMEOUT_MS,
+    "Stronghold.load",
+  );
+  try {
+    const client = await _stronghold.loadClient(CLIENT_NAME);
+    _store = client.getStore();
+  } catch {
+    const client = await _stronghold.createClient(CLIENT_NAME);
+    _store = client.getStore();
+  }
+}
 
 async function ensureInit(): Promise<void> {
   if (_store) return;
   if (!isTauri) return; // Browser mode — use memStore
-
   if (!_initPromise) {
-    _initPromise = (async () => {
-      try {
-        const { Stronghold } = await import("@tauri-apps/plugin-stronghold");
-        const { appDataDir } = await import("@tauri-apps/api/path");
-        const dir = await appDataDir();
-        const vaultPath = `${dir}${VAULT_FILE}`;
-        _stronghold = await withTimeout(
-          Stronghold.load(vaultPath, VAULT_PASS),
-          STRONGHOLD_TIMEOUT_MS,
-          "Stronghold.load",
-        );
-        try {
-          const client = await _stronghold.loadClient(CLIENT_NAME);
-          _store = client.getStore();
-        } catch {
-          const client = await _stronghold.createClient(CLIENT_NAME);
-          _store = client.getStore();
-        }
-      } catch (err) {
-        console.warn("[secrets] Stronghold initialization failed, using in-memory fallback:", err);
-        // Leave _store null — all operations fall back to memStore
-        _stronghold = null;
-      }
-    })();
+    _initPromise = initStrongholdOnce().catch((err) => {
+      _store = null;
+      _stronghold = null;
+      _initPromise = null;
+      console.warn("[secrets] Stronghold initialization failed; will retry on the next secret access:", err);
+      throw err;
+    });
   }
   await _initPromise;
+}
+
+async function ensureInitWithRetry(): Promise<boolean> {
+  if (!isTauri) return false;
+  for (let attempt = 1; attempt <= STRONGHOLD_MAX_INIT_ATTEMPTS; attempt++) {
+    try {
+      await ensureInit();
+      return !!_store;
+    } catch (err) {
+      if (attempt === STRONGHOLD_MAX_INIT_ATTEMPTS) {
+        console.warn("[secrets] Stronghold unavailable after retry; using in-memory fallback for this operation:", err);
+        return false;
+      }
+      await delay(STRONGHOLD_RETRY_DELAY_MS);
+    }
+  }
+  return false;
 }
 
 // ── Public API ─────────────────────────────────────────────────────
 
 async function getSecretValue(key: string): Promise<string> {
-  await ensureInit();
+  await ensureInitWithRetry();
   if (!_store) return memStore.get(key) ?? "";
   try {
     const data = await _store.get(key);
@@ -110,7 +134,7 @@ async function getSecretValue(key: string): Promise<string> {
 }
 
 async function setSecretValue(key: string, value: string): Promise<void> {
-  await ensureInit();
+  await ensureInitWithRetry();
   if (!_store) {
     memStore.set(key, value);
     return;
@@ -121,7 +145,7 @@ async function setSecretValue(key: string, value: string): Promise<void> {
 }
 
 async function removeSecretValue(key: string): Promise<void> {
-  await ensureInit();
+  await ensureInitWithRetry();
   if (!_store) {
     memStore.delete(key);
     return;
