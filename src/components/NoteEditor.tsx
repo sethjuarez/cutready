@@ -16,6 +16,14 @@ import { NoteIcon } from "./Icons";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
 import { MetadataEditor } from "./MetadataEditor";
 import { parseNoteDocument, serializeNoteDocument } from "../utils/documentMetadata";
+import { loadProviderSecrets } from "../hooks/useSecretStore";
+import {
+  activeProviderInput,
+  buildProviderConfig,
+  defaultProvider,
+  isProviderInputConfigured,
+  providerToConfigInput,
+} from "../utils/providerConfig";
 
 const AI_NOTE_CLEANUP_PROMPT = `You are a document editor. Clean up and improve the following Markdown note.
 
@@ -71,7 +79,7 @@ export function NoteEditor() {
     setModeLocal(m);
     if (activeNotePath) setNotePreview(activeNotePath, m === "preview");
   }, [activeNotePath, setNotePreview]);
-  const { settings } = useSettings();
+  const { settings, loaded: settingsLoaded, updateSetting } = useSettings();
   const runBackgroundAgentAction = useBackgroundAgentAction();
   const noteDocument = useMemo(() => parseNoteDocument(activeNoteContent ?? ""), [activeNoteContent]);
   const [aiCleaning, setAiCleaning] = useState(false);
@@ -146,6 +154,51 @@ export function NoteEditor() {
     },
     [activeNoteLocked, activeNoteContent],
   );
+
+  const buildRichPasteAiConfig = useCallback(async () => {
+    if (!settingsLoaded) return undefined;
+    const selectedProvider = defaultProvider(settings);
+    const providerInput = selectedProvider
+      ? providerToConfigInput(
+          selectedProvider,
+          settings,
+          selectedProvider.id === settings.aiActiveProviderId
+            ? { apiKey: settings.aiApiKey, accessToken: settings.aiAccessToken }
+            : await loadProviderSecrets(selectedProvider.id),
+        )
+      : activeProviderInput(settings);
+
+    if (!isProviderInputConfigured(providerInput)) return undefined;
+
+    let freshBearerToken = providerInput.authMode === "azure_oauth" ? providerInput.accessToken : null;
+    if (selectedProvider?.id === settings.aiActiveProviderId && settings.aiAuthMode === "azure_oauth" && settings.aiRefreshToken) {
+      try {
+        const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>(
+          "azure_token_refresh",
+          {
+            tenantId: settings.aiTenantId || "",
+            refreshToken: settings.aiRefreshToken,
+            clientId: settings.aiClientId || null,
+          },
+        );
+        if (tokenResult.access_token) {
+          freshBearerToken = tokenResult.access_token;
+          await updateSetting("aiAccessToken", tokenResult.access_token);
+          if (tokenResult.refresh_token) {
+            await updateSetting("aiRefreshToken", tokenResult.refresh_token);
+          }
+        }
+      } catch {
+        // The paste conversion request below will surface any auth failure with the current token.
+      }
+    }
+
+    const config = buildProviderConfig(providerInput);
+    if (freshBearerToken && selectedProvider?.id === settings.aiActiveProviderId) {
+      config.bearer_token = freshBearerToken;
+    }
+    return config;
+  }, [settings, settingsLoaded, updateSetting]);
 
   // Flush on unmount
   useEffect(() => {
@@ -387,6 +440,7 @@ Use write_note to save the cleaned Markdown back to "${activeNotePath}". Do not 
             value={noteDocument.body}
             onChange={handleChange}
             placeholder="Write your notes here..."
+            getAiConfig={buildRichPasteAiConfig}
           />
         ) : (
           <div className="py-6">
