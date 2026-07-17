@@ -60,7 +60,14 @@ const editorTheme = EditorView.theme({
   ".cm-line": {
     padding: "2px 0",
   },
-  ".cm-cursor": { borderLeftColor: "rgb(var(--color-accent))" },
+  ".cm-cursor": {
+    borderLeft: "2px solid rgb(var(--color-accent))",
+    borderRadius: "999px",
+    boxShadow: "0 0 0 1px color-mix(in srgb, rgb(var(--color-accent)) 18%, transparent), 0 0 10px color-mix(in srgb, rgb(var(--color-accent)) 28%, transparent)",
+  },
+  ".cm-dropCursor": {
+    borderLeftColor: "rgb(var(--color-accent))",
+  },
   ".cm-activeLine": { backgroundColor: "color-mix(in srgb, rgb(var(--color-text)) 4%, transparent)" },
   ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
     backgroundColor: "color-mix(in srgb, rgb(var(--color-accent)) 18%, transparent) !important",
