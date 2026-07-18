@@ -793,6 +793,8 @@ pub fn run() {
             commands::feedback::export_logs,
             commands::feedback::create_github_issue,
             commands::feedback::get_feedback_system_info,
+            commands::narration_preview::get_narration_voice_preview,
+            commands::narration_preview::save_narration_voice_preview,
             commands::export::import_background_music,
             commands::export::preview_background_music_mix,
             commands::export::delete_background_music,

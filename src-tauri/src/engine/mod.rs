@@ -9,6 +9,7 @@ pub mod ffmpeg;
 pub mod import;
 pub mod interaction;
 pub mod memory;
+pub mod narration_preview;
 pub mod project;
 pub mod recording;
 #[cfg(target_os = "macos")]

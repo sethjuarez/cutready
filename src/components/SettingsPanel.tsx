@@ -72,7 +72,6 @@ const NARRATION_VOICE_OPTIONS = [
   { value: "en-US-EmmaMultilingualNeural", label: "Emma Multilingual Neural", description: "Friendly, concise presenter voice." },
   { value: "en-US-BrianMultilingualNeural", label: "Brian Multilingual Neural", description: "Measured, technical walkthrough voice." },
 ] as const;
-
 const NARRATION_OUTPUT_FORMAT_OPTIONS = [
   { value: "riff-24khz-16bit-mono-pcm", label: "WAV, 24 kHz, 16-bit mono", description: "Best edit-friendly default." },
   { value: "riff-48khz-16bit-mono-pcm", label: "WAV, 48 kHz, 16-bit mono", description: "Video timeline friendly." },
@@ -109,6 +108,7 @@ import {
 import { sanitizeDiagnosticsLog } from "../utils/diagnosticsSanitizer";
 import { activeProvider, buildProviderConfig, canFetchModelsFor, createAiProviderConfig, isAiProviderConfigured } from "../utils/providerConfig";
 import { isMac } from "../utils/platform";
+import { ensureCachedNarrationVoicePreview, NARRATION_VOICE_SAMPLE } from "../services/narrationVoicePreview";
 import {
   appendFeedbackAttachmentsSection,
   formatFeedbackAttachmentSize,
@@ -772,6 +772,10 @@ function NarrationTab({
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
   const [error, setError] = useState("");
+  const [voicePreviewPath, setVoicePreviewPath] = useState<string | null>(null);
+  const [generatingVoicePreview, setGeneratingVoicePreview] = useState(false);
+  const voicePreviewAudioRef = useRef<HTMLAudioElement>(null);
+  const playGeneratedVoicePreview = useRef(false);
 
   const refreshMicrophones = async () => {
     setLoading(true);
@@ -875,6 +879,59 @@ function NarrationTab({
     await updateSetting("narrationConnectionMode", "dedicated");
     await updateSetting("narrationProviderId", next.id);
     useToastStore.getState().show("Narration connection added. Select it in AI Providers to sign in and choose its Foundry resource.", 5000, "info");
+  };
+
+  const loadCachedVoicePreview = useCallback(async () => {
+    try {
+      const path = await invoke<string | null>("get_narration_voice_preview", {
+        voiceName: settings.narrationVoiceName,
+        outputFormat: settings.narrationSpeechOutputFormat,
+      });
+      setVoicePreviewPath(path);
+    } catch (err) {
+      console.warn("[SettingsPanel] Failed to load narration voice preview:", err);
+      setVoicePreviewPath(null);
+    }
+  }, [settings.narrationSpeechOutputFormat, settings.narrationVoiceName]);
+
+  useEffect(() => {
+    void loadCachedVoicePreview();
+  }, [loadCachedVoicePreview]);
+
+  useEffect(() => {
+    if (!voicePreviewPath || !playGeneratedVoicePreview.current) return;
+    playGeneratedVoicePreview.current = false;
+    void voicePreviewAudioRef.current?.play().catch((err) => {
+      useToastStore.getState().show(`Could not play voice sample: ${err}`, 5000, "error");
+    });
+  }, [voicePreviewPath]);
+
+  const generateVoicePreview = async (playAfterGeneration = false) => {
+    setGeneratingVoicePreview(true);
+    try {
+      const { path } = await ensureCachedNarrationVoicePreview({
+        settings,
+        updateSetting,
+        force: true,
+      });
+      playGeneratedVoicePreview.current = playAfterGeneration;
+      setVoicePreviewPath(path);
+      useToastStore.getState().show("Voice sample generated and saved for this app.", 3500, "success");
+    } catch (err) {
+      useToastStore.getState().show(`Could not generate voice sample: ${err}`, 6000, "error");
+    } finally {
+      setGeneratingVoicePreview(false);
+    }
+  };
+
+  const playVoicePreview = () => {
+    if (!voicePreviewPath) {
+      void generateVoicePreview(true);
+      return;
+    }
+    void voicePreviewAudioRef.current?.play().catch((err) => {
+      useToastStore.getState().show(`Could not play voice sample: ${err}`, 5000, "error");
+    });
   };
 
   return (
@@ -1052,6 +1109,41 @@ function NarrationTab({
               ))}
             </select>
           </label>
+          <div className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <span className="min-w-0">
+                <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Voice sample</span>
+                <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+                  “{NARRATION_VOICE_SAMPLE}”
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={playVoicePreview}
+                disabled={generatingVoicePreview}
+                className="inline-flex shrink-0 items-center justify-center rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text))] transition-colors hover:border-[rgb(var(--color-accent))] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {generatingVoicePreview ? "Generating..." : voicePreviewPath ? "Play sample" : "Generate & play"}
+              </button>
+            </div>
+            {voicePreviewPath ? (
+              <div className="mt-3 flex flex-col gap-2">
+                <audio ref={voicePreviewAudioRef} controls preload="metadata" src={convertFileSrc(voicePreviewPath)} className="h-8 w-full" />
+                <button
+                  type="button"
+                  onClick={() => void generateVoicePreview()}
+                  disabled={generatingVoicePreview}
+                  className="self-start text-[11px] font-medium text-[rgb(var(--color-accent))] transition-colors hover:text-[rgb(var(--color-accent-hover))] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Refresh saved sample
+                </button>
+              </div>
+            ) : (
+              <p className="mt-3 text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+                Generate this voice once; CutReady saves it locally and reuses it until you refresh it.
+              </p>
+            )}
+          </div>
           <label className="grid gap-3 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_18rem] md:items-start">
             <span className="min-w-0">
               <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Speech output format</span>
@@ -1513,22 +1605,19 @@ function ExportTab({
   ];
 
   const isWorkspace = scope === "workspace";
-  const currentProject = useAppStore((state) => state.currentProject);
-  const activeSketch = useAppStore((state) => state.activeSketch);
   const disabled = isWorkspace && !settings.videoExportOverrideEnabled;
   const includeTitleCardKey: AppExportBooleanKey | WorkspaceExportBooleanKey = isWorkspace
     ? "workspaceVideoExportIncludeTitleCard"
     : "videoExportIncludeTitleCard";
-  const selectedBackgroundMusicTrack = settings.workspaceVideoExportBackgroundMusicTracks.find(
-    (track) => track.id === settings.workspaceVideoExportBackgroundMusicTrackId,
+  const selectedBackgroundMusicTrack = settings.videoExportBackgroundMusicTracks.find(
+    (track) => track.id === settings.videoExportBackgroundMusicTrackId,
   ) ?? null;
-  const backgroundMusicDisabled = !isWorkspace || !currentProject || !selectedBackgroundMusicTrack;
+  const backgroundMusicDisabled = isWorkspace || !selectedBackgroundMusicTrack;
   const [importingBackgroundMusic, setImportingBackgroundMusic] = useState(false);
   const [previewingBackgroundMusic, setPreviewingBackgroundMusic] = useState(false);
   const [backgroundMusicPreview, setBackgroundMusicPreview] = useState<{
     path: string;
     durationSeconds: number;
-    usedNarration: boolean;
   } | null>(null);
   const { status: ffmpegStatus, loading: ffmpegChecking, refresh: refreshFfmpegStatus } = useFfmpegStatus();
   const ffmpegVersion = ffmpegStatus?.version?.split(/\r?\n/)[0] ?? null;
@@ -1577,7 +1666,7 @@ function ExportTab({
   };
 
   const importBackgroundMusic = async () => {
-    if (!currentProject || !isWorkspace) return;
+    if (isWorkspace) return;
     const selected = await dialogOpen({
       multiple: false,
       title: "Choose loopable background music WAV",
@@ -1593,10 +1682,10 @@ function ExportTab({
         path: string;
         durationSeconds?: number;
       }>("import_background_music", { sourcePath: selected });
-      const tracks = settings.workspaceVideoExportBackgroundMusicTracks.filter((existing) => existing.id !== track.id);
-      await updateSetting("workspaceVideoExportBackgroundMusicTracks", [...tracks, track]);
-      await updateSetting("workspaceVideoExportBackgroundMusicTrackId", track.id);
-      useToastStore.getState().show("Background music added to this project.", 3000, "success");
+      const tracks = settings.videoExportBackgroundMusicTracks.filter((existing) => existing.id !== track.id);
+      await updateSetting("videoExportBackgroundMusicTracks", [...tracks, track]);
+      await updateSetting("videoExportBackgroundMusicTrackId", track.id);
+      useToastStore.getState().show("Background music added to your app library.", 3000, "success");
     } catch (err) {
       useToastStore.getState().show(`Could not add background music: ${err}`, 5000, "error");
     } finally {
@@ -1605,16 +1694,16 @@ function ExportTab({
   };
 
   const removeBackgroundMusic = async (trackId: string) => {
-    const track = settings.workspaceVideoExportBackgroundMusicTracks.find((candidate) => candidate.id === trackId);
+    const track = settings.videoExportBackgroundMusicTracks.find((candidate) => candidate.id === trackId);
     if (!track) return;
     try {
       await invoke("delete_background_music", { relativePath: track.path });
       await updateSetting(
-        "workspaceVideoExportBackgroundMusicTracks",
-        settings.workspaceVideoExportBackgroundMusicTracks.filter((candidate) => candidate.id !== trackId),
+        "videoExportBackgroundMusicTracks",
+        settings.videoExportBackgroundMusicTracks.filter((candidate) => candidate.id !== trackId),
       );
-      if (settings.workspaceVideoExportBackgroundMusicTrackId === trackId) {
-        await updateSetting("workspaceVideoExportBackgroundMusicTrackId", "");
+      if (settings.videoExportBackgroundMusicTrackId === trackId) {
+        await updateSetting("videoExportBackgroundMusicTrackId", "");
       }
       useToastStore.getState().show("Background music removed.", 3000, "success");
     } catch (err) {
@@ -1624,29 +1713,32 @@ function ExportTab({
 
   const previewBackgroundMusicMix = async () => {
     if (!selectedBackgroundMusicTrack || backgroundMusicDisabled) return;
-    const narrationPath = activeSketch?.rows.find((row) => row.narration?.path)?.narration?.path ?? null;
     setPreviewingBackgroundMusic(true);
     try {
+      const voicePreview = await ensureCachedNarrationVoicePreview({
+        settings,
+        updateSetting,
+      });
       const preview = await invoke<{
         path: string;
         durationSeconds: number;
-        usedNarration: boolean;
       }>("preview_background_music_mix", {
         settings: {
           backgroundMusicPath: selectedBackgroundMusicTrack.path,
-          narrationPath,
-          backgroundMusicVolumeDb: settings.workspaceVideoExportBackgroundMusicVolumeDb,
-          backgroundMusicDuckNarration: settings.workspaceVideoExportBackgroundMusicDuckNarration,
-          backgroundMusicFadeSeconds: settings.workspaceVideoExportBackgroundMusicFadeSeconds,
+          narrationVoiceName: settings.narrationVoiceName,
+          narrationVoiceOutputFormat: settings.narrationSpeechOutputFormat,
+          backgroundMusicVolumeDb: settings.videoExportBackgroundMusicVolumeDb,
+          backgroundMusicDuckNarration: settings.videoExportBackgroundMusicDuckNarration,
+          backgroundMusicFadeSeconds: settings.videoExportBackgroundMusicFadeSeconds,
         },
       });
       setBackgroundMusicPreview(preview);
       useToastStore.getState().show(
-        preview.usedNarration
-          ? "Rendered a preview with the current sketch narration."
-          : "Rendered a music-only preview because no active sketch narration was found.",
+        voicePreview.generated
+          ? "Generated the voice sample and rendered the mix preview."
+          : "Rendered a voice and music preview.",
         3500,
-        preview.usedNarration ? "success" : "info",
+        "success",
       );
     } catch (err) {
       useToastStore.getState().show(`Could not preview background music: ${err}`, 5000, "error");
@@ -1833,10 +1925,10 @@ function ExportTab({
           <div>
             <label className="text-sm font-medium">Background music</label>
             <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
-              Add loopable WAV beds to this project and mix one under exported narration.
+              Keep reusable WAV beds in your app library and mix one under exported narration.
             </p>
           </div>
-          {isWorkspace && currentProject && (
+          {!isWorkspace && (
             <button
               type="button"
               onClick={() => void importBackgroundMusic()}
@@ -1848,13 +1940,9 @@ function ExportTab({
           )}
         </div>
 
-        {!isWorkspace ? (
+        {isWorkspace ? (
           <div className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5 text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
-            Background music is configured per workspace because WAV files are copied into the project folder.
-          </div>
-        ) : !currentProject ? (
-          <div className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5 text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
-            Open a project to add reusable background music loops.
+            Background music is an app-wide library. Choose the music and mix defaults from the app Export settings.
           </div>
         ) : (
           <>
@@ -1867,12 +1955,12 @@ function ExportTab({
                   </span>
                 </span>
                 <select
-                  value={settings.workspaceVideoExportBackgroundMusicTrackId}
-                  onChange={(event) => updateSetting("workspaceVideoExportBackgroundMusicTrackId", event.target.value)}
+                  value={settings.videoExportBackgroundMusicTrackId}
+                  onChange={(event) => updateSetting("videoExportBackgroundMusicTrackId", event.target.value)}
                   className={`${inputClass} min-w-0`}
                 >
                   <option value="">None</option>
-                  {settings.workspaceVideoExportBackgroundMusicTracks.map((track) => (
+                  {settings.videoExportBackgroundMusicTracks.map((track) => (
                     <option key={track.id} value={track.id}>
                       {track.name}{track.durationSeconds ? ` (${formatSecondsLabel(track.durationSeconds)})` : ""}
                     </option>
@@ -1890,6 +1978,30 @@ function ExportTab({
               )}
             </div>
 
+            {selectedBackgroundMusicTrack && (
+              <label className="grid gap-3 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_18rem] md:items-center">
+                <span className="min-w-0">
+                  <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Track name</span>
+                  <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+                    This name appears wherever you choose background music.
+                  </span>
+                </span>
+                <input
+                  type="text"
+                  value={selectedBackgroundMusicTrack.name}
+                  onChange={(event) => {
+                    const tracks = settings.videoExportBackgroundMusicTracks.map((track) => (
+                      track.id === selectedBackgroundMusicTrack.id
+                        ? { ...track, name: event.target.value }
+                        : track
+                    ));
+                    void updateSetting("videoExportBackgroundMusicTracks", tracks);
+                  }}
+                  className={`${inputClass} min-w-0`}
+                />
+              </label>
+            )}
+
             <div className="grid gap-2 md:grid-cols-3">
               <label className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5">
                 <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Volume</span>
@@ -1900,8 +2012,8 @@ function ExportTab({
                     min={-60}
                     max={0}
                     step={1}
-                    value={settings.workspaceVideoExportBackgroundMusicVolumeDb}
-                    onChange={(event) => updateSetting("workspaceVideoExportBackgroundMusicVolumeDb", Math.min(0, Math.max(-60, Number.parseFloat(event.target.value) || -24)))}
+                    value={settings.videoExportBackgroundMusicVolumeDb}
+                    onChange={(event) => updateSetting("videoExportBackgroundMusicVolumeDb", Math.min(0, Math.max(-60, Number.parseFloat(event.target.value) || -24)))}
                     disabled={backgroundMusicDisabled}
                     className={`${inputClass} min-w-0 flex-1`}
                   />
@@ -1918,8 +2030,8 @@ function ExportTab({
                     min={0}
                     max={10}
                     step={0.1}
-                    value={settings.workspaceVideoExportBackgroundMusicFadeSeconds}
-                    onChange={(event) => updateSetting("workspaceVideoExportBackgroundMusicFadeSeconds", Math.max(0, Number.parseFloat(event.target.value) || 0))}
+                    value={settings.videoExportBackgroundMusicFadeSeconds}
+                    onChange={(event) => updateSetting("videoExportBackgroundMusicFadeSeconds", Math.max(0, Number.parseFloat(event.target.value) || 0))}
                     disabled={backgroundMusicDisabled}
                     className={`${inputClass} min-w-0 flex-1`}
                   />
@@ -1934,8 +2046,8 @@ function ExportTab({
                 </span>
                 <input
                   type="checkbox"
-                  checked={settings.workspaceVideoExportBackgroundMusicDuckNarration}
-                  onChange={(event) => updateSetting("workspaceVideoExportBackgroundMusicDuckNarration", event.target.checked)}
+                  checked={settings.videoExportBackgroundMusicDuckNarration}
+                  onChange={(event) => updateSetting("videoExportBackgroundMusicDuckNarration", event.target.checked)}
                   disabled={backgroundMusicDisabled}
                   className="h-4 w-4 shrink-0 accent-[rgb(var(--color-accent))]"
                 />
@@ -1947,7 +2059,7 @@ function ExportTab({
                 <span className="min-w-0">
                   <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Preview mix</span>
                   <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
-                    Renders a short audio sample with the selected loop, fade, volume, and narration ducking.
+                    Mixes the selected loop under the saved {settings.narrationVoiceName} voice sample, including your ducking, fade, and volume settings.
                   </span>
                 </span>
                 <button
@@ -1963,9 +2075,7 @@ function ExportTab({
                 <div className="mt-3 grid gap-2">
                   <audio controls src={convertFileSrc(backgroundMusicPreview.path)} className="w-full" />
                   <span className="text-[11px] text-[rgb(var(--color-text-secondary))]">
-                    {backgroundMusicPreview.usedNarration
-                      ? `Using current sketch narration (${formatSecondsLabel(backgroundMusicPreview.durationSeconds)}).`
-                      : `Music-only preview (${formatSecondsLabel(backgroundMusicPreview.durationSeconds)}); open a sketch with narration to hear ducking.`}
+                    Voice and music preview ({formatSecondsLabel(backgroundMusicPreview.durationSeconds)}).
                   </span>
                 </div>
               )}

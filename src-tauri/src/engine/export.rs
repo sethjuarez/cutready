@@ -12,13 +12,13 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    engine::{ffmpeg, project},
+    engine::{ffmpeg, narration_preview, project},
     models::sketch::{MotionPlan, MotionPlanKeyframe, Sketch},
 };
 
 const EXPORTS_DIR: &str = "exports";
 const TEMP_DIR: &str = ".cutready/exports/tmp";
-const BACKGROUND_MUSIC_DIR: &str = ".cutready/audio/background";
+const BACKGROUND_MUSIC_DIR: &str = "background-music";
 const BACKGROUND_MUSIC_PREVIEW_MIN_SECONDS: f64 = 10.0;
 const BACKGROUND_MUSIC_PREVIEW_MAX_SECONDS: f64 = 20.0;
 const DEFAULT_VIDEO_WIDTH: u32 = 1920;
@@ -66,8 +66,8 @@ pub struct BackgroundMusicTrack {
 #[serde(rename_all = "camelCase")]
 pub struct BackgroundMusicPreviewSettings {
     pub background_music_path: String,
-    #[serde(default)]
-    pub narration_path: Option<String>,
+    pub narration_voice_name: String,
+    pub narration_voice_output_format: String,
     #[serde(default = "default_background_music_volume_db")]
     pub background_music_volume_db: f64,
     #[serde(default = "default_background_music_duck_narration")]
@@ -81,7 +81,6 @@ pub struct BackgroundMusicPreviewSettings {
 pub struct BackgroundMusicPreview {
     pub path: String,
     pub duration_seconds: f64,
-    pub used_narration: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -222,6 +221,7 @@ pub fn export_sketch_video(
 ) -> anyhow::Result<SketchVideoExport> {
     export_sketch_video_with_progress(
         project_root,
+        project_root,
         sketch_path,
         output_path,
         SketchVideoExportSettings::default(),
@@ -230,7 +230,7 @@ pub fn export_sketch_video(
 }
 
 pub fn import_background_music(
-    project_root: &Path,
+    app_data_dir: &Path,
     source_path: impl AsRef<Path>,
 ) -> anyhow::Result<BackgroundMusicTrack> {
     let source_path = source_path.as_ref();
@@ -262,7 +262,7 @@ pub fn import_background_music(
         .filter(|stem| !stem.is_empty())
         .unwrap_or_else(|| "background-music".to_string());
     let relative_path = format!("{BACKGROUND_MUSIC_DIR}/{stem}-{id}.wav");
-    let destination = project::safe_resolve(project_root, &relative_path)?;
+    let destination = project::safe_resolve(app_data_dir, &relative_path)?;
     if let Some(parent) = destination.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -281,8 +281,22 @@ pub fn import_background_music(
     })
 }
 
-pub fn delete_background_music(project_root: &Path, relative_path: &str) -> anyhow::Result<()> {
-    if !relative_path.starts_with(BACKGROUND_MUSIC_DIR) {
+pub fn delete_background_music(app_data_dir: &Path, relative_path: &str) -> anyhow::Result<()> {
+    let path = resolve_background_music_path(app_data_dir, relative_path)?;
+    if path.exists() {
+        fs::remove_file(path)?;
+    }
+    Ok(())
+}
+
+fn resolve_background_music_path(
+    app_data_dir: &Path,
+    relative_path: &str,
+) -> anyhow::Result<PathBuf> {
+    if !relative_path
+        .strip_prefix(BACKGROUND_MUSIC_DIR)
+        .is_some_and(|suffix| suffix.starts_with('/'))
+    {
         anyhow::bail!("Background music path must be under {BACKGROUND_MUSIC_DIR}");
     }
     if relative_path
@@ -292,39 +306,27 @@ pub fn delete_background_music(project_root: &Path, relative_path: &str) -> anyh
     {
         anyhow::bail!("Background music path must point to a WAV file");
     }
-    let path = project::safe_resolve(project_root, relative_path)?;
-    if path.exists() {
-        fs::remove_file(path)?;
-    }
-    Ok(())
+    Ok(project::safe_resolve(app_data_dir, relative_path)?)
 }
 
 pub fn render_background_music_preview(
-    project_root: &Path,
+    app_data_dir: &Path,
     settings: BackgroundMusicPreviewSettings,
 ) -> anyhow::Result<BackgroundMusicPreview> {
     ensure_ffmpeg_available()?;
-    let music_path = project::safe_resolve(project_root, settings.background_music_path.trim())?;
+    let music_path = resolve_background_music_path(app_data_dir, &settings.background_music_path)?;
     if !music_path.is_file() {
         anyhow::bail!("Background music file was not found");
     }
-    let narration_path = settings
-        .narration_path
-        .as_ref()
-        .map(|path| project::safe_resolve(project_root, path.trim()))
-        .transpose()?
-        .filter(|path| path.is_file());
-    let used_narration = narration_path.is_some();
-    let narration_duration = narration_path
-        .as_deref()
-        .and_then(|path| probe_media_duration_seconds(path).ok());
+    let narration_path = resolve_preview_narration_path(app_data_dir, &settings)?;
+    let narration_duration = Some(probe_media_duration_seconds(&narration_path)?);
     let music_duration = probe_media_duration_seconds(&music_path).ok();
     let duration_seconds = background_music_preview_duration(narration_duration, music_duration);
     let work_relative = format!(
-        "{TEMP_DIR}/music-preview-{}.wav",
+        "{BACKGROUND_MUSIC_DIR}/previews/music-preview-{}.wav",
         Utc::now().format("%Y%m%d-%H%M%S-%3f")
     );
-    let output_path = project::safe_resolve(project_root, &work_relative)?;
+    let output_path = project::safe_resolve(app_data_dir, &work_relative)?;
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -333,7 +335,7 @@ pub fn render_background_music_preview(
         background_music_volume_db: sanitize_background_music_volume_db(
             settings.background_music_volume_db,
         ),
-        background_music_duck_narration: settings.background_music_duck_narration && used_narration,
+        background_music_duck_narration: settings.background_music_duck_narration,
         background_music_fade_seconds: sanitize_non_negative_duration(
             settings.background_music_fade_seconds,
             DEFAULT_BACKGROUND_MUSIC_FADE_SECONDS,
@@ -341,7 +343,7 @@ pub fn render_background_music_preview(
         ..SketchVideoExportSettings::default()
     };
     render_background_music_preview_audio(
-        narration_path.as_deref(),
+        Some(&narration_path),
         &music_path,
         &output_path,
         duration_seconds,
@@ -351,12 +353,29 @@ pub fn render_background_music_preview(
     Ok(BackgroundMusicPreview {
         path: output_path.to_string_lossy().to_string(),
         duration_seconds,
-        used_narration,
+    })
+}
+
+fn resolve_preview_narration_path(
+    app_data_dir: &Path,
+    settings: &BackgroundMusicPreviewSettings,
+) -> anyhow::Result<PathBuf> {
+    narration_preview::cached_voice_preview(
+        app_data_dir,
+        &settings.narration_voice_name,
+        &settings.narration_voice_output_format,
+    )?
+    .map(PathBuf::from)
+    .ok_or_else(|| {
+        anyhow::anyhow!(
+            "Generate a voice sample for the selected narration voice before previewing the mix"
+        )
     })
 }
 
 pub fn export_sketch_video_with_progress<F>(
     project_root: &Path,
+    app_data_dir: &Path,
     sketch_path: &str,
     output_path: Option<&Path>,
     settings: SketchVideoExportSettings,
@@ -540,7 +559,7 @@ where
             "Assembling the MP4",
         );
         concatenate_segments(
-            project_root,
+            app_data_dir,
             &work_dir,
             &segment_files,
             &output_path,
@@ -1125,7 +1144,7 @@ fn render_image_hold_segment_with_filter(
 }
 
 fn concatenate_segments(
-    project_root: &Path,
+    app_data_dir: &Path,
     work_dir: &Path,
     segment_files: &[PathBuf],
     output_path: &Path,
@@ -1186,7 +1205,7 @@ fn concatenate_segments(
     ])?;
 
     if let Some(background_music_path) = &settings.background_music_path {
-        let music_path = project::safe_resolve(project_root, background_music_path)?;
+        let music_path = resolve_background_music_path(app_data_dir, background_music_path)?;
         let actual_duration_seconds =
             probe_media_duration_seconds(&concatenated_output_path).unwrap_or(duration_seconds);
         mix_background_music(
@@ -1211,6 +1230,7 @@ fn mix_background_music(
     if !music_path.is_file() {
         anyhow::bail!("Background music file was not found");
     }
+
     let duration = format_duration(duration_seconds);
     let fade_duration = settings
         .background_music_fade_seconds
@@ -1926,6 +1946,32 @@ mod tests {
             12.25
         );
         assert_eq!(background_music_preview_duration(Some(90.0), None), 20.0);
+    }
+
+    #[test]
+    fn background_music_preview_uses_the_selected_cached_voice_sample() {
+        let directory = tempfile::tempdir().unwrap();
+        let voice_name = "en-US-Harper:MAI-Voice-2";
+        let output_format = "riff-24khz-16bit-mono-pcm";
+        let saved = narration_preview::save_voice_preview(
+            directory.path(),
+            voice_name,
+            output_format,
+            &[1, 2, 3],
+        )
+        .unwrap();
+        let settings = BackgroundMusicPreviewSettings {
+            background_music_path: "background-music/demo.wav".to_string(),
+            narration_voice_name: voice_name.to_string(),
+            narration_voice_output_format: output_format.to_string(),
+            background_music_volume_db: -24.0,
+            background_music_duck_narration: true,
+            background_music_fade_seconds: 0.5,
+        };
+
+        let resolved = resolve_preview_narration_path(directory.path(), &settings).unwrap();
+
+        assert_eq!(resolved.to_string_lossy(), saved);
     }
 
     #[test]

@@ -193,6 +193,16 @@ export interface GlobalSettings {
   videoExportPixelFormat: string;
   /** FFmpeg CRF/quality value used for MP4 export. */
   videoExportCrf: string;
+  /** App-wide reusable background music tracks stored in app data. */
+  videoExportBackgroundMusicTracks: BackgroundMusicTrack[];
+  /** Selected app-wide background music track ID. Empty means none. */
+  videoExportBackgroundMusicTrackId: string;
+  /** Background music gain in dB. */
+  videoExportBackgroundMusicVolumeDb: number;
+  /** Whether background music is ducked under narration. */
+  videoExportBackgroundMusicDuckNarration: boolean;
+  /** Background music fade in/out duration in seconds. */
+  videoExportBackgroundMusicFadeSeconds: number;
   /** How generated narration chooses its Azure/Foundry speech connection. */
   narrationConnectionMode: NarrationConnectionMode;
   /** Dedicated AI provider ID used for narration when narrationConnectionMode is dedicated. */
@@ -353,6 +363,11 @@ const defaultGlobalSettings: GlobalSettings = {
   videoExportEncoder: "libx264rgb",
   videoExportPixelFormat: "rgb24",
   videoExportCrf: "0",
+  videoExportBackgroundMusicTracks: [],
+  videoExportBackgroundMusicTrackId: "",
+  videoExportBackgroundMusicVolumeDb: -24,
+  videoExportBackgroundMusicDuckNarration: true,
+  videoExportBackgroundMusicFadeSeconds: 0.5,
   narrationConnectionMode: "reuse_active_foundry",
   narrationProviderId: "",
   narrationVoiceName: "en-US-Harper:MAI-Voice-2",
