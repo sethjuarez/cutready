@@ -23,6 +23,14 @@ impl DocumentMetadata {
     }
 }
 
+fn deserialize_vec_or_default<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Ok(Option::<Vec<T>>::deserialize(deserializer)?.unwrap_or_default())
+}
+
 /// Lock state for editable planning row cells.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct PlanningCellLocks {
@@ -121,6 +129,52 @@ pub struct NarrationAsset {
     pub recorded_at: DateTime<Utc>,
 }
 
+/// Ranked normalized screenshot point used by the Motion Director for camera moves.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MotionPoint {
+    pub rank: u8,
+    pub x: f32,
+    pub y: f32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+}
+
+/// Agent-generated camera motion plan for screenshot rows.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MotionPlan {
+    pub kind: MotionPlanKind,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keyframes: Vec<MotionPlanKeyframe>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rationale: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum MotionPlanKind {
+    SubtlePush,
+    WideHoldThenPush,
+    PushThenDrift,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MotionPlanKeyframe {
+    pub time_ms: u32,
+    pub scale: f32,
+    pub x: f32,
+    pub y: f32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub easing: Option<MotionPlanEasing>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum MotionPlanEasing {
+    Linear,
+    EaseInOut,
+    EaseOut,
+}
+
 /// A row in the sketch planning table (4 columns).
 ///
 /// Row identity is its array index — no UUID needed.
@@ -146,6 +200,16 @@ pub struct PlanningRow {
     /// Optional elucim DSL document for an animated framing visual.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visual: Option<serde_json::Value>,
+    /// Ranked normalized screenshot points used by the Motion Director for camera moves.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_vec_or_default",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub motion_points: Vec<MotionPoint>,
+    /// Agent-generated camera motion plan for screenshot rows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub motion_plan: Option<MotionPlan>,
     /// English-language design brief describing layout, elements, colors, and animation intent.
     /// Created by the Designer agent's conceptual pass before generating DSL JSON.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -166,6 +230,8 @@ impl PlanningRow {
             demo_actions: String::new(),
             screenshot: None,
             visual: None,
+            motion_points: Vec::new(),
+            motion_plan: None,
             design_plan: None,
             narration: None,
         }
@@ -556,6 +622,8 @@ mod tests {
             demo_actions: "Navigate, click CTA".into(),
             screenshot: Some("screenshots/step1.png".into()),
             visual: None,
+            motion_points: Vec::new(),
+            motion_plan: None,
             design_plan: None,
             narration: None,
         });
@@ -632,6 +700,24 @@ mod tests {
     }
 
     #[test]
+    fn planning_row_tolerates_null_motion_points() {
+        let row: PlanningRow = serde_json::from_value(serde_json::json!({
+            "time": "~30s",
+            "duration_seconds": 30,
+            "narrative": "Click the sign-up button",
+            "demo_actions": "Navigate to /signup, click CTA",
+            "screenshot": "screenshots/step1.png",
+            "visual": null,
+            "motion_points": null,
+            "motion_plan": null
+        }))
+        .unwrap();
+
+        assert!(row.motion_points.is_empty());
+        assert!(row.motion_plan.is_none());
+    }
+
+    #[test]
     fn planning_row_roundtrip() {
         let row = PlanningRow {
             locked: false,
@@ -642,6 +728,32 @@ mod tests {
             demo_actions: "Navigate to /signup, click CTA".into(),
             screenshot: Some("screenshots/step1.png".into()),
             visual: None,
+            motion_points: vec![MotionPoint {
+                rank: 1,
+                x: 0.62,
+                y: 0.41,
+                label: Some("Primary CTA".into()),
+            }],
+            motion_plan: Some(MotionPlan {
+                kind: MotionPlanKind::SubtlePush,
+                keyframes: vec![
+                    MotionPlanKeyframe {
+                        time_ms: 0,
+                        scale: 1.0,
+                        x: 0.5,
+                        y: 0.5,
+                        easing: Some(MotionPlanEasing::EaseOut),
+                    },
+                    MotionPlanKeyframe {
+                        time_ms: 2_000,
+                        scale: 1.16,
+                        x: 0.62,
+                        y: 0.41,
+                        easing: Some(MotionPlanEasing::EaseOut),
+                    },
+                ],
+                rationale: Some("Push toward the primary CTA.".into()),
+            }),
             design_plan: None,
             narration: None,
         };
@@ -650,6 +762,15 @@ mod tests {
         assert_eq!(parsed.time, "~30s");
         assert_eq!(parsed.duration_seconds, Some(30));
         assert_eq!(parsed.screenshot, Some("screenshots/step1.png".into()));
+        assert_eq!(parsed.motion_points.len(), 1);
+        assert_eq!(
+            parsed.motion_points[0].label.as_deref(),
+            Some("Primary CTA")
+        );
+        assert_eq!(
+            parsed.motion_plan.as_ref().map(|plan| &plan.kind),
+            Some(&MotionPlanKind::SubtlePush)
+        );
     }
 
     #[test]

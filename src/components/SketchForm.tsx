@@ -22,13 +22,15 @@ import type { PresentationMode } from "./presentation/types";
 import VisualCell from "./VisualCell";
 import { exportSketchToWord, type WordOrientation } from "../utils/exportToWord";
 import { exportSketchToPowerPoint, type PowerPointExportContent } from "../utils/exportToPowerPoint";
-import type { PlanningRow, Sketch } from "../types/sketch";
+import type { MotionPlan, MotionPlanEasing, MotionPlanKind, PlanningRow, Sketch } from "../types/sketch";
 import { diffRow, type RowDiff } from "../utils/textDiff";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
 import { SketchIcon } from "./Icons";
 import type { RecordingTake } from "../types/recording";
-import { summarizeSketchDuration, type DurationDisplayMode } from "../utils/documentMetadata";
+import { parseDurationSeconds, summarizeSketchDuration, type DurationDisplayMode } from "../utils/documentMetadata";
 import { preferredNarrationMimeType } from "../utils/narrationAudio";
+import { activeProvider, activeProviderInput, buildProviderConfig, providerById } from "../utils/providerConfig";
+import { getProviderSecret, setProviderSecret } from "../hooks/useSecretStore";
 
 interface MonitorInfo {
   id: number;
@@ -47,13 +49,35 @@ type ProjectAsset = { path: string; size: number; assetType: string };
 type ProjectAudioAsset = { path: string; size: number; mimeType: string; modifiedAt: number };
 type SketchVideoExport = { path: string; duration_seconds: number; row_count: number };
 type SketchVideoExportProgress = { phase: string; current: number; total: number; message: string };
+type NarrationGenerationProgress = { phase: string; current: number; total: number; message: string };
 type SketchVideoExportSettings = {
+  includeTitleCard: boolean;
   titleCardDurationSeconds: number;
   titleToFirstRowHoldSeconds: number;
   rowTransitionHoldSeconds: number;
   finalHoldSeconds: number;
+  rowTransitionDipSeconds: number;
+  narrationTailHoldSeconds: number;
+  motionMaxScale: number;
+  videoWidth: number;
+  videoHeight: number;
+  videoFps: number;
+  videoEncoder: string;
+  videoPixelFormat: string;
+  videoCrf: string;
+  backgroundMusicPath?: string | null;
+  backgroundMusicVolumeDb: number;
+  backgroundMusicDuckNarration: boolean;
+  backgroundMusicFadeSeconds: number;
 };
 type VideoExportIssue = { rowNumber: number; missing: string[] };
+type AgentChatResult = { response: string };
+type NarrationSsmlRow = { row_number: number; ssml: string; source_text?: string };
+type NarrationSsmlPlan = { rows: NarrationSsmlRow[] };
+type MotionDirectorRow = { row_number: number; motion_plan: MotionPlan };
+type MotionDirectorPlan = { rows: MotionDirectorRow[] };
+
+const SPEECH_TOKEN_SCOPE = "https://cognitiveservices.azure.com/.default";
 
 function projectAssetSrc(projectRoot: string | undefined | null, relativePath: string | null | undefined): string {
   if (!projectRoot || !relativePath) return "";
@@ -61,6 +85,123 @@ function projectAssetSrc(projectRoot: string | undefined | null, relativePath: s
   const root = projectRoot.replace(/[\\/]+$/, "");
   const relative = relativePath.replace(/[\\/]+/g, separator);
   return convertFileSrc(`${root}${separator}${relative}`);
+}
+
+function escapeSsmlText(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function inferSpeechEndpoint(endpoint: string): string {
+  const parsed = new URL(endpoint);
+  const resourceName = parsed.hostname.split(".")[0];
+  if (!resourceName) throw new Error("Could not infer Azure AI resource name from endpoint.");
+  return `${parsed.protocol}//${resourceName}.cognitiveservices.azure.com`;
+}
+
+function buildPlainSsml(text: string, voiceName: string): string {
+  return `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='http://www.w3.org/2001/mstts' xml:lang='en-US'><voice name='${voiceName}'>${escapeSsmlText(text)}</voice></speak>`;
+}
+
+function extractJsonObject(text: string): string {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  if (fenced) return fenced[1].trim();
+
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start >= 0 && end > start) return trimmed.slice(start, end + 1);
+  return trimmed;
+}
+
+function parseNarrationSsmlPlan(response: string): NarrationSsmlPlan {
+  const parsed = JSON.parse(extractJsonObject(response)) as Partial<NarrationSsmlPlan>;
+  if (!Array.isArray(parsed.rows)) throw new Error("Narration agent did not return a rows array.");
+  const rows = parsed.rows.map((row) => ({
+    row_number: Number(row.row_number),
+    ssml: String(row.ssml ?? ""),
+    source_text: typeof row.source_text === "string" ? row.source_text : undefined,
+  }));
+  if (rows.some((row) => !Number.isInteger(row.row_number) || row.row_number < 1 || !row.ssml.trim())) {
+    throw new Error("Narration agent returned an invalid row entry.");
+  }
+  return { rows };
+}
+
+function clampMotionNumber(value: unknown, fallback: number, min: number, max: number): number {
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) return fallback;
+  return Math.max(min, Math.min(max, numberValue));
+}
+
+function parseMotionPlan(response: string, maxScale: number): MotionDirectorPlan {
+  const parsed = JSON.parse(extractJsonObject(response)) as Partial<MotionDirectorPlan>;
+  if (!Array.isArray(parsed.rows)) throw new Error("Motion Director did not return a rows array.");
+  const allowedKinds = new Set<MotionPlanKind>(["subtle_push", "wide_hold_then_push", "push_then_drift"]);
+  const rows = parsed.rows.map((row) => {
+    const rowNumber = Number(row.row_number);
+    const rawPlan = row.motion_plan as Partial<MotionPlan> | undefined;
+    if (!Number.isInteger(rowNumber) || rowNumber < 1 || !rawPlan || !allowedKinds.has(rawPlan.kind as MotionPlanKind)) {
+      throw new Error("Motion Director returned an invalid row entry.");
+    }
+    const kind = rawPlan.kind as MotionPlanKind;
+    if (!Array.isArray(rawPlan.keyframes) || rawPlan.keyframes.length < 2) {
+      throw new Error(`Motion Director returned too few keyframes for row ${rowNumber}.`);
+    }
+    const keyframes = rawPlan.keyframes
+      .slice(0, 4)
+      .map((keyframe) => {
+        return {
+          time_ms: Math.round(clampMotionNumber(keyframe.time_ms, 0, 0, 120_000)),
+          scale: clampMotionNumber(keyframe.scale, 1, 1, maxScale),
+          x: clampMotionNumber(keyframe.x, 0.5, 0, 1),
+          y: clampMotionNumber(keyframe.y, 0.5, 0, 1),
+          easing: "linear" as MotionPlanEasing,
+        };
+      })
+      .sort((a, b) => a.time_ms - b.time_ms);
+    keyframes[0] = { ...keyframes[0], time_ms: 0 };
+    return {
+      row_number: rowNumber,
+      motion_plan: {
+        kind,
+        keyframes,
+        rationale: typeof rawPlan.rationale === "string" ? rawPlan.rationale.slice(0, 240) : null,
+      },
+    };
+  });
+  return { rows };
+}
+
+function validateGeneratedSsml(ssml: string): string {
+  const trimmed = ssml.trim();
+  if (!/^<speak[\s>]/i.test(trimmed)) throw new Error("Narration agent returned SSML without a speak root.");
+  if (/<\s*(audio|lexicon|bookmark|mstts:backgroundaudio)\b/i.test(trimmed)) {
+    throw new Error("Narration agent returned unsupported SSML elements.");
+  }
+
+  const document = new DOMParser().parseFromString(trimmed, "application/xml");
+  if (document.querySelector("parsererror")) throw new Error("Narration agent returned malformed SSML.");
+  if (document.documentElement.localName !== "speak") throw new Error("Narration agent returned SSML without a speak root.");
+  return trimmed;
+}
+
+async function decodeAudioDurationMs(data: ArrayBuffer): Promise<number | null> {
+  try {
+    const context = new AudioContext();
+    try {
+      const buffer = await context.decodeAudioData(data.slice(0));
+      return Math.round(buffer.duration * 1000);
+    } finally {
+      void context.close();
+    }
+  } catch {
+    return null;
+  }
 }
 
 async function sha256Hex(value: string): Promise<string> {
@@ -329,7 +470,67 @@ function VideoExportProgressDialog({
           </div>
 
           <div className="mt-4 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))]">
-            Keeping screenshots lossless in RGB, trimming narration silence, easing into the first row, holding adjacent rows for transitions, and ending on a 3-second hold.
+            Keeping screenshots lossless in RGB, preserving generated narration from first sample to last sample, easing into the first row, holding adjacent rows for transitions, and ending on a 3-second hold.
+          </div>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+function NarrationGenerationProgressDialog({
+  progress,
+}: {
+  progress: NarrationGenerationProgress | null;
+}) {
+  if (!progress) return null;
+
+  const total = Math.max(1, progress.total);
+  const current = Math.min(Math.max(0, progress.current), total);
+  const percent = Math.round((current / total) * 100);
+  const isFinishing = progress.phase === "complete";
+
+  return (
+    <Dialog
+      isOpen={progress !== null}
+      onClose={() => {}}
+      align="top"
+      topOffset="18vh"
+      width="w-full max-w-md mx-4"
+      labelledBy="narration-generation-progress-title"
+    >
+      <div className="cr-modal-surface overflow-hidden rounded-2xl">
+        <div className="px-5 py-5">
+          <div className="flex items-start gap-3">
+            <div className="relative grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+              <Mic2 className="h-4 w-4" />
+              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 animate-pulse rounded-full bg-[rgb(var(--color-accent))]" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 id="narration-generation-progress-title" className="text-sm font-semibold text-[rgb(var(--color-text))]">
+                Generating narration
+              </h2>
+              <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
+                {progress.message}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5">
+            <div className="mb-2 flex items-center justify-between text-[11px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
+              <span>{isFinishing ? "Wrapping up" : `Step ${current} of ${total}`}</span>
+              <span>{percent}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-[rgb(var(--color-surface-alt))]">
+              <div
+                className="h-full rounded-full bg-[rgb(var(--color-accent))] transition-all duration-300 ease-out"
+                style={{ width: `${percent}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))]">
+            The Narration Director is writing grounded SSML, shaping pacing with Azure Speech markup, synthesizing MAI-Voice-2 audio, and attaching each cut to its row.
           </div>
         </div>
       </div>
@@ -791,7 +992,7 @@ export function SketchForm() {
   const activeStoryboard = useAppStore((s) => s.activeStoryboard);
   const updateSketch = useAppStore((s) => s.updateSketch);
   const closeSketch = useAppStore((s) => s.closeSketch);
-  const { settings } = useSettings();
+  const { settings, updateSetting } = useSettings();
 
   const [localTitle, setLocalTitle] = useState(activeSketch?.title ?? "");
   const [localRows, setLocalRows] = useState<PlanningRow[]>(activeSketch?.rows ?? []);
@@ -808,6 +1009,7 @@ export function SketchForm() {
   const [narrationSavingRows, setNarrationSavingRows] = useState<Set<number>>(new Set());
   const [exportingVideo, setExportingVideo] = useState(false);
   const [videoExportProgress, setVideoExportProgress] = useState<SketchVideoExportProgress | null>(null);
+  const [narrationGenerationProgress, setNarrationGenerationProgress] = useState<NarrationGenerationProgress | null>(null);
   const [videoExportIssues, setVideoExportIssues] = useState<VideoExportIssue[] | null>(null);
   const [showNarrationSetupPrompt, setShowNarrationSetupPrompt] = useState(false);
   // Last AI diffs are preserved so the user can re-show them after auto-fade
@@ -1118,7 +1320,7 @@ The Actions describe what happens on screen — use them as visual design hints.
     (screenshotPath: string) => {
       if (captureRowIdx === null) return;
       const updated = [...localRows];
-      updated[captureRowIdx] = { ...updated[captureRowIdx], screenshot: screenshotPath };
+      updated[captureRowIdx] = { ...updated[captureRowIdx], screenshot: screenshotPath, visual: null, motion_points: null, motion_plan: null };
       handleRowsChange(updated);
       if (returnToNarrationAfterCapture !== null) {
         setNarrationDialogRow(returnToNarrationAfterCapture);
@@ -1162,9 +1364,9 @@ The Actions describe what happens on screen — use them as visual design hints.
     if (imagePickerRowIdx === null) return;
     const updated = [...localRows];
     if (asset.assetType === "visual") {
-      updated[imagePickerRowIdx] = { ...updated[imagePickerRowIdx], visual: asset.path, screenshot: null };
+      updated[imagePickerRowIdx] = { ...updated[imagePickerRowIdx], visual: asset.path, screenshot: null, motion_points: null, motion_plan: null };
     } else {
-      updated[imagePickerRowIdx] = { ...updated[imagePickerRowIdx], screenshot: asset.path, visual: null };
+      updated[imagePickerRowIdx] = { ...updated[imagePickerRowIdx], screenshot: asset.path, visual: null, motion_points: null, motion_plan: null };
     }
     handleRowsChange(updated);
     setImagePickerRowIdx(null);
@@ -1181,7 +1383,7 @@ The Actions describe what happens on screen — use them as visual design hints.
     try {
       const relativePath = await invoke<string>("import_image", { sourcePath: filePath });
       const updated = [...localRows];
-      updated[rowIndex] = { ...updated[rowIndex], screenshot: relativePath };
+      updated[rowIndex] = { ...updated[rowIndex], screenshot: relativePath, visual: null, motion_points: null, motion_plan: null };
       handleRowsChange(updated);
     } catch (err) {
       console.error("Failed to import image:", err);
@@ -1250,6 +1452,425 @@ The Actions describe what happens on screen — use them as visual design hints.
     narrationDialogRow,
     saveSketchEditsForPath,
     sketchLocked,
+  ]);
+
+  const synthesizeNarrationForRow = useCallback(async (
+    rowIndex: number,
+    ssml: string,
+    sourceText: string,
+    accessToken: string,
+    speechEndpoint: string,
+  ) => {
+    if (!activeSketchPath) throw new Error("No active sketch is open.");
+    const response = await fetch(`${speechEndpoint}/tts/cognitiveservices/v1`, {
+      method: "POST",
+      headers: {
+        Authorization: ["Bearer", accessToken].join(" "),
+        "Content-Type": "application/ssml+xml",
+        "X-Microsoft-OutputFormat": settings.narrationSpeechOutputFormat,
+        "User-Agent": "cutready",
+      },
+      body: validateGeneratedSsml(ssml),
+    });
+    const audioData = await response.arrayBuffer();
+    if (!response.ok) {
+      const details = new TextDecoder().decode(audioData.slice(0, 500));
+      throw new Error(details || `Azure Speech returned ${response.status}`);
+    }
+
+    const durationMs = await decodeAudioDurationMs(audioData);
+    const sketch = await invoke<Sketch>("save_narration_recording", {
+      sketchPath: activeSketchPath,
+      rowIndex,
+      audioData: Array.from(new Uint8Array(audioData)),
+      mimeType: response.headers.get("content-type") || "audio/x-wav",
+      durationMs,
+      sourceText,
+      leadingSilenceMs: 0,
+      trailingSilenceMs: 0,
+      silenceThresholdDb: null,
+    });
+    useAppStore.setState({ activeSketch: sketch });
+    setLocalRows(sketch.rows ?? []);
+    return sketch;
+  }, [activeSketchPath, settings.narrationSpeechOutputFormat]);
+
+  const refreshSpeechAccess = useCallback(async () => {
+    const narrationProviders = settings.aiProviders?.filter((provider) =>
+      (provider.provider === "microsoft_foundry" || provider.provider === "azure_openai") && provider.endpoint
+    ) ?? [];
+    const selectedProvider = settings.narrationConnectionMode === "dedicated"
+      ? providerById(settings, settings.narrationProviderId) ?? narrationProviders[0] ?? null
+      : activeProvider(settings);
+    if (!selectedProvider || !["microsoft_foundry", "azure_openai"].includes(selectedProvider.provider) || !selectedProvider.endpoint) {
+      throw new Error("Select a Foundry/Azure narration connection before generating narration.");
+    }
+    if (selectedProvider.authMode !== "azure_oauth") {
+      throw new Error("Generated narration currently requires an Entra-authenticated Foundry/Azure connection.");
+    }
+    const refreshToken = selectedProvider.id === settings.aiActiveProviderId
+      ? settings.aiRefreshToken
+      : await getProviderSecret(selectedProvider.id, "refreshToken");
+    if (!refreshToken) throw new Error("Sign in to the selected narration connection before generating narration.");
+    const speechEndpoint = inferSpeechEndpoint(selectedProvider.endpoint);
+    const token = await invoke<{ access_token: string; refresh_token?: string }>("azure_token_refresh", {
+      tenantId: selectedProvider.tenantId || settings.aiTenantId || "",
+      refreshToken,
+      clientId: selectedProvider.clientId || settings.aiClientId || null,
+      scope: SPEECH_TOKEN_SCOPE,
+    });
+    if (!token.access_token) throw new Error("Azure Speech token refresh did not return an access token.");
+    if (selectedProvider.id === settings.aiActiveProviderId) {
+      if (token.access_token) await updateSetting("aiAccessToken", token.access_token);
+      if (token.refresh_token) await updateSetting("aiRefreshToken", token.refresh_token);
+    } else {
+      await setProviderSecret(selectedProvider.id, "accessToken", token.access_token);
+      if (token.refresh_token) await setProviderSecret(selectedProvider.id, "refreshToken", token.refresh_token);
+    }
+    return { accessToken: token.access_token, speechEndpoint };
+  }, [
+    settings,
+    updateSetting,
+  ]);
+
+  const refreshAgentAccessToken = useCallback(async () => {
+    if (settings.aiAuthMode !== "azure_oauth" || !settings.aiRefreshToken) return settings.aiAccessToken;
+    const token = await invoke<{ access_token: string; refresh_token?: string }>("azure_token_refresh", {
+      tenantId: settings.aiTenantId || "",
+      refreshToken: settings.aiRefreshToken,
+      clientId: settings.aiClientId || null,
+    });
+    if (token.access_token) await updateSetting("aiAccessToken", token.access_token);
+    if (token.refresh_token) await updateSetting("aiRefreshToken", token.refresh_token);
+    return token.access_token || settings.aiAccessToken;
+  }, [
+    settings.aiAccessToken,
+    settings.aiAuthMode,
+    settings.aiClientId,
+    settings.aiRefreshToken,
+    settings.aiTenantId,
+    updateSetting,
+  ]);
+
+  const generateSketchNarrationSsml = useCallback(async () => {
+    const agentAccessToken = await refreshAgentAccessToken();
+    const providerConfig = buildProviderConfig(activeProviderInput(settings));
+    if (settings.aiAuthMode === "azure_oauth" && agentAccessToken) {
+      providerConfig.bearer_token = agentAccessToken;
+    }
+
+    const sketchContext = {
+      title: localTitle,
+      description: localDesc,
+      voice: settings.narrationVoiceName,
+      style: settings.narrationStylePrompt,
+      rows: localRows.map((row, index) => ({
+        row_number: index + 1,
+        time: row.time,
+        narrative: row.narrative,
+        actions: row.demo_actions,
+        screenshot: row.screenshot,
+        visual: row.visual,
+      })),
+    };
+    const systemPrompt = `You are CutReady's Narration Director, an expert scriptwriter and SSML author for Azure Speech.
+
+Your job is to turn a complete demo sketch into compelling spoken narration SSML for ${settings.narrationVoiceName}.
+
+Rules:
+- Return ONLY valid JSON. No markdown, no prose, no code fences.
+- Output shape: {"rows":[{"row_number":1,"source_text":"plain narration text","ssml":"<speak ...>...</speak>"}]}
+- Include every row that has narrative or actions. Skip only rows with neither.
+- Each ssml value must be a complete Azure Speech SSML document with a <speak> root and <voice name="${settings.narrationVoiceName}">.
+- Use natural spoken delivery, short sentences, and clean transitions across rows.
+- Style direction: ${settings.narrationStylePrompt || "Natural presenter delivery."}
+- Use SSML intentionally: <break time="200ms"/> to shape pacing, <prosody rate="-5%" pitch="+0st"> sparingly, <emphasis level="moderate"> for one key idea when useful.
+- Do not include <audio>, external URLs, lexicons, bookmarks, or background audio.
+- Keep the narration grounded in the sketch. Do not invent product capabilities beyond the title, description, narrative, actions, screenshots, or visuals.
+- Avoid hype words and AI marketing cliches. Use plain, presenter-like language.
+- Use ASCII punctuation in text content.`;
+
+    const result = await invoke<AgentChatResult>("agent_chat_with_tools", {
+      config: providerConfig,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Generate narration SSML for this sketch:\n${JSON.stringify(sketchContext, null, 2)}` },
+      ],
+      agentPrompts: {},
+      agentId: "narration-director",
+      emitEvents: false,
+      allowMutationTools: false,
+    });
+    return parseNarrationSsmlPlan(result.response);
+  }, [localDesc, localRows, localTitle, refreshAgentAccessToken, settings]);
+
+  const generateSketchMotionPlans = useCallback(async (eligibleRows: { row: PlanningRow; index: number }[]) => {
+    const agentAccessToken = await refreshAgentAccessToken();
+    const providerConfig = buildProviderConfig(activeProviderInput(settings));
+    const motionMaxScale = settings.videoExportOverrideEnabled
+      ? settings.workspaceVideoExportMotionMaxScale
+      : settings.videoExportMotionMaxScale;
+    if (settings.aiAuthMode === "azure_oauth" && agentAccessToken) {
+      providerConfig.bearer_token = agentAccessToken;
+    }
+
+    const sketchContext = {
+      title: localTitle,
+      description: localDesc,
+      rows: eligibleRows.map(({ row, index }) => ({
+        row_number: index + 1,
+        narrative: row.narrative,
+        actions: row.demo_actions,
+        narration_duration_ms: row.narration?.duration_ms ?? Math.round((row.duration_seconds ?? parseDurationSeconds(row.time) ?? 3) * 1000),
+        screenshot: row.screenshot,
+        points: row.motion_points,
+      })),
+    };
+    const systemPrompt = `You are CutReady's Motion Director, an expert video editor designing subtle camera motion for static product demo screenshots.
+
+Your job is to convert user-ranked screenshot attention points into safe camera motion plans that fit each row's narration duration.
+
+Rules:
+- Return ONLY valid JSON. No markdown, no prose, no code fences.
+- Output shape: {"rows":[{"row_number":1,"motion_plan":{"kind":"subtle_push","keyframes":[{"time_ms":0,"scale":1,"x":0.5,"y":0.5,"easing":"linear"},{"time_ms":2200,"scale":1.28,"x":0.62,"y":0.41,"easing":"linear"}],"rationale":"..."}}]}
+- Include one row entry for every input row.
+- kind must be one of: "subtle_push", "wide_hold_then_push", "push_then_drift".
+- Keyframe x/y are normalized 0..1 screenshot coordinates. Use only the provided points as targets, except the first frame may start at center x=0.5 y=0.5.
+- scale must stay between 1.0 and ${motionMaxScale}. Prefer 1.12-${Math.min(motionMaxScale, 1.35).toFixed(2)} for normal narration; use higher values when the narrative/actions need a clear detail focus, especially for edge or small UI targets.
+- Keep motion linear and editorial. Avoid rapid cuts, bouncing, easing curves, spins, or disorienting zooms.
+- Use at least two keyframes and at most four.
+- If narration is under 2500ms, use a single subtle push to the primary point.
+- If narration is longer, you may hold wide briefly, push to primary, and drift subtly toward secondary/tertiary only if that helps the row's actions.
+- Final keyframe time must be no later than narration_duration_ms.`;
+
+    const result = await invoke<AgentChatResult>("agent_chat_with_tools", {
+      config: providerConfig,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Generate screenshot camera motion plans for this sketch:\n${JSON.stringify(sketchContext, null, 2)}` },
+      ],
+      agentPrompts: {},
+      agentId: "motion-director",
+      emitEvents: false,
+      allowMutationTools: false,
+    });
+    return parseMotionPlan(result.response, motionMaxScale);
+  }, [localDesc, localTitle, refreshAgentAccessToken, settings]);
+
+  const generateAndSaveMotionRows = useCallback(async (rows: PlanningRow[]) => {
+    if (!activeSketchPath || sketchLocked) return null;
+    const eligibleRows = rows
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => row.screenshot?.trim() && !row.visual && (row.motion_points?.length ?? 0) > 0);
+    if (eligibleRows.length === 0) {
+      return rows;
+    }
+
+    const totalSteps = eligibleRows.length + 3;
+    setVideoExportProgress({
+      phase: "motion-prepare",
+      current: 0,
+      total: totalSteps,
+      message: "Saving the latest sketch edits before planning camera motion.",
+    });
+    await saveSketchEditsForPath(activeSketchPath, null, rows, "motion generation");
+    useToastStore.getState().show("Motion Director is planning camera moves...", 3000, "info");
+    setVideoExportProgress({
+      phase: "motion-director",
+      current: 1,
+      total: totalSteps,
+      message: `Motion Director is planning camera moves for ${eligibleRows.length} marked row${eligibleRows.length === 1 ? "" : "s"}.`,
+    });
+    const plan = await generateSketchMotionPlans(eligibleRows);
+    const plansByNumber = new Map(plan.rows.map((row) => [row.row_number, row.motion_plan]));
+    const eligibleRowNumbers = new Set(eligibleRows.map(({ index }) => index + 1));
+    let appliedCount = 0;
+    const updatedRows = rows.map((row, index) => {
+      if (!eligibleRowNumbers.has(index + 1)) return row;
+      const motionPlan = plansByNumber.get(index + 1);
+      if (!motionPlan) return row;
+      appliedCount += 1;
+      return { ...row, motion_plan: motionPlan };
+    });
+    if (appliedCount === 0) throw new Error("Motion Director did not return plans for any marked rows.");
+    setVideoExportProgress({
+      phase: "motion-save",
+      current: totalSteps - 1,
+      total: totalSteps,
+      message: "Saving generated motion plans before video export.",
+    });
+    setLocalRows(updatedRows);
+    await saveSketchEditsForPath(activeSketchPath, null, updatedRows, "AI motion generation");
+    const { refreshChangedFiles, checkDirty, addActivityEntries } = useAppStore.getState();
+    await checkDirty();
+    await refreshChangedFiles();
+    addActivityEntries([{
+      id: crypto.randomUUID(),
+      timestamp: new Date(),
+      source: "agent",
+      content: `Generated motion plans for ${appliedCount} row${appliedCount === 1 ? "" : "s"}`,
+      level: "success",
+    }]);
+    useToastStore.getState().show(`Generated motion plans for ${appliedCount} row${appliedCount === 1 ? "" : "s"}`, 5000, "success");
+    return updatedRows;
+  }, [
+    activeSketchPath,
+    generateSketchMotionPlans,
+    saveSketchEditsForPath,
+    sketchLocked,
+  ]);
+
+  const refreshAfterNarrationGeneration = useCallback(async (message: string, level: "success" | "error" = "success") => {
+    const { loadSketches, loadNarrationAssets, refreshChangedFiles, checkDirty, addActivityEntries } = useAppStore.getState();
+    await loadSketches();
+    await loadNarrationAssets();
+    await checkDirty();
+    await refreshChangedFiles();
+    addActivityEntries([{
+      id: crypto.randomUUID(),
+      timestamp: new Date(),
+      source: "recording",
+      content: message,
+      level,
+    }]);
+  }, []);
+
+  const handleGenerateNarration = useCallback(async (rowIndex: number) => {
+    if (!activeSketchPath || sketchLocked) return;
+    const row = localRows[rowIndex];
+    const text = row?.narrative?.trim();
+    if (!row || !text) {
+      useToastStore.getState().show("Add narrative text before generating narration.", 5000, "error");
+      return;
+    }
+
+    setNarrationSavingRows((rows) => new Set(rows).add(rowIndex));
+    try {
+      await saveSketchEditsForPath(activeSketchPath, null, localRows, "generated narration");
+      const { accessToken, speechEndpoint } = await refreshSpeechAccess();
+      console.info("[SketchForm] generating Azure Speech narration", {
+        rowIndex,
+        speechHost: new URL(speechEndpoint).host,
+        voice: settings.narrationVoiceName,
+      });
+      await synthesizeNarrationForRow(rowIndex, buildPlainSsml(text, settings.narrationVoiceName), text, accessToken, speechEndpoint);
+      await refreshAfterNarrationGeneration(`Generated narration for row ${rowIndex + 1}`);
+      useToastStore.getState().show(`Generated narration for row ${rowIndex + 1}`, 4000, "success");
+    } catch (err) {
+      console.warn("[SketchForm] Failed to generate narration:", err);
+      useToastStore.getState().show(`Could not generate narration: ${err}`, 6000, "error");
+    } finally {
+      setNarrationSavingRows((rows) => {
+        const next = new Set(rows);
+        next.delete(rowIndex);
+        return next;
+      });
+    }
+  }, [
+    activeSketchPath,
+    localRows,
+    refreshAfterNarrationGeneration,
+    refreshSpeechAccess,
+    saveSketchEditsForPath,
+    settings.narrationVoiceName,
+    sketchLocked,
+    synthesizeNarrationForRow,
+  ]);
+
+  const handleGenerateSketchNarration = useCallback(async () => {
+    if (!activeSketchPath || sketchLocked) return;
+    const eligibleRows = localRows
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) => row.narrative.trim() || row.demo_actions.trim());
+    if (eligibleRows.length === 0) {
+      useToastStore.getState().show("Add narrative or actions before generating narration.", 5000, "error");
+      return;
+    }
+
+    setNarrationSavingRows((rows) => {
+      const next = new Set(rows);
+      eligibleRows.forEach(({ index }) => next.add(index));
+      return next;
+    });
+    try {
+      const totalSteps = eligibleRows.length + 4;
+      setNarrationGenerationProgress({
+        phase: "prepare",
+        current: 0,
+        total: totalSteps,
+        message: "Saving the latest sketch edits before writing narration.",
+      });
+      await saveSketchEditsForPath(activeSketchPath, null, localRows, "AI narration generation");
+      useToastStore.getState().show("Narration Director is writing SSML...", 3000, "info");
+
+      setNarrationGenerationProgress({
+        phase: "script",
+        current: 1,
+        total: totalSteps,
+        message: "Narration Director is reading the full sketch and writing SSML.",
+      });
+      const plan = await generateSketchNarrationSsml();
+
+      setNarrationGenerationProgress({
+        phase: "auth",
+        current: 2,
+        total: totalSteps,
+        message: "Borrowing the current Azure/Foundry connection for Speech synthesis.",
+      });
+      const { accessToken, speechEndpoint } = await refreshSpeechAccess();
+
+      const rowsByNumber = new Map(plan.rows.map((row) => [row.row_number, row]));
+      let generatedCount = 0;
+      for (const { row, index } of eligibleRows) {
+        const generated = rowsByNumber.get(index + 1);
+        if (!generated) continue;
+        setNarrationGenerationProgress({
+          phase: "synthesize",
+          current: 3 + generatedCount,
+          total: totalSteps,
+          message: `Synthesizing row ${index + 1} with MAI-Voice-2.`,
+        });
+        const sourceText = generated.source_text?.trim() || row.narrative.trim() || row.demo_actions.trim();
+        await synthesizeNarrationForRow(index, generated.ssml, sourceText, accessToken, speechEndpoint);
+        generatedCount += 1;
+      }
+
+      if (generatedCount === 0) throw new Error("Narration agent did not return SSML for any eligible rows.");
+      setNarrationGenerationProgress({
+        phase: "refresh",
+        current: totalSteps - 1,
+        total: totalSteps,
+        message: "Refreshing narration assets and sketch state.",
+      });
+      await refreshAfterNarrationGeneration(`Generated AI narration for ${generatedCount} row${generatedCount === 1 ? "" : "s"}`);
+      setNarrationGenerationProgress({
+        phase: "complete",
+        current: totalSteps,
+        total: totalSteps,
+        message: "Narration generation complete.",
+      });
+      useToastStore.getState().show(`Generated AI narration for ${generatedCount} row${generatedCount === 1 ? "" : "s"}`, 5000, "success");
+    } catch (err) {
+      console.warn("[SketchForm] Failed to generate sketch narration:", err);
+      useToastStore.getState().show(`Could not generate sketch narration: ${err}`, 7000, "error");
+      await refreshAfterNarrationGeneration(`AI narration generation failed: ${err}`, "error");
+    } finally {
+      setNarrationSavingRows((rows) => {
+        const next = new Set(rows);
+        eligibleRows.forEach(({ index }) => next.delete(index));
+        return next;
+      });
+      setNarrationGenerationProgress(null);
+    }
+  }, [
+    activeSketchPath,
+    generateSketchNarrationSsml,
+    localRows,
+    refreshAfterNarrationGeneration,
+    refreshSpeechAccess,
+    saveSketchEditsForPath,
+    sketchLocked,
+    synthesizeNarrationForRow,
   ]);
 
   const handleSaveNarrationTake = useCallback(async (
@@ -1366,36 +1987,47 @@ The Actions describe what happens on screen — use them as visual design hints.
     }).catch(err => console.error("PowerPoint export failed:", err));
   }, [activeSketch]);
 
-  const handleExportVideo = useCallback(async () => {
+  const promptForVideoOutputPath = useCallback(async () => {
+    if (!activeSketch) return null;
+    const selectedPath = await save({
+      defaultPath: defaultVideoExportName(localTitle || activeSketch.title || "sketch"),
+      filters: [{ name: "MP4 Video", extensions: ["mp4"] }],
+    });
+    return selectedPath ? ensureMp4Extension(selectedPath) : null;
+  }, [activeSketch, localTitle]);
+
+  const handleExportVideo = useCallback(async (rowsOverride?: PlanningRow[], outputPathOverride?: string) => {
     if (!activeSketchPath || !activeSketch || !projectRoot || exportingVideo) return;
-    const issues = getVideoExportIssues(localRows);
+    const rowsForExport = rowsOverride ?? localRows;
+    const issues = getVideoExportIssues(rowsForExport);
     if (issues.length > 0) {
       setVideoExportIssues(issues);
       return;
     }
 
-    const selectedPath = await save({
-      defaultPath: defaultVideoExportName(localTitle || activeSketch.title || "sketch"),
-      filters: [{ name: "MP4 Video", extensions: ["mp4"] }],
-    });
-    if (!selectedPath) return;
-
-    const outputPath = ensureMp4Extension(selectedPath);
+    const outputPath = outputPathOverride ?? await promptForVideoOutputPath();
+    if (!outputPath) return;
 
     setExportingVideo(true);
     setVideoExportProgress({
       phase: "preparing",
       current: 0,
-      total: Math.max(1, localRows.length + Math.max(0, localRows.length - 1) + 4),
+      total: Math.max(1, rowsForExport.length + Math.max(0, rowsForExport.length - 1) + 4),
       message: "Preparing sketch video export",
     });
     try {
-      await saveSketchEditsForPath(activeSketchPath, localTitle, localRows, "video export");
+      await saveSketchEditsForPath(activeSketchPath, localTitle, rowsForExport, "video export");
       const progressChannel = new Channel<SketchVideoExportProgress>();
       progressChannel.onmessage = (progress) => {
         setVideoExportProgress(progress);
       };
+      const selectedBackgroundMusicTrack = settings.workspaceVideoExportBackgroundMusicTracks.find(
+        (track) => track.id === settings.workspaceVideoExportBackgroundMusicTrackId,
+      );
       const videoExportSettings = {
+        includeTitleCard: settings.videoExportOverrideEnabled
+          ? settings.workspaceVideoExportIncludeTitleCard
+          : settings.videoExportIncludeTitleCard,
         titleCardDurationSeconds: settings.videoExportOverrideEnabled
           ? settings.workspaceVideoExportTitleCardDurationSeconds
           : settings.videoExportTitleCardDurationSeconds,
@@ -1408,6 +2040,37 @@ The Actions describe what happens on screen — use them as visual design hints.
         finalHoldSeconds: settings.videoExportOverrideEnabled
           ? settings.workspaceVideoExportFinalHoldSeconds
           : settings.videoExportFinalHoldSeconds,
+        rowTransitionDipSeconds: settings.videoExportOverrideEnabled
+          ? settings.workspaceVideoExportRowTransitionDipSeconds
+          : settings.videoExportRowTransitionDipSeconds,
+        narrationTailHoldSeconds: settings.videoExportOverrideEnabled
+          ? settings.workspaceVideoExportNarrationTailHoldSeconds
+          : settings.videoExportNarrationTailHoldSeconds,
+        motionMaxScale: settings.videoExportOverrideEnabled
+          ? settings.workspaceVideoExportMotionMaxScale
+          : settings.videoExportMotionMaxScale,
+        videoWidth: settings.videoExportOverrideEnabled
+          ? settings.workspaceVideoExportWidth
+          : settings.videoExportWidth,
+        videoHeight: settings.videoExportOverrideEnabled
+          ? settings.workspaceVideoExportHeight
+          : settings.videoExportHeight,
+        videoFps: settings.videoExportOverrideEnabled
+          ? settings.workspaceVideoExportFps
+          : settings.videoExportFps,
+        videoEncoder: settings.videoExportOverrideEnabled
+          ? settings.workspaceVideoExportEncoder
+          : settings.videoExportEncoder,
+        videoPixelFormat: settings.videoExportOverrideEnabled
+          ? settings.workspaceVideoExportPixelFormat
+          : settings.videoExportPixelFormat,
+        videoCrf: settings.videoExportOverrideEnabled
+          ? settings.workspaceVideoExportCrf
+          : settings.videoExportCrf,
+        backgroundMusicPath: selectedBackgroundMusicTrack?.path ?? null,
+        backgroundMusicVolumeDb: settings.workspaceVideoExportBackgroundMusicVolumeDb,
+        backgroundMusicDuckNarration: settings.workspaceVideoExportBackgroundMusicDuckNarration,
+        backgroundMusicFadeSeconds: settings.workspaceVideoExportBackgroundMusicFadeSeconds,
       } satisfies SketchVideoExportSettings;
 
       const result = await invoke<SketchVideoExport>("export_sketch_video", {
@@ -1448,18 +2111,67 @@ The Actions describe what happens on screen — use them as visual design hints.
     activeSketch,
     projectRoot,
     exportingVideo,
+    promptForVideoOutputPath,
     saveSketchEditsForPath,
     localTitle,
     localRows,
     settings.videoExportOverrideEnabled,
+    settings.videoExportIncludeTitleCard,
     settings.videoExportTitleCardDurationSeconds,
     settings.videoExportTitleToFirstRowHoldSeconds,
     settings.videoExportRowTransitionHoldSeconds,
     settings.videoExportFinalHoldSeconds,
+    settings.videoExportRowTransitionDipSeconds,
+    settings.videoExportNarrationTailHoldSeconds,
+    settings.videoExportMotionMaxScale,
+    settings.videoExportWidth,
+    settings.videoExportHeight,
+    settings.videoExportFps,
+    settings.videoExportEncoder,
+    settings.videoExportPixelFormat,
+    settings.videoExportCrf,
+    settings.workspaceVideoExportBackgroundMusicTracks,
+    settings.workspaceVideoExportBackgroundMusicTrackId,
+    settings.workspaceVideoExportBackgroundMusicVolumeDb,
+    settings.workspaceVideoExportBackgroundMusicDuckNarration,
+    settings.workspaceVideoExportBackgroundMusicFadeSeconds,
+    settings.workspaceVideoExportIncludeTitleCard,
     settings.workspaceVideoExportTitleCardDurationSeconds,
     settings.workspaceVideoExportTitleToFirstRowHoldSeconds,
     settings.workspaceVideoExportRowTransitionHoldSeconds,
     settings.workspaceVideoExportFinalHoldSeconds,
+    settings.workspaceVideoExportRowTransitionDipSeconds,
+    settings.workspaceVideoExportNarrationTailHoldSeconds,
+    settings.workspaceVideoExportMotionMaxScale,
+    settings.workspaceVideoExportWidth,
+    settings.workspaceVideoExportHeight,
+    settings.workspaceVideoExportFps,
+    settings.workspaceVideoExportEncoder,
+    settings.workspaceVideoExportPixelFormat,
+    settings.workspaceVideoExportCrf,
+  ]);
+
+  const handleGenerateVideo = useCallback(async () => {
+    if (!activeSketchPath || sketchLocked || exportingVideo) return;
+    try {
+      const outputPath = await promptForVideoOutputPath();
+      if (!outputPath) return;
+      const rowsForExport = await generateAndSaveMotionRows(localRows);
+      if (!rowsForExport) return;
+      await handleExportVideo(rowsForExport, outputPath);
+    } catch (err) {
+      console.warn("[SketchForm] Failed to generate video:", err);
+      useToastStore.getState().show(`Could not generate video: ${err}`, 7000, "error");
+      setVideoExportProgress(null);
+    }
+  }, [
+    activeSketchPath,
+    exportingVideo,
+    generateAndSaveMotionRows,
+    handleExportVideo,
+    localRows,
+    promptForVideoOutputPath,
+    sketchLocked,
   ]);
 
   const handleRecord = useCallback(async () => {
@@ -1532,6 +2244,20 @@ The Actions describe what happens on screen — use them as visual design hints.
         { label: localRows.length === 0 ? "Generate plan" : "Improve sketch" },
       ),
     },
+    {
+      id: "generate-narration",
+      label: "Generate narration",
+      icon: <Mic2 className="h-3.5 w-3.5" />,
+      onSelect: handleGenerateSketchNarration,
+      disabled: localRows.length === 0 || narrationSavingRows.size > 0,
+    },
+    {
+      id: "generate-video",
+      label: exportingVideo ? "Rendering video..." : "Generate video",
+      icon: <Film className="h-3.5 w-3.5" />,
+      onSelect: handleGenerateVideo,
+      disabled: localRows.length === 0 || exportingVideo,
+    },
   ] : [];
   const exportActions: DocumentToolbarAction[] = hasRows ? [
     {
@@ -1562,7 +2288,7 @@ The Actions describe what happens on screen — use them as visual design hints.
       id: "video",
       label: exportingVideo ? "Rendering video..." : "Video",
       icon: documentToolbarIcons.video,
-      onSelect: handleExportVideo,
+      onSelect: () => void handleExportVideo(),
       disabled: exportingVideo,
     },
   ] : [];
@@ -1744,6 +2470,7 @@ The row already has a visual and design_plan. You may read the sketch for contex
             onRowLockChange={handleRowLockChange}
             onCellLockChange={handleCellLockChange}
             onStartNarrationRecording={handleStartNarrationRecording}
+            onGenerateNarration={handleGenerateNarration}
             onPickNarration={handlePickNarration}
             onStopNarrationRecording={handleStopNarrationRecording}
             narrationRecordingRow={narrationRecordingRow}
@@ -1856,6 +2583,7 @@ The row already has a visual and design_plan. You may read the sketch for contex
         onClose={() => setVideoExportIssues(null)}
       />
       <VideoExportProgressDialog progress={videoExportProgress} />
+      <NarrationGenerationProgressDialog progress={narrationGenerationProgress} />
 
       {showNarrationSetupPrompt && (
         <div

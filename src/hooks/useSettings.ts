@@ -28,6 +28,7 @@ export interface AgentPreset {
 export type AiProviderKind = "microsoft_foundry" | "azure_openai" | "openai" | "anthropic";
 export type AiAuthMode = "api_key" | "azure_oauth";
 export type AiApplyMode = "ask" | "auto";
+export type NarrationConnectionMode = "reuse_active_foundry" | "dedicated";
 
 export interface AiProviderConfig {
   id: string;
@@ -43,6 +44,13 @@ export interface AiProviderConfig {
   subscriptionId: string;
   resourceGroup: string;
   resourceName: string;
+}
+
+export interface BackgroundMusicTrack {
+  id: string;
+  name: string;
+  path: string;
+  durationSeconds?: number;
 }
 
 // ── Global settings (stored in Tauri app data) ────────────────────
@@ -155,6 +163,8 @@ export interface GlobalSettings {
   recorderIncludeCursor: boolean;
   /** Default recording quality: "lossless", "high", or "compact". */
   recorderOutputQuality: "lossless" | "high" | "compact";
+  /** Whether sketch video export includes a title card. */
+  videoExportIncludeTitleCard: boolean;
   /** Sketch video export title card duration in seconds. */
   videoExportTitleCardDurationSeconds: number;
   /** Sketch video export first screenshot hold after the title card in seconds. */
@@ -163,6 +173,34 @@ export interface GlobalSettings {
   videoExportRowTransitionHoldSeconds: number;
   /** Sketch video export final screenshot hold duration in seconds. */
   videoExportFinalHoldSeconds: number;
+  /** Sketch video export dip-to-black fade duration in seconds. */
+  videoExportRowTransitionDipSeconds: number;
+  /** Extra tail hold after row narration audio in seconds. */
+  videoExportNarrationTailHoldSeconds: number;
+  /** Maximum generated camera push scale for screenshot motion. */
+  videoExportMotionMaxScale: number;
+  /** MP4 export width in pixels. */
+  videoExportWidth: number;
+  /** MP4 export height in pixels. */
+  videoExportHeight: number;
+  /** MP4 export frame rate. */
+  videoExportFps: number;
+  /** FFmpeg video encoder used for MP4 export. */
+  videoExportEncoder: string;
+  /** FFmpeg pixel format used for MP4 export. */
+  videoExportPixelFormat: string;
+  /** FFmpeg CRF/quality value used for MP4 export. */
+  videoExportCrf: string;
+  /** How generated narration chooses its Azure/Foundry speech connection. */
+  narrationConnectionMode: NarrationConnectionMode;
+  /** Dedicated AI provider ID used for narration when narrationConnectionMode is dedicated. */
+  narrationProviderId: string;
+  /** Azure Speech voice used for generated narration. */
+  narrationVoiceName: string;
+  /** Azure Speech output format used for generated narration. */
+  narrationSpeechOutputFormat: string;
+  /** Additional style direction for the narration SSML agent. */
+  narrationStylePrompt: string;
   /** Custom FFmpeg executable path. Empty means auto-detect. */
   ffmpegExecutablePath: string;
   /** Custom FFprobe executable path. Empty means auto-detect. */
@@ -200,6 +238,8 @@ export interface WorkspaceSettings {
   repoAuthorEmail: string;
   /** Override app-level sketch video export timing for this workspace. */
   videoExportOverrideEnabled: boolean;
+  /** Workspace override: whether sketch video export includes a title card. */
+  workspaceVideoExportIncludeTitleCard: boolean;
   /** Workspace override: sketch video export title card duration in seconds. */
   workspaceVideoExportTitleCardDurationSeconds: number;
   /** Workspace override: first screenshot hold after the title card in seconds. */
@@ -208,6 +248,34 @@ export interface WorkspaceSettings {
   workspaceVideoExportRowTransitionHoldSeconds: number;
   /** Workspace override: final screenshot hold duration in seconds. */
   workspaceVideoExportFinalHoldSeconds: number;
+  /** Workspace override: dip-to-black fade duration in seconds. */
+  workspaceVideoExportRowTransitionDipSeconds: number;
+  /** Workspace override: extra tail hold after row narration audio in seconds. */
+  workspaceVideoExportNarrationTailHoldSeconds: number;
+  /** Workspace override: maximum generated camera push scale for screenshot motion. */
+  workspaceVideoExportMotionMaxScale: number;
+  /** Workspace override: MP4 export width in pixels. */
+  workspaceVideoExportWidth: number;
+  /** Workspace override: MP4 export height in pixels. */
+  workspaceVideoExportHeight: number;
+  /** Workspace override: MP4 export frame rate. */
+  workspaceVideoExportFps: number;
+  /** Workspace override: FFmpeg video encoder used for MP4 export. */
+  workspaceVideoExportEncoder: string;
+  /** Workspace override: FFmpeg pixel format used for MP4 export. */
+  workspaceVideoExportPixelFormat: string;
+  /** Workspace override: FFmpeg CRF/quality value used for MP4 export. */
+  workspaceVideoExportCrf: string;
+  /** Project-local reusable loopable WAV files for sketch video background music. */
+  workspaceVideoExportBackgroundMusicTracks: BackgroundMusicTrack[];
+  /** Selected project-local background music track ID. Empty means none. */
+  workspaceVideoExportBackgroundMusicTrackId: string;
+  /** Background music gain in dB. */
+  workspaceVideoExportBackgroundMusicVolumeDb: number;
+  /** Whether background music is ducked under narration. */
+  workspaceVideoExportBackgroundMusicDuckNarration: boolean;
+  /** Background music fade in/out duration in seconds. */
+  workspaceVideoExportBackgroundMusicFadeSeconds: number;
 }
 
 /** Combined view for backward compatibility — consumers that need both. */
@@ -268,10 +336,25 @@ const defaultGlobalSettings: GlobalSettings = {
   recorderFrameRate: 30,
   recorderIncludeCursor: true,
   recorderOutputQuality: "high",
+  videoExportIncludeTitleCard: true,
   videoExportTitleCardDurationSeconds: 3,
   videoExportTitleToFirstRowHoldSeconds: 0.5,
   videoExportRowTransitionHoldSeconds: 1,
   videoExportFinalHoldSeconds: 3,
+  videoExportRowTransitionDipSeconds: 0.35,
+  videoExportNarrationTailHoldSeconds: 0.35,
+  videoExportMotionMaxScale: 1.65,
+  videoExportWidth: 1920,
+  videoExportHeight: 1080,
+  videoExportFps: 30,
+  videoExportEncoder: "libx264rgb",
+  videoExportPixelFormat: "rgb24",
+  videoExportCrf: "0",
+  narrationConnectionMode: "reuse_active_foundry",
+  narrationProviderId: "",
+  narrationVoiceName: "en-US-Harper:MAI-Voice-2",
+  narrationSpeechOutputFormat: "riff-24khz-16bit-mono-pcm",
+  narrationStylePrompt: "Natural presenter delivery: short sentences, clean transitions, light emphasis, and no hype.",
   ffmpegExecutablePath: "",
   ffprobeExecutablePath: "",
   recorderCameraEnabled: false,
@@ -301,10 +384,25 @@ export const defaultWorkspaceSettings: WorkspaceSettings = {
   repoAuthorName: "",
   repoAuthorEmail: "",
   videoExportOverrideEnabled: false,
+  workspaceVideoExportIncludeTitleCard: true,
   workspaceVideoExportTitleCardDurationSeconds: 3,
   workspaceVideoExportTitleToFirstRowHoldSeconds: 0.5,
   workspaceVideoExportRowTransitionHoldSeconds: 1,
   workspaceVideoExportFinalHoldSeconds: 3,
+  workspaceVideoExportRowTransitionDipSeconds: 0.35,
+  workspaceVideoExportNarrationTailHoldSeconds: 0.35,
+  workspaceVideoExportMotionMaxScale: 1.65,
+  workspaceVideoExportWidth: 1920,
+  workspaceVideoExportHeight: 1080,
+  workspaceVideoExportFps: 30,
+  workspaceVideoExportEncoder: "libx264rgb",
+  workspaceVideoExportPixelFormat: "rgb24",
+  workspaceVideoExportCrf: "0",
+  workspaceVideoExportBackgroundMusicTracks: [],
+  workspaceVideoExportBackgroundMusicTrackId: "",
+  workspaceVideoExportBackgroundMusicVolumeDb: -24,
+  workspaceVideoExportBackgroundMusicDuckNarration: true,
+  workspaceVideoExportBackgroundMusicFadeSeconds: 0.5,
 };
 
 const defaultSettings: AppSettings = {
@@ -346,10 +444,25 @@ const WORKSPACE_KEYS: (keyof WorkspaceSettings)[] = [
   "repoAuthorName",
   "repoAuthorEmail",
   "videoExportOverrideEnabled",
+  "workspaceVideoExportIncludeTitleCard",
   "workspaceVideoExportTitleCardDurationSeconds",
   "workspaceVideoExportTitleToFirstRowHoldSeconds",
   "workspaceVideoExportRowTransitionHoldSeconds",
   "workspaceVideoExportFinalHoldSeconds",
+  "workspaceVideoExportRowTransitionDipSeconds",
+  "workspaceVideoExportNarrationTailHoldSeconds",
+  "workspaceVideoExportMotionMaxScale",
+  "workspaceVideoExportWidth",
+  "workspaceVideoExportHeight",
+  "workspaceVideoExportFps",
+  "workspaceVideoExportEncoder",
+  "workspaceVideoExportPixelFormat",
+  "workspaceVideoExportCrf",
+  "workspaceVideoExportBackgroundMusicTracks",
+  "workspaceVideoExportBackgroundMusicTrackId",
+  "workspaceVideoExportBackgroundMusicVolumeDb",
+  "workspaceVideoExportBackgroundMusicDuckNarration",
+  "workspaceVideoExportBackgroundMusicFadeSeconds",
 ];
 
 function providerLabel(provider: AiProviderKind): string {

@@ -54,3 +54,39 @@ pub async fn export_sketch_video(
     .map_err(|e| e.to_string())?
     .map_err(|e| e.to_string())
 }
+
+#[auditaur_command(skip_all, err)]
+pub async fn import_background_music(
+    source_path: String,
+    state: State<'_, AppState>,
+) -> Result<export::BackgroundMusicTrack, String> {
+    let root = project_root(&state)?;
+    tokio::task::spawn_blocking(move || export::import_background_music(&root, &source_path))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn preview_background_music_mix(
+    settings: export::BackgroundMusicPreviewSettings,
+    state: State<'_, AppState>,
+) -> Result<export::BackgroundMusicPreview, String> {
+    let root = project_root(&state)?;
+    tokio::task::spawn_blocking(move || export::render_background_music_preview(&root, settings))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn delete_background_music(
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let root = project_root(&state)?;
+    tokio::task::spawn_blocking(move || export::delete_background_music(&root, &relative_path))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}

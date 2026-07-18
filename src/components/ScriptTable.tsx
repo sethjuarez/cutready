@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { usePopover } from "../hooks/usePopover";
 import {
@@ -28,6 +28,7 @@ import {
   Plus,
   Camera,
   Check,
+  Crosshair,
   Lock,
   Unlock,
   Loader2,
@@ -38,7 +39,7 @@ import {
   AlertTriangle,
   type LucideIcon,
 } from "lucide-react";
-import type { PlanningCellField, PlanningRow } from "../types/sketch";
+import type { MotionPoint, PlanningCellField, PlanningRow } from "../types/sketch";
 import { normalizeDocument } from "@elucim/dsl";
 import type { CutReadyElucimDocument } from "../types/elucim";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -110,15 +111,17 @@ interface ScriptTableProps {
   onRowLockChange?: (rowIndex: number, locked: boolean) => void;
   onCellLockChange?: (rowIndex: number, field: PlanningCellField, locked: boolean) => void;
   onStartNarrationRecording?: (rowIndex: number) => void;
+  onGenerateNarration?: (rowIndex: number) => void;
   onPickNarration?: (rowIndex: number) => void;
   onStopNarrationRecording?: () => void;
   narrationRecordingRow?: number | null;
   narrationSavingRows?: Set<number>;
 }
 
-export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onBrowseImage, onSparkle, onGenerateVisual, onNudgeVisual, projectRoot, sketchPath, highlightedRows, rowDiffs, aiSnapshotRows, onDismissHighlights, hasLastAiDiffs, onReShowHighlights, onRowLockChange, onCellLockChange, onStartNarrationRecording, onPickNarration, onStopNarrationRecording, narrationRecordingRow, narrationSavingRows }: ScriptTableProps) {
+export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onBrowseImage, onSparkle, onGenerateVisual, onNudgeVisual, projectRoot, sketchPath, highlightedRows, rowDiffs, aiSnapshotRows, onDismissHighlights, hasLastAiDiffs, onReShowHighlights, onRowLockChange, onCellLockChange, onStartNarrationRecording, onGenerateNarration, onPickNarration, onStopNarrationRecording, narrationRecordingRow, narrationSavingRows }: ScriptTableProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<{ src: string; rowIndex: number } | null>(null);
+  const lightboxImageRef = useRef<HTMLImageElement | null>(null);
   const [visualLightbox, setVisualLightbox] = useState<{ visualPath: string; rowIndex: number } | null>(null);
   const [nudgeInput, setNudgeInput] = useState("");
   const [lightboxMode, setLightboxMode] = useState<"preview" | "edit">("preview");
@@ -176,11 +179,11 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
   }, [aiSnapshotRows, highlightedRows, showUndoToast]);
 
   useEffect(() => {
-    if (!lightboxSrc) return;
-    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") setLightboxSrc(null); };
+    if (!lightboxImage) return;
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") setLightboxImage(null); };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [lightboxSrc]);
+  }, [lightboxImage]);
 
   useEffect(() => {
     if (!visualLightbox) return;
@@ -273,6 +276,9 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
         if (field === "time") {
           return { ...r, time: value, duration_seconds: parseDurationSeconds(value) };
         }
+        if (field === "screenshot") {
+          return { ...r, screenshot: value || null, motion_points: value ? r.motion_points : null, motion_plan: null };
+        }
         return { ...r, [field]: value };
       });
       onChange(updated);
@@ -303,6 +309,51 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
     },
     [onChange, pushUndo, showUndoToast],
   );
+
+  const updateMotionPoints = useCallback(
+    (index: number, points: MotionPoint[]) => {
+      if (isCellLocked(rowsRef.current[index], "screenshot")) return;
+      pushUndo();
+      const normalized = points
+        .slice(0, 3)
+        .map((point, pointIndex) => ({
+          ...point,
+          rank: (pointIndex + 1) as MotionPoint["rank"],
+          x: Math.max(0, Math.min(1, point.x)),
+          y: Math.max(0, Math.min(1, point.y)),
+          label: point.label?.trim() || null,
+        }));
+      const updated = rowsRef.current.map((row, rowIndex) =>
+        rowIndex === index
+          ? { ...row, motion_points: normalized.length > 0 ? normalized : null, motion_plan: null }
+          : row,
+      );
+      onChange(updated);
+    },
+    [onChange, pushUndo],
+  );
+
+  const addMotionPointFromLightbox = useCallback((event: ReactMouseEvent) => {
+    if (readOnly || !lightboxImage || isCellLocked(rowsRef.current[lightboxImage.rowIndex], "screenshot")) return;
+    const image = lightboxImageRef.current;
+    if (!image) return;
+    const rect = image.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const x = (event.clientX - rect.left) / rect.width;
+    const y = (event.clientY - rect.top) / rect.height;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return;
+    const currentPoints = rowsRef.current[lightboxImage.rowIndex]?.motion_points ?? [];
+    const nextPoints = [
+      ...currentPoints.slice(0, 2),
+      {
+        rank: Math.min(currentPoints.length + 1, 3) as MotionPoint["rank"],
+        x,
+        y,
+        label: null,
+      },
+    ];
+    updateMotionPoints(lightboxImage.rowIndex, nextPoints);
+  }, [lightboxImage, readOnly, updateMotionPoints]);
 
   const removeVisual = useCallback(
     (index: number) => {
@@ -425,7 +476,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   onRemoveNarration={removeNarration}
                   projectRoot={projectRoot}
                   sketchPath={sketchPath}
-                  onImageClick={setLightboxSrc}
+                  onImageClick={(src, rowIndex) => setLightboxImage({ src, rowIndex })}
                   onVisualClick={(visualPath, rowIdx) => setVisualLightbox({ visualPath, rowIndex: rowIdx })}
                   isHighlighted={highlightedRows?.has(idx) ?? false}
                   rowDiff={rowDiffs?.find((d) => d.rowIndex === idx)}
@@ -434,6 +485,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   onRowLockChange={onRowLockChange}
                   onCellLockChange={onCellLockChange}
                   onStartNarrationRecording={onStartNarrationRecording}
+                  onGenerateNarration={onGenerateNarration}
                   onPickNarration={onPickNarration}
                   onStopNarrationRecording={onStopNarrationRecording}
                   narrationRecordingRow={narrationRecordingRow}
@@ -466,19 +518,130 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
       </DndContext>
 
       {/* Lightbox overlay */}
-      {lightboxSrc && (
+      {lightboxImage && (
         <div
-          className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-strong)/0.8)] cursor-pointer"
-          onClick={() => setLightboxSrc(null)}
+          className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-strong)/0.82)] p-5"
+          onClick={() => setLightboxImage(null)}
         >
-          <img
-            src={lightboxSrc}
-            alt="Screenshot preview"
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+          <div
+            className="grid h-[calc(100vh-40px)] w-[calc(100vw-40px)] max-w-[1280px] grid-cols-[minmax(0,1fr)_280px] overflow-hidden rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-2xl"
             onClick={(e) => e.stopPropagation()}
-          />
+          >
+            <div className="relative flex min-h-0 items-center justify-center bg-[rgb(var(--color-surface-alt))]/55 p-5">
+              <div className="relative max-h-full max-w-full" onClick={addMotionPointFromLightbox}>
+                <img
+                  ref={lightboxImageRef}
+                  src={lightboxImage.src}
+                  alt="Screenshot preview"
+                  className="max-h-[calc(100vh-80px)] max-w-full select-none rounded-xl object-contain shadow-2xl"
+                  draggable={false}
+                />
+                {(rows[lightboxImage.rowIndex]?.motion_points ?? []).map((point) => (
+                  <div
+                    key={point.rank}
+                    className="absolute -translate-x-1/2 -translate-y-1/2"
+                    style={{ left: `${point.x * 100}%`, top: `${point.y * 100}%` }}
+                  >
+                    <div className="grid h-8 w-8 place-items-center rounded-full border-2 border-[rgb(var(--color-accent-fg))] bg-[rgb(var(--color-accent))] text-xs font-semibold text-[rgb(var(--color-accent-fg))] shadow-lg shadow-black/30 ring-4 ring-[rgb(var(--color-accent))]/25">
+                      {point.rank}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <aside className="flex min-h-0 flex-col border-l border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]">
+              <div className="border-b border-[rgb(var(--color-border))] px-4 py-4">
+                <div className="flex items-center gap-2">
+                  <div className="grid h-8 w-8 place-items-center rounded-xl bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+                    <Crosshair className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-[rgb(var(--color-text))]">Motion points</div>
+                    <div className="text-[11px] text-[rgb(var(--color-text-secondary))]">Row {lightboxImage.rowIndex + 1}</div>
+                  </div>
+                </div>
+                <p className="mt-3 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
+                  Click the screenshot to mark up to three important points in priority order. Points are saved as relative coordinates.
+                </p>
+                <div className="mt-3 space-y-2 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/45 p-3">
+                  <div>
+                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">Narrative</div>
+                    <div className="max-h-24 overflow-y-auto text-xs leading-5 text-[rgb(var(--color-text))]">
+                      {rows[lightboxImage.rowIndex]?.narrative ? (
+                        <MarkdownPreview value={rows[lightboxImage.rowIndex].narrative} placeholder="No narrative yet." />
+                      ) : (
+                        <span className="text-[rgb(var(--color-text-secondary))]">No narrative yet.</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="border-t border-[rgb(var(--color-border))] pt-2">
+                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">Actions</div>
+                    <div className="max-h-24 overflow-y-auto text-xs leading-5 text-[rgb(var(--color-text))]">
+                      {rows[lightboxImage.rowIndex]?.demo_actions ? (
+                        <MarkdownPreview value={rows[lightboxImage.rowIndex].demo_actions} placeholder="No actions yet." />
+                      ) : (
+                        <span className="text-[rgb(var(--color-text-secondary))]">No actions yet.</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+                {(rows[lightboxImage.rowIndex]?.motion_points ?? []).length > 0 ? (
+                  (rows[lightboxImage.rowIndex]?.motion_points ?? []).map((point, index) => (
+                    <div key={point.rank} className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/45 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-semibold text-[rgb(var(--color-text))]">
+                            {index === 0 ? "Primary" : index === 1 ? "Secondary" : "Tertiary"} point
+                          </div>
+                          <div className="mt-0.5 font-mono text-[10px] text-[rgb(var(--color-text-secondary))]">
+                            x {point.x.toFixed(3)} · y {point.y.toFixed(3)}
+                          </div>
+                        </div>
+                        {!readOnly && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = (rowsRef.current[lightboxImage.rowIndex]?.motion_points ?? []).filter((_, pointIndex) => pointIndex !== index);
+                              updateMotionPoints(lightboxImage.rowIndex, next);
+                            }}
+                            className="rounded-lg p-1 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-error))]/10 hover:text-[rgb(var(--color-error))]"
+                            aria-label={`Remove motion point ${point.rank}`}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-xl border border-dashed border-[rgb(var(--color-border))] p-4 text-center text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
+                    No motion points yet. Click the image to drop point 1.
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-2 border-t border-[rgb(var(--color-border))] px-4 py-3">
+                <button
+                  type="button"
+                  disabled={readOnly || (rows[lightboxImage.rowIndex]?.motion_points ?? []).length === 0}
+                  onClick={() => updateMotionPoints(lightboxImage.rowIndex, [])}
+                  className="rounded-lg border border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLightboxImage(null)}
+                  className="rounded-lg bg-[rgb(var(--color-accent))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))]"
+                >
+                  Done
+                </button>
+              </div>
+            </aside>
+          </div>
           <button
-            onClick={() => setLightboxSrc(null)}
+            onClick={() => setLightboxImage(null)}
             className="absolute top-4 right-4 p-2 rounded-full bg-[rgb(var(--color-media-control-bg)/0.5)] text-[rgb(var(--color-media-control-fg)/0.8)] hover:text-[rgb(var(--color-media-control-fg))] transition-colors"
           >
             <X className="w-5 h-5" />
@@ -681,6 +844,7 @@ function SortableRow({
   onRowLockChange,
   onCellLockChange,
   onStartNarrationRecording,
+  onGenerateNarration,
   onPickNarration,
   onStopNarrationRecording,
   narrationRecordingRow,
@@ -704,7 +868,7 @@ function SortableRow({
   onRemoveNarration?: (rowIndex: number) => void;
   projectRoot?: string;
   sketchPath?: string;
-  onImageClick: (src: string) => void;
+  onImageClick: (src: string, rowIndex: number) => void;
   onVisualClick: (visualPath: string, rowIndex: number) => void;
   isHighlighted?: boolean;
   rowDiff?: RowDiff;
@@ -713,6 +877,7 @@ function SortableRow({
   onRowLockChange?: (rowIndex: number, locked: boolean) => void;
   onCellLockChange?: (rowIndex: number, field: PlanningCellField, locked: boolean) => void;
   onStartNarrationRecording?: (rowIndex: number) => void;
+  onGenerateNarration?: (rowIndex: number) => void;
   onPickNarration?: (rowIndex: number) => void;
   onStopNarrationRecording?: () => void;
   narrationRecordingRow?: number | null;
@@ -730,6 +895,7 @@ function SortableRow({
   const isSavingNarration = narrationSavingRows?.has(idx) ?? false;
   const narrationStale = Boolean(row.narration && row.narration.source_text !== row.narrative);
   const narrationPath = row.narration?.path ?? null;
+  const motionPointCount = row.motion_points?.length ?? 0;
   const { confirm, confirmationDialog } = useConfirmDialog();
   const {
     attributes,
@@ -890,7 +1056,7 @@ function SortableRow({
           {row.screenshot ? (
             <div className="relative group/ss h-24 w-full rounded-md bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] overflow-hidden cursor-pointer"
               onClick={() => {
-                if (displayScreenshotSrc) onImageClick(displayScreenshotSrc);
+                if (displayScreenshotSrc) onImageClick(displayScreenshotSrc, idx);
               }}
             >
               {!readOnly && !rowLocked && onCellLockChange && (
@@ -905,17 +1071,32 @@ function SortableRow({
                   className="w-full h-full object-cover"
                 />
               )}
+              {motionPointCount > 0 && (
+                <div className="absolute bottom-1 left-1 z-10 inline-flex items-center gap-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.58)] px-1.5 py-0.5 text-[10px] font-medium text-[rgb(var(--color-media-control-fg))] backdrop-blur">
+                  <Crosshair className="h-3 w-3" />
+                  {motionPointCount}
+                </div>
+              )}
               {!readOnly && !mediaLocked && (
                 <div className="absolute inset-0 bg-[rgb(var(--color-media-control-bg)/0.5)] opacity-0 group-hover/ss:opacity-100 transition-opacity flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                   <button
                     onClick={() => {
-                      if (displayScreenshotSrc) onImageClick(displayScreenshotSrc);
-                    }}
-                    className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.3)]"
-                    title="View image"
-                  >
-                    <Search className="w-3.5 h-3.5" />
-                  </button>
+                    if (displayScreenshotSrc) onImageClick(displayScreenshotSrc, idx);
+                  }}
+                  className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.3)]"
+                  title="View image"
+                >
+                  <Search className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => {
+                    if (displayScreenshotSrc) onImageClick(displayScreenshotSrc, idx);
+                  }}
+                  className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-accent)/0.8)]"
+                  title="Set motion points"
+                >
+                  <Crosshair className="w-3.5 h-3.5" />
+                </button>
                   <button
                     onClick={() => onCaptureScreenshot?.(idx)}
                     className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.3)]"
@@ -1008,6 +1189,7 @@ function SortableRow({
                     onBrowseImage={onBrowseImage}
                     onGenerateVisual={onGenerateVisual}
                     onStartNarrationRecording={onStartNarrationRecording}
+                    onGenerateNarration={onGenerateNarration}
                   />
                   <span>Screenshot</span>
                 </div>
@@ -1066,6 +1248,7 @@ function SortableRow({
                     hasNarration={Boolean(row.narration)}
                     hasPrimaryAsset={Boolean(row.screenshot || row.visual)}
                     onStartNarrationRecording={narrationRecordingRow === null ? onStartNarrationRecording : undefined}
+                    onGenerateNarration={onGenerateNarration}
                     onPickNarration={onPickNarration}
                   />
                   <span>Narration</span>
@@ -1447,6 +1630,7 @@ function NarrationPlayer({
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const objectUrlRef = useRef("");
+  const pendingAutoplaySrcRef = useRef("");
   const [src, setSrc] = useState("");
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -1464,13 +1648,23 @@ function NarrationPlayer({
     setCurrentTime(0);
     setDuration(0);
     setPlaying(false);
+    pendingAutoplaySrcRef.current = "";
 
     return () => {
       const currentObjectUrl = objectUrlRef.current;
       if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
       objectUrlRef.current = "";
+      pendingAutoplaySrcRef.current = "";
     };
   }, [relativePath]);
+
+  const handlePlaybackError = (err: unknown) => {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      console.debug("[NarrationPlayer] narration playback was interrupted by an audio source reload");
+      return;
+    }
+    setLoadError(`Could not play narration: ${err}`);
+  };
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -1480,9 +1674,29 @@ function NarrationPlayer({
     setPlaying(false);
     audio.pause();
     audio.load();
+
+    if (!src || pendingAutoplaySrcRef.current !== src) return;
+
+    let cancelled = false;
+    const playLoadedAudio = () => {
+      if (cancelled || pendingAutoplaySrcRef.current !== src) return;
+      pendingAutoplaySrcRef.current = "";
+      void audio.play().catch(handlePlaybackError);
+    };
+
+    if (audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      queueMicrotask(playLoadedAudio);
+      return () => { cancelled = true; };
+    }
+
+    audio.addEventListener("canplay", playLoadedAudio, { once: true });
+    return () => {
+      cancelled = true;
+      audio.removeEventListener("canplay", playLoadedAudio);
+    };
   }, [src]);
 
-  const loadNarrationForPlayback = async () => {
+  const loadNarrationForPlayback = async (autoplay = false) => {
     if (src) return src;
     setLoading(true);
     setLoadError("");
@@ -1490,6 +1704,7 @@ function NarrationPlayer({
       const asset = await invoke<NarrationAssetData>("read_narration_asset", { relativePath });
       const objectUrl = URL.createObjectURL(new Blob([new Uint8Array(asset.data)], { type: asset.mimeType }));
       objectUrlRef.current = objectUrl;
+      if (autoplay) pendingAutoplaySrcRef.current = objectUrl;
       setSrc(objectUrl);
       return objectUrl;
     } catch (err) {
@@ -1504,13 +1719,15 @@ function NarrationPlayer({
     const audio = audioRef.current;
     if (!audio || loading) return;
     if (audio.paused) {
-      const playbackSrc = await loadNarrationForPlayback();
+      if (src) {
+        setLoadError("");
+        await audio.play().catch(handlePlaybackError);
+        return;
+      }
+      const playbackSrc = await loadNarrationForPlayback(true);
       if (!playbackSrc) return;
-      if (audio.src !== playbackSrc) audio.src = playbackSrc;
-      await audio.play().catch((err: unknown) => {
-        setLoadError(`Could not play narration: ${err}`);
-      });
     } else {
+      pendingAutoplaySrcRef.current = "";
       audio.pause();
     }
   };
@@ -1623,6 +1840,7 @@ interface MediaAddPopoverProps {
   onBrowseImage?: (idx: number) => void;
   onGenerateVisual?: (idx: number) => void;
   onStartNarrationRecording?: (idx: number) => void;
+  onGenerateNarration?: (idx: number) => void;
   onPickNarration?: (idx: number) => void;
 }
 
@@ -1637,6 +1855,7 @@ function MediaAddPopover({
   onBrowseImage,
   onGenerateVisual,
   onStartNarrationRecording,
+  onGenerateNarration,
   onPickNarration,
 }: MediaAddPopoverProps) {
   const { state, ref, addRef, toggle, close } = usePopover();
@@ -1649,23 +1868,27 @@ function MediaAddPopover({
   useEffect(() => { addRef(portalRef); }, [addRef]);
 
   const items = useMemo(() => {
-    const list: { icon: LucideIcon; label: string; action: () => void }[] = [];
+    const list: { icon: LucideIcon; label: string; action: () => void; disabled?: boolean; title?: string }[] = [];
     if (assetKind === "visual") {
       const imageVerb = hasPrimaryAsset ? "Replace" : "Add";
       list.push({ icon: Camera, label: `${imageVerb} screenshot`, action: () => onCaptureScreenshot?.(idx) });
       if (onPickImage) list.push({ icon: ImageIcon, label: `${imageVerb} from workspace`, action: () => onPickImage(idx) });
       if (onBrowseImage) list.push({ icon: Folder, label: `${imageVerb} from file`, action: () => onBrowseImage(idx) });
       if (onGenerateVisual) list.push({ icon: Sparkles, label: hasPrimaryAsset ? "Replace with visual" : "Generate visual", action: () => onGenerateVisual(idx) });
-    } else if (onStartNarrationRecording) {
+    } else if (assetKind === "narration") {
       const narrationVerb = hasNarration ? "Replace" : "Add";
-      list.push({ icon: Mic, label: `${narrationVerb} narration`, action: () => onStartNarrationRecording(idx) });
+      list.push({
+        icon: Sparkles,
+        label: "Generate narration",
+        action: () => onGenerateNarration?.(idx),
+        disabled: !onGenerateNarration,
+        title: onGenerateNarration ? undefined : "Generate narration is not wired yet",
+      });
+      if (onStartNarrationRecording) list.push({ icon: Mic, label: `${narrationVerb} narration`, action: () => onStartNarrationRecording(idx) });
       if (onPickNarration) list.push({ icon: Folder, label: `${narrationVerb} from workspace`, action: () => onPickNarration(idx) });
-    } else if (assetKind === "narration" && onPickNarration) {
-      const narrationVerb = hasNarration ? "Replace" : "Add";
-      list.push({ icon: Folder, label: `${narrationVerb} from workspace`, action: () => onPickNarration(idx) });
     }
     return list;
-  }, [assetKind, hasNarration, hasPrimaryAsset, idx, onCaptureScreenshot, onPickImage, onBrowseImage, onGenerateVisual, onStartNarrationRecording, onPickNarration]);
+  }, [assetKind, hasNarration, hasPrimaryAsset, idx, onCaptureScreenshot, onPickImage, onBrowseImage, onGenerateVisual, onStartNarrationRecording, onGenerateNarration, onPickNarration]);
 
   const handleItemClick = (action: () => void) => {
     close();
@@ -1736,9 +1959,17 @@ function MediaAddPopover({
                 ref={(el) => { itemsRef.current[i] = el; }}
                 role="menuitem"
                 tabIndex={0}
-                onClick={() => handleItemClick(item.action)}
+                onClick={() => {
+                  if (!item.disabled) handleItemClick(item.action);
+                }}
                 onKeyDown={(e) => handleKeyDown(e, i)}
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors text-left"
+                aria-disabled={item.disabled ? "true" : undefined}
+                title={item.title}
+                className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[rgb(var(--color-text-secondary))] transition-colors text-left ${
+                  item.disabled
+                    ? "cursor-not-allowed opacity-45"
+                    : "hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5"
+                }`}
               >
                 <Icon className="w-3.5 h-3.5 flex-shrink-0" />
                 {item.label}

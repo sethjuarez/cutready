@@ -101,6 +101,12 @@ const mockSettingsStore: Record<string, unknown> = {
   aiRefreshToken: "",
   audioDevice: "",
   outputDirectory: "",
+  narrationConnectionMode: "reuse_active_foundry",
+  narrationProviderId: "",
+  narrationVoiceName: "en-US-Harper:MAI-Voice-2",
+  narrationSpeechOutputFormat: "riff-24khz-16bit-mono-pcm",
+  narrationStylePrompt: "Natural presenter delivery: short sentences, clean transitions, light emphasis, and no hype.",
+  videoExportIncludeTitleCard: true,
   aiSelectedAgent: "planner",
   aiAgents: [],
   aiAgentModelOverrides: {},
@@ -226,6 +232,21 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         duration_seconds: 12,
         row_count: 3,
       };
+    case "import_background_music":
+      return {
+        id: "mock-loop",
+        name: "Mock loop",
+        path: ".cutready/audio/background/mock-loop.wav",
+        durationSeconds: 24,
+      };
+    case "preview_background_music_mix":
+      return {
+        path: "C:/mock-project/.cutready/exports/tmp/music-preview.wav",
+        durationSeconds: 12,
+        usedNarration: Boolean((args?.settings as { narrationPath?: string } | undefined)?.narrationPath),
+      };
+    case "delete_background_music":
+      return null;
     case "import_video":
     case "import_video_with_progress":
       sendMockProgress(args, {
