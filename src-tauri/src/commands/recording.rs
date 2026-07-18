@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::{
     engine::{project, recording},
-    models::sketch::{NarrationAsset, Sketch},
+    models::sketch::{NarrationAsset, NarrationPlan, Sketch},
     AppState,
 };
 
@@ -215,6 +215,7 @@ pub async fn save_narration_recording(
     leading_silence_ms: Option<u32>,
     trailing_silence_ms: Option<u32>,
     silence_threshold_db: Option<f32>,
+    narration_plan: Option<NarrationPlan>,
     state: State<'_, AppState>,
 ) -> Result<Sketch, String> {
     const MAX_NARRATION_BYTES: usize = 50 * 1024 * 1024;
@@ -271,6 +272,8 @@ pub async fn save_narration_recording(
         recorded_at: Utc::now(),
     };
     row.narration = Some(asset);
+    row.narration_plan = narration_plan;
+    row.motion_plan = None;
     sketch.updated_at = Utc::now();
 
     project::write_sketch(&sketch, &sketch_abs, &root).map_err(|e| e.to_string())?;

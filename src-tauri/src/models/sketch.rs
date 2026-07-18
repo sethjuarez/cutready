@@ -129,6 +129,38 @@ pub struct NarrationAsset {
     pub recorded_at: DateTime<Utc>,
 }
 
+/// A deliberate delivery beat that may anchor narration and camera motion.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NarrationBeat {
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style_degree: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub emphasis: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pause_after_ms: Option<u32>,
+}
+
+/// Durable creative direction and compiled Azure Speech SSML for generated narration.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NarrationPlan {
+    pub source_text: String,
+    pub voice: String,
+    pub locale: String,
+    pub ssml: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baseline_style: Option<String>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub pronunciation_overrides: std::collections::BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub beats: Vec<NarrationBeat>,
+    pub generated_at: DateTime<Utc>,
+}
+
 /// Ranked normalized screenshot point used by the Motion Director for camera moves.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MotionPoint {
@@ -217,6 +249,9 @@ pub struct PlanningRow {
     /// Optional narration audio for this row.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub narration: Option<NarrationAsset>,
+    /// Durable SSML and creative direction for generated narration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub narration_plan: Option<NarrationPlan>,
 }
 
 impl PlanningRow {
@@ -234,6 +269,7 @@ impl PlanningRow {
             motion_plan: None,
             design_plan: None,
             narration: None,
+            narration_plan: None,
         }
     }
 
@@ -626,6 +662,7 @@ mod tests {
             motion_plan: None,
             design_plan: None,
             narration: None,
+            narration_plan: None,
         });
         sketch
             .metadata
@@ -715,6 +752,36 @@ mod tests {
 
         assert!(row.motion_points.is_empty());
         assert!(row.motion_plan.is_none());
+        assert!(row.narration_plan.is_none());
+    }
+
+    #[test]
+    fn planning_row_roundtrips_narration_plan() {
+        let mut row = PlanningRow::new();
+        row.narration_plan = Some(NarrationPlan {
+            source_text: "CutReady keeps the story moving.".into(),
+            voice: "en-US-AvaMultilingualNeural".into(),
+            locale: "en-US".into(),
+            ssml: "<speak><voice name=\"en-US-AvaMultilingualNeural\">CutReady keeps the story moving.</voice></speak>".into(),
+            baseline_style: Some("narration-professional".into()),
+            pronunciation_overrides: [("CutReady".into(), "cut ready".into())].into_iter().collect(),
+            beats: vec![NarrationBeat {
+                text: "story moving".into(),
+                purpose: Some("payoff".into()),
+                style: Some("excited".into()),
+                style_degree: Some(1.1),
+                emphasis: Some("moderate".into()),
+                pause_after_ms: Some(250),
+            }],
+            generated_at: Utc::now(),
+        });
+
+        let serialized = serde_json::to_value(&row).unwrap();
+        let parsed: PlanningRow = serde_json::from_value(serialized).unwrap();
+        let plan = parsed.narration_plan.unwrap();
+        assert_eq!(plan.baseline_style.as_deref(), Some("narration-professional"));
+        assert_eq!(plan.pronunciation_overrides.get("CutReady").map(String::as_str), Some("cut ready"));
+        assert_eq!(plan.beats[0].pause_after_ms, Some(250));
     }
 
     #[test]
@@ -756,6 +823,7 @@ mod tests {
             }),
             design_plan: None,
             narration: None,
+            narration_plan: None,
         };
         let json = serde_json::to_string(&row).unwrap();
         let parsed: PlanningRow = serde_json::from_str(&json).unwrap();

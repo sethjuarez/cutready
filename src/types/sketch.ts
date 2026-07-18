@@ -27,6 +27,29 @@ export interface NarrationAsset {
   recorded_at: string;
 }
 
+export type NarrationEmphasis = "reduced" | "moderate" | "strong";
+
+export interface NarrationBeat {
+  text: string;
+  purpose?: string | null;
+  style?: string | null;
+  style_degree?: number | null;
+  emphasis?: NarrationEmphasis | null;
+  pause_after_ms?: number | null;
+}
+
+/** Durable creative direction and compiled SSML for generated narration. */
+export interface NarrationPlan {
+  source_text: string;
+  voice: string;
+  locale: string;
+  ssml: string;
+  baseline_style?: string | null;
+  pronunciation_overrides?: Record<string, string>;
+  beats?: NarrationBeat[];
+  generated_at: string;
+}
+
 export interface MotionPoint {
   rank: 1 | 2 | 3;
   x: number;
@@ -72,6 +95,8 @@ export interface PlanningRow {
   design_plan?: string | null;
   /** Recorded or generated narration audio attached to this row. */
   narration?: NarrationAsset | null;
+  /** Durable SSML and creative direction for generated narration. */
+  narration_plan?: NarrationPlan | null;
 }
 
 export type PlanningCellField = "time" | "narrative" | "demo_actions" | "screenshot" | "visual" | "design_plan";

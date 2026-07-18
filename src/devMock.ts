@@ -1050,7 +1050,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "transfer_asset":
       return null; // no-op in dev mock
     case "save_narration_recording": {
-      const { rowIndex, mimeType, durationMs, sourceText, leadingSilenceMs, trailingSilenceMs, silenceThresholdDb } = args as {
+      const { rowIndex, mimeType, durationMs, sourceText, leadingSilenceMs, trailingSilenceMs, silenceThresholdDb, narrationPlan } = args as {
         rowIndex: number;
         mimeType?: string;
         durationMs?: number;
@@ -1058,6 +1058,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         leadingSilenceMs?: number;
         trailingSilenceMs?: number;
         silenceThresholdDb?: number;
+        narrationPlan?: unknown;
       };
       return {
         ...MOCK_SKETCH,
@@ -1075,6 +1076,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
             byte_size: 12345,
             recorded_at: new Date().toISOString(),
           },
+          narration_plan: narrationPlan ?? null,
+          motion_plan: null,
         } : row),
       };
     }

@@ -22,7 +22,15 @@ import type { PresentationMode } from "./presentation/types";
 import VisualCell from "./VisualCell";
 import { exportSketchToWord, type WordOrientation } from "../utils/exportToWord";
 import { exportSketchToPowerPoint, type PowerPointExportContent } from "../utils/exportToPowerPoint";
-import type { MotionPlan, MotionPlanEasing, MotionPlanKind, PlanningRow, Sketch } from "../types/sketch";
+import type {
+  MotionPlan,
+  MotionPlanEasing,
+  MotionPlanKind,
+  NarrationBeat,
+  NarrationPlan,
+  PlanningRow,
+  Sketch,
+} from "../types/sketch";
 import { diffRow, type RowDiff } from "../utils/textDiff";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
 import { SketchIcon } from "./Icons";
@@ -32,6 +40,7 @@ import { preferredNarrationMimeType } from "../utils/narrationAudio";
 import { activeProvider, activeProviderInput, buildProviderConfig, providerById } from "../utils/providerConfig";
 import { getProviderSecret, setProviderSecret } from "../hooks/useSecretStore";
 import { buildPlainSsml, inferSpeechEndpoint, SPEECH_TOKEN_SCOPE, synthesizeSpeechAudio } from "../services/narrationSpeech";
+import { validateGeneratedSsml } from "../services/narrationSsml";
 
 interface MonitorInfo {
   id: number;
@@ -73,7 +82,14 @@ type SketchVideoExportSettings = {
 };
 type VideoExportIssue = { rowNumber: number; missing: string[] };
 type AgentChatResult = { response: string };
-type NarrationSsmlRow = { row_number: number; ssml: string; source_text?: string };
+type NarrationSsmlRow = {
+  row_number: number;
+  ssml: string;
+  source_text?: string;
+  baseline_style?: string;
+  pronunciation_overrides?: Record<string, string>;
+  beats?: NarrationBeat[];
+};
 type NarrationSsmlPlan = { rows: NarrationSsmlRow[] };
 type MotionDirectorRow = { row_number: number; motion_plan: MotionPlan };
 type MotionDirectorPlan = { rows: MotionDirectorRow[] };
@@ -104,11 +120,65 @@ function parseNarrationSsmlPlan(response: string): NarrationSsmlPlan {
     row_number: Number(row.row_number),
     ssml: String(row.ssml ?? ""),
     source_text: typeof row.source_text === "string" ? row.source_text : undefined,
+    baseline_style: typeof row.baseline_style === "string" ? row.baseline_style : undefined,
+    pronunciation_overrides: isStringRecord(row.pronunciation_overrides) ? row.pronunciation_overrides : undefined,
+    beats: Array.isArray(row.beats) ? row.beats : undefined,
   }));
   if (rows.some((row) => !Number.isInteger(row.row_number) || row.row_number < 1 || !row.ssml.trim())) {
     throw new Error("Narration agent returned an invalid row entry.");
   }
   return { rows };
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return value !== null && typeof value === "object" && Object.values(value).every((entry) => typeof entry === "string");
+}
+
+function narrationLocaleForVoice(voice: string): string {
+  return voice.match(/^[a-z]{2}-[a-z]{2}/i)?.[0] ?? "en-US";
+}
+
+function normalizeNarrationPlan(
+  generated: NarrationSsmlRow,
+  sourceText: string,
+  voice: string,
+): NarrationPlan {
+  const beats = (generated.beats ?? [])
+    .slice(0, 8)
+    .map((beat) => ({
+      text: typeof beat.text === "string" ? beat.text.trim().slice(0, 240) : "",
+      purpose: typeof beat.purpose === "string" ? beat.purpose.trim().slice(0, 160) : null,
+      style: typeof beat.style === "string" ? beat.style.trim().slice(0, 64) : null,
+      style_degree: typeof beat.style_degree === "number" && Number.isFinite(beat.style_degree)
+        ? Math.max(0.01, Math.min(2, beat.style_degree))
+        : null,
+      emphasis: ["reduced", "moderate", "strong"].includes(beat.emphasis ?? "")
+        ? beat.emphasis
+        : null,
+      pause_after_ms: typeof beat.pause_after_ms === "number" && Number.isFinite(beat.pause_after_ms)
+        ? Math.round(Math.max(0, Math.min(20_000, beat.pause_after_ms)))
+        : null,
+    }))
+    .filter((beat) => beat.text.length > 0);
+  const pronunciationOverrides = Object.entries(generated.pronunciation_overrides ?? {})
+    .slice(0, 32)
+    .reduce<Record<string, string>>((overrides, [term, pronunciation]) => {
+      const normalizedTerm = term.trim().slice(0, 120);
+      const normalizedPronunciation = pronunciation.trim().slice(0, 160);
+      if (normalizedTerm && normalizedPronunciation) overrides[normalizedTerm] = normalizedPronunciation;
+      return overrides;
+    }, {});
+
+  return {
+    source_text: sourceText,
+    voice,
+    locale: narrationLocaleForVoice(voice),
+    ssml: validateGeneratedSsml(generated.ssml, voice),
+    baseline_style: generated.baseline_style?.trim().slice(0, 64) || null,
+    pronunciation_overrides: pronunciationOverrides,
+    beats,
+    generated_at: new Date().toISOString(),
+  };
 }
 
 function clampMotionNumber(value: unknown, fallback: number, min: number, max: number): number {
@@ -154,19 +224,6 @@ function parseMotionPlan(response: string, maxScale: number): MotionDirectorPlan
     };
   });
   return { rows };
-}
-
-function validateGeneratedSsml(ssml: string): string {
-  const trimmed = ssml.trim();
-  if (!/^<speak[\s>]/i.test(trimmed)) throw new Error("Narration agent returned SSML without a speak root.");
-  if (/<\s*(audio|lexicon|bookmark|mstts:backgroundaudio)\b/i.test(trimmed)) {
-    throw new Error("Narration agent returned unsupported SSML elements.");
-  }
-
-  const document = new DOMParser().parseFromString(trimmed, "application/xml");
-  if (document.querySelector("parsererror")) throw new Error("Narration agent returned malformed SSML.");
-  if (document.documentElement.localName !== "speak") throw new Error("Narration agent returned SSML without a speak root.");
-  return trimmed;
 }
 
 async function decodeAudioDurationMs(data: ArrayBuffer): Promise<number | null> {
@@ -1400,6 +1457,8 @@ The Actions describe what happens on screen — use them as visual design hints.
         byte_size: asset.size,
         recorded_at: new Date().toISOString(),
       },
+      narration_plan: null,
+      motion_plan: null,
     };
     handleRowsChange(updated);
     setNarrationPickerRowIdx(null);
@@ -1435,8 +1494,7 @@ The Actions describe what happens on screen — use them as visual design hints.
 
   const synthesizeNarrationForRow = useCallback(async (
     rowIndex: number,
-    ssml: string,
-    sourceText: string,
+    narrationPlan: NarrationPlan,
     accessToken: string,
     speechEndpoint: string,
   ) => {
@@ -1444,7 +1502,7 @@ The Actions describe what happens on screen — use them as visual design hints.
     const { audioData, mimeType } = await synthesizeSpeechAudio({
       accessToken,
       speechEndpoint,
-      ssml: validateGeneratedSsml(ssml),
+      ssml: validateGeneratedSsml(narrationPlan.ssml, narrationPlan.voice),
       outputFormat: settings.narrationSpeechOutputFormat,
     });
 
@@ -1455,10 +1513,11 @@ The Actions describe what happens on screen — use them as visual design hints.
       audioData: Array.from(new Uint8Array(audioData)),
       mimeType,
       durationMs,
-      sourceText,
+      sourceText: narrationPlan.source_text,
       leadingSilenceMs: 0,
       trailingSilenceMs: 0,
       silenceThresholdDb: null,
+      narrationPlan,
     });
     useAppStore.setState({ activeSketch: sketch });
     setLocalRows(sketch.rows ?? []);
@@ -1536,7 +1595,8 @@ The Actions describe what happens on screen — use them as visual design hints.
       style: settings.narrationStylePrompt,
       rows: localRows.map((row, index) => ({
         row_number: index + 1,
-        time: row.time,
+        planning_time: row.time,
+        planning_duration_seconds: row.duration_seconds,
         narrative: row.narrative,
         actions: row.demo_actions,
         screenshot: row.screenshot,
@@ -1549,13 +1609,15 @@ Your job is to turn a complete demo sketch into compelling spoken narration SSML
 
 Rules:
 - Return ONLY valid JSON. No markdown, no prose, no code fences.
-- Output shape: {"rows":[{"row_number":1,"source_text":"plain narration text","ssml":"<speak ...>...</speak>"}]}
+- Output shape: {"rows":[{"row_number":1,"source_text":"plain narration text","baseline_style":"narration-professional","pronunciation_overrides":{"CutReady":"cut ready"},"beats":[{"text":"spoken phrase","purpose":"reveal","style":"excited","style_degree":1.1,"emphasis":"moderate","pause_after_ms":250}],"ssml":"<speak ...>...</speak>"}]}
 - Include every row that has narrative or actions. Skip only rows with neither.
 - Each ssml value must be a complete Azure Speech SSML document with a <speak> root and <voice name="${settings.narrationVoiceName}">.
 - Use natural spoken delivery, short sentences, and clean transitions across rows.
 - Style direction: ${settings.narrationStylePrompt || "Natural presenter delivery."}
-- Use SSML intentionally: <break time="200ms"/> to shape pacing, <prosody rate="-5%" pitch="+0st"> sparingly, <emphasis level="moderate"> for one key idea when useful.
-- Do not include <audio>, external URLs, lexicons, bookmarks, or background audio.
+- Be creatively intentional with supported Azure SSML: use <p>/<s>, <break>, <prosody>, <emphasis>, <say-as>, <sub>, <phoneme>, <lang>, and <mstts:express-as> only when they improve natural delivery. Keep emphasis and prosody sparse.
+- The planning time is a drafting estimate, never a narration target. Favor clear, natural speech; CutReady will adapt video timing to the measured audio.
+- Return concise beats for meaningful delivery or visual transitions. Beats describe the SSML you wrote; they do not add facts.
+- Do not include <audio>, external URLs, lexicons, bookmarks, background audio, visemes, voice conversion, or additional voices.
 - Keep the narration grounded in the sketch. Do not invent product capabilities beyond the title, description, narrative, actions, screenshots, or visuals.
 - Avoid hype words and AI marketing cliches. Use plain, presenter-like language.
 - Use ASCII punctuation in text content.`;
@@ -1594,6 +1656,7 @@ Rules:
         narration_duration_ms: row.narration?.duration_ms ?? Math.round((row.duration_seconds ?? parseDurationSeconds(row.time) ?? 3) * 1000),
         screenshot: row.screenshot,
         points: row.motion_points,
+        narration_beats: row.narration_plan?.beats ?? [],
       })),
     };
     const systemPrompt = `You are CutReady's Motion Director, an expert video editor designing subtle camera motion for static product demo screenshots.
@@ -1723,7 +1786,15 @@ Rules:
         speechHost: new URL(speechEndpoint).host,
         voice: settings.narrationVoiceName,
       });
-      await synthesizeNarrationForRow(rowIndex, buildPlainSsml(text, settings.narrationVoiceName), text, accessToken, speechEndpoint);
+      await synthesizeNarrationForRow(rowIndex, {
+        source_text: text,
+        voice: settings.narrationVoiceName,
+        locale: narrationLocaleForVoice(settings.narrationVoiceName),
+        ssml: buildPlainSsml(text, settings.narrationVoiceName),
+        pronunciation_overrides: {},
+        beats: [],
+        generated_at: new Date().toISOString(),
+      }, accessToken, speechEndpoint);
       await refreshAfterNarrationGeneration(`Generated narration for row ${rowIndex + 1}`);
       useToastStore.getState().show(`Generated narration for row ${rowIndex + 1}`, 4000, "success");
     } catch (err) {
@@ -1801,7 +1872,12 @@ Rules:
           message: `Synthesizing row ${index + 1} with MAI-Voice-2.`,
         });
         const sourceText = generated.source_text?.trim() || row.narrative.trim() || row.demo_actions.trim();
-        await synthesizeNarrationForRow(index, generated.ssml, sourceText, accessToken, speechEndpoint);
+        await synthesizeNarrationForRow(
+          index,
+          normalizeNarrationPlan(generated, sourceText, settings.narrationVoiceName),
+          accessToken,
+          speechEndpoint,
+        );
         generatedCount += 1;
       }
 
