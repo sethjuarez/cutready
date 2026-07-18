@@ -27,6 +27,30 @@ export interface NarrationAsset {
   recorded_at: string;
 }
 
+export interface MotionPoint {
+  rank: 1 | 2 | 3;
+  x: number;
+  y: number;
+  label?: string | null;
+}
+
+export type MotionPlanKind = "subtle_push" | "wide_hold_then_push" | "push_then_drift";
+export type MotionPlanEasing = "linear" | "ease_in_out" | "ease_out";
+
+export interface MotionPlanKeyframe {
+  time_ms: number;
+  scale: number;
+  x: number;
+  y: number;
+  easing?: MotionPlanEasing | null;
+}
+
+export interface MotionPlan {
+  kind: MotionPlanKind;
+  keyframes: MotionPlanKeyframe[];
+  rationale?: string | null;
+}
+
 export interface PlanningRow {
   /** Whether the entire row is protected from edits. */
   locked?: boolean;
@@ -40,6 +64,10 @@ export interface PlanningRow {
   screenshot: string | null;
   /** Path to an elucim visual file (e.g., ".cutready/visuals/abc123.json"). */
   visual?: string | null;
+  /** Ranked normalized screenshot points used by the Motion Director for camera moves. */
+  motion_points?: MotionPoint[] | null;
+  /** Agent-generated camera motion plan for screenshot rows. */
+  motion_plan?: MotionPlan | null;
   /** English-language design brief for the visual (created by Designer agent Pass 1). */
   design_plan?: string | null;
   /** Recorded or generated narration audio attached to this row. */

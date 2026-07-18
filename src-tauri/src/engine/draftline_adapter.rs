@@ -1038,7 +1038,9 @@ mod tests {
                 candidate.include_range.start == *merge_result.version.id()
                     && candidate.include_range.end == *head.id()
             })
-            .expect("candidate should include the full local-ahead range ending at the merge commit");
+            .expect(
+                "candidate should include the full local-ahead range ending at the merge commit",
+            );
 
         assert!(!merge_endpoint.can_compact);
         assert!(merge_endpoint.blockers.iter().any(|blocker| {

@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 use crate::engine::agent::llm::{ContentPart, ImageUrl, Tool, ToolCall};
 use crate::engine::draftline_adapter::CutReadyDraftlineAdapter;
 use crate::engine::project;
-use crate::models::sketch::{PlanningRow, Sketch};
+use crate::models::sketch::{MotionPlan, MotionPoint, PlanningRow, Sketch};
 
 // ---------------------------------------------------------------------------
 // Image extraction and encoding for vision-capable models
@@ -2219,6 +2219,15 @@ fn exec_write_sketch(root: &Path, args: &Value) -> String {
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string()),
                 visual: r.get("visual").cloned(),
+                motion_points: r
+                    .get("motion_points")
+                    .cloned()
+                    .and_then(|value| serde_json::from_value::<Vec<MotionPoint>>(value).ok())
+                    .unwrap_or_default(),
+                motion_plan: r
+                    .get("motion_plan")
+                    .cloned()
+                    .and_then(|value| serde_json::from_value::<MotionPlan>(value).ok()),
                 design_plan: r
                     .get("design_plan")
                     .and_then(|v| v.as_str())

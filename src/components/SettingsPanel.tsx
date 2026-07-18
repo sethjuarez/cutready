@@ -4,7 +4,7 @@ import { useSettings, useSettingsStore, type AgentPreset, type AppSettings } fro
 import { useFfmpegStatus } from "../hooks/useFfmpegStatus";
 import { useRecordingDevices } from "../hooks/useRecordingDevices";
 import { useTheme, type ThemePreference } from "../hooks/useTheme";
-import { invoke } from "../services/tauri";
+import { convertFileSrc, invoke } from "../services/tauri";
 import { getVersion } from "@tauri-apps/api/app";
 import { open as dialogOpen } from "@tauri-apps/plugin-dialog";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
@@ -64,6 +64,21 @@ interface AuthCodeFlowInit {
   auth_url: string;
   port: number;
 }
+
+const NARRATION_VOICE_OPTIONS = [
+  { value: "en-US-Harper:MAI-Voice-2", label: "Harper (MAI Voice 2)", description: "Expressive presenter voice for polished demos." },
+  { value: "en-US-AvaMultilingualNeural", label: "Ava Multilingual Neural", description: "Warm, clear, general-purpose narration." },
+  { value: "en-US-AndrewMultilingualNeural", label: "Andrew Multilingual Neural", description: "Calm, professional male narration." },
+  { value: "en-US-EmmaMultilingualNeural", label: "Emma Multilingual Neural", description: "Friendly, concise presenter voice." },
+  { value: "en-US-BrianMultilingualNeural", label: "Brian Multilingual Neural", description: "Measured, technical walkthrough voice." },
+] as const;
+
+const NARRATION_OUTPUT_FORMAT_OPTIONS = [
+  { value: "riff-24khz-16bit-mono-pcm", label: "WAV, 24 kHz, 16-bit mono", description: "Best edit-friendly default." },
+  { value: "riff-48khz-16bit-mono-pcm", label: "WAV, 48 kHz, 16-bit mono", description: "Video timeline friendly." },
+  { value: "audio-24khz-160kbitrate-mono-mp3", label: "MP3, 24 kHz, 160 kbps mono", description: "Smaller preview files." },
+  { value: "audio-48khz-192kbitrate-mono-mp3", label: "MP3, 48 kHz, 192 kbps mono", description: "Compact high-rate export audio." },
+] as const;
 
 type SettingsTab = "ai" | "agents" | "memory" | "display" | "themes" | "presentation" | "narration" | "recording" | "export" | "feedback" | "repository" | "updates" | "experimental";
 const REQUESTED_SETTINGS_TAB_KEY = "cutready:requested-settings-tab";
@@ -295,17 +310,17 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
     },
     narration: {
       label: "Narration",
-      eyebrow: "Voice capture",
-      description: "Choose the microphone CutReady uses when recording narration directly into sketch rows.",
+      eyebrow: "Voice capture and generation",
+      description: "Choose the microphone for recorded narration and tune generated Azure Speech voice settings.",
       icon: <MessageSquare className="h-4 w-4" />,
-      keywords: "narration microphone mic voice audio row record permission",
+      keywords: "narration microphone mic voice audio row record permission azure speech tts ssml output format",
     },
     export: {
       label: "Export",
       eyebrow: "Video output",
-      description: "Tune the sketch-to-MP4 timing rhythm and output defaults.",
+      description: "Tune the sketch-to-MP4 timing rhythm, transitions, motion, frame shape, and codec defaults.",
       icon: <Download className="h-4 w-4" />,
-      keywords: "export video mp4 timing title card lead row transition final hold",
+      keywords: "export video mp4 timing title card lead row transition final hold dip black motion zoom codec crf fps resolution",
     },
     ai: {
       label: "AI providers",
@@ -837,6 +852,31 @@ function NarrationTab({
           ? "Unavailable"
           : "Unknown";
 
+  const providers = settings.aiProviders ?? [];
+  const activeFoundryProvider = providers.find((provider) =>
+    provider.id === settings.aiActiveProviderId &&
+    (provider.provider === "microsoft_foundry" || provider.provider === "azure_openai") &&
+    provider.endpoint
+  );
+  const narrationProviders = providers.filter((provider) =>
+    (provider.provider === "microsoft_foundry" || provider.provider === "azure_openai") && provider.endpoint
+  );
+  const selectedNarrationProvider =
+    narrationProviders.find((provider) => provider.id === settings.narrationProviderId)
+    ?? narrationProviders[0]
+    ?? null;
+  const addNarrationProvider = async () => {
+    const next = {
+      ...createAiProviderConfig("microsoft_foundry", providers.length + 1),
+      name: `Narration Foundry${providers.length > 0 ? ` ${providers.length + 1}` : ""}`,
+      authMode: "azure_oauth" as const,
+    };
+    await updateSetting("aiProviders", [...providers, next]);
+    await updateSetting("narrationConnectionMode", "dedicated");
+    await updateSetting("narrationProviderId", next.id);
+    useToastStore.getState().show("Narration connection added. Select it in AI Providers to sign in and choose its Foundry resource.", 5000, "info");
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <p className="text-xs text-[rgb(var(--color-text-secondary))]">
@@ -911,6 +951,138 @@ function NarrationTab({
           <p className="text-[10px] text-[rgb(var(--color-error))]">{error}</p>
         )}
       </label>
+
+      <fieldset className="flex flex-col gap-3 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/40 p-4">
+        <div>
+          <label className="text-sm font-medium">Generated narration</label>
+          <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
+            Choose whether speech synthesis reuses the current Foundry/Azure connection or gets its own connection.
+          </p>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-2">
+          <button
+            type="button"
+            disabled={!activeFoundryProvider}
+            onClick={() => updateSetting("narrationConnectionMode", "reuse_active_foundry")}
+            className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${
+              settings.narrationConnectionMode === "reuse_active_foundry"
+                ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10"
+                : "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] hover:border-[rgb(var(--color-border-strong))]"
+            } disabled:cursor-not-allowed disabled:opacity-60`}
+          >
+            <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Reuse current Foundry connection</span>
+            <span className="mt-1 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+              {activeFoundryProvider
+                ? `${activeFoundryProvider.name} (${activeFoundryProvider.resourceName || activeFoundryProvider.endpoint})`
+                : "Set up and select a Foundry or Azure OpenAI provider first."}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void updateSetting("narrationConnectionMode", "dedicated");
+              if (!settings.narrationProviderId && selectedNarrationProvider) {
+                void updateSetting("narrationProviderId", selectedNarrationProvider.id);
+              }
+            }}
+            className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${
+              settings.narrationConnectionMode === "dedicated"
+                ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10"
+                : "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] hover:border-[rgb(var(--color-border-strong))]"
+            }`}
+          >
+            <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Use a narration connection</span>
+            <span className="mt-1 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+              Select or create a Foundry/Azure connection just for generated narration.
+            </span>
+          </button>
+        </div>
+
+        {settings.narrationConnectionMode === "dedicated" && (
+          <div className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+              <label className="flex-1">
+                <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Narration connection</span>
+                <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+                  Pick an existing Foundry/Azure provider. Its selected resource is used to derive the Speech endpoint.
+                </span>
+                <select
+                  value={settings.narrationProviderId || selectedNarrationProvider?.id || ""}
+                  onChange={(event) => updateSetting("narrationProviderId", event.target.value)}
+                  className={`${inputClass} mt-2 w-full`}
+                >
+                  <option value="">Select a Foundry/Azure provider</option>
+                  {narrationProviders.map((provider) => (
+                    <option key={provider.id} value={provider.id}>
+                      {provider.name} ({provider.resourceName || provider.endpoint})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => void addNarrationProvider()}
+                className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text))] transition-colors hover:border-[rgb(var(--color-border-strong))]"
+              >
+                Create narration connection
+              </button>
+            </div>
+            <p className="mt-2 text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+              New narration connections are configured in AI Providers so endpoint, sign-in, and selected resource stay in one place.
+            </p>
+          </div>
+        )}
+
+        <div className="grid gap-2">
+          <label className="grid gap-3 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_18rem] md:items-start">
+            <span className="min-w-0">
+              <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Voice</span>
+              <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+                {NARRATION_VOICE_OPTIONS.find((voice) => voice.value === settings.narrationVoiceName)?.description ?? "Azure Speech voice used in generated SSML."}
+              </span>
+            </span>
+            <select
+              value={settings.narrationVoiceName}
+              onChange={(event) => updateSetting("narrationVoiceName", event.target.value)}
+              className={`${inputClass} min-w-0`}
+            >
+              {NARRATION_VOICE_OPTIONS.map((voice) => (
+                <option key={voice.value} value={voice.value}>{voice.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-3 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_18rem] md:items-start">
+            <span className="min-w-0">
+              <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Speech output format</span>
+              <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+                {NARRATION_OUTPUT_FORMAT_OPTIONS.find((format) => format.value === settings.narrationSpeechOutputFormat)?.description ?? "Azure Speech audio format sent to the TTS endpoint."}
+              </span>
+            </span>
+            <select
+              value={settings.narrationSpeechOutputFormat}
+              onChange={(event) => updateSetting("narrationSpeechOutputFormat", event.target.value)}
+              className={`${inputClass} min-w-0`}
+            >
+              {NARRATION_OUTPUT_FORMAT_OPTIONS.map((format) => (
+                <option key={format.value} value={format.value}>{format.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <label className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5">
+          <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Narration style direction</span>
+          <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+            Extra instruction passed to the Narration Director when it writes SSML.
+          </span>
+          <textarea
+            value={settings.narrationStylePrompt}
+            onChange={(event) => updateSetting("narrationStylePrompt", event.target.value)}
+            rows={5}
+            className={`${inputClass} mt-3 w-full min-w-0 resize-y`}
+          />
+        </label>
+      </fieldset>
     </div>
   );
 }
@@ -1072,7 +1244,7 @@ function RecordingTab({
 
       <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/50 p-4">
         <div className="mb-3 text-sm font-medium text-[rgb(var(--color-text))]">Tracks</div>
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-2">
           <label className="flex items-center justify-between gap-3 rounded-lg bg-[rgb(var(--color-surface))] px-3 py-2">
             <span className="text-xs text-[rgb(var(--color-text))]">Include cursor</span>
             <input
@@ -1156,6 +1328,13 @@ function recordingDeviceStatusText(
 
 // ── Export Tab ─────────────────────────────────────────────────────
 
+function formatSecondsLabel(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "unknown";
+  const minutes = Math.floor(seconds / 60);
+  const remaining = Math.round(seconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${remaining}`;
+}
+
 function ExportTab({
   settings,
   updateSetting,
@@ -1165,56 +1344,205 @@ function ExportTab({
   updateSetting: ReturnType<typeof useSettings>["updateSetting"];
   scope: "app" | "workspace";
 }) {
-  type AppExportTimingKey =
+  type AppExportNumberKey =
     | "videoExportTitleCardDurationSeconds"
     | "videoExportTitleToFirstRowHoldSeconds"
     | "videoExportRowTransitionHoldSeconds"
-    | "videoExportFinalHoldSeconds";
-  type WorkspaceExportTimingKey =
+    | "videoExportFinalHoldSeconds"
+    | "videoExportRowTransitionDipSeconds"
+    | "videoExportNarrationTailHoldSeconds"
+    | "videoExportMotionMaxScale"
+    | "videoExportWidth"
+    | "videoExportHeight"
+    | "videoExportFps";
+  type WorkspaceExportNumberKey =
     | "workspaceVideoExportTitleCardDurationSeconds"
     | "workspaceVideoExportTitleToFirstRowHoldSeconds"
     | "workspaceVideoExportRowTransitionHoldSeconds"
-    | "workspaceVideoExportFinalHoldSeconds";
+    | "workspaceVideoExportFinalHoldSeconds"
+    | "workspaceVideoExportRowTransitionDipSeconds"
+    | "workspaceVideoExportNarrationTailHoldSeconds"
+    | "workspaceVideoExportMotionMaxScale"
+    | "workspaceVideoExportWidth"
+    | "workspaceVideoExportHeight"
+    | "workspaceVideoExportFps";
+  type AppExportBooleanKey = "videoExportIncludeTitleCard";
+  type WorkspaceExportBooleanKey = "workspaceVideoExportIncludeTitleCard";
+  type AppExportTextKey = "videoExportEncoder" | "videoExportPixelFormat" | "videoExportCrf";
+  type WorkspaceExportTextKey = "workspaceVideoExportEncoder" | "workspaceVideoExportPixelFormat" | "workspaceVideoExportCrf";
   const timingFields: Array<{
-    appKey: AppExportTimingKey;
-    workspaceKey: WorkspaceExportTimingKey;
+    appKey: AppExportNumberKey;
+    workspaceKey: WorkspaceExportNumberKey;
     label: string;
     description: string;
+    min?: number;
+    max?: number;
+    step?: number;
+    unit?: string;
   }> = [
     {
       appKey: "videoExportTitleCardDurationSeconds",
       workspaceKey: "workspaceVideoExportTitleCardDurationSeconds",
       label: "Title card",
       description: "How long the sketch title and description stay on screen before the demo begins.",
+      min: 0.1,
+      step: 0.1,
+      unit: "sec",
     },
     {
       appKey: "videoExportTitleToFirstRowHoldSeconds",
       workspaceKey: "workspaceVideoExportTitleToFirstRowHoldSeconds",
       label: "Lead into first row",
-      description: "Silent hold on the first row screenshot after the title card and before narration starts.",
+      description: "Silent hold on the first row screenshot before narration starts.",
+      min: 0.1,
+      step: 0.1,
+      unit: "sec",
     },
     {
       appKey: "videoExportRowTransitionHoldSeconds",
       workspaceKey: "workspaceVideoExportRowTransitionHoldSeconds",
       label: "Between rows",
       description: "Transition hold split evenly between the previous screenshot and the next screenshot.",
+      min: 0.1,
+      step: 0.1,
+      unit: "sec",
     },
     {
       appKey: "videoExportFinalHoldSeconds",
       workspaceKey: "workspaceVideoExportFinalHoldSeconds",
       label: "Final hold",
       description: "How long the last screenshot remains on screen after the final narration ends.",
+      min: 0.1,
+      step: 0.1,
+      unit: "sec",
+    },
+    {
+      appKey: "videoExportRowTransitionDipSeconds",
+      workspaceKey: "workspaceVideoExportRowTransitionDipSeconds",
+      label: "Dip to black",
+      description: "Fade duration used inside the row-to-row transition hold.",
+      min: 0,
+      step: 0.05,
+      unit: "sec",
+    },
+    {
+      appKey: "videoExportNarrationTailHoldSeconds",
+      workspaceKey: "workspaceVideoExportNarrationTailHoldSeconds",
+      label: "Narration tail",
+      description: "Extra visual hold after each row's narration audio completes.",
+      min: 0,
+      step: 0.05,
+      unit: "sec",
+    },
+  ];
+  const renderNumberFields: Array<{
+    appKey: AppExportNumberKey;
+    workspaceKey: WorkspaceExportNumberKey;
+    label: string;
+    description: string;
+    min: number;
+    max?: number;
+    step: number;
+    unit?: string;
+  }> = [
+    {
+      appKey: "videoExportMotionMaxScale",
+      workspaceKey: "workspaceVideoExportMotionMaxScale",
+      label: "Max motion push",
+      description: "Upper zoom limit for generated screenshot camera moves.",
+      min: 1,
+      max: 3,
+      step: 0.05,
+      unit: "x",
+    },
+    {
+      appKey: "videoExportFps",
+      workspaceKey: "workspaceVideoExportFps",
+      label: "Frame rate",
+      description: "Frames per second for generated video clips.",
+      min: 12,
+      max: 120,
+      step: 1,
+      unit: "fps",
+    },
+    {
+      appKey: "videoExportWidth",
+      workspaceKey: "workspaceVideoExportWidth",
+      label: "Width",
+      description: "Output frame width in pixels.",
+      min: 240,
+      max: 7680,
+      step: 2,
+      unit: "px",
+    },
+    {
+      appKey: "videoExportHeight",
+      workspaceKey: "workspaceVideoExportHeight",
+      label: "Height",
+      description: "Output frame height in pixels.",
+      min: 240,
+      max: 7680,
+      step: 2,
+      unit: "px",
+    },
+  ];
+  const codecFields: Array<{
+    appKey: AppExportTextKey;
+    workspaceKey: WorkspaceExportTextKey;
+    label: string;
+    description: string;
+  }> = [
+    {
+      appKey: "videoExportEncoder",
+      workspaceKey: "workspaceVideoExportEncoder",
+      label: "Video encoder",
+      description: "FFmpeg encoder for intermediate clips and final MP4.",
+    },
+    {
+      appKey: "videoExportPixelFormat",
+      workspaceKey: "workspaceVideoExportPixelFormat",
+      label: "Pixel format",
+      description: "FFmpeg pixel format. rgb24 preserves screenshot color fidelity.",
+    },
+    {
+      appKey: "videoExportCrf",
+      workspaceKey: "workspaceVideoExportCrf",
+      label: "CRF / quality",
+      description: "CRF value passed to FFmpeg. 0 keeps the current lossless behavior.",
     },
   ];
 
   const isWorkspace = scope === "workspace";
+  const currentProject = useAppStore((state) => state.currentProject);
+  const activeSketch = useAppStore((state) => state.activeSketch);
   const disabled = isWorkspace && !settings.videoExportOverrideEnabled;
+  const includeTitleCardKey: AppExportBooleanKey | WorkspaceExportBooleanKey = isWorkspace
+    ? "workspaceVideoExportIncludeTitleCard"
+    : "videoExportIncludeTitleCard";
+  const selectedBackgroundMusicTrack = settings.workspaceVideoExportBackgroundMusicTracks.find(
+    (track) => track.id === settings.workspaceVideoExportBackgroundMusicTrackId,
+  ) ?? null;
+  const backgroundMusicDisabled = !isWorkspace || !currentProject || !selectedBackgroundMusicTrack;
+  const [importingBackgroundMusic, setImportingBackgroundMusic] = useState(false);
+  const [previewingBackgroundMusic, setPreviewingBackgroundMusic] = useState(false);
+  const [backgroundMusicPreview, setBackgroundMusicPreview] = useState<{
+    path: string;
+    durationSeconds: number;
+    usedNarration: boolean;
+  } | null>(null);
   const { status: ffmpegStatus, loading: ffmpegChecking, refresh: refreshFfmpegStatus } = useFfmpegStatus();
   const ffmpegVersion = ffmpegStatus?.version?.split(/\r?\n/)[0] ?? null;
   const ffprobeVersion = ffmpegStatus?.ffprobe_version?.split(/\r?\n/)[0] ?? null;
-  const updateDuration = (key: AppExportTimingKey | WorkspaceExportTimingKey, value: string) => {
+  const updateNumber = <K extends AppExportNumberKey | WorkspaceExportNumberKey>(
+    key: K,
+    value: string,
+    min = 0.1,
+    max?: number,
+  ) => {
     const parsed = Number.parseFloat(value);
-    void updateSetting(key, Number.isFinite(parsed) ? Math.max(0.1, parsed) : 0.1);
+    const lowerBounded = Number.isFinite(parsed) ? Math.max(min, parsed) : min;
+    const nextValue = max === undefined ? lowerBounded : Math.min(max, lowerBounded);
+    void updateSetting(key, nextValue as AppSettings[K]);
   };
 
   useEffect(() => {
@@ -1246,6 +1574,85 @@ function ExportTab({
     await updateSetting("ffmpegExecutablePath", "");
     await updateSetting("ffprobeExecutablePath", "");
     await refreshFfmpegStatus();
+  };
+
+  const importBackgroundMusic = async () => {
+    if (!currentProject || !isWorkspace) return;
+    const selected = await dialogOpen({
+      multiple: false,
+      title: "Choose loopable background music WAV",
+      filters: [{ name: "WAV audio", extensions: ["wav"] }],
+    });
+    if (!selected || Array.isArray(selected)) return;
+
+    setImportingBackgroundMusic(true);
+    try {
+      const track = await invoke<{
+        id: string;
+        name: string;
+        path: string;
+        durationSeconds?: number;
+      }>("import_background_music", { sourcePath: selected });
+      const tracks = settings.workspaceVideoExportBackgroundMusicTracks.filter((existing) => existing.id !== track.id);
+      await updateSetting("workspaceVideoExportBackgroundMusicTracks", [...tracks, track]);
+      await updateSetting("workspaceVideoExportBackgroundMusicTrackId", track.id);
+      useToastStore.getState().show("Background music added to this project.", 3000, "success");
+    } catch (err) {
+      useToastStore.getState().show(`Could not add background music: ${err}`, 5000, "error");
+    } finally {
+      setImportingBackgroundMusic(false);
+    }
+  };
+
+  const removeBackgroundMusic = async (trackId: string) => {
+    const track = settings.workspaceVideoExportBackgroundMusicTracks.find((candidate) => candidate.id === trackId);
+    if (!track) return;
+    try {
+      await invoke("delete_background_music", { relativePath: track.path });
+      await updateSetting(
+        "workspaceVideoExportBackgroundMusicTracks",
+        settings.workspaceVideoExportBackgroundMusicTracks.filter((candidate) => candidate.id !== trackId),
+      );
+      if (settings.workspaceVideoExportBackgroundMusicTrackId === trackId) {
+        await updateSetting("workspaceVideoExportBackgroundMusicTrackId", "");
+      }
+      useToastStore.getState().show("Background music removed.", 3000, "success");
+    } catch (err) {
+      useToastStore.getState().show(`Could not remove background music: ${err}`, 5000, "error");
+    }
+  };
+
+  const previewBackgroundMusicMix = async () => {
+    if (!selectedBackgroundMusicTrack || backgroundMusicDisabled) return;
+    const narrationPath = activeSketch?.rows.find((row) => row.narration?.path)?.narration?.path ?? null;
+    setPreviewingBackgroundMusic(true);
+    try {
+      const preview = await invoke<{
+        path: string;
+        durationSeconds: number;
+        usedNarration: boolean;
+      }>("preview_background_music_mix", {
+        settings: {
+          backgroundMusicPath: selectedBackgroundMusicTrack.path,
+          narrationPath,
+          backgroundMusicVolumeDb: settings.workspaceVideoExportBackgroundMusicVolumeDb,
+          backgroundMusicDuckNarration: settings.workspaceVideoExportBackgroundMusicDuckNarration,
+          backgroundMusicFadeSeconds: settings.workspaceVideoExportBackgroundMusicFadeSeconds,
+        },
+      });
+      setBackgroundMusicPreview(preview);
+      useToastStore.getState().show(
+        preview.usedNarration
+          ? "Rendered a preview with the current sketch narration."
+          : "Rendered a music-only preview because no active sketch narration was found.",
+        3500,
+        preview.usedNarration ? "success" : "info",
+      );
+    } catch (err) {
+      useToastStore.getState().show(`Could not preview background music: ${err}`, 5000, "error");
+    } finally {
+      setPreviewingBackgroundMusic(false);
+    }
   };
 
   return (
@@ -1281,41 +1688,290 @@ function ExportTab({
           </p>
         </div>
 
+        <label className="flex items-center justify-between gap-4 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5">
+          <span className="min-w-0">
+            <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Include title card</span>
+            <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+              Start the video with the sketch title and description.
+            </span>
+            {isWorkspace && !settings.videoExportOverrideEnabled && (
+              <span className="mt-1 block text-[10px] text-[rgb(var(--color-text-secondary))]">
+                App default: {settings.videoExportIncludeTitleCard ? "on" : "off"}
+              </span>
+            )}
+          </span>
+          <input
+            type="checkbox"
+            checked={settings[includeTitleCardKey]}
+            onChange={(event) => updateSetting(includeTitleCardKey, event.target.checked)}
+            disabled={disabled}
+            className="h-4 w-4 shrink-0 accent-[rgb(var(--color-accent))]"
+          />
+        </label>
+
         <div className="grid gap-3 md:grid-cols-2">
           {timingFields.map((field) => {
             const key = isWorkspace ? field.workspaceKey : field.appKey;
             const fallbackValue = settings[field.appKey];
             const value = settings[key];
+            const fieldDisabled = disabled || (
+              field.appKey === "videoExportTitleCardDurationSeconds" && !settings[includeTitleCardKey]
+            );
             return (
               <label
                 key={key}
-                className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-3"
+                className="grid gap-3 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_9rem] sm:items-center"
               >
-                <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">{field.label}</span>
-                <span className="mt-1 block min-h-10 text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
-                  {field.description}
+                <span className="min-w-0">
+                  <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">{field.label}</span>
+                  <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+                    {field.description}
+                  </span>
+                  {isWorkspace && !settings.videoExportOverrideEnabled && (
+                    <span className="mt-1 block text-[10px] text-[rgb(var(--color-text-secondary))]">
+                      App default: {fallbackValue}s
+                    </span>
+                  )}
                 </span>
-                <div className="mt-3 flex items-center gap-2">
+                <span className="flex items-center gap-2 sm:justify-end">
                   <input
                     type="number"
-                    min="0.1"
-                    step="0.1"
+                    min={field.min ?? 0.1}
+                    max={field.max}
+                    step={field.step ?? 0.1}
                     value={value}
-                    onChange={(event) => updateDuration(key, event.target.value)}
-                    disabled={disabled}
-                    className={`${inputClass} min-w-0 flex-1`}
+                    onChange={(event) => updateNumber(key, event.target.value, field.min ?? 0.1, field.max)}
+                    disabled={fieldDisabled}
+                    className={`${inputClass} min-w-0 flex-1 sm:w-24 sm:flex-none`}
                   />
-                  <span className="text-[11px] font-medium text-[rgb(var(--color-text-secondary))]">sec</span>
-                </div>
-                {isWorkspace && !settings.videoExportOverrideEnabled && (
-                  <span className="mt-2 block text-[10px] text-[rgb(var(--color-text-secondary))]">
-                    App default: {fallbackValue}s
-                  </span>
-                )}
+                  <span className="w-8 text-[11px] font-medium text-[rgb(var(--color-text-secondary))]">{field.unit ?? "sec"}</span>
+                </span>
               </label>
             );
           })}
         </div>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-3 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/40 p-4">
+        <div>
+          <label className="text-sm font-medium">Motion and render profile</label>
+          <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
+            Control camera-move limits and the generated MP4 frame shape.
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          {renderNumberFields.map((field) => {
+            const key = isWorkspace ? field.workspaceKey : field.appKey;
+            const fallbackValue = settings[field.appKey];
+            const value = settings[key];
+            return (
+              <label key={key} className="grid gap-3 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_9rem] sm:items-center">
+                <span className="min-w-0">
+                  <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">{field.label}</span>
+                  <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">{field.description}</span>
+                  {isWorkspace && !settings.videoExportOverrideEnabled && (
+                    <span className="mt-1 block text-[10px] text-[rgb(var(--color-text-secondary))]">
+                      App default: {fallbackValue}{field.unit ? ` ${field.unit}` : ""}
+                    </span>
+                  )}
+                </span>
+                <span className="flex items-center gap-2 sm:justify-end">
+                  <input
+                    type="number"
+                    min={field.min}
+                    max={field.max}
+                    step={field.step}
+                    value={value}
+                    onChange={(event) => updateNumber(key, event.target.value, field.min, field.max)}
+                    disabled={disabled}
+                    className={`${inputClass} min-w-0 flex-1 sm:w-24 sm:flex-none`}
+                  />
+                  <span className="w-8 text-[11px] font-medium text-[rgb(var(--color-text-secondary))]">{field.unit ?? ""}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-3 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/40 p-4">
+        <div>
+          <label className="text-sm font-medium">Codec and quality</label>
+          <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
+            Advanced FFmpeg values. Invalid values will make export fail instead of silently changing quality.
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {codecFields.map((field) => {
+            const key = isWorkspace ? field.workspaceKey : field.appKey;
+            const fallbackValue = settings[field.appKey];
+            const value = settings[key];
+            return (
+              <label key={key} className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5">
+                <span className="min-w-0">
+                  <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">{field.label}</span>
+                  <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">{field.description}</span>
+                  {isWorkspace && !settings.videoExportOverrideEnabled && (
+                    <span className="mt-1 block text-[10px] text-[rgb(var(--color-text-secondary))]">App default: {fallbackValue}</span>
+                  )}
+                </span>
+                <input
+                  type="text"
+                  value={value}
+                  onChange={(event) => updateSetting(key, event.target.value)}
+                  disabled={disabled}
+                  className={`${inputClass} mt-3 w-full min-w-0`}
+                />
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-3 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/40 p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <label className="text-sm font-medium">Background music</label>
+            <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
+              Add loopable WAV beds to this project and mix one under exported narration.
+            </p>
+          </div>
+          {isWorkspace && currentProject && (
+            <button
+              type="button"
+              onClick={() => void importBackgroundMusic()}
+              disabled={importingBackgroundMusic}
+              className="inline-flex items-center justify-center rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text))] transition-colors hover:border-[rgb(var(--color-border-strong))] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {importingBackgroundMusic ? "Adding..." : "Add WAV loop..."}
+            </button>
+          )}
+        </div>
+
+        {!isWorkspace ? (
+          <div className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5 text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+            Background music is configured per workspace because WAV files are copied into the project folder.
+          </div>
+        ) : !currentProject ? (
+          <div className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5 text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+            Open a project to add reusable background music loops.
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+              <label className="grid gap-3 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_18rem] md:items-center">
+                <span className="min-w-0">
+                  <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Selected music</span>
+                  <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+                    Choose the loop to repeat for the full export. None leaves narration unchanged.
+                  </span>
+                </span>
+                <select
+                  value={settings.workspaceVideoExportBackgroundMusicTrackId}
+                  onChange={(event) => updateSetting("workspaceVideoExportBackgroundMusicTrackId", event.target.value)}
+                  className={`${inputClass} min-w-0`}
+                >
+                  <option value="">None</option>
+                  {settings.workspaceVideoExportBackgroundMusicTracks.map((track) => (
+                    <option key={track.id} value={track.id}>
+                      {track.name}{track.durationSeconds ? ` (${formatSecondsLabel(track.durationSeconds)})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {selectedBackgroundMusicTrack && (
+                <button
+                  type="button"
+                  onClick={() => void removeBackgroundMusic(selectedBackgroundMusicTrack.id)}
+                  className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-border-strong))] hover:text-[rgb(var(--color-text))]"
+                >
+                  Remove selected
+                </button>
+              )}
+            </div>
+
+            <div className="grid gap-2 md:grid-cols-3">
+              <label className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5">
+                <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Volume</span>
+                <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">Gain applied before mixing.</span>
+                <div className="mt-3 flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={-60}
+                    max={0}
+                    step={1}
+                    value={settings.workspaceVideoExportBackgroundMusicVolumeDb}
+                    onChange={(event) => updateSetting("workspaceVideoExportBackgroundMusicVolumeDb", Math.min(0, Math.max(-60, Number.parseFloat(event.target.value) || -24)))}
+                    disabled={backgroundMusicDisabled}
+                    className={`${inputClass} min-w-0 flex-1`}
+                  />
+                  <span className="text-[11px] font-medium text-[rgb(var(--color-text-secondary))]">dB</span>
+                </div>
+              </label>
+
+              <label className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5">
+                <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Fade</span>
+                <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">Fade in and out at export edges.</span>
+                <div className="mt-3 flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    max={10}
+                    step={0.1}
+                    value={settings.workspaceVideoExportBackgroundMusicFadeSeconds}
+                    onChange={(event) => updateSetting("workspaceVideoExportBackgroundMusicFadeSeconds", Math.max(0, Number.parseFloat(event.target.value) || 0))}
+                    disabled={backgroundMusicDisabled}
+                    className={`${inputClass} min-w-0 flex-1`}
+                  />
+                  <span className="text-[11px] font-medium text-[rgb(var(--color-text-secondary))]">sec</span>
+                </div>
+              </label>
+
+              <label className="flex items-center justify-between gap-3 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5">
+                <span className="min-w-0">
+                  <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Duck under narration</span>
+                  <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">Automatically lowers music while narration is present.</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={settings.workspaceVideoExportBackgroundMusicDuckNarration}
+                  onChange={(event) => updateSetting("workspaceVideoExportBackgroundMusicDuckNarration", event.target.checked)}
+                  disabled={backgroundMusicDisabled}
+                  className="h-4 w-4 shrink-0 accent-[rgb(var(--color-accent))]"
+                />
+              </label>
+            </div>
+
+            <div className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <span className="min-w-0">
+                  <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Preview mix</span>
+                  <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+                    Renders a short audio sample with the selected loop, fade, volume, and narration ducking.
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void previewBackgroundMusicMix()}
+                  disabled={backgroundMusicDisabled || previewingBackgroundMusic}
+                  className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text))] transition-colors hover:border-[rgb(var(--color-accent))] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {previewingBackgroundMusic ? "Rendering..." : "Preview mix"}
+                </button>
+              </div>
+              {backgroundMusicPreview && (
+                <div className="mt-3 grid gap-2">
+                  <audio controls src={convertFileSrc(backgroundMusicPreview.path)} className="w-full" />
+                  <span className="text-[11px] text-[rgb(var(--color-text-secondary))]">
+                    {backgroundMusicPreview.usedNarration
+                      ? `Using current sketch narration (${formatSecondsLabel(backgroundMusicPreview.durationSeconds)}).`
+                      : `Music-only preview (${formatSecondsLabel(backgroundMusicPreview.durationSeconds)}); open a sketch with narration to hear ducking.`}
+                  </span>
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </fieldset>
 
       <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/50 p-4">
@@ -1396,7 +2052,7 @@ function ExportTab({
       <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/50 p-4">
         <div className="text-sm font-medium text-[rgb(var(--color-text))]">Current output format</div>
         <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
-          Sketch video export currently writes 1920x1080 MP4 files with RGB lossless screenshot encoding, trimmed recorded narration audio, and AAC audio.
+          Sketch video export currently writes {settings.videoExportWidth}x{settings.videoExportHeight} MP4 files at {settings.videoExportFps}fps with {settings.videoExportIncludeTitleCard ? "a title card" : "no title card"}, {settings.videoExportEncoder}, {settings.videoExportPixelFormat}, CRF {settings.videoExportCrf}, trimmed recorded narration audio, and AAC audio.
         </p>
       </div>
     </div>
