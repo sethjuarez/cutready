@@ -10,6 +10,22 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.31.0](https://github.com/sethjuarez/cutready/compare/v1.30.1...v1.31.0) (2026-07-18)
+
+
+### Features
+
+* **agent:** migrate chat history to local state ([#215](https://github.com/sethjuarez/cutready/issues/215)) ([8dcd07f](https://github.com/sethjuarez/cutready/commit/8dcd07f8f850276bc620598d2b2e8ff3db8b77b2))
+* **editor:** improve markdown cursor visibility ([94eb6ce](https://github.com/sethjuarez/cutready/commit/94eb6ce352e9d0854f57d565cc364ab6c03ae9d0))
+* **export:** add narration and background music controls ([5cd062b](https://github.com/sethjuarez/cutready/commit/5cd062bfecb766ed15248769dea222eb41956049))
+* **notes:** add explicit intelligent paste ([59439f0](https://github.com/sethjuarez/cutready/commit/59439f0e7f52681d6807276d3584d2d54a9fb446))
+
+
+### Bug Fixes
+
+* **projects:** clear stale chat on project open ([6ff41e8](https://github.com/sethjuarez/cutready/commit/6ff41e8da6462cc37085ff8a410e04b0fdc93c8e))
+* **settings:** retry Stronghold secret initialization ([39e4d89](https://github.com/sethjuarez/cutready/commit/39e4d89aee722676518e1408b3824e26f828c3c6))
+
 ## [1.30.1](https://github.com/sethjuarez/cutready/compare/v1.30.0...v1.30.1) (2026-07-13)
 
 
