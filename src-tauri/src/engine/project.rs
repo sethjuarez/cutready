@@ -20,8 +20,6 @@ use crate::models::script::{ProjectEntry, ProjectManifest, ProjectView, RepoView
 use crate::models::sketch::{NoteSummary, Sketch, SketchSummary, Storyboard, StoryboardSummary};
 
 const LOCKS_PATH: &str = ".cutready/locks.json";
-const LEGACY_CHAT_URI_PREFIX: &str = "cutready://legacy-chats/";
-const LEGACY_CHAT_STATE_DIR: &str = "legacy-chats";
 
 /// Lock metadata for plain Markdown notes.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
@@ -2395,19 +2393,6 @@ pub fn sketch_file_exists(relative_path: &str, project_root: &Path) -> bool {
 
 // ── Chat sessions (.chat JSON files) ────────────────────────────────
 
-/// Summary of a saved chat session.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ChatSessionSummary {
-    pub path: String,
-    pub title: String,
-    pub message_count: usize,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
-    #[serde(default)]
-    pub author_name: Option<String>,
-    #[serde(default)]
-    pub author_email: Option<String>,
-}
-
 /// A persisted chat session.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ChatSession {
@@ -2421,153 +2406,20 @@ pub struct ChatSession {
     pub author_email: Option<String>,
 }
 
-/// Copy legacy `.chats/*.chat` files into local repo state.
+/// Import legacy `.chats/*.chat` files into the local agent-state database.
+///
+/// Files are removed only after the database import verifies their transcript.
+/// Malformed files remain in place and their failure is recorded in the database.
 pub fn migrate_legacy_chat_sessions(
     repo_root: &Path,
     project_root: &Path,
 ) -> Result<(), ProjectError> {
-    let chats_dir = project_root.join(".chats");
-    if !chats_dir.exists() {
-        return Ok(());
-    }
-
-    let archive_dir = legacy_chat_state_dir(repo_root, project_root);
-    std::fs::create_dir_all(&archive_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
-    let entries = std::fs::read_dir(&chats_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
-    for entry in entries {
-        let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
-        let source = entry.path();
-        if !source.extension().is_some_and(|ext| ext == "chat") {
-            continue;
-        }
-        let Some(file_name) = source.file_name() else {
-            continue;
-        };
-        let destination = archive_dir.join(file_name);
-        if destination.exists() {
-            continue;
-        }
-        migrate_legacy_chat_file(project_root, &source, &destination)?;
-    }
-    Ok(())
-}
-
-/// Scan for legacy .chat files archived in local repo state.
-pub fn scan_chat_sessions(
-    repo_root: &Path,
-    project_root: &Path,
-) -> Result<Vec<ChatSessionSummary>, ProjectError> {
-    migrate_legacy_chat_sessions(repo_root, project_root)?;
-    let mut summaries = Vec::new();
-    let chats_dir = legacy_chat_state_dir(repo_root, project_root);
-    if chats_dir.exists() {
-        let entries = std::fs::read_dir(&chats_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
-        for entry in entries {
-            let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
-            let path = entry.path();
-            if path.extension().is_some_and(|ext| ext == "chat") {
-                if let Ok(data) = std::fs::read_to_string(&path) {
-                    if let Ok(session) = serde_json::from_str::<ChatSession>(&data) {
-                        if let Some(file_name) = path.file_name().map(|name| name.to_string_lossy())
-                        {
-                            let session_path = format!("{LEGACY_CHAT_URI_PREFIX}{file_name}");
-                            summaries.push(ChatSessionSummary {
-                                path: session_path,
-                                title: session.title,
-                                message_count: session.messages.len(),
-                                updated_at: session.updated_at,
-                                author_name: session.author_name,
-                                author_email: session.author_email,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-    }
-    summaries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-    Ok(summaries)
-}
-
-pub fn resolve_chat_session_path(
-    repo_root: &Path,
-    project_root: &Path,
-    relative_path: &str,
-) -> Result<PathBuf, ProjectError> {
-    migrate_legacy_chat_sessions(repo_root, project_root)?;
-    if let Some(file_name) = legacy_chat_file_name(relative_path)? {
-        let archive_path = legacy_chat_state_dir(repo_root, project_root).join(file_name);
-        return Ok(archive_path);
-    }
-
-    let project_path = safe_resolve(project_root, relative_path)?;
-    if project_path.exists() || !relative_path.starts_with(".chats/") {
-        return Ok(project_path);
-    }
-    let file_name = Path::new(relative_path)
-        .file_name()
-        .ok_or_else(|| ProjectError::PathTraversal(relative_path.to_string()))?;
-    Ok(legacy_chat_state_dir(repo_root, project_root).join(file_name))
-}
-
-fn legacy_chat_state_dir(repo_root: &Path, project_root: &Path) -> PathBuf {
-    git_state_dir(repo_root, project_root).join(LEGACY_CHAT_STATE_DIR)
-}
-
-fn legacy_chat_file_name(relative_path: &str) -> Result<Option<&str>, ProjectError> {
-    let Some(file_name) = relative_path.strip_prefix(LEGACY_CHAT_URI_PREFIX) else {
-        return Ok(None);
-    };
-    if file_name.is_empty()
-        || file_name.contains('/')
-        || file_name.contains('\\')
-        || file_name.contains("..")
-        || !file_name.ends_with(".chat")
-    {
-        return Err(ProjectError::PathTraversal(relative_path.to_string()));
-    }
-    Ok(Some(file_name))
-}
-
-fn migrate_legacy_chat_file(
-    _project_root: &Path,
-    source: &Path,
-    destination: &Path,
-) -> Result<(), ProjectError> {
-    let data = std::fs::read_to_string(source).map_err(|e| ProjectError::Io(e.to_string()))?;
-    if let Ok(session) = serde_json::from_str::<ChatSession>(&data) {
-        write_chat_session(destination, &session)?;
-    } else {
-        std::fs::write(destination, data).map_err(|e| ProjectError::Io(e.to_string()))?;
-    }
-    Ok(())
-}
-
-/// Read a chat session file.
-pub fn read_chat_session(path: &Path) -> Result<ChatSession, ProjectError> {
-    if !path.exists() {
-        return Err(ProjectError::NotFound(path.to_string_lossy().into_owned()));
-    }
-    let data = std::fs::read_to_string(path).map_err(|e| ProjectError::Io(e.to_string()))?;
-    serde_json::from_str(&data).map_err(|e| ProjectError::Io(format!("Invalid chat session: {e}")))
-}
-
-/// Write a chat session file.
-pub fn write_chat_session(path: &Path, session: &ChatSession) -> Result<(), ProjectError> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
-    }
-    let json =
-        serde_json::to_string_pretty(session).map_err(|e| ProjectError::Io(e.to_string()))?;
-    std::fs::write(path, json).map_err(|e| ProjectError::Io(e.to_string()))
-}
-
-/// Delete a chat session file.
-pub fn delete_chat_session(path: &Path) -> Result<(), ProjectError> {
-    if path.exists() {
-        std::fs::remove_file(path).map_err(|e| ProjectError::Io(e.to_string()))?;
-    }
-    Ok(())
+    crate::engine::agent_state::AgentStateStore::ensure_database_for_project(
+        repo_root,
+        project_root,
+    )
+    .map(|_| ())
+    .map_err(ProjectError::Io)
 }
 
 // ── Sidebar order manifest ──────────────────────────────────────────
@@ -2620,6 +2472,9 @@ pub fn read_workspace_state(repo_root: &Path, project_root: &Path) -> WorkspaceS
     let new_path = state_dir.join("workspace.json");
     if let Ok(data) = std::fs::read_to_string(&new_path) {
         if let Ok(mut ws) = serde_json::from_str(&data) {
+            if let Err(err) = migrate_legacy_chat_sessions(repo_root, project_root) {
+                log::warn!("[workspace] could not import archived chat sessions: {err}");
+            }
             sanitize_workspace_chat_session(repo_root, project_root, &mut ws);
             return ws;
         }
@@ -2628,6 +2483,9 @@ pub fn read_workspace_state(repo_root: &Path, project_root: &Path) -> WorkspaceS
     let legacy_path = project_root.join(".cutready/workspace.json");
     if let Ok(data) = std::fs::read_to_string(&legacy_path) {
         if let Ok(mut ws) = serde_json::from_str::<WorkspaceState>(&data) {
+            if let Err(err) = migrate_legacy_chat_sessions(repo_root, project_root) {
+                log::warn!("[workspace] could not import archived chat sessions: {err}");
+            }
             sanitize_workspace_chat_session(repo_root, project_root, &mut ws);
             // Migrate by copying into local state. Preserve the versioned legacy file so opening
             // older projects never dirties history by deleting tracked compatibility data.
@@ -2645,20 +2503,10 @@ pub fn read_workspace_state(repo_root: &Path, project_root: &Path) -> WorkspaceS
 }
 
 fn sanitize_workspace_chat_session(repo_root: &Path, project_root: &Path, ws: &mut WorkspaceState) {
-    let Some(session_path) = ws.chat_session_path.as_deref() else {
-        return;
-    };
-    let is_legacy_session =
-        session_path.starts_with(".chats/") || session_path.starts_with(LEGACY_CHAT_URI_PREFIX);
-    if !is_legacy_session {
-        return;
-    }
-    let exists = resolve_chat_session_path(repo_root, project_root, session_path)
-        .map(|path| path.exists())
-        .unwrap_or(false);
-    if !exists {
-        ws.chat_session_path = None;
-    }
+    let _ = (repo_root, project_root);
+    // Chat history is database-backed. Older workspace state may still carry a
+    // file-session pointer, but it must never reactivate the removed file flow.
+    ws.chat_session_path = None;
 }
 
 /// Write workspace state to .git/cutready/ (untracked by snapshots).
@@ -3884,7 +3732,7 @@ Some text
     }
 
     #[test]
-    fn workspace_state_keeps_existing_legacy_chat_session() {
+    fn workspace_state_clears_existing_legacy_chat_session() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
         std::fs::create_dir(root.join(".git")).unwrap();
@@ -3892,7 +3740,18 @@ Some text
         let state_dir = root.join(".git/cutready");
         let chat_dir = state_dir.join("legacy-chats");
         std::fs::create_dir_all(&chat_dir).unwrap();
-        std::fs::write(chat_dir.join("chat.chat"), "{}").unwrap();
+        let chat_source = chat_dir.join("chat.chat");
+        std::fs::write(
+            &chat_source,
+            serde_json::json!({
+                "title": "Saved chat",
+                "messages": [{"role": "user", "content": "Keep this conversation"}],
+                "created_at": "2025-06-01T10:00:00Z",
+                "updated_at": "2025-06-01T10:01:00Z",
+            })
+            .to_string(),
+        )
+        .unwrap();
         std::fs::write(
             state_dir.join("workspace.json"),
             r#"{"open_tabs":[],"active_tab_id":null,"chat_session_path":"cutready://legacy-chats/chat.chat"}"#,
@@ -3901,9 +3760,18 @@ Some text
 
         let ws = read_workspace_state(root, root);
 
+        assert!(ws.chat_session_path.is_none());
+        assert!(
+            !chat_source.exists(),
+            "The archived chat should import before its workspace pointer is cleared"
+        );
+        let sessions =
+            crate::engine::agent_state::AgentStateStore::list_chat_sessions(root, root, 10, 0)
+                .unwrap();
+        assert_eq!(sessions.sessions.len(), 1);
         assert_eq!(
-            ws.chat_session_path.as_deref(),
-            Some("cutready://legacy-chats/chat.chat")
+            sessions.sessions[0].source_path.as_deref(),
+            Some(".git/cutready/legacy-chats/chat.chat")
         );
     }
 
@@ -3970,7 +3838,7 @@ Some text
     }
 
     #[test]
-    fn scan_chat_sessions_includes_saved_author_metadata() {
+    fn legacy_chat_migration_uses_agent_state_without_archiving_chat_files() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
         let now = chrono::Utc::now();
@@ -3982,46 +3850,12 @@ Some text
             author_name: Some("Ada Lovelace".into()),
             author_email: Some("ada@example.com".into()),
         };
-        write_chat_session(&root.join(".chats/chat.chat"), &session).unwrap();
+        let source = root.join(".chats/chat.chat");
+        std::fs::create_dir_all(source.parent().unwrap()).unwrap();
+        std::fs::write(&source, serde_json::to_string(&session).unwrap()).unwrap();
 
-        let sessions = scan_chat_sessions(root, root).unwrap();
-        assert_eq!(sessions.len(), 1);
-        assert_eq!(
-            sessions[0].path,
-            "cutready://legacy-chats/chat.chat".to_string()
-        );
-        assert_eq!(sessions[0].author_name.as_deref(), Some("Ada Lovelace"));
-        assert_eq!(sessions[0].author_email.as_deref(), Some("ada@example.com"));
-        assert!(root.join(".chats/chat.chat").exists());
-        assert!(root.join(".git/cutready/legacy-chats/chat.chat").exists());
-    }
-
-    #[test]
-    fn scan_chat_sessions_preserves_unknown_author_without_git_lookup() {
-        let tmp = TempDir::new().unwrap();
-        let root = tmp.path();
-        let now = chrono::Utc::now();
-        let session = ChatSession {
-            title: "Imported teammate chat".into(),
-            messages: vec![serde_json::json!({ "role": "user", "content": "hello" })],
-            created_at: now,
-            updated_at: now,
-            author_name: None,
-            author_email: None,
-        };
-        let chat_path = root.join(".chats/chat.chat");
-        write_chat_session(&chat_path, &session).unwrap();
-
-        let sessions = scan_chat_sessions(root, root).unwrap();
-        assert_eq!(sessions.len(), 1);
-        assert!(sessions[0].author_name.is_none());
-        assert!(sessions[0].author_email.is_none());
-
-        let migrated = read_chat_session(
-            &resolve_chat_session_path(root, root, "cutready://legacy-chats/chat.chat").unwrap(),
-        )
-        .unwrap();
-        assert!(migrated.author_name.is_none());
-        assert!(migrated.author_email.is_none());
+        migrate_legacy_chat_sessions(root, root).unwrap();
+        assert!(!source.exists());
+        assert!(!root.join(".git/cutready/legacy-chats/chat.chat").exists());
     }
 }

@@ -146,9 +146,18 @@ pub struct AppState {
     pub steering: agentive::Steering,
     /// Agent-state run IDs that are actively owned by this process.
     pub active_agent_runs: Arc<Mutex<HashSet<String>>>,
+    /// Cancellation senders for active chat runs, indexed by the frontend's client run ID.
+    pub agent_chat_cancellations: AgentChatCancellationRegistry,
     /// Last chat session summary (updated by frontend, archived on window close).
     pub last_chat_summary: Mutex<Option<(String, String)>>, // (session_id, summary)
 }
+
+pub struct AgentChatCancellationEntry {
+    pub generation: String,
+    pub cancellation: agentive::CancellationToken,
+}
+
+pub type AgentChatCancellationRegistry = Arc<Mutex<HashMap<String, AgentChatCancellationEntry>>>;
 
 /// Serializes access to project-level operations that mutate the filesystem or git state.
 /// Prevents concurrent git operations, snapshot + checkout races, and write-during-read corruption.
@@ -379,6 +388,7 @@ pub fn run() {
         browser: Arc::new(tokio::sync::Mutex::new(None)),
         steering: agentive::Steering::new(),
         active_agent_runs: Arc::new(Mutex::new(HashSet::new())),
+        agent_chat_cancellations: Arc::new(Mutex::new(HashMap::new())),
         last_chat_summary: Mutex::new(None),
     };
 
@@ -748,18 +758,19 @@ pub fn run() {
             commands::agent::list_models,
             commands::agent::agent_chat,
             commands::agent::agent_chat_with_tools,
+            commands::agent::cancel_agent_chat_run,
             commands::agent::push_pending_chat_message,
             commands::agent::list_agent_runs,
             commands::agent::get_agent_run,
+            commands::agent::list_chat_sessions,
+            commands::agent::get_chat_session,
+            commands::agent::save_chat_session,
             commands::agent::has_active_agent_run,
             commands::agent::delete_agent_run,
             commands::agent::prune_agent_runs,
             commands::agent::compact_agent_state_database,
+            commands::agent::clear_saved_context,
             commands::agent::fetch_url_content,
-            commands::agent::list_chat_sessions,
-            commands::agent::get_chat_session,
-            commands::agent::save_chat_session,
-            commands::agent::delete_chat_session,
             commands::agent::get_memory_context,
             commands::agent::archive_chat_session,
             commands::agent::update_chat_summary,

@@ -254,6 +254,7 @@ fn read_only_tool_names() -> &'static [&'static str] {
         "read_storyboard",
         "delegate_to_agent",
         "fetch_url",
+        "read_context_asset",
         "search_web",
         "recall_memory",
     ]
@@ -528,6 +529,19 @@ pub fn all_tools(
                     "url": { "type": "string", "description": "The URL to fetch (must start with http:// or https://)" }
                 },
                 "required": ["url"]
+            }),
+        ),
+        Tool::function(
+            "read_context_asset",
+            "Read a bounded excerpt from an attached local context snapshot. Use this only when the context pack points to a stored asset and you need more detail. Asset IDs are opaque; do not invent them.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "asset_id": { "type": "string", "description": "Opaque asset ID from a context reference" },
+                    "offset": { "type": "integer", "minimum": 0, "description": "Character offset to begin reading (default 0)" },
+                    "limit": { "type": "integer", "minimum": 1, "maximum": 12000, "description": "Maximum characters to return (default 6000)" }
+                },
+                "required": ["asset_id"]
             }),
         ),
         agentive::memory::recall_memory_tool(),

@@ -3,6 +3,7 @@ import { invoke, listen } from "../services/tauri";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { AgentRunInspector } from "./AgentRunInspector";
 import { AgentStateDatabasePanel } from "./AgentStateDatabasePanel";
+import { SessionHistoryPanel } from "./SessionHistoryPanel";
 import { ProjectImage } from "./ProjectImage";
 import { projectRelativeScreenshotPath } from "../utils/projectImage";
 
@@ -21,7 +22,7 @@ import {
   providerToConfigInput,
 } from "../utils/providerConfig";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
-import type { ChatMessage, ChatSessionSummary, ChatToolActivity, ChatWorkingNotes } from "../types/sketch";
+import type { ChatMessage, ChatToolActivity, ChatWorkingNotes } from "../types/sketch";
 import {
   Sparkles,
   Clock,
@@ -29,7 +30,6 @@ import {
   FileText,
   Globe,
   Wrench,
-  Trash2,
   Plus,
   Paperclip,
   ChevronDown,
@@ -42,11 +42,73 @@ import {
   Database,
   Maximize2,
   Minimize2,
+  Pin,
 } from "lucide-react";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
 const CHAT_AUTO_SCROLL_THRESHOLD_PX = 48;
+const TOOL_ACTIVITY_PREVIEW_MAX_CHARS = 1_200;
+const webContentRequests = new Map<string, Promise<string>>();
+
+interface AgentContextItem {
+  id: string;
+  name: string;
+  source: "user" | "system" | "tool_result" | "file" | "search" | "checkpoint" | "memory" | "host" | "custom";
+  kind: "recent_turn" | "memory_fact" | "reference_doc" | "tool_observation" | "file_excerpt" | "web_excerpt" | "error_trace" | "media_summary" | "other";
+  content: string;
+  content_type?: string;
+  priority?: number;
+  origin?: string;
+  persist?: boolean;
+}
+
+function boundedToolActivityResult(content: string): string {
+  if (content.length <= TOOL_ACTIVITY_PREVIEW_MAX_CHARS) return content;
+  return `${content.slice(0, TOOL_ACTIVITY_PREVIEW_MAX_CHARS).trimEnd()}\n\n[Tool result preview truncated]`;
+}
+
+function formatContextBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  return `${(bytes / 1024).toFixed(bytes >= 10_240 ? 0 : 1)} KB`;
+}
+
+export function fetchWebReferenceContent(
+  url: string,
+  fetcher: (referenceUrl: string) => Promise<string> = (referenceUrl) =>
+    invoke<string>("fetch_url_content", { url: referenceUrl }),
+): Promise<string> {
+  const existing = webContentRequests.get(url);
+  if (existing) return existing;
+
+  const request = fetcher(url);
+  webContentRequests.set(url, request);
+  void request.then(() => {
+    webContentRequests.delete(url);
+  }, () => {
+    webContentRequests.delete(url);
+  });
+  return request;
+}
+
+export function chatSessionTitle(messages: ChatMessage[]): string {
+  const firstUserMessage = messages.find((message) => message.role === "user");
+  const title = firstUserMessage ? textContent(firstUserMessage.content).replace(/\s+/g, " ").trim() : "";
+  return title.slice(0, 120) || "Untitled conversation";
+}
+
+export async function resolveWebReferenceContent<T extends { path: string }>(
+  references: T[],
+  fetcher: (referenceUrl: string) => Promise<string> = fetchWebReferenceContent,
+): Promise<Array<T & { webContent?: string; webStatus: "ready" | "error" }>> {
+  return Promise.all(references.map(async (reference) => {
+    try {
+      return { ...reference, webContent: await fetcher(reference.path), webStatus: "ready" as const };
+    } catch {
+      return { ...reference, webStatus: "error" as const };
+    }
+  }));
+}
 
 export function isChatScrolledNearBottom(
   scrollState: Pick<HTMLElement, "scrollHeight" | "scrollTop" | "clientHeight">,
@@ -123,6 +185,14 @@ export function askModeApprovedSystemInstruction(): string {
 
 export function askModeCancelledMessage(): string {
   return "Ask Mode is active, so I need approval before applying AI changes. I did not run write or mutation tools. To skip this prompt in future turns, choose Auto-apply from the approval dialog or change Settings > AI apply behavior to Auto-apply AI changes.";
+}
+
+export async function cancelAgentChatRun(
+  clientRunId: number,
+  cancel: (clientRunId: string) => Promise<unknown> = (id) =>
+    invoke("cancel_agent_chat_run", { clientRunId: id }),
+): Promise<void> {
+  await cancel(clientRunId.toString());
 }
 
 /**
@@ -356,7 +426,9 @@ interface FileReference {
   /** Cached web content (only for type: "web"). */
   webContent?: string;
   /** Fetch status for web refs. */
-  webStatus?: "loading" | "ready" | "error";
+  webStatus?: "queued" | "loading" | "ready" | "error";
+  /** Keep a locally fetched web snapshot available to future project chats. */
+  persist?: boolean;
 }
 
 type SecondaryTab = "chat" | "sessions" | "runs" | "database";
@@ -381,12 +453,12 @@ function IconSparkles({ size = 14 }: { size?: number }) {
   return <Sparkles width={size} height={size} />;
 }
 
-function IconHistory({ size = 14 }: { size?: number }) {
-  return <Clock width={size} height={size} />;
-}
-
 function IconRuns({ size = 14 }: { size?: number }) {
   return <Activity width={size} height={size} />;
+}
+
+function IconSessions({ size = 14 }: { size?: number }) {
+  return <Clock width={size} height={size} />;
 }
 
 function IconDatabase({ size = 14 }: { size?: number }) {
@@ -403,10 +475,6 @@ function IconFile({ size = 12 }: { size?: number }) {
 
 function IconGlobe({ size = 12 }: { size?: number }) {
   return <Globe width={size} height={size} />;
-}
-
-function IconTrash({ size = 12 }: { size?: number }) {
-  return <Trash2 width={size} height={size} />;
 }
 
 function IconPlus({ size = 14 }: { size?: number }) {
@@ -456,7 +524,7 @@ export function ChatPanel({ focusMode = false }: { focusMode?: boolean }) {
   const railOnLeft = sidebarPosition === "right";
   const tabs: Array<{ id: SecondaryTab; label: string; icon: ReactNode }> = [
     { id: "chat", label: "Chat", icon: <IconSparkles size={13} /> },
-    { id: "sessions", label: "Sessions", icon: <IconHistory size={13} /> },
+    { id: "sessions", label: "Session History", icon: <IconSessions size={13} /> },
     { id: "runs", label: "Runs", icon: <IconRuns size={13} /> },
     { id: "database", label: "Database", icon: <IconDatabase size={13} /> },
   ];
@@ -508,7 +576,7 @@ export function ChatPanel({ focusMode = false }: { focusMode?: boolean }) {
       {/* Tab content */}
       <div className="flex-1 min-w-0 min-h-0">
         {activeTab === "chat" && <ChatTab />}
-        {activeTab === "sessions" && <ChatHistory onOpenSession={() => setActiveTab("chat")} />}
+        {activeTab === "sessions" && <SessionHistoryPanel onOpenChat={() => setActiveTab("chat")} />}
         {activeTab === "runs" && <AgentRunInspector />}
         {activeTab === "database" && <AgentStateDatabasePanel />}
       </div>
@@ -573,6 +641,8 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const thinkingRef = useRef("");
   const workingDraftsRef = useRef<string[]>([]);
   const abortedRef = useRef(false);
+  const nextSendIdRef = useRef(0);
+  const activePreflightSendIdRef = useRef<number | null>(null);
   const pendingToolArgsRef = useRef<Record<string, string[]>>({});
   const handledSketchMutationsRef = useRef<Map<string, number>>(new Map());
 
@@ -615,8 +685,14 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     const shouldListen = focusMode || !chatFocusMode;
     if (!shouldListen) return;
 
-    const unlisten = listen<{ type: string; content?: string; message?: string; name?: string; arguments?: string; result?: string; response?: string; agent_id?: string; task?: string }>("agent-event", (event) => {
+    const unlisten = listen<{ type: string; content?: string; message?: string; name?: string; arguments?: string; result?: string; response?: string; agent_id?: string; task?: string; selected_count?: number; dropped_count?: number; total_bytes?: number; budget_bytes?: number; iteration?: number; attempt?: number; client_run_id?: string }>("agent-event", (event) => {
       const ev = event.payload;
+      if (
+        ev.client_run_id
+        && ev.client_run_id !== activePreflightSendIdRef.current?.toString()
+      ) {
+        return;
+      }
       switch (ev.type) {
         case "delta":
           streamingRef.current += ev.content ?? "";
@@ -652,9 +728,35 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
             timestamp: new Date(),
             source: "status",
             content: ev.message ?? "",
+            level: ev.message?.startsWith("Dropped packed context") ? "warn" : "info",
+          }]);
+          break;
+        case "context_prepared": {
+          const selected = ev.selected_count ?? 0;
+          const dropped = ev.dropped_count ?? 0;
+          const content = `Context prepared: ${selected} item${selected === 1 ? "" : "s"} · ${formatContextBytes(ev.total_bytes ?? 0)}${dropped > 0 ? ` · ${dropped} omitted` : ""}`;
+          setChatStreamingState({ chatStreamingStatus: content });
+          addActivityEntries([{
+            id: crypto.randomUUID(),
+            timestamp: new Date(),
+            source: "context",
+            content,
             level: "info",
           }]);
           break;
+        }
+        case "context_sent": {
+          const content = `Context sent to provider${ev.attempt ? ` · retry ${ev.attempt}` : ""}`;
+          setChatStreamingState({ chatStreamingStatus: content });
+          addActivityEntries([{
+            id: crypto.randomUUID(),
+            timestamp: new Date(),
+            source: "context",
+            content,
+            level: "info",
+          }]);
+          break;
+        }
         case "tool_call":
           // Stash args so tool_result can use them (e.g. to extract path)
           if (ev.name) {
@@ -666,7 +768,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
             id: crypto.randomUUID(),
             timestamp: new Date(),
             source: ev.name ?? "tool",
-            content: `Called with: ${ev.arguments ?? "{}"}`,
+            content: describeToolCall(ev.name ?? "tool", ev.arguments ?? "{}"),
             level: "info",
           }]);
           break;
@@ -675,7 +777,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
             id: crypto.randomUUID(),
             timestamp: new Date(),
             source: `result ${ev.name ?? ""}`.trim(),
-            content: ev.result ?? "",
+            content: boundedToolActivityResult(ev.result ?? ""),
             level: "success",
           }]);
           // Auto-refresh sidebar and open sketches after tool mutations
@@ -889,6 +991,20 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       .catch(() => setMemoryContext(""));
   }, [activeSketchPath]);
 
+  const persistChatSession = useCallback(async (sessionId: string, transcript: ChatMessage[]) => {
+    if (!currentProject || transcript.length === 0) return;
+    await invoke("save_chat_session", {
+      sessionId,
+      title: chatSessionTitle(transcript),
+      messages: transcript,
+      metadata: {
+        source: "chat_panel",
+        transcript_format: 1,
+      },
+    });
+    window.dispatchEvent(new CustomEvent("cutready:chat-sessions-updated"));
+  }, [currentProject]);
+
   // Keep Rust-side chat summary in sync so window close can archive reliably.
   // Updates whenever messages change (debounced by React's batching).
   useEffect(() => {
@@ -930,8 +1046,11 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     const agentOverride = opts?.agent;
     shouldStickToBottomRef.current = true;
 
+    if (loading && activePreflightSendIdRef.current !== null) return;
+
     setInput("");
     setShowAutocomplete(false);
+    setShowContextPicker(false);
 
     // If agent is already running, push to pending stack
     if (loading) {
@@ -948,12 +1067,47 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     }
 
     setChatError(null);
+    const sendId = ++nextSendIdRef.current;
+    activePreflightSendIdRef.current = sendId;
+    abortedRef.current = false;
+
+    const webReferences = references.filter((reference) => reference.type === "web");
+    let resolvedWebReferences = webReferences;
+    if (webReferences.length > 0) {
+      setChatLoading(true);
+      setChatStreamingState({ chatStreamingStatus: "Fetching attached references…" });
+      setReferences((previous) => previous.map((reference) => (
+        reference.type === "web" && webReferences.some((webReference) => webReference.path === reference.path)
+          ? { ...reference, webStatus: "loading" as const }
+          : reference
+      )));
+      resolvedWebReferences = await resolveWebReferenceContent(webReferences);
+      if (abortedRef.current || activePreflightSendIdRef.current !== sendId) {
+        if (activePreflightSendIdRef.current !== sendId) return;
+        setReferences((previous) => previous.map((reference) => (
+          reference.type === "web" && reference.webStatus === "loading"
+            ? { ...reference, webStatus: "queued" as const }
+            : reference
+        )));
+        return;
+      }
+      const failedReferences = resolvedWebReferences.filter((reference) => reference.webStatus === "error");
+      if (failedReferences.length > 0) {
+        addActivityEntries(failedReferences.map((reference) => ({
+          id: crypto.randomUUID(),
+          timestamp: new Date(),
+          source: "context",
+          content: `Could not fetch attached reference: ${reference.path}`,
+          level: "warn" as const,
+        })));
+      }
+    }
 
     // Build user message with @references context (agentive protocol)
     let userContent = text;
-    let llmContent: string | null = null;
+    const contextItems: AgentContextItem[] = [];
     if (references.length > 0) {
-      const webRefs = references.filter((r) => r.type === "web");
+      const webRefs = resolvedWebReferences;
       const fileRefs = references.filter((r) => r.type !== "web");
       const parts: string[] = [];
 
@@ -964,25 +1118,39 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       // Web refs shown as compact footnotes after the message text
       const webTags = webRefs.map((wr) => `[Web: ${wr.path}]`).join(" ");
 
-      // Build separate LLM parts with full web content
-      const llmParts = [...parts];
       for (const wr of webRefs) {
         if (wr.webContent && wr.webStatus === "ready") {
-          llmParts.push(`[Web Content: ${wr.path}]\n${wr.webContent}`);
+          contextItems.push({
+            id: `web:${wr.path}`,
+            name: wr.title || wr.path,
+            source: "search",
+            kind: "web_excerpt",
+            content: wr.webContent,
+            content_type: "text/plain",
+            priority: 90,
+            origin: wr.path,
+            persist: wr.persist ?? false,
+          });
         }
       }
 
       // File refs + web refs shown as footnotes after the message text
       const footnote = parts.length > 0 ? `\n${parts.join(" · ")}` : "";
       userContent = `${text}${footnote}${webTags ? `\n${webTags}` : ""}`;
-      llmContent = `${text}${footnote}\n\n${llmParts.filter((p) => p.startsWith("[Web Content:")).join("\n\n")}`;
     }
 
     const userMsg: ChatMessage = { role: "user", content: userContent };
     const newMessages = [...messages, userMsg];
+    const sessionId = chatSessionPath ?? crypto.randomUUID();
+    if (!chatSessionPath) {
+      useAppStore.setState({ chatSessionPath: sessionId });
+    }
     // For silent sends, don't update the displayed chat with the user message
     if (!silent) {
       setChatMessages(newMessages);
+      void persistChatSession(sessionId, newMessages).catch((persistError) => {
+        console.warn("Could not save chat session:", persistError);
+      });
       requestAnimationFrame(() => scrollMessagesToBottom());
     }
     setReferences([]);
@@ -990,9 +1158,13 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     let askModeApproved = false;
     if (shouldRequestChatMutationApproval(settings.aiApplyMode)) {
       const approval = await useAiApplyGateStore.getState().requestApproval("This chat turn");
+      if (abortedRef.current || activePreflightSendIdRef.current !== sendId) return;
       if (approval === "cancel") {
         const notice: ChatMessage = { role: "assistant", content: askModeCancelledMessage() };
         setChatMessages(silent ? [...messages, notice] : [...newMessages, notice]);
+        activePreflightSendIdRef.current = null;
+        setChatLoading(false);
+        resetChatStreaming();
         addActivityEntries([{
           id: crypto.randomUUID(),
           timestamp: new Date(),
@@ -1005,10 +1177,9 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       askModeApproved = true;
     }
 
-    // Build full conversation with system prompt — use llmContent for last message so LLM gets web content
-    const llmMessages = newMessages.map((m, i) =>
-      i === newMessages.length - 1 && llmContent ? { ...m, content: llmContent } : m
-    );
+    // Build full conversation with system prompt. Large reference/web payloads are sent
+    // separately as transient Agentive context items so they do not persist in chat history.
+    const llmMessages = newMessages;
     // If an agent override was requested (e.g. from ✨ buttons), use that agent's prompt
     let effectiveSystemPrompt = systemPrompt;
     if (agentOverride) {
@@ -1032,7 +1203,6 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     ];
 
     setChatLoading(true);
-    abortedRef.current = false;
     handledSketchMutationsRef.current.clear();
     streamingRef.current = "";
     thinkingRef.current = "";
@@ -1098,15 +1268,19 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       }
 
       // Route to the backend agent command
+      if (abortedRef.current || activePreflightSendIdRef.current !== sendId) return;
       const result = await invoke<AgentChatResult>("agent_chat_with_tools", {
             config,
             messages: fullMessages,
+            contextItems,
             agentPrompts,
             agentId: effectiveAgent.id,
             allowMutationTools,
+            clientRunId: sendId.toString(),
           });
 
       // Activity logging now handled by real-time agent-event listener
+      if (abortedRef.current || activePreflightSendIdRef.current !== sendId) return;
 
       // Use the backend's full conversation (with correct tool_call/tool_result ordering)
       // but restore display-friendly user messages. The backend/reference resolver may
@@ -1155,7 +1329,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       }]);
 
       // If the user stopped generation, discard the result
-      if (abortedRef.current) return;
+      if (abortedRef.current || activePreflightSendIdRef.current !== sendId) return;
 
       // Tool-result events are used for immediate refresh, but they are best-effort
       // UI events. Reconcile from the returned conversation as well so open sketches
@@ -1175,8 +1349,11 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       }
 
       setChatMessages(backendMessages);
+      void persistChatSession(sessionId, backendMessages).catch((persistError) => {
+        console.warn("Could not save chat session:", persistError);
+      });
     } catch (err) {
-      if (abortedRef.current) return;
+      if (abortedRef.current || activePreflightSendIdRef.current !== sendId) return;
       const errMsg = err instanceof Error ? err.message : String(err);
       setChatError(errMsg);
       // Log error to activity
@@ -1188,15 +1365,22 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
         level: "error",
       }]);
       // Keep user message visible (unless silent)
-      if (!silent) setChatMessages(newMessages);
+      if (!silent) {
+        setChatMessages(newMessages);
+        void persistChatSession(sessionId, newMessages).catch((persistError) => {
+          console.warn("Could not save chat session:", persistError);
+        });
+      }
     } finally {
+      if (activePreflightSendIdRef.current !== sendId) return;
+      activePreflightSendIdRef.current = null;
       setChatLoading(false);
       resetChatStreaming();
       streamingRef.current = "";
       thinkingRef.current = "";
       workingDraftsRef.current = [];
     }
-  }, [input, loading, messages, references, systemPrompt, buildEffectiveProviderInput, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings, selectedAgent, memoryContext, activeSketchPath, activeStoryboardPath, activeNotePath, refreshSketchAfterMutation, refreshStoryboardAfterMutation, resetChatStreaming, scrollMessagesToBottom, setChatStreamingState, updateSetting]);
+  }, [input, loading, messages, references, systemPrompt, buildEffectiveProviderInput, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings, selectedAgent, memoryContext, activeSketchPath, activeStoryboardPath, activeNotePath, chatSessionPath, persistChatSession, refreshSketchAfterMutation, refreshStoryboardAfterMutation, resetChatStreaming, scrollMessagesToBottom, setChatStreamingState, updateSetting]);
 
   // Pick up prompts queued from outside the chat (e.g. sparkle buttons)
   const handleSendRef = useRef(handleSend);
@@ -1210,7 +1394,19 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   }, [pendingChatPrompt]);
 
   const handleStop = useCallback(() => {
+    const clientRunId = activePreflightSendIdRef.current;
+    if (clientRunId !== null) {
+      void cancelAgentChatRun(clientRunId).catch((error) => {
+        console.warn("Failed to cancel chat run:", error);
+      });
+    }
     abortedRef.current = true;
+    activePreflightSendIdRef.current = null;
+    setReferences((previous) => previous.map((reference) => (
+      reference.type === "web" && reference.webStatus === "loading"
+        ? { ...reference, webStatus: "queued" as const }
+        : reference
+    )));
     setChatLoading(false);
     resetChatStreaming();
     streamingRef.current = "";
@@ -1236,6 +1432,10 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const val = e.target.value;
       setInput(val);
+      if (loading) {
+        setShowAutocomplete(false);
+        return;
+      }
 
       // Detect @ trigger for references (agentive protocol)
       const cursorPos = e.target.selectionStart;
@@ -1251,20 +1451,10 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           const url = webMatch[1];
           setReferences((prev) => {
             if (prev.some((r) => r.path === url)) return prev;
-            return [...prev, { type: "web", path: url, title: url, webStatus: "loading" }];
+            return [...prev, { type: "web", path: url, title: url, webStatus: "queued" }];
           });
           // Keep @URL text in the input — just close autocomplete
           setShowAutocomplete(false);
-          // Fetch content in background
-          invoke<string>("fetch_url_content", { url }).then((content) => {
-            setReferences((prev) => prev.map((r) =>
-              r.path === url ? { ...r, webContent: content, webStatus: "ready" as const } : r
-            ));
-          }).catch(() => {
-            setReferences((prev) => prev.map((r) =>
-              r.path === url ? { ...r, webContent: "Failed to fetch", webStatus: "error" as const } : r
-            ));
-          });
           return;
         }
 
@@ -1277,11 +1467,12 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       }
       setShowAutocomplete(false);
     },
-    [],
+    [loading],
   );
 
   const insertReference = useCallback(
     (file: FileReference) => {
+      if (loading) return;
       setReferences((prev) => [...prev, file]);
       // Replace the @query with a clean @mention (quoted if title has spaces)
       const cursorPos = inputRef.current?.selectionStart ?? input.length;
@@ -1299,7 +1490,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
         inputRef.current?.focus();
       }, 0);
     },
-    [input],
+    [input, loading],
   );
 
   const removeReference = useCallback((path: string) => {
@@ -1425,9 +1616,10 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
             </div>
           </div>
           <button
-            className="flex items-center justify-center w-[26px] h-[26px] rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-toolbar))] transition-colors"
+            disabled={loading}
+            className="flex h-[26px] w-[26px] items-center justify-center rounded text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-toolbar))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
             onClick={clearChat}
-            title="New Chat"
+            title={loading ? "Wait for the current message to finish" : "New Chat"}
             aria-label="New Chat"
           >
             <IconPlus size={14} />
@@ -1598,17 +1790,30 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                     <button
                       className="max-w-[180px] truncate hover:underline"
                       onClick={() => setExpandedWebRef(expandedWebRef === ref.path ? null : ref.path)}
-                      title={ref.webStatus === "loading" ? "Fetching…" : "Click to preview"}
+                      title={ref.webStatus === "queued" ? "Fetched when you send" : ref.webStatus === "loading" ? "Fetching…" : "Click to preview"}
                     >
-                      {ref.webStatus === "loading" ? "Fetching…" : ref.title}
+                      {ref.webStatus === "queued" ? "Ready to fetch" : ref.webStatus === "loading" ? "Fetching…" : ref.title}
                     </button>
                   ) : (
                     <span className="max-w-[120px] truncate">{ref.title}</span>
                   )}
+                  {ref.type === "web" && ref.webStatus !== "error" && (
+                    <button
+                      disabled={loading}
+                      className={`transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${ref.persist ? "text-[rgb(var(--color-accent))]" : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"}`}
+                      onClick={() => setReferences((previous) => previous.map((item) => (
+                        item.path === ref.path ? { ...item, persist: !item.persist } : item
+                      )))}
+                      title={loading ? "References are locked while this message is sending" : ref.persist ? "Store the fetched snapshot for future project chats" : "Keep the fetched snapshot available to future project chats"}
+                    >
+                      <Pin className="w-2.5 h-2.5" />
+                    </button>
+                  )}
                   <button
-                    className="text-[rgb(var(--color-text-secondary))] hover:text-error transition-colors"
+                    disabled={loading}
+                    className="text-[rgb(var(--color-text-secondary))] hover:text-error transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={() => { removeReference(ref.path); if (expandedWebRef === ref.path) setExpandedWebRef(null); }}
-                    title="Remove"
+                    title={loading ? "References are locked while this message is sending" : "Remove"}
                   >
                     <X className="w-2.5 h-2.5" />
                   </button>
@@ -1675,11 +1880,12 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           {/* Add Context button + picker */}
           <div className="relative" ref={contextPickerRef}>
             <button
+              disabled={loading}
               className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
                 showContextPicker
                   ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
                   : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))]"
-              }`}
+              } disabled:cursor-not-allowed disabled:opacity-50`}
               onClick={() => { setShowContextPicker(!showContextPicker); setContextFilter(""); }}
               title="Add Context (@)"
             >
@@ -1995,7 +2201,7 @@ function WebRefChip({ url }: { url: string }) {
     if (content) return;
     setLoading(true);
     try {
-      const result = await invoke<string>("fetch_url_content", { url });
+      const result = await fetchWebReferenceContent(url);
       setContent(result);
     } catch {
       setContent("Failed to fetch content");
@@ -2263,6 +2469,38 @@ function ToolJsonBlock({ label, value }: { label: string; value: string }) {
 
 function formatToolName(name: string): string {
   return name.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+export function describeToolCall(name: string, argumentsJson: string): string {
+  let args: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(argumentsJson);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      args = parsed as Record<string, unknown>;
+    }
+  } catch {
+    // The expandable tool timeline still exposes the original arguments.
+  }
+
+  if (name === "update_planning_row") {
+    const rowNumber = args.row_number;
+    const legacyRowIndex = args.row_index ?? args.rowIndex;
+    const path = typeof args.path === "string" ? args.path.split(/[\\/]/).pop() : undefined;
+    const rowLabel = typeof rowNumber === "number"
+      ? ` ${rowNumber}`
+      : typeof legacyRowIndex === "number"
+        ? ` ${legacyRowIndex + 1}`
+        : "";
+    return `Updating planning row${rowLabel}${path ? ` in ${path}` : ""}`;
+  }
+  if (name === "read_sketch" && typeof args.path === "string") {
+    return `Reading ${args.path.split(/[\\/]/).pop()}`;
+  }
+  if (name === "write_note" && typeof args.path === "string") {
+    return `Writing ${args.path.split(/[\\/]/).pop()}`;
+  }
+
+  return `${formatToolName(name)} started`;
 }
 
 function formatMaybeJson(value: string): string {
@@ -2692,159 +2930,4 @@ function FileTypeIcon({ type }: { type: string }) {
     default:
       return <span className={cls}><IconFile /></span>;
   }
-}
-
-// ── Chat History ─────────────────────────────────────────────────
-
-function ChatHistory({ onOpenSession }: { onOpenSession: () => void }) {
-  const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const listChatSessions = useAppStore((s) => s.listChatSessions);
-  const loadChatSession = useAppStore((s) => s.loadChatSession);
-  const deleteChatSession = useAppStore((s) => s.deleteChatSession);
-  const newChatSession = useAppStore((s) => s.newChatSession);
-  const chatSessionPath = useAppStore((s) => s.chatSessionPath);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    const list = await listChatSessions();
-    // Sort by most recent first
-    list.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-    setSessions(list);
-    setLoading(false);
-  }, [listChatSessions]);
-
-  useEffect(() => { refresh(); }, [refresh]);
-
-  const handleOpen = useCallback(async (path: string) => {
-    await loadChatSession(path);
-    onOpenSession();
-  }, [loadChatSession, onOpenSession]);
-
-  const handleDelete = useCallback(async (e: React.MouseEvent, path: string) => {
-    e.stopPropagation();
-    await deleteChatSession(path);
-    refresh();
-  }, [deleteChatSession, refresh]);
-
-  const handleNewChat = useCallback(() => {
-    newChatSession();
-    onOpenSession();
-  }, [newChatSession, onOpenSession]);
-
-  const formatDate = (iso: string) => {
-    try {
-      const d = new Date(iso);
-      const now = new Date();
-      const diff = now.getTime() - d.getTime();
-      const mins = Math.floor(diff / 60000);
-      if (mins < 1) return "Just now";
-      if (mins < 60) return `${mins}m ago`;
-      const hrs = Math.floor(mins / 60);
-      if (hrs < 24) return `${hrs}h ago`;
-      const days = Math.floor(hrs / 24);
-      if (days < 7) return `${days}d ago`;
-      return d.toLocaleDateString();
-    } catch {
-      return iso;
-    }
-  };
-
-  return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[rgb(var(--color-border))]">
-        <span className="text-[11px] font-medium text-[rgb(var(--color-text-secondary))]">
-          {sessions.length} session{sessions.length !== 1 ? "s" : ""}
-        </span>
-        <button
-          onClick={handleNewChat}
-          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
-          title="New chat"
-        >
-          <IconPlus size={12} />
-          New Chat
-        </button>
-      </div>
-
-      {/* Session list */}
-      <div className="flex-1 overflow-y-auto">
-        {loading ? (
-          <div className="flex items-center justify-center py-8 text-[rgb(var(--color-text-secondary))] text-xs">
-            Loading…
-          </div>
-        ) : sessions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 px-4 text-center gap-2">
-            <IconHistory size={24} />
-            <span className="text-[12px] text-[rgb(var(--color-text-secondary))]">No chat sessions yet</span>
-            <span className="text-[11px] text-[rgb(var(--color-text-secondary))]/60">
-              New conversations are saved in Runs; legacy chat files appear here.
-            </span>
-          </div>
-        ) : (
-          <div className="py-1">
-            {sessions.map((s) => {
-              const isActive = s.path === chatSessionPath;
-              return (
-                <div
-                  key={s.path}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => handleOpen(s.path)}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleOpen(s.path); }}
-                  className={`group w-full text-left px-3 py-2.5 flex items-start gap-2 transition-colors border-l-2 cursor-pointer ${
-                    isActive
-                      ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/8"
-                      : "border-transparent hover:bg-[rgb(var(--color-surface-hover))]"
-                  }`}
-                >
-                  <IconSparkles size={14} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[12px] font-medium text-[rgb(var(--color-text))] truncate leading-tight">
-                      {s.title || "Untitled chat"}
-                    </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {(s.author_name || s.author_email) && (
-                        <>
-                          <span
-                            className="max-w-[8rem] truncate text-[10px] text-[rgb(var(--color-accent))]"
-                            title={formatAuthor(s)}
-                          >
-                            {s.author_name || s.author_email}
-                          </span>
-                          <span className="text-[10px] text-[rgb(var(--color-text-secondary))]/50">·</span>
-                        </>
-                      )}
-                      <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">
-                        {s.message_count} message{s.message_count !== 1 ? "s" : ""}
-                      </span>
-                      <span className="text-[10px] text-[rgb(var(--color-text-secondary))]/50">·</span>
-                      <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">
-                        {formatDate(s.updated_at)}
-                      </span>
-                    </div>
-                  </div>
-                  {/* Delete button — visible on hover */}
-                  <button
-                    onClick={(e) => handleDelete(e, s.path)}
-                    className="shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-[rgb(var(--color-surface-hover))] text-[rgb(var(--color-text-secondary))] hover:text-error transition-all"
-                    title="Delete session"
-                  >
-                    <IconTrash size={12} />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function formatAuthor(session: ChatSessionSummary) {
-  if (session.author_name && session.author_email) {
-    return `${session.author_name} <${session.author_email}>`;
-  }
-  return session.author_name || session.author_email || "Unknown author";
 }

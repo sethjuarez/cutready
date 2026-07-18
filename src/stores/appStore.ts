@@ -78,7 +78,6 @@ import type {
   GraphNode,
   NoteSummary,
   ChatMessage,
-  ChatSessionSummary,
   RemoteBranchInfo,
   RemoteInfo,
   SyncStatus,
@@ -90,22 +89,6 @@ import type {
 } from "../types/sketch";
 
 const suppressedEditorFlushPaths = new Set<string>();
-const LOCAL_CHAT_SESSION_PREFIX = "cutready://legacy-chats/";
-
-function randomSessionSuffix(): string {
-  if (globalThis.crypto?.randomUUID) {
-    return globalThis.crypto.randomUUID().slice(0, 8);
-  }
-  return Math.random().toString(36).slice(2, 10);
-}
-
-export function createLocalChatSessionPath(now = new Date()): string {
-  const timestamp = now.toISOString()
-    .replace(/\.\d{3}Z$/, "Z")
-    .replace(/[:.]/g, "-");
-  return `${LOCAL_CHAT_SESSION_PREFIX}chat-${timestamp}-${randomSessionSuffix()}.chat`;
-}
-
 export function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
@@ -195,17 +178,6 @@ export function remoteSyncErrorMessage(error: unknown): string {
 
 const PENDING_CLEANUP_INCOMING_MESSAGE =
   "Publish or undo milestone history before getting incoming remote saves. Pulling first would change the local timeline and invalidate the milestone publish.";
-
-function chatMessagePreviewContent(message: ChatMessage): string {
-  if (typeof message.content === "string") return message.content;
-  if (Array.isArray(message.content)) {
-    return message.content
-      .filter((part) => part.type === "text" && part.text)
-      .map((part) => part.text)
-      .join("\n");
-  }
-  return "";
-}
 
 export function suppressEditorFlush(relativePath: string) {
   suppressedEditorFlushPaths.add(normalizeRelativePath(relativePath));
@@ -527,9 +499,9 @@ interface AppStoreState {
   narrationAssets: NarrationAssetInfo[];
 
   // ── Chat state ──────────────────────────────────────────────
-  /** Messages in the current chat session. */
+  /** Messages in the current in-memory chat. */
   chatMessages: ChatMessage[];
-  /** Relative path of the current chat session file (null = unsaved). */
+  /** Current database-backed chat session ID; retained for workspace compatibility. */
   chatSessionPath: string | null;
   /** Whether the chat is waiting for a response. */
   chatLoading: boolean;
@@ -819,14 +791,12 @@ interface AppStoreState {
 
   // ── Chat actions ────────────────────────────────────────────
 
-  /** Set chat messages (updates store + auto-saves to disk). */
+  /** Set the current in-memory chat messages without changing its database session. */
   setChatMessages: (messages: ChatMessage[]) => void;
-  /** Start a new chat session (clears messages, assigns path). */
+  /** Restore a database-backed conversation into the Chat tab. */
+  restoreChatSession: (sessionId: string, messages: ChatMessage[]) => void;
+  /** Start a new in-memory conversation. */
   newChatSession: () => void;
-  /** Load a saved chat session by path. */
-  loadChatSession: (sessionPath: string) => Promise<void>;
-  /** Save the current chat session to disk. */
-  saveChatSession: () => Promise<void>;
   /** Set chat loading state. */
   setChatLoading: (loading: boolean) => void;
   /** Set chat error. */
@@ -851,10 +821,6 @@ interface AppStoreState {
   addDebugEntry: (entry: ActivityEntry) => void;
   /** Clear debug log. */
   clearDebugLog: () => void;
-  /** List saved chat sessions. */
-  listChatSessions: () => Promise<ChatSessionSummary[]>;
-  /** Delete a chat session. */
-  deleteChatSession: (sessionPath: string) => Promise<void>;
 
   // ── Versioning actions ───────────────────────────────────
 
@@ -1076,17 +1042,13 @@ async function restoreWorkspaceState(get: () => AppStoreState, set: (partial: Pa
       else if (active?.type === "note") await get().openNote(active.path);
     }
 
-    if (ws.chat_session_path) {
-      get().loadChatSession(ws.chat_session_path).catch(() => {});
-    } else {
-      set({
-        chatMessages: [],
-        chatSessionPath: null,
-        chatLoading: false,
-        chatError: null,
-        chatInputDraft: "",
-      });
-    }
+    set({
+      chatMessages: [],
+      chatSessionPath: null,
+      chatLoading: false,
+      chatError: null,
+      chatInputDraft: "",
+    });
   } catch {
     // First launch or corrupted local workspace UI state; project content still loads normally.
   }
@@ -1392,14 +1354,14 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     return { sidebarPosition: pos };
   }),
 
-  // Persist workspace state (tabs + chat session) to local repo state.
+  // Persist workspace state. Chat transcripts live in agent-state runs.
   _persistTabs: () => {
-    const { openTabs, activeTabId, chatSessionPath } = get();
+    const { openTabs, activeTabId } = get();
     invoke("set_workspace_state", {
       workspace: {
         open_tabs: openTabs.map((t) => ({ id: t.id, type: t.type, path: t.path, title: t.title })),
         active_tab_id: activeTabId,
-        chat_session_path: chatSessionPath,
+        chat_session_path: null,
       },
     }).catch(() => {});
   },
@@ -1850,7 +1812,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     set({ loading: true, projectSwitching: true });
     try {
       // Save current workspace state before switching
-      const { openTabs, activeTabId, chatSessionPath, currentProject, startedBranchFromSnapshot } = get();
+      const { openTabs, activeTabId, currentProject, startedBranchFromSnapshot } = get();
       await invoke("set_workspace_state", {
         workspace: {
           open_tabs: openTabs.map((t) => ({
@@ -1860,7 +1822,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
             title: t.title,
           })),
           active_tab_id: activeTabId,
-          chat_session_path: chatSessionPath,
+          chat_session_path: null,
         },
       }).catch(() => {});
 
@@ -2494,33 +2456,20 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   // ── Chat actions ──────────────────────────────────────────
 
   setChatMessages: (messages) => {
-    const existingSessionPath = get().chatSessionPath;
-    const chatSessionPath = existingSessionPath ?? (messages.length > 0 ? createLocalChatSessionPath() : null);
-    set({ chatMessages: messages, chatSessionPath, chatError: null });
-    if (chatSessionPath !== existingSessionPath) {
-      get()._persistTabs();
-    }
-    // Auto-save after a short delay
-    const state = get();
-    if (state.chatSessionPath && messages.length > 0) {
-      state.saveChatSession().catch(console.error);
-    }
+    set({ chatMessages: messages, chatError: null });
+  },
+
+  restoreChatSession: (sessionId, messages) => {
+    set({
+      chatMessages: messages,
+      chatSessionPath: sessionId,
+      chatLoading: false,
+      chatError: null,
+      chatInputDraft: "",
+    });
   },
 
   newChatSession: () => {
-    // Archive the previous session if it had messages
-    const { chatMessages, chatSessionPath } = get();
-    if (chatSessionPath && chatMessages.length > 1) {
-      const userMsgs = chatMessages.filter((m) => m.role === "user");
-      const summary = userMsgs.map((m) => chatMessagePreviewContent(m).slice(0, 100)).filter(Boolean).join("; ");
-      if (summary) {
-        invoke("archive_chat_session", {
-          sessionId: chatSessionPath,
-          summary: `Topics discussed: ${summary}`,
-        }).catch(() => {});
-      }
-    }
-
     set({
       chatMessages: [],
       chatSessionPath: null,
@@ -2530,53 +2479,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activityLog: [],
     });
     get()._persistTabs();
-  },
-
-  loadChatSession: async (sessionPath) => {
-    try {
-      const session = await invoke<{
-        title: string;
-        messages: ChatMessage[];
-        created_at: string;
-        updated_at: string;
-        author_name?: string | null;
-        author_email?: string | null;
-      }>(
-        "get_chat_session",
-        { relativePath: sessionPath },
-      );
-      set({
-        chatMessages: session.messages,
-        chatSessionPath: sessionPath,
-        chatError: null,
-      });
-      get()._persistTabs();
-    } catch {
-      // Session file doesn't exist (e.g., new session with no messages yet) — start fresh
-      get().newChatSession();
-    }
-  },
-
-  saveChatSession: async () => {
-    const { chatMessages, chatSessionPath } = get();
-    if (!chatSessionPath || chatMessages.length === 0) return;
-    // Derive title from first user message
-    const firstUser = chatMessages.find((m) => m.role === "user");
-    const title = firstUser ? chatMessagePreviewContent(firstUser).slice(0, 80) : "Chat session";
-    const now = new Date().toISOString();
-    try {
-      await invoke("save_chat_session", {
-        relativePath: chatSessionPath,
-        session: {
-          title,
-          messages: chatMessages,
-          created_at: now,
-          updated_at: now,
-        },
-      });
-    } catch (err) {
-      console.error("Failed to save chat session:", err);
-    }
   },
 
   setChatLoading: (loading) => set({ chatLoading: loading }),
@@ -2599,23 +2501,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   clearActivityLog: () => set({ activityLog: [] }),
   addDebugEntry: (entry) => set((s) => ({ debugLog: [...s.debugLog.slice(-499), entry] })),
   clearDebugLog: () => set({ debugLog: [] }),
-
-  listChatSessions: async () => {
-    try {
-      return await invoke<ChatSessionSummary[]>("list_chat_sessions");
-    } catch (err) {
-      console.error("Failed to list chat sessions:", err);
-      return [];
-    }
-  },
-
-  deleteChatSession: async (sessionPath) => {
-    try {
-      await invoke("delete_chat_session", { relativePath: sessionPath });
-    } catch (err) {
-      console.error("Failed to delete chat session:", err);
-    }
-  },
 
   // ── Versioning actions ───────────────────────────────────
 

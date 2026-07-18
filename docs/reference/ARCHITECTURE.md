@@ -763,7 +763,7 @@ fn graph_overview(adapter: &CutReadyDraftlineAdapter) -> DraftlineResult<Workspa
 - Snapshots are created automatically on user saves and explicit workspace-structure changes.
 - Draftline owns branch/variation IDs; CutReady treats IDs as opaque and uses helper APIs for graph relationships.
 - The version history UI presents Draftline graph summaries and neighborhoods, not raw git logs.
-- Legacy files such as `.chats`, `.cutready/memory.json`, `.cutready/workspace.json`, and `.cutready-order.json` are migrated non-destructively so tracked older projects do not become dirty simply by opening.
+- ChatPanel conversation snapshots and legacy `.chats/*.chat` transcripts live in `.git/cutready/agent-state.db`; the Session History rail lists and reopens both transcript types. Legacy imports retain source metadata, are exempt from generic run retention, and are verified against a fresh source-file hash before removal; malformed, unverified, or changed files remain in place and their migration failure is recorded locally. Other legacy files such as `.cutready/memory.json`, `.cutready/workspace.json`, and `.cutready-order.json` are migrated non-destructively so tracked older projects do not become dirty simply by opening.
 
 **Content policy**:
 

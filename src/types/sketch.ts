@@ -236,7 +236,7 @@ export interface ChatMessage {
   tool_call_id?: string;
   /** Frontend-only: marks a message as queued while the agent is busy. */
   pending?: boolean;
-  /** Frontend-only: CutReady display metadata preserved in chat session files. */
+  /** Frontend-only: CutReady display metadata retained while a chat is open. */
   cutready?: ChatMessageMetadata;
 }
 
@@ -264,25 +264,6 @@ export interface ToolCall {
   function: { name: string; arguments: string };
 }
 
-/** Summary of a saved chat session. */
-export interface ChatSessionSummary {
-  path: string;
-  title: string;
-  message_count: number;
-  updated_at: string;
-  author_name?: string | null;
-  author_email?: string | null;
-}
-
-/** A persisted chat session. */
-export interface ChatSession {
-  title: string;
-  messages: ChatMessage[];
-  created_at: string;
-  updated_at: string;
-  author_name?: string | null;
-  author_email?: string | null;
-}
 
 // ── Merge types ──────────────────────────────────────────────
 

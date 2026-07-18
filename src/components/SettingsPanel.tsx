@@ -3016,6 +3016,25 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
           When enabled, agents can call a web search tool for current public information. Project content is not sent unless you explicitly ask for it.
         </p>
       </fieldset>
+
+      <fieldset className="flex flex-col gap-2">
+        <label className="text-sm font-medium">Maximum tool rounds</label>
+        <input
+          type="number"
+          min={1}
+          max={200}
+          step={1}
+          value={settings.aiMaxToolRounds || 50}
+          onChange={(event) => {
+            const next = Math.max(1, Math.min(200, Number(event.target.value) || 50));
+            void updateSetting("aiMaxToolRounds", next);
+          }}
+          className={inputClass}
+        />
+        <p className="text-xs text-[rgb(var(--color-text-secondary))]">
+          Limits agent tool-call rounds before CutReady stops a runaway loop. Higher values help long editing sessions that need many read/write/review cycles.
+        </p>
+      </fieldset>
     </div>
   );
 }

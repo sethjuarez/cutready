@@ -5,6 +5,11 @@ import {
   askModeCancelledMessage,
   buildChatWorkingNotes,
   canUseChatMutationTools,
+  cancelAgentChatRun,
+  chatSessionTitle,
+  describeToolCall,
+  fetchWebReferenceContent,
+  resolveWebReferenceContent,
   extractInlineToolActivity,
   isChatScrolledNearBottom,
   reconcileMessagesForDisplay,
@@ -12,6 +17,85 @@ import {
   shouldRequestChatMutationApproval,
 } from "../components/ChatPanel";
 import type { ChatMessage } from "../types/sketch";
+import {
+  agentRunEventLabel,
+  agentRunProviderLabel,
+  agentRunStatusLabel,
+} from "../components/AgentRunInspector";
+import { sessionSourceLabel, sessionSourcePathLabel } from "../components/SessionHistoryPanel";
+
+describe("describeToolCall", () => {
+  it("summarizes planning row updates without exposing raw arguments", () => {
+    expect(describeToolCall(
+      "update_planning_row",
+      JSON.stringify({ path: "sketches/intro.sk", row_number: 3, narrative: "Private draft" }),
+    )).toBe("Updating planning row 3 in intro.sk");
+  });
+
+  describe("cancelAgentChatRun", () => {
+    it("uses the active client run ID when requesting cancellation", async () => {
+      const cancel = vi.fn().mockResolvedValue(undefined);
+
+      await cancelAgentChatRun(42, cancel);
+
+      expect(cancel).toHaveBeenCalledExactlyOnceWith("42");
+    });
+  });
+});
+
+describe("fetchWebReferenceContent", () => {
+  it("deduplicates concurrent fetches for the same URL", async () => {
+    const url = "https://example.test/dedupe";
+    const fetcher = vi.fn().mockResolvedValue("reference content");
+
+    const [first, second] = await Promise.all([
+      fetchWebReferenceContent(url, fetcher),
+      fetchWebReferenceContent(url, fetcher),
+    ]);
+
+    expect(first).toBe("reference content");
+    expect(second).toBe("reference content");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetches a URL again for a later send", async () => {
+    const url = "https://example.test/refresh";
+    const fetcher = vi.fn().mockResolvedValue("reference content");
+
+    await fetchWebReferenceContent(url, fetcher);
+    await fetchWebReferenceContent(url, fetcher);
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("resolveWebReferenceContent", () => {
+  it("fetches only the web references attached to the submitted turn", async () => {
+    const fetcher = vi.fn().mockResolvedValue("reference content");
+
+    const resolved = await resolveWebReferenceContent([
+      { path: "https://example.test/attached" },
+    ], fetcher);
+
+    expect(fetcher).toHaveBeenCalledExactlyOnceWith("https://example.test/attached");
+    expect(resolved).toEqual([{
+      path: "https://example.test/attached",
+      webContent: "reference content",
+      webStatus: "ready",
+    }]);
+  });
+
+  it("keeps a failed reference out of context while preserving the submitted URL", async () => {
+    const resolved = await resolveWebReferenceContent([
+      { path: "https://example.test/unavailable" },
+    ], vi.fn().mockRejectedValue(new Error("offline")));
+
+    expect(resolved).toEqual([{
+      path: "https://example.test/unavailable",
+      webStatus: "error",
+    }]);
+  });
+});
 
 describe("reconcileMessagesForDisplay", () => {
   it("restores earlier user messages when backend injects referenced documents", () => {
@@ -252,6 +336,28 @@ describe("extractInlineToolActivity", () => {
         result: "{\"title\":\"Intro\"}",
       },
     ]);
+  });
+
+  describe("chat session history helpers", () => {
+    it("uses the first user turn as a stable, compact session title", () => {
+      expect(chatSessionTitle([
+        { role: "system", content: "Hidden prompt" },
+        { role: "user", content: "  Refine   the opening scene\nfor launch. " },
+        { role: "assistant", content: "Sure." },
+      ])).toBe("Refine the opening scene for launch.");
+    });
+
+    it("identifies imported chats without conflating them with current chats", () => {
+      expect(sessionSourceLabel("legacy_import")).toBe("Imported chat");
+      expect(sessionSourceLabel("chat_panel")).toBe("Chat");
+      expect(sessionSourcePathLabel(".git/cutready/legacy-chats/chat.chat")).toBe("Archived chats/chat.chat");
+    });
+
+    it("keeps imported chat labels free of implementation terminology", () => {
+      expect(agentRunProviderLabel("legacy_chat")).toBe("Imported chat");
+      expect(agentRunStatusLabel("imported_legacy")).toBe("Imported");
+      expect(agentRunEventLabel("legacy_chat_message")).toBe("Imported chat message");
+    });
   });
 
   it("keeps multiple tool calls ordered by the assistant request", () => {

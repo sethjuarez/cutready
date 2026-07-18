@@ -5,7 +5,7 @@
 //! handled by agentive.  This module wires CutReady's tools, sub-agent
 //! delegation, and Tauri event bridge into the agentive runner.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -18,8 +18,11 @@ use crate::engine::agent::tools;
 use crate::engine::agent_state::AgentStateStore;
 use crate::engine::project;
 
-/// Maximum tool-call rounds to prevent infinite loops.
-const MAX_TOOL_ROUNDS: usize = 10;
+/// Default maximum tool-call rounds to prevent infinite loops.
+pub const DEFAULT_MAX_TOOL_ROUNDS: usize = 50;
+const TOOL_RESULT_MAX_CHARS: usize = 8_000;
+const TOOL_RESULT_HEAD_CHARS: usize = 5_000;
+const TOOL_RESULT_TAIL_CHARS: usize = 1_500;
 
 /// Maximum delegation depth for sub-agents.
 const MAX_DELEGATION_DEPTH: usize = 2;
@@ -55,6 +58,18 @@ pub enum AgentEvent {
     /// A tool returned a result.
     #[serde(rename = "tool_result")]
     ToolResult { name: String, result: String },
+    /// Context was selected for the next provider request. The provider may still
+    /// omit the transient pack if its serialized request budget is exhausted.
+    #[serde(rename = "context_prepared")]
+    ContextPrepared {
+        selected_count: usize,
+        dropped_count: usize,
+        total_bytes: usize,
+        budget_bytes: usize,
+    },
+    /// Packed context survived final request fitting and was sent to the provider.
+    #[serde(rename = "context_sent")]
+    ContextSent { iteration: usize, attempt: usize },
     /// A sub-agent is starting work.
     #[serde(rename = "agent_start")]
     AgentStart { agent_id: String, task: String },
@@ -99,8 +114,11 @@ pub async fn run(
     vision: &VisionConfig,
     web_access: &WebAccessConfig,
     mutation_tools_enabled: bool,
+    max_tool_rounds: usize,
+    context_items: Vec<agentive::ContextItem>,
     run_id: Option<String>,
     agent_state: Option<AgentStateStore>,
+    cancellation: agentive::CancellationToken,
     emit: impl Fn(AgentEvent) + Send + Sync + 'static,
 ) -> Result<agentive::RunnerResult, String> {
     let emit = Arc::new(emit);
@@ -118,8 +136,11 @@ pub async fn run(
         vision,
         web_access,
         mutation_tools_enabled,
+        max_tool_rounds,
+        context_items,
         run_id,
         agent_state,
+        cancellation,
         emit,
     )
     .await
@@ -141,8 +162,11 @@ fn run_inner<'a>(
     vision: &'a VisionConfig,
     web_access: &'a WebAccessConfig,
     mutation_tools_enabled: bool,
+    max_tool_rounds: usize,
+    context_items: Vec<agentive::ContextItem>,
     run_id: Option<String>,
     agent_state: Option<AgentStateStore>,
+    cancellation: agentive::CancellationToken,
     emit: Arc<dyn Fn(AgentEvent) + Send + Sync + 'static>,
 ) -> std::pin::Pin<
     Box<dyn std::future::Future<Output = Result<agentive::RunnerResult, String>> + Send + 'a>,
@@ -155,16 +179,20 @@ fn run_inner<'a>(
             mutation_tools_enabled,
         );
         let tool_count = tool_defs.len();
+        let packed_context_items =
+            build_context_items(project_root, &messages, context_items.clone());
+        let context_packing = context_packing_for(&packed_context_items);
         let starting_chars = agentive::context::estimate_chars(&messages);
 
         log::info!(
-            "[agent] starting run (depth={}, agent={}, {} messages, chars={}, budget={}chars, tools={}, vision={}, web_search={}, project_workspace_tools={}, mutation_tools={})",
+            "[agent] starting run (depth={}, agent={}, {} messages, chars={}, budget={}chars, tools={}, context_items={}, vision={}, web_search={}, project_workspace_tools={}, mutation_tools={})",
             depth,
             agent_id,
             messages.len(),
             starting_chars,
             provider.context_budget_chars(),
             tool_count,
+            packed_context_items.len(),
             vision.enabled,
             web_access.search_enabled,
             project_workspace_tools_enabled && mutation_tools_enabled,
@@ -179,6 +207,8 @@ fn run_inner<'a>(
                 "chars": starting_chars,
                 "budget_chars": provider.context_budget_chars(),
                 "tools": tool_count,
+                "max_tool_rounds": max_tool_rounds,
+                "context_items": packed_context_items.len(),
                 "vision_enabled": vision.enabled,
                 "web_search_enabled": web_access.search_enabled,
                 "project_workspace_tools_enabled": project_workspace_tools_enabled && mutation_tools_enabled,
@@ -188,12 +218,16 @@ fn run_inner<'a>(
 
         // Configure agentive runner
         let config = agentive::RunnerConfig {
-            max_iterations: MAX_TOOL_ROUNDS,
+            max_iterations: max_tool_rounds,
             retry_on_400: false,
             auto_trim_context: true,
             sanitize_tool_results: true,
-            compaction_provider: Some(provider.clone()),
-            reference_resolver: Some(build_reference_resolver(project_root)),
+            tool_result_budget: Some(tool_result_budget()),
+            // Automatic request compaction must not add a second, blocking model
+            // call. Intentional AI handoff summaries remain a separate UX action.
+            compaction_provider: None,
+            context_items: packed_context_items.clone(),
+            context_packing,
             run_id: run_id.clone(),
             provider_name: provider_name.clone(),
             model_name: model_name.clone(),
@@ -316,6 +350,47 @@ fn run_inner<'a>(
                 | agentive::RunnerEvent::VerificationRecorded { .. }
                 | agentive::RunnerEvent::MemoryPromotionSuggested { .. }
                 | agentive::RunnerEvent::MemoryPromotionCompleted { .. } => {}
+                agentive::RunnerEvent::ContextPacked {
+                    iteration,
+                    selected_count,
+                    dropped_count,
+                    total_bytes,
+                    budget_bytes,
+                    ..
+                } => {
+                    crate::util::trace::emit(
+                        "agent_context_packed",
+                        "agent",
+                        serde_json::json!({
+                            "elapsed_ms": run_started.elapsed().as_millis(),
+                            "iteration": iteration,
+                            "selected_count": selected_count,
+                            "dropped_count": dropped_count,
+                            "total_bytes": total_bytes,
+                            "budget_bytes": budget_bytes,
+                        }),
+                    );
+                    emit_events(AgentEvent::ContextPrepared {
+                        selected_count,
+                        dropped_count,
+                        total_bytes,
+                        budget_bytes,
+                    });
+                }
+                agentive::RunnerEvent::ContextPackSent {
+                    iteration, attempt, ..
+                } => {
+                    crate::util::trace::emit(
+                        "agent_context_sent",
+                        "agent",
+                        serde_json::json!({
+                            "elapsed_ms": run_started.elapsed().as_millis(),
+                            "iteration": iteration,
+                            "attempt": attempt,
+                        }),
+                    );
+                    emit_events(AgentEvent::ContextSent { iteration, attempt });
+                }
                 agentive::RunnerEvent::Done { response, .. } => {
                     emit_events(AgentEvent::Done { response });
                 }
@@ -340,6 +415,9 @@ fn run_inner<'a>(
         let mutation_tools_enabled_for_tools = mutation_tools_enabled;
         let tool_depth = depth;
         let steering_for_tools = steering.clone();
+        let context_items_for_tools = packed_context_items.clone();
+        let agent_state_for_tools = agent_state.clone();
+        let cancellation_for_tools = cancellation.clone();
 
         let tool_executor = move |tool_call: agentive::ToolCall| -> std::pin::Pin<
             Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>,
@@ -353,6 +431,9 @@ fn run_inner<'a>(
             let tools = tools_for_exec.clone();
             let emit = emit_for_tools.clone();
             let steering = steering_for_tools.clone();
+            let context_items = context_items_for_tools.clone();
+            let context_store = agent_state_for_tools.clone();
+            let cancellation = cancellation_for_tools.clone();
 
             if tool_call.function.name == "delegate_to_agent" {
                 exec_delegation(
@@ -368,9 +449,16 @@ fn run_inner<'a>(
                     vision_enabled,
                     web_search_enabled,
                     mutation_tools_enabled_for_tools,
+                    max_tool_rounds,
+                    context_items,
+                    context_store,
                     steering,
+                    cancellation,
                     emit,
                 )
+            } else if tool_call.function.name == "read_context_asset" {
+                let tc = tool_call;
+                Box::pin(async move { read_context_asset_output(context_store.as_ref(), &tc) })
             } else if tool_call.function.name == "fetch_url" {
                 let tc = tool_call;
                 Box::pin(async move {
@@ -405,15 +493,13 @@ fn run_inner<'a>(
             }
         };
 
-        let cancel = agentive::CancellationToken::new();
-
         let result = agentive::run(
             provider.clone(),
             messages.clone(),
             tool_defs,
             tool_executor,
             config,
-            cancel,
+            cancellation.clone(),
             steering.clone(),
             agentive::Guardrails::default(),
             &on_event,
@@ -441,9 +527,7 @@ fn run_inner<'a>(
                 let mut retry_messages = messages;
                 let retry_budget =
                     forced_retry_budget(starting_chars, provider.context_budget_chars());
-                let (dropped_count, _) =
-                    agentive::context::trim_to_context_window(&mut retry_messages, retry_budget);
-
+                let dropped_count = trim_history_to_budget(&mut retry_messages, retry_budget);
                 if dropped_count == 0 {
                     emit(AgentEvent::Error {
                         message: friendly_context_error(&err),
@@ -456,14 +540,22 @@ fn run_inner<'a>(
                         "Compacted context — summarized {dropped_count} earlier messages"
                     ),
                 });
+                let retry_context_items = build_context_items(
+                    project_root,
+                    &retry_messages,
+                    packed_context_items.clone(),
+                );
+                let retry_context_packing = context_packing_for(&retry_context_items);
 
                 let retry_config = agentive::RunnerConfig {
-                    max_iterations: MAX_TOOL_ROUNDS,
+                    max_iterations: max_tool_rounds,
                     retry_on_400: false,
                     auto_trim_context: true,
                     sanitize_tool_results: true,
-                    compaction_provider: Some(provider.clone()),
-                    reference_resolver: Some(build_reference_resolver(project_root)),
+                    tool_result_budget: Some(tool_result_budget()),
+                    compaction_provider: None,
+                    context_items: retry_context_items.clone(),
+                    context_packing: retry_context_packing,
                     run_id: run_id.clone(),
                     provider_name: provider_name.clone(),
                     model_name: model_name.clone(),
@@ -492,6 +584,9 @@ fn run_inner<'a>(
                 let vision_enabled = vision.enabled;
                 let tool_depth = depth;
                 let steering_for_tools = steering.clone();
+                let context_items_for_tools = retry_context_items.clone();
+                let agent_state_for_tools = agent_state.clone();
+                let cancellation_for_tools = cancellation.clone();
 
                 let retry_tool_executor = move |tool_call: agentive::ToolCall| -> std::pin::Pin<
                     Box<
@@ -508,6 +603,9 @@ fn run_inner<'a>(
                     let tools = tools_for_exec.clone();
                     let emit = emit_for_tools.clone();
                     let steering = steering_for_tools.clone();
+                    let context_items = context_items_for_tools.clone();
+                    let context_store = agent_state_for_tools.clone();
+                    let cancellation = cancellation_for_tools.clone();
 
                     if tool_call.function.name == "delegate_to_agent" {
                         exec_delegation(
@@ -523,8 +621,17 @@ fn run_inner<'a>(
                             vision_enabled,
                             web_search_enabled,
                             mutation_tools_enabled,
+                            max_tool_rounds,
+                            context_items,
+                            context_store,
                             steering,
+                            cancellation,
                             emit,
+                        )
+                    } else if tool_call.function.name == "read_context_asset" {
+                        let tc = tool_call;
+                        Box::pin(
+                            async move { read_context_asset_output(context_store.as_ref(), &tc) },
                         )
                     } else if tool_call.function.name == "fetch_url" {
                         let tc = tool_call;
@@ -574,7 +681,7 @@ fn run_inner<'a>(
                     ),
                     retry_tool_executor,
                     retry_config,
-                    agentive::CancellationToken::new(),
+                    cancellation,
                     steering.clone(),
                     agentive::Guardrails::default(),
                     &on_event,
@@ -680,24 +787,8 @@ fn friendly_context_error(err: &agentive::AgentError) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// @reference resolver
+// @reference context
 // ---------------------------------------------------------------------------
-
-/// Build a `ReferenceResolver` that resolves `@name` patterns against the
-/// project's sketches, notes, and storyboards.  The resolver matches by:
-///   1. Exact path (e.g., `@intro.sk`, `@docs/plan.md`)
-///   2. Title (case-insensitive, e.g., `@Introduction`)
-///   3. File stem (e.g., `@intro` matches `intro.sk`)
-fn build_reference_resolver(project_root: &Path) -> agentive::ReferenceResolver {
-    let root = project_root.to_path_buf();
-    Arc::new(move |name: String| {
-        let root = root.clone();
-        Box::pin(async move { resolve_project_reference(&root, &name) })
-            as std::pin::Pin<
-                Box<dyn std::future::Future<Output = Option<agentive::ResolvedReference>> + Send>,
-            >
-    })
-}
 
 /// Try to resolve a reference name against project files.
 fn resolve_project_reference(
@@ -754,6 +845,257 @@ fn resolve_project_reference(
     }
 
     None
+}
+
+fn build_context_items(
+    project_root: &Path,
+    messages: &[ChatMessage],
+    mut explicit_items: Vec<agentive::ContextItem>,
+) -> Vec<agentive::ContextItem> {
+    let mut seen = explicit_items
+        .iter()
+        .map(|item| item.id.clone())
+        .collect::<BTreeSet<_>>();
+
+    for reference in extract_project_reference_names(messages) {
+        let normalized = normalize_ref_name(&reference);
+        let id = format!("project-reference:{normalized}");
+        if seen.contains(&id) {
+            continue;
+        }
+        if let Some(resolved) = resolve_project_reference(project_root, &reference) {
+            let item = agentive::ContextItem::new(
+                id.clone(),
+                agentive::ContextSource::File,
+                resolved.name,
+                format!("Project reference @{reference}"),
+            )
+            .with_kind(agentive::ContextKind::ReferenceDoc)
+            .with_priority(100)
+            .with_content(resolved.content, resolved.content_type)
+            .with_metadata("reference", reference);
+            explicit_items.push(item);
+            seen.insert(id);
+        }
+    }
+
+    explicit_items
+}
+
+fn context_packing_for(
+    context_items: &[agentive::ContextItem],
+) -> Option<agentive::ContextPackingConfig> {
+    if context_items.is_empty() {
+        return None;
+    }
+
+    let mut config = agentive::ContextPackingConfig::default();
+    config.total_budget_bytes = 12_000;
+    config.default_kind_budget_bytes = 6_000;
+    config.default_kind_max_items = 4;
+    config.max_item_preview_bytes = 4_000;
+    config.kind_budgets = vec![
+        agentive::ContextKindBudget::new(agentive::ContextKind::ReferenceDoc, 8_000, 4),
+        agentive::ContextKindBudget::new(agentive::ContextKind::FileExcerpt, 6_000, 3),
+        agentive::ContextKindBudget::new(agentive::ContextKind::WebExcerpt, 6_000, 3),
+        agentive::ContextKindBudget::new(agentive::ContextKind::ToolObservation, 3_000, 3),
+        agentive::ContextKindBudget::new(agentive::ContextKind::MemoryFact, 2_000, 6),
+        agentive::ContextKindBudget::new(agentive::ContextKind::ErrorTrace, 2_000, 3),
+    ];
+    Some(config)
+}
+
+fn tool_result_budget() -> agentive::ToolResultBudget {
+    agentive::ToolResultBudget {
+        max_chars: TOOL_RESULT_MAX_CHARS,
+        head_chars: TOOL_RESULT_HEAD_CHARS,
+        tail_chars: TOOL_RESULT_TAIL_CHARS,
+    }
+}
+
+fn trim_history_to_budget(messages: &mut Vec<ChatMessage>, max_chars: usize) -> usize {
+    if agentive::context::estimate_chars(messages) <= max_chars {
+        return 0;
+    }
+
+    let prefix_end = messages
+        .iter()
+        .position(|message| !matches!(message.role.as_str(), "system" | "developer"))
+        .unwrap_or(messages.len());
+    let prefix = messages.drain(..prefix_end).collect::<Vec<_>>();
+    let budget = max_chars
+        .saturating_sub(agentive::context::estimate_chars(&prefix))
+        .saturating_sub(5_000);
+    let mut dropped = Vec::new();
+
+    while agentive::context::estimate_chars(messages) > budget && messages.len() > 2 {
+        let group = take_oldest_message_group(messages);
+        if group.is_empty() {
+            break;
+        }
+        dropped.extend(group);
+    }
+
+    let summary = agentive::context::summarize_dropped(&dropped);
+    let remaining = std::mem::take(messages);
+    *messages = prefix;
+    if !summary.is_empty() {
+        messages.push(ChatMessage::user(&summary));
+    }
+    messages.extend(remaining);
+    dropped.len()
+}
+
+fn take_oldest_message_group(messages: &mut Vec<ChatMessage>) -> Vec<ChatMessage> {
+    if messages.is_empty() {
+        return Vec::new();
+    }
+
+    let mut dropped = vec![messages.remove(0)];
+    if dropped[0].role == "user" {
+        while messages.first().is_some_and(|message| {
+            !matches!(message.role.as_str(), "user" | "system" | "developer")
+        }) {
+            dropped.push(messages.remove(0));
+        }
+    } else if dropped[0].role == "assistant" {
+        let call_ids = dropped[0]
+            .tool_calls
+            .as_ref()
+            .into_iter()
+            .flatten()
+            .map(|call| call.id.clone())
+            .collect::<BTreeSet<String>>();
+        while !call_ids.is_empty()
+            && messages.first().is_some_and(|message| {
+                message.role == "tool"
+                    && message
+                        .tool_call_id
+                        .as_deref()
+                        .is_some_and(|id| call_ids.contains(id))
+            })
+        {
+            dropped.push(messages.remove(0));
+        }
+    }
+    while messages.first().is_some_and(|message| {
+        message.role == "user"
+            && message
+                .text()
+                .is_some_and(|text| text.starts_with("[Images from the tool result above"))
+    }) {
+        dropped.push(messages.remove(0));
+    }
+    dropped
+}
+
+fn read_context_asset_output(
+    store: Option<&AgentStateStore>,
+    tool_call: &agentive::ToolCall,
+) -> Result<agentive::ToolOutput, String> {
+    let store =
+        store.ok_or_else(|| "No local context store is available for this run".to_string())?;
+    let args = agentive::parse_tool_args(&tool_call.function.arguments)
+        .unwrap_or_else(|_| serde_json::json!({}));
+    let asset_id = args
+        .get("asset_id")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| "read_context_asset requires an asset_id".to_string())?;
+    let offset = args
+        .get("offset")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0) as usize;
+    let limit = args
+        .get("limit")
+        .and_then(|value| value.as_u64())
+        .unwrap_or(6_000) as usize;
+    let excerpt = store.read_context_asset(asset_id, offset, limit)?;
+    Ok(agentive::ToolOutput::from(format!(
+        "[Stored context: {} | {} chars | offset {}]\n{}",
+        excerpt.asset.name,
+        excerpt.excerpt.len(),
+        offset,
+        excerpt.excerpt
+    )))
+}
+
+fn extract_project_reference_names(messages: &[ChatMessage]) -> Vec<String> {
+    let mut refs = Vec::new();
+    let mut seen = BTreeSet::new();
+    for message in messages {
+        if message.role != "user" {
+            continue;
+        }
+        if let Some(text) = message.text() {
+            for reference in extract_project_reference_names_from_text(text) {
+                if seen.insert(reference.clone()) {
+                    refs.push(reference);
+                }
+            }
+        }
+    }
+    refs
+}
+
+fn extract_project_reference_names_from_text(text: &str) -> Vec<String> {
+    let mut refs = Vec::new();
+    let bytes = text.as_bytes();
+    let mut index = 0usize;
+    while index < bytes.len() {
+        if bytes[index] != b'@' {
+            index += 1;
+            continue;
+        }
+
+        if index > 0 {
+            let prev = bytes[index - 1] as char;
+            if prev.is_ascii_alphanumeric() || prev == '_' {
+                index += 1;
+                continue;
+            }
+        }
+
+        let start = index + 1;
+        if start >= bytes.len() {
+            break;
+        }
+
+        let (raw, next_index) = if bytes[start] == b'"' || bytes[start] == b'\'' {
+            let quote = bytes[start];
+            let content_start = start + 1;
+            let mut end = content_start;
+            while end < bytes.len() && bytes[end] != quote {
+                end += 1;
+            }
+            (&text[content_start..end], end.saturating_add(1))
+        } else {
+            let mut end = start;
+            while end < bytes.len() {
+                let ch = bytes[end] as char;
+                if ch.is_whitespace() || matches!(ch, ',' | ';' | ')' | ']' | '}') {
+                    break;
+                }
+                end += 1;
+            }
+            (&text[start..end], end)
+        };
+
+        let reference = raw
+            .trim()
+            .trim_matches(|ch: char| matches!(ch, '.' | ':' | ',' | ';' | ')' | ']' | '}'))
+            .to_string();
+        let normalized = normalize_ref_name(&reference);
+        if !reference.is_empty()
+            && !normalized.starts_with("http://")
+            && !normalized.starts_with("https://")
+            && !normalized.starts_with("web:http://")
+            && !normalized.starts_with("web:https://")
+        {
+            refs.push(reference);
+        }
+        index = next_index.max(index + 1);
+    }
+    refs
 }
 
 /// Check if a user-typed reference name matches a project file by path, title, or stem.
@@ -827,7 +1169,11 @@ fn exec_delegation(
     vision_enabled: bool,
     web_search_enabled: bool,
     mutation_tools_enabled: bool,
+    max_tool_rounds: usize,
+    context_items: Vec<agentive::ContextItem>,
+    agent_state: Option<AgentStateStore>,
     steering: agentive::Steering,
+    cancellation: agentive::CancellationToken,
     emit: Arc<dyn Fn(AgentEvent) + Send + Sync + 'static>,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<agentive::ToolOutput, String>> + Send>>
 {
@@ -880,6 +1226,9 @@ fn exec_delegation(
 
     Box::pin(async move {
         let sub_messages = vec![ChatMessage::system(&prompt), ChatMessage::user(&message)];
+        let sub_context_items =
+            build_context_items(Path::new(&project_root), &sub_messages, context_items);
+        let sub_context_packing = context_packing_for(&sub_context_items);
 
         emit(AgentEvent::AgentStart {
             agent_id: agent_id.clone(),
@@ -887,12 +1236,17 @@ fn exec_delegation(
         });
 
         let config = agentive::RunnerConfig {
-            max_iterations: MAX_TOOL_ROUNDS,
+            max_iterations: max_tool_rounds,
             auto_trim_context: true,
             sanitize_tool_results: true,
-            reference_resolver: Some(build_reference_resolver(Path::new(&project_root))),
+            tool_result_budget: Some(tool_result_budget()),
+            context_items: sub_context_items.clone(),
+            context_packing: sub_context_packing,
             provider_name: provider_name.clone(),
             model_name: model_name.clone(),
+            trajectory_sink: agent_state
+                .clone()
+                .map(|store| Arc::new(store) as Arc<dyn agentive::TrajectorySink>),
             ..Default::default()
         };
 
@@ -905,6 +1259,9 @@ fn exec_delegation(
         let tools_for_tools = tools.clone();
         let emit_for_tools = emit.clone();
         let steering_for_tools = steering.clone();
+        let context_items_for_tools = sub_context_items.clone();
+        let agent_state_for_tools = agent_state.clone();
+        let cancellation_for_tools = cancellation.clone();
         let sub_project_workspace_tools_enabled =
             agent_id.eq_ignore_ascii_case("writer") && mutation_tools_enabled;
 
@@ -920,6 +1277,9 @@ fn exec_delegation(
             let tools = tools_for_tools.clone();
             let emit = emit_for_tools.clone();
             let steering = steering_for_tools.clone();
+            let context_items = context_items_for_tools.clone();
+            let context_store = agent_state_for_tools.clone();
+            let cancellation = cancellation_for_tools.clone();
 
             if tool_call.function.name == "delegate_to_agent" {
                 exec_delegation(
@@ -935,9 +1295,16 @@ fn exec_delegation(
                     vision_enabled,
                     web_search_enabled,
                     mutation_tools_enabled,
+                    max_tool_rounds,
+                    context_items,
+                    context_store,
                     steering,
+                    cancellation,
                     emit,
                 )
+            } else if tool_call.function.name == "read_context_asset" {
+                let tc = tool_call;
+                Box::pin(async move { read_context_asset_output(context_store.as_ref(), &tc) })
             } else if tool_call.function.name == "fetch_url" {
                 let tc = tool_call;
                 Box::pin(async move {
@@ -961,7 +1328,6 @@ fn exec_delegation(
             }
         };
 
-        let cancel = agentive::CancellationToken::new();
         let sub_emit = emit.clone();
         let sub_on_event = move |event: agentive::RunnerEvent| match event {
             agentive::RunnerEvent::Token { token } => {
@@ -978,6 +1344,25 @@ fn exec_delegation(
             agentive::RunnerEvent::ToolResult { name, result, .. } => {
                 sub_emit(AgentEvent::ToolResult { name, result });
             }
+            agentive::RunnerEvent::ContextPacked {
+                selected_count,
+                dropped_count,
+                total_bytes,
+                budget_bytes,
+                ..
+            } => {
+                sub_emit(AgentEvent::ContextPrepared {
+                    selected_count,
+                    dropped_count,
+                    total_bytes,
+                    budget_bytes,
+                });
+            }
+            agentive::RunnerEvent::ContextPackSent {
+                iteration, attempt, ..
+            } => {
+                sub_emit(AgentEvent::ContextSent { iteration, attempt });
+            }
             _ => {}
         };
 
@@ -987,7 +1372,7 @@ fn exec_delegation(
             tools,
             sub_tool_executor,
             config,
-            cancel,
+            cancellation,
             steering,
             agentive::Guardrails::default(),
             sub_on_event,
@@ -1015,8 +1400,10 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use rusqlite::Connection;
+    use std::fs;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use tokio::sync::mpsc;
+    use std::time::Duration;
+    use tokio::sync::{mpsc, Notify};
 
     struct HarnessProvider {
         calls: AtomicUsize,
@@ -1094,6 +1481,40 @@ mod tests {
         }
     }
 
+    struct BlockingProvider {
+        started: Arc<Notify>,
+        cancellation_observed: Arc<Notify>,
+    }
+
+    #[async_trait]
+    impl agentive::Provider for BlockingProvider {
+        async fn chat(
+            &self,
+            _request: agentive::ChatRequest,
+            _tx: mpsc::Sender<agentive::ChatEvent>,
+            cancel: &agentive::CancellationToken,
+        ) -> Result<(), agentive::AgentError> {
+            self.started.notify_one();
+            while !cancel.is_cancelled() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            self.cancellation_observed.notify_one();
+            Ok(())
+        }
+
+        fn name(&self) -> &str {
+            "blocking-harness"
+        }
+
+        fn model(&self) -> Option<&str> {
+            Some("blocking-harness")
+        }
+
+        fn context_budget_chars(&self) -> usize {
+            3_000
+        }
+    }
+
     fn event_count(db_path: &Path, run_id: &str, event_type: &str) -> usize {
         let conn = Connection::open(db_path).unwrap();
         conn.query_row(
@@ -1107,6 +1528,88 @@ mod tests {
     #[test]
     fn matches_ref_exact_path() {
         assert!(matches_ref("intro.sk", "intro.sk", "Introduction"));
+    }
+
+    #[test]
+    fn extracts_project_references_without_web_tags() {
+        let refs = extract_project_reference_names_from_text(
+            "Use @intro.sk and @\"Planning Notes\" with [Web: https://example.com] later.",
+        );
+
+        assert_eq!(refs, vec!["intro.sk", "Planning Notes"]);
+    }
+
+    #[test]
+    fn build_context_items_resolves_project_reference_files() {
+        let project = tempfile::tempdir().unwrap();
+        fs::write(
+            project.path().join("planning-notes.md"),
+            "# Planning Notes\n\nUse this as reference.",
+        )
+        .unwrap();
+        let messages = vec![ChatMessage::user("Use @planning-notes as context.")];
+
+        let items = build_context_items(project.path(), &messages, Vec::new());
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, "project-reference:planning-notes");
+        assert_eq!(items[0].kind, agentive::ContextKind::ReferenceDoc);
+        assert_eq!(items[0].source, agentive::ContextSource::File);
+        assert_eq!(items[0].content_type.as_deref(), Some("text/markdown"));
+    }
+
+    #[test]
+    fn build_context_items_preserves_resolved_references_across_retries() {
+        let project = tempfile::tempdir().unwrap();
+        fs::write(
+            project.path().join("planning-notes.md"),
+            "# Planning Notes\n\nUse this as reference.",
+        )
+        .unwrap();
+        let initial_messages = vec![ChatMessage::user("Use @planning-notes as context.")];
+        let initial_items = build_context_items(project.path(), &initial_messages, Vec::new());
+        let retry_messages = vec![ChatMessage::user("Continue with the current request.")];
+
+        let retry_items = build_context_items(project.path(), &retry_messages, initial_items);
+
+        assert_eq!(retry_items.len(), 1);
+        assert_eq!(retry_items[0].id, "project-reference:planning-notes");
+    }
+
+    #[test]
+    fn history_trim_keeps_tool_results_with_their_tool_call() {
+        let tool_call = agentive::ToolCall {
+            id: "call-update".into(),
+            call_type: "function".into(),
+            function: agentive::FunctionCall {
+                name: "update_planning_row".into(),
+                arguments: "{}".into(),
+            },
+        };
+        let earlier_request = format!("Earlier request {}", "x".repeat(10_000));
+        let current_request = format!("Current request {}", "y".repeat(10_000));
+        let mut messages = vec![
+            ChatMessage::system("System instructions"),
+            ChatMessage::user(&earlier_request),
+            ChatMessage::assistant_with_tool_calls(vec![tool_call]),
+            ChatMessage::tool_result("call-update", "updated"),
+            ChatMessage::user("[Images from the tool result above.]\n<image omitted>"),
+            ChatMessage::user(&current_request),
+        ];
+
+        let dropped = trim_history_to_budget(&mut messages, 8_000);
+
+        assert!(dropped >= 4);
+        assert!(messages.iter().all(|message| message.role != "tool"));
+        assert!(messages.iter().all(|message| {
+            message
+                .text()
+                .is_none_or(|text| !text.starts_with("[Images from the tool result above"))
+        }));
+        assert!(messages
+            .last()
+            .and_then(ChatMessage::text)
+            .is_some_and(|text| text.starts_with("Current request")));
     }
 
     #[test]
@@ -1287,8 +1790,11 @@ mod tests {
                 search_enabled: false,
             },
             true,
+            DEFAULT_MAX_TOOL_ROUNDS,
+            Vec::new(),
             Some(run_id.clone()),
             Some(store.clone()),
+            agentive::CancellationToken::new(),
             Arc::new(|_| {}),
         )
         .await
@@ -1314,5 +1820,61 @@ mod tests {
             1
         );
         assert_eq!(event_count(store.db_path(), &run_id, "turn_completed"), 1);
+    }
+
+    #[tokio::test]
+    async fn runner_passes_cancellation_to_blocking_provider() {
+        let project = tempfile::tempdir().unwrap();
+        let provider = Arc::new(BlockingProvider {
+            started: Arc::new(Notify::new()),
+            cancellation_observed: Arc::new(Notify::new()),
+        });
+        let started = provider.started.clone();
+        let cancellation_observed = provider.cancellation_observed.clone();
+        let provider_started = started.notified();
+        let provider_cancelled = cancellation_observed.notified();
+        let cancellation = agentive::CancellationToken::new();
+        let prompts = HashMap::new();
+        let steering = agentive::Steering::new();
+        let run = run(
+            provider,
+            Some("blocking-harness".into()),
+            Some("blocking-harness".into()),
+            vec![ChatMessage::user("Wait for cancellation.")],
+            project.path(),
+            project.path(),
+            "planner",
+            &prompts,
+            &steering,
+            &VisionConfig { enabled: false },
+            &WebAccessConfig {
+                search_enabled: false,
+            },
+            false,
+            DEFAULT_MAX_TOOL_ROUNDS,
+            Vec::new(),
+            None,
+            None,
+            cancellation.clone(),
+            |_| {},
+        );
+        tokio::pin!(run);
+
+        let started = tokio::select! {
+            result = tokio::time::timeout(Duration::from_secs(1), provider_started) => result,
+            result = &mut run => panic!("runner ended before provider started: {result:?}"),
+        };
+        started.expect("provider chat should start");
+        cancellation.cancel();
+
+        tokio::time::timeout(Duration::from_secs(1), provider_cancelled)
+            .await
+            .expect("provider chat should observe cancellation");
+        assert!(
+            tokio::time::timeout(Duration::from_secs(1), &mut run)
+                .await
+                .is_ok(),
+            "runner should finish after cancellation"
+        );
     }
 }
