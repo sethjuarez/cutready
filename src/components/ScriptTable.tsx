@@ -372,7 +372,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
       if (isCellLocked(rowsRef.current[index], "screenshot") || isCellLocked(rowsRef.current[index], "visual")) return;
       pushUndo();
       const updated = rowsRef.current.map((r, i) =>
-        i === index ? { ...r, narration: null } : r,
+        i === index ? { ...r, narration: null, narration_plan: null, motion_plan: null } : r,
       );
       onChange(updated);
     },
@@ -1215,6 +1215,7 @@ function SortableRow({
               : "border-dashed border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/45"
           }`}>
             {row.narration ? (
+            <>
               <div className="flex items-center gap-1.5">
                 <div className="min-w-0 flex-1">
                   {narrationPath ? (
@@ -1238,6 +1239,31 @@ function SortableRow({
                   </span>
                 )}
               </div>
+              {row.narration_plan && (
+                <details className="mt-1.5 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                  <summary className="cursor-pointer select-none hover:text-[rgb(var(--color-text))]">
+                    SSML plan · {row.narration_plan.voice}
+                    {row.narration_plan.baseline_style ? ` · ${row.narration_plan.baseline_style}` : ""}
+                  </summary>
+                  <div className="mt-1 space-y-1 border-t border-[rgb(var(--color-border))] pt-1.5">
+                    {row.narration_plan.beats?.map((beat, beatIndex) => (
+                      <div key={`${beat.text}-${beatIndex}`}>
+                        <span className="font-medium text-[rgb(var(--color-text))]">{beat.text}</span>
+                        {beat.purpose ? ` · ${beat.purpose}` : ""}
+                        {beat.pause_after_ms ? ` · ${beat.pause_after_ms}ms pause` : ""}
+                      </div>
+                    ))}
+                    {Object.keys(row.narration_plan.pronunciation_overrides ?? {}).length > 0 && (
+                      <div>
+                        Pronunciations: {Object.entries(row.narration_plan.pronunciation_overrides ?? {})
+                          .map(([term, pronunciation]) => `${term} → ${pronunciation}`)
+                          .join(", ")}
+                      </div>
+                    )}
+                  </div>
+                </details>
+              )}
+              </>
             ) : (
               !readOnly && !mediaLocked ? (
                 <div className="flex min-h-12 flex-col items-center justify-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
