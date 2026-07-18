@@ -238,17 +238,20 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return {
         id: "mock-loop",
         name: "Mock loop",
-        path: ".cutready/audio/background/mock-loop.wav",
+        path: "background-music/mock-loop.wav",
         durationSeconds: 24,
       };
     case "preview_background_music_mix":
       return {
-        path: "C:/mock-project/.cutready/exports/tmp/music-preview.wav",
-        durationSeconds: 12,
-        usedNarration: Boolean((args?.settings as { narrationPath?: string } | undefined)?.narrationPath),
+        path: "C:/mock-app-data/background-music/previews/music-preview.wav",
+        durationSeconds: 10,
       };
     case "delete_background_music":
       return null;
+    case "get_narration_voice_preview":
+      return null;
+    case "save_narration_voice_preview":
+      return "C:/mock-app-data/narration-previews/voice-sample.wav";
     case "import_video":
     case "import_video_with_progress":
       sendMockProgress(args, {

@@ -31,6 +31,7 @@ import { parseDurationSeconds, summarizeSketchDuration, type DurationDisplayMode
 import { preferredNarrationMimeType } from "../utils/narrationAudio";
 import { activeProvider, activeProviderInput, buildProviderConfig, providerById } from "../utils/providerConfig";
 import { getProviderSecret, setProviderSecret } from "../hooks/useSecretStore";
+import { buildPlainSsml, inferSpeechEndpoint, SPEECH_TOKEN_SCOPE, synthesizeSpeechAudio } from "../services/narrationSpeech";
 
 interface MonitorInfo {
   id: number;
@@ -77,34 +78,12 @@ type NarrationSsmlPlan = { rows: NarrationSsmlRow[] };
 type MotionDirectorRow = { row_number: number; motion_plan: MotionPlan };
 type MotionDirectorPlan = { rows: MotionDirectorRow[] };
 
-const SPEECH_TOKEN_SCOPE = "https://cognitiveservices.azure.com/.default";
-
 function projectAssetSrc(projectRoot: string | undefined | null, relativePath: string | null | undefined): string {
   if (!projectRoot || !relativePath) return "";
   const separator = projectRoot.includes("\\") ? "\\" : "/";
   const root = projectRoot.replace(/[\\/]+$/, "");
   const relative = relativePath.replace(/[\\/]+/g, separator);
   return convertFileSrc(`${root}${separator}${relative}`);
-}
-
-function escapeSsmlText(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
-
-function inferSpeechEndpoint(endpoint: string): string {
-  const parsed = new URL(endpoint);
-  const resourceName = parsed.hostname.split(".")[0];
-  if (!resourceName) throw new Error("Could not infer Azure AI resource name from endpoint.");
-  return `${parsed.protocol}//${resourceName}.cognitiveservices.azure.com`;
-}
-
-function buildPlainSsml(text: string, voiceName: string): string {
-  return `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='http://www.w3.org/2001/mstts' xml:lang='en-US'><voice name='${voiceName}'>${escapeSsmlText(text)}</voice></speak>`;
 }
 
 function extractJsonObject(text: string): string {
@@ -1462,28 +1441,19 @@ The Actions describe what happens on screen — use them as visual design hints.
     speechEndpoint: string,
   ) => {
     if (!activeSketchPath) throw new Error("No active sketch is open.");
-    const response = await fetch(`${speechEndpoint}/tts/cognitiveservices/v1`, {
-      method: "POST",
-      headers: {
-        Authorization: ["Bearer", accessToken].join(" "),
-        "Content-Type": "application/ssml+xml",
-        "X-Microsoft-OutputFormat": settings.narrationSpeechOutputFormat,
-        "User-Agent": "cutready",
-      },
-      body: validateGeneratedSsml(ssml),
+    const { audioData, mimeType } = await synthesizeSpeechAudio({
+      accessToken,
+      speechEndpoint,
+      ssml: validateGeneratedSsml(ssml),
+      outputFormat: settings.narrationSpeechOutputFormat,
     });
-    const audioData = await response.arrayBuffer();
-    if (!response.ok) {
-      const details = new TextDecoder().decode(audioData.slice(0, 500));
-      throw new Error(details || `Azure Speech returned ${response.status}`);
-    }
 
     const durationMs = await decodeAudioDurationMs(audioData);
     const sketch = await invoke<Sketch>("save_narration_recording", {
       sketchPath: activeSketchPath,
       rowIndex,
       audioData: Array.from(new Uint8Array(audioData)),
-      mimeType: response.headers.get("content-type") || "audio/x-wav",
+      mimeType,
       durationMs,
       sourceText,
       leadingSilenceMs: 0,
@@ -2021,8 +1991,8 @@ Rules:
       progressChannel.onmessage = (progress) => {
         setVideoExportProgress(progress);
       };
-      const selectedBackgroundMusicTrack = settings.workspaceVideoExportBackgroundMusicTracks.find(
-        (track) => track.id === settings.workspaceVideoExportBackgroundMusicTrackId,
+      const selectedBackgroundMusicTrack = settings.videoExportBackgroundMusicTracks.find(
+        (track) => track.id === settings.videoExportBackgroundMusicTrackId,
       );
       const videoExportSettings = {
         includeTitleCard: settings.videoExportOverrideEnabled
@@ -2068,9 +2038,9 @@ Rules:
           ? settings.workspaceVideoExportCrf
           : settings.videoExportCrf,
         backgroundMusicPath: selectedBackgroundMusicTrack?.path ?? null,
-        backgroundMusicVolumeDb: settings.workspaceVideoExportBackgroundMusicVolumeDb,
-        backgroundMusicDuckNarration: settings.workspaceVideoExportBackgroundMusicDuckNarration,
-        backgroundMusicFadeSeconds: settings.workspaceVideoExportBackgroundMusicFadeSeconds,
+        backgroundMusicVolumeDb: settings.videoExportBackgroundMusicVolumeDb,
+        backgroundMusicDuckNarration: settings.videoExportBackgroundMusicDuckNarration,
+        backgroundMusicFadeSeconds: settings.videoExportBackgroundMusicFadeSeconds,
       } satisfies SketchVideoExportSettings;
 
       const result = await invoke<SketchVideoExport>("export_sketch_video", {
@@ -2130,11 +2100,11 @@ Rules:
     settings.videoExportEncoder,
     settings.videoExportPixelFormat,
     settings.videoExportCrf,
-    settings.workspaceVideoExportBackgroundMusicTracks,
-    settings.workspaceVideoExportBackgroundMusicTrackId,
-    settings.workspaceVideoExportBackgroundMusicVolumeDb,
-    settings.workspaceVideoExportBackgroundMusicDuckNarration,
-    settings.workspaceVideoExportBackgroundMusicFadeSeconds,
+    settings.videoExportBackgroundMusicTracks,
+    settings.videoExportBackgroundMusicTrackId,
+    settings.videoExportBackgroundMusicVolumeDb,
+    settings.videoExportBackgroundMusicDuckNarration,
+    settings.videoExportBackgroundMusicFadeSeconds,
     settings.workspaceVideoExportIncludeTitleCard,
     settings.workspaceVideoExportTitleCardDurationSeconds,
     settings.workspaceVideoExportTitleToFirstRowHoldSeconds,
