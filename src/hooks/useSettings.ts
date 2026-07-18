@@ -135,6 +135,8 @@ export interface GlobalSettings {
   aiModelSupportsVision: string;
   /** Web search access for chat agents: "disabled" or "enabled". */
   aiWebAccess: "disabled" | "enabled";
+  /** Maximum agent tool-call rounds before stopping a run. */
+  aiMaxToolRounds: number;
   /** Whether write-capable AI shortcuts prompt before mutating project files. */
   aiApplyMode: AiApplyMode;
   /** Named AI provider configurations. Secrets are stored separately in Stronghold. */
@@ -322,6 +324,7 @@ const defaultGlobalSettings: GlobalSettings = {
   aiVisionMode: "notes_and_sketches",
   aiModelSupportsVision: "",
   aiWebAccess: "disabled",
+  aiMaxToolRounds: 50,
   aiApplyMode: "ask",
   aiProviders: [],
   aiActiveProviderId: "",

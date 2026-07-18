@@ -51,6 +51,8 @@ function sendMockProgress(args: Record<string, unknown> | undefined, progress: R
   }
 }
 
+const activeMockAgentRuns = new Map<string, { cancelled: boolean }>();
+
 const MOCK_STORYBOARDS: StoryboardSummary[] = [
   { path: "storyboards/full-demo.sb", title: "Full Demo Flow", locked: false, sketch_count: 2, created_at: "2025-01-15T09:00:00Z", updated_at: "2025-01-15T12:30:00Z" },
 ];
@@ -757,21 +759,6 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return { storyboards: [], sketches: [], notes: [] };
     case "get_workspace_state":
       return { open_tabs: [], active_tab_id: null, chat_session_path: null };
-    case "list_chat_sessions":
-      return [];
-    case "save_chat_session":
-      return null;
-    case "get_chat_session":
-      return {
-        title: "New Chat",
-        messages: [],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        author_name: "Demo User",
-        author_email: "demo@example.com",
-      };
-    case "delete_chat_session":
-      return null;
     case "list_agent_runs":
       return [
         {
@@ -805,6 +792,59 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
           verification_result_count: 1,
         },
       ];
+    case "list_chat_sessions":
+      return {
+        sessions: [
+          {
+            session_id: "mock-current-chat",
+            title: "Refine the introduction",
+            preview: "Make the opening more concise and add a screenshot cue.",
+            message_count: 4,
+            source: "chat_panel",
+            source_path: null,
+            created_at: new Date(Date.now() - 1000 * 60 * 40).toISOString(),
+            updated_at: new Date(Date.now() - 1000 * 60 * 8).toISOString(),
+          },
+          {
+            session_id: "mock-legacy-chat",
+            title: "Original launch planning",
+            preview: "Draft a launch plan for the product walkthrough.",
+            message_count: 2,
+            source: "legacy_import",
+            source_path: ".chats/launch-planning.chat",
+            created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 14).toISOString(),
+            updated_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 14).toISOString(),
+          },
+        ],
+        has_more: false,
+      };
+    case "get_chat_session":
+      return {
+        session_id: args?.sessionId ?? "mock-current-chat",
+        title: "Refine the introduction",
+        preview: "Make the opening more concise and add a screenshot cue.",
+        message_count: 2,
+        source: "chat_panel",
+        source_path: null,
+        created_at: new Date(Date.now() - 1000 * 60 * 40).toISOString(),
+        updated_at: new Date().toISOString(),
+        messages: [
+          { role: "user", content: "Make the opening more concise and add a screenshot cue." },
+          { role: "assistant", content: "I can tighten the opening and add a screenshot cue to the first planning row." },
+        ],
+        metadata: { source: "chat_panel", transcript_format: 1 },
+      };
+    case "save_chat_session":
+      return {
+        session_id: args?.sessionId,
+        title: args?.title ?? "Untitled conversation",
+        preview: "",
+        message_count: Array.isArray(args?.messages) ? args.messages.length : 0,
+        source: "chat_panel",
+        source_path: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
     case "get_agent_run":
       return {
         run: {
@@ -909,23 +949,36 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       const lastUser = userMsgs.filter(m => m.role === "user").pop();
       const response = `This is a mock response to: "${lastUser?.content?.substring(0, 50) || "your message"}"\n\nIn production, this would come from your configured AI provider. The chat UI is fully functional — try the @reference autocomplete, context picker, and model selector!`;
       const w = window as any;
+      const clientRunId = typeof args?.clientRunId === "string" ? args.clientRunId : undefined;
+      const mockRun = { cancelled: false };
+      if (clientRunId) {
+        activeMockAgentRuns.set(clientRunId, mockRun);
+      }
+      const emit = (event: Record<string, unknown>) => {
+        if (mockRun.cancelled) return false;
+        w.__TAURI_INTERNALS__?.emit?.("agent-event", {
+          ...event,
+          ...(clientRunId ? { client_run_id: clientRunId } : {}),
+        });
+        return true;
+      };
 
       // Emit streaming events asynchronously
       const streamEvents = async () => {
-        w.__TAURI_INTERNALS__?.emit?.("agent-event", { type: "status", message: "Thinking…" });
+        if (!emit({ type: "status", message: "Thinking…" })) return;
         await new Promise(r => setTimeout(r, 300));
-        w.__TAURI_INTERNALS__?.emit?.("agent-event", { type: "tool_call", name: "list_project_files", arguments: "{}" });
+        if (!emit({ type: "tool_call", name: "list_project_files", arguments: "{}" })) return;
         await new Promise(r => setTimeout(r, 200));
-        w.__TAURI_INTERNALS__?.emit?.("agent-event", { type: "tool_result", name: "list_project_files", result: "sketches/intro.sk, notes/outline.md" });
+        if (!emit({ type: "tool_result", name: "list_project_files", result: "sketches/intro.sk, notes/outline.md" })) return;
         await new Promise(r => setTimeout(r, 200));
-        w.__TAURI_INTERNALS__?.emit?.("agent-event", { type: "status", message: "Thinking… (round 2)" });
+        if (!emit({ type: "status", message: "Thinking… (round 2)" })) return;
         await new Promise(r => setTimeout(r, 200));
         const words = response.split(" ");
         for (let i = 0; i < words.length; i++) {
-          w.__TAURI_INTERNALS__?.emit?.("agent-event", { type: "delta", content: (i === 0 ? "" : " ") + words[i] });
+          if (!emit({ type: "delta", content: (i === 0 ? "" : " ") + words[i] })) return;
           await new Promise(r => setTimeout(r, 30));
         }
-        w.__TAURI_INTERNALS__?.emit?.("agent-event", { type: "done", response });
+        emit({ type: "done", response });
       };
       streamEvents(); // fire and forget
 
@@ -943,11 +996,27 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         content: "sketches/intro.sk, notes/outline.md",
         tool_call_id: "mock_tc_1",
       };
-      // Delay the return so streaming events fire first
-      return new Promise(resolve => setTimeout(() => resolve({
-        messages: [...userMsgs, mockToolCall, mockToolResult],
-        response,
-      }), 2000));
+      // Delay the return so streaming events fire first.
+      return new Promise((resolve, reject) => setTimeout(() => {
+        if (clientRunId && activeMockAgentRuns.get(clientRunId) === mockRun) {
+          activeMockAgentRuns.delete(clientRunId);
+        }
+        if (mockRun.cancelled) {
+          reject(new Error("Agent run cancelled"));
+          return;
+        }
+        resolve({
+          messages: [...userMsgs, mockToolCall, mockToolResult],
+          response,
+        });
+      }, 2000));
+    }
+    case "cancel_agent_chat_run": {
+      const clientRunId = typeof args?.clientRunId === "string" ? args.clientRunId : "";
+      const mockRun = clientRunId ? activeMockAgentRuns.get(clientRunId) : undefined;
+      if (!mockRun) return false;
+      mockRun.cancelled = true;
+      return true;
     }
     case "push_pending_chat_message":
       return null;

@@ -11,6 +11,7 @@ export interface ProviderSettings {
   aiVisionMode?: "off" | "notes" | "notes_and_sketches";
   aiModelSupportsVision?: string;
   aiWebAccess?: "disabled" | "enabled";
+  aiMaxToolRounds?: number;
   aiProviders?: AiProviderConfig[];
   aiActiveProviderId?: string;
   aiDefaultProviderId?: string;
@@ -34,6 +35,7 @@ export interface ProviderConfigInput {
   providerName?: string;
   aiVisionMode?: "off" | "notes" | "notes_and_sketches";
   aiWebAccess?: "disabled" | "enabled";
+  aiMaxToolRounds?: number;
 }
 
 function providerLabel(provider: AiProviderKind): string {
@@ -65,7 +67,7 @@ export function createAiProviderConfig(provider: AiProviderKind = "azure_openai"
 
 export function providerToConfigInput(
   provider: AiProviderConfig,
-  settings: Pick<ProviderSettings, "aiVisionMode" | "aiWebAccess">,
+  settings: Pick<ProviderSettings, "aiVisionMode" | "aiWebAccess" | "aiMaxToolRounds">,
   secrets: ProviderSecrets = {},
 ): ProviderConfigInput {
   return {
@@ -142,6 +144,7 @@ export function buildProviderConfig(settings: ProviderSettings | ProviderConfigI
         ? null
         : modelSupportsVision === "true",
     web_access: settings.aiWebAccess || "disabled",
+    max_tool_rounds: Math.max(1, Math.min(200, Number(settings.aiMaxToolRounds || 50))),
     provider_id: requestInput ? settings.providerId : undefined,
     provider_name: requestInput ? settings.providerName : undefined,
   };

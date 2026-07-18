@@ -69,7 +69,6 @@ const originalState = {
   checkRewound: useAppStore.getState().checkRewound,
   checkStash: useAppStore.getState().checkStash,
   detectRemote: useAppStore.getState().detectRemote,
-  loadChatSession: useAppStore.getState().loadChatSession,
   switchTimeline: useAppStore.getState().switchTimeline,
   refreshSyncStatus: useAppStore.getState().refreshSyncStatus,
 };
@@ -109,8 +108,6 @@ describe("project switch store side effects", () => {
   });
 
   it("saves outgoing UI state and restores incoming UI state without abandoning dirty workspace content", async () => {
-    const loadChatSession = vi.fn(() => Promise.resolve());
-
     mockInvoke.mockImplementation((command: string) => {
       switch (command) {
         case "set_workspace_state":
@@ -147,7 +144,6 @@ describe("project switch store side effects", () => {
       checkDirty: async () => useAppStore.setState({ isDirty: true }),
       checkRewound: vi.fn(() => Promise.resolve()),
       checkStash: vi.fn(() => Promise.resolve()),
-      loadChatSession,
     });
 
     const switchPromise = useAppStore.getState().switchProject("beta");
@@ -160,7 +156,7 @@ describe("project switch store side effects", () => {
       workspace: {
         open_tabs: [{ id: "sketch-old.sk", type: "sketch", path: "old.sk", title: "Old sketch" }],
         active_tab_id: "sketch-old.sk",
-        chat_session_path: "cutready://legacy-chats/old.chat",
+        chat_session_path: null,
       },
     });
     expect(mockInvoke).toHaveBeenCalledWith("switch_project", { projectPath: "beta" });
@@ -175,12 +171,10 @@ describe("project switch store side effects", () => {
       snapshotId: "snapshot-1",
     });
     expect(useAppStore.getState().projectSwitching).toBe(false);
-    expect(loadChatSession).toHaveBeenCalledWith("cutready://legacy-chats/chat.chat");
+    expect(useAppStore.getState().chatSessionPath).toBeNull();
   });
 
   it("clears stale chat when opening a project with no saved chat session", async () => {
-    const loadChatSession = vi.fn(() => Promise.resolve());
-
     mockInvoke.mockImplementation((command: string) => {
       switch (command) {
         case "open_project_folder":
@@ -218,7 +212,6 @@ describe("project switch store side effects", () => {
       checkRewound: vi.fn(() => Promise.resolve()),
       checkStash: vi.fn(() => Promise.resolve()),
       detectRemote: vi.fn(() => Promise.resolve()),
-      loadChatSession,
     });
 
     await useAppStore.getState().openProject("D:\\workspace\\beta");
@@ -229,7 +222,6 @@ describe("project switch store side effects", () => {
     expect(useAppStore.getState().chatLoading).toBe(false);
     expect(useAppStore.getState().chatError).toBeNull();
     expect(useAppStore.getState().chatInputDraft).toBe("");
-    expect(loadChatSession).not.toHaveBeenCalled();
   });
 
   it("lists remote-only branches and adopts one before switching", async () => {

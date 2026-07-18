@@ -1,13 +1,15 @@
 //! Tauri commands for the AI assistant (chat, model listing, ✨ generation).
 
+use agentive::LocalContextIndex;
 use serde::Deserialize;
 
 use crate::engine::agent::llm::{self, ChatMessage, LlmConfig, LlmProvider, ModelInfo};
 use crate::engine::agent::runner::{self, AgentEvent};
 use crate::engine::agent_state::{
-    AgentRunDetail, AgentRunSummary, AgentStateMaintenanceResult, AgentStateStore,
+    AgentRunDetail, AgentRunSummary, AgentStateMaintenanceResult, AgentStateStore, ChatSessionPage,
+    ChatSessionRecord, ChatSessionSummary, ContextAssetInput, ContextAssetScope,
 };
-use crate::AppState;
+use crate::{AgentChatCancellationRegistry, AppState};
 use agentive::azure_oauth::{self, AuthCodeFlowInit, DeviceCodeResponse, TokenResponse};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
@@ -17,6 +19,7 @@ use tauri_plugin_auditaur::auditaur_command;
 const SIMPLE_CHAT_TIMEOUT: Duration = Duration::from_secs(45);
 const MIN_SIMPLE_CHAT_TIMEOUT_MS: u64 = 5_000;
 const MAX_SIMPLE_CHAT_TIMEOUT_MS: u64 = 120_000;
+const AGENT_RUN_CANCELLED_ERROR: &str = "Agent run cancelled";
 
 struct ActiveAgentRunGuard {
     run_id: String,
@@ -48,6 +51,85 @@ impl Drop for ActiveAgentRunGuard {
     }
 }
 
+struct AgentChatCancellationGuard {
+    client_run_id: String,
+    generation: String,
+    cancellations: AgentChatCancellationRegistry,
+}
+
+impl AgentChatCancellationGuard {
+    fn register(
+        cancellations: AgentChatCancellationRegistry,
+        client_run_id: String,
+        cancellation: agentive::CancellationToken,
+    ) -> Result<Self, String> {
+        let generation = uuid::Uuid::new_v4().to_string();
+        let mut active_cancellations = cancellations
+            .lock()
+            .map_err(|err| format!("Agent cancellation registry unavailable: {err}"))?;
+        if active_cancellations.contains_key(&client_run_id) {
+            return Err(format!(
+                "A chat run with client run ID {client_run_id} is already active"
+            ));
+        }
+        active_cancellations.insert(
+            client_run_id.clone(),
+            crate::AgentChatCancellationEntry {
+                generation: generation.clone(),
+                cancellation,
+            },
+        );
+        drop(active_cancellations);
+        Ok(Self {
+            client_run_id,
+            generation,
+            cancellations,
+        })
+    }
+}
+
+impl Drop for AgentChatCancellationGuard {
+    fn drop(&mut self) {
+        if let Ok(mut active_cancellations) = self.cancellations.lock() {
+            if active_cancellations
+                .get(&self.client_run_id)
+                .is_some_and(|entry| entry.generation == self.generation)
+            {
+                active_cancellations.remove(&self.client_run_id);
+            }
+        }
+    }
+}
+
+fn cancel_agent_chat_run_in_registry(
+    cancellations: &AgentChatCancellationRegistry,
+    client_run_id: &str,
+) -> Result<bool, String> {
+    let active_cancellations = cancellations
+        .lock()
+        .map_err(|err| format!("Agent cancellation registry unavailable: {err}"))?;
+    let Some(entry) = active_cancellations.get(client_run_id) else {
+        return Ok(false);
+    };
+    if entry.cancellation.is_cancelled() {
+        return Ok(false);
+    }
+    entry.cancellation.cancel();
+    Ok(true)
+}
+
+fn agent_event_payload(event: &AgentEvent, client_run_id: Option<&str>) -> serde_json::Value {
+    let mut payload = serde_json::to_value(event).unwrap_or_default();
+    if let (Some(client_run_id), serde_json::Value::Object(payload)) = (client_run_id, &mut payload)
+    {
+        payload.insert(
+            "client_run_id".into(),
+            serde_json::Value::String(client_run_id.into()),
+        );
+    }
+    payload
+}
+
 /// Serialisable provider config sent from the frontend.
 #[derive(Debug, Deserialize)]
 pub struct ProviderConfig {
@@ -73,6 +155,196 @@ pub struct ProviderConfig {
     /// Web search access: "disabled" or "enabled".
     #[serde(default)]
     pub web_access: Option<String>,
+    /// Maximum agentive tool-call rounds before stopping the run.
+    #[serde(default)]
+    pub max_tool_rounds: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AgentContextItemConfig {
+    pub name: String,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub kind: Option<String>,
+    pub content: String,
+    #[serde(default)]
+    pub content_type: Option<String>,
+    #[serde(default)]
+    pub priority: Option<i32>,
+    #[serde(default)]
+    pub origin: Option<String>,
+    #[serde(default)]
+    pub persist: bool,
+}
+
+impl AgentContextItemConfig {
+    fn into_context_item(
+        self,
+        store: Option<&AgentStateStore>,
+    ) -> Result<agentive::ContextItem, String> {
+        let source = match self.source.as_deref() {
+            Some("user") => agentive::ContextSource::User,
+            Some("system") => agentive::ContextSource::System,
+            Some("tool_result") => agentive::ContextSource::ToolResult,
+            Some("file") => agentive::ContextSource::File,
+            Some("search") => agentive::ContextSource::Search,
+            Some("checkpoint") => agentive::ContextSource::Checkpoint,
+            Some("memory") => agentive::ContextSource::Memory,
+            Some("host") => agentive::ContextSource::Host,
+            _ => agentive::ContextSource::Custom,
+        };
+        let kind = match self.kind.as_deref() {
+            Some("recent_turn") => agentive::ContextKind::RecentTurn,
+            Some("memory_fact") => agentive::ContextKind::MemoryFact,
+            Some("reference_doc") => agentive::ContextKind::ReferenceDoc,
+            Some("tool_observation") => agentive::ContextKind::ToolObservation,
+            Some("file_excerpt") => agentive::ContextKind::FileExcerpt,
+            Some("web_excerpt") => agentive::ContextKind::WebExcerpt,
+            Some("error_trace") => agentive::ContextKind::ErrorTrace,
+            Some("media_summary") => agentive::ContextKind::MediaSummary,
+            _ => agentive::ContextKind::Other,
+        };
+        let scope = if self.persist {
+            ContextAssetScope::Project
+        } else {
+            ContextAssetScope::Session
+        };
+        let origin = self
+            .origin
+            .unwrap_or_else(|| self.name.clone())
+            .trim()
+            .to_string();
+        let asset = store
+            .map(|store| {
+                store.store_context_asset(ContextAssetInput {
+                    name: self.name.clone(),
+                    origin: origin.clone(),
+                    source: "user_attachment".into(),
+                    kind: self.kind.clone().unwrap_or_else(|| "other".into()),
+                    content: self.content.clone(),
+                    content_type: self
+                        .content_type
+                        .clone()
+                        .unwrap_or_else(|| "text/plain".into()),
+                    scope,
+                })
+            })
+            .transpose()?;
+        let preview = bounded_context_preview(&self.content, 6_000);
+        let mut item = agentive::ContextItem::new(
+            asset
+                .as_ref()
+                .map(|asset| format!("context-asset:{}", asset.id))
+                .unwrap_or_else(|| format!("transient:{}", uuid::Uuid::new_v4())),
+            source,
+            self.name,
+            "User-selected chat context",
+        )
+        .with_kind(kind)
+        .with_priority(self.priority.unwrap_or(50))
+        .with_sensitivity(agentive::ContextSensitivity::Internal)
+        .with_scope(match scope {
+            ContextAssetScope::Session => agentive::ContextScope::Session,
+            ContextAssetScope::Project => agentive::ContextScope::Project,
+        })
+        .with_content(
+            preview,
+            self.content_type.unwrap_or_else(|| "text/plain".into()),
+        )
+        .with_metadata("origin", origin);
+        if let Some(asset) = asset {
+            item = item.with_large_ref(
+                agentive::LargeContextRef::new(asset.id, "read_context_asset")
+                    .with_bytes(asset.bytes)
+                    .with_hash(asset.hash),
+            );
+        }
+        Ok(item)
+    }
+}
+
+fn bounded_context_preview(content: &str, max_bytes: usize) -> String {
+    if content.len() <= max_bytes {
+        return content.to_string();
+    }
+    let mut end = max_bytes.min(content.len());
+    while end > 0 && !content.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!(
+        "{}\n\n[Stored context excerpt truncated. Use read_context_asset for more.]",
+        &content[..end]
+    )
+}
+
+fn context_kind_from_name(kind: &str) -> agentive::ContextKind {
+    match kind {
+        "recent_turn" => agentive::ContextKind::RecentTurn,
+        "memory_fact" => agentive::ContextKind::MemoryFact,
+        "reference_doc" => agentive::ContextKind::ReferenceDoc,
+        "tool_observation" => agentive::ContextKind::ToolObservation,
+        "file_excerpt" => agentive::ContextKind::FileExcerpt,
+        "web_excerpt" => agentive::ContextKind::WebExcerpt,
+        "error_trace" => agentive::ContextKind::ErrorTrace,
+        "media_summary" => agentive::ContextKind::MediaSummary,
+        _ => agentive::ContextKind::Other,
+    }
+}
+
+fn recalled_context_items(
+    messages: &[ChatMessage],
+    store: Option<&AgentStateStore>,
+) -> Vec<agentive::ContextItem> {
+    let Some(store) = store else {
+        return Vec::new();
+    };
+    let Some(query) = messages
+        .iter()
+        .rev()
+        .find(|message| message.role == "user")
+        .and_then(ChatMessage::text)
+    else {
+        return Vec::new();
+    };
+    let assets = match store.search_context_assets(query, 4) {
+        Ok(assets) => assets,
+        Err(err) => {
+            log::warn!("[agent_chat_with_tools] context recall unavailable: {err}");
+            return Vec::new();
+        }
+    };
+    let items = assets
+        .into_iter()
+        .map(|asset| {
+            agentive::ContextItem::new(
+                format!("context-asset:{}", asset.asset.id),
+                agentive::ContextSource::Host,
+                asset.asset.name,
+                format!("Saved project context from {}", asset.asset.origin),
+            )
+            .with_kind(context_kind_from_name(&asset.asset.kind))
+            .with_priority(35)
+            .with_sensitivity(agentive::ContextSensitivity::Internal)
+            .with_scope(agentive::ContextScope::Project)
+            .with_content(asset.excerpt, asset.asset.content_type.clone())
+            .with_large_ref(
+                agentive::LargeContextRef::new(asset.asset.id, "read_context_asset")
+                    .with_bytes(asset.asset.bytes)
+                    .with_hash(asset.asset.hash),
+            )
+            .with_metadata("origin", asset.asset.origin)
+        })
+        .collect::<Vec<_>>();
+    let mut index = agentive::InMemoryContextIndex::new();
+    for item in items {
+        index.upsert(item);
+    }
+    index
+        .search(&agentive::ContextSearchQuery::new(query).with_limit(4))
+        .into_iter()
+        .map(|result| result.item)
+        .collect()
 }
 
 impl From<ProviderConfig> for LlmConfig {
@@ -340,6 +612,64 @@ pub async fn get_agent_run(
 }
 
 #[auditaur_command(skip_all, err)]
+pub async fn list_chat_sessions(
+    state: tauri::State<'_, AppState>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> Result<ChatSessionPage, String> {
+    let (repo_root, root) = {
+        let guard = state.current_project.lock().unwrap();
+        let view = guard.as_ref().ok_or("No project open")?;
+        (view.repo_root.clone(), view.root.clone())
+    };
+    AgentStateStore::list_chat_sessions(
+        &repo_root,
+        &root,
+        limit.unwrap_or(25).clamp(1, 100),
+        offset.unwrap_or(0),
+    )
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn get_chat_session(
+    state: tauri::State<'_, AppState>,
+    session_id: String,
+) -> Result<Option<ChatSessionRecord>, String> {
+    let (repo_root, root) = {
+        let guard = state.current_project.lock().unwrap();
+        let view = guard.as_ref().ok_or("No project open")?;
+        (view.repo_root.clone(), view.root.clone())
+    };
+    AgentStateStore::get_chat_session(&repo_root, &root, &session_id)
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn save_chat_session(
+    state: tauri::State<'_, AppState>,
+    session_id: String,
+    title: String,
+    messages: Vec<serde_json::Value>,
+    metadata: Option<serde_json::Value>,
+) -> Result<ChatSessionSummary, String> {
+    if session_id.trim().is_empty() {
+        return Err("Chat session ID cannot be empty".into());
+    }
+    let (repo_root, root) = {
+        let guard = state.current_project.lock().unwrap();
+        let view = guard.as_ref().ok_or("No project open")?;
+        (view.repo_root.clone(), view.root.clone())
+    };
+    AgentStateStore::save_chat_session(
+        &repo_root,
+        &root,
+        &session_id,
+        &title,
+        &messages,
+        metadata.unwrap_or_else(|| serde_json::json!({})),
+    )
+}
+
+#[auditaur_command(skip_all, err)]
 pub async fn has_active_agent_run(state: tauri::State<'_, AppState>) -> Result<bool, String> {
     let active_count = state
         .active_agent_runs
@@ -399,6 +729,16 @@ pub async fn compact_agent_state_database(
     AgentStateStore::compact_project_database(&repo_root, &root)
 }
 
+#[auditaur_command(skip_all, err)]
+pub async fn clear_saved_context(state: tauri::State<'_, AppState>) -> Result<usize, String> {
+    let (repo_root, root) = {
+        let guard = state.current_project.lock().unwrap();
+        let view = guard.as_ref().ok_or("No project open")?;
+        (view.repo_root.clone(), view.root.clone())
+    };
+    AgentStateStore::clear_project_context_assets(&repo_root, &root)
+}
+
 /// Agentic chat with function calling — the LLM can read/write project files.
 /// Returns the full conversation (including tool calls) and the final response.
 /// Emits `agent-event` events to the frontend for real-time streaming.
@@ -408,12 +748,28 @@ pub async fn agent_chat_with_tools(
     state: tauri::State<'_, AppState>,
     config: ProviderConfig,
     messages: Vec<ChatMessage>,
+    context_items: Option<Vec<AgentContextItemConfig>>,
     agent_prompts: Option<std::collections::HashMap<String, String>>,
     agent_id: Option<String>,
     emit_events: Option<bool>,
     allow_mutation_tools: Option<bool>,
+    client_run_id: Option<String>,
 ) -> Result<AgentChatResult, String> {
     use tauri::Emitter;
+
+    let client_run_id = client_run_id.filter(|id| !id.trim().is_empty());
+    let cancellation = agentive::CancellationToken::new();
+    let _cancellation_guard = match client_run_id.as_ref() {
+        Some(client_run_id) => {
+            let guard = AgentChatCancellationGuard::register(
+                state.agent_chat_cancellations.clone(),
+                client_run_id.clone(),
+                cancellation.clone(),
+            )?;
+            Some(guard)
+        }
+        None => None,
+    };
 
     let started = Instant::now();
     let mut messages = messages;
@@ -451,12 +807,17 @@ pub async fn agent_chat_with_tools(
     let vision_mode = config.vision_mode.clone().unwrap_or_else(|| "off".into());
     let discovered_vision_support = config.model_supports_vision;
     let search_enabled = config.web_access.as_deref() == Some("enabled");
+    let max_tool_rounds = config
+        .max_tool_rounds
+        .unwrap_or(runner::DEFAULT_MAX_TOOL_ROUNDS)
+        .clamp(1, 200);
     let mutation_tools_enabled = allow_mutation_tools.unwrap_or(false);
     let provider_name = config.provider.clone();
     let configured_provider_name = config.provider_name.clone();
     let configured_provider_id = config.provider_id.clone();
     let model = config.model.clone();
     let llm_config: LlmConfig = config.into();
+    let context_item_configs = context_items.unwrap_or_default();
 
     // Determine effective vision: user setting AND discovered/static model capability.
     let model_supports_vision =
@@ -492,6 +853,7 @@ pub async fn agent_chat_with_tools(
                     "vision_enabled": vision.enabled,
                     "web_search_enabled": web_access.search_enabled,
                     "mutation_tools_enabled": mutation_tools_enabled,
+                    "max_tool_rounds": max_tool_rounds,
                     "agent_prompts": prompts.len(),
                     "agent_id": &agent_id,
                 }),
@@ -519,8 +881,13 @@ pub async fn agent_chat_with_tools(
             None
         }
     };
+    let mut context_items = context_item_configs
+        .into_iter()
+        .map(|item| item.into_context_item(agent_state.as_ref()))
+        .collect::<Result<Vec<_>, _>>()?;
+    context_items.extend(recalled_context_items(&messages, agent_state.as_ref()));
     log::info!(
-        "[agent_chat_with_tools] start run_id={} agent={} provider={} model={} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} mutation_tools={} prompts={}",
+        "[agent_chat_with_tools] start run_id={} agent={} provider={} model={} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} mutation_tools={} max_tool_rounds={} prompts={}",
         run_id,
         agent_id,
         provider_name,
@@ -532,6 +899,7 @@ pub async fn agent_chat_with_tools(
         vision.enabled,
         web_access.search_enabled,
         mutation_tools_enabled,
+        max_tool_rounds,
         prompts.len()
     );
     crate::util::trace::emit(
@@ -550,14 +918,16 @@ pub async fn agent_chat_with_tools(
             "vision_enabled": vision.enabled,
             "web_search_enabled": web_access.search_enabled,
             "mutation_tools_enabled": mutation_tools_enabled,
+            "max_tool_rounds": max_tool_rounds,
             "agent_prompts": prompts.len(),
             "agent_id": &agent_id,
+            "context_items": context_items.len(),
         }),
     );
 
     let should_emit_events = emit_events.unwrap_or(true);
     let emit_handle = app.clone();
-    let result = match runner::run(
+    let runner_future = runner::run(
         provider,
         Some(provider_name.clone()),
         Some(model.clone()),
@@ -570,16 +940,25 @@ pub async fn agent_chat_with_tools(
         &vision,
         &web_access,
         mutation_tools_enabled,
+        max_tool_rounds,
+        context_items,
         Some(run_id.clone()),
         agent_state.clone(),
+        cancellation.clone(),
         move |event: AgentEvent| {
             if should_emit_events {
-                let _ = emit_handle.emit("agent-event", &event);
+                let payload = agent_event_payload(&event, client_run_id.as_deref());
+                let _ = emit_handle.emit("agent-event", payload);
             }
         },
-    )
-    .await
-    {
+    );
+    let runner_result = runner_future.await;
+    let runner_result = if cancellation.is_cancelled() {
+        Err(AGENT_RUN_CANCELLED_ERROR.into())
+    } else {
+        runner_result
+    };
+    let result = match runner_result {
         Ok(result) => {
             let elapsed_ms = started.elapsed().as_millis();
             log::info!(
@@ -613,15 +992,29 @@ pub async fn agent_chat_with_tools(
         }
         Err(err) => {
             let elapsed_ms = started.elapsed().as_millis();
-            log::warn!(
-                "[agent_chat_with_tools] error provider={} model={} elapsed={}ms error={}",
-                provider_name,
-                model,
-                elapsed_ms,
-                err
-            );
+            let cancelled = err == AGENT_RUN_CANCELLED_ERROR;
+            if cancelled {
+                log::info!(
+                    "[agent_chat_with_tools] cancelled provider={} model={} elapsed={}ms",
+                    provider_name,
+                    model,
+                    elapsed_ms,
+                );
+            } else {
+                log::warn!(
+                    "[agent_chat_with_tools] error provider={} model={} elapsed={}ms error={}",
+                    provider_name,
+                    model,
+                    elapsed_ms,
+                    err
+                );
+            }
             crate::util::trace::emit(
-                "agent_chat_with_tools_error",
+                if cancelled {
+                    "agent_chat_with_tools_cancelled"
+                } else {
+                    "agent_chat_with_tools_error"
+                },
                 "agent",
                 serde_json::json!({
                     "provider": provider_name,
@@ -632,9 +1025,11 @@ pub async fn agent_chat_with_tools(
                 }),
             );
             if let Some(agent_state) = &agent_state {
-                if let Err(state_err) = agent_state.finish_run("failed") {
+                if let Err(state_err) =
+                    agent_state.finish_run(if cancelled { "cancelled" } else { "failed" })
+                {
                     log::warn!(
-                        "[agent_chat_with_tools] failed to mark agent state run failed: {state_err}"
+                        "[agent_chat_with_tools] failed to finish agent state run: {state_err}"
                     );
                 }
             }
@@ -648,6 +1043,19 @@ pub async fn agent_chat_with_tools(
     })
 }
 
+/// Request cancellation of the active chat run associated with a frontend client run ID.
+#[auditaur_command(skip_all, err)]
+pub async fn cancel_agent_chat_run(
+    client_run_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<bool, String> {
+    let client_run_id = client_run_id.trim();
+    if client_run_id.is_empty() {
+        return Err("Client run ID is required".into());
+    }
+    cancel_agent_chat_run_in_registry(&state.agent_chat_cancellations, client_run_id)
+}
+
 /// Fetch a URL and return clean text content. Used by @web: references.
 #[tauri::command]
 pub async fn fetch_url_content(url: String) -> Result<String, String> {
@@ -659,89 +1067,6 @@ pub async fn fetch_url_content(url: String) -> Result<String, String> {
 pub struct AgentChatResult {
     pub messages: Vec<ChatMessage>,
     pub response: String,
-}
-
-// ---------------------------------------------------------------------------
-// Chat session persistence
-// ---------------------------------------------------------------------------
-
-use crate::engine::project::{ChatSession, ChatSessionSummary};
-
-/// List all chat sessions in the current project.
-#[tauri::command]
-pub async fn list_chat_sessions(
-    state: tauri::State<'_, AppState>,
-) -> Result<Vec<ChatSessionSummary>, String> {
-    let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
-        let view = guard.as_ref().ok_or("No project open")?;
-        (view.repo_root.clone(), view.root.clone())
-    };
-    crate::engine::project::scan_chat_sessions(&repo_root, &root).map_err(|e| e.to_string())
-}
-
-/// Load a chat session by relative path.
-#[tauri::command]
-pub async fn get_chat_session(
-    relative_path: String,
-    state: tauri::State<'_, AppState>,
-) -> Result<ChatSession, String> {
-    let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
-        let view = guard.as_ref().ok_or("No project open")?;
-        (view.repo_root.clone(), view.root.clone())
-    };
-    let abs = crate::engine::project::resolve_chat_session_path(&repo_root, &root, &relative_path)
-        .map_err(|e| e.to_string())?;
-    crate::engine::project::read_chat_session(&abs).map_err(|e| e.to_string())
-}
-
-/// Save a chat session to a relative path.
-#[tauri::command]
-pub async fn save_chat_session(
-    relative_path: String,
-    mut session: ChatSession,
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
-    let (root, repo_root) = {
-        let guard = state.current_project.lock().unwrap();
-        let view = guard.as_ref().ok_or("No project open")?;
-        (view.root.clone(), view.repo_root.clone())
-    };
-    let abs = crate::engine::project::resolve_chat_session_path(&repo_root, &root, &relative_path)
-        .map_err(|e| e.to_string())?;
-    if session.author_name.is_none() || session.author_email.is_none() {
-        if session.author_name.is_none() {
-            session.author_name = std::env::var("GIT_AUTHOR_NAME")
-                .ok()
-                .or_else(|| std::env::var("USERNAME").ok())
-                .or_else(|| std::env::var("USER").ok())
-                .filter(|value| !value.trim().is_empty())
-                .or_else(|| Some("CutReady User".to_string()));
-        }
-        if session.author_email.is_none() {
-            session.author_email = std::env::var("GIT_AUTHOR_EMAIL")
-                .ok()
-                .filter(|value| !value.trim().is_empty());
-        }
-    }
-    crate::engine::project::write_chat_session(&abs, &session).map_err(|e| e.to_string())
-}
-
-/// Delete a chat session by relative path.
-#[tauri::command]
-pub async fn delete_chat_session(
-    relative_path: String,
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
-    let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
-        let view = guard.as_ref().ok_or("No project open")?;
-        (view.repo_root.clone(), view.root.clone())
-    };
-    let abs = crate::engine::project::resolve_chat_session_path(&repo_root, &root, &relative_path)
-        .map_err(|e| e.to_string())?;
-    crate::engine::project::delete_chat_session(&abs).map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -780,7 +1105,7 @@ pub async fn archive_chat_session(
 
 /// Update the current chat summary (called periodically by frontend).
 /// Stored in AppState so the Rust-side window close handler can archive it.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn update_chat_summary(
     session_id: String,
     summary: String,
@@ -1039,6 +1364,7 @@ mod tests {
             vision_mode: Some("off".into()),
             model_supports_vision: Some(true),
             web_access: Some("disabled".into()),
+            max_tool_rounds: Some(runner::DEFAULT_MAX_TOOL_ROUNDS),
         }
     }
 
@@ -1074,5 +1400,65 @@ mod tests {
     fn provider_config_unknown_defaults_to_azure() {
         let config: LlmConfig = make_config("some_future_provider").into();
         assert_eq!(config.provider, LlmProvider::AzureOpenai);
+    }
+
+    #[tokio::test]
+    async fn cancellation_registry_cancels_only_the_matching_client_run() {
+        let cancellations = Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let first_cancellation = agentive::CancellationToken::new();
+        let second_cancellation = agentive::CancellationToken::new();
+        let _first_guard = AgentChatCancellationGuard::register(
+            cancellations.clone(),
+            "first".into(),
+            first_cancellation.clone(),
+        )
+        .unwrap();
+        let _second_guard = AgentChatCancellationGuard::register(
+            cancellations.clone(),
+            "second".into(),
+            second_cancellation.clone(),
+        )
+        .unwrap();
+
+        assert!(cancel_agent_chat_run_in_registry(&cancellations, "first").unwrap());
+        assert!(first_cancellation.is_cancelled());
+        assert!(!second_cancellation.is_cancelled());
+        assert!(!cancel_agent_chat_run_in_registry(&cancellations, "first").unwrap());
+        assert!(cancel_agent_chat_run_in_registry(&cancellations, "second").unwrap());
+        assert!(second_cancellation.is_cancelled());
+    }
+
+    #[test]
+    fn cancellation_registry_rejects_duplicate_client_run_ids() {
+        let cancellations = Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let _guard = AgentChatCancellationGuard::register(
+            cancellations.clone(),
+            "same-run".into(),
+            agentive::CancellationToken::new(),
+        )
+        .unwrap();
+
+        assert!(matches!(
+            AgentChatCancellationGuard::register(
+                cancellations,
+                "same-run".into(),
+                agentive::CancellationToken::new(),
+            ),
+            Err(error) if error.contains("already active")
+        ));
+    }
+
+    #[test]
+    fn agent_events_keep_original_fields_when_client_run_id_is_added() {
+        let payload = agent_event_payload(
+            &AgentEvent::Status {
+                message: "Thinking…".into(),
+            },
+            Some("42"),
+        );
+
+        assert_eq!(payload["type"], "status");
+        assert_eq!(payload["message"], "Thinking…");
+        assert_eq!(payload["client_run_id"], "42");
     }
 }

@@ -36,6 +36,19 @@ interface AgentRunSummary {
   verification_result_count: number;
 }
 
+function metadataLabel(key: string): string {
+  switch (key) {
+    case "legacy_import":
+      return "Imported";
+    case "legacy_source_path":
+      return "Original source path";
+    case "legacy_content_hash":
+      return "Original content hash";
+    default:
+      return humanize(key);
+  }
+}
+
 interface AgentTrajectoryEventRecord {
   id: number;
   event_id: string | null;
@@ -91,6 +104,14 @@ interface AgentStateMaintenanceResult {
   deleted_rows: number;
   size_before: number;
   size_after: number;
+}
+
+export function agentRunProviderLabel(provider: string): string {
+  return provider === "legacy_chat" ? "Imported chat" : provider;
+}
+
+export function agentRunStatusLabel(status: string): string {
+  return status === "imported_legacy" ? "Imported" : status;
 }
 
 export function AgentRunInspector() {
@@ -158,7 +179,7 @@ export function AgentRunInspector() {
   const pruneRuns = useCallback(async () => {
     const confirmed = await confirm({
       title: "Prune old agent runs?",
-      message: "Prune completed agent runs, keeping the 25 most recent completed runs?\n\nRunning runs and agent memory are preserved. This only removes older local trajectory/checkpoint/resource records.",
+      message: "Prune completed agent runs, keeping the 25 most recent completed runs?\n\nRunning runs, imported transcripts, and agent memory are preserved. This only removes older local trajectory/checkpoint/resource records.",
       confirmLabel: "Prune old runs",
       variant: "warning",
     });
@@ -198,6 +219,33 @@ export function AgentRunInspector() {
     }
   }, [confirm, hasRunningRun, showToast]);
 
+  const clearSavedContext = useCallback(async () => {
+    if (hasRunningRun) {
+      showToast("Wait for the active agent run to finish before clearing saved context.", 4000, "warning");
+      return;
+    }
+    const confirmed = await confirm({
+      title: "Forget saved context?",
+      message: "Remove all web references pinned for future project chats?\n\nThis does not change project files, chat history, or agent runs.",
+      confirmLabel: "Forget context",
+      variant: "warning",
+    });
+    if (!confirmed) return;
+    setMaintenanceBusy(true);
+    try {
+      const deleted = await invoke<number>("clear_saved_context");
+      showToast(
+        deleted === 0 ? "No saved context to forget" : `Forgot ${deleted} saved context item${deleted === 1 ? "" : "s"}`,
+        3500,
+        "success",
+      );
+    } catch (err) {
+      showToast(`Could not clear saved context: ${String(err)}`, 5000, "error");
+    } finally {
+      setMaintenanceBusy(false);
+    }
+  }, [confirm, hasRunningRun, showToast]);
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-[rgb(var(--color-surface))]">
       <div className="flex h-[38px] items-center gap-2 border-b border-[rgb(var(--color-border))] px-3">
@@ -221,7 +269,7 @@ export function AgentRunInspector() {
           className="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
           onClick={() => void pruneRuns()}
           disabled={maintenanceBusy || loadingRuns}
-          title="Keep the 25 most recent completed runs and remove older completed runtime records"
+          title="Keep the 25 most recent completed runs; imported transcripts are preserved"
         >
           <MoreHorizontal className="h-3 w-3" />
           Prune old
@@ -234,6 +282,15 @@ export function AgentRunInspector() {
         >
           <Database className="h-3 w-3" />
           Compact
+        </button>
+        <button
+          className="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => void clearSavedContext()}
+          disabled={maintenanceBusy || hasRunningRun}
+          title={hasRunningRun ? "Wait for the active agent run to finish before forgetting saved context" : "Forget web references saved for future project chats"}
+        >
+          <Trash2 className="h-3 w-3" />
+          Forget context
         </button>
       </div>
 
@@ -338,9 +395,9 @@ function RunListItem({
           </div>
           <div className="mt-1 flex items-center gap-1.5 pl-7 text-[10px] text-[rgb(var(--color-text-secondary))]">
             <span className={`rounded-full px-1.5 py-0.5 font-medium ${status.bg} ${status.text}`}>
-              {run.status}
+              {agentRunStatusLabel(run.status)}
             </span>
-            <span className="truncate">{run.provider}</span>
+            <span className="truncate">{agentRunProviderLabel(run.provider)}</span>
             <span className="opacity-50">·</span>
             <span className="font-mono">{shortId(run.run_id)}</span>
           </div>
@@ -404,7 +461,7 @@ function RunDetail({ detail }: { detail: AgentRunDetail }) {
             </h2>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[rgb(var(--color-text-secondary))]">
               <StatusPill status={run.status} />
-              <span>{run.provider}</span>
+              <span>{agentRunProviderLabel(run.provider)}</span>
               <span className="opacity-50">·</span>
               <span className="font-mono">{run.run_id}</span>
             </div>
@@ -417,7 +474,7 @@ function RunDetail({ detail }: { detail: AgentRunDetail }) {
         {metadataEntries.length > 0 && (
           <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
             {metadataEntries.map(([key, value]) => (
-              <Fact key={key} label={humanize(key)} value={valuePreview(value)} />
+              <Fact key={key} label={metadataLabel(key)} value={valuePreview(value)} />
             ))}
           </div>
         )}
@@ -461,7 +518,7 @@ function TimelineCard({ events }: { events: AgentTrajectoryEventRecord[] }) {
               </div>
               <div className="mt-1 flex flex-wrap gap-1.5 text-[10px] text-[rgb(var(--color-text-secondary))]">
                 <span className="rounded-full bg-[rgb(var(--color-surface))] px-1.5 py-0.5 font-mono">
-                  {humanize(event.event_type)}
+                  {agentRunEventLabel(event.event_type)}
                 </span>
                 {event.iteration != null && <span>iteration {event.iteration}</span>}
                 {event.event_id && <span className="font-mono">{shortId(event.event_id)}</span>}
@@ -618,7 +675,7 @@ function Fact({ label, value }: { label: string; value: string }) {
 
 function StatusPill({ status }: { status: string }) {
   const tone = statusTone(status);
-  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${tone.bg} ${tone.text}`}>{status}</span>;
+  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${tone.bg} ${tone.text}`}>{agentRunStatusLabel(status)}</span>;
 }
 
 function StateMessage({ label, detail }: { label: string; detail?: string }) {
@@ -634,6 +691,7 @@ function StateMessage({ label, detail }: { label: string; detail?: string }) {
 function statusTone(status: string) {
   switch (status.toLowerCase()) {
     case "completed":
+    case "imported_legacy":
       return { bg: "bg-[rgb(var(--color-success))]/10", text: "text-[rgb(var(--color-success))]" };
     case "failed":
       return { bg: "bg-error/10", text: "text-error" };
@@ -663,12 +721,12 @@ function objectEntries(value: JsonValue): Array<[string, JsonValue]> {
 }
 
 function eventSummary(event: AgentTrajectoryEventRecord): string {
-  const found = deepFindString(event.event, ["goal", "tool_name", "toolName", "name", "criterion", "message", "reason"]);
-  const label = eventLabel(event.event_type);
+  const found = deepFindString(event.event, ["goal", "tool_name", "toolName", "name", "criterion", "message", "content", "reason"]);
+  const label = agentRunEventLabel(event.event_type);
   return found ? `${label} · ${found}` : label;
 }
 
-function eventLabel(eventType: string): string {
+export function agentRunEventLabel(eventType: string): string {
   switch (eventType) {
     case "turn_started":
       return "Started turn";
@@ -688,6 +746,8 @@ function eventLabel(eventType: string): string {
       return "Created checkpoint";
     case "resource_touched":
       return "Touched resource";
+    case "legacy_chat_message":
+      return "Imported chat message";
     default:
       return humanize(eventType);
   }
