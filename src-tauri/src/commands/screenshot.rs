@@ -731,7 +731,48 @@ fn get_saved_recording_control_position(
         .and_then(|value| serde_json::from_value(value).ok())
 }
 
-/// Open a fullscreen preview window on the primary monitor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PreviewMonitorBounds {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+
+fn requested_preview_monitor_bounds(
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+) -> Result<Option<PreviewMonitorBounds>, String> {
+    if x == 0 && y == 0 && width == 0 && height == 0 {
+        return Ok(None);
+    }
+
+    if width == 0 || height == 0 {
+        return Err("The selected display must include non-zero width and height.".to_string());
+    }
+
+    Ok(Some(PreviewMonitorBounds {
+        x,
+        y,
+        width,
+        height,
+    }))
+}
+
+fn monitor_matches_preview_bounds(
+    position: &tauri::PhysicalPosition<i32>,
+    size: &tauri::PhysicalSize<u32>,
+    requested: PreviewMonitorBounds,
+) -> bool {
+    position.x == requested.x
+        && position.y == requested.y
+        && size.width == requested.width
+        && size.height == requested.height
+}
+
+/// Open a fullscreen preview window on the selected monitor.
 ///
 /// On macOS, uses native fullscreen (hides menu bar + dock) for a PowerPoint-style
 /// presentation experience. On Windows, uses borderless manual positioning.
@@ -749,27 +790,63 @@ pub async fn open_preview_window(
         phys_x, phys_y, phys_w, phys_h
     );
 
-    // Destroy any existing preview window first
+    let requested_bounds = requested_preview_monitor_bounds(phys_x, phys_y, phys_w, phys_h)?;
+    let monitors = app.available_monitors().map_err(|e| e.to_string())?;
+    let primary = app.primary_monitor().map_err(|e| e.to_string())?;
+    let monitor = if let Some(requested) = requested_bounds {
+        Some(
+            monitors
+                .iter()
+                .find(|monitor| {
+                    monitor_matches_preview_bounds(monitor.position(), monitor.size(), requested)
+                })
+                .ok_or_else(|| {
+                    format!(
+                        "The selected display ({}, {} {}x{}) is no longer available.",
+                        requested.x, requested.y, requested.width, requested.height
+                    )
+                })?,
+        )
+    } else {
+        primary.as_ref().or(monitors.first())
+    };
+
+    if let Some(monitor) = monitor {
+        let position = monitor.position();
+        let size = monitor.size();
+        tracing::info!(
+            requested_monitor = ?requested_bounds,
+            resolved_x = position.x,
+            resolved_y = position.y,
+            resolved_width = size.width,
+            resolved_height = size.height,
+            "Resolved preview display"
+        );
+    } else {
+        tracing::warn!(
+            requested_monitor = ?requested_bounds,
+            "No display reported by Tauri; using fallback preview dimensions"
+        );
+    }
+
+    // Do not tear down a working preview until the requested display has resolved.
     if let Some(existing) = app.get_webview_window("preview") {
         eprintln!("[PREVIEW] destroying existing preview window");
         let _ = existing.destroy();
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
-    // Use Tauri's own monitor API to determine size/position if not provided
-    let monitors = app.available_monitors().map_err(|e| e.to_string())?;
-    let target_monitor = if phys_w > 0 && phys_h > 0 {
-        monitors.iter().find(|m| {
-            let pos = m.position();
-            (pos.x - phys_x).abs() < 100 && (pos.y - phys_y).abs() < 100
-        })
-    } else {
-        None
-    };
-    let primary = app.primary_monitor().map_err(|e| e.to_string())?;
-    let monitor = target_monitor.or(primary.as_ref()).or(monitors.first());
-
-    let (scale, logical_w, logical_h, logical_x, logical_y) = if let Some(m) = monitor {
+    let (
+        scale,
+        logical_w,
+        logical_h,
+        logical_x,
+        logical_y,
+        resolved_phys_x,
+        resolved_phys_y,
+        resolved_phys_w,
+        resolved_phys_h,
+    ) = if let Some(m) = monitor {
         let s = m.scale_factor();
         let size = m.size();
         let pos = m.position();
@@ -779,17 +856,13 @@ pub async fn open_preview_window(
             size.height as f64 / s,
             pos.x as f64 / s,
             pos.y as f64 / s,
-        )
-    } else if phys_w > 0 {
-        (
-            1.0,
-            phys_w as f64,
-            phys_h as f64,
-            phys_x as f64,
-            phys_y as f64,
+            pos.x,
+            pos.y,
+            size.width,
+            size.height,
         )
     } else {
-        (1.0, 1920.0, 1080.0, 0.0, 0.0)
+        (1.0, 1920.0, 1080.0, 0.0, 0.0, 0, 0, 1920, 1080)
     };
 
     eprintln!(
@@ -805,13 +878,13 @@ pub async fn open_preview_window(
             .title("CutReady Preview")
             .inner_size(logical_w, logical_h)
             .position(logical_x, logical_y)
+            .fullscreen(true)
             .focused(true)
             .build()
             .map_err(|e| {
                 eprintln!("[PREVIEW] build FAILED: {}", e);
                 e.to_string()
             })?;
-        win.set_fullscreen(true).map_err(|e| e.to_string())?;
         eprintln!(
             "[PREVIEW] macOS fullscreen window created OK, label={}",
             win.label()
@@ -835,7 +908,13 @@ pub async fn open_preview_window(
                 eprintln!("[PREVIEW] build FAILED: {}", e);
                 e.to_string()
             })?;
-        fit_window_extended_frame_to_physical_bounds(&win, phys_x, phys_y, phys_w, phys_h);
+        fit_window_extended_frame_to_physical_bounds(
+            &win,
+            resolved_phys_x,
+            resolved_phys_y,
+            resolved_phys_w,
+            resolved_phys_h,
+        );
         eprintln!("[PREVIEW] window created OK, label={}", win.label());
     }
 
@@ -900,4 +979,48 @@ pub async fn crop_screenshot(
 ) -> Result<String, String> {
     let root = project_root(&state)?;
     screenshot::crop_screenshot(&root, &source_path, x, y, width, height)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        monitor_matches_preview_bounds, requested_preview_monitor_bounds, PreviewMonitorBounds,
+    };
+    use tauri::{PhysicalPosition, PhysicalSize};
+
+    #[test]
+    fn zero_bounds_request_automatic_monitor_selection() {
+        assert_eq!(requested_preview_monitor_bounds(0, 0, 0, 0).unwrap(), None);
+    }
+
+    #[test]
+    fn partial_bounds_are_rejected() {
+        let error = requested_preview_monitor_bounds(0, 0, 1920, 0).unwrap_err();
+
+        assert_eq!(
+            error,
+            "The selected display must include non-zero width and height."
+        );
+    }
+
+    #[test]
+    fn monitor_matching_requires_full_bounds() {
+        let requested = PreviewMonitorBounds {
+            x: -2560,
+            y: -1080,
+            width: 2560,
+            height: 1440,
+        };
+
+        assert!(monitor_matches_preview_bounds(
+            &PhysicalPosition::new(-2560, -1080),
+            &PhysicalSize::new(2560, 1440),
+            requested,
+        ));
+        assert!(!monitor_matches_preview_bounds(
+            &PhysicalPosition::new(-2560, -1080),
+            &PhysicalSize::new(1920, 1080),
+            requested,
+        ));
+    }
 }

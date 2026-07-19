@@ -236,6 +236,11 @@ export function StoryboardView() {
       });
     } catch (e) {
       console.error("[StoryboardView] Failed to open preview window:", e);
+      useToastStore.getState().show(
+        `Could not open presentation on the selected display: ${e}`,
+        5000,
+        "error",
+      );
       setPreviewMode(mode);
       setShowPreview(true);
     }
