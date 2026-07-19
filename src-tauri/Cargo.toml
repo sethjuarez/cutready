@@ -40,6 +40,7 @@ zip = "2"
 quick-xml = "0.37"
 pdf-extract = "0.8"
 rusqlite = "0.37"
+tempfile = "3"
 
 # Tauri plugins
 tauri-plugin-shell = "2"
@@ -77,4 +78,3 @@ opt-level = 3
 [dev-dependencies]
 async-trait = "0.1"
 httpmock = "0.7"
-tempfile = "3"

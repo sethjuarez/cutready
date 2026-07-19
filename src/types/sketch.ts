@@ -34,6 +34,22 @@ export interface MotionPoint {
   label?: string | null;
 }
 
+/** A normalized text region rendered as a typewriter overlay during video export. */
+export interface TypingSpot {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  text: string;
+  start_offset_ms?: number | null;
+  duration_ms?: number | null;
+  characters_per_second?: number | null;
+  show_cursor?: boolean | null;
+  text_color?: string | null;
+  font_family?: "sans" | "serif" | "mono" | null;
+  font_scale?: number | null;
+}
+
 export type MotionPlanKind = "subtle_push" | "wide_hold_then_push" | "push_then_drift";
 export type MotionPlanEasing = "linear" | "ease_in_out" | "ease_out";
 
@@ -66,6 +82,8 @@ export interface PlanningRow {
   visual?: string | null;
   /** Ranked normalized screenshot points used by the Motion Director for camera moves. */
   motion_points?: MotionPoint[] | null;
+  /** Positioned text overlays rendered before camera motion, so they compose with zooms. */
+  typing_spots?: TypingSpot[] | null;
   /** Agent-generated camera motion plan for screenshot rows. */
   motion_plan?: MotionPlan | null;
   /** English-language design brief for the visual (created by Designer agent Pass 1). */

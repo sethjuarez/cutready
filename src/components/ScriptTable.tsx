@@ -37,9 +37,10 @@ import {
   Play,
   Square,
   AlertTriangle,
+  Type,
   type LucideIcon,
 } from "lucide-react";
-import type { MotionPoint, PlanningCellField, PlanningRow } from "../types/sketch";
+import type { MotionPoint, PlanningCellField, PlanningRow, TypingSpot } from "../types/sketch";
 import { normalizeDocument } from "@elucim/dsl";
 import type { CutReadyElucimDocument } from "../types/elucim";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -67,6 +68,36 @@ const ROW_PALETTES: Record<string, string[]> = {
     "#9ca3af", "#9ca3af", "#9ca3af", "#9ca3af",
   ],
 };
+
+const TYPING_COLOR_PRESETS = ["#ffffff", "#111111", "#f8d775", "#8fe3b0", "#8dc9ff", "#d4a8ff", "#ff9cac"];
+const TYPING_EXPORT_WIDTH = 1920;
+const TYPING_EXPORT_HEIGHT = 1080;
+const TYPING_TEXT_PADDING_X = 12;
+const TYPING_TEXT_PADDING_Y = 8;
+
+function typingPreviewLayout(spot: TypingSpot, previewWidth: number) {
+  const width = Math.max(0.02, Math.min(1, spot.width));
+  const height = Math.max(0.02, Math.min(1, spot.height));
+  const characterCount = Math.max(1, Array.from(spot.text.trim()).length);
+  const scale = Math.max(0.4, Math.min(1.8, spot.font_scale ?? 1));
+  const paddingX = Math.min(TYPING_TEXT_PADDING_X, width * TYPING_EXPORT_WIDTH / 4);
+  const paddingY = Math.min(TYPING_TEXT_PADDING_Y, height * TYPING_EXPORT_HEIGHT / 4);
+  const contentWidth = Math.max(1, width * TYPING_EXPORT_WIDTH - 2 * paddingX);
+  const contentHeight = Math.max(1, height * TYPING_EXPORT_HEIGHT - 2 * paddingY);
+  const fontSize = Math.max(
+    18,
+    Math.min(
+      contentHeight * 0.68,
+      contentWidth / (characterCount * 0.65),
+    ) * scale,
+  );
+  const previewScale = previewWidth / TYPING_EXPORT_WIDTH;
+  return {
+    fontSize: previewWidth > 0 ? `${Math.min(fontSize, 96) * previewScale}px` : undefined,
+    paddingLeft: `${paddingX * previewScale}px`,
+    paddingTop: `${paddingY * previewScale}px`,
+  };
+}
 
 function getRowColor(idx: number): string {
   const palette = getComputedStyle(document.documentElement).getPropertyValue("--row-color-palette").trim() || "vivid";
@@ -116,15 +147,39 @@ interface ScriptTableProps {
   onStopNarrationRecording?: () => void;
   narrationRecordingRow?: number | null;
   narrationSavingRows?: Set<number>;
+  typingOverlayDefaults?: {
+    fontFamily: NonNullable<TypingSpot["font_family"]>;
+    fontScale: number;
+  };
 }
 
-export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onBrowseImage, onSparkle, onGenerateVisual, onNudgeVisual, projectRoot, sketchPath, highlightedRows, rowDiffs, aiSnapshotRows, onDismissHighlights, hasLastAiDiffs, onReShowHighlights, onRowLockChange, onCellLockChange, onStartNarrationRecording, onGenerateNarration, onPickNarration, onStopNarrationRecording, narrationRecordingRow, narrationSavingRows }: ScriptTableProps) {
+export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onBrowseImage, onSparkle, onGenerateVisual, onNudgeVisual, projectRoot, sketchPath, highlightedRows, rowDiffs, aiSnapshotRows, onDismissHighlights, hasLastAiDiffs, onReShowHighlights, onRowLockChange, onCellLockChange, onStartNarrationRecording, onGenerateNarration, onPickNarration, onStopNarrationRecording, narrationRecordingRow, narrationSavingRows, typingOverlayDefaults = { fontFamily: "sans", fontScale: 1 } }: ScriptTableProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<{ src: string; rowIndex: number } | null>(null);
   const lightboxImageRef = useRef<HTMLImageElement | null>(null);
+  const [lightboxPreviewWidth, setLightboxPreviewWidth] = useState(0);
   const [visualLightbox, setVisualLightbox] = useState<{ visualPath: string; rowIndex: number } | null>(null);
   const [nudgeInput, setNudgeInput] = useState("");
   const [lightboxMode, setLightboxMode] = useState<"preview" | "edit">("preview");
+  const [spotAuthoringMode, setSpotAuthoringMode] = useState<"motion" | "typing">("motion");
+  const [typingDraw, setTypingDraw] = useState<{ startX: number; startY: number; currentX: number; currentY: number } | null>(null);
+  const [selectedTypingSpot, setSelectedTypingSpot] = useState<number | null>(null);
+  const [typingSpotInteraction, setTypingSpotInteraction] = useState<{
+    kind: "move" | "resize";
+    index: number;
+    startX: number;
+    startY: number;
+    currentX: number;
+    currentY: number;
+    initialSpot: TypingSpot;
+  } | null>(null);
+  const [motionPointInteraction, setMotionPointInteraction] = useState<{
+    index: number;
+    startX: number;
+    startY: number;
+    currentX: number;
+    currentY: number;
+  } | null>(null);
   const [editorDsl, setEditorDsl] = useState<CutReadyElucimDocument | null>(null);
   const [editorDirty, setEditorDirty] = useState(false);
   const [visualVersion, setVisualVersion] = useState(0);
@@ -257,6 +312,19 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
     }
   }, [rows.length]);
 
+  useEffect(() => {
+    if (!lightboxImage) {
+      setLightboxPreviewWidth(0);
+      return;
+    }
+    const updatePreviewWidth = () => {
+      setLightboxPreviewWidth(lightboxImageRef.current?.clientWidth ?? 0);
+    };
+    updatePreviewWidth();
+    window.addEventListener("resize", updatePreviewWidth);
+    return () => window.removeEventListener("resize", updatePreviewWidth);
+  }, [lightboxImage]);
+
   // Always-current ref to avoid stale closure issues in callbacks
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
@@ -277,7 +345,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
           return { ...r, time: value, duration_seconds: parseDurationSeconds(value) };
         }
         if (field === "screenshot") {
-          return { ...r, screenshot: value || null, motion_points: value ? r.motion_points : null, motion_plan: null };
+          return { ...r, screenshot: value || null, motion_points: value ? r.motion_points : null, typing_spots: value ? r.typing_spots : null, motion_plan: null };
         }
         return { ...r, [field]: value };
       });
@@ -333,27 +401,234 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
     [onChange, pushUndo],
   );
 
-  const addMotionPointFromLightbox = useCallback((event: ReactMouseEvent) => {
-    if (readOnly || !lightboxImage || isCellLocked(rowsRef.current[lightboxImage.rowIndex], "screenshot")) return;
+  const updateTypingSpots = useCallback(
+    (rowIndex: number, spots: TypingSpot[]) => {
+      if (isCellLocked(rowsRef.current[rowIndex], "screenshot")) return;
+      pushUndo();
+      const normalized = spots
+        .map((spot) => ({
+          ...spot,
+          x: Math.max(0, Math.min(1, spot.x)),
+          y: Math.max(0, Math.min(1, spot.y)),
+          width: Math.max(0.02, Math.min(1, spot.width)),
+          height: Math.max(0.02, Math.min(1, spot.height)),
+          text: spot.text.slice(0, 160),
+          start_offset_ms: Math.max(0, Math.round(spot.start_offset_ms ?? 0)),
+          duration_ms: Math.max(0, Math.round(spot.duration_ms ?? 0)) || null,
+          characters_per_second: Math.max(1, Math.min(80, spot.characters_per_second ?? 18)),
+          show_cursor: spot.show_cursor ?? true,
+          text_color: /^#[0-9a-fA-F]{6}$/.test(spot.text_color ?? "") ? spot.text_color : "#ffffff",
+          font_family: ["sans", "serif", "mono"].includes(spot.font_family ?? "") ? spot.font_family : typingOverlayDefaults.fontFamily,
+          font_scale: Math.max(0.4, Math.min(1.8, spot.font_scale ?? typingOverlayDefaults.fontScale)),
+        }))
+        .filter((spot) => spot.x + spot.width <= 1.001 && spot.y + spot.height <= 1.001);
+      onChange(rowsRef.current.map((row, index) => (
+        index === rowIndex ? { ...row, typing_spots: normalized.length > 0 ? normalized : null } : row
+      )));
+    },
+    [onChange, pushUndo],
+  );
+
+  const pointerPosition = useCallback((event: ReactMouseEvent) => {
     const image = lightboxImageRef.current;
-    if (!image) return;
+    if (!image) return null;
     const rect = image.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return;
+    if (rect.width <= 0 || rect.height <= 0) return null;
     const x = (event.clientX - rect.left) / rect.width;
     const y = (event.clientY - rect.top) / rect.height;
-    if (x < 0 || x > 1 || y < 0 || y > 1) return;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+    return { x, y };
+  }, []);
+
+  const addMotionPointFromLightbox = useCallback((event: ReactMouseEvent) => {
+    if (spotAuthoringMode !== "motion" || readOnly || !lightboxImage || isCellLocked(rowsRef.current[lightboxImage.rowIndex], "screenshot")) return;
+    const point = pointerPosition(event);
+    if (!point) return;
+    setSelectedTypingSpot(null);
     const currentPoints = rowsRef.current[lightboxImage.rowIndex]?.motion_points ?? [];
     const nextPoints = [
       ...currentPoints.slice(0, 2),
       {
         rank: Math.min(currentPoints.length + 1, 3) as MotionPoint["rank"],
-        x,
-        y,
+        x: point.x,
+        y: point.y,
         label: null,
       },
     ];
     updateMotionPoints(lightboxImage.rowIndex, nextPoints);
-  }, [lightboxImage, readOnly, updateMotionPoints]);
+  }, [lightboxImage, pointerPosition, readOnly, spotAuthoringMode, updateMotionPoints]);
+
+  const beginTypingSpot = useCallback((event: ReactMouseEvent) => {
+    if (spotAuthoringMode !== "typing" || readOnly || !lightboxImage || isCellLocked(rowsRef.current[lightboxImage.rowIndex], "screenshot")) return;
+    const point = pointerPosition(event);
+    if (!point) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedTypingSpot(null);
+    setTypingDraw({ startX: point.x, startY: point.y, currentX: point.x, currentY: point.y });
+  }, [lightboxImage, pointerPosition, readOnly, spotAuthoringMode]);
+
+  const moveTypingSpot = useCallback((event: ReactMouseEvent) => {
+    if (motionPointInteraction) {
+      const point = pointerPosition(event);
+      if (!point) return;
+      setMotionPointInteraction((current) => current ? { ...current, currentX: point.x, currentY: point.y } : null);
+      return;
+    }
+    if (typingSpotInteraction) {
+      const point = pointerPosition(event);
+      if (!point) return;
+      setTypingSpotInteraction((current) => current ? { ...current, currentX: point.x, currentY: point.y } : null);
+      return;
+    }
+    if (!typingDraw) return;
+    const point = pointerPosition(event);
+    if (!point) return;
+    setTypingDraw((current) => current ? { ...current, currentX: point.x, currentY: point.y } : null);
+  }, [motionPointInteraction, pointerPosition, typingDraw, typingSpotInteraction]);
+
+  const finishTypingSpot = useCallback((event: ReactMouseEvent) => {
+    if (motionPointInteraction && lightboxImage) {
+      const point = pointerPosition(event);
+      const interaction = point
+        ? { ...motionPointInteraction, currentX: point.x, currentY: point.y }
+        : motionPointInteraction;
+      setMotionPointInteraction(null);
+      const points = rowsRef.current[lightboxImage.rowIndex]?.motion_points ?? [];
+      updateMotionPoints(lightboxImage.rowIndex, points.map((motionPoint, index) => (
+        index === interaction.index
+          ? { ...motionPoint, x: interaction.currentX, y: interaction.currentY }
+          : motionPoint
+      )));
+      return;
+    }
+    if (typingSpotInteraction && lightboxImage) {
+      const point = pointerPosition(event);
+      const interaction = point
+        ? { ...typingSpotInteraction, currentX: point.x, currentY: point.y }
+        : typingSpotInteraction;
+      const dx = interaction.currentX - interaction.startX;
+      const dy = interaction.currentY - interaction.startY;
+      const initial = interaction.initialSpot;
+      const nextSpot = interaction.kind === "move"
+        ? {
+            ...initial,
+            x: Math.max(0, Math.min(1 - initial.width, initial.x + dx)),
+            y: Math.max(0, Math.min(1 - initial.height, initial.y + dy)),
+          }
+        : {
+            ...initial,
+            width: Math.max(0.02, Math.min(1 - initial.x, initial.width + dx)),
+            height: Math.max(0.02, Math.min(1 - initial.y, initial.height + dy)),
+          };
+      setTypingSpotInteraction(null);
+          const spots = rowsRef.current[lightboxImage.rowIndex]?.typing_spots ?? [];
+          updateTypingSpots(lightboxImage.rowIndex, spots.map((spot, index) => (
+            index === interaction.index ? nextSpot : spot
+          )));
+          return;
+    }
+    if (!typingDraw || !lightboxImage) return;
+    const point = pointerPosition(event);
+    const completed = point ? { ...typingDraw, currentX: point.x, currentY: point.y } : typingDraw;
+    setTypingDraw(null);
+    const x = Math.min(completed.startX, completed.currentX);
+    const y = Math.min(completed.startY, completed.currentY);
+    const width = Math.abs(completed.currentX - completed.startX);
+    const height = Math.abs(completed.currentY - completed.startY);
+    if (width < 0.03 || height < 0.03) return;
+    const spots = rowsRef.current[lightboxImage.rowIndex]?.typing_spots ?? [];
+    updateTypingSpots(lightboxImage.rowIndex, [...spots, {
+      x,
+      y,
+      width: Math.min(width, 1 - x),
+      height: Math.min(height, 1 - y),
+      text: "Type your message",
+      start_offset_ms: 0,
+      duration_ms: null,
+      characters_per_second: 18,
+      show_cursor: true,
+      text_color: "#ffffff",
+      font_family: typingOverlayDefaults.fontFamily,
+      font_scale: typingOverlayDefaults.fontScale,
+    }]);
+    setSelectedTypingSpot(spots.length);
+  }, [lightboxImage, motionPointInteraction, pointerPosition, typingDraw, typingOverlayDefaults, typingSpotInteraction, updateMotionPoints, updateTypingSpots]);
+
+  const updateTypingSpot = useCallback((spotIndex: number, changes: Partial<TypingSpot>) => {
+    if (!lightboxImage) return;
+    const spots = rowsRef.current[lightboxImage.rowIndex]?.typing_spots ?? [];
+    updateTypingSpots(lightboxImage.rowIndex, spots.map((spot, index) => index === spotIndex ? { ...spot, ...changes } : spot));
+  }, [lightboxImage, updateTypingSpots]);
+
+  const beginTypingSpotInteraction = useCallback((
+    event: ReactMouseEvent,
+    index: number,
+    kind: "move" | "resize",
+  ) => {
+    if (readOnly || !lightboxImage) return;
+    const point = pointerPosition(event);
+    const spot = rowsRef.current[lightboxImage.rowIndex]?.typing_spots?.[index];
+    if (!point || !spot) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (selectedTypingSpot !== index) {
+      setSelectedTypingSpot(index);
+      return;
+    }
+    setSelectedTypingSpot(index);
+    setTypingSpotInteraction({
+      kind,
+      index,
+      startX: point.x,
+      startY: point.y,
+      currentX: point.x,
+      currentY: point.y,
+      initialSpot: spot,
+    });
+  }, [lightboxImage, pointerPosition, readOnly, selectedTypingSpot]);
+
+  const beginMotionPointInteraction = useCallback((event: ReactMouseEvent, index: number) => {
+    if (readOnly || !lightboxImage) return;
+    const point = pointerPosition(event);
+    if (!point) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setMotionPointInteraction({
+      index,
+      startX: point.x,
+      startY: point.y,
+      currentX: point.x,
+      currentY: point.y,
+    });
+  }, [lightboxImage, pointerPosition, readOnly]);
+
+  const previewTypingSpot = useCallback((spot: TypingSpot, index: number): TypingSpot => {
+    if (!typingSpotInteraction || typingSpotInteraction.index !== index) return spot;
+    const dx = typingSpotInteraction.currentX - typingSpotInteraction.startX;
+    const dy = typingSpotInteraction.currentY - typingSpotInteraction.startY;
+    if (typingSpotInteraction.kind === "move") {
+      return {
+        ...spot,
+        x: Math.max(0, Math.min(1 - spot.width, spot.x + dx)),
+        y: Math.max(0, Math.min(1 - spot.height, spot.y + dy)),
+      };
+    }
+    return {
+      ...spot,
+      width: Math.max(0.02, Math.min(1 - spot.x, spot.width + dx)),
+      height: Math.max(0.02, Math.min(1 - spot.y, spot.height + dy)),
+    };
+  }, [typingSpotInteraction]);
+
+  const previewMotionPoint = useCallback((point: MotionPoint, index: number): MotionPoint => {
+    if (!motionPointInteraction || motionPointInteraction.index !== index) return point;
+    return {
+      ...point,
+      x: Math.max(0, Math.min(1, motionPointInteraction.currentX)),
+      y: Math.max(0, Math.min(1, motionPointInteraction.currentY)),
+    };
+  }, [motionPointInteraction]);
 
   const removeVisual = useCallback(
     (index: number) => {
@@ -528,25 +803,87 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
             onClick={(e) => e.stopPropagation()}
           >
             <div className="relative flex min-h-0 items-center justify-center bg-[rgb(var(--color-surface-alt))]/55 p-5">
-              <div className="relative max-h-full max-w-full" onClick={addMotionPointFromLightbox}>
+              <div
+                className={`relative max-h-full max-w-full ${spotAuthoringMode === "typing" && !readOnly ? "cursor-crosshair" : ""}`}
+                onClick={addMotionPointFromLightbox}
+                onMouseDown={beginTypingSpot}
+                onMouseMove={moveTypingSpot}
+                onMouseUp={finishTypingSpot}
+              >
                 <img
                   ref={lightboxImageRef}
                   src={lightboxImage.src}
                   alt="Screenshot preview"
                   className="max-h-[calc(100vh-80px)] max-w-full select-none rounded-xl object-contain shadow-2xl"
                   draggable={false}
+                  onLoad={(event) => setLightboxPreviewWidth(event.currentTarget.clientWidth)}
                 />
-                {(rows[lightboxImage.rowIndex]?.motion_points ?? []).map((point) => (
-                  <div
-                    key={point.rank}
-                    className="absolute -translate-x-1/2 -translate-y-1/2"
-                    style={{ left: `${point.x * 100}%`, top: `${point.y * 100}%` }}
-                  >
-                    <div className="grid h-8 w-8 place-items-center rounded-full border-2 border-[rgb(var(--color-accent-fg))] bg-[rgb(var(--color-accent))] text-xs font-semibold text-[rgb(var(--color-accent-fg))] shadow-lg shadow-black/30 ring-4 ring-[rgb(var(--color-accent))]/25">
-                      {point.rank}
+                {(rows[lightboxImage.rowIndex]?.motion_points ?? []).map((point, index) => {
+                  const displayPoint = previewMotionPoint(point, index);
+                  return (
+                    <div
+                      key={point.rank}
+                      className="absolute -translate-x-1/2 -translate-y-1/2"
+                      style={{ left: `${displayPoint.x * 100}%`, top: `${displayPoint.y * 100}%` }}
+                    >
+                      <button
+                        type="button"
+                        onClick={(event) => event.stopPropagation()}
+                        onMouseDown={(event) => beginMotionPointInteraction(event, index)}
+                        className={`grid h-8 w-8 place-items-center rounded-full border-2 border-[rgb(var(--color-accent-fg))] bg-[rgb(var(--color-accent))] text-xs font-semibold text-[rgb(var(--color-accent-fg))] shadow-lg shadow-black/30 ring-4 ring-[rgb(var(--color-accent))]/25 ${readOnly ? "" : "cursor-move"}`}
+                        title="Drag to move camera point"
+                      >
+                        {point.rank}
+                      </button>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
+                {(rows[lightboxImage.rowIndex]?.typing_spots ?? []).map((spot, index) => {
+                  const displaySpot = previewTypingSpot(spot, index);
+                  return (
+                    <button
+                      key={`${spot.x}-${spot.y}-${index}`}
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setSelectedTypingSpot(index);
+                      }}
+                      onMouseDown={(event) => beginTypingSpotInteraction(event, index, "move")}
+                      className={`absolute appearance-none overflow-visible rounded-md p-0 text-left leading-none outline outline-2 shadow-lg transition-colors ${selectedTypingSpot === index ? "outline-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/15" : "outline-white/85 bg-black/45"} ${readOnly ? "" : selectedTypingSpot === index ? "cursor-move" : "cursor-pointer"}`}
+                      style={{ left: `${displaySpot.x * 100}%`, top: `${displaySpot.y * 100}%`, width: `${displaySpot.width * 100}%`, height: `${displaySpot.height * 100}%` }}
+                      title={selectedTypingSpot === index ? "Drag to move selected typing layer" : "Select typing layer"}
+                    >
+                      <span
+                        className="block truncate font-normal leading-none"
+                        style={{
+                          color: spot.text_color ?? "#ffffff",
+                          fontFamily: spot.font_family === "mono" ? "Consolas, 'Courier New', monospace" : spot.font_family === "serif" ? "Georgia, serif" : "'Segoe UI', Arial, sans-serif",
+                          ...typingPreviewLayout(spot, lightboxPreviewWidth),
+                        }}
+                      >
+                        {spot.text || "Typing spot"}
+                      </span>
+                      {!readOnly && selectedTypingSpot === index && (
+                        <span
+                          role="presentation"
+                          onMouseDown={(event) => beginTypingSpotInteraction(event, index, "resize")}
+                          className="absolute right-0 bottom-0 h-3 w-3 cursor-se-resize border-l-2 border-t-2 border-[rgb(var(--color-accent-fg))] bg-[rgb(var(--color-accent))]"
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+                {typingDraw && (
+                  <div
+                    className="pointer-events-none absolute rounded-md border-2 border-dashed border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/15"
+                    style={{
+                      left: `${Math.min(typingDraw.startX, typingDraw.currentX) * 100}%`,
+                      top: `${Math.min(typingDraw.startY, typingDraw.currentY) * 100}%`,
+                      width: `${Math.abs(typingDraw.currentX - typingDraw.startX) * 100}%`,
+                      height: `${Math.abs(typingDraw.currentY - typingDraw.startY) * 100}%`,
+                    }}
+                  />
+                )}
               </div>
             </div>
             <aside className="flex min-h-0 flex-col border-l border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]">
@@ -556,13 +893,32 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                     <Crosshair className="h-4 w-4" />
                   </div>
                   <div>
-                    <div className="text-sm font-semibold text-[rgb(var(--color-text))]">Motion points</div>
+                    <div className="text-sm font-semibold text-[rgb(var(--color-text))]">Motion spots</div>
                     <div className="text-[11px] text-[rgb(var(--color-text-secondary))]">Row {lightboxImage.rowIndex + 1}</div>
                   </div>
                 </div>
                 <p className="mt-3 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
-                  Click the screenshot to mark up to three important points in priority order. Points are saved as relative coordinates.
+                  Camera points and typing overlays share this canvas. Drag existing markers to reposition them; draw a typing box where it belongs in the source frame so it moves and scales with camera motion.
                 </p>
+                <div className="mt-3 grid grid-cols-2 gap-1 rounded-xl bg-[rgb(var(--color-surface-alt))] p-1">
+                  <button
+                    type="button"
+                    onClick={() => setSpotAuthoringMode("motion")}
+                    className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${spotAuthoringMode === "motion" ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm" : "text-[rgb(var(--color-text-secondary))]"}`}
+                  >
+                    <Crosshair className="h-3.5 w-3.5" />
+                    Camera
+                  </button>
+                  <button
+                    type="button"
+                    disabled={readOnly}
+                    onClick={() => setSpotAuthoringMode("typing")}
+                    className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${spotAuthoringMode === "typing" ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] shadow-sm" : "text-[rgb(var(--color-text-secondary))]"}`}
+                  >
+                    <Type className="h-3.5 w-3.5" />
+                    Typing
+                  </button>
+                </div>
                 <div className="mt-3 space-y-2 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/45 p-3">
                   <div>
                     <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">Narrative</div>
@@ -620,6 +976,94 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                     No motion points yet. Click the image to drop point 1.
                   </div>
                 )}
+                <div className="mt-4 border-t border-[rgb(var(--color-border))] pt-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">Typing overlays</div>
+                    <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">{(rows[lightboxImage.rowIndex]?.typing_spots ?? []).length}</span>
+                  </div>
+                  <div className="space-y-1">
+                    {(rows[lightboxImage.rowIndex]?.typing_spots ?? []).map((spot, index) => (
+                      <button
+                        key={`${spot.x}-${spot.y}-${index}`}
+                        type="button"
+                        onClick={() => setSelectedTypingSpot(index)}
+                        className={`flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors ${selectedTypingSpot === index ? "border-[rgb(var(--color-accent))]/55 bg-[rgb(var(--color-accent))]/10" : "border-transparent bg-[rgb(var(--color-surface-alt))]/45 hover:border-[rgb(var(--color-border))]"}`}
+                      >
+                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: spot.text_color ?? "#ffffff" }} />
+                        <span className="min-w-0 flex-1 truncate text-xs font-medium text-[rgb(var(--color-text))]">{spot.text || `Typing layer ${index + 1}`}</span>
+                        <span className="font-mono text-[10px] text-[rgb(var(--color-text-secondary))]">{Math.round((spot.font_scale ?? typingOverlayDefaults.fontScale) * 100)}%</span>
+                      </button>
+                    ))}
+                  </div>
+                  {(rows[lightboxImage.rowIndex]?.typing_spots ?? []).length === 0 && (
+                    <div className="rounded-xl border border-dashed border-[rgb(var(--color-border))] p-3 text-center text-xs leading-5 text-[rgb(var(--color-text-secondary))]">Choose Typing, then drag a box on the screenshot.</div>
+                  )}
+                  {selectedTypingSpot !== null && (rows[lightboxImage.rowIndex]?.typing_spots ?? [])[selectedTypingSpot] && (() => {
+                    const spot = (rows[lightboxImage.rowIndex]?.typing_spots ?? [])[selectedTypingSpot];
+                    const index = selectedTypingSpot;
+                    return (
+                      <div className="mt-3 rounded-xl border border-[rgb(var(--color-accent))]/35 bg-[rgb(var(--color-accent))]/5 p-3">
+                        <div className="mb-2 flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-[rgb(var(--color-text))]">
+                            <Type className="h-3.5 w-3.5 text-[rgb(var(--color-accent))]" />
+                            Layer {index + 1}
+                          </div>
+                          {!readOnly && <button type="button" onClick={() => {
+                            const next = (rowsRef.current[lightboxImage.rowIndex]?.typing_spots ?? []).filter((_, spotIndex) => spotIndex !== index);
+                            updateTypingSpots(lightboxImage.rowIndex, next);
+                            setSelectedTypingSpot(null);
+                          }} className="rounded-lg p-1 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-error))]/10 hover:text-[rgb(var(--color-error))]" aria-label={`Remove typing layer ${index + 1}`}><X className="h-3.5 w-3.5" /></button>}
+                        </div>
+                        <textarea
+                          value={spot.text}
+                          onChange={(event) => updateTypingSpot(index, { text: event.target.value })}
+                          readOnly={readOnly}
+                          maxLength={160}
+                          rows={2}
+                          className="w-full resize-none rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-2 py-1.5 text-xs text-[rgb(var(--color-text))] outline-none focus:border-[rgb(var(--color-accent))]"
+                          aria-label={`Typing text ${index + 1}`}
+                        />
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <label className="text-[10px] text-[rgb(var(--color-text-secondary))]">Start (ms)<input type="number" min="0" value={spot.start_offset_ms ?? 0} onChange={(event) => updateTypingSpot(index, { start_offset_ms: Number(event.target.value) || 0 })} readOnly={readOnly} className="mt-1 w-full rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-1.5 py-1 text-xs text-[rgb(var(--color-text))]" /></label>
+                          <label className="text-[10px] text-[rgb(var(--color-text-secondary))]">Chars/sec<input type="number" min="1" max="80" value={spot.characters_per_second ?? 18} onChange={(event) => updateTypingSpot(index, { characters_per_second: Number(event.target.value) || 18 })} readOnly={readOnly} className="mt-1 w-full rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-1.5 py-1 text-xs text-[rgb(var(--color-text))]" /></label>
+                        </div>
+                        <div className="mt-2">
+                          <div className="mb-1.5 text-[10px] text-[rgb(var(--color-text-secondary))]">Text color</div>
+                          <div className="flex items-center gap-1">
+                            {TYPING_COLOR_PRESETS.map((color) => (
+                              <button key={color} type="button" disabled={readOnly} onClick={() => updateTypingSpot(index, { text_color: color })} className={`h-5 w-5 rounded-full border-2 transition-transform hover:scale-110 disabled:cursor-not-allowed ${spot.text_color === color ? "border-[rgb(var(--color-accent))] ring-2 ring-[rgb(var(--color-accent))]/25" : "border-[rgb(var(--color-border))]"}`} style={{ backgroundColor: color }} aria-label={`Set typing text color to ${color}`} />
+                            ))}
+                            <input
+                              key={spot.text_color ?? "#ffffff"}
+                              type="text"
+                              defaultValue={spot.text_color ?? "#ffffff"}
+                              maxLength={7}
+                              readOnly={readOnly}
+                              onBlur={(event) => {
+                                const value = event.target.value.trim();
+                                if (/^#[0-9a-fA-F]{6}$/.test(value)) updateTypingSpot(index, { text_color: value });
+                              }}
+                              className="ml-auto w-16 rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-1.5 py-1 font-mono text-[10px] text-[rgb(var(--color-text))] outline-none focus:border-[rgb(var(--color-accent))]"
+                              aria-label={`Typing text color ${index + 1}`}
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <label className="min-w-0 text-[10px] text-[rgb(var(--color-text-secondary))]">Font
+                            <select value={spot.font_family ?? typingOverlayDefaults.fontFamily} onChange={(event) => updateTypingSpot(index, { font_family: event.target.value as TypingSpot["font_family"] })} disabled={readOnly} className="mt-1 w-full rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-1.5 py-1 text-xs text-[rgb(var(--color-text))]">
+                              <option value="sans">Sans</option>
+                              <option value="serif">Serif</option>
+                              <option value="mono">Mono</option>
+                            </select>
+                          </label>
+                          <label className="min-w-0 text-[10px] text-[rgb(var(--color-text-secondary))]">Size <span className="font-mono">{Math.round((spot.font_scale ?? typingOverlayDefaults.fontScale) * 100)}%</span>
+                            <input type="range" min="0.4" max="1.8" step="0.1" value={spot.font_scale ?? typingOverlayDefaults.fontScale} onChange={(event) => updateTypingSpot(index, { font_scale: Number(event.target.value) })} disabled={readOnly} className="mt-1 block w-full accent-[rgb(var(--color-accent))]" aria-label={`Typing font size ${index + 1}`} />
+                          </label>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
               <div className="flex items-center justify-between gap-2 border-t border-[rgb(var(--color-border))] px-4 py-3">
                 <button

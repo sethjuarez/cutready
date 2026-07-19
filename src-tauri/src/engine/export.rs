@@ -3,7 +3,7 @@
 use std::{
     ffi::OsStr,
     fs,
-    io::Read,
+    io::{Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     engine::{ffmpeg, narration_preview, project},
-    models::sketch::{MotionPlan, MotionPlanKeyframe, Sketch},
+    models::sketch::{MotionPlan, MotionPlanKeyframe, Sketch, TypingSpot},
 };
 
 const EXPORTS_DIR: &str = "exports";
@@ -37,6 +37,10 @@ const DEFAULT_BACKGROUND_MUSIC_FADE_SECONDS: f64 = 0.5;
 const DEFAULT_VIDEO_ENCODER: &str = "libx264rgb";
 const DEFAULT_VIDEO_PIXEL_FORMAT: &str = "rgb24";
 const DEFAULT_VIDEO_CRF: &str = "0";
+const TYPING_TEXT_PADDING_X: f64 = 12.0;
+const TYPING_TEXT_PADDING_Y: f64 = 8.0;
+const MAX_TYPING_ANIMATION_CHARACTERS: usize = 160;
+const FFMPEG_FILTER_SCRIPT_THRESHOLD_BYTES: usize = 8 * 1024;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SketchVideoExport {
@@ -212,6 +216,7 @@ struct RowSegment {
     audio_duration_seconds: f64,
     duration_seconds: f64,
     motion_plan: Option<MotionPlan>,
+    typing_spots: Vec<TypingSpot>,
 }
 
 pub fn export_sketch_video(
@@ -656,10 +661,7 @@ fn render_title_card(
     settings: &SketchVideoExportSettings,
 ) -> anyhow::Result<()> {
     let duration = format_duration(duration_seconds);
-    let text_dir = output_path
-        .parent()
-        .ok_or_else(|| anyhow::anyhow!("Title card output path has no parent directory"))?;
-    let title_filter = title_card_filter(sketch, text_dir, settings)?;
+    let title_filter = title_card_filter(sketch, settings);
 
     run_ffmpeg(vec![
         "-y".to_string(),
@@ -669,16 +671,27 @@ fn render_title_card(
         "-f".to_string(),
         "lavfi".to_string(),
         "-i".to_string(),
-        format!(
-            "color=c=#faf9f7:s={}x{}:r={}:d={duration}",
-            settings.video_width, settings.video_height, settings.video_fps
-        ),
+        FfmpegFilterGraph::chain([FfmpegFilter::new("color")
+            .named("c", "#faf9f7")
+            .named(
+                "s",
+                FfmpegValue::raw(format!(
+                    "{}x{}",
+                    settings.video_width, settings.video_height
+                )),
+            )
+            .named("r", settings.video_fps.to_string())
+            .named("d", duration.clone())])
+        .render(),
         "-f".to_string(),
         "lavfi".to_string(),
         "-t".to_string(),
         duration,
         "-i".to_string(),
-        "anullsrc=channel_layout=stereo:sample_rate=48000".to_string(),
+        FfmpegFilterGraph::chain([FfmpegFilter::new("anullsrc")
+            .named("channel_layout", "stereo")
+            .named("sample_rate", "48000")])
+        .render(),
         "-map".to_string(),
         "0:v:0".to_string(),
         "-map".to_string(),
@@ -777,6 +790,7 @@ fn collect_row_segments(
                 audio_duration_seconds,
                 duration_seconds,
                 motion_plan: row.motion_plan.clone(),
+                typing_spots: row.typing_spots.clone(),
             })
         })
         .collect()
@@ -790,12 +804,17 @@ fn render_segment(
     let duration = format_duration(segment.duration_seconds);
     let audio_duration = format_duration(segment.audio_duration_seconds);
     let audio_start = format_seconds(segment.audio_start_seconds);
-    let vf = segment
-        .motion_plan
-        .as_ref()
-        .map(|plan| motion_image_video_filter(plan, segment.duration_seconds, settings))
-        .transpose()?
-        .unwrap_or_else(|| still_image_video_filter(settings));
+    let use_looped_image_input = segment.motion_plan.is_none() || !segment.typing_spots.is_empty();
+    let vf = if let Some(plan) = segment.motion_plan.as_ref() {
+        motion_image_video_filter(
+            plan,
+            &segment.typing_spots,
+            segment.duration_seconds,
+            settings,
+        )
+    } else {
+        still_image_video_filter(&segment.typing_spots, segment.duration_seconds, settings)
+    }?;
     let af = narration_audio_filter(&audio_start, &audio_duration, &duration);
     let mut args = vec![
         "-y".to_string(),
@@ -803,7 +822,7 @@ fn render_segment(
         "-loglevel".to_string(),
         "warning".to_string(),
     ];
-    if segment.motion_plan.is_none() {
+    if use_looped_image_input {
         args.extend([
             "-loop".to_string(),
             "1".to_string(),
@@ -836,7 +855,7 @@ fn render_segment(
         "-preset".to_string(),
         "medium".to_string(),
     ]);
-    if segment.motion_plan.is_none() {
+    if use_looped_image_input {
         args.extend(["-tune".to_string(), "stillimage".to_string()]);
     }
     args.extend([
@@ -855,25 +874,41 @@ fn render_segment(
     run_ffmpeg(args)
 }
 
-fn still_image_video_filter(settings: &SketchVideoExportSettings) -> String {
-    format!(
-        "scale={}:{}:force_original_aspect_ratio=decrease:flags=neighbor,\
-         pad={}:{}:(ow-iw)/2:(oh-ih)/2,\
-         fps={},setsar=1,format={}",
-        settings.video_width,
-        settings.video_height,
-        settings.video_width,
-        settings.video_height,
-        settings.video_fps,
-        settings.video_pixel_format
-    )
+fn still_image_video_filter(
+    typing_spots: &[TypingSpot],
+    duration_seconds: f64,
+    settings: &SketchVideoExportSettings,
+) -> anyhow::Result<String> {
+    Ok(FfmpegFilterGraph::chain(still_image_video_filters(
+        typing_spots,
+        duration_seconds,
+        false,
+        settings,
+    )?)
+    .render())
 }
 
 fn motion_image_video_filter(
     plan: &MotionPlan,
+    typing_spots: &[TypingSpot],
     duration_seconds: f64,
     settings: &SketchVideoExportSettings,
 ) -> anyhow::Result<String> {
+    Ok(FfmpegFilterGraph::chain(motion_image_video_filters(
+        plan,
+        typing_spots,
+        duration_seconds,
+        settings,
+    )?)
+    .render())
+}
+
+fn motion_image_video_filters(
+    plan: &MotionPlan,
+    typing_spots: &[TypingSpot],
+    duration_seconds: f64,
+    settings: &SketchVideoExportSettings,
+) -> anyhow::Result<Vec<FfmpegFilter>> {
     let mut keyframes = valid_motion_keyframes(plan);
     if keyframes.len() < 2 {
         anyhow::bail!("Motion plan needs at least two valid keyframes");
@@ -882,56 +917,536 @@ fn motion_image_video_filter(
     let frames = ((duration_seconds.max(MIN_ROW_DURATION_SECONDS) * settings.video_fps as f64)
         .ceil() as u32)
         .max(1);
+    let zoompan_frames = if typing_spots.is_empty() { frames } else { 1 };
     let crop_keyframes = motion_crop_keyframes(&keyframes, frames, settings)?;
     let crop_width = piecewise_crop_expression(&crop_keyframes, |crop| crop.width);
     let crop_x = piecewise_crop_expression(&crop_keyframes, |crop| crop.x);
     let crop_y = piecewise_crop_expression(&crop_keyframes, |crop| crop.y);
-
-    Ok(format!(
-        "scale={}:{}:force_original_aspect_ratio=decrease:flags=lanczos,\
-         pad={}:{}:(ow-iw)/2:(oh-ih)/2,\
-         zoompan=z='1/({crop_width})':x='iw*({crop_x})':y='ih*({crop_y})':d={frames}:s={}x{}:fps={},\
-         setsar=1,format={}",
-        settings.video_width,
-        settings.video_height,
-        settings.video_width,
-        settings.video_height,
-        settings.video_width,
-        settings.video_height,
-        settings.video_fps,
-        settings.video_pixel_format
-    ))
+    let mut filters = image_layout_filters(settings, "lanczos");
+    filters.extend(typing_spot_filters(
+        typing_spots,
+        duration_seconds,
+        false,
+        settings,
+    )?);
+    filters.push(
+        FfmpegFilter::new("zoompan")
+            .named("z", FfmpegExpression::raw(format!("1/({crop_width})")))
+            .named("x", FfmpegExpression::raw(format!("iw*({crop_x})")))
+            .named("y", FfmpegExpression::raw(format!("ih*({crop_y})")))
+            .named("d", zoompan_frames.to_string())
+            .named(
+                "s",
+                FfmpegValue::raw(format!(
+                    "{}x{}",
+                    settings.video_width, settings.video_height
+                )),
+            )
+            .named("fps", settings.video_fps.to_string()),
+    );
+    filters.extend(video_output_filters(settings));
+    Ok(filters)
 }
 
 fn motion_final_frame_video_filter(
     plan: &MotionPlan,
+    typing_spots: &[TypingSpot],
     settings: &SketchVideoExportSettings,
 ) -> anyhow::Result<String> {
+    Ok(FfmpegFilterGraph::chain(motion_final_frame_video_filters(
+        plan,
+        typing_spots,
+        settings,
+    )?)
+    .render())
+}
+
+fn motion_final_frame_video_filters(
+    plan: &MotionPlan,
+    typing_spots: &[TypingSpot],
+    settings: &SketchVideoExportSettings,
+) -> anyhow::Result<Vec<FfmpegFilter>> {
     let mut keyframes = valid_motion_keyframes(plan);
     if keyframes.is_empty() {
         anyhow::bail!("Motion plan needs at least one valid keyframe");
     }
     keyframes.sort_by_key(|keyframe| keyframe.time_ms);
     let crop = motion_crop_rect(keyframes[keyframes.len() - 1], settings.motion_max_scale);
+    let mut filters = image_layout_filters(settings, "lanczos");
+    filters.extend(typing_spot_filters(typing_spots, 0.0, true, settings)?);
+    filters.push(
+        FfmpegFilter::new("zoompan")
+            .named("z", FfmpegExpression::raw(format!("1/{:.6}", crop.width)))
+            .named("x", FfmpegExpression::raw(format!("iw*({:.6})", crop.x)))
+            .named("y", FfmpegExpression::raw(format!("ih*({:.6})", crop.y)))
+            .named("d", "1")
+            .named(
+                "s",
+                FfmpegValue::raw(format!(
+                    "{}x{}",
+                    settings.video_width, settings.video_height
+                )),
+            )
+            .named("fps", settings.video_fps.to_string()),
+    );
+    filters.extend(video_output_filters(settings));
+    Ok(filters)
+}
 
-    Ok(format!(
-        "scale={}:{}:force_original_aspect_ratio=decrease:flags=lanczos,\
-         pad={}:{}:(ow-iw)/2:(oh-ih)/2,\
-         zoompan=z='1/{:.6}':x='iw*({:.6})':y='ih*({:.6})':d=1:s={}x{}:fps={},\
-         fps={},setsar=1,format={}",
-        settings.video_width,
-        settings.video_height,
-        settings.video_width,
-        settings.video_height,
-        crop.width,
-        crop.x,
-        crop.y,
-        settings.video_width,
-        settings.video_height,
-        settings.video_fps,
-        settings.video_fps,
-        settings.video_pixel_format
-    ))
+fn image_layout_filters(
+    settings: &SketchVideoExportSettings,
+    scale_flags: &str,
+) -> Vec<FfmpegFilter> {
+    vec![
+        FfmpegFilter::new("scale")
+            .positional(settings.video_width.to_string())
+            .positional(settings.video_height.to_string())
+            .named("force_original_aspect_ratio", "decrease")
+            .named("flags", scale_flags),
+        FfmpegFilter::new("pad")
+            .positional(settings.video_width.to_string())
+            .positional(settings.video_height.to_string())
+            .positional(FfmpegExpression::raw("(ow-iw)/2"))
+            .positional(FfmpegExpression::raw("(oh-ih)/2")),
+    ]
+}
+
+fn video_output_filters(settings: &SketchVideoExportSettings) -> Vec<FfmpegFilter> {
+    vec![
+        FfmpegFilter::new("fps").positional(settings.video_fps.to_string()),
+        FfmpegFilter::new("setsar").positional("1"),
+        FfmpegFilter::new("format").positional(settings.video_pixel_format.clone()),
+    ]
+}
+
+fn still_image_video_filters(
+    typing_spots: &[TypingSpot],
+    duration_seconds: f64,
+    completed: bool,
+    settings: &SketchVideoExportSettings,
+) -> anyhow::Result<Vec<FfmpegFilter>> {
+    let mut filters = image_layout_filters(settings, "neighbor");
+    filters.extend(typing_spot_filters(
+        typing_spots,
+        duration_seconds,
+        completed,
+        settings,
+    )?);
+    filters.extend(video_output_filters(settings));
+    Ok(filters)
+}
+
+fn typing_spot_filters(
+    typing_spots: &[TypingSpot],
+    duration_seconds: f64,
+    completed: bool,
+    settings: &SketchVideoExportSettings,
+) -> anyhow::Result<Vec<FfmpegFilter>> {
+    let mut filters = Vec::new();
+    for spot in typing_spots {
+        let text = spot.text.trim();
+        if text.is_empty()
+            || !spot.x.is_finite()
+            || !spot.y.is_finite()
+            || !spot.width.is_finite()
+            || !spot.height.is_finite()
+        {
+            continue;
+        }
+        let character_count = text.chars().count();
+        if character_count > MAX_TYPING_ANIMATION_CHARACTERS {
+            anyhow::bail!(
+                "Typing overlays support up to {MAX_TYPING_ANIMATION_CHARACTERS} characters"
+            );
+        }
+
+        let x = f64::from(spot.x).clamp(0.0, 1.0);
+        let y = f64::from(spot.y).clamp(0.0, 1.0);
+        let width = f64::from(spot.width).clamp(0.02, 1.0 - x);
+        let height = f64::from(spot.height).clamp(0.02, 1.0 - y);
+        let padding_x = TYPING_TEXT_PADDING_X.min(width * f64::from(settings.video_width) / 4.0);
+        let padding_y = TYPING_TEXT_PADDING_Y.min(height * f64::from(settings.video_height) / 4.0);
+        let content_x = x + padding_x / f64::from(settings.video_width);
+        let content_y = y + padding_y / f64::from(settings.video_height);
+        let content_width = (width * f64::from(settings.video_width) - 2.0 * padding_x).max(1.0);
+        let content_height = (height * f64::from(settings.video_height) - 2.0 * padding_y).max(1.0);
+        let requested_start = f64::from(spot.start_offset_ms.unwrap_or(0)) / 1_000.0;
+        let configured_characters_per_second =
+            f64::from(spot.characters_per_second.unwrap_or(18.0)).clamp(1.0, 80.0);
+        let configured_reveal_duration = spot
+            .duration_ms
+            .map(|duration_ms| f64::from(duration_ms) / 1_000.0);
+        let (start, characters_per_second, end) = if completed {
+            (
+                requested_start,
+                configured_characters_per_second,
+                duration_seconds,
+            )
+        } else {
+            constrained_typing_timing(
+                character_count,
+                requested_start,
+                configured_reveal_duration,
+                configured_characters_per_second,
+                duration_seconds,
+                settings.video_fps,
+            )
+        };
+        let max_font_size_for_width = content_width / (character_count.max(1) as f64 * 0.65);
+        let font_size = ((content_height * 0.68).min(max_font_size_for_width)
+            * typing_spot_font_scale(spot.font_scale))
+        .clamp(18.0, 96.0);
+        let text_color = typing_spot_text_color(spot.text_color.as_deref());
+        let prefixes = if completed {
+            vec![text.to_string()]
+        } else {
+            text.chars()
+                .take(MAX_TYPING_ANIMATION_CHARACTERS)
+                .scan(String::new(), |prefix, character| {
+                    prefix.push(character);
+                    Some(prefix.clone())
+                })
+                .collect::<Vec<_>>()
+        };
+        let fontfile = typing_spot_fontfile(spot.font_family.as_deref());
+        for (index, prefix) in prefixes.iter().enumerate() {
+            let reveal_at = start + index as f64 / characters_per_second;
+            let visible_until = if index + 1 == prefixes.len() {
+                end
+            } else {
+                start + (index + 1) as f64 / characters_per_second
+            };
+            let visible_text = if !completed && spot.show_cursor.unwrap_or(true) {
+                format!("{prefix}|")
+            } else {
+                prefix.clone()
+            };
+            let visible_text = safe_drawtext_text(&visible_text);
+            let mut filter = FfmpegFilter::new("drawtext");
+            if let Some(fontfile) = &fontfile {
+                filter = filter.named("fontfile", FfmpegValue::font_path(fontfile));
+            }
+            filter = filter
+                .named("fontcolor", text_color.clone())
+                .named("fontsize", format!("{font_size:.1}"))
+                .named("x", FfmpegExpression::raw(format!("w*{content_x:.6}")))
+                .named(
+                    "y",
+                    FfmpegExpression::raw(format!("h*{content_y:.6}+ascent")),
+                )
+                .named("text", FfmpegValue::text(visible_text));
+            if !completed {
+                filter = filter.named(
+                    "enable",
+                    FfmpegExpression::call(
+                        "between",
+                        [
+                            FfmpegExpression::raw("t"),
+                            FfmpegExpression::raw(format!("{reveal_at:.3}")),
+                            FfmpegExpression::raw(format!("{visible_until:.3}")),
+                        ],
+                    ),
+                );
+            }
+            filters.push(filter);
+        }
+    }
+    Ok(filters)
+}
+
+fn constrained_typing_timing(
+    character_count: usize,
+    requested_start: f64,
+    configured_reveal_duration: Option<f64>,
+    configured_characters_per_second: f64,
+    duration_seconds: f64,
+    video_fps: u32,
+) -> (f64, f64, f64) {
+    let frame_duration = 1.0 / f64::from(video_fps.max(1));
+    let end = duration_seconds.max(MIN_ROW_DURATION_SECONDS);
+    let start = requested_start.clamp(0.0, (end - frame_duration).max(0.0));
+    let available_reveal_duration = (end - start).max(frame_duration);
+    let desired_reveal_duration = configured_reveal_duration
+        .unwrap_or(character_count as f64 / configured_characters_per_second)
+        .max(frame_duration);
+    let reveal_duration = desired_reveal_duration.min(available_reveal_duration);
+    let characters_per_second = character_count as f64 / reveal_duration;
+    (start, characters_per_second, end)
+}
+
+fn safe_drawtext_text(value: &str) -> String {
+    value.replace('\'', "\u{2019}")
+}
+
+struct FfmpegFilterGraph {
+    chains: Vec<FfmpegFilterChain>,
+}
+
+impl FfmpegFilterGraph {
+    fn new() -> Self {
+        Self { chains: Vec::new() }
+    }
+
+    fn chain(filters: impl IntoIterator<Item = FfmpegFilter>) -> Self {
+        let mut graph = Self::new();
+        graph.push_chain(FfmpegFilterChain::new(filters));
+        graph
+    }
+
+    fn push_chain(&mut self, chain: FfmpegFilterChain) {
+        self.chains.push(chain);
+    }
+
+    fn render(self) -> String {
+        self.chains
+            .into_iter()
+            .map(FfmpegFilterChain::render)
+            .filter(|chain| !chain.is_empty())
+            .collect::<Vec<_>>()
+            .join(";")
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct FfmpegExpression(String);
+
+impl FfmpegExpression {
+    fn raw(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    fn call(name: &str, arguments: impl IntoIterator<Item = FfmpegExpression>) -> Self {
+        let arguments = arguments
+            .into_iter()
+            .map(|argument| argument.0)
+            .collect::<Vec<_>>()
+            .join(r"\,");
+        Self(format!("{name}({arguments})"))
+    }
+}
+
+impl std::fmt::Display for FfmpegExpression {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl From<FfmpegExpression> for FfmpegValue {
+    fn from(value: FfmpegExpression) -> Self {
+        Self::Expression(value)
+    }
+}
+
+enum FfmpegValue {
+    Raw(String),
+    Expression(FfmpegExpression),
+    Text(String),
+    FilePath(PathBuf),
+    FontPath(PathBuf),
+}
+
+impl FfmpegValue {
+    fn raw(value: impl Into<String>) -> Self {
+        Self::Raw(value.into())
+    }
+
+    fn text(value: impl Into<String>) -> Self {
+        Self::Text(value.into())
+    }
+
+    fn file_path(path: impl AsRef<Path>) -> Self {
+        Self::FilePath(path.as_ref().to_path_buf())
+    }
+
+    fn font_path(path: impl AsRef<Path>) -> Self {
+        Self::FontPath(path.as_ref().to_path_buf())
+    }
+
+    fn render(self) -> String {
+        match self {
+            Self::Raw(value) => value,
+            Self::Expression(expression) => format!("'{}'", expression.0),
+            Self::Text(value) => format!("'{}'", escape_filter_text(&value)),
+            Self::FilePath(path) => format!("'{}'", escape_filter_path(&path, false)),
+            Self::FontPath(path) => format!("'{}'", escape_filter_path(&path, true)),
+        }
+    }
+}
+
+impl From<&str> for FfmpegValue {
+    fn from(value: &str) -> Self {
+        Self::raw(value)
+    }
+}
+
+impl From<String> for FfmpegValue {
+    fn from(value: String) -> Self {
+        Self::raw(value)
+    }
+}
+
+struct FfmpegFilter {
+    inputs: Vec<FfmpegLabel>,
+    name: String,
+    options: Vec<(Option<String>, FfmpegValue)>,
+    outputs: Vec<FfmpegLabel>,
+}
+
+impl FfmpegFilter {
+    fn new(name: impl Into<String>) -> Self {
+        Self {
+            inputs: Vec::new(),
+            name: name.into(),
+            options: Vec::new(),
+            outputs: Vec::new(),
+        }
+    }
+
+    fn input(mut self, label: impl Into<FfmpegLabel>) -> Self {
+        self.inputs.push(label.into());
+        self
+    }
+
+    fn output(mut self, label: impl Into<FfmpegLabel>) -> Self {
+        self.outputs.push(label.into());
+        self
+    }
+
+    fn named(mut self, name: impl Into<String>, value: impl Into<FfmpegValue>) -> Self {
+        self.options.push((Some(name.into()), value.into()));
+        self
+    }
+
+    fn positional(mut self, value: impl Into<FfmpegValue>) -> Self {
+        self.options.push((None, value.into()));
+        self
+    }
+
+    fn render(self) -> String {
+        let inputs = self
+            .inputs
+            .into_iter()
+            .map(|label| format!("[{}]", label.0))
+            .collect::<String>();
+        let options = self
+            .options
+            .into_iter()
+            .map(|(name, value)| match name {
+                Some(name) => format!("{name}={}", value.render()),
+                None => value.render(),
+            })
+            .collect::<Vec<_>>()
+            .join(":");
+        let outputs = self
+            .outputs
+            .into_iter()
+            .map(|label| format!("[{}]", label.0))
+            .collect::<String>();
+        if options.is_empty() {
+            format!("{inputs}{}{outputs}", self.name)
+        } else {
+            format!("{inputs}{}={options}{outputs}", self.name)
+        }
+    }
+}
+
+#[derive(Clone)]
+struct FfmpegLabel(String);
+
+impl From<&str> for FfmpegLabel {
+    fn from(value: &str) -> Self {
+        Self(value.to_string())
+    }
+}
+
+impl From<String> for FfmpegLabel {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+struct FfmpegFilterChain {
+    filters: Vec<FfmpegFilter>,
+}
+
+impl FfmpegFilterChain {
+    fn new(filters: impl IntoIterator<Item = FfmpegFilter>) -> Self {
+        Self {
+            filters: filters.into_iter().collect(),
+        }
+    }
+
+    fn render(self) -> String {
+        self.filters
+            .into_iter()
+            .map(FfmpegFilter::render)
+            .collect::<Vec<_>>()
+            .join(",")
+    }
+}
+
+fn typing_spot_text_color(value: Option<&str>) -> String {
+    let value = value.unwrap_or("#ffffff").trim();
+    let hex = value.strip_prefix('#').unwrap_or(value);
+    if hex.len() == 6 && hex.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        format!("0x{hex}")
+    } else {
+        "white".to_string()
+    }
+}
+
+fn typing_spot_font_scale(value: Option<f32>) -> f64 {
+    f64::from(value.unwrap_or(1.0)).clamp(0.4, 1.8)
+}
+
+fn typing_spot_fontfile(family: Option<&str>) -> Option<PathBuf> {
+    let candidates = match family.unwrap_or("sans") {
+        "serif" => [
+            #[cfg(target_os = "windows")]
+            PathBuf::from(r"C:\Windows\Fonts\georgia.ttf"),
+            #[cfg(target_os = "macos")]
+            PathBuf::from("/System/Library/Fonts/Supplemental/Georgia.ttf"),
+            #[cfg(target_os = "linux")]
+            PathBuf::from("/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"),
+        ],
+        "mono" => [
+            #[cfg(target_os = "windows")]
+            PathBuf::from(r"C:\Windows\Fonts\consola.ttf"),
+            #[cfg(target_os = "macos")]
+            PathBuf::from("/System/Library/Fonts/Supplemental/Courier New.ttf"),
+            #[cfg(target_os = "linux")]
+            PathBuf::from("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"),
+        ],
+        _ => return title_card_fontfile(),
+    };
+    candidates.into_iter().find(|path| path.is_file())
+}
+
+fn escape_filter_text(value: &str) -> String {
+    value
+        .replace('\\', r"\\")
+        .replace('\'', r"\\'")
+        .replace(':', r"\:")
+        .replace('%', r"\%")
+        .replace(',', r"\,")
+        .replace('[', r"\[")
+        .replace(']', r"\]")
+        .replace('\n', r"\n")
+}
+
+fn escape_filter_path(path: &Path, strip_windows_drive_prefix: bool) -> String {
+    let mut normalized = path
+        .to_string_lossy()
+        .replace(std::path::MAIN_SEPARATOR, "/");
+    #[cfg(target_os = "windows")]
+    if strip_windows_drive_prefix
+        && normalized.len() >= 3
+        && normalized.as_bytes()[1] == b':'
+        && normalized.as_bytes()[2] == b'/'
+    {
+        normalized.replace_range(..2, "");
+    }
+    escape_filter_text(&normalized)
 }
 
 #[derive(Clone, Copy)]
@@ -989,19 +1504,46 @@ fn piecewise_crop_expression(
     value: impl Fn(MotionCropRect) -> f64,
 ) -> String {
     let (_, last_crop) = crop_keyframes[crop_keyframes.len() - 1];
-    let mut expression = format!("{:.6}", value(last_crop));
+    let mut expression = FfmpegExpression::raw(format!("{:.6}", value(last_crop)));
     for window in crop_keyframes.windows(2).rev() {
         let (start_frame, start_crop) = window[0];
         let (end_frame, end_crop) = window[1];
         let span = end_frame.saturating_sub(start_frame).max(1);
         let start_value = value(start_crop);
         let end_value = value(end_crop);
-        let segment = format!(
-            "{start_value:.6}+(({end_value:.6}-{start_value:.6})*(min(max(on-{start_frame},0)/{span},1)))"
+        let clamped_frame = FfmpegExpression::call(
+            "max",
+            [
+                FfmpegExpression::raw(format!("on-{start_frame}")),
+                FfmpegExpression::raw("0"),
+            ],
         );
-        expression = format!("if(lte(on,{end_frame}),{segment},{expression})");
+        let progress = FfmpegExpression::call(
+            "min",
+            [
+                FfmpegExpression::raw(format!("{clamped_frame}/{span}")),
+                FfmpegExpression::raw("1"),
+            ],
+        );
+        let segment = FfmpegExpression::raw(format!(
+            "{start_value:.6}+(({end_value:.6}-{start_value:.6})*({progress}))"
+        ));
+        expression = FfmpegExpression::call(
+            "if",
+            [
+                FfmpegExpression::call(
+                    "lte",
+                    [
+                        FfmpegExpression::raw("on"),
+                        FfmpegExpression::raw(end_frame.to_string()),
+                    ],
+                ),
+                segment,
+                expression,
+            ],
+        );
     }
-    expression
+    expression.0
 }
 
 fn narration_audio_filter(
@@ -1009,9 +1551,17 @@ fn narration_audio_filter(
     audio_duration: &str,
     output_duration: &str,
 ) -> String {
-    format!(
-        "atrim=start={audio_start}:duration={audio_duration},asetpts=PTS-STARTPTS,apad,atrim=duration={output_duration},aresample=48000,aformat=channel_layouts=stereo"
-    )
+    FfmpegFilterGraph::chain([
+        FfmpegFilter::new("atrim")
+            .named("start", audio_start)
+            .named("duration", audio_duration),
+        FfmpegFilter::new("asetpts").positional("PTS-STARTPTS"),
+        FfmpegFilter::new("apad"),
+        FfmpegFilter::new("atrim").named("duration", output_duration),
+        FfmpegFilter::new("aresample").positional("48000"),
+        FfmpegFilter::new("aformat").named("channel_layouts", "stereo"),
+    ])
+    .render()
 }
 
 fn render_image_hold_segment(
@@ -1024,7 +1574,7 @@ fn render_image_hold_segment(
         image_path,
         duration_seconds,
         output_path,
-        still_image_video_filter(settings),
+        still_image_video_filters(&[], duration_seconds, true, settings)?,
         settings,
     )
 }
@@ -1037,22 +1587,21 @@ fn render_segment_hold(
     transition: HoldTransition,
     settings: &SketchVideoExportSettings,
 ) -> anyhow::Result<()> {
-    let base_filter = if hold_final_motion_frame {
-        segment
-            .motion_plan
-            .as_ref()
-            .map(|plan| motion_final_frame_video_filter(plan, settings))
-            .transpose()?
-            .unwrap_or_else(|| still_image_video_filter(settings))
+    let base_filters = if hold_final_motion_frame {
+        if let Some(plan) = segment.motion_plan.as_ref() {
+            motion_final_frame_video_filters(plan, &segment.typing_spots, settings)?
+        } else {
+            still_image_video_filters(&segment.typing_spots, duration_seconds, true, settings)?
+        }
     } else {
-        still_image_video_filter(settings)
+        still_image_video_filters(&segment.typing_spots, duration_seconds, true, settings)?
     };
-    let filter = hold_video_filter(base_filter, duration_seconds, transition, settings);
+    let filters = hold_video_filters(base_filters, duration_seconds, transition, settings);
     render_image_hold_segment_with_filter(
         &segment.image_path,
         duration_seconds,
         output_path,
-        filter,
+        filters,
         settings,
     )
 }
@@ -1064,29 +1613,38 @@ enum HoldTransition {
     FadeInFromBlack,
 }
 
-fn hold_video_filter(
-    base_filter: String,
+fn hold_video_filters(
+    mut filters: Vec<FfmpegFilter>,
     duration_seconds: f64,
     transition: HoldTransition,
     settings: &SketchVideoExportSettings,
-) -> String {
+) -> Vec<FfmpegFilter> {
     let fade_duration = duration_seconds
         .min(settings.row_transition_dip_seconds)
         .max(MIN_ROW_DURATION_SECONDS);
     match transition {
-        HoldTransition::None => base_filter,
+        HoldTransition::None => filters,
         HoldTransition::FadeOutToBlack => {
             let start = (duration_seconds - fade_duration).max(0.0);
-            format!(
-                "{base_filter},fade=t=out:st={}:d={}:color=black",
-                format_seconds(start),
-                format_seconds(fade_duration)
-            )
+            filters.push(
+                FfmpegFilter::new("fade")
+                    .named("t", "out")
+                    .named("st", format_seconds(start))
+                    .named("d", format_seconds(fade_duration))
+                    .named("color", "black"),
+            );
+            filters
         }
-        HoldTransition::FadeInFromBlack => format!(
-            "{base_filter},fade=t=in:st=0:d={}:color=black",
-            format_seconds(fade_duration)
-        ),
+        HoldTransition::FadeInFromBlack => {
+            filters.push(
+                FfmpegFilter::new("fade")
+                    .named("t", "in")
+                    .named("st", "0")
+                    .named("d", format_seconds(fade_duration))
+                    .named("color", "black"),
+            );
+            filters
+        }
     }
 }
 
@@ -1094,7 +1652,7 @@ fn render_image_hold_segment_with_filter(
     image_path: &Path,
     duration_seconds: f64,
     output_path: &Path,
-    video_filter: String,
+    video_filters: Vec<FfmpegFilter>,
     settings: &SketchVideoExportSettings,
 ) -> anyhow::Result<()> {
     let duration = format_duration(duration_seconds);
@@ -1116,13 +1674,16 @@ fn render_image_hold_segment_with_filter(
         "-t".to_string(),
         duration,
         "-i".to_string(),
-        "anullsrc=channel_layout=stereo:sample_rate=48000".to_string(),
+        FfmpegFilterGraph::chain([FfmpegFilter::new("anullsrc")
+            .named("channel_layout", "stereo")
+            .named("sample_rate", "48000")])
+        .render(),
         "-map".to_string(),
         "0:v:0".to_string(),
         "-map".to_string(),
         "1:a:0".to_string(),
         "-vf".to_string(),
-        video_filter,
+        FfmpegFilterGraph::chain(video_filters).render(),
         "-c:v".to_string(),
         settings.video_encoder.clone(),
         "-preset".to_string(),
@@ -1198,7 +1759,10 @@ fn concatenate_segments(
         "-ar".to_string(),
         "48000".to_string(),
         "-af".to_string(),
-        "aresample=async=1:first_pts=0".to_string(),
+        FfmpegFilterGraph::chain([FfmpegFilter::new("aresample")
+            .named("async", "1")
+            .named("first_pts", "0")])
+        .render(),
         "-movflags".to_string(),
         "+faststart".to_string(),
         concatenated_output_path.to_string_lossy().to_string(),
@@ -1307,7 +1871,10 @@ fn render_background_music_preview_audio(
             "-t".to_string(),
             duration,
             "-i".to_string(),
-            "anullsrc=r=48000:cl=stereo".to_string(),
+            FfmpegFilterGraph::chain([FfmpegFilter::new("anullsrc")
+                .named("r", "48000")
+                .named("cl", "stereo")])
+            .render(),
         ]);
     }
     args.extend([
@@ -1352,19 +1919,28 @@ fn background_music_preview_filter(
     fade_out_start: f64,
     settings: &SketchVideoExportSettings,
 ) -> String {
-    let narration = format!(
-        "[0:a]apad,atrim=0:{duration},asetpts=PTS-STARTPTS,aformat=channel_layouts=stereo[previewNarration];"
-    );
-    format!(
-        "{narration}{}",
-        background_music_filter_with_narration_label(
-            duration,
-            fade_duration,
-            fade_out_start,
-            settings,
-            "previewNarration",
-        )
-    )
+    let mut graph = FfmpegFilterGraph::new();
+    graph.push_chain(FfmpegFilterChain::new([
+        FfmpegFilter::new("apad").input("0:a"),
+        FfmpegFilter::new("atrim")
+            .positional("0")
+            .positional(duration.clone()),
+        FfmpegFilter::new("asetpts").positional("PTS-STARTPTS"),
+        FfmpegFilter::new("aformat")
+            .named("channel_layouts", "stereo")
+            .output("previewNarration"),
+    ]));
+    graph.push_chain(background_music_filter_chain(
+        duration,
+        fade_duration,
+        fade_out_start,
+        settings,
+    ));
+    graph.push_chain(background_music_mix_chain(
+        "previewNarration",
+        settings.background_music_duck_narration,
+    ));
+    graph.render()
 }
 
 fn background_music_filter_with_narration_label(
@@ -1374,34 +1950,88 @@ fn background_music_filter_with_narration_label(
     settings: &SketchVideoExportSettings,
     narration_label: &str,
 ) -> String {
-    let mut music_filter = format!(
-        "[1:a]atrim=0:{duration},asetpts=PTS-STARTPTS,volume={}dB",
-        settings.background_music_volume_db
-    );
+    let mut graph = FfmpegFilterGraph::new();
+    graph.push_chain(background_music_filter_chain(
+        duration,
+        fade_duration,
+        fade_out_start,
+        settings,
+    ));
+    graph.push_chain(background_music_mix_chain(
+        narration_label,
+        settings.background_music_duck_narration,
+    ));
+    graph.render()
+}
+
+fn background_music_filter_chain(
+    duration: String,
+    fade_duration: f64,
+    fade_out_start: f64,
+    settings: &SketchVideoExportSettings,
+) -> FfmpegFilterChain {
+    let mut music_filters = vec![
+        FfmpegFilter::new("atrim")
+            .input("1:a")
+            .positional("0")
+            .positional(duration),
+        FfmpegFilter::new("asetpts").positional("PTS-STARTPTS"),
+        FfmpegFilter::new("volume").positional(FfmpegValue::raw(format!(
+            "{}dB",
+            settings.background_music_volume_db
+        ))),
+    ];
     if fade_duration > 0.0 {
-        music_filter.push_str(&format!(
-            ",afade=t=in:st=0:d={},afade=t=out:st={}:d={}",
-            format_duration(fade_duration),
-            format_duration(fade_out_start),
-            format_duration(fade_duration)
-        ));
+        music_filters.extend([
+            FfmpegFilter::new("afade")
+                .named("t", "in")
+                .named("st", "0")
+                .named("d", format_duration(fade_duration)),
+            FfmpegFilter::new("afade")
+                .named("t", "out")
+                .named("st", format_duration(fade_out_start))
+                .named("d", format_duration(fade_duration)),
+        ]);
     }
-    if settings.background_music_duck_narration {
-        format!(
-            "{music_filter}[music];[music][{narration_label}]sidechaincompress=threshold=0.035:ratio=8:attack=20:release=350[ducked];[{narration_label}][ducked]amix=inputs=2:duration=first:dropout_transition=0[a]"
-        )
+    music_filters
+        .last_mut()
+        .unwrap()
+        .outputs
+        .push("music".into());
+    FfmpegFilterChain::new(music_filters)
+}
+
+fn background_music_mix_chain(narration_label: &str, duck_narration: bool) -> FfmpegFilterChain {
+    if duck_narration {
+        FfmpegFilterChain::new([
+            FfmpegFilter::new("sidechaincompress")
+                .input("music")
+                .input(narration_label)
+                .named("threshold", "0.035")
+                .named("ratio", "8")
+                .named("attack", "20")
+                .named("release", "350")
+                .output("ducked"),
+            FfmpegFilter::new("amix")
+                .input(narration_label)
+                .input("ducked")
+                .named("inputs", "2")
+                .named("duration", "first")
+                .named("dropout_transition", "0")
+                .output("a"),
+        ])
     } else {
-        format!(
-            "{music_filter}[music];[{narration_label}][music]amix=inputs=2:duration=first:dropout_transition=0[a]"
-        )
+        FfmpegFilterChain::new([FfmpegFilter::new("amix")
+            .input(narration_label)
+            .input("music")
+            .named("inputs", "2")
+            .named("duration", "first")
+            .named("dropout_transition", "0")
+            .output("a")])
     }
 }
 
-fn title_card_filter(
-    sketch: &Sketch,
-    text_dir: &Path,
-    settings: &SketchVideoExportSettings,
-) -> anyhow::Result<String> {
+fn title_card_filter(sketch: &Sketch, settings: &SketchVideoExportSettings) -> String {
     let title = if sketch.title.trim().is_empty() {
         "Untitled Sketch"
     } else {
@@ -1432,29 +2062,25 @@ fn title_card_filter(
 
     let mut filters = Vec::new();
     for (index, line) in title_lines.iter().enumerate() {
-        let text_file = write_drawtext_file(text_dir, "title", index, line)?;
         filters.push(drawtext_filter(
             font_path.as_deref(),
-            &text_file,
+            line,
             72,
             "#2b2926",
             title_start_y + (index as i32 * title_line_height),
         ));
     }
     for (index, line) in description_lines.iter().enumerate() {
-        let text_file = write_drawtext_file(text_dir, "description", index, line)?;
         filters.push(drawtext_filter(
             font_path.as_deref(),
-            &text_file,
+            line,
             30,
             "#6f6760",
             description_start_y + (index as i32 * description_line_height),
         ));
     }
-    filters.push(format!("fps={}", settings.video_fps));
-    filters.push("setsar=1".to_string());
-    filters.push(format!("format={}", settings.video_pixel_format));
-    Ok(filters.join(","))
+    filters.extend(video_output_filters(settings));
+    FfmpegFilterGraph::chain(filters).render()
 }
 
 fn description_text(value: &serde_json::Value) -> String {
@@ -1542,32 +2168,21 @@ fn wrap_text(value: &str, max_chars: usize, max_lines: usize) -> Vec<String> {
 
 fn drawtext_filter(
     font_path: Option<&Path>,
-    text_file: &Path,
+    text: &str,
     font_size: u32,
     color: &str,
     y: i32,
-) -> String {
-    let fontfile =
-        font_path.map(|path| format!(":fontfile='{}'", ffmpeg_filter_font_path_escape(path)));
-    format!(
-        "drawtext=textfile='{}'{}:fontcolor={}:fontsize={}:x=(w-text_w)/2:y={}",
-        ffmpeg_filter_file_path_escape(text_file),
-        fontfile.unwrap_or_default(),
-        color,
-        font_size,
-        y
-    )
-}
-
-fn write_drawtext_file(
-    text_dir: &Path,
-    kind: &str,
-    index: usize,
-    text: &str,
-) -> anyhow::Result<PathBuf> {
-    let path = text_dir.join(format!("title-card-{kind}-{index:02}.txt"));
-    fs::write(&path, text.as_bytes())?;
-    Ok(path)
+) -> FfmpegFilter {
+    let mut filter =
+        FfmpegFilter::new("drawtext").named("text", FfmpegValue::text(safe_drawtext_text(text)));
+    if let Some(font_path) = font_path {
+        filter = filter.named("fontfile", FfmpegValue::font_path(font_path));
+    }
+    filter
+        .named("fontcolor", color)
+        .named("fontsize", font_size.to_string())
+        .named("x", FfmpegExpression::raw("(w-text_w)/2"))
+        .named("y", y.to_string())
 }
 
 fn title_card_fontfile() -> Option<PathBuf> {
@@ -1581,40 +2196,6 @@ fn title_card_fontfile() -> Option<PathBuf> {
     ]
     .into_iter()
     .find(|path| path.is_file())
-}
-
-fn ffmpeg_filter_escape(value: &str) -> String {
-    value
-        .replace('\\', r"\\")
-        .replace('\'', r"\'")
-        .replace(':', r"\:")
-        .replace('%', r"\%")
-        .replace(',', r"\,")
-        .replace('[', r"\[")
-        .replace(']', r"\]")
-}
-
-fn ffmpeg_filter_file_path_escape(path: &Path) -> String {
-    let normalized = path
-        .to_string_lossy()
-        .replace(std::path::MAIN_SEPARATOR, "/");
-    ffmpeg_filter_escape(&normalized)
-}
-
-fn ffmpeg_filter_font_path_escape(path: &Path) -> String {
-    let mut normalized = path
-        .to_string_lossy()
-        .replace(std::path::MAIN_SEPARATOR, "/");
-    #[cfg(target_os = "windows")]
-    {
-        if normalized.len() >= 3
-            && normalized.as_bytes()[1] == b':'
-            && normalized.as_bytes()[2] == b'/'
-        {
-            normalized.replace_range(..2, "");
-        }
-    }
-    ffmpeg_filter_escape(&normalized)
 }
 
 fn ensure_ffmpeg_available() -> anyhow::Result<()> {
@@ -1670,7 +2251,36 @@ fn effective_source_duration_seconds(
 }
 
 fn run_ffmpeg(args: Vec<String>) -> anyhow::Result<()> {
-    let output = ffmpeg::run_ffmpeg(args)?;
+    let diagnostics = FfmpegFilterDiagnostics::from_args(&args);
+    let mut args = args;
+    let _filter_scripts = match offload_large_filter_arguments(&mut args) {
+        Ok(scripts) => scripts,
+        Err(error) => {
+            log_ffmpeg_failure(
+                None,
+                &error.to_string(),
+                "",
+                "",
+                &diagnostics,
+                "FFmpeg filter script preparation failed",
+            );
+            return Err(error);
+        }
+    };
+    let output = match ffmpeg::run_ffmpeg(&args) {
+        Ok(output) => output,
+        Err(error) => {
+            log_ffmpeg_failure(
+                None,
+                &error.to_string(),
+                "",
+                "",
+                &diagnostics,
+                "FFmpeg export command could not start",
+            );
+            return Err(error);
+        }
+    };
     if output.status.success() {
         return Ok(());
     }
@@ -1683,13 +2293,133 @@ fn run_ffmpeg(args: Vec<String>) -> anyhow::Result<()> {
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>();
-    let message = lines
+    let message = ffmpeg_failure_message(&lines);
+    log_ffmpeg_failure(
+        output.status.code(),
+        message,
+        stderr.trim(),
+        stdout.trim(),
+        &diagnostics,
+        "FFmpeg export command failed",
+    );
+    anyhow::bail!("{message}");
+}
+
+struct FfmpegFilterDiagnostics {
+    video_filter: Option<String>,
+    audio_filter: Option<String>,
+    complex_filter: Option<String>,
+}
+
+impl FfmpegFilterDiagnostics {
+    fn from_args(args: &[String]) -> Self {
+        Self {
+            video_filter: ffmpeg_filter_argument(args, "-vf").map(str::to_string),
+            audio_filter: ffmpeg_filter_argument(args, "-af").map(str::to_string),
+            complex_filter: ffmpeg_filter_argument(args, "-filter_complex").map(str::to_string),
+        }
+    }
+}
+
+fn log_ffmpeg_failure(
+    status: Option<i32>,
+    message: &str,
+    stderr: &str,
+    stdout: &str,
+    diagnostics: &FfmpegFilterDiagnostics,
+    event: &'static str,
+) {
+    tracing::error!(
+        ffmpeg_status = ?status,
+        ffmpeg_message = %message,
+        ffmpeg_stderr = %stderr,
+        ffmpeg_stdout = %stdout,
+        ffmpeg_video_filter = ?diagnostics.video_filter,
+        ffmpeg_audio_filter = ?diagnostics.audio_filter,
+        ffmpeg_filter_complex = ?diagnostics.complex_filter,
+        "{event}"
+    );
+}
+
+fn ffmpeg_filter_argument<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
+    args.windows(2)
+        .find_map(|arguments| (arguments[0] == flag).then_some(arguments[1].as_str()))
+}
+
+fn offload_large_filter_arguments(args: &mut [String]) -> anyhow::Result<Vec<tempfile::TempPath>> {
+    let mut scripts = Vec::new();
+    for index in 0..args.len().saturating_sub(1) {
+        let Some(script_flag) = ffmpeg_filter_script_flag(&args[index]) else {
+            continue;
+        };
+        if args[index + 1].len() <= FFMPEG_FILTER_SCRIPT_THRESHOLD_BYTES {
+            continue;
+        }
+
+        let mut script = tempfile::Builder::new()
+            .prefix("cutready-ffmpeg-")
+            .suffix(".filter")
+            .tempfile()
+            .map_err(|error| anyhow::anyhow!("Could not create FFmpeg filter script: {error}"))?;
+        script
+            .write_all(args[index + 1].as_bytes())
+            .map_err(|error| anyhow::anyhow!("Could not write FFmpeg filter script: {error}"))?;
+        let path = script.into_temp_path();
+        args[index] = script_flag.to_string();
+        args[index + 1] = path.to_string_lossy().to_string();
+        scripts.push(path);
+    }
+    Ok(scripts)
+}
+
+fn ffmpeg_filter_script_flag(flag: &str) -> Option<&'static str> {
+    match flag {
+        "-vf" => Some("-filter_script:v"),
+        "-af" => Some("-filter_script:a"),
+        "-filter_complex" => Some("-filter_complex_script"),
+        _ => None,
+    }
+}
+
+fn ffmpeg_failure_message<'a>(lines: &'a [&'a str]) -> &'a str {
+    lines
         .iter()
         .copied()
-        .find(|line| !line.starts_with("Fontconfig error:"))
+        .find(|line| {
+            line.contains("Error initializing output stream")
+                || line.contains("Error while opening encoder")
+                || line.contains("Could not write header")
+                || line.contains("Unknown encoder")
+                || line.contains("Unable to find a suitable output format")
+                || line.contains("No such file or directory")
+        })
+        .or_else(|| {
+            lines
+                .iter()
+                .copied()
+                .find(|line| line.contains("Invalid argument"))
+        })
+        .or_else(|| {
+            lines.iter().copied().find(|line| {
+                (line.contains("Error") || line.contains("error") || line.contains("Failed"))
+                    && !line.starts_with("Error opening output file")
+            })
+        })
+        .or_else(|| {
+            lines
+                .iter()
+                .copied()
+                .find(|line| line.starts_with("Error opening output file"))
+        })
+        .or_else(|| {
+            lines
+                .iter()
+                .rev()
+                .copied()
+                .find(|line| !line.starts_with("Fontconfig error:"))
+        })
         .or_else(|| lines.first().copied())
-        .unwrap_or("FFmpeg failed");
-    anyhow::bail!("{message}");
+        .unwrap_or("FFmpeg failed")
 }
 
 fn default_output_relative_path(title: &str) -> String {
@@ -1890,7 +2620,7 @@ mod tests {
     use super::*;
     use crate::models::sketch::{
         MotionPlan, MotionPlanEasing, MotionPlanKeyframe, MotionPlanKind, NarrationAsset,
-        PlanningRow, Sketch,
+        PlanningRow, Sketch, TypingSpot,
     };
     use image::{Rgb, RgbImage};
     use tempfile::TempDir;
@@ -1899,6 +2629,217 @@ mod tests {
     fn slugify_returns_stable_file_safe_name() {
         assert_eq!(slugify("Demo: Login Flow!"), "demo-login-flow");
         assert_eq!(slugify("   "), "sketch");
+    }
+
+    #[test]
+    fn ffmpeg_failure_message_prefers_the_actionable_encoder_error() {
+        let lines = [
+            "Error opening output file C:\\demo\\row-001.mp4.",
+            "Error initializing output stream 0:0 -- Error while opening encoder for output stream #0:0",
+        ];
+
+        assert_eq!(
+            ffmpeg_failure_message(&lines),
+            "Error initializing output stream 0:0 -- Error while opening encoder for output stream #0:0"
+        );
+    }
+
+    #[test]
+    fn ffmpeg_filter_argument_finds_each_filter_form() {
+        let args = vec![
+            "-vf".to_string(),
+            "scale=1920:1080".to_string(),
+            "-af".to_string(),
+            "aresample=48000".to_string(),
+            "-filter_complex".to_string(),
+            "[0:a]anull[a]".to_string(),
+        ];
+
+        assert_eq!(
+            ffmpeg_filter_argument(&args, "-vf"),
+            Some("scale=1920:1080")
+        );
+        assert_eq!(
+            ffmpeg_filter_argument(&args, "-af"),
+            Some("aresample=48000")
+        );
+        assert_eq!(
+            ffmpeg_filter_argument(&args, "-filter_complex"),
+            Some("[0:a]anull[a]")
+        );
+        assert_eq!(ffmpeg_filter_argument(&args, "-filter_script"), None);
+    }
+
+    #[test]
+    fn large_filter_arguments_are_written_to_temporary_scripts() {
+        let filter = "null,".repeat(FFMPEG_FILTER_SCRIPT_THRESHOLD_BYTES / 4 + 1);
+        let mut args = vec!["-vf".to_string(), filter.clone()];
+
+        let scripts = offload_large_filter_arguments(&mut args).unwrap();
+
+        assert_eq!(args[0], "-filter_script:v");
+        assert_eq!(scripts.len(), 1);
+        assert_eq!(fs::read_to_string(&scripts[0]).unwrap(), filter);
+    }
+
+    #[test]
+    fn large_video_filter_script_runs_with_ffmpeg() {
+        if ensure_ffmpeg_available().is_err() {
+            return;
+        }
+        let directory = tempfile::tempdir().unwrap();
+        let output_path = directory.path().join("filter-script.mkv");
+        let filter = std::iter::repeat_n("null", FFMPEG_FILTER_SCRIPT_THRESHOLD_BYTES / 4 + 1)
+            .collect::<Vec<_>>()
+            .join(",");
+
+        run_ffmpeg(vec![
+            "-y".to_string(),
+            "-f".to_string(),
+            "lavfi".to_string(),
+            "-i".to_string(),
+            "color=black:s=16x16:r=1".to_string(),
+            "-vf".to_string(),
+            filter,
+            "-frames:v".to_string(),
+            "1".to_string(),
+            "-c:v".to_string(),
+            DEFAULT_VIDEO_ENCODER.to_string(),
+            "-crf".to_string(),
+            DEFAULT_VIDEO_CRF.to_string(),
+            "-pix_fmt".to_string(),
+            DEFAULT_VIDEO_PIXEL_FORMAT.to_string(),
+            output_path.to_string_lossy().to_string(),
+        ])
+        .unwrap();
+
+        assert!(output_path.is_file());
+    }
+
+    #[test]
+    fn typing_reveal_is_compressed_to_finish_within_the_row() {
+        let (start, characters_per_second, end) =
+            constrained_typing_timing(160, 7.0, None, 18.0, 3.0, 30);
+
+        assert!(start < 3.0);
+        assert!(characters_per_second > 18.0);
+        assert!((start + 160.0 / characters_per_second - end).abs() < 0.000_001);
+        assert_eq!(end, 3.0);
+    }
+
+    #[test]
+    fn typing_filters_reject_text_beyond_the_animation_limit() {
+        let spot = TypingSpot {
+            x: 0.2,
+            y: 0.3,
+            width: 0.4,
+            height: 0.1,
+            text: "x".repeat(MAX_TYPING_ANIMATION_CHARACTERS + 1),
+            start_offset_ms: None,
+            duration_ms: None,
+            characters_per_second: None,
+            show_cursor: None,
+            text_color: None,
+            font_family: None,
+            font_scale: None,
+        };
+
+        let error = typing_spot_filters(&[spot], 3.0, false, &SketchVideoExportSettings::default())
+            .err()
+            .expect("typing text over the limit must be rejected");
+
+        assert!(error.to_string().contains("up to 160 characters"));
+    }
+
+    #[test]
+    fn ffmpeg_expression_escapes_function_argument_delimiters() {
+        let expression = FfmpegExpression::call(
+            "if",
+            [
+                FfmpegExpression::call(
+                    "lte",
+                    [FfmpegExpression::raw("on"), FfmpegExpression::raw("60")],
+                ),
+                FfmpegExpression::call(
+                    "min",
+                    [
+                        FfmpegExpression::call(
+                            "max",
+                            [FfmpegExpression::raw("on-0"), FfmpegExpression::raw("0")],
+                        ),
+                        FfmpegExpression::raw("1"),
+                    ],
+                ),
+                FfmpegExpression::raw("0.862069"),
+            ],
+        );
+
+        assert_eq!(
+            expression.to_string(),
+            r"if(lte(on\,60)\,min(max(on-0\,0)\,1)\,0.862069)"
+        );
+    }
+
+    #[test]
+    fn ffmpeg_filter_builder_serializes_labels_values_and_chains() {
+        let text_path = ["font root", "demo's:font.txt"].iter().collect::<PathBuf>();
+        let mut graph = FfmpegFilterGraph::new();
+        graph.push_chain(FfmpegFilterChain::new([FfmpegFilter::new("drawtext")
+            .input("0:v")
+            .named("textfile", FfmpegValue::file_path(&text_path))
+            .named(
+                "enable",
+                FfmpegExpression::call(
+                    "between",
+                    [
+                        FfmpegExpression::raw("t"),
+                        FfmpegExpression::raw("0"),
+                        FfmpegExpression::call(
+                            "min",
+                            [FfmpegExpression::raw("3"), FfmpegExpression::raw("5")],
+                        ),
+                    ],
+                ),
+            )
+            .output("caption")]));
+        graph.push_chain(FfmpegFilterChain::new([FfmpegFilter::new("anullsrc")
+            .named("r", "48000")
+            .named("cl", "stereo")
+            .output("audio")]));
+
+        assert_eq!(
+            graph.render(),
+            r"[0:v]drawtext=textfile='font root/demo\\'s\:font.txt':enable='between(t\,0\,min(3\,5))'[caption];anullsrc=r=48000:cl=stereo[audio]"
+        );
+    }
+
+    #[test]
+    fn ffmpeg_filter_builder_escapes_apostrophes_through_the_filter_parser() {
+        let filter = FfmpegFilterGraph::chain([
+            FfmpegFilter::new("drawtext")
+                .named("text", FfmpegValue::text("What's next?"))
+                .named(
+                    "enable",
+                    FfmpegExpression::call(
+                        "between",
+                        [
+                            FfmpegExpression::raw("t"),
+                            FfmpegExpression::raw("0"),
+                            FfmpegExpression::raw("1"),
+                        ],
+                    ),
+                ),
+            FfmpegFilter::new("null"),
+        ])
+        .render();
+
+        assert!(filter.contains(r"text='What\\'s next?'"));
+        assert!(filter.contains(r"enable='between(t\,0\,1)',null"));
+    }
+
+    #[test]
+    fn typing_text_uses_a_safe_apostrophe_glyph() {
+        assert_eq!(safe_drawtext_text("What's next?"), "What\u{2019}s next?");
     }
 
     #[test]
@@ -2002,23 +2943,31 @@ mod tests {
     #[test]
     fn hold_video_filter_adds_dip_to_black_for_row_transitions() {
         let settings = SketchVideoExportSettings::default();
-        let fade_out = hold_video_filter(
-            "base".to_string(),
+        let fade_out = FfmpegFilterGraph::chain(hold_video_filters(
+            vec![FfmpegFilter::new("base")],
             0.5,
             HoldTransition::FadeOutToBlack,
             &settings,
-        );
+        ))
+        .render();
         assert_eq!(fade_out, "base,fade=t=out:st=0.150:d=0.350:color=black");
 
-        let fade_in = hold_video_filter(
-            "base".to_string(),
+        let fade_in = FfmpegFilterGraph::chain(hold_video_filters(
+            vec![FfmpegFilter::new("base")],
             0.5,
             HoldTransition::FadeInFromBlack,
             &settings,
-        );
+        ))
+        .render();
         assert_eq!(fade_in, "base,fade=t=in:st=0:d=0.350:color=black");
 
-        let unchanged = hold_video_filter("base".to_string(), 3.0, HoldTransition::None, &settings);
+        let unchanged = FfmpegFilterGraph::chain(hold_video_filters(
+            vec![FfmpegFilter::new("base")],
+            3.0,
+            HoldTransition::None,
+            &settings,
+        ))
+        .render();
         assert_eq!(unchanged, "base");
     }
 
@@ -2051,11 +3000,74 @@ mod tests {
         assert!((end_crop.x - 0.137931).abs() < 0.000001);
         assert_eq!(end_crop.y, 0.0);
 
-        let filter = motion_image_video_filter(&plan, 3.0, &settings).unwrap();
-        assert!(filter.contains("zoompan=z='1/(if(lte(on,60),1.000000+((0.862069-1.000000)*(min(max(on-0,0)/60,1))),0.862069))'"));
-        assert!(filter.contains(":x='iw*(if(lte(on,60),"));
-        assert!(filter.contains(":y='ih*(if(lte(on,60),"));
+        let filter = motion_image_video_filter(&plan, &[], 3.0, &settings).unwrap();
+        assert!(filter.contains("zoompan=z='1/(if(lte(on\\,60)\\,1.000000+((0.862069-1.000000)*(min(max(on-0\\,0)/60\\,1)))\\,0.862069))'"));
+        assert!(filter.contains(":x='iw*(if(lte(on\\,60)\\,"));
+        assert!(filter.contains(":y='ih*(if(lte(on\\,60)\\,"));
         assert!(filter.contains("d=90"));
+    }
+
+    #[test]
+    fn typing_spots_render_before_zoompan_with_incremental_text() {
+        let plan = MotionPlan {
+            kind: MotionPlanKind::SubtlePush,
+            keyframes: vec![
+                MotionPlanKeyframe {
+                    time_ms: 0,
+                    scale: 1.0,
+                    x: 0.5,
+                    y: 0.5,
+                    easing: Some(MotionPlanEasing::Linear),
+                },
+                MotionPlanKeyframe {
+                    time_ms: 1_000,
+                    scale: 1.2,
+                    x: 0.6,
+                    y: 0.4,
+                    easing: Some(MotionPlanEasing::Linear),
+                },
+            ],
+            rationale: None,
+        };
+        let spots = [TypingSpot {
+            x: 0.2,
+            y: 0.3,
+            width: 0.4,
+            height: 0.1,
+            text: "Go".into(),
+            start_offset_ms: Some(500),
+            duration_ms: None,
+            characters_per_second: Some(10.0),
+            show_cursor: Some(true),
+            text_color: Some("#ffcc00".into()),
+            font_family: Some("mono".into()),
+            font_scale: Some(1.2),
+        }];
+
+        let filter =
+            motion_image_video_filter(&plan, &spots, 2.0, &SketchVideoExportSettings::default())
+                .unwrap();
+
+        assert!(filter.contains("text='G|'"));
+        assert!(filter.contains("text='Go|'"));
+        assert!(filter.contains("fontcolor=0xffcc00"));
+        assert!(filter.contains("fontfile='/Windows/Fonts/consola.ttf'"));
+        assert!(filter.contains("between(t\\,0.500\\,0.600)"));
+        assert!(filter.contains("between(t\\,0.600\\,2.000)"));
+        assert!(filter.contains("x='w*0.206250'"));
+        assert!(filter.contains("y='h*0.307407+ascent'"));
+        assert!(!filter.contains("box="));
+        assert!(!filter.contains("boxcolor="));
+        assert!(filter.find("drawtext=").unwrap() < filter.find("zoompan=").unwrap());
+
+        let completed = FfmpegFilterGraph::chain(
+            still_image_video_filters(&spots, 2.0, true, &SketchVideoExportSettings::default())
+                .unwrap(),
+        )
+        .render();
+        assert!(completed.contains("text='Go'"));
+        assert!(!completed.contains("text='G|'"));
+        assert!(!completed.contains("enable="));
     }
 
     #[test]
@@ -2089,10 +3101,10 @@ mod tests {
         };
 
         let settings = SketchVideoExportSettings::default();
-        let filter = motion_image_video_filter(&plan, 3.0, &settings).unwrap();
-        assert!(filter.contains("if(lte(on,30),"));
-        assert!(filter.contains("if(lte(on,60),"));
-        assert!(filter.contains("min(max(on-30,0)/30,1)"));
+        let filter = motion_image_video_filter(&plan, &[], 3.0, &settings).unwrap();
+        assert!(filter.contains("if(lte(on\\,30)\\,"));
+        assert!(filter.contains("if(lte(on\\,60)\\,"));
+        assert!(filter.contains("min(max(on-30\\,0)/30\\,1)"));
     }
 
     #[test]
@@ -2124,7 +3136,7 @@ mod tests {
         assert!((end_crop.x - 0.137931).abs() < 0.000001);
         assert_eq!(end_crop.y, 0.0);
 
-        let filter = motion_final_frame_video_filter(&plan, &settings).unwrap();
+        let filter = motion_final_frame_video_filter(&plan, &[], &settings).unwrap();
         assert!(filter.contains("zoompan=z='1/0.862069'"));
         assert!(filter.contains(":x='iw*("));
         assert!(filter.contains(":y='ih*(0.000000)'"));
@@ -2208,56 +3220,45 @@ mod tests {
 
     #[test]
     fn title_card_filter_includes_escaped_title_and_description() {
-        let temp_dir = TempDir::new().unwrap();
         let mut sketch = Sketch::new("Demo: Export, Now 100%");
         sketch.description = serde_json::json!([{ "type": "paragraph", "children": [{ "text": "Direction's script, A [B]" }] }]);
 
         let settings = SketchVideoExportSettings::default();
-        let filter = title_card_filter(&sketch, temp_dir.path(), &settings).unwrap();
-        assert!(filter.contains("drawtext=textfile='"));
-        assert!(filter.contains("title-card-title-00.txt"));
-        assert!(filter.contains("title-card-description-00.txt"));
-        assert!(!filter.contains("text='"));
+        let filter = title_card_filter(&sketch, &settings);
+        assert!(filter.contains("drawtext=text='Demo\\: Export\\, Now 100\\%'"));
+        assert!(filter.contains("text='Direction’s script\\, A \\[B\\]'"));
         assert!(!filter.contains("paragraph"));
-        assert_eq!(
-            fs::read_to_string(temp_dir.path().join("title-card-title-00.txt")).unwrap(),
-            "Demo: Export, Now 100%"
-        );
-        assert_eq!(
-            fs::read_to_string(temp_dir.path().join("title-card-description-00.txt")).unwrap(),
-            "Direction's script, A [B]"
-        );
     }
 
     #[test]
-    fn ffmpeg_filter_file_path_escape_uses_filter_safe_paths() {
+    fn ffmpeg_filter_builder_escapes_filter_safe_paths() {
         let path = ["font root", "demo's:font.ttf"].iter().collect::<PathBuf>();
         assert_eq!(
-            ffmpeg_filter_file_path_escape(&path),
-            r"font root/demo\'s\:font.ttf"
+            FfmpegValue::file_path(&path).render(),
+            r"'font root/demo\\'s\:font.ttf'"
         );
     }
 
     #[cfg(target_os = "windows")]
     #[test]
-    fn ffmpeg_filter_file_path_escape_keeps_windows_drive_prefix() {
+    fn ffmpeg_filter_builder_keeps_windows_drive_prefix() {
         assert_eq!(
-            ffmpeg_filter_file_path_escape(Path::new(r"C:\cutready\rko\title-card.txt")),
-            r"C\:/cutready/rko/title-card.txt"
+            FfmpegValue::file_path(Path::new(r"C:\cutready\rko\title-card.txt")).render(),
+            r"'C\:/cutready/rko/title-card.txt'"
         );
     }
 
     #[cfg(target_os = "windows")]
     #[test]
-    fn ffmpeg_filter_font_path_escape_strips_windows_drive_prefix() {
+    fn ffmpeg_filter_builder_strips_windows_font_drive_prefix() {
         assert_eq!(
-            ffmpeg_filter_font_path_escape(Path::new(r"C:\Windows\Fonts\segoeui.ttf")),
-            r"/Windows/Fonts/segoeui.ttf"
+            FfmpegValue::font_path(Path::new(r"C:\Windows\Fonts\segoeui.ttf")).render(),
+            r"'/Windows/Fonts/segoeui.ttf'"
         );
     }
 
     #[test]
-    fn export_sketch_video_renders_mp4_when_ffmpeg_is_available() {
+    fn export_sketch_video_combines_typing_camera_motion_and_audio_when_ffmpeg_is_available() {
         if ensure_ffmpeg_available().is_err() {
             eprintln!("Skipping sketch video export smoke test because FFmpeg is unavailable");
             return;
@@ -2292,6 +3293,40 @@ mod tests {
         let mut sketch = Sketch::new("Tiny Export");
         let mut row = PlanningRow::new();
         row.screenshot = Some(".cutready/screenshots/row-1.png".to_string());
+        row.typing_spots = vec![TypingSpot {
+            x: 0.2,
+            y: 0.25,
+            width: 0.5,
+            height: 0.12,
+            text: "What's next?".to_string(),
+            start_offset_ms: Some(0),
+            duration_ms: None,
+            characters_per_second: Some(24.0),
+            show_cursor: Some(true),
+            text_color: Some("#ffffff".to_string()),
+            font_family: Some("sans".to_string()),
+            font_scale: Some(1.0),
+        }];
+        row.motion_plan = Some(MotionPlan {
+            kind: MotionPlanKind::SubtlePush,
+            keyframes: vec![
+                MotionPlanKeyframe {
+                    time_ms: 0,
+                    scale: 1.0,
+                    x: 0.5,
+                    y: 0.5,
+                    easing: Some(MotionPlanEasing::Linear),
+                },
+                MotionPlanKeyframe {
+                    time_ms: 250,
+                    scale: 1.1,
+                    x: 0.55,
+                    y: 0.45,
+                    easing: Some(MotionPlanEasing::Linear),
+                },
+            ],
+            rationale: None,
+        });
         row.narration = Some(NarrationAsset {
             path: ".cutready/narration/row-1.wav".to_string(),
             source_text: "Hello".to_string(),

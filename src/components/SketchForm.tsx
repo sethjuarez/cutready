@@ -1299,7 +1299,7 @@ The Actions describe what happens on screen — use them as visual design hints.
     (screenshotPath: string) => {
       if (captureRowIdx === null) return;
       const updated = [...localRows];
-      updated[captureRowIdx] = { ...updated[captureRowIdx], screenshot: screenshotPath, visual: null, motion_points: null, motion_plan: null };
+      updated[captureRowIdx] = { ...updated[captureRowIdx], screenshot: screenshotPath, visual: null, motion_points: null, typing_spots: null, motion_plan: null };
       handleRowsChange(updated);
       if (returnToNarrationAfterCapture !== null) {
         setNarrationDialogRow(returnToNarrationAfterCapture);
@@ -1343,9 +1343,9 @@ The Actions describe what happens on screen — use them as visual design hints.
     if (imagePickerRowIdx === null) return;
     const updated = [...localRows];
     if (asset.assetType === "visual") {
-      updated[imagePickerRowIdx] = { ...updated[imagePickerRowIdx], visual: asset.path, screenshot: null, motion_points: null, motion_plan: null };
+      updated[imagePickerRowIdx] = { ...updated[imagePickerRowIdx], visual: asset.path, screenshot: null, motion_points: null, typing_spots: null, motion_plan: null };
     } else {
-      updated[imagePickerRowIdx] = { ...updated[imagePickerRowIdx], screenshot: asset.path, visual: null, motion_points: null, motion_plan: null };
+      updated[imagePickerRowIdx] = { ...updated[imagePickerRowIdx], screenshot: asset.path, visual: null, motion_points: null, typing_spots: null, motion_plan: null };
     }
     handleRowsChange(updated);
     setImagePickerRowIdx(null);
@@ -1362,7 +1362,7 @@ The Actions describe what happens on screen — use them as visual design hints.
     try {
       const relativePath = await invoke<string>("import_image", { sourcePath: filePath });
       const updated = [...localRows];
-      updated[rowIndex] = { ...updated[rowIndex], screenshot: relativePath, visual: null, motion_points: null, motion_plan: null };
+      updated[rowIndex] = { ...updated[rowIndex], screenshot: relativePath, visual: null, motion_points: null, typing_spots: null, motion_plan: null };
       handleRowsChange(updated);
     } catch (err) {
       console.error("Failed to import image:", err);
@@ -2445,6 +2445,14 @@ The row already has a visual and design_plan. You may read the sketch for contex
             onStopNarrationRecording={handleStopNarrationRecording}
             narrationRecordingRow={narrationRecordingRow}
             narrationSavingRows={narrationSavingRows}
+            typingOverlayDefaults={{
+              fontFamily: settings.typingOverlayOverrideEnabled
+                ? settings.workspaceTypingOverlayFontFamily
+                : settings.typingOverlayFontFamily,
+              fontScale: settings.typingOverlayOverrideEnabled
+                ? settings.workspaceTypingOverlayFontScale
+                : settings.typingOverlayFontScale,
+            }}
             highlightedRows={highlightedRows}
             rowDiffs={rowDiffs}
             aiSnapshotRows={aiSnapshotRef.current?.rows ?? null}
