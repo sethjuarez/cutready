@@ -10,6 +10,13 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.33.0](https://github.com/sethjuarez/cutready/compare/v1.32.0...v1.33.0) (2026-07-19)
+
+
+### Features
+
+* **editor:** improve narration and screenshot imports ([#221](https://github.com/sethjuarez/cutready/issues/221)) ([54875d5](https://github.com/sethjuarez/cutready/commit/54875d5d3351e0216e59fa770126ce7182f70c7c))
+
 ## [1.32.0](https://github.com/sethjuarez/cutready/compare/v1.31.0...v1.32.0) (2026-07-19)
 
 
