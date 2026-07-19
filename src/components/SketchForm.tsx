@@ -41,6 +41,7 @@ import { activeProvider, activeProviderInput, buildProviderConfig, providerById 
 import { getProviderSecret, setProviderSecret } from "../hooks/useSecretStore";
 import { buildPlainSsml, inferSpeechEndpoint, SPEECH_TOKEN_SCOPE, synthesizeSpeechAudio } from "../services/narrationSpeech";
 import { validateGeneratedSsml } from "../services/narrationSsml";
+import { readClipboardImage } from "../utils/clipboardImage";
 
 interface MonitorInfo {
   id: number;
@@ -60,6 +61,7 @@ type ProjectAudioAsset = { path: string; size: number; mimeType: string; modifie
 type SketchVideoExport = { path: string; duration_seconds: number; row_count: number };
 type SketchVideoExportProgress = { phase: string; current: number; total: number; message: string };
 type NarrationGenerationProgress = { phase: string; current: number; total: number; message: string };
+type AgentStreamEvent = { type: string; content?: string; client_run_id?: string };
 type SketchVideoExportSettings = {
   includeTitleCard: boolean;
   titleCardDurationSeconds: number;
@@ -1321,6 +1323,32 @@ export function SketchForm() {
     setCaptureRowIdx(rowIndex);
   }, []);
 
+  const handlePasteImage = useCallback(async (rowIndex: number) => {
+    if (sketchLocked) return;
+    try {
+      const image = await readClipboardImage();
+      if (!image) {
+        useToastStore.getState().show("Copy an image to the clipboard, then try again.", 5000, "warning");
+        return;
+      }
+
+      const screenshotPath = await invoke<string>("save_pasted_image", image);
+      const updated = [...localRows];
+      updated[rowIndex] = {
+        ...updated[rowIndex],
+        screenshot: screenshotPath,
+        visual: null,
+        motion_points: null,
+        typing_spots: null,
+        motion_plan: null,
+      };
+      handleRowsChange(updated);
+    } catch (err) {
+      console.error("[SketchForm] Failed to import clipboard image:", err);
+      useToastStore.getState().show(`Could not import clipboard image: ${err}`, 6000, "error");
+    }
+  }, [handleRowsChange, localRows, sketchLocked]);
+
   const handleGenerateVisual = useCallback(() => {
     if (visualPromptRow === null) return;
     const row = localRows[visualPromptRow];
@@ -1581,7 +1609,7 @@ The Actions describe what happens on screen — use them as visual design hints.
     updateSetting,
   ]);
 
-  const generateSketchNarrationSsml = useCallback(async () => {
+  const generateSketchNarrationSsml = useCallback(async (clientRunId: string) => {
     const agentAccessToken = await refreshAgentAccessToken();
     const providerConfig = buildProviderConfig(activeProviderInput(settings));
     if (settings.aiAuthMode === "azure_oauth" && agentAccessToken) {
@@ -1612,14 +1640,16 @@ Rules:
 - Output shape: {"rows":[{"row_number":1,"source_text":"plain narration text","baseline_style":"narration-professional","pronunciation_overrides":{"CutReady":"cut ready"},"beats":[{"text":"spoken phrase","purpose":"reveal","style":"excited","style_degree":1.1,"emphasis":"moderate","pause_after_ms":250}],"ssml":"<speak ...>...</speak>"}]}
 - Include every row that has narrative or actions. Skip only rows with neither.
 - Each ssml value must be a complete Azure Speech SSML document with a <speak> root and <voice name="${settings.narrationVoiceName}">.
-- Use natural spoken delivery, short sentences, and clean transitions across rows.
+- Treat each row's Narrative as the source of truth. Preserve its meaning and point of view; only rewrite it enough to sound natural when spoken. Use Actions only to clarify what is visible when Narrative is empty or unclear.
+- Write one or two concise, conversational sentences per row. Do not repeat the sketch title, restate the previous row, narrate obvious clicks, or turn the demo into marketing copy.
+- Make the final row a concrete, grounded close based on its Narrative and Actions. Do not invent a slogan, call to action, or broad product claim.
 - Style direction: ${settings.narrationStylePrompt || "Natural presenter delivery."}
 - Be creatively intentional with supported Azure SSML: use <p>/<s>, <break>, <prosody>, <emphasis>, <say-as>, <sub>, <phoneme>, <lang>, and <mstts:express-as> only when they improve natural delivery. Keep emphasis and prosody sparse.
 - The planning time is a drafting estimate, never a narration target. Favor clear, natural speech; CutReady will adapt video timing to the measured audio.
-- Return concise beats for meaningful delivery or visual transitions. Beats describe the SSML you wrote; they do not add facts.
+- Return at most three concise beats for meaningful delivery or visual transitions. Beats must use exact phrases from source_text and must not add facts. Keep pronunciation_overrides empty unless a pronunciation would otherwise be wrong.
 - Do not include <audio>, external URLs, lexicons, bookmarks, background audio, visemes, voice conversion, or additional voices.
 - Keep the narration grounded in the sketch. Do not invent product capabilities beyond the title, description, narrative, actions, screenshots, or visuals.
-- Avoid hype words and AI marketing cliches. Use plain, presenter-like language.
+- Avoid hype words, AI marketing cliches, and constructions such as "not just", "seamless", "revolutionary", "game-changing", or "everything starts".
 - Use ASCII punctuation in text content.`;
 
     const result = await invoke<AgentChatResult>("agent_chat_with_tools", {
@@ -1630,7 +1660,8 @@ Rules:
       ],
       agentPrompts: {},
       agentId: "narration-director",
-      emitEvents: false,
+      emitEvents: true,
+      clientRunId,
       allowMutationTools: false,
     });
     return parseNarrationSsmlPlan(result.response);
@@ -1833,8 +1864,41 @@ Rules:
       eligibleRows.forEach(({ index }) => next.add(index));
       return next;
     });
+    let unlisten: (() => void) | undefined;
     try {
-      const totalSteps = eligibleRows.length + 4;
+      const totalSteps = eligibleRows.length * 2 + 4;
+      const clientRunId = crypto.randomUUID();
+      let streamedResponse = "";
+      let draftedRows = 0;
+      unlisten = await listen<AgentStreamEvent>("agent-event", (event) => {
+        const update = event.payload;
+        if (update.client_run_id !== clientRunId) return;
+        if (update.type === "delta_reset") {
+          streamedResponse = "";
+          draftedRows = 0;
+          setNarrationGenerationProgress({
+            phase: "script",
+            current: 1,
+            total: totalSteps,
+            message: "Narration Director is continuing the SSML draft.",
+          });
+          return;
+        }
+        if (update.type !== "delta" || !update.content) return;
+
+        streamedResponse += update.content;
+        const completedRows = (streamedResponse.match(/"row_number"\s*:/g) ?? []).length;
+        if (completedRows <= draftedRows) return;
+
+        draftedRows = Math.min(completedRows, eligibleRows.length);
+        setNarrationGenerationProgress({
+          phase: "script",
+          current: 1 + draftedRows,
+          total: totalSteps,
+          message: `Drafted narration for ${draftedRows} of ${eligibleRows.length} rows.`,
+        });
+      });
+
       setNarrationGenerationProgress({
         phase: "prepare",
         current: 0,
@@ -1848,13 +1912,13 @@ Rules:
         phase: "script",
         current: 1,
         total: totalSteps,
-        message: "Narration Director is reading the full sketch and writing SSML.",
+        message: "Narration Director is reading the full sketch and writing SSML live.",
       });
-      const plan = await generateSketchNarrationSsml();
+      const plan = await generateSketchNarrationSsml(clientRunId);
 
       setNarrationGenerationProgress({
         phase: "auth",
-        current: 2,
+        current: eligibleRows.length + 2,
         total: totalSteps,
         message: "Borrowing the current Azure/Foundry connection for Speech synthesis.",
       });
@@ -1867,7 +1931,7 @@ Rules:
         if (!generated) continue;
         setNarrationGenerationProgress({
           phase: "synthesize",
-          current: 3 + generatedCount,
+          current: eligibleRows.length + 3 + generatedCount,
           total: totalSteps,
           message: `Synthesizing row ${index + 1} with MAI-Voice-2.`,
         });
@@ -1901,6 +1965,7 @@ Rules:
       useToastStore.getState().show(`Could not generate sketch narration: ${err}`, 7000, "error");
       await refreshAfterNarrationGeneration(`AI narration generation failed: ${err}`, "error");
     } finally {
+      unlisten?.();
       setNarrationSavingRows((rows) => {
         const next = new Set(rows);
         eligibleRows.forEach(({ index }) => next.delete(index));
@@ -2489,6 +2554,7 @@ Rules:
             onChange={handleRowsChange}
             readOnly={sketchLocked}
             onCaptureScreenshot={handleCaptureScreenshot}
+            onPasteImage={handlePasteImage}
             onPickImage={handlePickImage}
             onBrowseImage={handleBrowseImage}
             onSparkle={(prompt) => void runBackgroundAgentAction(prompt, { label: "Improve row" })}

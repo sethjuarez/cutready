@@ -27,6 +27,7 @@ import {
   Folder,
   Plus,
   Camera,
+  ClipboardPaste,
   Check,
   Crosshair,
   Lock,
@@ -126,6 +127,7 @@ interface ScriptTableProps {
   onChange: (rows: PlanningRow[]) => void;
   readOnly?: boolean;
   onCaptureScreenshot?: (rowIndex: number) => void;
+  onPasteImage?: (rowIndex: number) => void;
   onPickImage?: (rowIndex: number) => void;
   onBrowseImage?: (rowIndex: number) => void;
   onSparkle?: (prompt: string) => void;
@@ -153,7 +155,7 @@ interface ScriptTableProps {
   };
 }
 
-export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPickImage, onBrowseImage, onSparkle, onGenerateVisual, onNudgeVisual, projectRoot, sketchPath, highlightedRows, rowDiffs, aiSnapshotRows, onDismissHighlights, hasLastAiDiffs, onReShowHighlights, onRowLockChange, onCellLockChange, onStartNarrationRecording, onGenerateNarration, onPickNarration, onStopNarrationRecording, narrationRecordingRow, narrationSavingRows, typingOverlayDefaults = { fontFamily: "sans", fontScale: 1 } }: ScriptTableProps) {
+export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreenshot, onPasteImage, onPickImage, onBrowseImage, onSparkle, onGenerateVisual, onNudgeVisual, projectRoot, sketchPath, highlightedRows, rowDiffs, aiSnapshotRows, onDismissHighlights, hasLastAiDiffs, onReShowHighlights, onRowLockChange, onCellLockChange, onStartNarrationRecording, onGenerateNarration, onPickNarration, onStopNarrationRecording, narrationRecordingRow, narrationSavingRows, typingOverlayDefaults = { fontFamily: "sans", fontScale: 1 } }: ScriptTableProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<{ src: string; rowIndex: number } | null>(null);
   const lightboxImageRef = useRef<HTMLImageElement | null>(null);
@@ -743,6 +745,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   isDragging={activeIdx === idx}
                   isLastRow={idx === rows.length - 1}
                   onCaptureScreenshot={onCaptureScreenshot}
+                  onPasteImage={onPasteImage}
                   onPickImage={onPickImage}
                   onBrowseImage={onBrowseImage}
                   onSparkle={onSparkle}
@@ -1271,6 +1274,7 @@ function SortableRow({
   isDragging,
   isLastRow,
   onCaptureScreenshot,
+  onPasteImage,
   onPickImage,
   onBrowseImage,
   onSparkle,
@@ -1304,6 +1308,7 @@ function SortableRow({
   isDragging: boolean;
   isLastRow: boolean;
   onCaptureScreenshot?: (rowIndex: number) => void;
+  onPasteImage?: (rowIndex: number) => void;
   onPickImage?: (rowIndex: number) => void;
   onBrowseImage?: (rowIndex: number) => void;
   onSparkle?: (prompt: string) => void;
@@ -1629,6 +1634,7 @@ function SortableRow({
                     hasPrimaryAsset={Boolean(row.screenshot || row.visual)}
                     assetKind="visual"
                     onCaptureScreenshot={onCaptureScreenshot}
+                    onPasteImage={onPasteImage}
                     onPickImage={onPickImage}
                     onBrowseImage={onBrowseImage}
                     onGenerateVisual={onGenerateVisual}
@@ -2306,6 +2312,7 @@ interface MediaAddPopoverProps {
   hasPrimaryAsset: boolean;
   variant?: "compact" | "placeholder";
   onCaptureScreenshot?: (idx: number) => void;
+  onPasteImage?: (idx: number) => void;
   onPickImage?: (idx: number) => void;
   onBrowseImage?: (idx: number) => void;
   onGenerateVisual?: (idx: number) => void;
@@ -2321,6 +2328,7 @@ function MediaAddPopover({
   hasPrimaryAsset,
   variant = "compact",
   onCaptureScreenshot,
+  onPasteImage,
   onPickImage,
   onBrowseImage,
   onGenerateVisual,
@@ -2342,6 +2350,7 @@ function MediaAddPopover({
     if (assetKind === "visual") {
       const imageVerb = hasPrimaryAsset ? "Replace" : "Add";
       list.push({ icon: Camera, label: `${imageVerb} screenshot`, action: () => onCaptureScreenshot?.(idx) });
+      if (onPasteImage) list.push({ icon: ClipboardPaste, label: `${imageVerb} from clipboard`, action: () => onPasteImage(idx) });
       if (onPickImage) list.push({ icon: ImageIcon, label: `${imageVerb} from workspace`, action: () => onPickImage(idx) });
       if (onBrowseImage) list.push({ icon: Folder, label: `${imageVerb} from file`, action: () => onBrowseImage(idx) });
       if (onGenerateVisual) list.push({ icon: Sparkles, label: hasPrimaryAsset ? "Replace with visual" : "Generate visual", action: () => onGenerateVisual(idx) });
@@ -2358,7 +2367,7 @@ function MediaAddPopover({
       if (onPickNarration) list.push({ icon: Folder, label: `${narrationVerb} from workspace`, action: () => onPickNarration(idx) });
     }
     return list;
-  }, [assetKind, hasNarration, hasPrimaryAsset, idx, onCaptureScreenshot, onPickImage, onBrowseImage, onGenerateVisual, onStartNarrationRecording, onGenerateNarration, onPickNarration]);
+  }, [assetKind, hasNarration, hasPrimaryAsset, idx, onCaptureScreenshot, onPasteImage, onPickImage, onBrowseImage, onGenerateVisual, onStartNarrationRecording, onGenerateNarration, onPickNarration]);
 
   const handleItemClick = (action: () => void) => {
     close();
