@@ -1606,6 +1606,15 @@ function ExportTab({
 
   const isWorkspace = scope === "workspace";
   const disabled = isWorkspace && !settings.videoExportOverrideEnabled;
+  const typingTypographyDisabled = isWorkspace && !settings.typingOverlayOverrideEnabled;
+  const typingFontFamilyKey = isWorkspace
+    ? "workspaceTypingOverlayFontFamily"
+    : "typingOverlayFontFamily";
+  const typingFontScaleKey = isWorkspace
+    ? "workspaceTypingOverlayFontScale"
+    : "typingOverlayFontScale";
+  const typingFontFamily = settings[typingFontFamilyKey];
+  const typingFontScale = settings[typingFontScaleKey];
   const includeTitleCardKey: AppExportBooleanKey | WorkspaceExportBooleanKey = isWorkspace
     ? "workspaceVideoExportIncludeTitleCard"
     : "videoExportIncludeTitleCard";
@@ -1771,6 +1780,67 @@ function ExportTab({
           />
         </label>
       )}
+
+      <fieldset className="flex flex-col gap-3 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/40 p-4">
+        <div>
+          <label className="text-sm font-medium">Typing overlay typography</label>
+          <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
+            Default type styling for new typing overlays. Individual overlays can still override these values.
+          </p>
+        </div>
+
+        {isWorkspace && (
+          <label className="flex items-center justify-between gap-4 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5">
+            <span className="min-w-0">
+              <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Use workspace typography</span>
+              <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+                When off, new overlays use the app-level typography defaults.
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              checked={settings.typingOverlayOverrideEnabled}
+              onChange={(event) => updateSetting("typingOverlayOverrideEnabled", event.target.checked)}
+              className="h-4 w-4 shrink-0 accent-[rgb(var(--color-accent))]"
+            />
+          </label>
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="min-w-0 text-xs font-medium text-[rgb(var(--color-text))]">
+            Font
+            <select
+              value={typingFontFamily}
+              onChange={(event) => updateSetting(
+                typingFontFamilyKey,
+                event.target.value as AppSettings[typeof typingFontFamilyKey],
+              )}
+              disabled={typingTypographyDisabled}
+              className="mt-1 block w-full rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-2 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <option value="sans">Sans</option>
+              <option value="serif">Serif</option>
+              <option value="mono">Mono</option>
+            </select>
+          </label>
+          <label className="min-w-0 text-xs font-medium text-[rgb(var(--color-text))]">
+            Size <span className="font-mono text-[rgb(var(--color-text-secondary))]">{Math.round(typingFontScale * 100)}%</span>
+            <input
+              type="range"
+              min="0.4"
+              max="1.8"
+              step="0.1"
+              value={typingFontScale}
+              onChange={(event) => updateSetting(
+                typingFontScaleKey,
+                Number(event.target.value) as AppSettings[typeof typingFontScaleKey],
+              )}
+              disabled={typingTypographyDisabled}
+              className="mt-2 block w-full accent-[rgb(var(--color-accent))] disabled:cursor-not-allowed disabled:opacity-50"
+            />
+          </label>
+        </div>
+      </fieldset>
 
       <fieldset className="flex flex-col gap-3 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/40 p-4">
         <div>

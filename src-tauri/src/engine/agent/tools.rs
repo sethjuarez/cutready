@@ -2238,6 +2238,13 @@ fn exec_write_sketch(root: &Path, args: &Value) -> String {
                     .cloned()
                     .and_then(|value| serde_json::from_value::<Vec<MotionPoint>>(value).ok())
                     .unwrap_or_default(),
+                typing_spots: r
+                    .get("typing_spots")
+                    .cloned()
+                    .and_then(|value| {
+                        serde_json::from_value::<Vec<crate::models::sketch::TypingSpot>>(value).ok()
+                    })
+                    .unwrap_or_default(),
                 motion_plan: r
                     .get("motion_plan")
                     .cloned()

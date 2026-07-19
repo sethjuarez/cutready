@@ -171,6 +171,30 @@ pub struct MotionPoint {
     pub label: Option<String>,
 }
 
+/// A normalized text box rendered as a typewriter overlay during video export.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TypingSpot {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_offset_ms: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub characters_per_second: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_cursor: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_family: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_scale: Option<f32>,
+}
+
 /// Agent-generated camera motion plan for screenshot rows.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MotionPlan {
@@ -239,6 +263,13 @@ pub struct PlanningRow {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub motion_points: Vec<MotionPoint>,
+    /// Positioned text overlays that are rendered in source coordinates before camera motion.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_vec_or_default",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub typing_spots: Vec<TypingSpot>,
     /// Agent-generated camera motion plan for screenshot rows.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub motion_plan: Option<MotionPlan>,
@@ -266,6 +297,7 @@ impl PlanningRow {
             screenshot: None,
             visual: None,
             motion_points: Vec::new(),
+            typing_spots: Vec::new(),
             motion_plan: None,
             design_plan: None,
             narration: None,
@@ -659,6 +691,7 @@ mod tests {
             screenshot: Some("screenshots/step1.png".into()),
             visual: None,
             motion_points: Vec::new(),
+            typing_spots: Vec::new(),
             motion_plan: None,
             design_plan: None,
             narration: None,
@@ -801,6 +834,20 @@ mod tests {
                 y: 0.41,
                 label: Some("Primary CTA".into()),
             }],
+            typing_spots: vec![TypingSpot {
+                x: 0.2,
+                y: 0.3,
+                width: 0.4,
+                height: 0.1,
+                text: "Create a workspace".into(),
+                start_offset_ms: Some(200),
+                duration_ms: Some(1_500),
+                characters_per_second: Some(18.0),
+                show_cursor: Some(true),
+                text_color: Some("#ffffff".into()),
+                font_family: Some("sans".into()),
+                font_scale: Some(1.0),
+            }],
             motion_plan: Some(MotionPlan {
                 kind: MotionPlanKind::SubtlePush,
                 keyframes: vec![
@@ -831,6 +878,8 @@ mod tests {
         assert_eq!(parsed.duration_seconds, Some(30));
         assert_eq!(parsed.screenshot, Some("screenshots/step1.png".into()));
         assert_eq!(parsed.motion_points.len(), 1);
+        assert_eq!(parsed.typing_spots.len(), 1);
+        assert_eq!(parsed.typing_spots[0].text, "Create a workspace");
         assert_eq!(
             parsed.motion_points[0].label.as_deref(),
             Some("Primary CTA")

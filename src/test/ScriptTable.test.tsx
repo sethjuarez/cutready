@@ -8,6 +8,9 @@ vi.mock("@elucim/dsl", () => ({
   renderToSvgString: () => '<svg></svg>',
 }));
 vi.mock("@elucim/core", () => ({ svgToCanvas: vi.fn() }));
+vi.mock("../hooks/useProjectImage", () => ({
+  useProjectImage: () => "data:image/png;base64,AA==",
+}));
 
 import { ScriptTable } from "../components/ScriptTable";
 import type { PlanningRow } from "../types/sketch";
@@ -78,6 +81,44 @@ describe("ScriptTable tab order", () => {
     await waitFor(() => {
       const nextTimeCell = getTabCells()[3];
       expect(nextTimeCell.contains(document.activeElement)).toBe(true);
+    });
+  });
+
+  describe("ScriptTable typing layers", () => {
+    it("keeps layer controls hidden until a typing layer is selected", async () => {
+      const user = userEvent.setup();
+      const rows: PlanningRow[] = [{
+        ...filledRow("10s", "Narrate", "Type"),
+        screenshot: "screenshots/demo.png",
+        typing_spots: [{
+          x: 0.2,
+          y: 0.2,
+          width: 0.3,
+          height: 0.1,
+          text: "Welcome",
+          text_color: "#ffffff",
+        }],
+      }];
+
+      const onChange = vi.fn();
+      render(<ScriptTable rows={rows} onChange={onChange} projectRoot="C:\\demo" />);
+
+      await user.click(screen.getByTitle("Set motion points"));
+
+      expect(screen.getByRole("button", { name: "Welcome" })).toBeInTheDocument();
+      expect(screen.queryByLabelText("Typing text 1")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Welcome" }));
+
+      expect(screen.getByLabelText("Typing text 1")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Set typing text color to #111111" }));
+
+      expect(onChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({
+          typing_spots: [expect.objectContaining({ text_color: "#111111" })],
+        }),
+      ]);
     });
   });
 

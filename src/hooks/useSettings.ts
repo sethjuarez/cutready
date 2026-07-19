@@ -193,6 +193,10 @@ export interface GlobalSettings {
   videoExportPixelFormat: string;
   /** FFmpeg CRF/quality value used for MP4 export. */
   videoExportCrf: string;
+  /** Default font family for newly created typing overlays. */
+  typingOverlayFontFamily: "sans" | "serif" | "mono";
+  /** Default size multiplier for newly created typing overlays. */
+  typingOverlayFontScale: number;
   /** App-wide reusable background music tracks stored in app data. */
   videoExportBackgroundMusicTracks: BackgroundMusicTrack[];
   /** Selected app-wide background music track ID. Empty means none. */
@@ -278,6 +282,12 @@ export interface WorkspaceSettings {
   workspaceVideoExportPixelFormat: string;
   /** Workspace override: FFmpeg CRF/quality value used for MP4 export. */
   workspaceVideoExportCrf: string;
+  /** Whether this workspace overrides the app-level typing overlay typography. */
+  typingOverlayOverrideEnabled: boolean;
+  /** Workspace default font family for newly created typing overlays. */
+  workspaceTypingOverlayFontFamily: "sans" | "serif" | "mono";
+  /** Workspace default size multiplier for newly created typing overlays. */
+  workspaceTypingOverlayFontScale: number;
   /** Project-local reusable loopable WAV files for sketch video background music. */
   workspaceVideoExportBackgroundMusicTracks: BackgroundMusicTrack[];
   /** Selected project-local background music track ID. Empty means none. */
@@ -363,6 +373,8 @@ const defaultGlobalSettings: GlobalSettings = {
   videoExportEncoder: "libx264rgb",
   videoExportPixelFormat: "rgb24",
   videoExportCrf: "0",
+  typingOverlayFontFamily: "sans",
+  typingOverlayFontScale: 1,
   videoExportBackgroundMusicTracks: [],
   videoExportBackgroundMusicTrackId: "",
   videoExportBackgroundMusicVolumeDb: -24,
@@ -416,6 +428,9 @@ export const defaultWorkspaceSettings: WorkspaceSettings = {
   workspaceVideoExportEncoder: "libx264rgb",
   workspaceVideoExportPixelFormat: "rgb24",
   workspaceVideoExportCrf: "0",
+  typingOverlayOverrideEnabled: false,
+  workspaceTypingOverlayFontFamily: "sans",
+  workspaceTypingOverlayFontScale: 1,
   workspaceVideoExportBackgroundMusicTracks: [],
   workspaceVideoExportBackgroundMusicTrackId: "",
   workspaceVideoExportBackgroundMusicVolumeDb: -24,
@@ -476,6 +491,9 @@ const WORKSPACE_KEYS: (keyof WorkspaceSettings)[] = [
   "workspaceVideoExportEncoder",
   "workspaceVideoExportPixelFormat",
   "workspaceVideoExportCrf",
+  "typingOverlayOverrideEnabled",
+  "workspaceTypingOverlayFontFamily",
+  "workspaceTypingOverlayFontScale",
   "workspaceVideoExportBackgroundMusicTracks",
   "workspaceVideoExportBackgroundMusicTrackId",
   "workspaceVideoExportBackgroundMusicVolumeDb",
