@@ -15,11 +15,8 @@ Release Please manages this changelog. Do not edit manually.
 
 ### Features
 
-* **export:** add app music and voice previews ([e149d98](https://github.com/sethjuarez/cutready/commit/e149d98f7b12edeafb69f356d72966a4ddd09a7b))
 * **export:** add app music and voice previews ([eb7123a](https://github.com/sethjuarez/cutready/commit/eb7123a487ac920e7d5cec4df8a7108ad9aeaf7e))
-* **export:** add composable typing overlays ([3f316b5](https://github.com/sethjuarez/cutready/commit/3f316b58171c4e91209b4f89a219da2981fa33f6))
 * **export:** add composable typing overlays ([604edbb](https://github.com/sethjuarez/cutready/commit/604edbbbeee506bc11b7152f95c8d62fd9385211))
-* **narration:** persist creative SSML plans ([23c14bf](https://github.com/sethjuarez/cutready/commit/23c14bf136260595e950eb4f2a9efbd34cedb212))
 * **narration:** persist creative SSML plans ([72f155a](https://github.com/sethjuarez/cutready/commit/72f155a79644ac5515ee303c505b1d552da8e8c9))
 
 ## [1.31.0](https://github.com/sethjuarez/cutready/compare/v1.30.1...v1.31.0) (2026-07-18)
