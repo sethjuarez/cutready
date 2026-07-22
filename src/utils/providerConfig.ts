@@ -1,5 +1,7 @@
 import type { AiProviderConfig, AiProviderKind, AiAuthMode } from "../hooks/useSettings";
 
+export type AgentExecutionEngine = "agentive" | "prompty";
+
 export interface ProviderSettings {
   aiProvider: string;
   aiEndpoint: string;
@@ -124,7 +126,10 @@ export function activeProviderInput(settings: ProviderSettings): ProviderConfigI
 }
 
 /** Build the provider config payload for IPC calls like list_models / agent_chat_with_tools. */
-export function buildProviderConfig(settings: ProviderSettings | ProviderConfigInput) {
+export function buildProviderConfig(
+  settings: ProviderSettings | ProviderConfigInput,
+  executionEngine: AgentExecutionEngine = "agentive",
+) {
   const requestInput = "provider" in settings;
   const contextLength = requestInput ? settings.contextLength : settings.aiContextLength;
   const modelSupportsVision = requestInput ? settings.modelSupportsVision : settings.aiModelSupportsVision;
@@ -147,6 +152,7 @@ export function buildProviderConfig(settings: ProviderSettings | ProviderConfigI
     max_tool_rounds: Math.max(1, Math.min(200, Number(settings.aiMaxToolRounds || 50))),
     provider_id: requestInput ? settings.providerId : undefined,
     provider_name: requestInput ? settings.providerName : undefined,
+    execution_engine: executionEngine,
   };
 }
 

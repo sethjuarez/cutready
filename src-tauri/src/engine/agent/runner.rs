@@ -913,7 +913,7 @@ fn tool_result_budget() -> agentive::ToolResultBudget {
     }
 }
 
-fn trim_history_to_budget(messages: &mut Vec<ChatMessage>, max_chars: usize) -> usize {
+pub(super) fn trim_history_to_budget(messages: &mut Vec<ChatMessage>, max_chars: usize) -> usize {
     if agentive::context::estimate_chars(messages) <= max_chars {
         return 0;
     }
@@ -989,7 +989,7 @@ fn take_oldest_message_group(messages: &mut Vec<ChatMessage>) -> Vec<ChatMessage
     dropped
 }
 
-fn read_context_asset_output(
+pub(super) fn read_context_asset_output(
     store: Option<&AgentStateStore>,
     tool_call: &agentive::ToolCall,
 ) -> Result<agentive::ToolOutput, String> {

@@ -3215,6 +3215,26 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
           Limits agent tool-call rounds before CutReady stops a runaway loop. Higher values help long editing sessions that need many read/write/review cycles.
         </p>
       </fieldset>
+
+      <fieldset className="flex flex-col gap-2">
+        <label className="text-sm font-medium">AI execution engine</label>
+        <select
+          value={settings.aiAgentExecutionEngine || "agentive"}
+          onChange={(event) =>
+            updateSetting(
+              "aiAgentExecutionEngine",
+              event.target.value as "agentive" | "prompty",
+            )
+          }
+          className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded px-3 py-1.5 text-sm"
+        >
+          <option value="agentive">Agentive — current default</option>
+          <option value="prompty">Prompty TurnEngine — experimental</option>
+        </select>
+        <p className="text-xs text-[rgb(var(--color-text-secondary))]">
+          Prompty uses the new durable TurnEngine for pressure testing. Delegated sub-agents remain available only with Agentive.
+        </p>
+      </fieldset>
     </div>
   );
 }

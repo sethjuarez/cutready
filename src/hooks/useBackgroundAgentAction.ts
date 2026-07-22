@@ -250,7 +250,10 @@ export function useBackgroundAgentAction() {
       }
 
       const modelOverride = resolveAgentModelOverride(effectiveAgent, settings.aiAgentModelOverrides);
-      const providerConfig = buildProviderConfig(await buildEffectiveProviderInput(effectiveAgent));
+      const providerConfig = buildProviderConfig(
+        await buildEffectiveProviderInput(effectiveAgent),
+        settings.aiAgentExecutionEngine || "agentive",
+      );
       if (!resolveAgentProviderOverride(effectiveAgent, settings.aiAgentProviderOverrides) && freshBearerToken) {
         providerConfig.bearer_token = freshBearerToken;
       }

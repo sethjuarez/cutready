@@ -4,6 +4,7 @@
 //! function calling, streaming, and the agentic tool loop.
 
 pub mod llm;
+pub mod prompty_runner;
 pub mod runner;
 pub mod sanitize;
 pub mod tools;

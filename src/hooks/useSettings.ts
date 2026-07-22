@@ -28,6 +28,7 @@ export interface AgentPreset {
 export type AiProviderKind = "microsoft_foundry" | "azure_openai" | "openai" | "anthropic";
 export type AiAuthMode = "api_key" | "azure_oauth";
 export type AiApplyMode = "ask" | "auto";
+export type AiAgentExecutionEngine = "agentive" | "prompty";
 export type NarrationConnectionMode = "reuse_active_foundry" | "dedicated";
 
 export interface AiProviderConfig {
@@ -137,6 +138,8 @@ export interface GlobalSettings {
   aiWebAccess: "disabled" | "enabled";
   /** Maximum agent tool-call rounds before stopping a run. */
   aiMaxToolRounds: number;
+  /** Agent orchestration engine. Prompty is an experimental pressure-test path. */
+  aiAgentExecutionEngine: AiAgentExecutionEngine;
   /** Whether write-capable AI shortcuts prompt before mutating project files. */
   aiApplyMode: AiApplyMode;
   /** Named AI provider configurations. Secrets are stored separately in Stronghold. */
@@ -345,6 +348,7 @@ const defaultGlobalSettings: GlobalSettings = {
   aiModelSupportsVision: "",
   aiWebAccess: "disabled",
   aiMaxToolRounds: 50,
+  aiAgentExecutionEngine: "agentive",
   aiApplyMode: "ask",
   aiProviders: [],
   aiActiveProviderId: "",

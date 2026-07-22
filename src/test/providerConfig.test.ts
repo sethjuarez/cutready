@@ -29,6 +29,11 @@ describe("buildProviderConfig", () => {
     expect(cfg.provider).toBe("openai");
     expect(cfg.api_key).toBe("sk-test");
     expect(cfg.bearer_token).toBeNull();
+    expect(cfg.execution_engine).toBe("agentive");
+  });
+
+  test("Prompty TurnEngine is an explicit provider payload opt-in", () => {
+    expect(buildProviderConfig(base, "prompty").execution_engine).toBe("prompty");
   });
 
   test("Azure OAuth: bearer_token is the access token", () => {

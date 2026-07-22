@@ -144,6 +144,10 @@ pub struct AppState {
     pub browser: Arc<tokio::sync::Mutex<Option<BrowserConnection>>>,
     /// Steering handle for injecting messages into a running agent loop.
     pub steering: agentive::Steering,
+    /// Number of Agentive chat runners currently able to receive steering.
+    pub active_agentive_chat_runs: Arc<std::sync::atomic::AtomicUsize>,
+    /// Steering queue used only while the opt-in Prompty TurnEngine path is active.
+    pub prompty_steering: engine::agent::prompty_runner::PromptySteering,
     /// Agent-state run IDs that are actively owned by this process.
     pub active_agent_runs: Arc<Mutex<HashSet<String>>>,
     /// Cancellation senders for active chat runs, indexed by the frontend's client run ID.
@@ -155,6 +159,7 @@ pub struct AppState {
 pub struct AgentChatCancellationEntry {
     pub generation: String,
     pub cancellation: agentive::CancellationToken,
+    pub prompty_cancelled: Arc<std::sync::atomic::AtomicBool>,
 }
 
 pub type AgentChatCancellationRegistry = Arc<Mutex<HashMap<String, AgentChatCancellationEntry>>>;
@@ -387,6 +392,8 @@ pub fn run() {
         current_project: Mutex::new(None),
         browser: Arc::new(tokio::sync::Mutex::new(None)),
         steering: agentive::Steering::new(),
+        active_agentive_chat_runs: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        prompty_steering: engine::agent::prompty_runner::PromptySteering::new(),
         active_agent_runs: Arc::new(Mutex::new(HashSet::new())),
         agent_chat_cancellations: Arc::new(Mutex::new(HashMap::new())),
         last_chat_summary: Mutex::new(None),

@@ -1108,6 +1108,74 @@ impl AgentStateStore {
         Ok(())
     }
 
+    /// Append one canonical Prompty engine event to this run's trajectory.
+    pub fn append_prompty_event(&self, event: &prompty::EngineEvent) -> Result<(), String> {
+        self.validate_prompty_run(&event.session_id)?;
+        let conn = self.connect()?;
+        insert_prompty_event(&conn, self.run_id(), event)?;
+        prune_by_run_limit(
+            &conn,
+            "trajectory_events",
+            self.run_id(),
+            MAX_EVENTS_PER_RUN,
+        )
+    }
+
+    /// Atomically append canonical events and the checkpoint that contains them.
+    pub fn append_prompty_events_with_checkpoint(
+        &self,
+        events: &[prompty::EngineEvent],
+        checkpoint: &prompty::EngineCheckpoint,
+    ) -> Result<(), String> {
+        self.validate_prompty_run(&checkpoint.session_id)?;
+        for event in events {
+            self.validate_prompty_run(&event.session_id)?;
+        }
+
+        let mut conn = self.connect()?;
+        let transaction = conn
+            .transaction()
+            .map_err(|e| format!("Could not begin Prompty durability transaction: {e}"))?;
+        for event in events {
+            insert_prompty_event(&transaction, self.run_id(), event)?;
+        }
+        let checkpoint_json = serde_json::to_string(checkpoint).map_err(|e| e.to_string())?;
+        let created_at = events
+            .last()
+            .map(|event| event.timestamp.clone())
+            .unwrap_or_else(|| Utc::now().to_rfc3339());
+        transaction
+            .execute(
+                "INSERT OR REPLACE INTO checkpoints
+                    (id, run_id, created_at, checkpoint_json)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![checkpoint.id, self.run_id(), created_at, checkpoint_json],
+            )
+            .map_err(|e| format!("Could not save Prompty checkpoint: {e}"))?;
+        prune_by_run_limit(
+            &transaction,
+            "trajectory_events",
+            self.run_id(),
+            MAX_EVENTS_PER_RUN,
+        )?;
+        prune_checkpoints_for_run(&transaction, self.run_id())?;
+        transaction
+            .commit()
+            .map_err(|e| format!("Could not commit Prompty durability transaction: {e}"))
+    }
+
+    fn validate_prompty_run(&self, session_id: &str) -> Result<(), String> {
+        if session_id == self.run_id() {
+            Ok(())
+        } else {
+            Err(format!(
+                "Prompty durability session '{}' does not match CutReady run '{}'",
+                session_id,
+                self.run_id()
+            ))
+        }
+    }
+
     #[allow(dead_code)]
     pub fn save_resume_context(&self, context: ResumeContext) -> Result<(), String> {
         let conn = self.connect()?;
@@ -2397,6 +2465,35 @@ fn insert_trajectory_event(
     )
     .map_err(|e| format!("Could not insert trajectory event: {e}"))?;
     prune_by_run_limit(conn, "trajectory_events", run_id, MAX_EVENTS_PER_RUN)?;
+    Ok(())
+}
+
+fn insert_prompty_event(
+    conn: &Connection,
+    run_id: &str,
+    event: &prompty::EngineEvent,
+) -> Result<(), String> {
+    let event_json = serde_json::to_string(event).map_err(|e| e.to_string())?;
+    let event_type = serde_json::to_value(event.kind)
+        .map_err(|e| e.to_string())?
+        .as_str()
+        .unwrap_or("unknown")
+        .to_string();
+    conn.execute(
+        "INSERT INTO trajectory_events
+            (run_id, event_id, parent_event_id, iteration, event_type, event_json, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            run_id,
+            event.id,
+            event.invocation_id,
+            event.iteration.map(|value| value as i64),
+            event_type,
+            event_json,
+            event.timestamp,
+        ],
+    )
+    .map_err(|e| format!("Could not insert Prompty trajectory event: {e}"))?;
     Ok(())
 }
 

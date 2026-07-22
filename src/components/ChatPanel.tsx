@@ -1248,7 +1248,10 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
         : selectedAgent;
       const modelOverride = resolveAgentModelOverride(effectiveAgent, settings.aiAgentModelOverrides);
       const effectiveProviderInput = await buildEffectiveProviderInput(effectiveAgent);
-      const providerConfig = buildProviderConfig(effectiveProviderInput);
+      const providerConfig = buildProviderConfig(
+        effectiveProviderInput,
+        settings.aiAgentExecutionEngine || "agentive",
+      );
       if (!resolveAgentProviderOverride(effectiveAgent, settings.aiAgentProviderOverrides) && freshBearerToken) {
         providerConfig.bearer_token = freshBearerToken;
       }

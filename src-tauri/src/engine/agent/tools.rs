@@ -260,7 +260,7 @@ fn read_only_tool_names() -> &'static [&'static str] {
     ]
 }
 
-fn is_read_only_tool(name: &str) -> bool {
+pub(super) fn is_read_only_tool(name: &str) -> bool {
     read_only_tool_names().contains(&name)
 }
 
@@ -1028,7 +1028,7 @@ pub fn decorate_tool_output(
     output.with_metadata(resources, vec![verification], Vec::new())
 }
 
-fn is_tool_error(result_text: &str) -> bool {
+pub(super) fn is_tool_error(result_text: &str) -> bool {
     result_text.starts_with("Error:") || result_text.starts_with("Validation failed")
 }
 

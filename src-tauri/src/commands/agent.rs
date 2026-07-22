@@ -12,7 +12,10 @@ use crate::engine::agent_state::{
 use crate::{AgentChatCancellationRegistry, AppState};
 use agentive::azure_oauth::{self, AuthCodeFlowInit, DeviceCodeResponse, TokenResponse};
 use std::collections::HashSet;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+    Arc, Mutex,
+};
 use std::time::{Duration, Instant};
 use tauri_plugin_auditaur::auditaur_command;
 
@@ -51,6 +54,23 @@ impl Drop for ActiveAgentRunGuard {
     }
 }
 
+struct ActiveAgentiveChatRunGuard {
+    active_runs: Arc<AtomicUsize>,
+}
+
+impl ActiveAgentiveChatRunGuard {
+    fn register(active_runs: Arc<AtomicUsize>) -> Self {
+        active_runs.fetch_add(1, Ordering::AcqRel);
+        Self { active_runs }
+    }
+}
+
+impl Drop for ActiveAgentiveChatRunGuard {
+    fn drop(&mut self) {
+        self.active_runs.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
 struct AgentChatCancellationGuard {
     client_run_id: String,
     generation: String,
@@ -62,6 +82,7 @@ impl AgentChatCancellationGuard {
         cancellations: AgentChatCancellationRegistry,
         client_run_id: String,
         cancellation: agentive::CancellationToken,
+        prompty_cancelled: Arc<AtomicBool>,
     ) -> Result<Self, String> {
         let generation = uuid::Uuid::new_v4().to_string();
         let mut active_cancellations = cancellations
@@ -77,6 +98,7 @@ impl AgentChatCancellationGuard {
             crate::AgentChatCancellationEntry {
                 generation: generation.clone(),
                 cancellation,
+                prompty_cancelled,
             },
         );
         drop(active_cancellations);
@@ -111,10 +133,11 @@ fn cancel_agent_chat_run_in_registry(
     let Some(entry) = active_cancellations.get(client_run_id) else {
         return Ok(false);
     };
-    if entry.cancellation.is_cancelled() {
+    if entry.cancellation.is_cancelled() && entry.prompty_cancelled.load(Ordering::SeqCst) {
         return Ok(false);
     }
     entry.cancellation.cancel();
+    entry.prompty_cancelled.store(true, Ordering::SeqCst);
     Ok(true)
 }
 
@@ -158,6 +181,34 @@ pub struct ProviderConfig {
     /// Maximum agentive tool-call rounds before stopping the run.
     #[serde(default)]
     pub max_tool_rounds: Option<usize>,
+    /// Experimental orchestration path. Omitted or "agentive" preserves the current default.
+    #[serde(default)]
+    pub execution_engine: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExecutionEngine {
+    Agentive,
+    Prompty,
+}
+
+impl ExecutionEngine {
+    fn from_config(value: Option<&str>) -> Result<Self, String> {
+        match value.map(str::trim).filter(|value| !value.is_empty()) {
+            None | Some("agentive") => Ok(Self::Agentive),
+            Some("prompty") => Ok(Self::Prompty),
+            Some(value) => Err(format!(
+                "Unsupported execution_engine '{value}'. Expected 'agentive' or 'prompty'."
+            )),
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Agentive => "agentive",
+            Self::Prompty => "prompty",
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -581,7 +632,10 @@ pub async fn push_pending_chat_message(
     state: tauri::State<'_, AppState>,
     message: String,
 ) -> Result<(), String> {
-    state.steering.send(&message);
+    let delivered_to_prompty = state.prompty_steering.send(&message);
+    if state.active_agentive_chat_runs.load(Ordering::Acquire) > 0 || !delivered_to_prompty {
+        state.steering.send(&message);
+    }
     Ok(())
 }
 
@@ -759,12 +813,14 @@ pub async fn agent_chat_with_tools(
 
     let client_run_id = client_run_id.filter(|id| !id.trim().is_empty());
     let cancellation = agentive::CancellationToken::new();
+    let prompty_cancelled = Arc::new(AtomicBool::new(false));
     let _cancellation_guard = match client_run_id.as_ref() {
         Some(client_run_id) => {
             let guard = AgentChatCancellationGuard::register(
                 state.agent_chat_cancellations.clone(),
                 client_run_id.clone(),
                 cancellation.clone(),
+                prompty_cancelled.clone(),
             )?;
             Some(guard)
         }
@@ -812,6 +868,7 @@ pub async fn agent_chat_with_tools(
         .unwrap_or(runner::DEFAULT_MAX_TOOL_ROUNDS)
         .clamp(1, 200);
     let mutation_tools_enabled = allow_mutation_tools.unwrap_or(false);
+    let execution_engine = ExecutionEngine::from_config(config.execution_engine.as_deref())?;
     let provider_name = config.provider.clone();
     let configured_provider_name = config.provider_name.clone();
     let configured_provider_id = config.provider_id.clone();
@@ -853,6 +910,7 @@ pub async fn agent_chat_with_tools(
                     "vision_enabled": vision.enabled,
                     "web_search_enabled": web_access.search_enabled,
                     "mutation_tools_enabled": mutation_tools_enabled,
+                    "execution_engine": execution_engine.as_str(),
                     "max_tool_rounds": max_tool_rounds,
                     "agent_prompts": prompts.len(),
                     "agent_id": &agent_id,
@@ -887,8 +945,9 @@ pub async fn agent_chat_with_tools(
         .collect::<Result<Vec<_>, _>>()?;
     context_items.extend(recalled_context_items(&messages, agent_state.as_ref()));
     log::info!(
-        "[agent_chat_with_tools] start run_id={} agent={} provider={} model={} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} mutation_tools={} max_tool_rounds={} prompts={}",
+        "[agent_chat_with_tools] start run_id={} engine={} agent={} provider={} model={} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} mutation_tools={} max_tool_rounds={} prompts={}",
         run_id,
+        execution_engine.as_str(),
         agent_id,
         provider_name,
         model,
@@ -910,6 +969,7 @@ pub async fn agent_chat_with_tools(
             "provider_id": &configured_provider_id,
             "provider_name": &configured_provider_name,
             "model": model,
+            "execution_engine": execution_engine.as_str(),
             "run_id": &run_id,
             "messages": message_count,
             "chars": message_chars,
@@ -927,32 +987,62 @@ pub async fn agent_chat_with_tools(
 
     let should_emit_events = emit_events.unwrap_or(true);
     let emit_handle = app.clone();
-    let runner_future = runner::run(
-        provider,
-        Some(provider_name.clone()),
-        Some(model.clone()),
-        messages,
-        &repo_root,
-        &project_root,
-        &agent_id,
-        &prompts,
-        &steering,
-        &vision,
-        &web_access,
-        mutation_tools_enabled,
-        max_tool_rounds,
-        context_items,
-        Some(run_id.clone()),
-        agent_state.clone(),
-        cancellation.clone(),
-        move |event: AgentEvent| {
-            if should_emit_events {
-                let payload = agent_event_payload(&event, client_run_id.as_deref());
-                let _ = emit_handle.emit("agent-event", payload);
-            }
-        },
-    );
-    let runner_result = runner_future.await;
+    let emit = move |event: AgentEvent| {
+        if should_emit_events {
+            let payload = agent_event_payload(&event, client_run_id.as_deref());
+            let _ = emit_handle.emit("agent-event", payload);
+        }
+    };
+    let runner_result = match execution_engine {
+        ExecutionEngine::Agentive => {
+            let _active_agentive_run =
+                ActiveAgentiveChatRunGuard::register(state.active_agentive_chat_runs.clone());
+            runner::run(
+                provider,
+                Some(provider_name.clone()),
+                Some(model.clone()),
+                messages,
+                &repo_root,
+                &project_root,
+                &agent_id,
+                &prompts,
+                &steering,
+                &vision,
+                &web_access,
+                mutation_tools_enabled,
+                max_tool_rounds,
+                context_items,
+                Some(run_id.clone()),
+                agent_state.clone(),
+                cancellation.clone(),
+                emit,
+            )
+            .await
+        }
+        ExecutionEngine::Prompty => {
+            crate::engine::agent::prompty_runner::run(
+                provider,
+                Some(provider_name.clone()),
+                Some(model.clone()),
+                messages,
+                &repo_root,
+                &project_root,
+                &agent_id,
+                &prompts,
+                state.prompty_steering.clone(),
+                &vision,
+                &web_access,
+                mutation_tools_enabled,
+                max_tool_rounds,
+                context_items,
+                Some(run_id.clone()),
+                agent_state.clone(),
+                prompty_cancelled,
+                emit,
+            )
+            .await
+        }
+    };
     let runner_result = if cancellation.is_cancelled() {
         Err(AGENT_RUN_CANCELLED_ERROR.into())
     } else {
@@ -962,7 +1052,8 @@ pub async fn agent_chat_with_tools(
         Ok(result) => {
             let elapsed_ms = started.elapsed().as_millis();
             log::info!(
-                "[agent_chat_with_tools] done provider={} model={} elapsed={}ms response_chars={} total_messages={} total_tokens={}",
+                "[agent_chat_with_tools] done engine={} provider={} model={} elapsed={}ms response_chars={} total_messages={} total_tokens={}",
+                execution_engine.as_str(),
                 provider_name,
                 model,
                 elapsed_ms,
@@ -976,6 +1067,7 @@ pub async fn agent_chat_with_tools(
                 serde_json::json!({
                     "provider": provider_name,
                     "model": model,
+                    "execution_engine": execution_engine.as_str(),
                     "run_id": &run_id,
                     "elapsed_ms": elapsed_ms,
                     "response_chars": result.response.len(),
@@ -995,14 +1087,16 @@ pub async fn agent_chat_with_tools(
             let cancelled = err == AGENT_RUN_CANCELLED_ERROR;
             if cancelled {
                 log::info!(
-                    "[agent_chat_with_tools] cancelled provider={} model={} elapsed={}ms",
+                    "[agent_chat_with_tools] cancelled engine={} provider={} model={} elapsed={}ms",
+                    execution_engine.as_str(),
                     provider_name,
                     model,
                     elapsed_ms,
                 );
             } else {
                 log::warn!(
-                    "[agent_chat_with_tools] error provider={} model={} elapsed={}ms error={}",
+                    "[agent_chat_with_tools] error engine={} provider={} model={} elapsed={}ms error={}",
+                    execution_engine.as_str(),
                     provider_name,
                     model,
                     elapsed_ms,
@@ -1019,6 +1113,7 @@ pub async fn agent_chat_with_tools(
                 serde_json::json!({
                     "provider": provider_name,
                     "model": model,
+                    "execution_engine": execution_engine.as_str(),
                     "run_id": &run_id,
                     "elapsed_ms": elapsed_ms,
                     "error": err,
@@ -1365,7 +1460,35 @@ mod tests {
             model_supports_vision: Some(true),
             web_access: Some("disabled".into()),
             max_tool_rounds: Some(runner::DEFAULT_MAX_TOOL_ROUNDS),
+            execution_engine: None,
         }
+    }
+
+    #[test]
+    fn execution_engine_defaults_to_agentive_and_requires_known_opt_in() {
+        assert_eq!(
+            ExecutionEngine::from_config(None).unwrap(),
+            ExecutionEngine::Agentive
+        );
+        assert_eq!(
+            ExecutionEngine::from_config(Some("agentive")).unwrap(),
+            ExecutionEngine::Agentive
+        );
+        assert_eq!(
+            ExecutionEngine::from_config(Some("prompty")).unwrap(),
+            ExecutionEngine::Prompty
+        );
+        assert!(ExecutionEngine::from_config(Some("other")).is_err());
+    }
+
+    #[test]
+    fn active_agentive_run_guard_tracks_steering_receivers() {
+        let active_runs = Arc::new(AtomicUsize::new(0));
+        {
+            let _guard = ActiveAgentiveChatRunGuard::register(active_runs.clone());
+            assert_eq!(active_runs.load(Ordering::Acquire), 1);
+        }
+        assert_eq!(active_runs.load(Ordering::Acquire), 0);
     }
 
     #[test]
@@ -1407,22 +1530,28 @@ mod tests {
         let cancellations = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let first_cancellation = agentive::CancellationToken::new();
         let second_cancellation = agentive::CancellationToken::new();
+        let first_prompty = Arc::new(AtomicBool::new(false));
+        let second_prompty = Arc::new(AtomicBool::new(false));
         let _first_guard = AgentChatCancellationGuard::register(
             cancellations.clone(),
             "first".into(),
             first_cancellation.clone(),
+            first_prompty.clone(),
         )
         .unwrap();
         let _second_guard = AgentChatCancellationGuard::register(
             cancellations.clone(),
             "second".into(),
             second_cancellation.clone(),
+            second_prompty.clone(),
         )
         .unwrap();
 
         assert!(cancel_agent_chat_run_in_registry(&cancellations, "first").unwrap());
         assert!(first_cancellation.is_cancelled());
+        assert!(first_prompty.load(Ordering::SeqCst));
         assert!(!second_cancellation.is_cancelled());
+        assert!(!second_prompty.load(Ordering::SeqCst));
         assert!(!cancel_agent_chat_run_in_registry(&cancellations, "first").unwrap());
         assert!(cancel_agent_chat_run_in_registry(&cancellations, "second").unwrap());
         assert!(second_cancellation.is_cancelled());
@@ -1435,6 +1564,7 @@ mod tests {
             cancellations.clone(),
             "same-run".into(),
             agentive::CancellationToken::new(),
+            Arc::new(AtomicBool::new(false)),
         )
         .unwrap();
 
@@ -1443,6 +1573,7 @@ mod tests {
                 cancellations,
                 "same-run".into(),
                 agentive::CancellationToken::new(),
+                Arc::new(AtomicBool::new(false)),
             ),
             Err(error) if error.contains("already active")
         ));
