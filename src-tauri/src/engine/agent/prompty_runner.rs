@@ -370,13 +370,12 @@ pub async fn run(
                 "Prompty TurnEngine committed a failed turn",
             ));
         }
-        TurnStatus::ReconciliationRequired => {
+        TurnStatus::Reconciliation_required => {
             return Err(turn_error_message(
                 result.commit.output.as_ref(),
                 "Prompty TurnEngine requires effect reconciliation; the checkpoint was persisted",
             ));
         }
-        _ => return Err("Prompty TurnEngine returned an unknown terminal status".into()),
     }
 
     let final_messages = result
@@ -475,13 +474,13 @@ impl ModelPort for TrackingModelPort {
                 .map_err(|error| PortError::new(format!("Usage tracking failed: {error}")))?;
             usage.prompt_tokens = usage
                 .prompt_tokens
-                .saturating_add(response_usage.input_tokens.min(u32::MAX as u64) as u32);
+                .saturating_add(response_usage.input_tokens.clamp(0, u32::MAX as i64) as u32);
             usage.completion_tokens = usage
                 .completion_tokens
-                .saturating_add(response_usage.output_tokens.min(u32::MAX as u64) as u32);
+                .saturating_add(response_usage.output_tokens.clamp(0, u32::MAX as i64) as u32);
             usage.total_tokens = usage
                 .total_tokens
-                .saturating_add(response_usage.total_tokens.min(u32::MAX as u64) as u32);
+                .saturating_add(response_usage.total_tokens.clamp(0, u32::MAX as i64) as u32);
         }
         let assistant_messages = response
             .assistant_messages
@@ -861,7 +860,13 @@ impl ToolPort for CutReadyToolPort {
             .get("arguments_json")
             .and_then(Value::as_str)
             .map(str::to_string)
-            .unwrap_or_else(|| request.arguments.to_string());
+            .unwrap_or_else(|| {
+                request
+                    .arguments
+                    .as_ref()
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "{}".to_string())
+            });
         let tool_call = ToolCall {
             id: request.id.clone(),
             call_type: "function".into(),
@@ -916,7 +921,7 @@ impl ToolPort for CutReadyToolPort {
             } else {
                 ToolOutcome::Success
             },
-            output: Value::String(budgeted_text),
+            output: Some(Value::String(budgeted_text)),
             error_kind: failed.then(|| "tool_error".to_string()),
             metadata,
         })
@@ -1135,16 +1140,16 @@ impl DurabilityPort for CutReadyDurabilityPort {
 
 impl CutReadyDurabilityPort {
     fn emit_semantic_event(&self, event: &EngineEvent) {
+        let payload = event.payload.as_ref().unwrap_or(&Value::Null);
         match event.kind {
-            EngineEventKind::PolicyApplied => emit_host_event(
+            EngineEventKind::Policy_applied => emit_host_event(
                 &self.emit,
                 AgentEvent::Status {
                     message: "Applied steering or compacted model context".into(),
                 },
             ),
-            EngineEventKind::ContextPrepared => {
-                let decisions = event
-                    .payload
+            EngineEventKind::Context_prepared => {
+                let decisions = payload
                     .get("decisions")
                     .and_then(Value::as_array)
                     .cloned()
@@ -1156,7 +1161,7 @@ impl CutReadyDurabilityPort {
                     })
                     .count();
                 let dropped_count = decisions.len().saturating_sub(selected_count);
-                let metadata = event.payload.get("metadata").unwrap_or(&Value::Null);
+                let metadata = payload.get("metadata").unwrap_or(&Value::Null);
                 emit_host_event(
                     &self.emit,
                     AgentEvent::ContextPrepared {
@@ -1173,15 +1178,14 @@ impl CutReadyDurabilityPort {
                     },
                 );
             }
-            EngineEventKind::ModelInvocationStarted => emit_host_event(
+            EngineEventKind::Model_invocation_started => emit_host_event(
                 &self.emit,
                 AgentEvent::Status {
                     message: "Waiting for model response…".into(),
                 },
             ),
-            EngineEventKind::ToolExecutionStarted => {
-                let name = event
-                    .payload
+            EngineEventKind::Tool_execution_started => {
+                let name = payload
                     .pointer("/toolRequest/name")
                     .and_then(Value::as_str)
                     .unwrap_or("tool");
@@ -1192,8 +1196,8 @@ impl CutReadyDurabilityPort {
                     },
                 );
             }
-            EngineEventKind::ToolResultCommitted => {
-                if let Some(result) = event.payload.get("toolResult") {
+            EngineEventKind::Tool_result_committed => {
+                if let Some(result) = payload.get("toolResult") {
                     emit_host_event(
                         &self.emit,
                         AgentEvent::ToolResult {
@@ -1213,19 +1217,18 @@ impl CutReadyDurabilityPort {
                     );
                 }
             }
-            EngineEventKind::ConversationUpdated => {
+            EngineEventKind::Conversation_updated => {
                 emit_host_event(&self.emit, AgentEvent::DeltaReset)
             }
-            EngineEventKind::TurnFailed | EngineEventKind::TurnReconciliationRequired => {
-                let message = event
-                    .payload
+            EngineEventKind::Turn_failed | EngineEventKind::Turn_reconciliation_required => {
+                let message = payload
                     .pointer("/output/message")
                     .and_then(Value::as_str)
                     .unwrap_or("Prompty TurnEngine failed")
                     .to_string();
                 emit_host_event(&self.emit, AgentEvent::Error { message });
             }
-            EngineEventKind::TurnCancelled => emit_host_event(
+            EngineEventKind::Turn_cancelled => emit_host_event(
                 &self.emit,
                 AgentEvent::Status {
                     message: "Cancelling…".into(),
@@ -1602,6 +1605,7 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
 
     use crate::engine::agent::execution::{ContextSource, FunctionCall, ImageUrl};
+    use prompty::model::InvocationUsage;
     use tokio::sync::Notify;
 
     use super::*;
@@ -1662,8 +1666,10 @@ mod tests {
             messages: Vec::new(),
             iterations: 1,
             last_sequence: 1,
-            portability: prompty::ContextPortability::Portable,
-            delegated_state: Vec::new(),
+            context_state: InvocationContextState {
+                portability: prompty::ContextPortability::Portable,
+                delegated_state: Vec::new(),
+            },
             model_reconciliation: None,
         };
         port.after_commit("effect", &commit, &CancellationToken::new())
@@ -1768,9 +1774,8 @@ mod tests {
                         )
                         .map_err(PortError::configuration)?],
                         tool_requests: Vec::new(),
-                        next_portability: None,
-                        delegated_state: None,
-                        usage: Some(prompty::types::Usage {
+                        next_context_state: None,
+                        usage: Some(InvocationUsage {
                             input_tokens: 3,
                             output_tokens: 2,
                             total_tokens: 5,
@@ -1794,18 +1799,18 @@ mod tests {
                         tool_requests: vec![EngineToolRequest {
                             id: tool_call.id,
                             name: tool_call.function.name,
-                            arguments: serde_json::from_str(&tool_call.function.arguments)
-                                .unwrap_or_else(|_| {
-                                    Value::String(tool_call.function.arguments.clone())
-                                }),
+                            arguments: Some(
+                                serde_json::from_str(&tool_call.function.arguments).unwrap_or_else(
+                                    |_| Value::String(tool_call.function.arguments.clone()),
+                                ),
+                            ),
                             metadata: json!({
                                 "arguments_json": tool_call.function.arguments,
                                 "call_type": tool_call.call_type,
                             }),
                         }],
-                        next_portability: None,
-                        delegated_state: None,
-                        usage: Some(prompty::types::Usage {
+                        next_context_state: None,
+                        usage: Some(InvocationUsage {
                             input_tokens: 4,
                             output_tokens: 1,
                             total_tokens: 5,
@@ -2156,7 +2161,7 @@ mod tests {
                 .find(|checkpoint| checkpoint.id == checkpoint_id)
                 .unwrap();
             assert_eq!(
-                checkpoint.checkpoint["last_sequence"].as_u64(),
+                checkpoint.checkpoint["lastSequence"].as_u64(),
                 Some(included_through)
             );
         }
@@ -2347,10 +2352,66 @@ mod tests {
             .iter()
             .any(|event| event.event_type == "turn_committed"));
         assert!(!detail.checkpoints.is_empty());
-        assert_eq!(
-            detail.checkpoints.last().unwrap().checkpoint["session_id"],
-            "prompty-durable"
-        );
+
+        // Durable payloads use the canonical camelCase projection emitted by the
+        // generated turn-engine types, not Rust snake_case field names.
+        let checkpoint = &detail.checkpoints.last().unwrap().checkpoint;
+        assert_eq!(checkpoint["sessionId"], "prompty-durable");
+
+        // Run identity round-trips through the checkpoint and every event as a
+        // non-empty camelCase `runId`. A top-level run has no parent and depth 0,
+        // so the canonical projection omits `parentRunId` / `delegationDepth`.
+        let run_id = checkpoint["runId"]
+            .as_str()
+            .expect("checkpoint carries a runId");
+        assert!(!run_id.is_empty());
+        assert!(checkpoint.get("parentRunId").is_none());
+        assert!(checkpoint.get("delegationDepth").is_none());
+        for record in &detail.trajectory_events {
+            assert_eq!(
+                record.event["runId"]
+                    .as_str()
+                    .expect("event carries a runId"),
+                run_id,
+                "every persisted event shares the top-level run identity"
+            );
+            assert!(record.event.get("parentRunId").is_none());
+            assert!(record.event.get("delegationDepth").is_none());
+        }
+
+        // A delegated child run must round-trip all three identity fields in
+        // camelCase through CutReady's durability store: runId, parentRunId, and a
+        // non-zero delegationDepth.
+        let store = AgentStateStore::for_project(project.path(), project.path(), "prompty-durable")
+            .unwrap();
+        let delegated_event = EngineEvent {
+            sequence: 999,
+            id: "delegated-event-1".into(),
+            timestamp: "2026-07-24T00:00:00Z".into(),
+            session_id: "prompty-durable".into(),
+            turn_id: "prompty-durable:child-turn".into(),
+            run_id: "child-run".into(),
+            parent_run_id: Some("parent-run".into()),
+            delegation_depth: 1,
+            invocation_id: Some("child-invocation".into()),
+            iteration: Some(0),
+            kind: EngineEventKind::Turn_started,
+            payload: None,
+        };
+        store.append_prompty_event(&delegated_event).unwrap();
+
+        let persisted =
+            AgentStateStore::get_run_detail(project.path(), project.path(), "prompty-durable")
+                .unwrap()
+                .unwrap()
+                .trajectory_events
+                .into_iter()
+                .find(|record| record.event_id.as_deref() == Some("delegated-event-1"))
+                .expect("delegated event persisted")
+                .event;
+        assert_eq!(persisted["runId"], "child-run");
+        assert_eq!(persisted["parentRunId"], "parent-run");
+        assert_eq!(persisted["delegationDepth"], 1);
     }
 
     #[tokio::test]
@@ -2610,10 +2671,13 @@ mod tests {
             timestamp: "2026-07-22T00:00:00Z".into(),
             session_id: "session".into(),
             turn_id: "turn".into(),
+            run_id: "run".into(),
+            parent_run_id: None,
+            delegation_depth: 0,
             invocation_id: Some("invocation".into()),
             iteration: Some(0),
             kind,
-            payload: json!({
+            payload: Some(json!({
                 "toolResult": {
                     "request_id": "call-1",
                     "name": "inspect",
@@ -2622,16 +2686,16 @@ mod tests {
                     "error_kind": null,
                     "metadata": {},
                 },
-            }),
+            })),
         };
 
         durability
-            .append(&event(1, EngineEventKind::ToolExecutionCompleted))
+            .append(&event(1, EngineEventKind::Tool_execution_completed))
             .await
             .unwrap();
         assert!(visible.lock().unwrap().is_empty());
         durability
-            .append(&event(2, EngineEventKind::ToolResultCommitted))
+            .append(&event(2, EngineEventKind::Tool_result_committed))
             .await
             .unwrap();
 

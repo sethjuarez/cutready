@@ -2,13 +2,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures_util::StreamExt;
-use prompty::engine::GeneratedModelPortAdapter;
 use prompty::interfaces::{Executor, InvokerError, Processor};
 use prompty::model::{context::LoadContext, Prompty};
 use prompty::model::{
-    InvocationContextPortability, InvocationContextState, InvocationUsage,
-    ModelInvocationRequest as GeneratedModelInvocationRequest,
-    ModelInvocationResponse as GeneratedModelInvocationResponse, ModelToolRequest,
+    InvocationContextPortability, InvocationContextState, InvocationUsage, ModelToolRequest,
 };
 use prompty::types::{Message, Role, StreamChunk};
 #[cfg(test)]
@@ -339,19 +336,6 @@ impl ModelPort for PromptyExecutorModelPort {
         cancellation: &CancellationToken,
         stream: &dyn ModelStreamPort,
     ) -> Result<ModelInvocationResponse, PortError> {
-        let adapter = GeneratedModelPortAdapter::new(Arc::new(self.clone()));
-        ModelPort::invoke(&adapter, request, cancellation, stream).await
-    }
-}
-
-#[async_trait]
-impl prompty::engine::GeneratedModelPort for PromptyExecutorModelPort {
-    async fn invoke(
-        &self,
-        request: &GeneratedModelInvocationRequest,
-        cancellation: &CancellationToken,
-        stream: &dyn ModelStreamPort,
-    ) -> Result<GeneratedModelInvocationResponse, PortError> {
         if cancellation.is_cancelled() {
             return Err(PortError::new("Agent run cancelled"));
         }
@@ -480,7 +464,7 @@ impl prompty::engine::GeneratedModelPort for PromptyExecutorModelPort {
         let output = tool_requests
             .is_empty()
             .then(|| Value::String(text.clone()));
-        Ok(GeneratedModelInvocationResponse {
+        Ok(ModelInvocationResponse {
             output,
             assistant_messages: vec![assistant],
             tool_requests,
@@ -1039,11 +1023,9 @@ mod tests {
 
         provider.assert();
         assert_eq!(response.output, Some(Value::String("continued".into())));
-        assert_eq!(
-            response.next_portability,
-            Some(ContextPortability::Delegated)
-        );
-        assert_eq!(response.delegated_state.unwrap()[0].id, "resp-next");
+        let next_state = response.next_context_state.as_ref().unwrap();
+        assert_eq!(next_state.portability, ContextPortability::Delegated);
+        assert_eq!(next_state.delegated_state[0].id, "resp-next");
     }
 
     #[tokio::test]
@@ -1081,14 +1063,9 @@ mod tests {
             .unwrap();
 
         provider.assert();
-        assert_eq!(
-            response.next_portability,
-            Some(ContextPortability::Delegated)
-        );
-        assert_eq!(
-            response.delegated_state.as_ref().unwrap()[0].id,
-            "resp-tool"
-        );
+        let next_state = response.next_context_state.as_ref().unwrap();
+        assert_eq!(next_state.portability, ContextPortability::Delegated);
+        assert_eq!(next_state.delegated_state[0].id, "resp-tool");
         assert_eq!(response.tool_requests[0].id, "call-list");
         assert_eq!(
             response.assistant_messages[0].metadata["responses_function_call"]["call_id"],
@@ -1315,7 +1292,7 @@ mod tests {
 
     #[test]
     fn prompty_production_dependencies_remain_pinned_to_a_single_revision() {
-        const REVISION: &str = "4e0e54a2ba3fcea316f5bfc2132f9610ba858558";
+        const REVISION: &str = "0da7bca5e1f52994f9a6d60328c6a3e7ccd8caba";
         let manifest = include_str!("../../../Cargo.toml");
         let lockfile = include_str!("../../../Cargo.lock");
 

@@ -60,10 +60,10 @@ tauri-plugin-opener = "2.5.3"
 tauri-plugin-stronghold = "2"
 
 agentive = { version = "0.6.1", features = ["tracing"] }
-prompty = { git = "https://github.com/microsoft/prompty", rev = "4e0e54a2ba3fcea316f5bfc2132f9610ba858558" }
-prompty-openai = { git = "https://github.com/microsoft/prompty", rev = "4e0e54a2ba3fcea316f5bfc2132f9610ba858558" }
-prompty-foundry = { git = "https://github.com/microsoft/prompty", rev = "4e0e54a2ba3fcea316f5bfc2132f9610ba858558" }
-prompty-anthropic = { git = "https://github.com/microsoft/prompty", rev = "4e0e54a2ba3fcea316f5bfc2132f9610ba858558" }
+prompty = { git = "https://github.com/microsoft/prompty", rev = "0da7bca5e1f52994f9a6d60328c6a3e7ccd8caba" }
+prompty-openai = { git = "https://github.com/microsoft/prompty", rev = "0da7bca5e1f52994f9a6d60328c6a3e7ccd8caba" }
+prompty-foundry = { git = "https://github.com/microsoft/prompty", rev = "0da7bca5e1f52994f9a6d60328c6a3e7ccd8caba" }
+prompty-anthropic = { git = "https://github.com/microsoft/prompty", rev = "0da7bca5e1f52994f9a6d60328c6a3e7ccd8caba" }
 portable-pty = "0.9.0"
 
 # Vendor OpenSSL on macOS to support cross-compilation (ARM → Intel)

@@ -271,7 +271,7 @@ function extractText(json) {
 // ── Post-run assertions ──────────────────────────────────────────────────────
 
 function assertEngineWasPrompty() {
-  const result = runJson(["logs", "--json", "--session", report.sessionId]);
+  const result = runJson(readArgs("logs"));
   if (!result.ok) return recordAssertion("engine-is-prompty", "failed", null, result.error);
   const items = asArray(result.json);
   const starts = items
@@ -292,7 +292,7 @@ function assertEngineWasPrompty() {
 }
 
 function assertNoErrors() {
-  const result = runJson(["errors", "--json", "--session", report.sessionId]);
+  const result = runJson(readArgs("errors"));
   if (!result.ok) return recordAssertion("no-frontend-errors", "failed", null, result.error);
   const count = jsonCount(result.json);
   recordAssertion(
@@ -304,7 +304,7 @@ function assertNoErrors() {
 }
 
 function assertNoFailedIpc() {
-  const result = runJson(["ipc", "--json", "--session", report.sessionId, "--failed"]);
+  const result = runJson(readArgs("ipc", "--failed"));
   if (!result.ok) return recordAssertion("no-failed-ipc", "failed", null, result.error);
   const count = jsonCount(result.json);
   recordAssertion(
@@ -318,7 +318,7 @@ function assertNoFailedIpc() {
 function assertNoPrivacyLeak() {
   const forbid = definition.privacyForbid ?? [];
   if (forbid.length === 0) return;
-  const result = runJson(["logs", "--json", "--session", report.sessionId]);
+  const result = runJson(readArgs("logs"));
   if (!result.ok) return recordAssertion("no-privacy-leak", "failed", null, result.error);
   const blob = JSON.stringify(result.json ?? "");
   const leaked = forbid.filter((marker) => blob.includes(marker));
@@ -331,7 +331,7 @@ function assertNoPrivacyLeak() {
 }
 
 function recordExplain() {
-  const result = runJson(["explain", "--json", "--session", report.sessionId]);
+  const result = runJson(readArgs("explain"));
   report.explain = result.ok ? result.json : { error: result.error };
   writeReport();
 }
@@ -458,6 +458,13 @@ function removeProjectFromRecents() {
 }
 
 // ── Small utilities ──────────────────────────────────────────────────────────
+
+// Pin post-run read commands to this drill's exact telemetry DB and session so
+// stale discovery records from prior runs cannot cause "Multiple active Auditaur
+// sessions found" ambiguity. --db is the authoritative disambiguator.
+function readArgs(command, ...rest) {
+  return [command, "--json", "--db", report.databasePath, "--session", report.sessionId, ...rest];
+}
 
 function runJson(args) {
   const result = spawnSync("auditaur", args, { env, encoding: "utf8", shell: false });

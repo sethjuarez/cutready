@@ -114,8 +114,7 @@ fn final_response(text: &str) -> ModelInvocationResponse {
         usage: None,
         assistant_messages: vec![Message::with_text(Role::Assistant, text)],
         tool_requests: Vec::new(),
-        next_portability: None,
-        delegated_state: None,
+        next_context_state: None,
         metadata: Value::Null,
     }
 }
@@ -124,7 +123,7 @@ fn tool_request(id: &str, name: &str, arguments: Value) -> EngineToolRequest {
     EngineToolRequest {
         id: id.into(),
         name: name.into(),
-        arguments,
+        arguments: Some(arguments),
         metadata: Value::Null,
     }
 }
@@ -138,7 +137,11 @@ fn tool_response(requests: Vec<EngineToolRequest>) -> ModelInvocationResponse {
                 "type": "function",
                 "function": {
                     "name": request.name,
-                    "arguments": request.arguments.to_string(),
+                    "arguments": request
+                        .arguments
+                        .as_ref()
+                        .map(|value| value.to_string())
+                        .unwrap_or_default(),
                 },
             })
         })
@@ -152,8 +155,7 @@ fn tool_response(requests: Vec<EngineToolRequest>) -> ModelInvocationResponse {
             metadata: json!({ "tool_calls": tool_calls }),
         }],
         tool_requests: requests,
-        next_portability: None,
-        delegated_state: None,
+        next_context_state: None,
         metadata: Value::Null,
     }
 }
@@ -210,12 +212,12 @@ impl ToolPort for RecordingTools {
             request_id: request.id.clone(),
             name: request.name.clone(),
             outcome: ToolOutcome::Success,
-            output: Value::String(
+            output: Some(Value::String(
                 self.outputs
                     .get(&request.id)
                     .cloned()
                     .unwrap_or_else(|| "ok".into()),
-            ),
+            )),
             error_kind: None,
             metadata: Value::Null,
         })
@@ -470,9 +472,9 @@ async fn prompty_multi_round_permissions_arguments_and_post_commit_are_durable()
         .lock()
         .unwrap()
         .iter()
-        .filter(|event| event.kind == EngineEventKind::ToolResultCommitted)
+        .filter(|event| event.kind == EngineEventKind::Tool_result_committed)
         .map(|event| {
-            event.payload["toolResult"]["request_id"]
+            event.payload.as_ref().unwrap()["toolResult"]["requestId"]
                 .as_str()
                 .unwrap()
                 .to_string()
@@ -570,7 +572,7 @@ async fn prompty_persistence_failures_resume_without_duplicate_model_or_tool_eff
         Arc::new(prompty::NoopPostCommitPort),
     )
     .run(
-        TurnEngineRequest::resume_from(&checkpoint, 3, last_persisted_sequence),
+        TurnEngineRequest::resume_from(&checkpoint, 3, last_persisted_sequence as u64),
         CancellationToken::new(),
     )
     .await
@@ -612,13 +614,13 @@ async fn prompty_persistence_failures_resume_without_duplicate_model_or_tool_eff
         let marker = events
             .iter()
             .find(|event| {
-                event.kind == EngineEventKind::CheckpointCreated
-                    && event.payload["checkpointId"] == checkpoint.id
+                event.kind == EngineEventKind::Checkpoint_created
+                    && event.payload.as_ref().unwrap()["checkpointId"] == checkpoint.id
             })
             .unwrap();
         assert_eq!(marker.sequence, checkpoint.last_sequence + 1);
         assert_eq!(
-            marker.payload["includedThroughSequence"].as_u64(),
+            marker.payload.as_ref().unwrap()["includedThroughSequence"].as_i64(),
             Some(checkpoint.last_sequence)
         );
     }
@@ -649,7 +651,7 @@ async fn prompty_indeterminate_partial_model_output_reconciles_without_reinvocat
     .await
     .unwrap();
 
-    assert_eq!(result.commit.status, TurnStatus::ReconciliationRequired);
+    assert_eq!(result.commit.status, TurnStatus::Reconciliation_required);
     assert_eq!(
         result.commit.output.as_ref().unwrap()["errorKind"],
         "model_outcome_unknown"
@@ -671,7 +673,7 @@ async fn prompty_indeterminate_partial_model_output_reconciles_without_reinvocat
     let resumed_request = TurnEngineRequest::resume_after_model_reconciliation(
         &checkpoint,
         3,
-        result.commit.last_sequence,
+        result.commit.last_sequence as u64,
         final_response("host-confirmed response"),
     )
     .unwrap();
