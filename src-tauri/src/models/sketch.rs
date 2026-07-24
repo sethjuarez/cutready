@@ -812,8 +812,16 @@ mod tests {
         let serialized = serde_json::to_value(&row).unwrap();
         let parsed: PlanningRow = serde_json::from_value(serialized).unwrap();
         let plan = parsed.narration_plan.unwrap();
-        assert_eq!(plan.baseline_style.as_deref(), Some("narration-professional"));
-        assert_eq!(plan.pronunciation_overrides.get("CutReady").map(String::as_str), Some("cut ready"));
+        assert_eq!(
+            plan.baseline_style.as_deref(),
+            Some("narration-professional")
+        );
+        assert_eq!(
+            plan.pronunciation_overrides
+                .get("CutReady")
+                .map(String::as_str),
+            Some("cut ready")
+        );
         assert_eq!(plan.beats[0].pause_after_ms, Some(250));
     }
 

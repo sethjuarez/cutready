@@ -23,6 +23,7 @@ pub fn msg(event: &str, module: &str, message: &str) {
 }
 
 /// Truncate a string to max_len chars, appending "…" if truncated.
+#[allow(dead_code)]
 pub fn truncate(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()

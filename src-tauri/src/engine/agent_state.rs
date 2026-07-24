@@ -1221,6 +1221,37 @@ impl AgentStateStore {
         insert_memory_promotion(&conn, self.run_id(), candidate, outcome)
     }
 
+    /// Record a memory-promotion candidate from a host-owned JSON payload, with no
+    /// dependency on the turn engine's promotion types. The native Prompty path uses
+    /// this from its `PostCommitPort` so promotions are host-schema and engine-agnostic.
+    pub fn record_native_memory_promotion(
+        &self,
+        candidate: &serde_json::Value,
+    ) -> Result<(), String> {
+        let conn = self.connect()?;
+        let candidate_json = serde_json::to_string(candidate).map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT INTO memory_promotions
+                (run_id, status, candidate_json, outcome_json, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                self.run_id(),
+                "suggested",
+                candidate_json,
+                Option::<String>::None,
+                Utc::now().to_rfc3339()
+            ],
+        )
+        .map_err(|e| format!("Could not insert memory promotion: {e}"))?;
+        prune_by_run_limit(
+            &conn,
+            "memory_promotions",
+            self.run_id(),
+            MAX_MEMORY_PROMOTIONS_PER_RUN,
+        )?;
+        Ok(())
+    }
+
     #[allow(dead_code)]
     pub fn get_run(&self, run_id: &str) -> Result<Option<AgentRunRecord>, String> {
         let conn = self.connect()?;
@@ -3641,6 +3672,34 @@ mod tests {
         assert_eq!(store.touched_resource_count("run-metadata").unwrap(), 1);
         assert_eq!(store.verification_result_count("run-metadata").unwrap(), 1);
         assert_eq!(store.memory_promotion_count("run-metadata").unwrap(), 1);
+    }
+
+    #[test]
+    fn native_memory_promotion_persists_generic_json_without_agentive_types() {
+        let store = test_store("run-native-promotion");
+        assert_eq!(
+            store
+                .memory_promotion_count("run-native-promotion")
+                .unwrap(),
+            0
+        );
+
+        // The native Prompty path records candidates as opaque host JSON — no engine type.
+        store
+            .record_native_memory_promotion(
+                &serde_json::json!({ "content": "prefers concise narration", "category": "core" }),
+            )
+            .unwrap();
+        store
+            .record_native_memory_promotion(&serde_json::json!({ "content": "FFV1 lossless" }))
+            .unwrap();
+
+        assert_eq!(
+            store
+                .memory_promotion_count("run-native-promotion")
+                .unwrap(),
+            2
+        );
     }
 
     #[test]

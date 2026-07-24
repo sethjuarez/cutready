@@ -1,0 +1,58 @@
+{
+  "app": "cutready",
+  "timeoutSeconds": 240,
+  "turnTimeoutMs": 120000,
+  "requireEngine": "prompty",
+  "selectors": {
+    "composer": "textarea[placeholder^=\"Ask about your demo plan\"]",
+    "send": "button[title=\"Send (Enter)\"]",
+    "stop": "button[title=\"Stop generation\"]",
+    "transcript": "[data-testid=\"chat-messages-scroll\"]",
+    "newChat": "button[aria-label=\"New Chat\"]"
+  },
+  "fixture": {
+    "prefix": "cutready-chat-drill-",
+    "notes": [
+      {
+        "path": "brief.md",
+        "body": "# Launch brief\n\nInternal only. The launch codename is ZULU-7781.\nDo not share outside the team.\n"
+      }
+    ],
+    "sketches": [
+      {
+        "path": "intro.sk",
+        "title": "Aurora Onboarding",
+        "narrative": "Welcome tour. Reference marker CIPHER-3096 for tracking."
+      },
+      {
+        "path": "demo.sk",
+        "title": "Falcon Checkout",
+        "narrative": "Checkout walkthrough. Reference marker CIPHER-8042 for tracking."
+      }
+    ]
+  },
+  "privacyForbid": ["ZULU-7781", "CIPHER-3096", "CIPHER-8042"],
+  "scenarios": [
+    {
+      "id": "read-note",
+      "prompt": "Read the note brief.md and reply with ONLY the launch codename it contains, nothing else.",
+      "expectResponse": ["ZULU-7781"]
+    },
+    {
+      "id": "read-multi",
+      "prompt": "List the project files, then read intro.sk and demo.sk. Reply with the exact title of each sketch, one per line.",
+      "expectResponse": ["Aurora Onboarding", "Falcon Checkout"]
+    },
+    {
+      "id": "cancel",
+      "prompt": "Write an extremely long, exhaustively detailed 2000-word narration script for a product demo about relational databases. Keep going with as much detail as possible.",
+      "cancel": true,
+      "cancelAfterMs": 2500
+    },
+    {
+      "id": "post-cancel",
+      "prompt": "Read the note brief.md and reply with ONLY the launch codename it contains, nothing else.",
+      "expectResponse": ["ZULU-7781"]
+    }
+  ]
+}

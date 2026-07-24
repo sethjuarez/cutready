@@ -15,7 +15,7 @@ export function recordActivityEntries(entries: TelemetryActivityEntry[]) {
       id: entry.id,
       timestamp: entry.timestamp.toISOString(),
       source: entry.source,
-      content: entry.content,
+      contentChars: entry.content.length,
       level: entry.level,
     };
 

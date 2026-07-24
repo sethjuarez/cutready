@@ -18,7 +18,7 @@
 //! - Tool-result messages are produced by our own tool implementations and
 //!   are sanitized at their own boundaries when needed.
 
-use agentive::types::{ChatMessage, ContentPart, MessageContent};
+use super::execution::{ChatMessage, ContentPart, MessageContent};
 
 /// Strip C0 control characters (excluding `\t`, `\n`, `\r`) and `DEL` from
 /// the input text. Returns the sanitized string and the number of characters
@@ -35,6 +35,41 @@ pub fn sanitize_text(text: &str) -> (String, usize) {
         }
     }
     (out, removed)
+}
+
+/// Remove API-hostile control characters and oversized inline base64 images.
+pub fn sanitize_for_api(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut remaining = text;
+    while let Some(start) = remaining.find("data:image/") {
+        result.push_str(&remaining[..start]);
+        let after = &remaining[start..];
+        if let Some(base64_start) = after.find(";base64,") {
+            let data_start = base64_start + 8;
+            let data_end = after[data_start..]
+                .find(|character: char| {
+                    !character.is_ascii_alphanumeric()
+                        && character != '+'
+                        && character != '/'
+                        && character != '='
+                })
+                .unwrap_or(after.len() - data_start);
+            if data_end > 100 {
+                result.push_str("[base64 image removed]");
+            } else {
+                result.push_str(&after[..data_start + data_end]);
+            }
+            remaining = &after[data_start + data_end..];
+        } else {
+            result.push_str("data:image/");
+            remaining = &after[11..];
+        }
+    }
+    result.push_str(remaining);
+    result
+        .chars()
+        .filter(|character| !character.is_control() || matches!(character, '\n' | '\r' | '\t'))
+        .collect()
 }
 
 /// Sanitize all user-role messages in place. Returns the total number of
@@ -75,7 +110,7 @@ pub fn sanitize_user_messages(messages: &mut [ChatMessage]) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agentive::types::{ChatMessage, ContentPart, ImageUrl, MessageContent};
+    use crate::engine::agent::execution::{ChatMessage, ContentPart, ImageUrl, MessageContent};
 
     #[test]
     fn strips_nul_and_other_control_chars_but_keeps_whitespace() {

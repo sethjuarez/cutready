@@ -22,6 +22,7 @@ type AuditaurInvokeArgs = Record<string, unknown>;
 const TAURI_SERIALIZE_TO_IPC_KEY = "__TAURI_TO_IPC_KEY__";
 
 const SENSITIVE_INVOKE_COMMANDS = new Set([
+  "agent_chat_with_tools",
   "azure_browser_auth_complete",
   "azure_device_code_poll",
   "azure_token_refresh",
@@ -30,6 +31,15 @@ const SENSITIVE_INVOKE_COMMANDS = new Set([
   "save_feedback",
   "save_narration_recording",
 ]);
+const SENSITIVE_TAURI_EVENTS = new Set(["agent-event"]);
+
+export function isSensitiveInvokeCommand(command: string) {
+  return SENSITIVE_INVOKE_COMMANDS.has(command);
+}
+
+export function isSensitiveTauriEvent(event: string) {
+  return SENSITIVE_TAURI_EVENTS.has(event);
+}
 
 function isTauriRuntime() {
   return typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
@@ -55,7 +65,7 @@ async function getAuditaur() {
 }
 
 export async function invoke<T>(cmd: string, args?: InvokeArgs, options?: InvokeOptions): Promise<T> {
-  if (SENSITIVE_INVOKE_COMMANDS.has(cmd)) {
+  if (isSensitiveInvokeCommand(cmd)) {
     return options ? rawInvoke<T>(cmd, args, options) : rawInvoke<T>(cmd, args);
   }
 
@@ -74,6 +84,7 @@ export async function listen<T>(
   options?: Options,
 ): Promise<UnlistenFn> {
   if (options) return rawListen<T>(event, handler, options);
+  if (isSensitiveTauriEvent(event)) return rawListen<T>(event, handler);
 
   const auditaur = await getAuditaur();
   if (!auditaur) return rawListen<T>(event, handler);

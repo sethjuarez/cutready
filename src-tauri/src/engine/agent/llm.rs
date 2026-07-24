@@ -12,10 +12,72 @@ use std::sync::Arc;
 // ---------------------------------------------------------------------------
 
 pub use agentive::discovery::ModelInfo;
-pub use agentive::{
-    context_budget, needs_responses_api, simple_chat, supports_vision, ChatMessage, ContentPart,
-    ImageUrl, Provider, Tool, ToolCall,
-};
+pub use agentive::{simple_chat, ChatMessage, Provider};
+
+pub fn needs_responses_api(model: &str) -> bool {
+    let model = model.to_ascii_lowercase();
+    model.contains("codex") || (model.contains("gpt-5") && model.ends_with("-pro"))
+}
+
+pub fn supports_vision(model: &str) -> bool {
+    let model = model.to_ascii_lowercase();
+    model.contains("gpt-4o")
+        || model.contains("gpt-4.1")
+        || model.contains("gpt-5")
+        || model.contains("gpt-4-turbo")
+        || model.contains("gpt-4-vision")
+        || model.contains("claude-3-5")
+        || model.contains("claude-3.5")
+        || model.contains("claude-4")
+        || model.contains("gemini")
+        || model.starts_with("o1")
+        || model.starts_with("o3")
+        || model.starts_with("o4")
+}
+
+pub fn context_budget(model: &str, reported_context: Option<usize>) -> usize {
+    if let Some(reported) = reported_context {
+        return reported.saturating_mul(3);
+    }
+    let model = model.to_ascii_lowercase();
+    let token_limit: usize = if model.contains("codex") {
+        16_000
+    } else if model.contains("claude-3-5")
+        || model.contains("claude-3.5")
+        || model.contains("claude-4")
+    {
+        200_000
+    } else if model.contains("claude") {
+        100_000
+    } else if model.contains("gpt-5")
+        || model.contains("gpt-4o")
+        || model.contains("gpt-4.1")
+        || model.contains("gpt-4-turbo")
+        || model.contains("gpt-4-1106")
+        || model.contains("gpt-4-0125")
+        || model.starts_with("o1")
+        || model.starts_with("o3")
+        || model.starts_with("o4")
+        || model.contains("gemini")
+    {
+        128_000
+    } else if model.contains("deepseek") {
+        64_000
+    } else if model.contains("16k") || model.contains("phi-4") || model.contains("phi-3") {
+        16_000
+    } else if model.contains("mistral-large") || model.contains("mistral-medium") {
+        32_000
+    } else if model.contains("mistral") {
+        8_000
+    } else if model.contains("gpt-4") {
+        8_192
+    } else if model.contains("gpt-35") || model.contains("gpt-3.5") {
+        4_096
+    } else {
+        32_000
+    };
+    token_limit.saturating_mul(3)
+}
 
 // ---------------------------------------------------------------------------
 // CutReady-specific provider configuration
@@ -355,6 +417,13 @@ mod tests {
         );
         assert_eq!(caps.get("responses_api").map(String::as_str), Some("false"));
         assert_eq!(caps.get("tool_calling").map(String::as_str), Some("true"));
+    }
+
+    #[test]
+    fn context_budget_preserves_legacy_host_policy_defaults() {
+        assert_eq!(context_budget("mistral-7b", None), 24_000);
+        assert_eq!(context_budget("custom-private-model", None), 96_000);
+        assert_eq!(context_budget("custom-private-model", Some(10_000)), 30_000);
     }
 
     #[test]

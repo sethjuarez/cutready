@@ -13,10 +13,13 @@ use std::sync::{
 };
 use std::time::Instant;
 
+use super::reference_context::resolve_project_references;
+#[cfg(test)]
+use super::reference_context::{extract_project_reference_names_from_text, matches_ref};
+use super::{agentive_adapter, tools};
+use crate::engine::agent::execution::{AgentEvent, VisionConfig, WebAccessConfig};
 use crate::engine::agent::llm::ChatMessage;
-use crate::engine::agent::tools;
 use crate::engine::agent_state::AgentStateStore;
-use crate::engine::project;
 
 /// Default maximum tool-call rounds to prevent infinite loops.
 pub const DEFAULT_MAX_TOOL_ROUNDS: usize = 50;
@@ -32,68 +35,19 @@ const MAX_DELEGATION_DEPTH: usize = 2;
 const CONTEXT_FAILURE_RETRY_FRACTION_NUMERATOR: usize = 2;
 const CONTEXT_FAILURE_RETRY_FRACTION_DENOMINATOR: usize = 3;
 
-// ---------------------------------------------------------------------------
-// Event types
-// ---------------------------------------------------------------------------
-
-/// Events emitted during the agent loop.
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(tag = "type")]
-pub enum AgentEvent {
-    /// A text delta streamed from the LLM.
-    #[serde(rename = "delta")]
-    Delta { content: String },
-    /// Signals a new turn — frontend should clear its streaming buffer.
-    #[serde(rename = "delta_reset")]
-    DeltaReset,
-    /// A reasoning/thinking delta streamed from the LLM.
-    #[serde(rename = "thinking")]
-    Thinking { content: String },
-    /// Status update (thinking, calling tools, etc.)
-    #[serde(rename = "status")]
-    Status { message: String },
-    /// A tool is being called.
-    #[serde(rename = "tool_call")]
-    ToolCall { name: String, arguments: String },
-    /// A tool returned a result.
-    #[serde(rename = "tool_result")]
-    ToolResult { name: String, result: String },
-    /// Context was selected for the next provider request. The provider may still
-    /// omit the transient pack if its serialized request budget is exhausted.
-    #[serde(rename = "context_prepared")]
-    ContextPrepared {
-        selected_count: usize,
-        dropped_count: usize,
-        total_bytes: usize,
-        budget_bytes: usize,
-    },
-    /// Packed context survived final request fitting and was sent to the provider.
-    #[serde(rename = "context_sent")]
-    ContextSent { iteration: usize, attempt: usize },
-    /// A sub-agent is starting work.
-    #[serde(rename = "agent_start")]
-    AgentStart { agent_id: String, task: String },
-    /// A sub-agent finished.
-    #[serde(rename = "agent_done")]
-    AgentDone { agent_id: String },
-    /// The agent loop finished.
-    #[serde(rename = "done")]
-    Done { response: String },
-    /// An error occurred.
-    #[serde(rename = "error")]
-    Error { message: String },
-}
-
-/// Configuration for vision/image support in tool execution.
-#[derive(Debug, Clone)]
-pub struct VisionConfig {
-    /// Whether vision is enabled (user setting AND model support).
-    pub enabled: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct WebAccessConfig {
-    pub search_enabled: bool,
+fn agentive_tool_definitions(
+    web_search_enabled: bool,
+    project_workspace_tools_enabled: bool,
+    mutation_tools_enabled: bool,
+) -> Vec<agentive::Tool> {
+    tools::all_tools(
+        web_search_enabled,
+        project_workspace_tools_enabled,
+        mutation_tools_enabled,
+    )
+    .into_iter()
+    .map(agentive_adapter::tool_definition_to_agentive)
+    .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -173,7 +127,7 @@ fn run_inner<'a>(
 > {
     Box::pin(async move {
         let project_workspace_tools_enabled = agent_id.eq_ignore_ascii_case("writer");
-        let tool_defs = tools::all_tools(
+        let tool_defs = agentive_tool_definitions(
             web_access.search_enabled,
             project_workspace_tools_enabled && mutation_tools_enabled,
             mutation_tools_enabled,
@@ -467,8 +421,9 @@ fn run_inner<'a>(
                     let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("");
                     agentive::web::fetch_and_clean(url)
                         .await
-                        .map(agentive::ToolOutput::from)
+                        .map(super::execution::ToolOutput::from)
                         .map(|output| tools::decorate_tool_output(&tc.function.name, &args, output))
+                        .map(agentive_adapter::tool_output_to_agentive)
                 })
             } else if tool_call.function.name == "search_web" {
                 let tc = tool_call;
@@ -477,19 +432,22 @@ fn run_inner<'a>(
                         .unwrap_or(serde_json::json!({}));
                     tools::exec_search_web(&args)
                         .await
-                        .map(agentive::ToolOutput::from)
+                        .map(super::execution::ToolOutput::from)
                         .map(|output| tools::decorate_tool_output(&tc.function.name, &args, output))
+                        .map(agentive_adapter::tool_output_to_agentive)
                 })
             } else {
                 let output = tools::execute_tool(
-                    &tool_call,
+                    &agentive_adapter::tool_call_from_agentive(tool_call),
                     Path::new(&repo_root),
                     Path::new(&project_root),
                     vision_enabled,
                     project_workspace_tools_enabled,
                     mutation_tools_enabled_for_tools,
                 );
-                Box::pin(std::future::ready(Ok(output)))
+                Box::pin(std::future::ready(Ok(
+                    agentive_adapter::tool_output_to_agentive(output),
+                )))
             }
         };
 
@@ -575,7 +533,7 @@ fn run_inner<'a>(
                 let provider_name_for_tools = provider_name.clone();
                 let model_name_for_tools = model_name.clone();
                 let web_search_enabled = web_access.search_enabled;
-                let tools_for_exec = tools::all_tools(
+                let tools_for_exec = agentive_tool_definitions(
                     web_search_enabled,
                     project_workspace_tools_enabled && mutation_tools_enabled,
                     mutation_tools_enabled,
@@ -641,10 +599,11 @@ fn run_inner<'a>(
                             let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("");
                             agentive::web::fetch_and_clean(url)
                                 .await
-                                .map(agentive::ToolOutput::from)
+                                .map(super::execution::ToolOutput::from)
                                 .map(|output| {
                                     tools::decorate_tool_output(&tc.function.name, &args, output)
                                 })
+                                .map(agentive_adapter::tool_output_to_agentive)
                         })
                     } else if tool_call.function.name == "search_web" {
                         let tc = tool_call;
@@ -653,28 +612,31 @@ fn run_inner<'a>(
                                 .unwrap_or(serde_json::json!({}));
                             tools::exec_search_web(&args)
                                 .await
-                                .map(agentive::ToolOutput::from)
+                                .map(super::execution::ToolOutput::from)
                                 .map(|output| {
                                     tools::decorate_tool_output(&tc.function.name, &args, output)
                                 })
+                                .map(agentive_adapter::tool_output_to_agentive)
                         })
                     } else {
                         let output = tools::execute_tool(
-                            &tool_call,
+                            &agentive_adapter::tool_call_from_agentive(tool_call),
                             Path::new(&repo_root),
                             Path::new(&project_root),
                             vision_enabled,
                             project_workspace_tools_enabled && mutation_tools_enabled,
                             mutation_tools_enabled,
                         );
-                        Box::pin(std::future::ready(Ok(output)))
+                        Box::pin(std::future::ready(Ok(
+                            agentive_adapter::tool_output_to_agentive(output),
+                        )))
                     }
                 };
 
                 agentive::run(
                     provider,
                     retry_messages,
-                    tools::all_tools(
+                    agentive_tool_definitions(
                         web_search_enabled,
                         project_workspace_tools_enabled && mutation_tools_enabled,
                         mutation_tools_enabled,
@@ -786,67 +748,6 @@ fn friendly_context_error(err: &agentive::AgentError) -> String {
     }
 }
 
-// ---------------------------------------------------------------------------
-// @reference context
-// ---------------------------------------------------------------------------
-
-/// Try to resolve a reference name against project files.
-fn resolve_project_reference(
-    root: &std::path::Path,
-    name: &str,
-) -> Option<agentive::ResolvedReference> {
-    // Try sketches
-    if let Ok(sketches) = project::scan_sketches(root) {
-        for s in &sketches {
-            if matches_ref(name, &s.path, &s.title) {
-                let abs = root.join(&s.path);
-                if let Ok(sketch) = project::read_sketch(&abs) {
-                    let content = format_sketch_for_ref(&sketch);
-                    return Some(agentive::ResolvedReference {
-                        name: s.title.clone(),
-                        content,
-                        content_type: "application/json".to_string(),
-                    });
-                }
-            }
-        }
-    }
-
-    // Try notes
-    if let Ok(notes) = project::scan_notes(root) {
-        for n in &notes {
-            if matches_ref(name, &n.path, &n.title) {
-                let abs = root.join(&n.path);
-                if let Ok(content) = project::read_note(&abs) {
-                    return Some(agentive::ResolvedReference {
-                        name: n.title.clone(),
-                        content,
-                        content_type: "text/markdown".to_string(),
-                    });
-                }
-            }
-        }
-    }
-
-    // Try storyboards
-    if let Ok(storyboards) = project::scan_storyboards(root) {
-        for sb in &storyboards {
-            if matches_ref(name, &sb.path, &sb.title) {
-                let abs = root.join(&sb.path);
-                if let Ok(storyboard) = project::read_storyboard(&abs) {
-                    return Some(agentive::ResolvedReference {
-                        name: sb.title.clone(),
-                        content: super::tools::format_storyboard_for_agent(root, &storyboard),
-                        content_type: "text/markdown".to_string(),
-                    });
-                }
-            }
-        }
-    }
-
-    None
-}
-
 fn build_context_items(
     project_root: &Path,
     messages: &[ChatMessage],
@@ -857,26 +758,28 @@ fn build_context_items(
         .map(|item| item.id.clone())
         .collect::<BTreeSet<_>>();
 
-    for reference in extract_project_reference_names(messages) {
-        let normalized = normalize_ref_name(&reference);
-        let id = format!("project-reference:{normalized}");
-        if seen.contains(&id) {
+    let user_messages = messages
+        .iter()
+        .filter(|message| message.role == "user")
+        .filter_map(ChatMessage::text)
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    for resolved in resolve_project_references(project_root, &user_messages) {
+        if seen.contains(&resolved.id) {
             continue;
         }
-        if let Some(resolved) = resolve_project_reference(project_root, &reference) {
-            let item = agentive::ContextItem::new(
-                id.clone(),
-                agentive::ContextSource::File,
-                resolved.name,
-                format!("Project reference @{reference}"),
-            )
-            .with_kind(agentive::ContextKind::ReferenceDoc)
-            .with_priority(100)
-            .with_content(resolved.content, resolved.content_type)
-            .with_metadata("reference", reference);
-            explicit_items.push(item);
-            seen.insert(id);
-        }
+        let item = agentive::ContextItem::new(
+            resolved.id.clone(),
+            agentive::ContextSource::File,
+            resolved.name,
+            format!("Project reference @{}", resolved.reference),
+        )
+        .with_kind(agentive::ContextKind::ReferenceDoc)
+        .with_priority(100)
+        .with_content(resolved.content, resolved.content_type)
+        .with_metadata("reference", resolved.reference);
+        seen.insert(resolved.id);
+        explicit_items.push(item);
     }
 
     explicit_items
@@ -1019,136 +922,6 @@ pub(super) fn read_context_asset_output(
     )))
 }
 
-fn extract_project_reference_names(messages: &[ChatMessage]) -> Vec<String> {
-    let mut refs = Vec::new();
-    let mut seen = BTreeSet::new();
-    for message in messages {
-        if message.role != "user" {
-            continue;
-        }
-        if let Some(text) = message.text() {
-            for reference in extract_project_reference_names_from_text(text) {
-                if seen.insert(reference.clone()) {
-                    refs.push(reference);
-                }
-            }
-        }
-    }
-    refs
-}
-
-fn extract_project_reference_names_from_text(text: &str) -> Vec<String> {
-    let mut refs = Vec::new();
-    let bytes = text.as_bytes();
-    let mut index = 0usize;
-    while index < bytes.len() {
-        if bytes[index] != b'@' {
-            index += 1;
-            continue;
-        }
-
-        if index > 0 {
-            let prev = bytes[index - 1] as char;
-            if prev.is_ascii_alphanumeric() || prev == '_' {
-                index += 1;
-                continue;
-            }
-        }
-
-        let start = index + 1;
-        if start >= bytes.len() {
-            break;
-        }
-
-        let (raw, next_index) = if bytes[start] == b'"' || bytes[start] == b'\'' {
-            let quote = bytes[start];
-            let content_start = start + 1;
-            let mut end = content_start;
-            while end < bytes.len() && bytes[end] != quote {
-                end += 1;
-            }
-            (&text[content_start..end], end.saturating_add(1))
-        } else {
-            let mut end = start;
-            while end < bytes.len() {
-                let ch = bytes[end] as char;
-                if ch.is_whitespace() || matches!(ch, ',' | ';' | ')' | ']' | '}') {
-                    break;
-                }
-                end += 1;
-            }
-            (&text[start..end], end)
-        };
-
-        let reference = raw
-            .trim()
-            .trim_matches(|ch: char| matches!(ch, '.' | ':' | ',' | ';' | ')' | ']' | '}'))
-            .to_string();
-        let normalized = normalize_ref_name(&reference);
-        if !reference.is_empty()
-            && !normalized.starts_with("http://")
-            && !normalized.starts_with("https://")
-            && !normalized.starts_with("web:http://")
-            && !normalized.starts_with("web:https://")
-        {
-            refs.push(reference);
-        }
-        index = next_index.max(index + 1);
-    }
-    refs
-}
-
-/// Check if a user-typed reference name matches a project file by path, title, or stem.
-fn matches_ref(name: &str, path: &str, title: &str) -> bool {
-    let name_lower = normalize_ref_name(name);
-    // Exact path match
-    if path.to_lowercase() == name_lower {
-        return true;
-    }
-    // Title match (case-insensitive)
-    if title.to_lowercase() == name_lower {
-        return true;
-    }
-    // File stem match (e.g., "intro" matches "intro.sk")
-    if let Some(stem) = std::path::Path::new(path).file_stem() {
-        if stem.to_string_lossy().to_lowercase() == name_lower {
-            return true;
-        }
-    }
-    false
-}
-
-fn normalize_ref_name(name: &str) -> String {
-    let trimmed = name.trim().trim_matches('"').trim_matches('\'');
-    let without_type = trimmed
-        .strip_prefix("sketch:")
-        .or_else(|| trimmed.strip_prefix("note:"))
-        .or_else(|| trimmed.strip_prefix("storyboard:"))
-        .unwrap_or(trimmed);
-    without_type
-        .trim()
-        .trim_matches('"')
-        .trim_matches('\'')
-        .to_lowercase()
-}
-
-/// Format a sketch as readable text for reference injection.
-fn format_sketch_for_ref(sketch: &crate::models::sketch::Sketch) -> String {
-    let mut out = format!("# {}\n\n", sketch.title);
-    if let Some(desc) = sketch.description.as_str() {
-        if !desc.is_empty() {
-            out.push_str(&format!("{desc}\n\n"));
-        }
-    }
-    for (i, row) in sketch.rows.iter().enumerate() {
-        out.push_str(&format!(
-            "## Row {} [{}]\n**Narrative:** {}\n**Actions:** {}\n\n",
-            i, row.time, row.narrative, row.demo_actions
-        ));
-    }
-    out
-}
-
 // ---------------------------------------------------------------------------
 // Tool helpers
 // ---------------------------------------------------------------------------
@@ -1217,7 +990,7 @@ fn exec_delegation(
     let repo_root = repo_root.to_string();
     let project_root = project_root.to_string();
     let agent_prompts = agent_prompts.clone();
-    let tools = tools::all_tools(
+    let tools = agentive_tool_definitions(
         web_search_enabled,
         agent_id.eq_ignore_ascii_case("writer") && mutation_tools_enabled,
         mutation_tools_enabled,
@@ -1317,14 +1090,16 @@ fn exec_delegation(
                 })
             } else {
                 let output = tools::execute_tool(
-                    &tool_call,
+                    &agentive_adapter::tool_call_from_agentive(tool_call),
                     Path::new(&repo_root),
                     Path::new(&project_root),
                     vision_enabled,
                     sub_project_workspace_tools_enabled,
                     mutation_tools_enabled,
                 );
-                Box::pin(std::future::ready(Ok(output)))
+                Box::pin(std::future::ready(Ok(
+                    agentive_adapter::tool_output_to_agentive(output),
+                )))
             }
         };
 

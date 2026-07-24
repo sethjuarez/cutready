@@ -14,9 +14,7 @@ pub fn cached_voice_preview(
     output_format: &str,
 ) -> anyhow::Result<Option<String>> {
     let path = preview_path(app_data_dir, voice_name, output_format)?;
-    Ok(path
-        .is_file()
-        .then(|| path.to_string_lossy().to_string()))
+    Ok(path.is_file().then(|| path.to_string_lossy().to_string()))
 }
 
 pub fn save_voice_preview(

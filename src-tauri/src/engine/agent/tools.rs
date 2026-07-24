@@ -8,12 +8,45 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::engine::agent::llm::{ContentPart, ImageUrl, Tool, ToolCall};
+use crate::engine::agent::execution::{
+    parse_tool_arguments, ContentPart, ImageUrl, ResourceOperation, ToolCall, ToolOutput,
+    TouchedResource, VerificationResult, VerificationStatus,
+};
 use crate::engine::draftline_adapter::CutReadyDraftlineAdapter;
 use crate::engine::project;
 use crate::models::sketch::{MotionPlan, MotionPoint, PlanningRow, Sketch};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDefinition {
+    #[serde(rename = "type")]
+    pub tool_type: String,
+    pub function: ToolFunctionDefinition,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolFunctionDefinition {
+    pub name: String,
+    pub description: String,
+    pub parameters: Value,
+}
+
+impl ToolDefinition {
+    pub fn function(name: &str, description: &str, parameters: Value) -> Self {
+        Self {
+            tool_type: "function".into(),
+            function: ToolFunctionDefinition {
+                name: name.into(),
+                description: description.into(),
+                parameters,
+            },
+        }
+    }
+}
+
+type Tool = ToolDefinition;
 
 // ---------------------------------------------------------------------------
 // Image extraction and encoding for vision-capable models
@@ -264,6 +297,50 @@ pub(super) fn is_read_only_tool(name: &str) -> bool {
     read_only_tool_names().contains(&name)
 }
 
+fn recall_memory_tool() -> Tool {
+    Tool::function(
+        "recall_memory",
+        "Search your memory for information from past conversations, saved facts, or session summaries. Use this when the user references something from a previous discussion, or when you need context about prior decisions. The search uses keyword matching — be specific.",
+        json!({
+            "type": "object",
+            "required": ["query"],
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Keywords to search for in memory"
+                }
+            }
+        }),
+    )
+}
+
+fn save_memory_tool() -> Tool {
+    Tool::function(
+        "save_memory",
+        "Save an important fact, decision, or preference to memory so you can recall it in future conversations. Use 'core' for persistent facts about the user or project and 'insight' for conversation conclusions.",
+        json!({
+            "type": "object",
+            "required": ["category", "content"],
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "enum": ["core", "insight"],
+                    "description": "Memory type"
+                },
+                "content": {
+                    "type": "string",
+                    "description": "The fact or insight to remember"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Optional search and deduplication tags"
+                }
+            }
+        }),
+    )
+}
+
 /// All tools available to the AI assistant.
 pub fn all_tools(
     web_search_enabled: bool,
@@ -372,7 +449,7 @@ pub fn all_tools(
                     "row_number": { "type": "integer", "minimum": 1, "description": "1-based planning row number shown in the sketch table, where 1 is the first row" },
                     "visual": {
                         "description": "An Elucim document (JSON object with version, scene, and elements), legacy v1 document, or null to remove",
-                        "oneOf": [
+                        "anyOf": [
                             {
                                 "type": "object",
                                 "properties": {
@@ -476,7 +553,7 @@ pub fn all_tools(
                         "type": "array",
                         "description": "Ordered sketch sequence. When provided, replaces all existing items. When omitted, preserves the existing sequence.",
                         "items": {
-                            "oneOf": [
+                            "anyOf": [
                                 {
                                     "type": "object",
                                     "description": "A direct reference to a sketch",
@@ -520,7 +597,7 @@ pub fn all_tools(
                 "required": ["agent_id", "message"]
             }),
         ),
-        agentive::types::Tool::function(
+        Tool::function(
             "fetch_url",
             "Fetch a web page and return its clean text content. The response includes the page text followed by a deduplicated list of all links found on the page. If the user asks you to follow links or explore further, call fetch_url again on any of those URLs.",
             serde_json::json!({
@@ -544,8 +621,8 @@ pub fn all_tools(
                 "required": ["asset_id"]
             }),
         ),
-        agentive::memory::recall_memory_tool(),
-        agentive::memory::save_memory_tool(),
+        recall_memory_tool(),
+        save_memory_tool(),
     ];
 
     if project_workspace_tools_enabled {
@@ -638,7 +715,7 @@ pub fn all_tools(
     if web_search_enabled {
         tools.insert(
             tools.len().saturating_sub(2),
-            agentive::types::Tool::function(
+            ToolDefinition::function(
                 "search_web",
                 "Search the public web for current external information. Use only when the user asks to search/look up current information or when current public facts are required. Returns concise results with source URLs.",
                 serde_json::json!({
@@ -819,8 +896,8 @@ pub fn execute_tool(
     vision_enabled: bool,
     project_workspace_tools_enabled: bool,
     mutation_tools_enabled: bool,
-) -> agentive::ToolOutput {
-    let args: Value = agentive::parse_tool_args(&call.function.arguments).unwrap_or(json!({}));
+) -> ToolOutput {
+    let args: Value = parse_tool_arguments(&call.function.arguments).unwrap_or(json!({}));
     let start = std::time::Instant::now();
 
     // Entry trace — if tool_exec is missing but this appears, the tool panicked
@@ -831,7 +908,7 @@ pub fn execute_tool(
     );
 
     if !mutation_tools_enabled && !is_read_only_tool(&call.function.name) {
-        return agentive::ToolOutput::from(format!(
+        return ToolOutput::from(format!(
             "Error: {} is disabled by the current AI mutation guard. In Ask Mode, approve the permission prompt before applying changes or switch Settings > AI apply behavior to Auto-apply AI changes.",
             call.function.name
         ));
@@ -839,68 +916,52 @@ pub fn execute_tool(
 
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         match call.function.name.as_str() {
-            "list_project_files" => {
-                agentive::ToolOutput::from(exec_list_project_files(project_root, &args))
-            }
+            "list_project_files" => ToolOutput::from(exec_list_project_files(project_root, &args)),
             "create_project" if project_workspace_tools_enabled => {
-                agentive::ToolOutput::from(exec_create_project(project_root, &args))
+                ToolOutput::from(exec_create_project(project_root, &args))
             }
-            "create_project" => agentive::ToolOutput::from(
-                "Error: create_project is only available to the Writer agent",
-            ),
+            "create_project" => {
+                ToolOutput::from("Error: create_project is only available to the Writer agent")
+            }
             "add_items_to_project" => {
                 if project_workspace_tools_enabled {
-                    agentive::ToolOutput::from(exec_add_items_to_project(project_root, &args))
+                    ToolOutput::from(exec_add_items_to_project(project_root, &args))
                 } else {
-                    agentive::ToolOutput::from(
+                    ToolOutput::from(
                         "Error: add_items_to_project is only available to the Writer agent",
                     )
                 }
             }
             "read_note" => exec_read_note(project_root, &args, vision_enabled),
-            "write_note" => agentive::ToolOutput::from(exec_write_note(project_root, &args)),
+            "write_note" => ToolOutput::from(exec_write_note(project_root, &args)),
             "read_sketch" => exec_read_sketch(project_root, &args, vision_enabled),
-            "write_sketch" => agentive::ToolOutput::from(exec_write_sketch(project_root, &args)),
+            "write_sketch" => ToolOutput::from(exec_write_sketch(project_root, &args)),
             "update_planning_row" => {
-                agentive::ToolOutput::from(exec_update_planning_row(project_root, &args))
+                ToolOutput::from(exec_update_planning_row(project_root, &args))
             }
-            "set_row_visual" => {
-                agentive::ToolOutput::from(exec_set_row_visual(project_root, &args))
-            }
-            "review_row_visual" => {
-                agentive::ToolOutput::from(exec_review_row_visual(project_root, &args))
-            }
+            "set_row_visual" => ToolOutput::from(exec_set_row_visual(project_root, &args)),
+            "review_row_visual" => ToolOutput::from(exec_review_row_visual(project_root, &args)),
             "apply_row_visual_nudge" => {
-                agentive::ToolOutput::from(exec_apply_row_visual_nudge(project_root, &args))
+                ToolOutput::from(exec_apply_row_visual_nudge(project_root, &args))
             }
             "apply_row_visual_command" => {
-                agentive::ToolOutput::from(exec_apply_row_visual_command(project_root, &args))
+                ToolOutput::from(exec_apply_row_visual_command(project_root, &args))
             }
-            "design_plan" => agentive::ToolOutput::from(exec_design_plan(project_root, &args)),
-            "elucim_agent_operation" => {
-                agentive::ToolOutput::from(exec_elucim_agent_operation(&args))
-            }
-            "read_storyboard" => {
-                agentive::ToolOutput::from(exec_read_storyboard(project_root, &args))
-            }
-            "write_storyboard" => {
-                agentive::ToolOutput::from(exec_write_storyboard(project_root, &args))
-            }
-            "recall_memory" => {
-                agentive::ToolOutput::from(exec_recall_memory(repo_root, project_root, &args))
-            }
-            "save_memory" => {
-                agentive::ToolOutput::from(exec_save_memory(repo_root, project_root, &args))
-            }
+            "design_plan" => ToolOutput::from(exec_design_plan(project_root, &args)),
+            "elucim_agent_operation" => ToolOutput::from(exec_elucim_agent_operation(&args)),
+            "read_storyboard" => ToolOutput::from(exec_read_storyboard(project_root, &args)),
+            "write_storyboard" => ToolOutput::from(exec_write_storyboard(project_root, &args)),
+            "recall_memory" => ToolOutput::from(exec_recall_memory(repo_root, project_root, &args)),
+            "save_memory" => ToolOutput::from(exec_save_memory(repo_root, project_root, &args)),
             "fetch_url" => {
                 let url = args
                     .get("url")
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
-                agentive::ToolOutput::from(tokio::task::block_in_place(|| {
+                ToolOutput::from(tokio::task::block_in_place(|| {
                     tokio::runtime::Handle::current().block_on(async {
-                        match agentive::web::fetch_and_clean(&url).await {
+                        match super::web::fetch_and_clean(&url).await {
                             Ok(content) => {
                                 // Extract markdown links for the agent to optionally follow
                                 let mut links: Vec<String> = Vec::new();
@@ -939,7 +1000,7 @@ pub fn execute_tool(
                     })
                 }))
             }
-            other => agentive::ToolOutput::from(format!("Unknown tool: {other}")),
+            other => ToolOutput::from(format!("Unknown tool: {other}")),
         }
     }));
 
@@ -962,7 +1023,7 @@ pub fn execute_tool(
                     "panic": msg,
                 }),
             );
-            agentive::ToolOutput::from(format!("Error: internal tool panic: {msg}"))
+            ToolOutput::from(format!("Error: internal tool panic: {msg}"))
         }
     };
 
@@ -977,6 +1038,10 @@ pub fn execute_tool(
 
     let is_error =
         result_text.starts_with("Error:") || result_text.starts_with("Validation failed");
+    // Privacy: tool results can contain user document content (note/sketch bodies,
+    // web page text). Telemetry stays metadata-only — emit the result length and an
+    // error flag, never the result content itself. See the chat acceptance drill's
+    // no-privacy-leak assertion (scripts/auditaur-chat-drill.mjs).
     crate::util::trace::emit(
         "tool_exec",
         "tools",
@@ -985,30 +1050,21 @@ pub fn execute_tool(
             "duration_ms": elapsed.as_millis(),
             "result_len": result_text.len(),
             "is_error": is_error,
-            "result_preview": if is_error {
-                crate::util::trace::truncate(result_text, 500)
-            } else {
-                crate::util::trace::truncate(result_text, 200)
-            },
         }),
     );
 
     decorate_tool_output(&call.function.name, &args, output)
 }
 
-pub fn decorate_tool_output(
-    tool_name: &str,
-    args: &Value,
-    output: agentive::ToolOutput,
-) -> agentive::ToolOutput {
+pub fn decorate_tool_output(tool_name: &str, args: &Value, output: ToolOutput) -> ToolOutput {
     let mut resources = touched_resources_for_tool(tool_name, args);
     let success = !is_tool_error(output.text());
-    let verification = agentive::VerificationResult::new(
+    let verification = VerificationResult::new(
         format!("Tool {tool_name} completed"),
         if success {
-            agentive::VerificationStatus::Passed
+            VerificationStatus::Passed
         } else {
-            agentive::VerificationStatus::Failed
+            VerificationStatus::Failed
         },
         if success {
             "Tool returned a non-error response"
@@ -1018,10 +1074,10 @@ pub fn decorate_tool_output(
     );
 
     if resources.is_empty() && !matches!(tool_name, "delegate_to_agent") {
-        resources.push(agentive::TouchedResource::new(
+        resources.push(TouchedResource::new(
             "tool",
             tool_name,
-            agentive::ResourceOperation::Execute,
+            ResourceOperation::Execute,
         ));
     }
 
@@ -1032,28 +1088,26 @@ pub(super) fn is_tool_error(result_text: &str) -> bool {
     result_text.starts_with("Error:") || result_text.starts_with("Validation failed")
 }
 
-fn touched_resources_for_tool(tool_name: &str, args: &Value) -> Vec<agentive::TouchedResource> {
+fn touched_resources_for_tool(tool_name: &str, args: &Value) -> Vec<TouchedResource> {
     let mut resources = Vec::new();
     let operation = match tool_name {
-        "read_note" | "read_sketch" | "read_storyboard" | "read_visual" => {
-            agentive::ResourceOperation::Read
-        }
+        "read_note" | "read_sketch" | "read_storyboard" | "read_visual" => ResourceOperation::Read,
         "write_note" | "write_sketch" | "write_storyboard" | "write_visual" => {
-            agentive::ResourceOperation::Write
+            ResourceOperation::Write
         }
-        "create_visual" => agentive::ResourceOperation::Create,
+        "create_visual" => ResourceOperation::Create,
         "update_planning_row"
         | "set_row_visual"
         | "review_row_visual"
         | "apply_row_visual_nudge"
         | "apply_row_visual_command"
-        | "design_plan" => agentive::ResourceOperation::Update,
-        "fetch_url" => agentive::ResourceOperation::Read,
-        "search_web" => agentive::ResourceOperation::Search,
-        "create_project" => agentive::ResourceOperation::Create,
-        "add_items_to_project" => agentive::ResourceOperation::Create,
-        "list_project_files" => agentive::ResourceOperation::Inspect,
-        _ => agentive::ResourceOperation::Execute,
+        | "design_plan" => ResourceOperation::Update,
+        "fetch_url" => ResourceOperation::Read,
+        "search_web" => ResourceOperation::Search,
+        "create_project" => ResourceOperation::Create,
+        "add_items_to_project" => ResourceOperation::Create,
+        "list_project_files" => ResourceOperation::Inspect,
+        _ => ResourceOperation::Execute,
     };
 
     match tool_name {
@@ -1131,7 +1185,7 @@ fn touched_resources_for_tool(tool_name: &str, args: &Value) -> Vec<agentive::To
                         &mut resources,
                         "project_item",
                         item.get("source_path").and_then(Value::as_str),
-                        agentive::ResourceOperation::Read,
+                        ResourceOperation::Read,
                         tool_name,
                     );
                 }
@@ -1144,16 +1198,15 @@ fn touched_resources_for_tool(tool_name: &str, args: &Value) -> Vec<agentive::To
 }
 
 fn push_path_resource(
-    resources: &mut Vec<agentive::TouchedResource>,
+    resources: &mut Vec<TouchedResource>,
     kind: &str,
     id: Option<&str>,
-    operation: agentive::ResourceOperation,
+    operation: ResourceOperation,
     tool_name: &str,
 ) {
     if let Some(id) = id.map(str::trim).filter(|id| !id.is_empty()) {
         resources.push(
-            agentive::TouchedResource::new(kind, id, operation)
-                .with_metadata("tool", tool_name.to_string()),
+            TouchedResource::new(kind, id, operation).with_metadata("tool", tool_name.to_string()),
         );
     }
 }
@@ -2094,10 +2147,10 @@ fn exec_list_project_files(root: &Path, args: &Value) -> String {
     }
 }
 
-fn exec_read_note(root: &Path, args: &Value, vision_enabled: bool) -> agentive::ToolOutput {
+fn exec_read_note(root: &Path, args: &Value, vision_enabled: bool) -> ToolOutput {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
-        None => return agentive::ToolOutput::from("Error: missing 'path' argument"),
+        None => return ToolOutput::from("Error: missing 'path' argument"),
     };
     match project::read_note(&path) {
         Ok(content) => {
@@ -2105,24 +2158,24 @@ fn exec_read_note(root: &Path, args: &Value, vision_enabled: bool) -> agentive::
                 let (text, image_parts) = extract_and_encode_images(&content, root);
                 if !image_parts.is_empty() {
                     log::info!("[vision] read_note: {} images extracted", image_parts.len());
-                    agentive::ToolOutput::with_images(text, image_parts)
+                    ToolOutput::with_images(text, image_parts)
                 } else {
-                    agentive::ToolOutput::from(content)
+                    ToolOutput::from(content)
                 }
             } else {
-                agentive::ToolOutput::from(content)
+                ToolOutput::from(content)
             }
         }
-        Err(e) => agentive::ToolOutput::from(format!("Error reading note: {e}")),
+        Err(e) => ToolOutput::from(format!("Error reading note: {e}")),
     }
 }
 
-fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> agentive::ToolOutput {
+fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> ToolOutput {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
         None => {
             let listing = exec_list_project_files(root, &Value::Null);
-            return agentive::ToolOutput::from(format!(
+            return ToolOutput::from(format!(
                 "Error: missing 'path' argument. Call read_sketch with a path from the list below.\n\n{listing}"
             ));
         }
@@ -2188,12 +2241,12 @@ fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> agentive
                     "[vision] read_sketch: {} screenshots extracted",
                     image_parts.len()
                 );
-                agentive::ToolOutput::with_images(out, image_parts)
+                ToolOutput::with_images(out, image_parts)
             } else {
-                agentive::ToolOutput::from(out)
+                ToolOutput::from(out)
             }
         }
-        Err(e) => agentive::ToolOutput::from(format!("Error reading sketch: {e}")),
+        Err(e) => ToolOutput::from(format!("Error reading sketch: {e}")),
     }
 }
 
@@ -5207,12 +5260,11 @@ mod tests {
         project::write_sketch(&sketch, &root.join(rel), root).unwrap();
     }
 
-    fn tool_output_text(output: agentive::ToolOutput) -> String {
+    fn tool_output_text(output: ToolOutput) -> String {
         match output {
-            agentive::ToolOutput::Text(text) => text,
-            agentive::ToolOutput::WithImages { text, .. } => text,
-            agentive::ToolOutput::WithMetadata { output, .. } => tool_output_text(*output),
-            _ => panic!("unexpected ToolOutput variant"),
+            ToolOutput::Text(text) => text,
+            ToolOutput::WithImages { text, .. } => text,
+            ToolOutput::WithMetadata { output, .. } => tool_output_text(*output),
         }
     }
 
@@ -5221,7 +5273,7 @@ mod tests {
         let output = decorate_tool_output(
             "write_sketch",
             &json!({ "path": "intro.sk" }),
-            agentive::ToolOutput::from("Saved sketch"),
+            ToolOutput::from("Saved sketch"),
         );
 
         assert_eq!(output.touched_resources().len(), 1);
@@ -5229,12 +5281,12 @@ mod tests {
         assert_eq!(output.touched_resources()[0].id, "intro.sk");
         assert_eq!(
             output.touched_resources()[0].operation,
-            agentive::ResourceOperation::Write
+            ResourceOperation::Write
         );
         assert_eq!(output.verification_results().len(), 1);
         assert_eq!(
             output.verification_results()[0].status,
-            agentive::VerificationStatus::Passed
+            VerificationStatus::Passed
         );
     }
 
@@ -5299,7 +5351,7 @@ mod tests {
             assert_eq!(resources[0].id, "intro.sk");
             assert_eq!(
                 resources[0].operation,
-                agentive::ResourceOperation::Update,
+                ResourceOperation::Update,
                 "{name} should be tracked as a sketch update"
             );
         }
@@ -5398,7 +5450,7 @@ mod tests {
         let call = ToolCall {
             id: "call-1".into(),
             call_type: "function".into(),
-            function: agentive::FunctionCall {
+            function: crate::engine::agent::execution::FunctionCall {
                 name: "create_project".into(),
                 arguments: json!({ "name": "Derived" }).to_string(),
             },
@@ -5415,7 +5467,7 @@ mod tests {
         let call = ToolCall {
             id: "call-1".into(),
             call_type: "function".into(),
-            function: agentive::FunctionCall {
+            function: crate::engine::agent::execution::FunctionCall {
                 name: "write_note".into(),
                 arguments: json!({ "path": "draft.md", "content": "nope" }).to_string(),
             },

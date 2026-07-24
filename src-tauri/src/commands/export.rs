@@ -70,10 +70,12 @@ pub async fn import_background_music(
     app: tauri::AppHandle,
 ) -> Result<export::BackgroundMusicTrack, String> {
     let app_data_dir = app_data_dir(&app)?;
-    tokio::task::spawn_blocking(move || export::import_background_music(&app_data_dir, &source_path))
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())
+    tokio::task::spawn_blocking(move || {
+        export::import_background_music(&app_data_dir, &source_path)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())
 }
 
 #[auditaur_command(skip_all, err)]
@@ -82,10 +84,12 @@ pub async fn preview_background_music_mix(
     app: tauri::AppHandle,
 ) -> Result<export::BackgroundMusicPreview, String> {
     let app_data_dir = app_data_dir(&app)?;
-    tokio::task::spawn_blocking(move || export::render_background_music_preview(&app_data_dir, settings))
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())
+    tokio::task::spawn_blocking(move || {
+        export::render_background_music_preview(&app_data_dir, settings)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())
 }
 
 #[auditaur_command(skip_all, err)]
@@ -94,8 +98,10 @@ pub async fn delete_background_music(
     app: tauri::AppHandle,
 ) -> Result<(), String> {
     let app_data_dir = app_data_dir(&app)?;
-    tokio::task::spawn_blocking(move || export::delete_background_music(&app_data_dir, &relative_path))
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())
+    tokio::task::spawn_blocking(move || {
+        export::delete_background_music(&app_data_dir, &relative_path)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())
 }

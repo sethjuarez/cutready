@@ -38,9 +38,21 @@ function App() {
       const startupProject = await invoke<string | null>("get_startup_project_path").catch(() => null);
       if (cancelled) return;
 
-      const projectToOpen = startupProject || localStorage.getItem("cutready:lastProject");
+      const persistedProject = localStorage.getItem("cutready:lastProject");
+      const projectToOpen = startupProject || persistedProject;
       if (projectToOpen) {
         await useAppStore.getState().openProject(projectToOpen);
+        if (cancelled) return;
+        // If auto-reopening the project failed (e.g. the folder was moved or
+        // deleted), drop the stale persisted pointer and fall back to the recent
+        // list instead of surfacing an error and re-failing on every launch.
+        if (!useAppStore.getState().currentProject) {
+          if (!startupProject && persistedProject) {
+            localStorage.removeItem("cutready:lastProject");
+          }
+          useAppStore.getState().clearError();
+          await useAppStore.getState().loadRecentProjects();
+        }
       } else {
         useAppStore.getState().loadRecentProjects();
       }

@@ -1,10 +1,13 @@
 //! Tauri commands for the AI assistant (chat, model listing, ✨ generation).
 
-use agentive::LocalContextIndex;
 use serde::Deserialize;
 
-use crate::engine::agent::llm::{self, ChatMessage, LlmConfig, LlmProvider, ModelInfo};
-use crate::engine::agent::runner::{self, AgentEvent};
+use crate::engine::agent::execution::{
+    estimate_message_chars, AgentEvent, ChatMessage, ContextItem, ContextKind, ContextScope,
+    ContextSource, LargeContextRef, RunCancellation, VisionConfig, WebAccessConfig,
+};
+use crate::engine::agent::llm::{self, LlmConfig, LlmProvider, ModelInfo};
+use crate::engine::agent::runner;
 use crate::engine::agent_state::{
     AgentRunDetail, AgentRunSummary, AgentStateMaintenanceResult, AgentStateStore, ChatSessionPage,
     ChatSessionRecord, ChatSessionSummary, ContextAssetInput, ContextAssetScope,
@@ -13,7 +16,7 @@ use crate::{AgentChatCancellationRegistry, AppState};
 use agentive::azure_oauth::{self, AuthCodeFlowInit, DeviceCodeResponse, TokenResponse};
 use std::collections::HashSet;
 use std::sync::{
-    atomic::{AtomicBool, AtomicUsize, Ordering},
+    atomic::{AtomicUsize, Ordering},
     Arc, Mutex,
 };
 use std::time::{Duration, Instant};
@@ -71,6 +74,14 @@ impl Drop for ActiveAgentiveChatRunGuard {
     }
 }
 
+struct AbortTaskOnDrop(tokio::task::JoinHandle<()>);
+
+impl Drop for AbortTaskOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
 struct AgentChatCancellationGuard {
     client_run_id: String,
     generation: String,
@@ -81,8 +92,7 @@ impl AgentChatCancellationGuard {
     fn register(
         cancellations: AgentChatCancellationRegistry,
         client_run_id: String,
-        cancellation: agentive::CancellationToken,
-        prompty_cancelled: Arc<AtomicBool>,
+        cancellation: RunCancellation,
     ) -> Result<Self, String> {
         let generation = uuid::Uuid::new_v4().to_string();
         let mut active_cancellations = cancellations
@@ -98,7 +108,6 @@ impl AgentChatCancellationGuard {
             crate::AgentChatCancellationEntry {
                 generation: generation.clone(),
                 cancellation,
-                prompty_cancelled,
             },
         );
         drop(active_cancellations);
@@ -133,11 +142,10 @@ fn cancel_agent_chat_run_in_registry(
     let Some(entry) = active_cancellations.get(client_run_id) else {
         return Ok(false);
     };
-    if entry.cancellation.is_cancelled() && entry.prompty_cancelled.load(Ordering::SeqCst) {
+    if entry.cancellation.is_cancelled() {
         return Ok(false);
     }
     entry.cancellation.cancel();
-    entry.prompty_cancelled.store(true, Ordering::SeqCst);
     Ok(true)
 }
 
@@ -151,6 +159,24 @@ fn agent_event_payload(event: &AgentEvent, client_run_id: Option<&str>) -> serde
         );
     }
     payload
+}
+
+fn agent_run_failure_trace_payload(
+    provider: &str,
+    model: &str,
+    execution_engine: &str,
+    run_id: &str,
+    elapsed_ms: u128,
+    cancelled: bool,
+) -> serde_json::Value {
+    serde_json::json!({
+        "provider": provider,
+        "model": model,
+        "execution_engine": execution_engine,
+        "run_id": run_id,
+        "elapsed_ms": elapsed_ms,
+        "error_kind": if cancelled { "cancelled" } else { "execution_failed" },
+    })
 }
 
 /// Serialisable provider config sent from the frontend.
@@ -192,6 +218,12 @@ enum ExecutionEngine {
     Prompty,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProductionTransport {
+    Agentive,
+    Prompty,
+}
+
 impl ExecutionEngine {
     fn from_config(value: Option<&str>) -> Result<Self, String> {
         match value.map(str::trim).filter(|value| !value.is_empty()) {
@@ -207,6 +239,13 @@ impl ExecutionEngine {
         match self {
             Self::Agentive => "agentive",
             Self::Prompty => "prompty",
+        }
+    }
+
+    fn production_transport(self) -> ProductionTransport {
+        match self {
+            Self::Agentive => ProductionTransport::Agentive,
+            Self::Prompty => ProductionTransport::Prompty,
         }
     }
 }
@@ -230,31 +269,28 @@ pub struct AgentContextItemConfig {
 }
 
 impl AgentContextItemConfig {
-    fn into_context_item(
-        self,
-        store: Option<&AgentStateStore>,
-    ) -> Result<agentive::ContextItem, String> {
+    fn into_context_item(self, store: Option<&AgentStateStore>) -> Result<ContextItem, String> {
         let source = match self.source.as_deref() {
-            Some("user") => agentive::ContextSource::User,
-            Some("system") => agentive::ContextSource::System,
-            Some("tool_result") => agentive::ContextSource::ToolResult,
-            Some("file") => agentive::ContextSource::File,
-            Some("search") => agentive::ContextSource::Search,
-            Some("checkpoint") => agentive::ContextSource::Checkpoint,
-            Some("memory") => agentive::ContextSource::Memory,
-            Some("host") => agentive::ContextSource::Host,
-            _ => agentive::ContextSource::Custom,
+            Some("user") => ContextSource::User,
+            Some("system") => ContextSource::System,
+            Some("tool_result") => ContextSource::ToolResult,
+            Some("file") => ContextSource::File,
+            Some("search") => ContextSource::Search,
+            Some("checkpoint") => ContextSource::Checkpoint,
+            Some("memory") => ContextSource::Memory,
+            Some("host") => ContextSource::Host,
+            _ => ContextSource::Custom,
         };
         let kind = match self.kind.as_deref() {
-            Some("recent_turn") => agentive::ContextKind::RecentTurn,
-            Some("memory_fact") => agentive::ContextKind::MemoryFact,
-            Some("reference_doc") => agentive::ContextKind::ReferenceDoc,
-            Some("tool_observation") => agentive::ContextKind::ToolObservation,
-            Some("file_excerpt") => agentive::ContextKind::FileExcerpt,
-            Some("web_excerpt") => agentive::ContextKind::WebExcerpt,
-            Some("error_trace") => agentive::ContextKind::ErrorTrace,
-            Some("media_summary") => agentive::ContextKind::MediaSummary,
-            _ => agentive::ContextKind::Other,
+            Some("recent_turn") => ContextKind::RecentTurn,
+            Some("memory_fact") => ContextKind::MemoryFact,
+            Some("reference_doc") => ContextKind::ReferenceDoc,
+            Some("tool_observation") => ContextKind::ToolObservation,
+            Some("file_excerpt") => ContextKind::FileExcerpt,
+            Some("web_excerpt") => ContextKind::WebExcerpt,
+            Some("error_trace") => ContextKind::ErrorTrace,
+            Some("media_summary") => ContextKind::MediaSummary,
+            _ => ContextKind::Other,
         };
         let scope = if self.persist {
             ContextAssetScope::Project
@@ -283,7 +319,7 @@ impl AgentContextItemConfig {
             })
             .transpose()?;
         let preview = bounded_context_preview(&self.content, 6_000);
-        let mut item = agentive::ContextItem::new(
+        let mut item = ContextItem::new(
             asset
                 .as_ref()
                 .map(|asset| format!("context-asset:{}", asset.id))
@@ -294,10 +330,9 @@ impl AgentContextItemConfig {
         )
         .with_kind(kind)
         .with_priority(self.priority.unwrap_or(50))
-        .with_sensitivity(agentive::ContextSensitivity::Internal)
         .with_scope(match scope {
-            ContextAssetScope::Session => agentive::ContextScope::Session,
-            ContextAssetScope::Project => agentive::ContextScope::Project,
+            ContextAssetScope::Session => ContextScope::Session,
+            ContextAssetScope::Project => ContextScope::Project,
         })
         .with_content(
             preview,
@@ -306,7 +341,7 @@ impl AgentContextItemConfig {
         .with_metadata("origin", origin);
         if let Some(asset) = asset {
             item = item.with_large_ref(
-                agentive::LargeContextRef::new(asset.id, "read_context_asset")
+                LargeContextRef::new(asset.id, "read_context_asset")
                     .with_bytes(asset.bytes)
                     .with_hash(asset.hash),
             );
@@ -329,24 +364,24 @@ fn bounded_context_preview(content: &str, max_bytes: usize) -> String {
     )
 }
 
-fn context_kind_from_name(kind: &str) -> agentive::ContextKind {
+fn context_kind_from_name(kind: &str) -> ContextKind {
     match kind {
-        "recent_turn" => agentive::ContextKind::RecentTurn,
-        "memory_fact" => agentive::ContextKind::MemoryFact,
-        "reference_doc" => agentive::ContextKind::ReferenceDoc,
-        "tool_observation" => agentive::ContextKind::ToolObservation,
-        "file_excerpt" => agentive::ContextKind::FileExcerpt,
-        "web_excerpt" => agentive::ContextKind::WebExcerpt,
-        "error_trace" => agentive::ContextKind::ErrorTrace,
-        "media_summary" => agentive::ContextKind::MediaSummary,
-        _ => agentive::ContextKind::Other,
+        "recent_turn" => ContextKind::RecentTurn,
+        "memory_fact" => ContextKind::MemoryFact,
+        "reference_doc" => ContextKind::ReferenceDoc,
+        "tool_observation" => ContextKind::ToolObservation,
+        "file_excerpt" => ContextKind::FileExcerpt,
+        "web_excerpt" => ContextKind::WebExcerpt,
+        "error_trace" => ContextKind::ErrorTrace,
+        "media_summary" => ContextKind::MediaSummary,
+        _ => ContextKind::Other,
     }
 }
 
 fn recalled_context_items(
     messages: &[ChatMessage],
     store: Option<&AgentStateStore>,
-) -> Vec<agentive::ContextItem> {
+) -> Vec<ContextItem> {
     let Some(store) = store else {
         return Vec::new();
     };
@@ -368,34 +403,25 @@ fn recalled_context_items(
     let items = assets
         .into_iter()
         .map(|asset| {
-            agentive::ContextItem::new(
+            ContextItem::new(
                 format!("context-asset:{}", asset.asset.id),
-                agentive::ContextSource::Host,
+                ContextSource::Host,
                 asset.asset.name,
                 format!("Saved project context from {}", asset.asset.origin),
             )
             .with_kind(context_kind_from_name(&asset.asset.kind))
             .with_priority(35)
-            .with_sensitivity(agentive::ContextSensitivity::Internal)
-            .with_scope(agentive::ContextScope::Project)
+            .with_scope(ContextScope::Project)
             .with_content(asset.excerpt, asset.asset.content_type.clone())
             .with_large_ref(
-                agentive::LargeContextRef::new(asset.asset.id, "read_context_asset")
+                LargeContextRef::new(asset.asset.id, "read_context_asset")
                     .with_bytes(asset.asset.bytes)
                     .with_hash(asset.asset.hash),
             )
             .with_metadata("origin", asset.asset.origin)
         })
         .collect::<Vec<_>>();
-    let mut index = agentive::InMemoryContextIndex::new();
-    for item in items {
-        index.upsert(item);
-    }
-    index
-        .search(&agentive::ContextSearchQuery::new(query).with_limit(4))
-        .into_iter()
-        .map(|result| result.item)
-        .collect()
+    items
 }
 
 impl From<ProviderConfig> for LlmConfig {
@@ -521,7 +547,7 @@ pub async fn agent_chat(
             stripped
         );
     }
-    let message_chars = agentive::context::estimate_chars(&messages);
+    let message_chars = estimate_message_chars(&messages);
     let provider_name = config.provider.clone();
     let configured_provider_name = config.provider_name.clone();
     let configured_provider_id = config.provider_id.clone();
@@ -557,7 +583,11 @@ pub async fn agent_chat(
         }),
     );
 
-    match tokio::time::timeout(timeout, llm::simple_chat(provider, messages)).await {
+    let agentive_messages = messages
+        .into_iter()
+        .map(crate::engine::agent::agentive_adapter::message_to_agentive)
+        .collect();
+    match tokio::time::timeout(timeout, llm::simple_chat(provider, agentive_messages)).await {
         Err(_) => {
             let elapsed_ms = started.elapsed().as_millis();
             log::warn!(
@@ -600,7 +630,7 @@ pub async fn agent_chat(
                     "response_chars": response.content.as_ref().map(|s| s.char_len()).unwrap_or(0),
                 }),
             );
-            Ok(response)
+            Ok(crate::engine::agent::agentive_adapter::message_from_agentive(response))
         }
         Ok(Err(err)) => {
             let elapsed_ms = started.elapsed().as_millis();
@@ -634,7 +664,7 @@ pub async fn push_pending_chat_message(
 ) -> Result<(), String> {
     let delivered_to_prompty = state.prompty_steering.send(&message);
     if state.active_agentive_chat_runs.load(Ordering::Acquire) > 0 || !delivered_to_prompty {
-        state.steering.send(&message);
+        state.agentive_steering.send(&message);
     }
     Ok(())
 }
@@ -812,15 +842,13 @@ pub async fn agent_chat_with_tools(
     use tauri::Emitter;
 
     let client_run_id = client_run_id.filter(|id| !id.trim().is_empty());
-    let cancellation = agentive::CancellationToken::new();
-    let prompty_cancelled = Arc::new(AtomicBool::new(false));
+    let cancellation = RunCancellation::new();
     let _cancellation_guard = match client_run_id.as_ref() {
         Some(client_run_id) => {
             let guard = AgentChatCancellationGuard::register(
                 state.agent_chat_cancellations.clone(),
                 client_run_id.clone(),
                 cancellation.clone(),
-                prompty_cancelled.clone(),
             )?;
             Some(guard)
         }
@@ -836,7 +864,7 @@ pub async fn agent_chat_with_tools(
             stripped
         );
     }
-    let message_chars = agentive::context::estimate_chars(&messages);
+    let message_chars = estimate_message_chars(&messages);
     let message_count = messages.len();
     // Heads-up log for unusually large request payloads. Azure OpenAI and other
     // gateways have rejected ~80KB+ bodies in the past with confusing
@@ -854,8 +882,6 @@ pub async fn agent_chat_with_tools(
         let view = guard.as_ref().ok_or("No project open")?;
         (view.repo_root.clone(), view.root.clone())
     };
-
-    let steering = state.steering.clone();
 
     let prompts = agent_prompts.unwrap_or_default();
     let agent_id = agent_id.unwrap_or_else(|| "planner".into());
@@ -880,13 +906,12 @@ pub async fn agent_chat_with_tools(
     let model_supports_vision =
         discovered_vision_support.unwrap_or_else(|| llm::supports_vision(&llm_config.model));
     let vision_enabled = vision_mode != "off" && model_supports_vision;
-    let vision = runner::VisionConfig {
+    let vision = VisionConfig {
         enabled: vision_enabled,
     };
-    let web_access = runner::WebAccessConfig { search_enabled };
+    let web_access = WebAccessConfig { search_enabled };
 
-    let provider = llm::build_provider(&llm_config, reported_context);
-    let budget_chars = provider.context_budget_chars();
+    let budget_chars = llm::context_budget(&llm_config.model, reported_context);
     let run_id = uuid::Uuid::new_v4().to_string();
     let _active_run_guard =
         ActiveAgentRunGuard::register(state.active_agent_runs.clone(), run_id.clone());
@@ -993,37 +1018,70 @@ pub async fn agent_chat_with_tools(
             let _ = emit_handle.emit("agent-event", payload);
         }
     };
-    let runner_result = match execution_engine {
-        ExecutionEngine::Agentive => {
+    let runner_result = match execution_engine.production_transport() {
+        ProductionTransport::Agentive => {
+            let provider = llm::build_provider(&llm_config, reported_context);
             let _active_agentive_run =
                 ActiveAgentiveChatRunGuard::register(state.active_agentive_chat_runs.clone());
-            runner::run(
+            let agentive_cancellation = agentive::CancellationToken::new();
+            let _cancellation_bridge = {
+                let native_cancellation = cancellation.clone();
+                let agentive_cancellation = agentive_cancellation.clone();
+                AbortTaskOnDrop(tokio::spawn(async move {
+                    while !native_cancellation.is_cancelled() {
+                        tokio::time::sleep(Duration::from_millis(20)).await;
+                    }
+                    agentive_cancellation.cancel();
+                }))
+            };
+            let result = runner::run(
                 provider,
                 Some(provider_name.clone()),
                 Some(model.clone()),
-                messages,
+                messages
+                    .into_iter()
+                    .map(crate::engine::agent::agentive_adapter::message_to_agentive)
+                    .collect(),
                 &repo_root,
                 &project_root,
                 &agent_id,
                 &prompts,
-                &steering,
+                &state.agentive_steering,
                 &vision,
                 &web_access,
                 mutation_tools_enabled,
                 max_tool_rounds,
-                context_items,
+                context_items
+                    .into_iter()
+                    .map(crate::engine::agent::agentive_adapter::context_item_to_agentive)
+                    .collect(),
                 Some(run_id.clone()),
                 agent_state.clone(),
-                cancellation.clone(),
+                agentive_cancellation,
                 emit,
             )
-            .await
+            .await;
+            result.map(crate::engine::agent::agentive_adapter::run_result_from_agentive)
         }
-        ExecutionEngine::Prompty => {
+        ProductionTransport::Prompty => {
+            let project_workspace_tools_enabled =
+                agent_id.eq_ignore_ascii_case("writer") && mutation_tools_enabled;
+            let mut tool_definitions = crate::engine::agent::tools::all_tools(
+                web_access.search_enabled,
+                project_workspace_tools_enabled,
+                mutation_tools_enabled,
+            );
+            tool_definitions.retain(|tool| tool.function.name != "delegate_to_agent");
+            let production_model = crate::engine::agent::prompty_model::build_production_model(
+                &llm_config,
+                reported_context,
+                tool_definitions,
+            )?;
             crate::engine::agent::prompty_runner::run(
-                provider,
-                Some(provider_name.clone()),
-                Some(model.clone()),
+                production_model.port,
+                production_model.provider_name,
+                production_model.model_name,
+                production_model.context_budget_chars,
                 messages,
                 &repo_root,
                 &project_root,
@@ -1037,7 +1095,7 @@ pub async fn agent_chat_with_tools(
                 context_items,
                 Some(run_id.clone()),
                 agent_state.clone(),
-                prompty_cancelled,
+                cancellation.clone(),
                 emit,
             )
             .await
@@ -1110,14 +1168,14 @@ pub async fn agent_chat_with_tools(
                     "agent_chat_with_tools_error"
                 },
                 "agent",
-                serde_json::json!({
-                    "provider": provider_name,
-                    "model": model,
-                    "execution_engine": execution_engine.as_str(),
-                    "run_id": &run_id,
-                    "elapsed_ms": elapsed_ms,
-                    "error": err,
-                }),
+                agent_run_failure_trace_payload(
+                    &provider_name,
+                    &model,
+                    execution_engine.as_str(),
+                    &run_id,
+                    elapsed_ms,
+                    cancelled,
+                ),
             );
             if let Some(agent_state) = &agent_state {
                 if let Err(state_err) =
@@ -1154,7 +1212,7 @@ pub async fn cancel_agent_chat_run(
 /// Fetch a URL and return clean text content. Used by @web: references.
 #[tauri::command]
 pub async fn fetch_url_content(url: String) -> Result<String, String> {
-    agentive::web::fetch_and_clean(&url).await
+    crate::engine::agent::web::fetch_and_clean(&url).await
 }
 
 /// Serializable result from the agentic chat.
@@ -1525,33 +1583,73 @@ mod tests {
         assert_eq!(config.provider, LlmProvider::AzureOpenai);
     }
 
+    #[test]
+    fn production_prompty_selection_never_selects_agentive_transport() {
+        let engine = ExecutionEngine::from_config(Some("prompty")).unwrap();
+        assert_eq!(engine.production_transport(), ProductionTransport::Prompty);
+    }
+
+    #[test]
+    fn prompty_production_boundary_has_no_agentive_mapping_static_or_runtime() {
+        let engine = ExecutionEngine::from_config(Some("prompty")).unwrap();
+        assert_eq!(engine.production_transport(), ProductionTransport::Prompty);
+
+        let runner = include_str!("../engine/agent/prompty_runner.rs")
+            .split("\n#[cfg(test)]\nmod tests")
+            .next()
+            .unwrap();
+        let model = include_str!("../engine/agent/prompty_model.rs")
+            .split("\n#[cfg(test)]\nmod tests")
+            .next()
+            .unwrap();
+        for forbidden in [
+            "agentive::",
+            "agentive_adapter",
+            "agentive::CancellationToken",
+            "agentive::ToolCall",
+            "agentive::ToolResult",
+        ] {
+            assert!(
+                !runner.contains(forbidden) && !model.contains(forbidden),
+                "production Prompty boundary contains forbidden mapping: {forbidden}"
+            );
+        }
+    }
+
+    #[test]
+    fn prompty_lifecycle_failure_trace_payload_omits_sensitive_bodies() {
+        let payload =
+            agent_run_failure_trace_payload("openai", "gpt-test", "prompty", "run-1", 42, false);
+
+        assert_eq!(payload["error_kind"], "execution_failed");
+        assert!(payload.get("error").is_none());
+        assert!(payload.get("messages").is_none());
+        assert!(payload.get("request").is_none());
+        assert!(payload.get("response").is_none());
+        assert!(!payload.to_string().contains("sensitive-body-marker"));
+    }
+
     #[tokio::test]
     async fn cancellation_registry_cancels_only_the_matching_client_run() {
         let cancellations = Arc::new(Mutex::new(std::collections::HashMap::new()));
-        let first_cancellation = agentive::CancellationToken::new();
-        let second_cancellation = agentive::CancellationToken::new();
-        let first_prompty = Arc::new(AtomicBool::new(false));
-        let second_prompty = Arc::new(AtomicBool::new(false));
+        let first_cancellation = RunCancellation::new();
+        let second_cancellation = RunCancellation::new();
         let _first_guard = AgentChatCancellationGuard::register(
             cancellations.clone(),
             "first".into(),
             first_cancellation.clone(),
-            first_prompty.clone(),
         )
         .unwrap();
         let _second_guard = AgentChatCancellationGuard::register(
             cancellations.clone(),
             "second".into(),
             second_cancellation.clone(),
-            second_prompty.clone(),
         )
         .unwrap();
 
         assert!(cancel_agent_chat_run_in_registry(&cancellations, "first").unwrap());
         assert!(first_cancellation.is_cancelled());
-        assert!(first_prompty.load(Ordering::SeqCst));
         assert!(!second_cancellation.is_cancelled());
-        assert!(!second_prompty.load(Ordering::SeqCst));
         assert!(!cancel_agent_chat_run_in_registry(&cancellations, "first").unwrap());
         assert!(cancel_agent_chat_run_in_registry(&cancellations, "second").unwrap());
         assert!(second_cancellation.is_cancelled());
@@ -1563,8 +1661,7 @@ mod tests {
         let _guard = AgentChatCancellationGuard::register(
             cancellations.clone(),
             "same-run".into(),
-            agentive::CancellationToken::new(),
-            Arc::new(AtomicBool::new(false)),
+            RunCancellation::new(),
         )
         .unwrap();
 
@@ -1572,8 +1669,7 @@ mod tests {
             AgentChatCancellationGuard::register(
                 cancellations,
                 "same-run".into(),
-                agentive::CancellationToken::new(),
-                Arc::new(AtomicBool::new(false)),
+                RunCancellation::new(),
             ),
             Err(error) if error.contains("already active")
         ));

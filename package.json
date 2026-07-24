@@ -12,6 +12,7 @@
     "test:e2e": "node scripts/auditaur-drill.mjs",
     "test:e2e:github": "node scripts/auditaur-github-drill.mjs",
     "test:e2e:project-switch": "node scripts/auditaur-project-switch-drill.mjs",
+    "test:e2e:chat": "node scripts/auditaur-chat-drill.mjs",
     "test:e2e:github:manual": "node scripts/auditaur-github-human-drill.mjs",
     "test:watch": "vitest",
     "tauri": "tauri",
