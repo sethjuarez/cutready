@@ -62,7 +62,6 @@ interface TokenResponse {
 
 interface AuthCodeFlowInit {
   auth_url: string;
-  port: number;
 }
 
 const NARRATION_VOICE_OPTIONS = [

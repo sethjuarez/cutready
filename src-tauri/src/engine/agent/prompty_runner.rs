@@ -37,9 +37,14 @@ use crate::engine::agent::execution::{
 use crate::engine::agent_state::AgentStateStore;
 
 const CANCELLED_ERROR: &str = "Agent run cancelled";
+/// Fallback surfaced only if a `delegate_to_agent` call reaches the tool port without a
+/// live [`DelegationContext`]; the normal Prompty path always wires delegation.
 const UNSUPPORTED_DELEGATION_MESSAGE: &str =
-    "delegate_to_agent is not supported by the experimental Prompty TurnEngine path. \
+    "delegate_to_agent is unavailable in this run because no delegation context is wired. \
      Continue with the current agent or start a separate run.";
+/// Maximum delegation depth for nested sub-agents. Mirrors the Agentive runner so the
+/// Prompty path preserves the same bound (a parent at this depth cannot delegate again).
+const MAX_DELEGATION_DEPTH: i32 = 2;
 
 // Tool-result budget applied before a tool result reaches the model. Mirrors the
 // Agentive path's `ToolResultBudget` (runner.rs) so large tool outputs cannot
@@ -161,6 +166,63 @@ fn prune_steering_messages(state: &mut PromptySteeringState) {
     }
 }
 
+/// Reusable parameters for a single Prompty turn. The public [`run`] entry point builds
+/// one of these for the top-level turn; a `delegate_to_agent` tool call builds a child
+/// via [`DelegationContext`] so a nested [`TurnEngine`] can run inside a `ToolPort`.
+struct PromptyTurn {
+    model: Arc<dyn ModelPort>,
+    provider_name: String,
+    model_name: String,
+    context_budget_chars: usize,
+    messages: Vec<ChatMessage>,
+    repo_root: PathBuf,
+    project_root: PathBuf,
+    agent_id: String,
+    agent_prompts: Arc<HashMap<String, String>>,
+    steering: PromptySteering,
+    vision: VisionConfig,
+    web_access: WebAccessConfig,
+    mutation_tools_enabled: bool,
+    max_tool_rounds: usize,
+    context_items: Vec<ContextItem>,
+    /// Durable journal/session key: constant across a delegation tree so parent and child
+    /// events share one run journal. Equals `run_id` for a top-level turn.
+    session_id: String,
+    run_id: String,
+    parent_run_id: Option<String>,
+    delegation_depth: i32,
+    agent_state: Option<AgentStateStore>,
+    cancellation: RunCancellation,
+    emit: EventEmitter,
+}
+
+/// Shared context a running turn hands to its `ToolPort` so a `delegate_to_agent` call can
+/// spawn a nested child turn. Holds owned/cloneable copies of the parent's execution config;
+/// `parent_run_id`/`depth` are the CURRENT turn's identity (the child is `depth + 1`).
+#[derive(Clone)]
+struct DelegationContext {
+    model: Arc<dyn ModelPort>,
+    provider_name: String,
+    model_name: String,
+    context_budget_chars: usize,
+    repo_root: PathBuf,
+    project_root: PathBuf,
+    agent_prompts: Arc<HashMap<String, String>>,
+    vision: VisionConfig,
+    web_access: WebAccessConfig,
+    mutation_tools_enabled: bool,
+    max_tool_rounds: usize,
+    context_items: Vec<ContextItem>,
+    agent_state: Option<AgentStateStore>,
+    cancellation: RunCancellation,
+    emit: EventEmitter,
+    /// Shared durable session key (top-level run_id) so a nested child appends to the same
+    /// run journal. `parent_run_id` below is the identity of the delegating (parent) run.
+    session_id: String,
+    parent_run_id: String,
+    depth: i32,
+}
+
 /// Run one CutReady chat turn through Prompty's canonical `TurnEngine`.
 #[allow(clippy::too_many_arguments)]
 pub async fn run(
@@ -172,7 +234,7 @@ pub async fn run(
     repo_root: &Path,
     project_root: &Path,
     agent_id: &str,
-    _agent_prompts: &HashMap<String, String>,
+    agent_prompts: &HashMap<String, String>,
     steering: PromptySteering,
     vision: &VisionConfig,
     web_access: &WebAccessConfig,
@@ -184,9 +246,63 @@ pub async fn run(
     cancellation: RunCancellation,
     emit: impl Fn(AgentEvent) + Send + Sync + 'static,
 ) -> Result<RunResult, String> {
-    let steering = steering.subscribe();
     let emit: EventEmitter = Arc::new(emit);
     let run_id = run_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    run_turn(PromptyTurn {
+        model,
+        provider_name,
+        model_name,
+        context_budget_chars,
+        messages,
+        repo_root: repo_root.to_path_buf(),
+        project_root: project_root.to_path_buf(),
+        agent_id: agent_id.to_string(),
+        agent_prompts: Arc::new(agent_prompts.clone()),
+        steering,
+        vision: vision.clone(),
+        web_access: web_access.clone(),
+        mutation_tools_enabled,
+        max_tool_rounds,
+        context_items,
+        session_id: run_id.clone(),
+        run_id,
+        parent_run_id: None,
+        delegation_depth: 0,
+        agent_state,
+        cancellation,
+        emit,
+    })
+    .await
+}
+
+/// Execute a single turn (top-level or delegated child) on Prompty's `TurnEngine`.
+async fn run_turn(turn: PromptyTurn) -> Result<RunResult, String> {
+    let PromptyTurn {
+        model,
+        provider_name,
+        model_name,
+        context_budget_chars,
+        messages,
+        repo_root,
+        project_root,
+        agent_id,
+        agent_prompts,
+        steering,
+        vision,
+        web_access,
+        mutation_tools_enabled,
+        max_tool_rounds,
+        context_items,
+        session_id,
+        run_id,
+        parent_run_id,
+        delegation_depth,
+        agent_state,
+        cancellation,
+        emit,
+    } = turn;
+    let is_top_level = parent_run_id.is_none();
+    let steering = steering.subscribe();
     if agent_state.is_none() {
         let message = "Agent run state unavailable; continuing without durable checkpoints";
         log::warn!("[prompty-agent] run_id={run_id} {message}");
@@ -195,12 +311,14 @@ pub async fn run(
             "agent",
             json!({ "run_id": &run_id }),
         );
-        emit_host_event(
-            &emit,
-            AgentEvent::Status {
-                message: message.into(),
-            },
-        );
+        if is_top_level {
+            emit_host_event(
+                &emit,
+                AgentEvent::Status {
+                    message: message.into(),
+                },
+            );
+        }
     }
     let initial_message_count = messages.len();
     let user_messages = messages
@@ -209,7 +327,7 @@ pub async fn run(
         .filter_map(ChatMessage::text)
         .map(str::to_string)
         .collect::<Vec<_>>();
-    let resolved_references = resolve_project_references(project_root, &user_messages);
+    let resolved_references = resolve_project_references(&project_root, &user_messages);
     let model_input_budget_chars = context_budget_chars.saturating_mul(4) / 5;
     let requested_context_chars = context_items
         .iter()
@@ -234,13 +352,36 @@ pub async fn run(
         project_workspace_tools_enabled,
         mutation_tools_enabled,
     );
-    tool_definitions.retain(|tool| tool.function.name != "delegate_to_agent");
     let allowed_tools = tool_definitions
         .iter()
         .map(|tool| tool.function.name.clone())
         .collect::<HashSet<_>>();
     let tool_count = allowed_tools.len();
     let context_item_count = context_items.len();
+
+    // Reusable execution config handed to the tool port so a `delegate_to_agent` call can
+    // run a nested child turn. Captures the RAW model (pre-tracking wrapper) plus cloned
+    // config; identity is THIS turn (children are delegated under `run_id` at `depth + 1`).
+    let delegation = Arc::new(DelegationContext {
+        model: model.clone(),
+        provider_name: provider_name.clone(),
+        model_name: model_name.clone(),
+        context_budget_chars,
+        repo_root: repo_root.clone(),
+        project_root: project_root.clone(),
+        agent_prompts: agent_prompts.clone(),
+        vision: vision.clone(),
+        web_access: web_access.clone(),
+        mutation_tools_enabled,
+        max_tool_rounds,
+        context_items: context_items.clone(),
+        agent_state: agent_state.clone(),
+        cancellation: cancellation.clone(),
+        emit: emit.clone(),
+        session_id: session_id.clone(),
+        parent_run_id: run_id.clone(),
+        depth: delegation_depth,
+    });
 
     let usage = Arc::new(Mutex::new(Usage::default()));
     let attempts = Arc::new(Mutex::new(HashMap::new()));
@@ -271,6 +412,7 @@ pub async fn run(
         vision_enabled: vision.enabled,
         agent_state: agent_state.clone(),
         memory_promotions: memory_promotions.clone(),
+        delegation: Some(delegation),
     });
     let post_commit = Arc::new(CutReadyPostCommitPort {
         store: agent_state.clone(),
@@ -313,20 +455,27 @@ pub async fn run(
         .map(native_to_prompty_message)
         .collect::<Result<Vec<_>, _>>()?;
     let turn_id = format!("{run_id}:turn");
-    let mut request = TurnEngineRequest::new(&run_id, turn_id, prompty_messages);
+    let mut request =
+        TurnEngineRequest::new(&session_id, turn_id, prompty_messages).with_run_id(&run_id);
+    if let Some(parent) = parent_run_id.as_ref() {
+        // The child's own delegation_depth is `parent_delegation_depth + 1`; the builder
+        // increments, so pass THIS turn's depth minus one.
+        request = request.delegated_under(parent, delegation_depth.saturating_sub(1));
+    }
     request.max_iterations = max_tool_rounds.max(1);
     request.inputs = json!({
         "host": "cutready",
         "executionEngine": "prompty",
-        "agentId": agent_id,
+        "agentId": agent_id.clone(),
         "provider": provider_name,
         "model": model_name,
-        "unsupportedFeatures": ["delegate_to_agent"],
     });
 
     log::info!(
-        "[prompty-agent] starting run_id={} agent={} messages={} tools={} context_items={} context_budget={}chars input_budget={}chars history_budget={}chars mutation_tools={}",
+        "[prompty-agent] starting run_id={} parent_run_id={:?} depth={} agent={} messages={} tools={} context_items={} context_budget={}chars input_budget={}chars history_budget={}chars mutation_tools={}",
         run_id,
+        parent_run_id,
+        delegation_depth,
         agent_id,
         initial_message_count,
         tool_count,
@@ -336,12 +485,14 @@ pub async fn run(
         history_budget_chars,
         mutation_tools_enabled,
     );
-    emit_host_event(
-        &emit,
-        AgentEvent::Status {
-            message: "Running with experimental Prompty TurnEngine".into(),
-        },
-    );
+    if is_top_level {
+        emit_host_event(
+            &emit,
+            AgentEvent::Status {
+                message: "Running with experimental Prompty TurnEngine".into(),
+            },
+        );
+    }
 
     let prompty_cancellation = CancellationToken::from_shared(cancellation.shared_flag());
     let result = match engine.run(request, prompty_cancellation).await {
@@ -351,12 +502,14 @@ pub async fn run(
                 return Err(CANCELLED_ERROR.into());
             }
             let message = format!("Prompty TurnEngine failed: {error}");
-            emit_host_event(
-                &emit,
-                AgentEvent::Error {
-                    message: message.clone(),
-                },
-            );
+            if is_top_level {
+                emit_host_event(
+                    &emit,
+                    AgentEvent::Error {
+                        message: message.clone(),
+                    },
+                );
+            }
             return Err(message);
         }
     };
@@ -394,12 +547,16 @@ pub async fn run(
                 .map(str::to_string)
         })
         .unwrap_or_default();
-    emit_host_event(
-        &emit,
-        AgentEvent::Done {
-            response: response.clone(),
-        },
-    );
+    // Only the top-level turn signals Done to the host; a delegated child's completion is
+    // surfaced by the delegation wrapper as an AgentDone event + the tool-result output.
+    if is_top_level {
+        emit_host_event(
+            &emit,
+            AgentEvent::Done {
+                response: response.clone(),
+            },
+        );
+    }
     let new_messages = new_messages
         .lock()
         .map(|messages| messages.clone())
@@ -412,7 +569,7 @@ pub async fn run(
         new_messages,
         total_usage,
         run_id,
-        parent_run_id: None,
+        parent_run_id,
     })
 }
 
@@ -805,9 +962,7 @@ impl PermissionPort for CutReadyPermissionPort {
         request: &EngineToolRequest,
         _cancellation: &CancellationToken,
     ) -> Result<EnginePermissionDecision, PortError> {
-        let denial = if request.name == "delegate_to_agent" {
-            Some(UNSUPPORTED_DELEGATION_MESSAGE.to_string())
-        } else if !self.mutation_tools_enabled && !tools::is_read_only_tool(&request.name) {
+        let denial = if !self.mutation_tools_enabled && !tools::is_read_only_tool(&request.name) {
             Some(format!(
                 "Error: {} is disabled by the current AI mutation guard. Enable mutation tools before applying changes.",
                 request.name
@@ -843,6 +998,9 @@ struct CutReadyToolPort {
     /// payload as `Value` means the native path never depends on the engine's promotion
     /// types — the host owns the schema.
     memory_promotions: Arc<Mutex<Vec<Value>>>,
+    /// Live delegation context enabling `delegate_to_agent` to spawn a nested child turn.
+    /// `None` only in isolated unit tests that never exercise delegation.
+    delegation: Option<Arc<DelegationContext>>,
 }
 
 #[async_trait]
@@ -876,7 +1034,10 @@ impl ToolPort for CutReadyToolPort {
             },
         };
         let output = if request.name == "delegate_to_agent" {
-            ToolOutput::from(UNSUPPORTED_DELEGATION_MESSAGE)
+            match self.delegation.as_ref() {
+                Some(delegation) => run_delegated_agent(delegation, &tool_call).await,
+                None => ToolOutput::from(UNSUPPORTED_DELEGATION_MESSAGE),
+            }
         } else if request.name == "read_context_asset" {
             read_context_asset_output(self.agent_state.as_ref(), &tool_call)
                 .unwrap_or_else(ToolOutput::from)
@@ -925,6 +1086,93 @@ impl ToolPort for CutReadyToolPort {
             error_kind: failed.then(|| "tool_error".to_string()),
             metadata,
         })
+    }
+}
+
+/// Run a `delegate_to_agent` tool call by nesting a child [`TurnEngine`] inside this
+/// turn's `ToolPort`. Preserves Agentive delegation parity:
+/// - cancellation propagates parent -> child (the child shares the parent's cancel flag),
+/// - steering is scoped per run (the child gets a fresh, isolated queue),
+/// - a child `Failed`/`ReconciliationRequired` resolves LOCALLY as a tool error returned to
+///   the parent, never a silent committed success,
+/// - run identity nests: the child carries `parentRunId = this run_id` and
+///   `delegationDepth = this depth + 1` on its durable event/checkpoint journal.
+async fn run_delegated_agent(delegation: &DelegationContext, call: &ToolCall) -> ToolOutput {
+    if delegation.depth >= MAX_DELEGATION_DEPTH {
+        return ToolOutput::from(format!(
+            "Error: maximum delegation depth ({MAX_DELEGATION_DEPTH}) reached; cannot delegate further"
+        ));
+    }
+    let args = parse_tool_arguments(&call.function.arguments).unwrap_or_else(|_| json!({}));
+    let Some(agent_id) = args.get("agent_id").and_then(Value::as_str) else {
+        return ToolOutput::from("Error: delegate_to_agent requires an 'agent_id' argument");
+    };
+    let Some(message) = args.get("message").and_then(Value::as_str) else {
+        return ToolOutput::from("Error: delegate_to_agent requires a 'message' argument");
+    };
+    let Some(prompt) = delegation.agent_prompts.get(agent_id) else {
+        let mut available = delegation
+            .agent_prompts
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        available.sort_unstable();
+        return ToolOutput::from(format!(
+            "Error: unknown agent '{agent_id}'. Available agents: {}",
+            available.join(", ")
+        ));
+    };
+
+    emit_host_event(
+        &delegation.emit,
+        AgentEvent::AgentStart {
+            agent_id: agent_id.to_string(),
+            task: message.to_string(),
+        },
+    );
+
+    let child = PromptyTurn {
+        model: delegation.model.clone(),
+        provider_name: delegation.provider_name.clone(),
+        model_name: delegation.model_name.clone(),
+        context_budget_chars: delegation.context_budget_chars,
+        messages: vec![ChatMessage::system(prompt), ChatMessage::user(message)],
+        repo_root: delegation.repo_root.clone(),
+        project_root: delegation.project_root.clone(),
+        agent_id: agent_id.to_string(),
+        agent_prompts: delegation.agent_prompts.clone(),
+        // Per-run steering isolation: the child never inherits the parent's queue.
+        steering: PromptySteering::new(),
+        vision: delegation.vision.clone(),
+        web_access: delegation.web_access.clone(),
+        mutation_tools_enabled: delegation.mutation_tools_enabled,
+        max_tool_rounds: delegation.max_tool_rounds,
+        context_items: delegation.context_items.clone(),
+        session_id: delegation.session_id.clone(),
+        run_id: uuid::Uuid::new_v4().to_string(),
+        parent_run_id: Some(delegation.parent_run_id.clone()),
+        delegation_depth: delegation.depth + 1,
+        agent_state: delegation.agent_state.clone(),
+        // Sharing the parent's cancellation propagates cancel parent -> child automatically.
+        cancellation: delegation.cancellation.clone(),
+        emit: delegation.emit.clone(),
+    };
+
+    // Box the recursive future: run_turn -> ToolPort::execute -> run_delegated_agent -> run_turn.
+    let result = Box::pin(run_turn(child)).await;
+
+    emit_host_event(
+        &delegation.emit,
+        AgentEvent::AgentDone {
+            agent_id: agent_id.to_string(),
+        },
+    );
+
+    match result {
+        Ok(run) => ToolOutput::from(run.response),
+        Err(error) => ToolOutput::from(format!(
+            "Error: delegated agent '{agent_id}' did not complete successfully: {error}"
+        )),
     }
 }
 
@@ -1907,6 +2155,334 @@ mod tests {
         .await
     }
 
+    /// Run a turn with explicit `agent_id` + sub-agent prompt registry so delegation is live.
+    async fn run_delegating(
+        provider: Arc<ScriptedModelPort>,
+        root: &Path,
+        run_id: &str,
+        agent_id: &str,
+        agent_prompts: HashMap<String, String>,
+        messages: Vec<ChatMessage>,
+        cancelled: Arc<AtomicBool>,
+        events: Arc<Mutex<Vec<AgentEvent>>>,
+    ) -> Result<RunResult, String> {
+        let store = test_store(root, run_id);
+        let context_budget_chars = provider.context_budget_chars;
+        let model: Arc<dyn ModelPort> = provider;
+        run(
+            model,
+            "scripted".into(),
+            "scripted-model".into(),
+            context_budget_chars,
+            messages,
+            root,
+            root,
+            agent_id,
+            &agent_prompts,
+            PromptySteering::new(),
+            &VisionConfig { enabled: true },
+            &WebAccessConfig {
+                search_enabled: false,
+            },
+            false,
+            5,
+            Vec::new(),
+            Some(run_id.into()),
+            Some(store),
+            RunCancellation::from_shared(cancelled),
+            move |event| events.lock().unwrap().push(event),
+        )
+        .await
+    }
+
+    fn delegate_call(agent_id: &str, message: &str) -> ToolCall {
+        ToolCall {
+            id: format!("call-delegate-{agent_id}"),
+            call_type: "function".into(),
+            function: FunctionCall {
+                name: "delegate_to_agent".into(),
+                arguments: json!({ "agent_id": agent_id, "message": message }).to_string(),
+            },
+        }
+    }
+
+    #[tokio::test]
+    async fn delegate_to_agent_runs_nested_child_and_persists_run_identity() {
+        let project = tempfile::tempdir().unwrap();
+        // Global reply order across BOTH the parent and the nested child engine (they share
+        // the same scripted model): parent delegates, child completes, parent finalises.
+        let provider = ScriptedModelPort::new([
+            ScriptedReply::ToolCall(delegate_call("writer", "Draft the intro sketch")),
+            ScriptedReply::Completion("Intro sketch drafted.".into()),
+            ScriptedReply::Completion("Delegated to writer and finished.".into()),
+        ]);
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let prompts = HashMap::from([(
+            "writer".to_string(),
+            "You are the CutReady writer.".to_string(),
+        )]);
+
+        let result = run_delegating(
+            provider.clone(),
+            project.path(),
+            "prompty-deleg",
+            "planner",
+            prompts,
+            vec![ChatMessage::user("Hand this to the writer.")],
+            Arc::new(AtomicBool::new(false)),
+            events.clone(),
+        )
+        .await
+        .unwrap();
+
+        // Parent's final answer is returned; the child's answer is folded into the tool result.
+        assert_eq!(result.response, "Delegated to writer and finished.");
+
+        // The child engine received exactly [system(prompt), user(message)].
+        let requests = provider.requests();
+        assert_eq!(requests.len(), 3, "parent x2 + child x1 model invocations");
+        let child_request = &requests[1];
+        assert_eq!(child_request.len(), 2);
+        assert_eq!(child_request[0].role, "system");
+        assert_eq!(
+            child_request[0].text(),
+            Some("You are the CutReady writer.")
+        );
+        assert_eq!(child_request[1].role, "user");
+        assert_eq!(child_request[1].text(), Some("Draft the intro sketch"));
+
+        // Delegation surfaced AgentStart/AgentDone for the sub-agent, and exactly ONE
+        // top-level Done (the child's completion must not emit a second Done to the host).
+        let events = events.lock().unwrap();
+        assert!(events.iter().any(|event| matches!(
+            event,
+            AgentEvent::AgentStart { agent_id, task }
+                if agent_id == "writer" && task == "Draft the intro sketch"
+        )));
+        assert!(events.iter().any(
+            |event| matches!(event, AgentEvent::AgentDone { agent_id } if agent_id == "writer")
+        ));
+        let done_count = events
+            .iter()
+            .filter(|event| matches!(event, AgentEvent::Done { .. }))
+            .count();
+        assert_eq!(done_count, 1, "only the top-level turn signals Done");
+        let done_response = events
+            .iter()
+            .find_map(|event| match event {
+                AgentEvent::Done { response } => Some(response.clone()),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(done_response, "Delegated to writer and finished.");
+        drop(events);
+
+        // Durable run identity: the whole delegation tree shares one journal (session =
+        // parent run_id), child events carry runId/parentRunId/delegationDepth in camelCase.
+        let detail =
+            AgentStateStore::get_run_detail(project.path(), project.path(), "prompty-deleg")
+                .unwrap()
+                .unwrap();
+        let child_events = detail
+            .trajectory_events
+            .iter()
+            .filter(|event| {
+                event.event.get("parentRunId").and_then(Value::as_str) == Some("prompty-deleg")
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            !child_events.is_empty(),
+            "child turn must persist events under the shared run journal"
+        );
+        let mut child_run_ids = std::collections::HashSet::new();
+        for event in &child_events {
+            assert_eq!(event.event["delegationDepth"].as_i64(), Some(1));
+            let child_run_id = event.event["runId"].as_str().unwrap();
+            assert_ne!(child_run_id, "prompty-deleg");
+            child_run_ids.insert(child_run_id.to_string());
+            // Canonical camelCase only — never the twin-era snake_case spellings.
+            assert!(event.event.get("parent_run_id").is_none());
+            assert!(event.event.get("delegation_depth").is_none());
+            assert_eq!(event.event["sessionId"].as_str(), Some("prompty-deleg"));
+        }
+        assert_eq!(child_run_ids.len(), 1, "one child run in this tree");
+
+        // Parent events keep runId = the run, omit parentRunId, and omit delegationDepth (0).
+        let parent_events = detail
+            .trajectory_events
+            .iter()
+            .filter(|event| event.event.get("parentRunId").is_none())
+            .collect::<Vec<_>>();
+        assert!(!parent_events.is_empty());
+        for event in &parent_events {
+            assert_eq!(event.event["runId"].as_str(), Some("prompty-deleg"));
+            assert!(event.event.get("delegationDepth").is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn delegate_to_unknown_agent_is_a_recoverable_tool_error() {
+        let project = tempfile::tempdir().unwrap();
+        // The unknown-agent check fails BEFORE any child engine spins up, so the parent
+        // only invokes the model twice (delegate call, then a completion after the error).
+        let provider = ScriptedModelPort::new([
+            ScriptedReply::ToolCall(delegate_call("designer", "Make a visual")),
+            ScriptedReply::Completion("Handled it myself.".into()),
+        ]);
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let prompts = HashMap::from([(
+            "writer".to_string(),
+            "You are the CutReady writer.".to_string(),
+        )]);
+
+        let result = run_delegating(
+            provider.clone(),
+            project.path(),
+            "prompty-unknown",
+            "planner",
+            prompts,
+            vec![ChatMessage::user("Delegate to designer.")],
+            Arc::new(AtomicBool::new(false)),
+            events.clone(),
+        )
+        .await
+        .unwrap();
+
+        // The turn still commits Success; the delegation failure is a model-visible tool error.
+        assert_eq!(result.response, "Handled it myself.");
+        assert_eq!(provider.requests().len(), 2, "no child engine was spawned");
+        let events = events.lock().unwrap();
+        // No AgentStart for an unknown agent (we bail before emitting it).
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, AgentEvent::AgentStart { .. })));
+        let tool_result = events
+            .iter()
+            .find_map(|event| match event {
+                AgentEvent::ToolResult { name, result } if name == "delegate_to_agent" => {
+                    Some(result.clone())
+                }
+                _ => None,
+            })
+            .unwrap();
+        assert!(tool_result.contains("unknown agent 'designer'"));
+        assert!(tool_result.contains("writer"));
+    }
+
+    #[tokio::test]
+    async fn delegation_depth_cap_blocks_further_delegation() {
+        // A parent already at the maximum delegation depth cannot delegate again. The check
+        // returns before any child engine spins up, so a dummy model is never invoked.
+        let model: Arc<dyn ModelPort> = ScriptedModelPort::new([]);
+        let ctx = DelegationContext {
+            model,
+            provider_name: "scripted".into(),
+            model_name: "scripted-model".into(),
+            context_budget_chars: 20_000,
+            repo_root: PathBuf::from("."),
+            project_root: PathBuf::from("."),
+            agent_prompts: Arc::new(HashMap::from([(
+                "writer".to_string(),
+                "You are the CutReady writer.".to_string(),
+            )])),
+            vision: VisionConfig { enabled: false },
+            web_access: WebAccessConfig {
+                search_enabled: false,
+            },
+            mutation_tools_enabled: false,
+            max_tool_rounds: 5,
+            context_items: Vec::new(),
+            agent_state: None,
+            cancellation: RunCancellation::from_shared(Arc::new(AtomicBool::new(false))),
+            emit: Arc::new(|_| {}),
+            session_id: "session".into(),
+            parent_run_id: "parent".into(),
+            depth: MAX_DELEGATION_DEPTH,
+        };
+
+        let output = run_delegated_agent(&ctx, &delegate_call("writer", "Go deeper")).await;
+        assert!(output.text().contains("maximum delegation depth"));
+    }
+
+    #[tokio::test]
+    async fn delegation_missing_arguments_is_a_tool_error() {
+        let model: Arc<dyn ModelPort> = ScriptedModelPort::new([]);
+        let ctx = DelegationContext {
+            model,
+            provider_name: "scripted".into(),
+            model_name: "scripted-model".into(),
+            context_budget_chars: 20_000,
+            repo_root: PathBuf::from("."),
+            project_root: PathBuf::from("."),
+            agent_prompts: Arc::new(HashMap::from([(
+                "writer".to_string(),
+                "You are the CutReady writer.".to_string(),
+            )])),
+            vision: VisionConfig { enabled: false },
+            web_access: WebAccessConfig {
+                search_enabled: false,
+            },
+            mutation_tools_enabled: false,
+            max_tool_rounds: 5,
+            context_items: Vec::new(),
+            agent_state: None,
+            cancellation: RunCancellation::from_shared(Arc::new(AtomicBool::new(false))),
+            emit: Arc::new(|_| {}),
+            session_id: "session".into(),
+            parent_run_id: "parent".into(),
+            depth: 0,
+        };
+
+        let missing_message = ToolCall {
+            id: "call".into(),
+            call_type: "function".into(),
+            function: FunctionCall {
+                name: "delegate_to_agent".into(),
+                arguments: json!({ "agent_id": "writer" }).to_string(),
+            },
+        };
+        let output = run_delegated_agent(&ctx, &missing_message).await;
+        assert!(output.text().contains("requires a 'message' argument"));
+    }
+
+    #[tokio::test]
+    async fn delegation_propagates_parent_cancellation_to_child() {
+        // The child shares the parent's cancellation flag. Pre-cancelling it means the child
+        // engine is cancelled and the delegation surfaces the cancellation as a tool error,
+        // never a silent committed success.
+        let cancelled = Arc::new(AtomicBool::new(true));
+        let model: Arc<dyn ModelPort> =
+            ScriptedModelPort::new([ScriptedReply::Completion("should never run".into())]);
+        let ctx = DelegationContext {
+            model,
+            provider_name: "scripted".into(),
+            model_name: "scripted-model".into(),
+            context_budget_chars: 20_000,
+            repo_root: PathBuf::from("."),
+            project_root: PathBuf::from("."),
+            agent_prompts: Arc::new(HashMap::from([(
+                "writer".to_string(),
+                "You are the CutReady writer.".to_string(),
+            )])),
+            vision: VisionConfig { enabled: false },
+            web_access: WebAccessConfig {
+                search_enabled: false,
+            },
+            mutation_tools_enabled: false,
+            max_tool_rounds: 5,
+            context_items: Vec::new(),
+            agent_state: None,
+            cancellation: RunCancellation::from_shared(cancelled),
+            emit: Arc::new(|_| {}),
+            session_id: "session".into(),
+            parent_run_id: "parent".into(),
+            depth: 0,
+        };
+
+        let output = run_delegated_agent(&ctx, &delegate_call("writer", "Draft it")).await;
+        assert!(output.text().contains(CANCELLED_ERROR));
+    }
+
     #[tokio::test]
     async fn no_tools_streaming_completion_preserves_history_and_usage() {
         let project = tempfile::tempdir().unwrap();
@@ -2412,6 +2988,258 @@ mod tests {
         assert_eq!(persisted["runId"], "child-run");
         assert_eq!(persisted["parentRunId"], "parent-run");
         assert_eq!(persisted["delegationDepth"], 1);
+
+        // Resume round-trip: a committed checkpoint promotes into the generated
+        // ResumeContext, persists as canonical camelCase durable state, and
+        // round-trips back to the typed record without fabricating any duplicate
+        // committed model/tool effect.
+        use prompty::ResumeContext;
+        let committed_before = detail
+            .trajectory_events
+            .iter()
+            .filter(|record| record.event_type == "turn_committed")
+            .count();
+        assert_eq!(
+            committed_before, 1,
+            "the scripted turn commits exactly once"
+        );
+
+        let committed_checkpoint: EngineCheckpoint =
+            serde_json::from_value(detail.checkpoints.last().unwrap().checkpoint.clone())
+                .expect("committed checkpoint deserializes into the generated EngineCheckpoint");
+        let journal_tail = committed_checkpoint.last_sequence + 3;
+        let resume = ResumeContext::resuming(committed_checkpoint.clone(), 8, 5)
+            .with_last_journal_sequence(journal_tail);
+        store.save_resume_context(&resume).unwrap();
+
+        let resumed_detail =
+            AgentStateStore::get_run_detail(project.path(), project.path(), "prompty-durable")
+                .unwrap()
+                .unwrap();
+        // Persisting resume state must not add a new committed turn.
+        assert_eq!(
+            resumed_detail
+                .trajectory_events
+                .iter()
+                .filter(|record| record.event_type == "turn_committed")
+                .count(),
+            committed_before,
+            "round-tripping resume state adds no duplicate committed effect"
+        );
+
+        let record = resumed_detail
+            .resume_contexts
+            .last()
+            .expect("resume context persisted");
+        assert_eq!(record.checkpoint_id, committed_checkpoint.id);
+        let stored = &record.context;
+        // Canonical camelCase durable keys, not Rust snake_case.
+        assert_eq!(stored["maxIterations"], 8);
+        assert_eq!(stored["maxModelAttempts"], 5);
+        assert_eq!(stored["lastJournalSequence"], journal_tail);
+        assert!(stored.get("max_iterations").is_none());
+        assert!(stored.get("last_journal_sequence").is_none());
+        // The embedded checkpoint keeps the committed run identity in camelCase.
+        assert_eq!(stored["checkpoint"]["sessionId"], "prompty-durable");
+        assert_eq!(
+            stored["checkpoint"]["runId"]
+                .as_str()
+                .expect("nested runId"),
+            run_id
+        );
+
+        // Round-trips back to the typed generated record.
+        let restored: ResumeContext =
+            serde_json::from_value(stored.clone()).expect("resume state round-trips to the type");
+        assert_eq!(restored.max_iterations, 8);
+        assert_eq!(restored.max_model_attempts, 5);
+        assert_eq!(restored.last_journal_sequence, journal_tail);
+        assert_eq!(restored.checkpoint.id, committed_checkpoint.id);
+        assert_eq!(restored.resume_sequence(), journal_tail);
+
+        // A zero journal tail is omitted per the conditional-emit discipline.
+        let resume_zero = ResumeContext::resuming(committed_checkpoint.clone(), 8, 5);
+        store.save_resume_context(&resume_zero).unwrap();
+        let zero_detail =
+            AgentStateStore::get_run_detail(project.path(), project.path(), "prompty-durable")
+                .unwrap()
+                .unwrap();
+        let zero_ctx = &zero_detail
+            .resume_contexts
+            .last()
+            .expect("zero-tail resume context persisted")
+            .context;
+        assert!(
+            zero_ctx.get("lastJournalSequence").is_none(),
+            "a zero journal tail is omitted from the canonical projection"
+        );
+    }
+
+    /// A reconciliation-required checkpoint must survive CutReady's durable round-trip
+    /// (canonical camelCase, including the indeterminate tool effect) and promote into a
+    /// generated `ResumeContext` that the engine's `from_resume_after_reconciliation`
+    /// bridge accepts. This proves the CutReady half of the resume-trigger composition:
+    /// the host persists and reconstructs a valid resume record, while the engine's own
+    /// suite (`resume_via_generated_resume_context_avoids_duplicate_effects`) owns the
+    /// no-duplicate-effect execution guarantee.
+    #[tokio::test]
+    async fn reconciliation_required_checkpoint_round_trips_into_a_resumable_context() {
+        use prompty::ResumeContext;
+
+        let project = tempfile::tempdir().unwrap();
+        let run_id = "prompty-recon";
+        let provider = ScriptedModelPort::new([ScriptedReply::Completion("Done.".into())]);
+        run_script(
+            provider,
+            project.path(),
+            run_id,
+            vec![ChatMessage::user("Finish.")],
+            Vec::new(),
+            false,
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(Mutex::new(Vec::new())),
+        )
+        .await
+        .unwrap();
+
+        let store = AgentStateStore::for_project(project.path(), project.path(), run_id).unwrap();
+        let detail = AgentStateStore::get_run_detail(project.path(), project.path(), run_id)
+            .unwrap()
+            .unwrap();
+        let committed: EngineCheckpoint =
+            serde_json::from_value(detail.checkpoints.last().unwrap().checkpoint.clone())
+                .expect("committed checkpoint deserializes");
+
+        // Shape a reconciliation-required checkpoint from the genuine committed one: it
+        // carries an indeterminate tool effect the host must resolve before resuming.
+        const REQUEST_ID: &str = "recon-call-1";
+        let mut recon = committed.clone();
+        recon.id = "checkpoint-recon".into();
+        recon.reconciliation_required = true;
+        recon.model_reconciliation = None;
+        recon.completed_tool_results = vec![EngineToolResult {
+            request_id: REQUEST_ID.into(),
+            name: "capture_screenshot".into(),
+            outcome: ToolOutcome::Indeterminate,
+            output: None,
+            error_kind: Some("indeterminate".into()),
+            metadata: Value::Null,
+        }];
+        recon.messages.push(Message::tool_result(
+            REQUEST_ID,
+            "awaiting host confirmation",
+        ));
+
+        let recon_event = EngineEvent {
+            sequence: recon.last_sequence + 1,
+            id: "recon-event-1".into(),
+            timestamp: "2026-07-25T00:00:00Z".into(),
+            session_id: run_id.into(),
+            turn_id: recon.turn_id.clone(),
+            run_id: recon.run_id.clone(),
+            parent_run_id: recon.parent_run_id.clone(),
+            delegation_depth: recon.delegation_depth,
+            invocation_id: recon.active_invocation_id.clone(),
+            iteration: Some(recon.iteration),
+            kind: EngineEventKind::Turn_reconciliation_required,
+            payload: None,
+        };
+        store
+            .append_prompty_events_with_checkpoint(&[recon_event], &recon)
+            .unwrap();
+
+        // Durable round-trip: the reconciliation state persists as canonical camelCase,
+        // not Rust snake_case, and the indeterminate tool effect survives verbatim.
+        let persisted = AgentStateStore::get_run_detail(project.path(), project.path(), run_id)
+            .unwrap()
+            .unwrap();
+        let stored_cp = persisted
+            .checkpoints
+            .iter()
+            .find(|record| record.checkpoint["id"] == "checkpoint-recon")
+            .expect("reconciliation checkpoint persisted")
+            .checkpoint
+            .clone();
+        assert_eq!(stored_cp["reconciliationRequired"], true);
+        // The generated projection stores completed results object-keyed by tool name
+        // (default SaveContext collection_format), each element in canonical camelCase.
+        let stored_result = &stored_cp["completedToolResults"]["capture_screenshot"];
+        assert_eq!(stored_result["requestId"], REQUEST_ID);
+        assert_eq!(stored_result["outcome"], "indeterminate");
+        assert!(stored_cp.get("completed_tool_results").is_none());
+        assert!(stored_cp.get("reconciliation_required").is_none());
+
+        let restored_cp: EngineCheckpoint = serde_json::from_value(stored_cp)
+            .expect("reconciliation checkpoint round-trips into the generated type");
+        assert!(restored_cp.reconciliation_required);
+        assert_eq!(
+            restored_cp.completed_tool_results[0].outcome,
+            ToolOutcome::Indeterminate
+        );
+        assert!(restored_cp.model_reconciliation.is_none());
+
+        // Promote into the generated ResumeContext and round-trip through CutReady's store.
+        let journal_tail = restored_cp.last_sequence + 2;
+        let resume = ResumeContext::resuming(restored_cp.clone(), 8, 5)
+            .with_last_journal_sequence(journal_tail);
+        store.save_resume_context(&resume).unwrap();
+        let resume_detail = AgentStateStore::get_run_detail(project.path(), project.path(), run_id)
+            .unwrap()
+            .unwrap();
+        let restored_resume: ResumeContext = serde_json::from_value(
+            resume_detail
+                .resume_contexts
+                .last()
+                .expect("resume context persisted")
+                .context
+                .clone(),
+        )
+        .expect("resume context round-trips to the type");
+        assert!(restored_resume.checkpoint.reconciliation_required);
+
+        // The persisted + round-tripped record is a valid resume input: resolving the
+        // indeterminate effect with a determinate result clears reconciliation, records
+        // the resolution, threads the durable model-attempt budget, and preserves run
+        // identity independently.
+        let resolved = EngineToolResult {
+            request_id: REQUEST_ID.into(),
+            name: "capture_screenshot".into(),
+            outcome: ToolOutcome::Success,
+            output: Some(json!({ "captured": true })),
+            error_kind: None,
+            metadata: Value::Null,
+        };
+        let request =
+            TurnEngineRequest::from_resume_after_reconciliation(&restored_resume, resolved.clone())
+                .expect("resolved reconciliation builds a resumable request");
+        assert!(!request.reconciliation_required);
+        assert_eq!(request.reconciliation_resolution, Some(resolved.clone()));
+        assert_eq!(request.session_id, run_id);
+        assert_eq!(request.run_id, committed.run_id);
+        assert_eq!(request.parent_run_id, committed.parent_run_id);
+        assert_eq!(request.delegation_depth, committed.delegation_depth);
+        assert_eq!(request.max_model_attempts, 5);
+        assert_eq!(request.initial_sequence, journal_tail as u64);
+
+        // Guard: an unresolved (still-indeterminate) result is rejected, so a host can
+        // never resume a reconciliation checkpoint without actually resolving the effect.
+        let still_indeterminate = EngineToolResult {
+            outcome: ToolOutcome::Indeterminate,
+            ..resolved.clone()
+        };
+        assert!(TurnEngineRequest::from_resume_after_reconciliation(
+            &restored_resume,
+            still_indeterminate,
+        )
+        .is_err());
+
+        // Guard: a tool-reconciliation checkpoint cannot be resumed through the model
+        // reconciliation bridge.
+        assert!(TurnEngineRequest::from_resume_after_model_reconciliation(
+            &restored_resume,
+            ModelInvocationResponse::new(),
+        )
+        .is_err());
     }
 
     #[tokio::test]

@@ -13,7 +13,8 @@ use crate::engine::agent_state::{
     ChatSessionRecord, ChatSessionSummary, ContextAssetInput, ContextAssetScope,
 };
 use crate::{AgentChatCancellationRegistry, AppState};
-use agentive::azure_oauth::{self, AuthCodeFlowInit, DeviceCodeResponse, TokenResponse};
+use prompty_foundry::oauth;
+use prompty_foundry::{DeviceCodeResponse, TokenResponse};
 use std::collections::HashSet;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
@@ -1272,13 +1273,13 @@ pub async fn update_chat_summary(
 #[tauri::command]
 pub async fn list_memories(
     state: tauri::State<'_, AppState>,
-) -> Result<Vec<crate::engine::memory::MemoryEntry>, String> {
+) -> Result<Vec<crate::engine::memory::MemoryDto>, String> {
     let (repo_root, root) = {
         let guard = state.current_project.lock().unwrap();
         let view = guard.as_ref().ok_or("No project open")?;
         (view.repo_root.clone(), view.root.clone())
     };
-    Ok(crate::engine::memory::load(&repo_root, &root).memories)
+    Ok(crate::engine::memory::list(&repo_root, &root))
 }
 
 /// Delete a memory by index.
@@ -1318,12 +1319,13 @@ pub async fn clear_memories(
         let view = guard.as_ref().ok_or("No project open")?;
         (view.repo_root.clone(), view.root.clone())
     };
-    let cat = category.map(|c| match c.as_str() {
-        "core" => crate::engine::memory::MemoryCategory::Core,
-        "archival" => crate::engine::memory::MemoryCategory::Archival,
-        "insight" => crate::engine::memory::MemoryCategory::Insight,
-        _ => crate::engine::memory::MemoryCategory::Archival,
-    });
+    let cat = match category.as_deref() {
+        Some(c) => Some(
+            crate::engine::memory::MemoryCategory::from_str_ignore_case_opt(c)
+                .ok_or_else(|| format!("Unknown memory category '{c}'"))?,
+        ),
+        None => None,
+    };
     crate::engine::memory::clear_memories(&repo_root, &root, cat)
 }
 
@@ -1342,7 +1344,7 @@ pub async fn azure_device_code_start(
     } else {
         &tenant_id
     };
-    azure_oauth::request_device_code(tid, client_id.as_deref(), None).await
+    oauth::request_device_code(tid, client_id.as_deref(), None).await
 }
 
 /// Poll for the token after the user has completed sign-in.
@@ -1360,7 +1362,7 @@ pub async fn azure_device_code_poll(
     } else {
         &tenant_id
     };
-    azure_oauth::poll_for_token(tid, &device_code, interval, timeout, client_id.as_deref()).await
+    oauth::poll_for_token(tid, &device_code, interval, timeout, client_id.as_deref()).await
 }
 
 /// Refresh an Azure OAuth token using a refresh token.
@@ -1376,17 +1378,23 @@ pub async fn azure_token_refresh(
     } else {
         &tenant_id
     };
-    azure_oauth::refresh_token(tid, &refresh_token, client_id.as_deref(), scope.as_deref()).await
+    oauth::refresh_token(tid, &refresh_token, client_id.as_deref(), scope.as_deref()).await
 }
 
 // ---------------------------------------------------------------------------
 // Browser-based Authorization Code + PKCE flow
+//
+// prompty-foundry owns the pure protocol (PKCE + URL build + token exchange).
+// The loopback redirect listener, its HTML response, and the pending-flow state
+// are host concerns and live here.
 // ---------------------------------------------------------------------------
 
-/// State for an in-progress browser auth flow.
+/// State for an in-progress browser auth flow. Holds the bound loopback
+/// listener so [`azure_browser_auth_complete`] can accept the redirect on it.
 struct PendingBrowserAuth {
     code_verifier: String,
-    port: u16,
+    redirect_uri: String,
+    listener: tokio::net::TcpListener,
 }
 
 static PENDING_BROWSER_AUTH: std::sync::OnceLock<tokio::sync::Mutex<Option<PendingBrowserAuth>>> =
@@ -1396,28 +1404,50 @@ fn pending_auth() -> &'static tokio::sync::Mutex<Option<PendingBrowserAuth>> {
     PENDING_BROWSER_AUTH.get_or_init(|| tokio::sync::Mutex::new(None))
 }
 
-/// Start the browser auth flow. Returns the auth URL + port for the frontend to open.
+/// Returned to the frontend so it can open the browser. Deliberately exposes
+/// ONLY the auth URL; the PKCE `code_verifier` stays host-side and never
+/// crosses the IPC boundary into the WebView.
+#[derive(serde::Serialize)]
+pub struct BrowserAuthStart {
+    pub auth_url: String,
+}
+
+/// Start the browser auth flow. Binds a loopback listener, builds the PKCE
+/// authorization URL, stashes the verifier + listener, and returns the URL.
 #[tauri::command]
 pub async fn azure_browser_auth_start(
     tenant_id: String,
     client_id: Option<String>,
-) -> Result<AuthCodeFlowInit, String> {
+) -> Result<BrowserAuthStart, String> {
     let tid = if tenant_id.is_empty() {
         "organizations"
     } else {
         &tenant_id
     };
-    let (init, verifier) =
-        azure_oauth::start_auth_code_flow(tid, client_id.as_deref(), None).await?;
 
-    // Store verifier + port for the exchange step
+    // Host owns the loopback redirect listener (the crate no longer binds it).
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .map_err(|e| format!("Failed to bind localhost listener: {e}"))?;
+    let port = listener
+        .local_addr()
+        .map_err(|e| format!("Failed to read listener address: {e}"))?
+        .port();
+    let redirect_uri = format!("http://127.0.0.1:{port}");
+
+    let init = oauth::build_auth_code_url(tid, client_id.as_deref(), None, &redirect_uri);
+
+    // Store verifier + redirect_uri + listener for the exchange step.
     let mut guard = pending_auth().lock().await;
     *guard = Some(PendingBrowserAuth {
-        code_verifier: verifier,
-        port: init.port,
+        code_verifier: init.code_verifier,
+        redirect_uri,
+        listener,
     });
 
-    Ok(init)
+    Ok(BrowserAuthStart {
+        auth_url: init.auth_url,
+    })
 }
 
 /// Wait for the browser callback, then exchange the code for tokens.
@@ -1433,44 +1463,163 @@ pub async fn azure_browser_auth_complete(
         &tenant_id
     };
 
-    let (verifier, port) = {
-        let guard = pending_auth().lock().await;
-        let p = guard.as_ref().ok_or("No pending browser auth flow")?;
-        (p.code_verifier.clone(), p.port)
+    // Take the pending flow (clears it regardless of outcome so a failed
+    // attempt never leaves a stale listener bound).
+    let pending = {
+        let mut guard = pending_auth().lock().await;
+        guard.take().ok_or("No pending browser auth flow")?
     };
 
-    let code = azure_oauth::wait_for_auth_code(port, timeout.unwrap_or(300), "CutReady").await?;
+    let code = wait_for_auth_code(&pending.listener, timeout.unwrap_or(300), "CutReady").await?;
 
-    let redirect_uri = format!("http://localhost:{port}");
-    let token = azure_oauth::exchange_code_for_token(
+    oauth::exchange_code_for_token(
         tid,
         &code,
-        &redirect_uri,
-        &verifier,
+        &pending.redirect_uri,
+        &pending.code_verifier,
         client_id.as_deref(),
         None,
     )
-    .await?;
+    .await
+}
 
-    // Clean up
-    let mut guard = pending_auth().lock().await;
-    *guard = None;
+/// Accept exactly one loopback redirect, parse the `code` (or `error`) query
+/// parameter, and serve a branded confirmation page. Host-owned half of the
+/// auth-code flow that previously lived in the OAuth crate.
+async fn wait_for_auth_code(
+    listener: &tokio::net::TcpListener,
+    timeout_secs: u64,
+    app_name: &str,
+) -> Result<String, String> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    Ok(token)
+    let timeout = std::time::Duration::from_secs(timeout_secs);
+    let (mut stream, _addr) = tokio::time::timeout(timeout, listener.accept())
+        .await
+        .map_err(|_| "Timed out waiting for browser redirect".to_string())?
+        .map_err(|e| format!("Accept failed: {e}"))?;
+
+    let mut buf = vec![0u8; 4096];
+    let n = stream
+        .read(&mut buf)
+        .await
+        .map_err(|e| format!("Failed to read request: {e}"))?;
+    let request = String::from_utf8_lossy(&buf[..n]);
+
+    let first_line = request.lines().next().unwrap_or("");
+    let path = first_line.split_whitespace().nth(1).unwrap_or("");
+
+    if path.contains("error=") {
+        let detail = extract_query_param(path, "error_description")
+            .or_else(|| extract_query_param(path, "error"))
+            .unwrap_or_default();
+        let page = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n{}",
+            auth_error_html(app_name, &detail)
+        );
+        let _ = stream.write_all(page.as_bytes()).await;
+        let _ = stream.shutdown().await;
+        return Err(format!("Auth error: {detail}"));
+    }
+
+    let code = extract_query_param(path, "code")
+        .ok_or_else(|| format!("No authorization code in redirect: {path}"))?;
+
+    let page = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n{}",
+        auth_success_html(app_name)
+    );
+    let _ = stream.write_all(page.as_bytes()).await;
+    let _ = stream.shutdown().await;
+
+    Ok(code)
+}
+
+/// Extract a query parameter value from a URL path like `/?code=abc&state=xyz`.
+fn extract_query_param(path: &str, key: &str) -> Option<String> {
+    let query = path.split('?').nth(1)?;
+    for pair in query.split('&') {
+        let mut kv = pair.splitn(2, '=');
+        if kv.next()? == key {
+            let val = kv.next().unwrap_or("");
+            return Some(urlencoding::decode(val).unwrap_or_default().into_owned());
+        }
+    }
+    None
+}
+
+fn auth_success_html(app_name: &str) -> String {
+    format!(
+        "<!DOCTYPE html>\
+<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
+<title>{app_name} Signed In</title>\
+<style>\
+*{{margin:0;padding:0;box-sizing:border-box}}\
+body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;\
+display:flex;align-items:center;justify-content:center;min-height:100vh;\
+background:#f8f9fa;color:#1a1a1a}}\
+@media(prefers-color-scheme:dark){{body{{background:#1a1a1a;color:#e8e8e8}}}}\
+.card{{text-align:center;padding:48px 40px;max-width:420px;\
+background:#fff;border-radius:16px;box-shadow:0 2px 24px rgba(0,0,0,.08)}}\
+@media(prefers-color-scheme:dark){{.card{{background:#2a2a2a;box-shadow:0 2px 24px rgba(0,0,0,.3)}}}}\
+.icon{{font-size:48px;margin-bottom:16px}}\
+h1{{font-size:20px;font-weight:600;margin-bottom:8px}}\
+p{{font-size:14px;opacity:.7;line-height:1.5}}\
+.fade{{animation:fadeIn .4s ease}}\
+@keyframes fadeIn{{from{{opacity:0;transform:translateY(8px)}}to{{opacity:1;transform:none}}}}\
+</style></head>\
+<body><div class=\"card fade\">\
+<div class=\"icon\">✅</div>\
+<h1>Signed in to {app_name}</h1>\
+<p>You can close this tab and return to the app.</p>\
+</div>\
+<script>setTimeout(()=>window.close(),3000)</script>\
+</body></html>"
+    )
+}
+
+fn auth_error_html(app_name: &str, detail: &str) -> String {
+    format!(
+        "<!DOCTYPE html>\
+<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
+<title>{app_name} Sign-in Failed</title>\
+<style>\
+*{{margin:0;padding:0;box-sizing:border-box}}\
+body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;\
+display:flex;align-items:center;justify-content:center;min-height:100vh;\
+background:#f8f9fa;color:#1a1a1a}}\
+@media(prefers-color-scheme:dark){{body{{background:#1a1a1a;color:#e8e8e8}}}}\
+.card{{text-align:center;padding:48px 40px;max-width:420px;\
+background:#fff;border-radius:16px;box-shadow:0 2px 24px rgba(0,0,0,.08)}}\
+@media(prefers-color-scheme:dark){{.card{{background:#2a2a2a;box-shadow:0 2px 24px rgba(0,0,0,.3)}}}}\
+.icon{{font-size:48px;margin-bottom:16px}}\
+h1{{font-size:20px;font-weight:600;margin-bottom:8px}}\
+p{{font-size:14px;opacity:.7;line-height:1.5}}\
+.detail{{margin-top:12px;font-size:12px;opacity:.5;word-break:break-word}}\
+.fade{{animation:fadeIn .4s ease}}\
+@keyframes fadeIn{{from{{opacity:0;transform:translateY(8px)}}to{{opacity:1;transform:none}}}}\
+</style></head>\
+<body><div class=\"card fade\">\
+<div class=\"icon\">❌</div>\
+<h1>Sign-in failed</h1>\
+<p>Something went wrong during authentication.</p>\
+<p class=\"detail\">{detail}</p>\
+</div></body></html>"
+    )
 }
 
 // ---------------------------------------------------------------------------
 // ARM Resource Discovery (Microsoft Foundry setup wizard)
 // ---------------------------------------------------------------------------
 
-use agentive::arm_discovery::{AiResource, FoundryProject, Subscription};
+use prompty_foundry::arm_discovery::{AiResource, FoundryProject, Subscription};
 
 /// List Azure subscriptions accessible to the user.
 #[tauri::command]
 pub async fn list_azure_subscriptions(
     management_token: String,
 ) -> Result<Vec<Subscription>, String> {
-    agentive::arm_discovery::list_subscriptions(&management_token).await
+    prompty_foundry::arm_discovery::list_subscriptions(&management_token).await
 }
 
 /// List AI resources (Azure OpenAI / AI Services) in a subscription.
@@ -1479,7 +1628,7 @@ pub async fn list_azure_ai_resources(
     management_token: String,
     subscription_id: String,
 ) -> Result<Vec<AiResource>, String> {
-    agentive::arm_discovery::list_ai_resources(&management_token, &subscription_id).await
+    prompty_foundry::arm_discovery::list_ai_resources(&management_token, &subscription_id).await
 }
 
 /// List Foundry projects under an AI resource.
@@ -1490,7 +1639,7 @@ pub async fn list_foundry_projects(
     resource_group: String,
     resource_name: String,
 ) -> Result<Vec<FoundryProject>, String> {
-    agentive::arm_discovery::list_foundry_projects(
+    prompty_foundry::arm_discovery::list_foundry_projects(
         &management_token,
         &subscription_id,
         &resource_group,

@@ -25,7 +25,7 @@ tracing-log = "0.2"
 tracing-subscriber = "0.3"
 log = "0.4"
 dirs = "6"
-tokio = { version = "1", features = ["process", "io-util", "sync", "time"] }
+tokio = { version = "1", features = ["process", "io-util", "sync", "time", "net"] }
 reqwest = { version = "0.12", features = ["json", "stream"] }
 scraper = "0.22"
 tokio-stream = "0.1"
@@ -60,10 +60,10 @@ tauri-plugin-opener = "2.5.3"
 tauri-plugin-stronghold = "2"
 
 agentive = { version = "0.6.1", features = ["tracing"] }
-prompty = { git = "https://github.com/microsoft/prompty", rev = "0da7bca5e1f52994f9a6d60328c6a3e7ccd8caba" }
-prompty-openai = { git = "https://github.com/microsoft/prompty", rev = "0da7bca5e1f52994f9a6d60328c6a3e7ccd8caba" }
-prompty-foundry = { git = "https://github.com/microsoft/prompty", rev = "0da7bca5e1f52994f9a6d60328c6a3e7ccd8caba" }
-prompty-anthropic = { git = "https://github.com/microsoft/prompty", rev = "0da7bca5e1f52994f9a6d60328c6a3e7ccd8caba" }
+prompty = { git = "https://github.com/microsoft/prompty", rev = "36f27ff661d8ad4cf29e6ac2c74ec270c4832e03" }
+prompty-openai = { git = "https://github.com/microsoft/prompty", rev = "36f27ff661d8ad4cf29e6ac2c74ec270c4832e03" }
+prompty-foundry = { git = "https://github.com/microsoft/prompty", rev = "36f27ff661d8ad4cf29e6ac2c74ec270c4832e03" }
+prompty-anthropic = { git = "https://github.com/microsoft/prompty", rev = "36f27ff661d8ad4cf29e6ac2c74ec270c4832e03" }
 portable-pty = "0.9.0"
 
 # Vendor OpenSSL on macOS to support cross-compilation (ARM → Intel)

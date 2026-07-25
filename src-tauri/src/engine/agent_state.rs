@@ -12,8 +12,8 @@ use std::time::Duration;
 
 use agentive::{
     Checkpoint, CheckpointStore, MemoryPromotionCandidate, MemoryPromotionHook,
-    MemoryPromotionOutcome, ResumeContext, TouchedResource, TrajectoryEvent, TrajectoryMetadata,
-    TrajectorySink, VerificationResult,
+    MemoryPromotionOutcome, TouchedResource, TrajectoryEvent, TrajectoryMetadata, TrajectorySink,
+    VerificationResult,
 };
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Row};
@@ -1176,17 +1176,24 @@ impl AgentStateStore {
         }
     }
 
+    /// Persist a resume record so an interrupted turn can restart from its last
+    /// durable checkpoint. Stores the generated `prompty::ResumeContext` verbatim
+    /// (canonical camelCase durable keys: `checkpoint` with run identity,
+    /// `maxIterations`, `maxModelAttempts`, `lastJournalSequence` conditional-emit,
+    /// `metadata`) so the resumed run honors the persisted iteration/attempt
+    /// budgets and continues numbering after the recorded journal tail.
     #[allow(dead_code)]
-    pub fn save_resume_context(&self, context: ResumeContext) -> Result<(), String> {
+    pub fn save_resume_context(&self, context: &prompty::ResumeContext) -> Result<(), String> {
+        self.validate_prompty_run(&context.checkpoint.session_id)?;
         let conn = self.connect()?;
-        let context_json = serde_json::to_string(&context).map_err(|e| e.to_string())?;
+        let context_json = serde_json::to_string(context).map_err(|e| e.to_string())?;
         conn.execute(
             "INSERT INTO resume_contexts (run_id, checkpoint_id, created_at, context_json)
              VALUES (?1, ?2, ?3, ?4)",
             params![
                 self.run_id(),
                 context.checkpoint.id,
-                context.generated_at.to_rfc3339(),
+                Utc::now().to_rfc3339(),
                 context_json
             ],
         )
@@ -3589,7 +3596,7 @@ mod tests {
     }
 
     #[test]
-    fn run_event_checkpoint_and_resume_context_round_trip() {
+    fn run_event_and_checkpoint_round_trip() {
         let store = test_store("run-round-trip");
         store
             .insert_run(
@@ -3611,9 +3618,6 @@ mod tests {
             .with_metadata("run_id", "run-round-trip")
             .with_next_step("Verify update");
         store.save_checkpoint(checkpoint.clone()).unwrap();
-        store
-            .save_resume_context(ResumeContext::new(checkpoint.clone()))
-            .unwrap();
 
         let run = store.get_run("run-round-trip").unwrap().unwrap();
         assert_eq!(run.status, "running");

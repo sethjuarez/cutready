@@ -1292,7 +1292,7 @@ mod tests {
 
     #[test]
     fn prompty_production_dependencies_remain_pinned_to_a_single_revision() {
-        const REVISION: &str = "0da7bca5e1f52994f9a6d60328c6a3e7ccd8caba";
+        const REVISION: &str = "36f27ff661d8ad4cf29e6ac2c74ec270c4832e03";
         let manifest = include_str!("../../../Cargo.toml");
         let lockfile = include_str!("../../../Cargo.lock");
 
