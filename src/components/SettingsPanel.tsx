@@ -2695,13 +2695,27 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
   const providers = settings.aiProviders?.length ? settings.aiProviders : [];
   const selectedProvider = activeProvider(settings);
   const defaultProvider = providers.find((provider) => provider.id === settings.aiDefaultProviderId) ?? selectedProvider;
+  // Persisted per-connection "kind" values are unchanged wire values. The two
+  // Azure kinds (microsoft_foundry, azure_openai) are surfaced as one "Microsoft
+  // Foundry (Azure)" family in the UI; a connection-method toggle picks between
+  // them, so labels/descriptions below fold both under the same family name.
   const providerOptions: Array<{ value: "microsoft_foundry" | "azure_openai" | "openai" | "anthropic"; label: string; description: string }> = [
-    { value: "microsoft_foundry", label: "Microsoft Foundry", description: "Entra or key-based Azure AI projects" },
-    { value: "azure_openai", label: "Azure OpenAI", description: "Azure-hosted OpenAI deployments" },
+    { value: "microsoft_foundry", label: "Microsoft Foundry (Azure)", description: "Foundry resource · Entra or key" },
+    { value: "azure_openai", label: "Microsoft Foundry (Azure)", description: "Azure OpenAI endpoint" },
     { value: "openai", label: "OpenAI", description: "OpenAI platform models and compatible endpoints" },
     { value: "anthropic", label: "Anthropic", description: "Claude models through Anthropic" },
   ];
-  const [newProviderKind, setNewProviderKind] = useState<typeof providerOptions[number]["value"]>("openai");
+  type ProviderFamily = "azure" | "openai" | "anthropic";
+  const providerFamilies: Array<{ value: ProviderFamily; label: string; description: string }> = [
+    { value: "azure", label: "Microsoft Foundry (Azure)", description: "Azure AI Foundry or Azure OpenAI" },
+    { value: "openai", label: "OpenAI", description: "OpenAI platform models and compatible endpoints" },
+    { value: "anthropic", label: "Anthropic", description: "Claude models through Anthropic" },
+  ];
+  const familyOf = (kind: string): ProviderFamily =>
+    kind === "microsoft_foundry" || kind === "azure_openai" ? "azure" : (kind as ProviderFamily);
+  const familyToKind = (family: ProviderFamily): "microsoft_foundry" | "openai" | "anthropic" =>
+    family === "azure" ? "microsoft_foundry" : family;
+  const [newProviderFamily, setNewProviderFamily] = useState<ProviderFamily>("azure");
   const providerLabel = (provider: string) =>
     providerOptions.find((option) => option.value === provider)?.label ?? provider.replace(/_/g, " ");
   const providerDescription = (provider: string) =>
@@ -2782,18 +2796,18 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
           </div>
           <div className="flex flex-col gap-2 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-2 sm:flex-row sm:items-center">
             <select
-              value={newProviderKind}
-              onChange={(e) => setNewProviderKind(e.target.value as typeof newProviderKind)}
+              value={newProviderFamily}
+              onChange={(e) => setNewProviderFamily(e.target.value as ProviderFamily)}
               className={inputClass + " min-w-44 text-xs"}
               aria-label="Provider type to add"
             >
-              {providerOptions.map((option) => (
+              {providerFamilies.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
             <button
               type="button"
-              onClick={() => void addProvider(newProviderKind)}
+              onClick={() => void addProvider(familyToKind(newProviderFamily))}
               className="rounded-lg bg-[rgb(var(--color-accent))] px-3 py-2 text-xs font-semibold text-[rgb(var(--color-accent-fg))] transition-opacity hover:opacity-90"
             >
               Add provider
@@ -2893,25 +2907,72 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
       <fieldset className="flex flex-col gap-2 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-3">
         <label className="text-sm font-medium">Editing connection type</label>
         <select
-          value={settings.aiProvider}
+          value={familyOf(settings.aiProvider)}
           onChange={(e) => {
-            updateSetting("aiProvider", e.target.value);
-            setModels([]);
-            if (
-              e.target.value !== "azure_openai" &&
-              e.target.value !== "microsoft_foundry"
-            ) {
+            const family = e.target.value as ProviderFamily;
+            if (family === "azure") {
+              // Default a fresh Azure connection to the recommended Foundry path;
+              // keep the current Azure kind when already in the family.
+              if (familyOf(settings.aiProvider) !== "azure") {
+                updateSetting("aiProvider", "microsoft_foundry");
+              }
+            } else {
+              updateSetting("aiProvider", family);
               updateSetting("aiAuthMode", "api_key");
             }
+            setModels([]);
           }}
           className={inputClass}
         >
-          <option value="microsoft_foundry">Microsoft Foundry</option>
-          <option value="azure_openai">Azure OpenAI</option>
-          <option value="openai">OpenAI</option>
-          <option value="anthropic">Anthropic</option>
+          {providerFamilies.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
         </select>
+        {(isAzure || isFoundry) && (
+          <p className="text-xs text-[rgb(var(--color-text-secondary))]">
+            Azure AI Foundry unifies Foundry resources and Azure OpenAI deployments. Pick the connection method below.
+          </p>
+        )}
       </fieldset>
+
+      {/* Connection method (Azure family): Foundry resource vs Azure OpenAI endpoint */}
+      {(isAzure || isFoundry) && (
+        <fieldset className="flex flex-col gap-2">
+          <label className="text-sm font-medium">Connection method</label>
+          <div className="flex gap-2">
+            {([
+              { kind: "microsoft_foundry", label: "Foundry resource", hint: "Recommended" },
+              { kind: "azure_openai", label: "Azure OpenAI endpoint", hint: "" },
+            ] as const).map((method) => (
+              <button
+                key={method.kind}
+                type="button"
+                onClick={() => {
+                  if (settings.aiProvider === method.kind) return;
+                  updateSetting("aiProvider", method.kind);
+                  // Endpoint semantics differ per method (services.ai.azure.com vs
+                  // openai.azure.com); clear the stale endpoint and discovered models.
+                  updateSetting("aiEndpoint", "");
+                  setModels([]);
+                }}
+                className={`flex-1 px-3 py-1.5 rounded-lg text-sm transition-colors border ${
+                  settings.aiProvider === method.kind
+                    ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] border-[rgb(var(--color-accent))]"
+                    : "bg-[rgb(var(--color-surface-alt))] border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
+                }`}
+              >
+                {method.label}
+                {method.hint ? <span className="ml-1 text-[10px] opacity-70">({method.hint})</span> : null}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-[rgb(var(--color-text-secondary))]">
+            {isFoundry
+              ? "Discover models from an Azure AI Foundry resource (services.ai.azure.com) using Entra sign-in or a key."
+              : "Point directly at an Azure OpenAI deployment endpoint (openai.azure.com)."}
+          </p>
+        </fieldset>
+      )}
 
       {/* Auth Mode (Azure OpenAI + Foundry — both support API Key and Entra) */}
       {(isAzure || isFoundry) && (
