@@ -35,6 +35,7 @@ pub async fn import_video(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 #[auditaur_command(skip_all, err)]
 pub async fn import_video_with_progress(
     file_path: String,

@@ -11,7 +11,9 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::engine::agent::llm::{self, ChatMessage, LlmConfig};
+use crate::engine::agent::execution::ChatMessage;
+use crate::engine::agent::llm::LlmConfig;
+use crate::engine::agent::prompty_model;
 use crate::engine::{ffmpeg, project};
 use crate::models::sketch::{PlanningRow, Sketch};
 
@@ -216,11 +218,13 @@ pub struct ResolvedVideoImportPlanningContextReference {
 #[derive(Debug, Clone)]
 pub struct VideoImportLlmOptions {
     pub config: LlmConfig,
+    #[allow(dead_code)]
     pub reported_context_length: Option<usize>,
     pub provider_label: String,
     pub model: String,
 }
 
+#[allow(dead_code)]
 pub async fn import_video_from_sidecar(
     project_root: &Path,
     video_path: &Path,
@@ -242,6 +246,7 @@ pub async fn import_video_from_sidecar(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn import_video_from_sidecar_with_progress<F>(
     project_root: &Path,
     video_path: &Path,
@@ -887,7 +892,6 @@ fn parse_time_range(line: &str) -> anyhow::Result<(u64, u64)> {
 
 fn parse_timestamp_ms(value: &str) -> anyhow::Result<u64> {
     let clean = value
-        .trim()
         .split_whitespace()
         .next()
         .unwrap_or("")
@@ -1211,7 +1215,6 @@ async fn refine_scenes_with_llm(
     };
 
     let input_scene_count = heuristic_evidence.heuristic_scenes.len();
-    let provider = llm::build_provider(&options.config, options.reported_context_length);
     let user_prompt = build_scene_refinement_prompt(heuristic_evidence, planning_context);
     tracing::info!(
         target: "cutready::video_import",
@@ -1234,8 +1237,11 @@ async fn refine_scenes_with_llm(
         ChatMessage::system(VIDEO_IMPORT_SCENE_ANALYST_PROMPT),
         ChatMessage::user(&user_prompt),
     ];
-    let result =
-        tokio::time::timeout(LLM_REFINEMENT_TIMEOUT, llm::simple_chat(provider, messages)).await;
+    let result = tokio::time::timeout(
+        LLM_REFINEMENT_TIMEOUT,
+        prompty_model::one_shot_chat(&options.config, &messages),
+    )
+    .await;
 
     let response = match result {
         Ok(Ok(message)) => message,

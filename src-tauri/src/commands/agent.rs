@@ -7,7 +7,6 @@ use crate::engine::agent::execution::{
     ContextSource, LargeContextRef, RunCancellation, VisionConfig, WebAccessConfig,
 };
 use crate::engine::agent::llm::{self, LlmConfig, LlmProvider, ModelInfo};
-use crate::engine::agent::runner;
 use crate::engine::agent_state::{
     AgentRunDetail, AgentRunSummary, AgentStateMaintenanceResult, AgentStateStore, ChatSessionPage,
     ChatSessionRecord, ChatSessionSummary, ContextAssetInput, ContextAssetScope,
@@ -16,10 +15,7 @@ use crate::{AgentChatCancellationRegistry, AppState};
 use prompty_foundry::oauth;
 use prompty_foundry::{DeviceCodeResponse, TokenResponse};
 use std::collections::HashSet;
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc, Mutex,
-};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri_plugin_auditaur::auditaur_command;
 
@@ -55,31 +51,6 @@ impl Drop for ActiveAgentRunGuard {
         if let Ok(mut runs) = self.active_runs.lock() {
             runs.remove(&self.run_id);
         }
-    }
-}
-
-struct ActiveAgentiveChatRunGuard {
-    active_runs: Arc<AtomicUsize>,
-}
-
-impl ActiveAgentiveChatRunGuard {
-    fn register(active_runs: Arc<AtomicUsize>) -> Self {
-        active_runs.fetch_add(1, Ordering::AcqRel);
-        Self { active_runs }
-    }
-}
-
-impl Drop for ActiveAgentiveChatRunGuard {
-    fn drop(&mut self) {
-        self.active_runs.fetch_sub(1, Ordering::AcqRel);
-    }
-}
-
-struct AbortTaskOnDrop(tokio::task::JoinHandle<()>);
-
-impl Drop for AbortTaskOnDrop {
-    fn drop(&mut self) {
-        self.0.abort();
     }
 }
 
@@ -215,38 +186,25 @@ pub struct ProviderConfig {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ExecutionEngine {
-    Agentive,
-    Prompty,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ProductionTransport {
-    Agentive,
     Prompty,
 }
 
 impl ExecutionEngine {
     fn from_config(value: Option<&str>) -> Result<Self, String> {
+        // "agentive" is accepted as a deprecated alias now that the Prompty
+        // TurnEngine is the sole runtime; persisted configs still using it map
+        // to Prompty rather than erroring.
         match value.map(str::trim).filter(|value| !value.is_empty()) {
-            None | Some("agentive") => Ok(Self::Agentive),
-            Some("prompty") => Ok(Self::Prompty),
+            None | Some("prompty") | Some("agentive") => Ok(Self::Prompty),
             Some(value) => Err(format!(
-                "Unsupported execution_engine '{value}'. Expected 'agentive' or 'prompty'."
+                "Unsupported execution_engine '{value}'. Expected 'prompty'."
             )),
         }
     }
 
     fn as_str(self) -> &'static str {
         match self {
-            Self::Agentive => "agentive",
             Self::Prompty => "prompty",
-        }
-    }
-
-    fn production_transport(self) -> ProductionTransport {
-        match self {
-            Self::Agentive => ProductionTransport::Agentive,
-            Self::Prompty => ProductionTransport::Prompty,
         }
     }
 }
@@ -558,8 +516,7 @@ pub async fn agent_chat(
         .map(Duration::from_millis)
         .unwrap_or(SIMPLE_CHAT_TIMEOUT);
     let llm_config: LlmConfig = config.into();
-    let provider = llm::build_provider(&llm_config, None);
-    let budget_chars = provider.context_budget_chars();
+    let budget_chars = llm::context_budget(&llm_config.model, None);
     log::info!(
         "[agent_chat] start provider={} model={} messages={} chars={} budget={}chars timeout={}ms",
         provider_name,
@@ -584,11 +541,12 @@ pub async fn agent_chat(
         }),
     );
 
-    let agentive_messages = messages
-        .into_iter()
-        .map(crate::engine::agent::agentive_adapter::message_to_agentive)
-        .collect();
-    match tokio::time::timeout(timeout, llm::simple_chat(provider, agentive_messages)).await {
+    match tokio::time::timeout(
+        timeout,
+        crate::engine::agent::prompty_model::one_shot_chat(&llm_config, &messages),
+    )
+    .await
+    {
         Err(_) => {
             let elapsed_ms = started.elapsed().as_millis();
             log::warn!(
@@ -614,12 +572,16 @@ pub async fn agent_chat(
         }
         Ok(Ok(response)) => {
             let elapsed_ms = started.elapsed().as_millis();
+            let response_chars = response
+                .text()
+                .map(|text| text.chars().count())
+                .unwrap_or(0);
             log::info!(
                 "[agent_chat] done provider={} model={} elapsed={}ms response_chars={}",
                 provider_name,
                 model,
                 elapsed_ms,
-                response.content.as_ref().map(|s| s.char_len()).unwrap_or(0)
+                response_chars
             );
             crate::util::trace::emit(
                 "agent_chat_done",
@@ -628,10 +590,10 @@ pub async fn agent_chat(
                     "provider": provider_name,
                     "model": model,
                     "elapsed_ms": elapsed_ms,
-                    "response_chars": response.content.as_ref().map(|s| s.char_len()).unwrap_or(0),
+                    "response_chars": response_chars,
                 }),
             );
-            Ok(crate::engine::agent::agentive_adapter::message_from_agentive(response))
+            Ok(response)
         }
         Ok(Err(err)) => {
             let elapsed_ms = started.elapsed().as_millis();
@@ -663,10 +625,7 @@ pub async fn push_pending_chat_message(
     state: tauri::State<'_, AppState>,
     message: String,
 ) -> Result<(), String> {
-    let delivered_to_prompty = state.prompty_steering.send(&message);
-    if state.active_agentive_chat_runs.load(Ordering::Acquire) > 0 || !delivered_to_prompty {
-        state.agentive_steering.send(&message);
-    }
+    state.prompty_steering.send(&message);
     Ok(())
 }
 
@@ -827,6 +786,7 @@ pub async fn clear_saved_context(state: tauri::State<'_, AppState>) -> Result<us
 /// Agentic chat with function calling — the LLM can read/write project files.
 /// Returns the full conversation (including tool calls) and the final response.
 /// Emits `agent-event` events to the frontend for real-time streaming.
+#[allow(clippy::too_many_arguments)]
 #[auditaur_command(skip_all, err)]
 pub async fn agent_chat_with_tools(
     app: tauri::AppHandle,
@@ -892,7 +852,7 @@ pub async fn agent_chat_with_tools(
     let search_enabled = config.web_access.as_deref() == Some("enabled");
     let max_tool_rounds = config
         .max_tool_rounds
-        .unwrap_or(runner::DEFAULT_MAX_TOOL_ROUNDS)
+        .unwrap_or(crate::engine::agent::prompty_runner::DEFAULT_MAX_TOOL_ROUNDS)
         .clamp(1, 200);
     let mutation_tools_enabled = allow_mutation_tools.unwrap_or(false);
     let execution_engine = ExecutionEngine::from_config(config.execution_engine.as_deref())?;
@@ -1019,88 +979,42 @@ pub async fn agent_chat_with_tools(
             let _ = emit_handle.emit("agent-event", payload);
         }
     };
-    let runner_result = match execution_engine.production_transport() {
-        ProductionTransport::Agentive => {
-            let provider = llm::build_provider(&llm_config, reported_context);
-            let _active_agentive_run =
-                ActiveAgentiveChatRunGuard::register(state.active_agentive_chat_runs.clone());
-            let agentive_cancellation = agentive::CancellationToken::new();
-            let _cancellation_bridge = {
-                let native_cancellation = cancellation.clone();
-                let agentive_cancellation = agentive_cancellation.clone();
-                AbortTaskOnDrop(tokio::spawn(async move {
-                    while !native_cancellation.is_cancelled() {
-                        tokio::time::sleep(Duration::from_millis(20)).await;
-                    }
-                    agentive_cancellation.cancel();
-                }))
-            };
-            let result = runner::run(
-                provider,
-                Some(provider_name.clone()),
-                Some(model.clone()),
-                messages
-                    .into_iter()
-                    .map(crate::engine::agent::agentive_adapter::message_to_agentive)
-                    .collect(),
-                &repo_root,
-                &project_root,
-                &agent_id,
-                &prompts,
-                &state.agentive_steering,
-                &vision,
-                &web_access,
-                mutation_tools_enabled,
-                max_tool_rounds,
-                context_items
-                    .into_iter()
-                    .map(crate::engine::agent::agentive_adapter::context_item_to_agentive)
-                    .collect(),
-                Some(run_id.clone()),
-                agent_state.clone(),
-                agentive_cancellation,
-                emit,
-            )
-            .await;
-            result.map(crate::engine::agent::agentive_adapter::run_result_from_agentive)
-        }
-        ProductionTransport::Prompty => {
-            let project_workspace_tools_enabled =
-                agent_id.eq_ignore_ascii_case("writer") && mutation_tools_enabled;
-            let mut tool_definitions = crate::engine::agent::tools::all_tools(
-                web_access.search_enabled,
-                project_workspace_tools_enabled,
-                mutation_tools_enabled,
-            );
-            tool_definitions.retain(|tool| tool.function.name != "delegate_to_agent");
-            let production_model = crate::engine::agent::prompty_model::build_production_model(
-                &llm_config,
-                reported_context,
-                tool_definitions,
-            )?;
-            crate::engine::agent::prompty_runner::run(
-                production_model.port,
-                production_model.provider_name,
-                production_model.model_name,
-                production_model.context_budget_chars,
-                messages,
-                &repo_root,
-                &project_root,
-                &agent_id,
-                &prompts,
-                state.prompty_steering.clone(),
-                &vision,
-                &web_access,
-                mutation_tools_enabled,
-                max_tool_rounds,
-                context_items,
-                Some(run_id.clone()),
-                agent_state.clone(),
-                cancellation.clone(),
-                emit,
-            )
-            .await
-        }
+    let runner_result = {
+        let project_workspace_tools_enabled =
+            agent_id.eq_ignore_ascii_case("writer") && mutation_tools_enabled;
+        let mut tool_definitions = crate::engine::agent::tools::all_tools(
+            web_access.search_enabled,
+            project_workspace_tools_enabled,
+            mutation_tools_enabled,
+        );
+        tool_definitions.retain(|tool| tool.function.name != "delegate_to_agent");
+        let production_model = crate::engine::agent::prompty_model::build_production_model(
+            &llm_config,
+            reported_context,
+            tool_definitions,
+        )?;
+        crate::engine::agent::prompty_runner::run(
+            production_model.port,
+            production_model.provider_name,
+            production_model.model_name,
+            production_model.context_budget_chars,
+            messages,
+            &repo_root,
+            &project_root,
+            &agent_id,
+            &prompts,
+            state.prompty_steering.clone(),
+            &vision,
+            &web_access,
+            mutation_tools_enabled,
+            max_tool_rounds,
+            context_items,
+            Some(run_id.clone()),
+            agent_state.clone(),
+            cancellation.clone(),
+            emit,
+        )
+        .await
     };
     let runner_result = if cancellation.is_cancelled() {
         Err(AGENT_RUN_CANCELLED_ERROR.into())
@@ -1666,36 +1580,26 @@ mod tests {
             vision_mode: Some("off".into()),
             model_supports_vision: Some(true),
             web_access: Some("disabled".into()),
-            max_tool_rounds: Some(runner::DEFAULT_MAX_TOOL_ROUNDS),
+            max_tool_rounds: Some(crate::engine::agent::prompty_runner::DEFAULT_MAX_TOOL_ROUNDS),
             execution_engine: None,
         }
     }
 
     #[test]
-    fn execution_engine_defaults_to_agentive_and_requires_known_opt_in() {
+    fn execution_engine_defaults_to_prompty_and_accepts_agentive_alias() {
         assert_eq!(
             ExecutionEngine::from_config(None).unwrap(),
-            ExecutionEngine::Agentive
+            ExecutionEngine::Prompty
         );
         assert_eq!(
             ExecutionEngine::from_config(Some("agentive")).unwrap(),
-            ExecutionEngine::Agentive
+            ExecutionEngine::Prompty
         );
         assert_eq!(
             ExecutionEngine::from_config(Some("prompty")).unwrap(),
             ExecutionEngine::Prompty
         );
         assert!(ExecutionEngine::from_config(Some("other")).is_err());
-    }
-
-    #[test]
-    fn active_agentive_run_guard_tracks_steering_receivers() {
-        let active_runs = Arc::new(AtomicUsize::new(0));
-        {
-            let _guard = ActiveAgentiveChatRunGuard::register(active_runs.clone());
-            assert_eq!(active_runs.load(Ordering::Acquire), 1);
-        }
-        assert_eq!(active_runs.load(Ordering::Acquire), 0);
     }
 
     #[test]
@@ -1733,15 +1637,19 @@ mod tests {
     }
 
     #[test]
-    fn production_prompty_selection_never_selects_agentive_transport() {
-        let engine = ExecutionEngine::from_config(Some("prompty")).unwrap();
-        assert_eq!(engine.production_transport(), ProductionTransport::Prompty);
+    fn production_prompty_selection_is_the_only_engine() {
+        assert_eq!(
+            ExecutionEngine::from_config(Some("prompty")).unwrap(),
+            ExecutionEngine::Prompty
+        );
     }
 
     #[test]
     fn prompty_production_boundary_has_no_agentive_mapping_static_or_runtime() {
-        let engine = ExecutionEngine::from_config(Some("prompty")).unwrap();
-        assert_eq!(engine.production_transport(), ProductionTransport::Prompty);
+        assert_eq!(
+            ExecutionEngine::from_config(Some("prompty")).unwrap(),
+            ExecutionEngine::Prompty
+        );
 
         let runner = include_str!("../engine/agent/prompty_runner.rs")
             .split("\n#[cfg(test)]\nmod tests")

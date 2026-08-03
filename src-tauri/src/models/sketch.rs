@@ -438,7 +438,7 @@ impl Storyboard {
     pub fn references_sketch(&self, sketch_path: &str) -> bool {
         self.items
             .iter()
-            .any(|item| item.sketch_paths().iter().any(|path| *path == sketch_path))
+            .any(|item| item.sketch_paths().contains(&sketch_path))
     }
 
     pub fn remove_sketch_references(&mut self, sketch_path: &str) -> usize {
@@ -582,6 +582,7 @@ impl StoryboardSummary {
 
 /// An entry in the project's version history.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct VersionEntry {
     pub id: String,
     pub message: String,
@@ -591,6 +592,7 @@ pub struct VersionEntry {
 
 /// A timeline (git branch) in the project.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct TimelineInfo {
     /// Branch name (slug).
     pub name: String,
@@ -606,6 +608,7 @@ pub struct TimelineInfo {
 
 /// A node in the timeline graph (commit with parent + lane info).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct GraphNode {
     pub id: String,
     pub message: String,

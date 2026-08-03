@@ -206,6 +206,7 @@ fn start_audio_recording(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn capture_audio_to_wav(
     source: AudioSource,
     volume: u8,

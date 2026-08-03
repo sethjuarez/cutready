@@ -1,8 +1,8 @@
 //! Project-scoped persistence for agent run state.
 //!
-//! Agentive owns the serializable observability/resumability models. CutReady
-//! owns where those records are stored, how they are retained, and how future UI
-//! surfaces will query them.
+//! The Prompty TurnEngine owns the serializable observability/resumability
+//! models. CutReady owns where those records are stored, how they are retained,
+//! and how future UI surfaces will query them.
 
 use std::collections::HashSet;
 use std::fs;
@@ -10,11 +10,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use agentive::{
-    Checkpoint, CheckpointStore, MemoryPromotionCandidate, MemoryPromotionHook,
-    MemoryPromotionOutcome, TouchedResource, TrajectoryEvent, TrajectoryMetadata, TrajectorySink,
-    VerificationResult,
-};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use sha2::{Digest, Sha256};
@@ -26,8 +21,6 @@ const MAX_COMPLETED_RUNS: usize = 100;
 const MAX_EVENTS_PER_RUN: usize = 1_000;
 const MAX_CHECKPOINTS_PER_RUN: usize = 25;
 const MAX_RESUME_CONTEXTS_PER_RUN: usize = 25;
-const MAX_TOUCHED_RESOURCES_PER_RUN: usize = 500;
-const MAX_VERIFICATION_RESULTS_PER_RUN: usize = 500;
 const MAX_MEMORY_PROMOTIONS_PER_RUN: usize = 200;
 const MAX_CONTEXT_ASSET_BYTES: usize = 1_000_000;
 const MAX_CONTEXT_ASSETS_PER_PROJECT: usize = 100;
@@ -242,8 +235,9 @@ impl AgentStateStore {
         Ok(store)
     }
 
+    #[allow(dead_code)]
     pub fn database_path_for_project(repo_root: &Path, project_root: &Path) -> PathBuf {
-        crate::engine::project::git_state_dir(&repo_root, project_root).join(AGENT_STATE_FILENAME)
+        crate::engine::project::git_state_dir(repo_root, project_root).join(AGENT_STATE_FILENAME)
     }
 
     pub fn prepare_database_path_for_project(
@@ -521,7 +515,7 @@ impl AgentStateStore {
             .map_err(|e| format!("Could not prepare agent run query: {e}"))?;
         let rows = stmt
             .query_map(
-                params![limit.max(1).min(MAX_COMPLETED_RUNS) as i64],
+                params![limit.clamp(1, MAX_COMPLETED_RUNS) as i64],
                 Self::read_run_summary,
             )
             .map_err(|e| format!("Could not query agent runs: {e}"))?;
@@ -1205,27 +1199,6 @@ impl AgentStateStore {
             MAX_RESUME_CONTEXTS_PER_RUN,
         )?;
         Ok(())
-    }
-
-    #[allow(dead_code)]
-    pub fn record_touched_resource(&self, resource: &TouchedResource) -> Result<(), String> {
-        let conn = self.connect()?;
-        insert_touched_resource(&conn, self.run_id(), resource)
-    }
-
-    #[allow(dead_code)]
-    pub fn record_verification_result(&self, result: &VerificationResult) -> Result<(), String> {
-        let conn = self.connect()?;
-        insert_verification_result(&conn, self.run_id(), result)
-    }
-
-    pub fn record_memory_promotion_decision(
-        &self,
-        candidate: &MemoryPromotionCandidate,
-        outcome: Option<&MemoryPromotionOutcome>,
-    ) -> Result<(), String> {
-        let conn = self.connect()?;
-        insert_memory_promotion(&conn, self.run_id(), candidate, outcome)
     }
 
     /// Record a memory-promotion candidate from a host-owned JSON payload, with no
@@ -2215,104 +2188,6 @@ fn record_legacy_chat_import_failure(conn: &Connection, source_path: &str, error
     }
 }
 
-impl TrajectorySink for AgentStateStore {
-    fn record(&self, event: TrajectoryEvent) -> Result<(), String> {
-        let conn = self.connect()?;
-        insert_trajectory_event(&conn, self.run_id(), &event)?;
-
-        match &event {
-            TrajectoryEvent::ResourceTouched { resource, .. } => {
-                insert_touched_resource(&conn, self.run_id(), resource)?;
-            }
-            TrajectoryEvent::VerificationRecorded { result, .. } => {
-                insert_verification_result(&conn, self.run_id(), result)?;
-            }
-            TrajectoryEvent::MemoryPromotionSuggested { candidate, .. } => {
-                insert_memory_promotion(&conn, self.run_id(), candidate, None)?;
-            }
-            _ => {}
-        }
-
-        Ok(())
-    }
-}
-
-impl CheckpointStore for AgentStateStore {
-    fn save_checkpoint(&self, checkpoint: Checkpoint) -> Result<(), String> {
-        let conn = self.connect()?;
-        let run_id = checkpoint
-            .metadata
-            .get("run_id")
-            .map(String::as_str)
-            .unwrap_or_else(|| self.run_id());
-        let checkpoint_json = serde_json::to_string(&checkpoint).map_err(|e| e.to_string())?;
-        conn.execute(
-            "INSERT OR REPLACE INTO checkpoints
-                (id, run_id, created_at, checkpoint_json)
-             VALUES (?1, ?2, ?3, ?4)",
-            params![
-                checkpoint.id,
-                run_id,
-                checkpoint.created_at.to_rfc3339(),
-                checkpoint_json
-            ],
-        )
-        .map_err(|e| format!("Could not save checkpoint: {e}"))?;
-        prune_checkpoints_for_run(&conn, run_id)?;
-        Ok(())
-    }
-
-    fn latest_checkpoint(&self, run_id: &str) -> Result<Option<Checkpoint>, String> {
-        let conn = self.connect()?;
-        conn.query_row(
-            "SELECT checkpoint_json FROM checkpoints
-             WHERE run_id = ?1
-             ORDER BY datetime(created_at) DESC, id DESC
-             LIMIT 1",
-            params![run_id],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
-        .map_err(|e| format!("Could not read latest checkpoint: {e}"))?
-        .map(|json| serde_json::from_str(&json).map_err(|e| e.to_string()))
-        .transpose()
-    }
-
-    fn list_checkpoints(&self, run_id: &str) -> Result<Vec<Checkpoint>, String> {
-        let conn = self.connect()?;
-        let mut stmt = conn
-            .prepare(
-                "SELECT checkpoint_json FROM checkpoints
-                 WHERE run_id = ?1
-                 ORDER BY datetime(created_at) ASC, id ASC",
-            )
-            .map_err(|e| format!("Could not prepare checkpoint query: {e}"))?;
-        let rows = stmt
-            .query_map(params![run_id], |row| row.get::<_, String>(0))
-            .map_err(|e| format!("Could not query checkpoints: {e}"))?;
-
-        let mut checkpoints = Vec::new();
-        for row in rows {
-            let json = row.map_err(|e| format!("Could not read checkpoint row: {e}"))?;
-            checkpoints.push(serde_json::from_str(&json).map_err(|e| e.to_string())?);
-        }
-        Ok(checkpoints)
-    }
-}
-
-impl MemoryPromotionHook for AgentStateStore {
-    fn consider(
-        &self,
-        candidate: MemoryPromotionCandidate,
-    ) -> Result<MemoryPromotionOutcome, String> {
-        let outcome = MemoryPromotionOutcome::Deferred {
-            reason: Some("CutReady memory-promotion UI is not enabled yet".into()),
-        };
-        self.record_memory_promotion_decision(&candidate, Some(&outcome))?;
-        Ok(outcome)
-    }
-}
-
 fn initialize_schema(conn: &Connection) -> Result<(), String> {
     let existing_version: i32 = conn
         .pragma_query_value(None, "user_version", |row| row.get(0))
@@ -2479,33 +2354,6 @@ fn initialize_schema(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-fn insert_trajectory_event(
-    conn: &Connection,
-    fallback_run_id: &str,
-    event: &TrajectoryEvent,
-) -> Result<(), String> {
-    let metadata = event_metadata(event);
-    let run_id = metadata.run_id.as_deref().unwrap_or(fallback_run_id);
-    let event_json = serde_json::to_string(event).map_err(|e| e.to_string())?;
-    conn.execute(
-        "INSERT INTO trajectory_events
-            (run_id, event_id, parent_event_id, iteration, event_type, event_json, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![
-            run_id,
-            metadata.event_id.as_deref(),
-            metadata.parent_event_id.as_deref(),
-            metadata.iteration.map(|value| value as i64),
-            event_type(event),
-            event_json,
-            metadata.timestamp.to_rfc3339(),
-        ],
-    )
-    .map_err(|e| format!("Could not insert trajectory event: {e}"))?;
-    prune_by_run_limit(conn, "trajectory_events", run_id, MAX_EVENTS_PER_RUN)?;
-    Ok(())
-}
-
 fn insert_prompty_event(
     conn: &Connection,
     run_id: &str,
@@ -2532,107 +2380,6 @@ fn insert_prompty_event(
         ],
     )
     .map_err(|e| format!("Could not insert Prompty trajectory event: {e}"))?;
-    Ok(())
-}
-
-fn insert_touched_resource(
-    conn: &Connection,
-    run_id: &str,
-    resource: &TouchedResource,
-) -> Result<(), String> {
-    let resource_json = serde_json::to_string(resource).map_err(|e| e.to_string())?;
-    let operation = serde_json::to_value(&resource.operation)
-        .map_err(|e| e.to_string())?
-        .as_str()
-        .unwrap_or("custom")
-        .to_string();
-    conn.execute(
-        "INSERT INTO touched_resources
-            (run_id, kind, resource_id, operation, resource_json, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![
-            run_id,
-            resource.kind,
-            resource.id,
-            operation,
-            resource_json,
-            Utc::now().to_rfc3339()
-        ],
-    )
-    .map_err(|e| format!("Could not insert touched resource: {e}"))?;
-    prune_by_run_limit(
-        conn,
-        "touched_resources",
-        run_id,
-        MAX_TOUCHED_RESOURCES_PER_RUN,
-    )?;
-    Ok(())
-}
-
-fn insert_verification_result(
-    conn: &Connection,
-    run_id: &str,
-    result: &VerificationResult,
-) -> Result<(), String> {
-    let result_json = serde_json::to_string(result).map_err(|e| e.to_string())?;
-    let status = serde_json::to_value(&result.status)
-        .map_err(|e| e.to_string())?
-        .as_str()
-        .unwrap_or("unknown")
-        .to_string();
-    conn.execute(
-        "INSERT INTO verification_results
-            (run_id, criterion, status, result_json, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![
-            run_id,
-            result.criterion,
-            status,
-            result_json,
-            Utc::now().to_rfc3339()
-        ],
-    )
-    .map_err(|e| format!("Could not insert verification result: {e}"))?;
-    prune_by_run_limit(
-        conn,
-        "verification_results",
-        run_id,
-        MAX_VERIFICATION_RESULTS_PER_RUN,
-    )?;
-    Ok(())
-}
-
-fn insert_memory_promotion(
-    conn: &Connection,
-    run_id: &str,
-    candidate: &MemoryPromotionCandidate,
-    outcome: Option<&MemoryPromotionOutcome>,
-) -> Result<(), String> {
-    let candidate_json = serde_json::to_string(candidate).map_err(|e| e.to_string())?;
-    let outcome_json = outcome
-        .map(serde_json::to_string)
-        .transpose()
-        .map_err(|e| e.to_string())?;
-    let status = outcome.map(memory_outcome_status).unwrap_or("suggested");
-    conn.execute(
-        "INSERT INTO memory_promotions
-            (run_id, status, candidate_json, outcome_json, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![
-            run_id,
-            status,
-            candidate_json,
-            outcome_json,
-            Utc::now().to_rfc3339()
-        ],
-    )
-    .map_err(|e| format!("Could not insert memory promotion: {e}"))?;
-    prune_by_run_limit(
-        conn,
-        "memory_promotions",
-        run_id,
-        MAX_MEMORY_PROMOTIONS_PER_RUN,
-    )?;
     Ok(())
 }
 
@@ -2758,57 +2505,6 @@ fn prune_checkpoints_for_run(conn: &Connection, run_id: &str) -> Result<(), Stri
     Ok(())
 }
 
-fn event_metadata(event: &TrajectoryEvent) -> &TrajectoryMetadata {
-    match event {
-        TrajectoryEvent::TurnStarted { metadata, .. }
-        | TrajectoryEvent::TurnCompleted { metadata, .. }
-        | TrajectoryEvent::ModelCallStarted { metadata, .. }
-        | TrajectoryEvent::ModelCallCompleted { metadata, .. }
-        | TrajectoryEvent::ToolCallStarted { metadata, .. }
-        | TrajectoryEvent::ToolCallCompleted { metadata, .. }
-        | TrajectoryEvent::Permission { metadata, .. }
-        | TrajectoryEvent::RetryScheduled { metadata, .. }
-        | TrajectoryEvent::VerificationRecorded { metadata, .. }
-        | TrajectoryEvent::CheckpointCreated { metadata, .. }
-        | TrajectoryEvent::CompactionStarted { metadata, .. }
-        | TrajectoryEvent::CompactionCompleted { metadata, .. }
-        | TrajectoryEvent::MemoryPromotionSuggested { metadata, .. }
-        | TrajectoryEvent::MemoryPromotionCompleted { metadata, .. }
-        | TrajectoryEvent::ResourceTouched { metadata, .. }
-        | TrajectoryEvent::Custom { metadata, .. } => metadata,
-    }
-}
-
-fn event_type(event: &TrajectoryEvent) -> &'static str {
-    match event {
-        TrajectoryEvent::TurnStarted { .. } => "turn_started",
-        TrajectoryEvent::TurnCompleted { .. } => "turn_completed",
-        TrajectoryEvent::ModelCallStarted { .. } => "model_call_started",
-        TrajectoryEvent::ModelCallCompleted { .. } => "model_call_completed",
-        TrajectoryEvent::ToolCallStarted { .. } => "tool_call_started",
-        TrajectoryEvent::ToolCallCompleted { .. } => "tool_call_completed",
-        TrajectoryEvent::Permission { .. } => "permission",
-        TrajectoryEvent::RetryScheduled { .. } => "retry_scheduled",
-        TrajectoryEvent::VerificationRecorded { .. } => "verification_recorded",
-        TrajectoryEvent::CheckpointCreated { .. } => "checkpoint_created",
-        TrajectoryEvent::CompactionStarted { .. } => "compaction_started",
-        TrajectoryEvent::CompactionCompleted { .. } => "compaction_completed",
-        TrajectoryEvent::MemoryPromotionSuggested { .. } => "memory_promotion_suggested",
-        TrajectoryEvent::MemoryPromotionCompleted { .. } => "memory_promotion_completed",
-        TrajectoryEvent::ResourceTouched { .. } => "resource_touched",
-        TrajectoryEvent::Custom { .. } => "custom",
-    }
-}
-
-fn memory_outcome_status(outcome: &MemoryPromotionOutcome) -> &'static str {
-    match outcome {
-        MemoryPromotionOutcome::Accepted { .. } => "accepted",
-        MemoryPromotionOutcome::Rejected { .. } => "rejected",
-        MemoryPromotionOutcome::Deferred { .. } => "deferred",
-        MemoryPromotionOutcome::Failed { .. } => "failed",
-    }
-}
-
 fn parse_rfc3339_row(value: String, column: usize) -> rusqlite::Result<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(&value)
         .map(|dt| dt.with_timezone(&Utc))
@@ -2824,9 +2520,50 @@ fn parse_rfc3339_row(value: String, column: usize) -> rusqlite::Result<DateTime<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agentive::{
-        CheckpointStore, ErrorKind, ResourceOperation, TrajectoryMetadata, VerificationStatus,
-    };
+
+    /// Build a canonical Prompty engine event bound to `run_id` for durability tests.
+    fn prompty_test_event(
+        run_id: &str,
+        id: &str,
+        kind: prompty::EngineEventKind,
+    ) -> prompty::EngineEvent {
+        prompty::EngineEvent {
+            id: id.into(),
+            timestamp: Utc::now().to_rfc3339(),
+            session_id: run_id.into(),
+            turn_id: format!("{run_id}:turn"),
+            run_id: run_id.into(),
+            kind,
+            ..Default::default()
+        }
+    }
+
+    /// Seed a canonical `turn_started` goal header the run projection reads from
+    /// (`json_extract(event_json, '$.goal')`), engine-agnostic.
+    fn seed_turn_started_goal(store: &AgentStateStore, run_id: &str, goal: &str) {
+        let conn = store.connect().unwrap();
+        conn.execute(
+            "INSERT INTO trajectory_events
+                (run_id, event_id, parent_event_id, iteration, event_type, event_json, created_at)
+             VALUES (?1, NULL, NULL, NULL, 'turn_started', ?2, ?3)",
+            params![
+                run_id,
+                serde_json::to_string(&serde_json::json!({ "goal": goal })).unwrap(),
+                Utc::now().to_rfc3339(),
+            ],
+        )
+        .unwrap();
+    }
+
+    fn checkpoint_count(store: &AgentStateStore, run_id: &str) -> usize {
+        let conn = store.connect().unwrap();
+        conn.query_row(
+            "SELECT COUNT(*) FROM checkpoints WHERE run_id = ?1",
+            params![run_id],
+            |row| row.get::<_, usize>(0),
+        )
+        .unwrap()
+    }
 
     #[cfg(unix)]
     fn create_file_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
@@ -3608,74 +3345,35 @@ mod tests {
             .unwrap();
 
         store
-            .record(TrajectoryEvent::TurnStarted {
-                metadata: TrajectoryMetadata::new().with_run_id("run-round-trip"),
-                goal: "Improve sketch".into(),
-            })
+            .append_prompty_event(&prompty_test_event(
+                "run-round-trip",
+                "event-1",
+                prompty::EngineEventKind::Turn_started,
+            ))
             .unwrap();
 
-        let checkpoint = Checkpoint::new("checkpoint-1", "Improve sketch")
-            .with_metadata("run_id", "run-round-trip")
-            .with_next_step("Verify update");
-        store.save_checkpoint(checkpoint.clone()).unwrap();
+        let checkpoint = prompty::EngineCheckpoint {
+            id: "checkpoint-1".into(),
+            session_id: "run-round-trip".into(),
+            run_id: "run-round-trip".into(),
+            turn_id: "run-round-trip:turn".into(),
+            ..Default::default()
+        };
+        store
+            .append_prompty_events_with_checkpoint(
+                &[prompty_test_event(
+                    "run-round-trip",
+                    "event-2",
+                    prompty::EngineEventKind::Checkpoint_created,
+                )],
+                &checkpoint,
+            )
+            .unwrap();
 
         let run = store.get_run("run-round-trip").unwrap().unwrap();
         assert_eq!(run.status, "running");
-        assert_eq!(store.trajectory_event_count("run-round-trip").unwrap(), 1);
-        assert_eq!(
-            store
-                .latest_checkpoint("run-round-trip")
-                .unwrap()
-                .unwrap()
-                .id,
-            checkpoint.id
-        );
-        assert_eq!(store.list_checkpoints("run-round-trip").unwrap().len(), 1);
-    }
-
-    #[test]
-    fn resource_verification_and_memory_records_use_agentive_types() {
-        let store = test_store("run-metadata");
-        let resource = TouchedResource::new("sketch", "intro.sk", ResourceOperation::Write)
-            .with_metadata("tool", "write_sketch");
-        let verification = VerificationResult::new(
-            "Tool write_sketch completed",
-            VerificationStatus::Passed,
-            "Tool returned a success response",
-        );
-        let candidate = MemoryPromotionCandidate::new("User prefers concise narration")
-            .with_category("core")
-            .with_tag("preference");
-
-        let resource_json = serde_json::to_string(&resource).unwrap();
-        let verification_json = serde_json::to_string(&verification).unwrap();
-        let candidate_json = serde_json::to_string(&candidate).unwrap();
-        assert_eq!(
-            serde_json::from_str::<TouchedResource>(&resource_json).unwrap(),
-            resource
-        );
-        assert_eq!(
-            serde_json::from_str::<VerificationResult>(&verification_json).unwrap(),
-            verification
-        );
-        assert_eq!(
-            serde_json::from_str::<MemoryPromotionCandidate>(&candidate_json).unwrap(),
-            candidate
-        );
-
-        store.record_touched_resource(&resource).unwrap();
-        store.record_verification_result(&verification).unwrap();
-        let outcome = MemoryPromotionOutcome::Failed {
-            failure_kind: ErrorKind::ToolError,
-            reason: "test hook failure".into(),
-        };
-        store
-            .record_memory_promotion_decision(&candidate, Some(&outcome))
-            .unwrap();
-
-        assert_eq!(store.touched_resource_count("run-metadata").unwrap(), 1);
-        assert_eq!(store.verification_result_count("run-metadata").unwrap(), 1);
-        assert_eq!(store.memory_promotion_count("run-metadata").unwrap(), 1);
+        assert_eq!(store.trajectory_event_count("run-round-trip").unwrap(), 2);
+        assert_eq!(checkpoint_count(&store, "run-round-trip"), 1);
     }
 
     #[test]
@@ -3707,35 +3405,6 @@ mod tests {
     }
 
     #[test]
-    fn trajectory_sink_extracts_resource_and_verification_records() {
-        let store = test_store("run-trajectory");
-        let metadata = TrajectoryMetadata::new().with_run_id("run-trajectory");
-        store
-            .record(TrajectoryEvent::ResourceTouched {
-                metadata: metadata.clone(),
-                resource: TouchedResource::new("note", "plan.md", ResourceOperation::Read),
-            })
-            .unwrap();
-        store
-            .record(TrajectoryEvent::VerificationRecorded {
-                metadata,
-                result: VerificationResult::new(
-                    "Tool read_note completed",
-                    VerificationStatus::Passed,
-                    "Read note content",
-                ),
-            })
-            .unwrap();
-
-        assert_eq!(store.trajectory_event_count("run-trajectory").unwrap(), 2);
-        assert_eq!(store.touched_resource_count("run-trajectory").unwrap(), 1);
-        assert_eq!(
-            store.verification_result_count("run-trajectory").unwrap(),
-            1
-        );
-    }
-
-    #[test]
     fn query_projection_returns_recent_runs_and_detail() {
         let project_root = tempfile::tempdir().unwrap().keep();
         let store =
@@ -3748,21 +3417,13 @@ mod tests {
                 serde_json::json!({"messages":2,"vision_enabled":true}),
             )
             .unwrap();
+        seed_turn_started_goal(&store, "run-query", "Summarize the first sketch");
         store
-            .record(TrajectoryEvent::TurnStarted {
-                metadata: TrajectoryMetadata::new().with_run_id("run-query"),
-                goal: "Summarize the first sketch".into(),
-            })
-            .unwrap();
-        store
-            .record(TrajectoryEvent::VerificationRecorded {
-                metadata: TrajectoryMetadata::new().with_run_id("run-query"),
-                result: VerificationResult::new(
-                    "Result was valid",
-                    VerificationStatus::Passed,
-                    "Parsed successfully",
-                ),
-            })
+            .append_prompty_event(&prompty_test_event(
+                "run-query",
+                "event-1",
+                prompty::EngineEventKind::Model_invocation_started,
+            ))
             .unwrap();
 
         let runs = AgentStateStore::list_recent_runs(&project_root, &project_root, 10).unwrap();
@@ -3773,7 +3434,6 @@ mod tests {
             Some("Summarize the first sketch")
         );
         assert_eq!(runs[0].trajectory_event_count, 2);
-        assert_eq!(runs[0].verification_result_count, 1);
 
         let detail = AgentStateStore::get_run_detail(&project_root, &project_root, "run-query")
             .unwrap()
@@ -3781,7 +3441,6 @@ mod tests {
         assert_eq!(detail.run.model, "gpt-5-codex");
         assert_eq!(detail.metadata["messages"], 2);
         assert_eq!(detail.trajectory_events.len(), 2);
-        assert_eq!(detail.verification_results[0].criterion, "Result was valid");
     }
 
     #[test]
@@ -3807,18 +3466,23 @@ mod tests {
         store
             .insert_run(None, "openai", "gpt-4o", serde_json::json!({}))
             .unwrap();
+        seed_turn_started_goal(&store, "run-delete", "Delete this run");
+        let checkpoint = prompty::EngineCheckpoint {
+            id: "checkpoint-del".into(),
+            session_id: "run-delete".into(),
+            run_id: "run-delete".into(),
+            turn_id: "run-delete:turn".into(),
+            ..Default::default()
+        };
         store
-            .record(TrajectoryEvent::TurnStarted {
-                metadata: TrajectoryMetadata::new().with_run_id("run-delete"),
-                goal: "Delete this run".into(),
-            })
-            .unwrap();
-        store
-            .record_verification_result(&VerificationResult::new(
-                "delete check",
-                VerificationStatus::Passed,
-                "ok",
-            ))
+            .append_prompty_events_with_checkpoint(
+                &[prompty_test_event(
+                    "run-delete",
+                    "event-del",
+                    prompty::EngineEventKind::Checkpoint_created,
+                )],
+                &checkpoint,
+            )
             .unwrap();
         store.finish_run("completed").unwrap();
 
@@ -3867,12 +3531,7 @@ mod tests {
             store
                 .insert_run(None, "openai", "gpt-4o", serde_json::json!({}))
                 .unwrap();
-            store
-                .record(TrajectoryEvent::TurnStarted {
-                    metadata: TrajectoryMetadata::new().with_run_id(run_id),
-                    goal: run_id.into(),
-                })
-                .unwrap();
+            seed_turn_started_goal(&store, run_id, run_id);
             if should_finish {
                 store.finish_run("completed").unwrap();
             }
@@ -3945,13 +3604,11 @@ mod tests {
         let store = test_store("run-retention");
         for index in 0..(MAX_EVENTS_PER_RUN + 5) {
             store
-                .record(TrajectoryEvent::Custom {
-                    metadata: TrajectoryMetadata::new()
-                        .with_run_id("run-retention")
-                        .with_event_id(format!("event-{index}")),
-                    name: "test".into(),
-                    fields: Default::default(),
-                })
+                .append_prompty_event(&prompty_test_event(
+                    "run-retention",
+                    &format!("event-{index}"),
+                    prompty::EngineEventKind::Conversation_updated,
+                ))
                 .unwrap();
         }
 

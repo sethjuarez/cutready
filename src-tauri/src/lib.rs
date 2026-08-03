@@ -142,11 +142,7 @@ pub struct AppState {
     /// The prepared browser connection (if any).
     /// Uses `tokio::sync::Mutex` because it's held across await points.
     pub browser: Arc<tokio::sync::Mutex<Option<BrowserConnection>>>,
-    /// Steering handle used only by the legacy Agentive execution branch.
-    pub agentive_steering: agentive::Steering,
-    /// Number of Agentive chat runners currently able to receive steering.
-    pub active_agentive_chat_runs: Arc<std::sync::atomic::AtomicUsize>,
-    /// Steering queue used only while the opt-in Prompty TurnEngine path is active.
+    /// Steering queue used to inject messages into the active Prompty TurnEngine run.
     pub prompty_steering: engine::agent::prompty_runner::PromptySteering,
     /// Agent-state run IDs that are actively owned by this process.
     pub active_agent_runs: Arc<Mutex<HashSet<String>>>,
@@ -382,7 +378,6 @@ pub fn run() {
         let target = metadata.target();
         target.starts_with("cutready")
             || target.starts_with("cutready_lib")
-            || target.starts_with("agentive")
             || metadata.level() <= &Level::WARN
     }
 
@@ -390,8 +385,6 @@ pub fn run() {
         current_repo: Mutex::new(None),
         current_project: Mutex::new(None),
         browser: Arc::new(tokio::sync::Mutex::new(None)),
-        agentive_steering: agentive::Steering::new(),
-        active_agentive_chat_runs: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         prompty_steering: engine::agent::prompty_runner::PromptySteering::new(),
         active_agent_runs: Arc::new(Mutex::new(HashSet::new())),
         agent_chat_cancellations: Arc::new(Mutex::new(HashMap::new())),

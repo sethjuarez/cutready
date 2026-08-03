@@ -2,7 +2,6 @@
 mod windows_hook {
     use std::{
         collections::HashMap,
-        ffi::c_void,
         sync::{LazyLock, Mutex},
     };
 
@@ -158,12 +157,7 @@ mod windows_hook {
             }
         }
 
-        CallNextHookEx(
-            Some(HHOOK(std::ptr::null_mut() as *mut c_void)),
-            code,
-            wparam,
-            lparam,
-        )
+        CallNextHookEx(Some(HHOOK(std::ptr::null_mut())), code, wparam, lparam)
     }
 
     fn ensure_hook_thread() -> Result<(), String> {

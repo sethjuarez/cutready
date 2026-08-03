@@ -1824,6 +1824,7 @@ fn paths_equivalent(left: &Path, right: &Path) -> bool {
     left == right
 }
 
+#[allow(dead_code)]
 pub async fn exec_search_web(args: &Value) -> Result<String, String> {
     let query = args
         .get("query")
@@ -1859,6 +1860,7 @@ pub async fn exec_search_web(args: &Value) -> Result<String, String> {
     Ok(format_search_results(query, &html, max_results))
 }
 
+#[allow(dead_code)]
 fn format_search_results(query: &str, html: &str, max_results: usize) -> String {
     let mut out = format!("# Web search results for \"{}\"\n\n", query);
     let results = parse_duckduckgo_results(html, max_results);
@@ -1883,12 +1885,14 @@ fn format_search_results(query: &str, html: &str, max_results: usize) -> String 
 }
 
 #[derive(Debug, PartialEq, Eq)]
+#[allow(dead_code)]
 struct SearchResult {
     title: String,
     url: String,
     snippet: String,
 }
 
+#[allow(dead_code)]
 fn parse_duckduckgo_results(html: &str, max_results: usize) -> Vec<SearchResult> {
     let mut results = Vec::new();
     for chunk in html.split("result__a").skip(1) {
@@ -1923,6 +1927,7 @@ fn parse_duckduckgo_results(html: &str, max_results: usize) -> Vec<SearchResult>
     results
 }
 
+#[allow(dead_code)]
 fn extract_attr(chunk: &str, attr: &str) -> Option<String> {
     let needle = format!("{attr}=\"");
     let start = chunk.find(&needle)? + needle.len();
@@ -1930,6 +1935,7 @@ fn extract_attr(chunk: &str, attr: &str) -> Option<String> {
     Some(html_unescape(&chunk[start..end]))
 }
 
+#[allow(dead_code)]
 fn normalize_search_url(href: &str) -> String {
     if let Some(uddg_pos) = href.find("uddg=") {
         let encoded = &href[uddg_pos + 5..];
@@ -1941,6 +1947,7 @@ fn normalize_search_url(href: &str) -> String {
     html_unescape(href)
 }
 
+#[allow(dead_code)]
 fn strip_tags(value: &str) -> String {
     let mut out = String::new();
     let mut in_tag = false;
@@ -1958,6 +1965,7 @@ fn strip_tags(value: &str) -> String {
         .join(" ")
 }
 
+#[allow(dead_code)]
 fn html_unescape(value: &str) -> String {
     value
         .replace("&amp;", "&")

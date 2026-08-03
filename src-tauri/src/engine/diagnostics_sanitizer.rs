@@ -70,11 +70,9 @@ fn sanitize_value_for_key(value: &mut Value, key: &str) {
         return;
     }
 
-    if is_local_path_key(key) {
-        if value.is_string() {
-            *value = Value::String(REDACTED_LOCAL_PATH.to_string());
-            return;
-        }
+    if is_local_path_key(key) && value.is_string() {
+        *value = Value::String(REDACTED_LOCAL_PATH.to_string());
+        return;
     }
 
     if is_identity_key(key) {

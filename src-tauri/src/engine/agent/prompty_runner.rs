@@ -37,6 +37,8 @@ use crate::engine::agent::execution::{
 use crate::engine::agent_state::AgentStateStore;
 
 const CANCELLED_ERROR: &str = "Agent run cancelled";
+/// Default cap on tool-call rounds within a single run.
+pub const DEFAULT_MAX_TOOL_ROUNDS: usize = 50;
 /// Fallback surfaced only if a `delegate_to_agent` call reaches the tool port without a
 /// live [`DelegationContext`]; the normal Prompty path always wires delegation.
 const UNSUPPORTED_DELEGATION_MESSAGE: &str =
@@ -347,7 +349,7 @@ async fn run_turn(turn: PromptyTurn) -> Result<RunResult, String> {
     let history_budget_chars = model_input_budget_chars.saturating_sub(context_reserve_chars);
     let project_workspace_tools_enabled =
         agent_id.eq_ignore_ascii_case("writer") && mutation_tools_enabled;
-    let mut tool_definitions = tools::all_tools(
+    let tool_definitions = tools::all_tools(
         web_access.search_enabled,
         project_workspace_tools_enabled,
         mutation_tools_enabled,
@@ -1679,7 +1681,7 @@ impl IdGenerator for UuidGenerator {
     }
 }
 
-fn native_to_prompty_message(message: &ChatMessage) -> Result<Message, String> {
+pub(crate) fn native_to_prompty_message(message: &ChatMessage) -> Result<Message, String> {
     let role = match message.role.as_str() {
         "system" => Role::System,
         "user" => Role::User,
@@ -1723,7 +1725,7 @@ fn native_content_part_to_prompty(part: &ContentPart) -> Result<PromptyContentPa
     }
 }
 
-fn prompty_to_native_message(message: &Message) -> Result<ChatMessage, String> {
+pub(crate) fn prompty_to_native_message(message: &Message) -> Result<ChatMessage, String> {
     let role = match message.role {
         Role::System => "system",
         Role::Developer => "system",

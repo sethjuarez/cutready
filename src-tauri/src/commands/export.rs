@@ -19,6 +19,7 @@ fn app_data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
         .map_err(|e| format!("Could not resolve app data dir: {e}"))
 }
 
+#[allow(clippy::too_many_arguments)]
 #[auditaur_command(skip_all, err)]
 pub async fn export_sketch_video(
     relative_path: String,

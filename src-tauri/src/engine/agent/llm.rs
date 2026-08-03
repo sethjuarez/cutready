@@ -1,18 +1,40 @@
-//! LLM provider configuration and agentive integration.
+//! LLM provider configuration and model discovery.
 //!
-//! Thin bridge between CutReady's settings (LlmProvider, LlmConfig) and the
-//! agentive crate.  All heavy lifting — streaming, SSE parsing, agentic loops,
-//! model heuristics, and discovery — lives in agentive.
+//! Bridges CutReady's settings (LlmProvider, LlmConfig) to the Prompty
+//! provider crates.  Execution and one-shot turns run through
+//! [`super::prompty_model`]; model discovery calls each provider crate's
+//! `list_models_async`.  This module owns only CutReady-specific policy
+//! (model heuristics, context budget) and the frontend-facing `ModelInfo`
+//! presentation DTO.
 
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::collections::HashMap;
+
+use serde_json::{json, Value};
+
+use prompty::model::ModelInfo as PromptyModelInfo;
 
 // ---------------------------------------------------------------------------
-// Shared types — re-exported from agentive
+// Frontend-facing model discovery DTO
 // ---------------------------------------------------------------------------
 
-pub use agentive::discovery::ModelInfo;
-pub use agentive::{simple_chat, ChatMessage, Provider};
+/// Information about an available model or deployment, in the snake_case shape
+/// the frontend model picker consumes.  Mapped from Prompty's provider
+/// [`PromptyModelInfo`] at the discovery boundary.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ModelInfo {
+    /// Model or deployment ID (what you pass as the model name).
+    pub id: String,
+    /// The underlying model name (for deployments that wrap a model).
+    #[serde(default)]
+    pub owned_by: Option<String>,
+    /// Capability flags (e.g., `"chat_completion": "true"`).
+    #[serde(default)]
+    pub capabilities: Option<HashMap<String, String>>,
+    /// Max context window in tokens, if reported.
+    #[serde(default)]
+    pub context_length: Option<usize>,
+}
 
 pub fn needs_responses_api(model: &str) -> bool {
     let model = model.to_ascii_lowercase();
@@ -110,48 +132,76 @@ pub struct LlmConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Provider + discovery
+// Model discovery (Prompty provider crates)
 // ---------------------------------------------------------------------------
 
-/// Build an agentive Provider from CutReady's LlmConfig.
-pub fn build_provider(
-    config: &LlmConfig,
-    reported_context_length: Option<usize>,
-) -> Arc<dyn Provider + Send + Sync> {
-    let model = effective_model(config);
-    let budget = context_budget(model, reported_context_length);
-    let vision = supports_vision(model);
-
-    if config.provider == LlmProvider::Anthropic {
-        return Arc::new(
-            agentive::AnthropicProvider::new(&config.api_key, model).with_context_budget(budget),
-        );
+/// List available models for the configured provider via Prompty's per-provider
+/// discovery, mapped into CutReady's frontend [`ModelInfo`] DTO.
+pub async fn list_models(config: &LlmConfig) -> Result<Vec<ModelInfo>, String> {
+    let connection = discovery_connection(config);
+    let raw = match config.provider {
+        LlmProvider::Openai => prompty_openai::list_models_async(&connection).await,
+        LlmProvider::Anthropic => prompty_anthropic::list_models_async(&connection).await,
+        LlmProvider::MicrosoftFoundry | LlmProvider::AzureOpenai => {
+            prompty_foundry::list_models_async(&connection).await
+        }
     }
+    .map_err(|error| error.to_string())?;
+    Ok(raw
+        .into_iter()
+        .map(map_prompty_model_info)
+        .map(normalize_model_info)
+        .collect())
+}
 
-    let endpoint = effective_endpoint(config);
-    let auth = resolve_auth(config);
-
-    if needs_responses_api(model) {
-        Arc::new(
-            agentive::ResponsesProvider::with_auth(endpoint, auth, model)
-                .with_context_budget(budget)
-                .with_vision(vision),
-        )
-    } else {
-        Arc::new(
-            agentive::OpenAiProvider::with_auth(endpoint, auth, model)
-                .with_context_budget(budget)
-                .with_vision(vision),
-        )
+/// Build the Prompty connection JSON for model discovery.  The Foundry lister
+/// prefers a caller-supplied bearer token (connection `apiKey`); Azure catalog
+/// and OpenAI/Anthropic listers use their respective keys.
+fn discovery_connection(config: &LlmConfig) -> Value {
+    let discovery_token = || {
+        config
+            .bearer_token
+            .as_deref()
+            .filter(|token| !token.is_empty())
+            .unwrap_or(&config.api_key)
+            .to_string()
+    };
+    match config.provider {
+        LlmProvider::Openai => json!({
+            "kind": "key",
+            "endpoint": effective_endpoint(config),
+            "apiKey": config.api_key,
+        }),
+        LlmProvider::Anthropic => json!({
+            "kind": "key",
+            "endpoint": "https://api.anthropic.com",
+            "apiKey": config.api_key,
+        }),
+        LlmProvider::MicrosoftFoundry => json!({
+            "kind": "foundry",
+            "endpoint": effective_endpoint(config),
+            "apiKey": discovery_token(),
+        }),
+        LlmProvider::AzureOpenai => json!({
+            "kind": "key",
+            "endpoint": effective_endpoint(config),
+            "apiKey": discovery_token(),
+        }),
     }
 }
 
-/// List available models from the provider via agentive discovery.
-pub async fn list_models(config: &LlmConfig) -> Result<Vec<ModelInfo>, String> {
-    let auth = resolve_auth(config);
-    agentive::discovery::list_models(effective_endpoint(config), &auth)
-        .await
-        .map(|models| models.into_iter().map(normalize_model_info).collect())
+/// Map Prompty's provider-owned `ModelInfo` into CutReady's frontend DTO.  The
+/// underlying model name (Prompty `display_name`) is preferred for capability
+/// keying and display; `capabilities` are synthesized by [`normalize_model_info`].
+fn map_prompty_model_info(model: PromptyModelInfo) -> ModelInfo {
+    ModelInfo {
+        id: model.id,
+        owned_by: model.display_name.or(model.owned_by),
+        capabilities: None,
+        context_length: model
+            .context_window
+            .and_then(|window| usize::try_from(window).ok()),
+    }
 }
 
 fn effective_endpoint(config: &LlmConfig) -> &str {
@@ -166,42 +216,8 @@ fn effective_endpoint(config: &LlmConfig) -> &str {
     endpoint
 }
 
-fn effective_model(config: &LlmConfig) -> &str {
-    if config.provider != LlmProvider::Anthropic {
-        return &config.model;
-    }
-
-    match config.model.as_str() {
-        "claude-sonnet-4-20250514" => "claude-sonnet-4-6",
-        "claude-opus-4-20250514" => "claude-opus-4-8",
-        "claude-haiku-3-5-20241022" => "claude-haiku-4-5",
-        _ => &config.model,
-    }
-}
-
-/// Map CutReady's LlmConfig to an agentive AuthStrategy.
-fn resolve_auth(config: &LlmConfig) -> agentive::AuthStrategy {
-    if let Some(ref token) = config.bearer_token {
-        if !token.is_empty() {
-            return agentive::AuthStrategy::Bearer(token.clone());
-        }
-    }
-    match config.provider {
-        LlmProvider::MicrosoftFoundry => {
-            // Foundry should always have a bearer token from Entra.
-            // Fall back to ApiKey if somehow set without OAuth.
-            agentive::AuthStrategy::ApiKey(config.api_key.clone())
-        }
-        LlmProvider::AzureOpenai => agentive::AuthStrategy::ApiKey(config.api_key.clone()),
-        LlmProvider::Openai => agentive::AuthStrategy::Bearer(config.api_key.clone()),
-        LlmProvider::Anthropic => {
-            // Anthropic uses its own header (x-api-key), handled by AnthropicProvider.
-            // This shouldn't be called for Anthropic, but return a placeholder.
-            agentive::AuthStrategy::ApiKey(config.api_key.clone())
-        }
-    }
-}
-
+/// Pick the name capability detection keys off: prefer `owned_by` when it looks
+/// like a real model id (Foundry deployments report the underlying model there).
 fn capability_model_name(model: &ModelInfo) -> &str {
     model
         .owned_by
@@ -259,118 +275,67 @@ mod tests {
         }
     }
 
-    // ── build_provider routing ───────────────────────────────────
+    // ── discovery_connection ─────────────────────────────────────
 
     #[test]
-    fn build_provider_routes_anthropic() {
-        let config = LlmConfig {
-            provider: LlmProvider::Anthropic,
-            endpoint: String::new(),
-            api_key: "sk-ant-test".into(),
-            model: "claude-sonnet-4-6".into(),
-            bearer_token: None,
-        };
-        let p = build_provider(&config, None);
-        assert_eq!(p.name(), "anthropic");
-    }
-
-    #[test]
-    fn build_provider_routes_azure_to_openai_provider() {
-        let config = azure_config(None);
-        let p = build_provider(&config, None);
-        assert_eq!(p.name(), "openai"); // OpenAiProvider for chat completions
-    }
-
-    #[test]
-    fn build_provider_routes_openai() {
-        let config = LlmConfig {
-            provider: LlmProvider::Openai,
-            endpoint: "https://api.openai.com".into(),
-            api_key: "sk-test".into(),
-            model: "gpt-4o".into(),
-            bearer_token: None,
-        };
-        let p = build_provider(&config, None);
-        assert_eq!(p.name(), "openai");
-    }
-
-    #[test]
-    fn build_provider_routes_foundry() {
+    fn discovery_connection_foundry_prefers_bearer_token() {
         let config = LlmConfig {
             provider: LlmProvider::MicrosoftFoundry,
-            endpoint: "https://my-ai.services.ai.azure.com".into(),
+            endpoint: "https://my-ai.services.ai.azure.com/".into(),
             api_key: String::new(),
             model: "gpt-4o".into(),
             bearer_token: Some("entra-token".into()),
         };
-        let p = build_provider(&config, None);
-        assert_eq!(p.name(), "openai");
+        let connection = discovery_connection(&config);
+        assert_eq!(connection["kind"], "foundry");
+        assert_eq!(connection["apiKey"], "entra-token");
+        assert_eq!(
+            connection["endpoint"],
+            "https://my-ai.services.ai.azure.com"
+        );
     }
 
     #[test]
-    fn build_provider_routes_responses_api_model() {
-        let config = LlmConfig {
-            provider: LlmProvider::AzureOpenai,
-            endpoint: "https://my-resource.openai.azure.com".into(),
-            api_key: "test-key".into(),
-            model: "gpt-5-codex".into(), // codex models need Responses API
-            bearer_token: None,
-        };
-        let p = build_provider(&config, None);
-        assert_eq!(p.name(), "responses");
-    }
-
-    // ── resolve_auth ─────────────────────────────────────────────
-
-    #[test]
-    fn resolve_auth_prefers_bearer_token() {
-        let config = azure_config(Some("my-bearer"));
-        let auth = resolve_auth(&config);
-        assert!(matches!(auth, agentive::AuthStrategy::Bearer(ref t) if t == "my-bearer"));
-    }
-
-    #[test]
-    fn resolve_auth_azure_falls_back_to_api_key() {
+    fn discovery_connection_azure_uses_key_kind() {
         let config = azure_config(None);
-        let auth = resolve_auth(&config);
-        assert!(matches!(auth, agentive::AuthStrategy::ApiKey(ref k) if k == "test-key"));
+        let connection = discovery_connection(&config);
+        assert_eq!(connection["kind"], "key");
+        assert_eq!(connection["apiKey"], "test-key");
     }
 
     #[test]
-    fn resolve_auth_openai_uses_bearer_for_api_key() {
+    fn discovery_connection_openai_uses_key_kind() {
         let config = LlmConfig {
             provider: LlmProvider::Openai,
             endpoint: String::new(),
-            api_key: "sk-openai".into(),
+            api_key: "sk-test".into(),
             model: "gpt-4o".into(),
             bearer_token: None,
         };
-        let auth = resolve_auth(&config);
-        assert!(matches!(auth, agentive::AuthStrategy::Bearer(ref k) if k == "sk-openai"));
+        let connection = discovery_connection(&config);
+        assert_eq!(connection["kind"], "key");
+        assert_eq!(connection["endpoint"], "https://api.openai.com");
+        assert_eq!(connection["apiKey"], "sk-test");
     }
 
     #[test]
-    fn resolve_auth_ignores_empty_bearer() {
-        let config = azure_config(Some(""));
-        let auth = resolve_auth(&config);
-        assert!(matches!(auth, agentive::AuthStrategy::ApiKey(_)));
+    fn map_prompty_model_info_prefers_display_name() {
+        let mapped = map_prompty_model_info(PromptyModelInfo {
+            id: "chat-prod".into(),
+            display_name: Some("gpt-4o".into()),
+            owned_by: Some("Microsoft".into()),
+            context_window: Some(128_000),
+            input_modalities: None,
+            output_modalities: None,
+            additional_properties: serde_json::Value::Null,
+        });
+        assert_eq!(mapped.id, "chat-prod");
+        assert_eq!(mapped.owned_by.as_deref(), Some("gpt-4o"));
+        assert_eq!(mapped.context_length, Some(128_000));
     }
 
     #[test]
-    fn resolve_auth_foundry_falls_back_to_api_key() {
-        let config = LlmConfig {
-            provider: LlmProvider::MicrosoftFoundry,
-            endpoint: "https://foundry.ai.azure.com".into(),
-            api_key: "foundry-key".into(),
-            model: "gpt-4o".into(),
-            bearer_token: None,
-        };
-        let auth = resolve_auth(&config);
-        assert!(matches!(auth, agentive::AuthStrategy::ApiKey(ref k) if k == "foundry-key"));
-    }
-
-    #[test]
-    fn effective_endpoint_defaults_anthropic() {
+    fn effective_endpoint_anthropic_uses_default() {
         let config = LlmConfig {
             provider: LlmProvider::Anthropic,
             endpoint: String::new(),
@@ -379,24 +344,6 @@ mod tests {
             bearer_token: None,
         };
         assert_eq!(effective_endpoint(&config), "https://api.anthropic.com");
-    }
-
-    #[test]
-    fn effective_model_maps_stale_anthropic_ids() {
-        let mut config = LlmConfig {
-            provider: LlmProvider::Anthropic,
-            endpoint: String::new(),
-            api_key: "sk-ant-test".into(),
-            model: "claude-sonnet-4-20250514".into(),
-            bearer_token: None,
-        };
-        assert_eq!(effective_model(&config), "claude-sonnet-4-6");
-
-        config.model = "claude-opus-4-20250514".into();
-        assert_eq!(effective_model(&config), "claude-opus-4-8");
-
-        config.model = "claude-haiku-3-5-20241022".into();
-        assert_eq!(effective_model(&config), "claude-haiku-4-5");
     }
 
     #[test]

@@ -11,8 +11,9 @@ use prompty::types::{Message, Role, StreamChunk};
 #[cfg(test)]
 use prompty::types::{StreamFailure, Usage};
 use prompty::{
-    CancellationToken, ModelInvocationRequest, ModelInvocationResponse, ModelPort,
-    ModelStreamChunk, ModelStreamPort, PortError,
+    CancellationToken, ModelInvocationContextSnapshot, ModelInvocationRequest,
+    ModelInvocationResponse, ModelPort, ModelStreamChunk, ModelStreamPort, NoopModelStreamPort,
+    PortError,
 };
 use serde_json::{json, Value};
 
@@ -499,6 +500,48 @@ fn invoker_error_to_port(error: InvokerError) -> PortError {
         }
         error => PortError::new(error.to_string()),
     }
+}
+
+/// Run a single, tool-free Prompty turn and return the assistant reply.
+///
+/// Used by callers that need a one-shot completion (e.g., the simple `agent_chat`
+/// command and transcript-grounded video import) without the full agentic loop.
+pub async fn one_shot_chat(
+    config: &LlmConfig,
+    messages: &[crate::engine::agent::execution::ChatMessage],
+) -> Result<crate::engine::agent::execution::ChatMessage, String> {
+    let model = build_production_model(config, None, Vec::new())?;
+    let prompty_messages = messages
+        .iter()
+        .map(super::prompty_runner::native_to_prompty_message)
+        .collect::<Result<Vec<_>, _>>()?;
+    let request = ModelInvocationRequest {
+        context: ModelInvocationContextSnapshot {
+            id: "one-shot".into(),
+            session_id: "one-shot".into(),
+            turn_id: "one-shot".into(),
+            invocation_id: "one-shot".into(),
+            iteration: 0,
+            messages: prompty_messages,
+            decisions: Vec::new(),
+            stable_prefix_messages: 0,
+            context_state: InvocationContextState {
+                portability: InvocationContextPortability::Portable,
+                delegated_state: Vec::new(),
+            },
+            metadata: Value::Null,
+        },
+    };
+    let response = model
+        .port
+        .invoke(&request, &CancellationToken::new(), &NoopModelStreamPort)
+        .await
+        .map_err(|error| error.to_string())?;
+    let assistant = response
+        .assistant_messages
+        .first()
+        .ok_or_else(|| "Model returned no assistant message".to_string())?;
+    super::prompty_runner::prompty_to_native_message(assistant)
 }
 
 fn responses_function_call_messages(response: &Value) -> Vec<Message> {
@@ -1292,7 +1335,7 @@ mod tests {
 
     #[test]
     fn prompty_production_dependencies_remain_pinned_to_a_single_revision() {
-        const REVISION: &str = "36f27ff661d8ad4cf29e6ac2c74ec270c4832e03";
+        const REVISION: &str = "fb50155198663e042a6551840ff2385f4da28838";
         let manifest = include_str!("../../../Cargo.toml");
         let lockfile = include_str!("../../../Cargo.lock");
 

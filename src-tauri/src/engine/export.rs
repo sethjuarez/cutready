@@ -219,6 +219,7 @@ struct RowSegment {
     typing_spots: Vec<TypingSpot>,
 }
 
+#[allow(dead_code)]
 pub fn export_sketch_video(
     project_root: &Path,
     sketch_path: &str,
@@ -948,6 +949,7 @@ fn motion_image_video_filters(
     Ok(filters)
 }
 
+#[allow(dead_code)]
 fn motion_final_frame_video_filter(
     plan: &MotionPlan,
     typing_spots: &[TypingSpot],
@@ -1241,6 +1243,7 @@ enum FfmpegValue {
     Raw(String),
     Expression(FfmpegExpression),
     Text(String),
+    #[allow(dead_code)]
     FilePath(PathBuf),
     FontPath(PathBuf),
 }
@@ -1254,6 +1257,7 @@ impl FfmpegValue {
         Self::Text(value.into())
     }
 
+    #[allow(dead_code)]
     fn file_path(path: impl AsRef<Path>) -> Self {
         Self::FilePath(path.as_ref().to_path_buf())
     }

@@ -1,7 +1,7 @@
 //! Tauri commands for the recording engine.
 
 use serde::Serialize;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use chrono::Utc;
 use sha2::{Digest, Sha256};
@@ -204,6 +204,7 @@ pub async fn read_narration_asset(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn save_narration_recording(
     sketch_path: String,
@@ -433,7 +434,7 @@ fn extract_sketch_narration_refs(content: &str) -> Vec<String> {
     refs
 }
 
-fn audio_mime_from_path(path: &PathBuf) -> Option<&'static str> {
+fn audio_mime_from_path(path: &Path) -> Option<&'static str> {
     match path
         .extension()
         .and_then(|extension| extension.to_str())

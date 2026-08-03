@@ -511,16 +511,17 @@ fn select_native_packed_yuv_type(
     windows::Win32::Media::MediaFoundation::IMFMediaType,
     SourceFormatConfig,
 )> {
+    type BestPackedYuv = (
+        (u8, u8, u64, u32),
+        windows::Win32::Media::MediaFoundation::IMFMediaType,
+        SourceFormatConfig,
+    );
     let selected_fps = selected_format
         .fps
         .as_deref()
         .and_then(parse_fps_score)
         .unwrap_or(0);
-    let mut best: Option<(
-        (u8, u8, u64, u32),
-        windows::Win32::Media::MediaFoundation::IMFMediaType,
-        SourceFormatConfig,
-    )> = None;
+    let mut best: Option<BestPackedYuv> = None;
     let mut index = 0u32;
 
     loop {
@@ -582,7 +583,7 @@ fn convert_packed_yuv_sample_to_nv12(
 ) -> anyhow::Result<IMFSample> {
     let width = config.width as usize;
     let height = config.height as usize;
-    if width % 2 != 0 || height % 2 != 0 {
+    if !width.is_multiple_of(2) || !height.is_multiple_of(2) {
         return Err(anyhow::anyhow!(
             "Packed-YUV camera frames must have even dimensions for NV12 conversion: {}x{}",
             width,

@@ -518,6 +518,7 @@ pub async fn get_recording_prompter_params(
         .ok_or_else(|| "No recording prompter params set".to_string())
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn open_recording_prompter_window(
     app: tauri::AppHandle,

@@ -1001,6 +1001,7 @@ fn relative_project_path(path: &Path, project_root: &Path) -> Result<String, Pro
 }
 
 /// Rename/move an unlocked project file and auto-commit.
+#[allow(dead_code)]
 pub fn rename_file(
     old_path: &Path,
     new_path: &Path,
@@ -1038,6 +1039,7 @@ pub fn rename_file(
 }
 
 /// Rename/move a sketch file and auto-commit.
+#[allow(dead_code)]
 pub fn rename_sketch(
     old_path: &Path,
     new_path: &Path,

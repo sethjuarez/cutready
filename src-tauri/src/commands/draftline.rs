@@ -61,15 +61,13 @@ pub struct DraftlineSquashVersionsRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
+#[derive(Default)]
 pub enum DraftlineSwitchPolicyInput {
+    #[default]
     AbortIfDirty,
-    SaveFirst { label: String },
-}
-
-impl Default for DraftlineSwitchPolicyInput {
-    fn default() -> Self {
-        Self::AbortIfDirty
-    }
+    SaveFirst {
+        label: String,
+    },
 }
 
 #[cfg(test)]
@@ -606,10 +604,9 @@ pub async fn abandon_pending_history_cleanup(
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<draftline::PendingHistoryCleanup> {
     let _guard = lock.0.lock().await;
-    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    let context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::abandon_pending_history_cleanup_with_context(
-        &mut context,
-        request,
+        &context, request,
     ))
 }
 

@@ -116,6 +116,7 @@ impl ChatMessage {
         Self::text_message("user", content)
     }
 
+    #[allow(dead_code)]
     pub fn assistant(content: &str) -> Self {
         Self::text_message("assistant", content)
     }
@@ -133,6 +134,7 @@ impl ChatMessage {
         }
     }
 
+    #[allow(dead_code)]
     pub fn assistant_with_tool_calls(tool_calls: Vec<ToolCall>) -> Self {
         Self {
             role: "assistant".into(),
@@ -315,9 +317,12 @@ pub struct Usage {
 pub struct RunResult {
     pub messages: Vec<ChatMessage>,
     pub response: String,
+    #[allow(dead_code)]
     pub new_messages: Vec<ChatMessage>,
     pub total_usage: Usage,
+    #[allow(dead_code)]
     pub run_id: String,
+    #[allow(dead_code)]
     pub parent_run_id: Option<String>,
 }
 

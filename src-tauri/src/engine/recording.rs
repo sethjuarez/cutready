@@ -912,7 +912,7 @@ fn normalize_prompter_text(value: &str) -> String {
         .lines()
         .map(|line| {
             line.trim()
-                .trim_start_matches(|c: char| c == '-' || c == '*' || c == '•')
+                .trim_start_matches(['-', '*', '•'])
                 .trim()
                 .to_string()
         })
@@ -1711,7 +1711,7 @@ fn spawn_camera_process(
     );
     let used_explicit_input_options = camera_args_use_explicit_input_options(&args);
     match spawn_ffmpeg_camera_with_startup_check(args, log_path) {
-        Ok(child) => return Ok(ActiveCameraProcess::Ffmpeg(child)),
+        Ok(child) => Ok(ActiveCameraProcess::Ffmpeg(child)),
         Err(first_err) if used_explicit_input_options => {
             log::warn!(
                 "[recording] camera capture failed with explicit device mode; retrying negotiated mode: {first_err}"
@@ -2108,9 +2108,10 @@ fn build_ffmpeg_capture_args(
                         "hwdownload,format=bgra,fps={},format=yuv420p",
                         settings.frame_rate
                     )
-                } else if use_desktop_duplication {
-                    format!("fps={},format=yuv420p", settings.frame_rate)
                 } else {
+                    // Desktop-duplication and GDI capture paths currently share the
+                    // same normalization filter.
+                    let _ = use_desktop_duplication;
                     format!("fps={},format=yuv420p", settings.frame_rate)
                 };
                 args.extend([
