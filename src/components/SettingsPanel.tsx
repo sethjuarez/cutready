@@ -1,6 +1,6 @@
 import { useCallback, useState, useEffect, useRef, type ReactNode } from "react";
 import { useAppStore } from "../stores/appStore";
-import { useSettings, useSettingsStore, type AgentPreset, type AppSettings, type AiAgentExecutionEngine } from "../hooks/useSettings";
+import { useSettings, useSettingsStore, type AgentPreset, type AppSettings } from "../hooks/useSettings";
 import { useFfmpegStatus } from "../hooks/useFfmpegStatus";
 import { useRecordingDevices } from "../hooks/useRecordingDevices";
 import { useTheme, type ThemePreference } from "../hooks/useTheme";
@@ -2688,26 +2688,6 @@ function DisplayTab({ settings, updateSetting }: {
 
 // ── AI Provider Tab ──────────────────────────────────────────────
 
-/**
- * User-selectable agent execution engines. Prompty's durable TurnEngine is the
- * only engine today, so the settings UI renders a plain read-only line. When a
- * second engine ships (e.g. the GitHub Copilot harness SDK), add it here and to
- * the {@link AiAgentExecutionEngine} union: the UI automatically upgrades to a
- * selector once this list has more than one entry. ("agentive" is intentionally
- * excluded: it persists only as a deprecated alias the backend maps to Prompty.)
- */
-const AI_EXECUTION_ENGINES: {
-  id: AiAgentExecutionEngine;
-  label: string;
-  description: string;
-}[] = [
-  {
-    id: "prompty",
-    label: "Prompty TurnEngine",
-    description: "CutReady runs on Prompty's durable TurnEngine.",
-  },
-];
-
 function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropic, isOAuth, hasToken, canFetchModels, models, setModels, loadingModels, modelFilter, setModelFilter, modelError, fetchModels, oauthStatus, oauthError, startOAuthFlow, signOut }: {
   settings: ReturnType<typeof useSettings>["settings"];
   updateSetting: ReturnType<typeof useSettings>["updateSetting"];
@@ -3319,28 +3299,6 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
         />
         <p className="text-xs text-[rgb(var(--color-text-secondary))]">
           Limits agent tool-call rounds before CutReady stops a runaway loop. Higher values help long editing sessions that need many read/write/review cycles.
-        </p>
-      </fieldset>
-
-      <fieldset className="flex flex-col gap-2">
-        <label className="text-sm font-medium">AI execution engine</label>
-        {AI_EXECUTION_ENGINES.length > 1 ? (
-          <select
-            value={settings.aiAgentExecutionEngine || "prompty"}
-            onChange={(e) => updateSetting("aiAgentExecutionEngine", e.target.value as AiAgentExecutionEngine)}
-            className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded px-3 py-1.5 text-sm"
-          >
-            {AI_EXECUTION_ENGINES.map((engine) => (
-              <option key={engine.id} value={engine.id}>{engine.label}</option>
-            ))}
-          </select>
-        ) : (
-          <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded px-3 py-1.5 text-sm">
-            {AI_EXECUTION_ENGINES[0].label}
-          </div>
-        )}
-        <p className="text-xs text-[rgb(var(--color-text-secondary))]">
-          {(AI_EXECUTION_ENGINES.find((engine) => engine.id === settings.aiAgentExecutionEngine) ?? AI_EXECUTION_ENGINES[0]).description}
         </p>
       </fieldset>
     </div>
@@ -4424,13 +4382,6 @@ function RepositoryTab({ settings, updateSetting }: {
     }
   };
 
-  const authOptions = [
-    { value: "github", label: "GitHub account", desc: "Uses CutReady's built-in GitHub connection. Recommended." },
-    { value: "gh_cli", label: "GitHub CLI (gh)", desc: "Uses your existing GitHub CLI login as a fallback." },
-    { value: "pat", label: "Personal Access Token", desc: "Enter a GitHub PAT manually." },
-    { value: "ssh", label: "SSH Key", desc: "Uses SSH keys from ~/.ssh/." },
-  ];
-
   return (
     <div className="flex flex-col gap-6">
       <p className="text-xs text-[rgb(var(--color-text-secondary))]">
@@ -4438,6 +4389,21 @@ function RepositoryTab({ settings, updateSetting }: {
       </p>
 
       <GitHubConnectionCard />
+
+      <div className="flex flex-col gap-1.5 px-3 py-2.5 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]">
+        <span className="text-sm font-medium text-[rgb(var(--color-text))]">How CutReady authenticates</span>
+        <p className="text-xs text-[rgb(var(--color-text-secondary))]">
+          Every push, pull, and fetch tries these in order and stops at the first one that works:
+        </p>
+        <ol className="list-decimal pl-4 flex flex-col gap-0.5 text-xs text-[rgb(var(--color-text-secondary))]">
+          <li>The GitHub account connected above.</li>
+          <li>Your GitHub CLI login, if you have run <code>gh auth login</code>.</li>
+          <li>SSH keys held by your SSH agent.</li>
+        </ol>
+        <p className="text-xs text-[rgb(var(--color-text-secondary))] mt-1">
+          Snapshots are attributed to <code>GIT_AUTHOR_NAME</code> and <code>GIT_AUTHOR_EMAIL</code>, falling back to your operating system username.
+        </p>
+      </div>
 
       {detectedRemote && !settings.repoRemoteUrl && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[rgb(var(--color-accent))]/10 border border-[rgb(var(--color-accent))]/20 text-xs text-[rgb(var(--color-accent))]">
@@ -4476,74 +4442,6 @@ function RepositoryTab({ settings, updateSetting }: {
         {testStatus === "error" && (
           <p className="text-xs text-error">{testMessage}</p>
         )}
-      </fieldset>
-
-      <fieldset className="flex flex-col gap-3">
-        <label className="text-sm font-medium text-[rgb(var(--color-text))]">Authentication</label>
-        <div className="flex flex-col gap-2">
-          {authOptions.map((opt) => (
-            <label
-              key={opt.value}
-              className={`flex items-start gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
-                settings.repoAuthMethod === opt.value
-                  ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/5"
-                  : "border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-text-secondary))]/30"
-              }`}
-            >
-              <input
-                type="radio"
-                name="repoAuth"
-                value={opt.value}
-                checked={settings.repoAuthMethod === opt.value}
-                onChange={() => updateSetting("repoAuthMethod", opt.value)}
-                className="mt-0.5 accent-[rgb(var(--color-accent))]"
-              />
-              <div>
-                <span className="text-sm font-medium text-[rgb(var(--color-text))]">{opt.label}</span>
-                <p className="text-xs text-[rgb(var(--color-text-secondary))] mt-0.5">{opt.desc}</p>
-              </div>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-
-      {settings.repoAuthMethod === "pat" && (
-        <fieldset className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-[rgb(var(--color-text))]">Personal Access Token</label>
-          <input
-            type="password"
-            value={settings.repoToken}
-            onChange={(e) => updateSetting("repoToken", e.target.value)}
-            placeholder="ghp_xxxxxxxxxxxx"
-            className={inputClass}
-          />
-          <p className="text-xs text-[rgb(var(--color-text-secondary))]">
-            Create a token at github.com/settings/tokens with &quot;repo&quot; scope.
-          </p>
-        </fieldset>
-      )}
-
-      <fieldset className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-[rgb(var(--color-text))]">Git Identity</label>
-        <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-1">
-          Name and email used for your snapshots. Leave empty to use system git config.
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          <input
-            type="text"
-            value={settings.repoAuthorName}
-            onChange={(e) => updateSetting("repoAuthorName", e.target.value)}
-            placeholder="Name"
-            className={inputClass}
-          />
-          <input
-            type="email"
-            value={settings.repoAuthorEmail}
-            onChange={(e) => updateSetting("repoAuthorEmail", e.target.value)}
-            placeholder="email@example.com"
-            className={inputClass}
-          />
-        </div>
       </fieldset>
     </div>
   );

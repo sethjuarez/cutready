@@ -11,7 +11,6 @@ export const SECRET_KEYS = [
   "aiApiKey",
   "aiAccessToken",
   "aiRefreshToken",
-  "repoToken",
 ] as const;
 
 export type SecretKey = (typeof SECRET_KEYS)[number];
