@@ -1763,10 +1763,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             {pendingDelete.usedBy && pendingDelete.usedBy.length > 0 && (
               <div className="mb-3 px-3 py-2 rounded-lg bg-warning/10 border border-warning/30">
                 <p className="text-xs text-warning font-medium mb-1">⚠ Used in {pendingDelete.usedBy.length === 1 ? "a storyboard" : `${pendingDelete.usedBy.length} storyboards`}:</p>
-                <ul className="text-[11px] text-amber-300/80 list-disc list-inside">
+                <ul className="text-[11px] text-warning/80 list-disc list-inside">
                   {pendingDelete.usedBy.map((t) => <li key={t}>{t}</li>)}
                 </ul>
-                <p className="text-[11px] text-amber-300/80 mt-1">Deleting will leave broken references.</p>
+                <p className="text-[11px] text-warning/80 mt-1">Deleting will leave broken references.</p>
               </div>
             )}
             <div className="flex gap-2 justify-end">
@@ -1854,10 +1854,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
               <p className="text-xs text-warning font-medium mb-1">
                 ⚠ Used in {transferWarning.usedBy.length === 1 ? "a storyboard" : `${transferWarning.usedBy.length} storyboards`}:
               </p>
-              <ul className="text-[11px] text-amber-300/80 list-disc list-inside">
+              <ul className="text-[11px] text-warning/80 list-disc list-inside">
                 {transferWarning.usedBy.map((t) => <li key={t}>{t}</li>)}
               </ul>
-              <p className="text-[11px] text-amber-300/80 mt-1">Moving will leave broken references in this project.</p>
+              <p className="text-[11px] text-warning/80 mt-1">Moving will leave broken references in this project.</p>
             </div>
             <div className="flex gap-2 justify-end">
               <button

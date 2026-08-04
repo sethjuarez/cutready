@@ -26,9 +26,9 @@ const badgeColors: Record<string, string> = {
   BrowserNavigate: "bg-accent/20 text-accent",
   BrowserClick: "bg-success/20 text-success",
   BrowserType: "bg-warning/20 text-warning",
-  BrowserSelect: "bg-purple-500/20 text-purple-400",
-  BrowserScroll: "bg-gray-500/20 text-gray-400",
-  Wait: "bg-gray-500/20 text-gray-400",
+  BrowserSelect: "bg-[rgb(var(--color-secondary))]/20 text-[rgb(var(--color-secondary))]",
+  BrowserScroll: "bg-[rgb(var(--color-text-secondary))]/20 text-[rgb(var(--color-text-secondary))]",
+  Wait: "bg-[rgb(var(--color-text-secondary))]/20 text-[rgb(var(--color-text-secondary))]",
 };
 
 /** Get a human-readable description of an action. */
@@ -68,7 +68,7 @@ interface ActionCardProps {
 export function ActionCard({ action, index }: ActionCardProps) {
   const actionType = action.action.type;
   const label = actionLabels[actionType] || actionType;
-  const badgeColor = badgeColors[actionType] || "bg-gray-500/20 text-gray-400";
+  const badgeColor = badgeColors[actionType] || "bg-[rgb(var(--color-text-secondary))]/20 text-[rgb(var(--color-text-secondary))]";
   const description = describeAction(action.action);
   const screenshot = action.metadata.captured_screenshot;
   const timestamp = new Date(action.metadata.timestamp_ms).toLocaleTimeString();

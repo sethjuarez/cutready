@@ -302,11 +302,11 @@ function WholeFileResolver({
         onClick={() => handleChoice("theirs")}
         className={`px-3 py-3 text-left transition-colors ${
           choice === "theirs"
-            ? "bg-purple-500/10 ring-1 ring-inset ring-purple-500/40"
+            ? "bg-[rgb(var(--color-secondary))]/10 ring-1 ring-inset ring-[rgb(var(--color-secondary))]/40"
             : "bg-[rgb(var(--color-surface))] hover:bg-[rgb(var(--color-border))]/20"
         }`}
       >
-        <div className="text-[9px] font-medium text-purple-500 mb-1.5">{sourceLabel} (incoming)</div>
+        <div className="text-[9px] font-medium text-[rgb(var(--color-secondary))] mb-1.5">{sourceLabel} (incoming)</div>
         <pre className="text-[10px] text-[rgb(var(--color-text))] font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
           {conflict.theirs.substring(0, 500)}{conflict.theirs.length > 500 ? "…" : ""}
         </pre>

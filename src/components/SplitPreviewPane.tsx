@@ -10,6 +10,7 @@ import { ScriptTable } from "./ScriptTable";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
+import { contentTypeTone } from "../utils/contentTypeTheme";
 import { usePopover } from "../hooks/usePopover";
 import { getClampedPopoverPosition } from "./TabBar";
 import { DocumentHeader } from "./DocumentHeader";
@@ -225,12 +226,10 @@ function SplitTab({
   onClose: () => void;
 }) {
   const tabRef = useRef<HTMLDivElement>(null);
-  const typeClasses =
-    tab.type === "sketch"
-      ? { bar: "bg-[rgb(var(--color-accent))]", icon: "text-[rgb(var(--color-accent))]" }
-      : tab.type === "storyboard"
-        ? { bar: "bg-success", icon: "text-success" }
-        : { bar: "bg-rose-500", icon: "text-rose-500" };
+  const tone = contentTypeTone(tab.type);
+  const typeClasses = tone
+    ? { bar: tone.bg, icon: tone.text }
+    : { bar: "bg-[rgb(var(--color-text-secondary))]", icon: "text-[rgb(var(--color-text-secondary))]" };
 
   const TabIcon =
     tab.type === "sketch" ? SketchIcon

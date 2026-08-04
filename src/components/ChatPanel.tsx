@@ -6,6 +6,7 @@ import { AgentStateDatabasePanel } from "./AgentStateDatabasePanel";
 import { SessionHistoryPanel } from "./SessionHistoryPanel";
 import { ProjectImage } from "./ProjectImage";
 import { projectRelativeScreenshotPath } from "../utils/projectImage";
+import { contentTypeTone } from "../utils/contentTypeTheme";
 
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useAiApplyGateStore } from "../stores/aiApplyGateStore";
@@ -2883,18 +2884,10 @@ function ChatErrorCard({ error, onRetry, onDismiss }: { error: string; onRetry: 
 
 /** Type-specific accent colors — matches the explorer sidebar selected styles. */
 function typeColors(type: string): { text: string; bg: string; border: string } {
-  switch (type) {
-    case "sketch":
-      return { text: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/25" };
-    case "note":
-      return { text: "text-rose-500", bg: "bg-rose-500/10", border: "border-rose-500/25" };
-    case "storyboard":
-      return { text: "text-success", bg: "bg-success/10", border: "border-success/25" };
-    case "web":
-      return { text: "text-accent", bg: "bg-accent/10", border: "border-accent/25" };
-    default:
-      return { text: "text-[rgb(var(--color-text-secondary))]", bg: "bg-[rgb(var(--color-surface))]", border: "border-[rgb(var(--color-border))]" };
-  }
+  const tone = contentTypeTone(type);
+  if (tone) return { text: tone.text, bg: tone.activeBg, border: tone.border };
+  if (type === "web") return { text: "text-accent", bg: "bg-accent/10", border: "border-accent/25" };
+  return { text: "text-[rgb(var(--color-text-secondary))]", bg: "bg-[rgb(var(--color-surface))]", border: "border-[rgb(var(--color-border))]" };
 }
 
 /** Detect file type from a path string for colorizing. */

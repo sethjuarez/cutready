@@ -4616,11 +4616,11 @@ function MemoryTab() {
 
   const categoryBadge = (cat: string) => {
     const colors: Record<string, string> = {
-      core: "bg-purple-500/20 text-purple-400",
+      core: "bg-[rgb(var(--color-secondary))]/20 text-[rgb(var(--color-secondary))]",
       archival: "bg-accent/20 text-accent",
       insight: "bg-warning/20 text-warning",
     };
-    return colors[cat] || "bg-gray-500/20 text-gray-400";
+    return colors[cat] || "bg-[rgb(var(--color-text-secondary))]/20 text-[rgb(var(--color-text-secondary))]";
   };
 
   const globalIndex = (item: MemoryItem) => memories.indexOf(item);
