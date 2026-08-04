@@ -161,25 +161,42 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
   };
 
   const selectSubscription = async (sub: Subscription) => {
+    // Only wipe the downstream resource/endpoint/model when actually switching
+    // subscriptions. Re-selecting the same subscription (e.g. the single-item
+    // auto-select that runs on every re-sign-in) must preserve the saved model.
+    const changed = sub.subscriptionId !== settings.aiSubscriptionId;
     await updateSetting("aiSubscriptionId", sub.subscriptionId);
-    await updateSetting("aiResourceGroup", "");
-    await updateSetting("aiResourceName", "");
-    await updateSetting("aiEndpoint", "");
-    await updateSetting("aiModel", "");
+    if (changed) {
+      await updateSetting("aiResourceGroup", "");
+      await updateSetting("aiResourceName", "");
+      await updateSetting("aiEndpoint", "");
+      await updateSetting("aiModel", "");
+    }
     loadResources(sub.subscriptionId);
   };
 
   const selectResource = async (res: AiResource) => {
+    // Keep the previously selected model when the resource is unchanged; only a
+    // genuine resource switch invalidates the old deployment.
+    const changed =
+      res.name !== settings.aiResourceName ||
+      res.resourceGroup !== settings.aiResourceGroup;
     await updateSetting("aiResourceGroup", res.resourceGroup);
     await updateSetting("aiResourceName", res.name);
     await updateSetting("aiEndpoint", res.endpoint);
-    await updateSetting("aiModel", "");
+    if (changed) {
+      await updateSetting("aiModel", "");
+    }
     loadProjects(res);
   };
 
   const selectProject = async (proj: FoundryProject) => {
+    // Preserve the model when the project endpoint is unchanged.
+    const changed = proj.endpoint !== settings.aiEndpoint;
     await updateSetting("aiEndpoint", proj.endpoint);
-    await updateSetting("aiModel", "");
+    if (changed) {
+      await updateSetting("aiModel", "");
+    }
   };
 
   const pickerItemClass =
