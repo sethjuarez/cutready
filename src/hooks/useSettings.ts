@@ -248,14 +248,6 @@ export interface GlobalSettings {
 export interface WorkspaceSettings {
   /** Git remote URL (e.g. https://github.com/user/repo.git). */
   repoRemoteUrl: string;
-  /** Auth method: "github" | "gh_cli" | "pat" | "ssh" (default "github"). */
-  repoAuthMethod: string;
-  /** Personal Access Token (when repoAuthMethod is "pat"). */
-  repoToken: string;
-  /** Git author name for commits. */
-  repoAuthorName: string;
-  /** Git author email for commits. */
-  repoAuthorEmail: string;
   /** Override app-level sketch video export timing for this workspace. */
   videoExportOverrideEnabled: boolean;
   /** Workspace override: whether sketch video export includes a title card. */
@@ -292,16 +284,6 @@ export interface WorkspaceSettings {
   workspaceTypingOverlayFontFamily: "sans" | "serif" | "mono";
   /** Workspace default size multiplier for newly created typing overlays. */
   workspaceTypingOverlayFontScale: number;
-  /** Project-local reusable loopable WAV files for sketch video background music. */
-  workspaceVideoExportBackgroundMusicTracks: BackgroundMusicTrack[];
-  /** Selected project-local background music track ID. Empty means none. */
-  workspaceVideoExportBackgroundMusicTrackId: string;
-  /** Background music gain in dB. */
-  workspaceVideoExportBackgroundMusicVolumeDb: number;
-  /** Whether background music is ducked under narration. */
-  workspaceVideoExportBackgroundMusicDuckNarration: boolean;
-  /** Background music fade in/out duration in seconds. */
-  workspaceVideoExportBackgroundMusicFadeSeconds: number;
 }
 
 /** Combined view for backward compatibility — consumers that need both. */
@@ -414,10 +396,6 @@ function getInitialGlobalSettings(): GlobalSettings {
 
 export const defaultWorkspaceSettings: WorkspaceSettings = {
   repoRemoteUrl: "",
-  repoAuthMethod: "github",
-  repoToken: "",
-  repoAuthorName: "",
-  repoAuthorEmail: "",
   videoExportOverrideEnabled: false,
   workspaceVideoExportIncludeTitleCard: true,
   workspaceVideoExportTitleCardDurationSeconds: 3,
@@ -436,11 +414,6 @@ export const defaultWorkspaceSettings: WorkspaceSettings = {
   typingOverlayOverrideEnabled: false,
   workspaceTypingOverlayFontFamily: "sans",
   workspaceTypingOverlayFontScale: 1,
-  workspaceVideoExportBackgroundMusicTracks: [],
-  workspaceVideoExportBackgroundMusicTrackId: "",
-  workspaceVideoExportBackgroundMusicVolumeDb: -24,
-  workspaceVideoExportBackgroundMusicDuckNarration: true,
-  workspaceVideoExportBackgroundMusicFadeSeconds: 0.5,
 };
 
 const defaultSettings: AppSettings = {
@@ -477,10 +450,6 @@ const FLAT_PROVIDER_FIELDS: Partial<Record<keyof GlobalSettings, keyof AiProvide
 
 const WORKSPACE_KEYS: (keyof WorkspaceSettings)[] = [
   "repoRemoteUrl",
-  "repoAuthMethod",
-  "repoToken",
-  "repoAuthorName",
-  "repoAuthorEmail",
   "videoExportOverrideEnabled",
   "workspaceVideoExportIncludeTitleCard",
   "workspaceVideoExportTitleCardDurationSeconds",
@@ -499,11 +468,6 @@ const WORKSPACE_KEYS: (keyof WorkspaceSettings)[] = [
   "typingOverlayOverrideEnabled",
   "workspaceTypingOverlayFontFamily",
   "workspaceTypingOverlayFontScale",
-  "workspaceVideoExportBackgroundMusicTracks",
-  "workspaceVideoExportBackgroundMusicTrackId",
-  "workspaceVideoExportBackgroundMusicVolumeDb",
-  "workspaceVideoExportBackgroundMusicDuckNarration",
-  "workspaceVideoExportBackgroundMusicFadeSeconds",
 ];
 
 function providerLabel(provider: AiProviderKind): string {
@@ -709,7 +673,6 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         aiApiKey: "",
         aiAccessToken: "",
         aiRefreshToken: "",
-        repoToken: "",
       };
 
       // Load secrets from Stronghold (encrypted vault)
@@ -892,7 +855,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     }
 
     if (WORKSPACE_KEYS.includes(key as keyof WorkspaceSettings)) {
-      // Workspace setting — special handling for repoToken (encrypted)
+      // Workspace setting — secret-valued workspace keys stay out of the plaintext file
       if (isSecretKey(key as string)) {
         try { await setSecret(key as SecretKey, value as string); } catch { /* vault unavailable */ }
       }
