@@ -1309,6 +1309,10 @@ struct PendingBrowserAuth {
     code_verifier: String,
     redirect_uri: String,
     listener: tokio::net::TcpListener,
+    /// Best-effort IPv6 loopback listener bound on the SAME port. The browser
+    /// may resolve `localhost` to `::1` before `127.0.0.1`, so we accept the
+    /// redirect on whichever family it connects to.
+    listener_v6: Option<tokio::net::TcpListener>,
 }
 
 static PENDING_BROWSER_AUTH: std::sync::OnceLock<tokio::sync::Mutex<Option<PendingBrowserAuth>>> =
@@ -1347,7 +1351,31 @@ pub async fn azure_browser_auth_start(
         .local_addr()
         .map_err(|e| format!("Failed to read listener address: {e}"))?
         .port();
-    let redirect_uri = format!("http://127.0.0.1:{port}");
+    // `localhost` can resolve to `::1` (IPv6) before `127.0.0.1` on Windows, so
+    // the browser may deliver the redirect to `[::1]:{port}`. Best-effort bind
+    // the IPv6 loopback on the SAME port; we accept the callback on whichever
+    // family the browser actually uses. Failure here is non-fatal (v4 still
+    // covers the common case).
+    let listener_v6 = tokio::net::TcpListener::bind((std::net::Ipv6Addr::LOCALHOST, port))
+        .await
+        .ok();
+    // Azure AD grants arbitrary loopback ports only to the `http://localhost`
+    // hostname for public clients; `http://127.0.0.1` is rejected with
+    // AADSTS50011 (redirect URI mismatch). Bind the listener on the loopback
+    // address but advertise `localhost` (which resolves to 127.0.0.1 or ::1) so
+    // the callback still lands on our listener.
+    let redirect_uri = format!("http://localhost:{port}");
+
+    crate::util::trace::emit(
+        "azure_browser_auth_start",
+        "auth",
+        serde_json::json!({
+            "tenant": tid,
+            "client_id": client_id.as_deref().unwrap_or("<default>"),
+            "redirect_uri": &redirect_uri,
+            "ipv6_listener": listener_v6.is_some(),
+        }),
+    );
 
     let init = oauth::build_auth_code_url(tid, client_id.as_deref(), None, &redirect_uri);
 
@@ -1357,6 +1385,7 @@ pub async fn azure_browser_auth_start(
         code_verifier: init.code_verifier,
         redirect_uri,
         listener,
+        listener_v6,
     });
 
     Ok(BrowserAuthStart {
@@ -1384,9 +1413,15 @@ pub async fn azure_browser_auth_complete(
         guard.take().ok_or("No pending browser auth flow")?
     };
 
-    let code = wait_for_auth_code(&pending.listener, timeout.unwrap_or(300), "CutReady").await?;
+    let code = wait_for_auth_code(
+        &pending.listener,
+        pending.listener_v6.as_ref(),
+        timeout.unwrap_or(300),
+        "CutReady",
+    )
+    .await?;
 
-    oauth::exchange_code_for_token(
+    let result = oauth::exchange_code_for_token(
         tid,
         &code,
         &pending.redirect_uri,
@@ -1394,7 +1429,25 @@ pub async fn azure_browser_auth_complete(
         client_id.as_deref(),
         None,
     )
-    .await
+    .await;
+
+    crate::util::trace::emit(
+        "azure_browser_auth_complete",
+        "auth",
+        serde_json::json!({
+            "tenant": tid,
+            "redirect_uri": &pending.redirect_uri,
+            "ok": result.is_ok(),
+            // Metadata only (never the token values) to diagnose empty-token
+            // exchanges without leaking secrets.
+            "access_token_len": result.as_ref().ok().map(|t| t.access_token.len()),
+            "has_refresh": result.as_ref().ok().map(|t| t.refresh_token.is_some()),
+            "granted_scope": result.as_ref().ok().and_then(|t| t.scope.clone()),
+            "err": result.as_ref().err().cloned(),
+        }),
+    );
+
+    result
 }
 
 /// Accept exactly one loopback redirect, parse the `code` (or `error`) query
@@ -1402,13 +1455,26 @@ pub async fn azure_browser_auth_complete(
 /// auth-code flow that previously lived in the OAuth crate.
 async fn wait_for_auth_code(
     listener: &tokio::net::TcpListener,
+    listener_v6: Option<&tokio::net::TcpListener>,
     timeout_secs: u64,
     app_name: &str,
 ) -> Result<String, String> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     let timeout = std::time::Duration::from_secs(timeout_secs);
-    let (mut stream, _addr) = tokio::time::timeout(timeout, listener.accept())
+    // Accept the browser redirect on whichever loopback family it connects to.
+    // `localhost` may resolve to `::1` (IPv6) before `127.0.0.1` on Windows, so
+    // waiting only on the IPv4 listener can hang forever.
+    let accept = async {
+        match listener_v6 {
+            Some(v6) => tokio::select! {
+                r = listener.accept() => r,
+                r = v6.accept() => r,
+            },
+            None => listener.accept().await,
+        }
+    };
+    let (mut stream, _addr) = tokio::time::timeout(timeout, accept)
         .await
         .map_err(|_| "Timed out waiting for browser redirect".to_string())?
         .map_err(|e| format!("Accept failed: {e}"))?;

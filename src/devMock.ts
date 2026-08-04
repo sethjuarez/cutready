@@ -928,24 +928,24 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       ];
     case "list_azure_subscriptions":
       return [
-        { subscription_id: "00000000-0000-0000-0000-000000000001", display_name: "Dev Subscription", state: "Enabled" },
-        { subscription_id: "00000000-0000-0000-0000-000000000002", display_name: "Production", state: "Enabled" },
+        { subscriptionId: "00000000-0000-0000-0000-000000000001", displayName: "Dev Subscription", state: "Enabled" },
+        { subscriptionId: "00000000-0000-0000-0000-000000000002", displayName: "Production", state: "Enabled" },
       ];
     case "list_azure_ai_resources":
       return [
-        { name: "my-ai-services", resource_group: "rg-ai", kind: "AIServices", endpoint: "https://my-ai-services.services.ai.azure.com", location: "eastus2" },
-        { name: "my-openai", resource_group: "rg-ai", kind: "OpenAI", endpoint: "https://my-openai.openai.azure.com", location: "westus" },
+        { name: "my-ai-services", resourceGroup: "rg-ai", kind: "AIServices", endpoint: "https://my-ai-services.services.ai.azure.com", location: "eastus2" },
+        { name: "my-openai", resourceGroup: "rg-ai", kind: "OpenAI", endpoint: "https://my-openai.openai.azure.com", location: "westus" },
       ];
     case "list_foundry_projects":
       return [
         { name: "demo-project", endpoint: "https://my-ai-services.services.ai.azure.com/api/projects/demo-project" },
       ];
     case "azure_token_refresh":
-      return { access_token: "mock-access-token", token_type: "Bearer", expires_in: 3600, refresh_token: "mock-refresh-token" };
+      return { accessToken: "mock-access-token", tokenType: "Bearer", expiresIn: 3600, refreshToken: "mock-refresh-token" };
     case "azure_browser_auth_start":
       return { auth_url: "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?mock=true" };
     case "azure_browser_auth_complete":
-      return { access_token: "mock-oauth-token", token_type: "Bearer", expires_in: 3600, refresh_token: "mock-refresh-token" };
+      return { accessToken: "mock-oauth-token", tokenType: "Bearer", expiresIn: 3600, refreshToken: "mock-refresh-token" };
     case "agent_chat_with_tools": {
       // Simulate streaming with agent events
       const userMsgs = (args?.messages as Array<{ role: string; content: string }>) || [];
