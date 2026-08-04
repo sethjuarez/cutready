@@ -228,7 +228,6 @@ export function TitleBar({
               <line x1="15" y1="3" x2="15" y2="21" />
             </svg>
           </button>
-          <div className="w-px h-3 bg-[rgb(var(--color-border))] mx-0.5 shrink-0" />
         </div>
 
         {/* Window controls — Windows style on the right, hidden on macOS */}
