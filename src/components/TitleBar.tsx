@@ -148,26 +148,15 @@ export function TitleBar({
     >
       {/* Left side */}
       <div className="flex items-center gap-2 shrink-0 pl-3">
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 128 128"
-          fill="none"
+        <img
+          src="/cutready-mark.svg"
+          alt=""
+          aria-hidden="true"
+          width={18}
+          height={18}
           className="shrink-0"
-        >
-          <rect x="14" y="52" width="100" height="64" rx="4" fill="#574bb8" />
-          <rect
-            x="14"
-            y="26"
-            width="100"
-            height="16"
-            rx="3"
-            fill="#7c6fdb"
-            transform="rotate(-14 14 42)"
-          />
-          <circle cx="14" cy="48" r="5" fill="rgb(var(--color-accent))" />
-          <path d="M48 68 L88 84 L48 100Z" fill="rgb(var(--color-accent))" />
-        </svg>
+          draggable={false}
+        />
         <span
           className="text-sm font-semibold tracking-tight text-[rgb(var(--color-text))]"
         >

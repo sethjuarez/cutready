@@ -13,7 +13,7 @@ function LogoMark() {
       {/* Gradient glow behind the icon */}
       <div
         className="absolute inset-0 rounded-2xl blur-xl opacity-40"
-        style={{ background: "linear-gradient(135deg, rgb(var(--color-accent)), #e879a8)" }}
+        style={{ background: "linear-gradient(135deg, rgb(var(--color-accent)), rgb(var(--color-tertiary)))" }}
       />
       <img
         src="/cutready.svg"

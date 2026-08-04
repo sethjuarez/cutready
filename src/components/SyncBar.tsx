@@ -164,7 +164,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
               ? "bg-warning animate-pulse"
               : currentRemote
                 ? "bg-success"
-                : "bg-zinc-400"
+                : "bg-[rgb(var(--color-text-secondary))]"
           }`}
         />
         <span className="text-[10px] text-[rgb(var(--color-text-secondary))] truncate flex-1">
