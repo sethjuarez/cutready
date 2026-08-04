@@ -1,4 +1,5 @@
-import type { ThemeColorTokens, ThemePalette } from "./appThemePalettes";
+import { deriveContentTokens } from "./appThemePalettes";
+import type { ContentTypeTokenKey, ThemeColorTokens, ThemePalette } from "./appThemePalettes";
 
 export const THEME_BOOTSTRAP_CACHE_KEY = "cutready-theme-bootstrap";
 
@@ -25,13 +26,30 @@ export const THEME_COLOR_TOKEN_MAP: Record<keyof ThemeColorTokens, string> = {
   mediaControlFg: "--color-media-control-fg",
 };
 
+/**
+ * Content-type colours are derived from each palette's accent rather than
+ * authored per palette, so every theme gets its own sketch/storyboard/note hues
+ * without maintaining 90 hand-picked values.
+ */
+const CONTENT_TOKEN_MAP: Record<ContentTypeTokenKey, string> = {
+  storyboard: "--color-content-storyboard",
+  sketch: "--color-content-sketch",
+  note: "--color-content-note",
+};
+
 function toCssVariables(colors: ThemeColorTokens): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(THEME_COLOR_TOKEN_MAP).map(([key, token]) => [
+  const content = deriveContentTokens(colors);
+
+  return Object.fromEntries([
+    ...Object.entries(THEME_COLOR_TOKEN_MAP).map(([key, token]) => [
       token,
       colors[key as keyof ThemeColorTokens],
-    ])
-  );
+    ]),
+    ...Object.entries(CONTENT_TOKEN_MAP).map(([key, token]) => [
+      token,
+      content[key as ContentTypeTokenKey],
+    ]),
+  ]);
 }
 
 export function applyThemeColorTokens(root: HTMLElement, colors: ThemeColorTokens) {

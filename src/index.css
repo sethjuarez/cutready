@@ -10,6 +10,7 @@
   --color-surface-toolbar: 228 222 214;
   --color-accent: 111 99 232;
   --color-accent-hover: 91 79 209;
+  /* Fallbacks only: derived per palette from the accent at runtime. */
   --color-content-storyboard: 15 118 110;
   --color-content-sketch: 111 99 232;
   --color-content-note: 194 105 17;

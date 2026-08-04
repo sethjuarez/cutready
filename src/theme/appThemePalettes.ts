@@ -210,6 +210,70 @@ function polishThemePalette(palette: ThemePalette): ThemePalette {
   };
 }
 
+function fromOklab([lightness, aAxis, bAxis]: Rgb): Rgb {
+  const lRoot = lightness + 0.3963377774 * aAxis + 0.2158037573 * bAxis;
+  const mRoot = lightness - 0.1055613458 * aAxis - 0.0638541728 * bAxis;
+  const sRoot = lightness - 0.0894841775 * aAxis - 1.291485548 * bAxis;
+  const l = lRoot ** 3;
+  const m = mRoot ** 3;
+  const s = sRoot ** 3;
+
+  return [
+    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+  ].map((channel) => {
+    const encoded = channel <= 0.0031308 ? channel * 12.92 : 1.055 * channel ** (1 / 2.4) - 0.055;
+    return clampChannel(encoded * 255);
+  }) as Rgb;
+}
+
+/**
+ * Rotates hue in OKLCh so perceived lightness and chroma stay fixed. Rotating in
+ * HSL instead would make warm hues read far brighter than cool ones at the same
+ * nominal lightness.
+ */
+function rotateHue(rgb: Rgb, degrees: number, minimumChroma: number): Rgb {
+  const [lightness, aAxis, bAxis] = toOklab(rgb);
+  const chroma = Math.max(Math.hypot(aAxis, bAxis), minimumChroma);
+  const hue = Math.atan2(bAxis, aAxis) + (degrees * Math.PI) / 180;
+
+  return fromOklab([lightness, Math.cos(hue) * chroma, Math.sin(hue) * chroma]);
+}
+
+/**
+ * Hue offsets from the palette accent, in OKLCh degrees. Measured from the
+ * original hand-picked CutReady content colours so the default theme keeps its
+ * indigo/teal/amber identity. Every pair sits at least 100 degrees apart, so the
+ * three content types stay distinguishable in every palette -- unlike reusing
+ * `warning`/`success`, which collide with `accent` outright in some palettes.
+ */
+const CONTENT_HUE_OFFSETS: Record<ContentTypeTokenKey, number> = {
+  sketch: 0,
+  storyboard: -100,
+  note: 145,
+};
+
+/** Keeps near-greyscale accents (Ink Mono) faintly tinted rather than identical. */
+const CONTENT_MINIMUM_CHROMA = 0.06;
+
+export type ContentTypeTokenKey = "storyboard" | "sketch" | "note";
+
+export function deriveContentTokens(
+  tokens: ThemeColorTokens
+): Record<ContentTypeTokenKey, string> {
+  const accent = tokenToRgb(tokens.accent);
+  const surface = tokenToRgb(tokens.surface);
+  const text = tokenToRgb(tokens.text);
+
+  return Object.fromEntries(
+    Object.entries(CONTENT_HUE_OFFSETS).map(([key, offset]) => {
+      const rotated = rotateHue(accent, offset, CONTENT_MINIMUM_CHROMA);
+      return [key, rgbToToken(ensureContrast(rotated, surface, text, 4.5))];
+    })
+  ) as Record<ContentTypeTokenKey, string>;
+}
+
 const cutreadyLight: ThemeColorTokens = {
   surface: "251 250 248",
   surfaceAlt: "243 240 236",
