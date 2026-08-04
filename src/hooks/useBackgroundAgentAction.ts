@@ -252,7 +252,7 @@ export function useBackgroundAgentAction() {
       const modelOverride = resolveAgentModelOverride(effectiveAgent, settings.aiAgentModelOverrides);
       const providerConfig = buildProviderConfig(
         await buildEffectiveProviderInput(effectiveAgent),
-        settings.aiAgentExecutionEngine || "agentive",
+        settings.aiAgentExecutionEngine || "prompty",
       );
       if (!resolveAgentProviderOverride(effectiveAgent, settings.aiAgentProviderOverrides) && freshBearerToken) {
         providerConfig.bearer_token = freshBearerToken;

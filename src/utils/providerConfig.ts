@@ -128,7 +128,7 @@ export function activeProviderInput(settings: ProviderSettings): ProviderConfigI
 /** Build the provider config payload for IPC calls like list_models / agent_chat_with_tools. */
 export function buildProviderConfig(
   settings: ProviderSettings | ProviderConfigInput,
-  executionEngine: AgentExecutionEngine = "agentive",
+  executionEngine: AgentExecutionEngine = "prompty",
 ) {
   const requestInput = "provider" in settings;
   const contextLength = requestInput ? settings.contextLength : settings.aiContextLength;

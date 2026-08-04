@@ -1,6 +1,6 @@
 import { useCallback, useState, useEffect, useRef, type ReactNode } from "react";
 import { useAppStore } from "../stores/appStore";
-import { useSettings, useSettingsStore, type AgentPreset, type AppSettings } from "../hooks/useSettings";
+import { useSettings, useSettingsStore, type AgentPreset, type AppSettings, type AiAgentExecutionEngine } from "../hooks/useSettings";
 import { useFfmpegStatus } from "../hooks/useFfmpegStatus";
 import { useRecordingDevices } from "../hooks/useRecordingDevices";
 import { useTheme, type ThemePreference } from "../hooks/useTheme";
@@ -53,11 +53,15 @@ interface ModelInfo {
   context_length?: number;
 }
 
+// Mirrors Prompty's canonical `OAuthToken` wire form (camelCase), which the
+// Tauri command returns verbatim over IPC. The Foundry OAuth wire (snake_case)
+// is remapped to this canonical shape inside prompty-foundry on load.
 interface TokenResponse {
-  access_token: string;
-  token_type: string;
-  expires_in: number;
-  refresh_token?: string;
+  accessToken: string;
+  tokenType: string;
+  expiresIn: number;
+  refreshToken?: string;
+  scope?: string;
 }
 
 interface AuthCodeFlowInit {
@@ -235,12 +239,25 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
         clientId: settings.aiClientId || null,
         timeout: 300,
       });
-      await updateSetting("aiAccessToken", token.access_token);
-      if (token.refresh_token) {
-        await updateSetting("aiRefreshToken", token.refresh_token);
+      console.info({
+        type: "cutready.ai.oauth",
+        phase: "complete_resolved",
+        access_token_len: token.accessToken?.length ?? 0,
+        has_refresh: Boolean(token.refreshToken),
+        scope: token.scope ?? null,
+      });
+      await updateSetting("aiAccessToken", token.accessToken);
+      if (token.refreshToken) {
+        await updateSetting("aiRefreshToken", token.refreshToken);
       }
+      console.info({
+        type: "cutready.ai.oauth",
+        phase: "tokens_persisted",
+        active_provider: settings.aiActiveProviderId,
+      });
       setOauthStatus("success");
     } catch (e) {
+      console.warn({ type: "cutready.ai.oauth", phase: "error", error: String(e) });
       setOauthError(String(e));
       setOauthStatus("error");
     }
@@ -2671,6 +2688,26 @@ function DisplayTab({ settings, updateSetting }: {
 
 // ── AI Provider Tab ──────────────────────────────────────────────
 
+/**
+ * User-selectable agent execution engines. Prompty's durable TurnEngine is the
+ * only engine today, so the settings UI renders a plain read-only line. When a
+ * second engine ships (e.g. the GitHub Copilot harness SDK), add it here and to
+ * the {@link AiAgentExecutionEngine} union: the UI automatically upgrades to a
+ * selector once this list has more than one entry. ("agentive" is intentionally
+ * excluded: it persists only as a deprecated alias the backend maps to Prompty.)
+ */
+const AI_EXECUTION_ENGINES: {
+  id: AiAgentExecutionEngine;
+  label: string;
+  description: string;
+}[] = [
+  {
+    id: "prompty",
+    label: "Prompty TurnEngine",
+    description: "CutReady runs on Prompty's durable TurnEngine.",
+  },
+];
+
 function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropic, isOAuth, hasToken, canFetchModels, models, setModels, loadingModels, modelFilter, setModelFilter, modelError, fetchModels, oauthStatus, oauthError, startOAuthFlow, signOut }: {
   settings: ReturnType<typeof useSettings>["settings"];
   updateSetting: ReturnType<typeof useSettings>["updateSetting"];
@@ -2950,9 +2987,10 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
                 onClick={() => {
                   if (settings.aiProvider === method.kind) return;
                   updateSetting("aiProvider", method.kind);
-                  // Endpoint semantics differ per method (services.ai.azure.com vs
-                  // openai.azure.com); clear the stale endpoint and discovered models.
-                  updateSetting("aiEndpoint", "");
+                  // Both methods live under the Azure AI Foundry umbrella and can
+                  // share a services.ai.azure.com endpoint, so preserve the
+                  // endpoint (a wrong one surfaces at discovery) and only drop the
+                  // method-specific discovered models.
                   setModels([]);
                 }}
                 className={`flex-1 px-3 py-1.5 rounded-lg text-sm transition-colors border ${
@@ -2996,11 +3034,14 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
         </fieldset>
       )}
 
-      {/* Endpoint — hidden for Anthropic, auto-set for Foundry OAuth */}
-      {!isAnthropic && !(isFoundry && isOAuth) && (
+      {/* Endpoint — hidden for Anthropic. In Foundry OAuth mode the endpoint is
+          normally set by the resource picker, but fall back to an editable field
+          when it is empty so the user can paste a project endpoint directly
+          instead of being stranded. */}
+      {!isAnthropic && !(isFoundry && isOAuth && !!settings.aiEndpoint) && (
         <fieldset className="flex flex-col gap-2">
           <label className="text-sm font-medium">
-            {isAzure ? "Endpoint" : "Endpoint (optional)"}
+            {(isAzure || isFoundry) ? "Endpoint" : "Endpoint (optional)"}
           </label>
           <input
             type="text"
@@ -3015,6 +3056,11 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
             }
             className={inputClass}
           />
+          {isFoundry && isOAuth && (
+            <p className="text-xs text-[rgb(var(--color-text-secondary))]">
+              Paste a Foundry project endpoint, or pick a resource below to set it automatically.
+            </p>
+          )}
         </fieldset>
       )}
 
@@ -3278,21 +3324,23 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
 
       <fieldset className="flex flex-col gap-2">
         <label className="text-sm font-medium">AI execution engine</label>
-        <select
-          value={settings.aiAgentExecutionEngine || "agentive"}
-          onChange={(event) =>
-            updateSetting(
-              "aiAgentExecutionEngine",
-              event.target.value as "agentive" | "prompty",
-            )
-          }
-          className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded px-3 py-1.5 text-sm"
-        >
-          <option value="agentive">Agentive — current default</option>
-          <option value="prompty">Prompty TurnEngine — experimental</option>
-        </select>
+        {AI_EXECUTION_ENGINES.length > 1 ? (
+          <select
+            value={settings.aiAgentExecutionEngine || "prompty"}
+            onChange={(e) => updateSetting("aiAgentExecutionEngine", e.target.value as AiAgentExecutionEngine)}
+            className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded px-3 py-1.5 text-sm"
+          >
+            {AI_EXECUTION_ENGINES.map((engine) => (
+              <option key={engine.id} value={engine.id}>{engine.label}</option>
+            ))}
+          </select>
+        ) : (
+          <div className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded px-3 py-1.5 text-sm">
+            {AI_EXECUTION_ENGINES[0].label}
+          </div>
+        )}
         <p className="text-xs text-[rgb(var(--color-text-secondary))]">
-          Prompty uses the new durable TurnEngine for pressure testing. Delegated sub-agents remain available only with Agentive.
+          {(AI_EXECUTION_ENGINES.find((engine) => engine.id === settings.aiAgentExecutionEngine) ?? AI_EXECUTION_ENGINES[0]).description}
         </p>
       </fieldset>
     </div>

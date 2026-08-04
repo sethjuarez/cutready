@@ -4,15 +4,17 @@ import { RefreshCw } from "lucide-react";
 import type { AppSettings } from "../hooks/useSettings";
 import { inputClass } from "../styles";
 
+// Field names mirror Prompty's canonical model wire form (camelCase):
+// SubscriptionInfo / AiResourceInfo / ProjectInfo serialize verbatim over IPC.
 interface Subscription {
-  subscription_id: string;
-  display_name: string;
+  subscriptionId: string;
+  displayName: string;
   state: string;
 }
 
 interface AiResource {
   name: string;
-  resource_group: string;
+  resourceGroup: string;
   kind: string;
   endpoint: string;
   location: string;
@@ -37,12 +39,14 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
   const [projects, setProjects] = useState<FoundryProject[]>([]);
   const [loading, setLoading] = useState("");
   const [error, setError] = useState("");
+  const [subFilter, setSubFilter] = useState("");
+  const [subOpen, setSubOpen] = useState(false);
 
   // Fetch management token from refresh token (different scope than inference)
   const fetchManagementToken = useCallback(async () => {
     if (!settings.aiRefreshToken) return null;
     try {
-      const result = await invoke<{ access_token: string; refresh_token?: string }>(
+      const result = await invoke<{ accessToken: string; refreshToken?: string }>(
         "azure_token_refresh",
         {
           tenantId: settings.aiTenantId || "",
@@ -51,9 +55,9 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
           scope: "https://management.azure.com/.default offline_access",
         },
       );
-      if (result.access_token) {
-        await updateSetting("aiManagementToken", result.access_token);
-        return result.access_token;
+      if (result.accessToken) {
+        await updateSetting("aiManagementToken", result.accessToken);
+        return result.accessToken;
       }
     } catch {
       // Management token fetch failed
@@ -92,8 +96,8 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
       if (subs.length === 1) {
         await selectSubscription(subs[0]);
       } else if (settings.aiSubscriptionId) {
-        const saved = subs.find((s) => s.subscription_id === settings.aiSubscriptionId);
-        if (saved) loadResources(saved.subscription_id);
+        const saved = subs.find((s) => s.subscriptionId === settings.aiSubscriptionId);
+        if (saved) loadResources(saved.subscriptionId);
       }
     } catch (e) {
       setError(`Failed to list subscriptions: ${e}`);
@@ -140,7 +144,7 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
       const proj = await invoke<FoundryProject[]>("list_foundry_projects", {
         managementToken: token,
         subscriptionId: settings.aiSubscriptionId,
-        resourceGroup: resource.resource_group,
+        resourceGroup: resource.resourceGroup,
         resourceName: resource.name,
       });
       setProjects(proj);
@@ -157,16 +161,16 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
   };
 
   const selectSubscription = async (sub: Subscription) => {
-    await updateSetting("aiSubscriptionId", sub.subscription_id);
+    await updateSetting("aiSubscriptionId", sub.subscriptionId);
     await updateSetting("aiResourceGroup", "");
     await updateSetting("aiResourceName", "");
     await updateSetting("aiEndpoint", "");
     await updateSetting("aiModel", "");
-    loadResources(sub.subscription_id);
+    loadResources(sub.subscriptionId);
   };
 
   const selectResource = async (res: AiResource) => {
-    await updateSetting("aiResourceGroup", res.resource_group);
+    await updateSetting("aiResourceGroup", res.resourceGroup);
     await updateSetting("aiResourceName", res.name);
     await updateSetting("aiEndpoint", res.endpoint);
     await updateSetting("aiModel", "");
@@ -182,6 +186,26 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
     "w-full text-left px-3 py-2 text-sm hover:bg-[rgb(var(--color-accent))]/10 transition-colors flex items-center justify-between gap-2";
   const selectedItemClass = "text-[rgb(var(--color-accent))] font-medium";
 
+  const sortedSubscriptions = [...subscriptions].sort((a, b) =>
+    a.displayName.localeCompare(b.displayName),
+  );
+  const filterTerm = subFilter.trim().toLowerCase();
+  const visibleSubscriptions = filterTerm
+    ? sortedSubscriptions.filter((s) =>
+        s.displayName.toLowerCase().includes(filterTerm),
+      )
+    : sortedSubscriptions;
+  const selectedSubscription = subscriptions.find(
+    (s) => s.subscriptionId === settings.aiSubscriptionId,
+  );
+
+  const sortedResources = [...resources].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  const sortedProjects = [...projects].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
@@ -196,27 +220,54 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
         </button>
       </div>
 
-      {/* Subscription Picker */}
+      {/* Subscription Picker (combobox) */}
       {subscriptions.length > 0 && (
-        <fieldset className="flex flex-col gap-1">
+        <fieldset className="flex flex-col gap-1 relative">
           <label className="text-xs text-[rgb(var(--color-text-secondary))]">
             Subscription
           </label>
-          <select
-            value={settings.aiSubscriptionId}
-            onChange={(e) => {
-              const sub = subscriptions.find((s) => s.subscription_id === e.target.value);
-              if (sub) selectSubscription(sub);
+          <input
+            type="text"
+            value={subOpen ? subFilter : selectedSubscription?.displayName ?? ""}
+            onFocus={() => {
+              setSubFilter("");
+              setSubOpen(true);
             }}
+            onBlur={() => setTimeout(() => setSubOpen(false), 150)}
+            onChange={(e) => setSubFilter(e.target.value)}
+            placeholder={`Select from ${subscriptions.length} subscriptions…`}
             className={inputClass}
-          >
-            <option value="">Select a subscription…</option>
-            {subscriptions.map((sub) => (
-              <option key={sub.subscription_id} value={sub.subscription_id}>
-                {sub.display_name}
-              </option>
-            ))}
-          </select>
+          />
+          {subOpen && (
+            <div className="absolute top-full left-0 right-0 z-10 mt-1 max-h-56 overflow-y-auto rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg">
+              {visibleSubscriptions.map((sub) => (
+                <button
+                  key={sub.subscriptionId}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    selectSubscription(sub);
+                    setSubFilter("");
+                    setSubOpen(false);
+                  }}
+                  className={`${pickerItemClass} ${
+                    settings.aiSubscriptionId === sub.subscriptionId
+                      ? selectedItemClass
+                      : ""
+                  }`}
+                >
+                  <span className="truncate">{sub.displayName}</span>
+                  <span className="text-xs text-[rgb(var(--color-text-secondary))] shrink-0">
+                    {sub.state}
+                  </span>
+                </button>
+              ))}
+              {visibleSubscriptions.length === 0 && (
+                <p className="px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))]">
+                  No subscriptions match “{subFilter}”
+                </p>
+              )}
+            </div>
+          )}
         </fieldset>
       )}
 
@@ -227,9 +278,9 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
             AI Resource
           </label>
           <div className="max-h-36 overflow-y-auto rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]">
-            {resources.map((res) => (
+            {sortedResources.map((res) => (
               <button
-                key={`${res.resource_group}/${res.name}`}
+                key={`${res.resourceGroup}/${res.name}`}
                 onClick={() => selectResource(res)}
                 className={`${pickerItemClass} ${
                   settings.aiResourceName === res.name ? selectedItemClass : ""
@@ -253,7 +304,7 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
             <span className="font-normal">(optional — use resource-level if none)</span>
           </label>
           <div className="max-h-36 overflow-y-auto rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]">
-            {projects.map((proj) => (
+            {sortedProjects.map((proj) => (
               <button
                 key={proj.name}
                 onClick={() => selectProject(proj)}

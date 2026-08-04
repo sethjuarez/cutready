@@ -29,10 +29,11 @@ describe("buildProviderConfig", () => {
     expect(cfg.provider).toBe("openai");
     expect(cfg.api_key).toBe("sk-test");
     expect(cfg.bearer_token).toBeNull();
-    expect(cfg.execution_engine).toBe("agentive");
+    expect(cfg.execution_engine).toBe("prompty");
   });
 
-  test("Prompty TurnEngine is an explicit provider payload opt-in", () => {
+  test("Prompty TurnEngine is the default engine", () => {
+    expect(buildProviderConfig(base).execution_engine).toBe("prompty");
     expect(buildProviderConfig(base, "prompty").execution_engine).toBe("prompty");
   });
 
