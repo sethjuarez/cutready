@@ -1335,16 +1335,20 @@ mod tests {
 
     #[test]
     fn prompty_production_dependencies_remain_pinned_to_a_single_revision() {
-        const REVISION: &str = "fb50155198663e042a6551840ff2385f4da28838";
+        // Production Prompty crates are pinned to one immutable crates.io release.
+        // Bump this constant whenever the pin moves.
+        const VERSION: &str = "2.0.0-beta.4";
         let manifest = include_str!("../../../Cargo.toml");
         let lockfile = include_str!("../../../Cargo.lock");
 
         assert_eq!(
-            manifest.matches(&format!("rev = \"{REVISION}\"")).count(),
+            manifest
+                .matches(&format!("version = \"{VERSION}\""))
+                .count(),
             4,
-            "all production Prompty crates must use the audited revision"
+            "all production Prompty crates must use the audited version"
         );
-        assert!(lockfile.contains(REVISION));
+        assert!(lockfile.contains(VERSION));
     }
 
     #[test]

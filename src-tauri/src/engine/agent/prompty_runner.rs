@@ -749,9 +749,9 @@ impl HostPolicyPort for CutReadyHostPolicy {
             messages
                 .iter()
                 .take_while(|message| matches!(message.role, Role::System | Role::Developer))
-                .count()
+                .count() as i32
         } else {
-            request.stable_prefix_messages.min(original_len)
+            request.stable_prefix_messages.min(original_len as i32)
         };
 
         Ok(HostPolicyResult {
