@@ -69,6 +69,21 @@ async function exportAuditaurDiagnostics(summary: AuditaurDiagnosticsSummary | n
   URL.revokeObjectURL(url);
 }
 
+type DebugFilter = "all" | "frontend" | "ipc" | "trace" | "log";
+
+type DebugStreamItem = AuditaurDiagnosticItem & { category: DebugFilter | "legacy" };
+
+const DEBUG_FILTERS: {
+  id: Exclude<DebugFilter, "all">;
+  label: string;
+  countKey: keyof AuditaurDiagnosticsSummary["counts"];
+}[] = [
+  { id: "frontend", label: "Frontend errors", countKey: "frontend_errors" },
+  { id: "ipc", label: "Failed IPC", countKey: "failed_ipc" },
+  { id: "trace", label: "Failed traces", countKey: "failed_traces" },
+  { id: "log", label: "Warn / error logs", countKey: "warning_logs" },
+];
+
 function AuditaurDebugView({
   summary,
   loading,
@@ -80,6 +95,8 @@ function AuditaurDebugView({
   error: string | null;
   legacyDebugEntries: ActivityEntry[];
 }) {
+  const [filter, setFilter] = useState<DebugFilter>("all");
+
   if (loading && !summary) {
     return (
       <div className="text-center text-[rgb(var(--color-text-secondary))] py-8">
@@ -104,109 +121,132 @@ function AuditaurDebugView({
     );
   }
 
+  const stream: DebugStreamItem[] = [
+    ...summary.frontend_errors.map((item) => ({ ...item, category: "frontend" as const })),
+    ...summary.failed_ipc.map((item) => ({ ...item, category: "ipc" as const })),
+    ...summary.failed_traces.map((item) => ({ ...item, category: "trace" as const })),
+    ...summary.warning_logs.map((item) => ({ ...item, category: "log" as const })),
+    ...legacyDebugEntries.slice(-50).map((entry) => ({
+      timestamp_unix_nanos: (entry.timestamp.getTime() * 1_000_000).toString(),
+      source: entry.source,
+      kind: entry.level,
+      title: entry.content,
+      detail: null,
+      status: entry.level,
+      trace_id: null,
+      span_id: null,
+      window_label: null,
+      category: "legacy" as const,
+    })),
+  ].sort((a, b) => (BigInt(a.timestamp_unix_nanos) < BigInt(b.timestamp_unix_nanos) ? 1 : -1));
+
+  const visible = filter === "all" ? stream : stream.filter((item) => item.category === filter);
+
   return (
-    <div className="space-y-3">
-      <div className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-2 font-sans">
-        <div className="flex flex-wrap items-center gap-2 text-[11px] text-[rgb(var(--color-text-secondary))]">
-          <span className="font-medium text-[rgb(var(--color-text))]">{summary.session.service_name}</span>
-          <span>PID {summary.session.pid ?? "unknown"}</span>
-          <span>Session {summary.session.session_id.slice(0, 8)}</span>
-          {summary.session.last_heartbeat_at && <span>Heartbeat {summary.session.last_heartbeat_at}</span>}
+    <div className="flex h-full min-h-0">
+      <div className="min-w-0 flex-1 overflow-y-auto p-2">
+        {visible.length === 0 ? (
+          <div className="py-8 text-center text-[rgb(var(--color-text-secondary))]">No entries.</div>
+        ) : (
+          visible.map((item, index) => (
+            <DebugLine key={`${item.category}-${item.timestamp_unix_nanos}-${index}`} item={item} />
+          ))
+        )}
+      </div>
+
+      <aside className="w-52 shrink-0 overflow-y-auto border-l border-[rgb(var(--color-border))] p-2 font-sans text-[11px]">
+        <div className="font-medium text-[rgb(var(--color-text))]">{summary.session.service_name}</div>
+        <div className="mt-0.5 text-[rgb(var(--color-text-secondary))]">
+          PID {summary.session.pid ?? "unknown"} · {summary.session.session_id.slice(0, 8)}
         </div>
-        <div className="mt-1 truncate font-mono text-[10px] text-[rgb(var(--color-text-secondary))]" title={summary.session.database_path}>
+        {summary.session.last_heartbeat_at && (
+          <div className="text-[rgb(var(--color-text-secondary))]">
+            Heartbeat {summary.session.last_heartbeat_at}
+          </div>
+        )}
+        <div
+          className="mt-0.5 truncate font-mono text-[10px] text-[rgb(var(--color-text-secondary))]"
+          title={summary.session.database_path}
+        >
           {summary.session.database_path}
         </div>
-      </div>
 
-      <div className="grid grid-cols-4 gap-2 font-sans">
-        <DebugCount label="Frontend errors" value={summary.counts.frontend_errors} />
-        <DebugCount label="Failed IPC" value={summary.counts.failed_ipc} />
-        <DebugCount label="Failed traces" value={summary.counts.failed_traces} />
-        <DebugCount label="Warnings/errors" value={summary.counts.warning_logs} />
-      </div>
-
-      {summary.notes.map((note) => (
-        <div key={note} className="text-[rgb(var(--color-text-secondary))] font-sans text-[11px]">
-          {note}
-        </div>
-      ))}
-
-      <DebugSection title="Recent frontend errors" items={summary.frontend_errors} />
-      <DebugSection title="Recent failed IPC" items={summary.failed_ipc} />
-      <DebugSection title="Recent failed traces" items={summary.failed_traces} />
-      <DebugSection title="Recent warn/error logs" items={summary.warning_logs} />
-
-      {legacyDebugEntries.length > 0 && (
-        <DebugSection
-          title="Legacy in-memory debug entries"
-          items={legacyDebugEntries.slice(-10).reverse().map((entry) => ({
-            timestamp_unix_nanos: (entry.timestamp.getTime() * 1_000_000).toString(),
-            source: entry.source,
-            kind: entry.level,
-            title: entry.content,
-            detail: null,
-            status: entry.level,
-            trace_id: null,
-            span_id: null,
-            window_label: null,
-          }))}
-        />
-      )}
-    </div>
-  );
-}
-
-function DebugCount({ label, value }: { label: string; value: number }) {
-  const hasIssues = value > 0;
-  return (
-    <div className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-2">
-      <div className={hasIssues ? "text-error text-lg font-semibold" : "text-[rgb(var(--color-text))] text-lg font-semibold"}>
-        {value}
-      </div>
-      <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">{label}</div>
-    </div>
-  );
-}
-
-function DebugSection({ title, items }: { title: string; items: AuditaurDiagnosticItem[] }) {
-  return (
-    <section>
-      <h3 className="mb-1 font-sans text-[11px] font-medium text-[rgb(var(--color-text-secondary))]">
-        {title}
-      </h3>
-      {items.length === 0 ? (
-        <div className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-2 py-1.5 text-[rgb(var(--color-text-secondary))]">
-          None
-        </div>
-      ) : (
-        <div className="space-y-1">
-          {items.map((item, index) => (
-            <DebugItemRow key={`${item.source}-${item.trace_id ?? item.timestamp_unix_nanos}-${index}`} item={item} />
+        <div className="mt-3 flex flex-col gap-0.5">
+          <DebugFilterRow
+            label="All"
+            count={stream.length}
+            active={filter === "all"}
+            onClick={() => setFilter("all")}
+          />
+          {DEBUG_FILTERS.map((entry) => (
+            <DebugFilterRow
+              key={entry.id}
+              label={entry.label}
+              count={summary.counts[entry.countKey]}
+              active={filter === entry.id}
+              onClick={() => setFilter(entry.id)}
+            />
           ))}
         </div>
-      )}
-    </section>
+
+        {summary.notes.length > 0 && (
+          <div className="mt-3 flex flex-col gap-1 text-[rgb(var(--color-text-secondary))]">
+            {summary.notes.map((note) => (
+              <div key={note}>{note}</div>
+            ))}
+          </div>
+        )}
+      </aside>
+    </div>
   );
 }
 
-function DebugItemRow({ item }: { item: AuditaurDiagnosticItem }) {
+function DebugFilterRow({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center justify-between gap-2 rounded px-2 py-1 text-left transition-colors ${
+        active
+          ? "bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text))]"
+          : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+      }`}
+    >
+      <span className="truncate">{label}</span>
+      <span className={`shrink-0 tabular-nums ${count > 0 ? "text-error" : ""}`}>{count}</span>
+    </button>
+  );
+}
+
+function DebugLine({ item }: { item: DebugStreamItem }) {
   const [expanded, setExpanded] = useState(false);
   const detail = item.detail?.trim();
   const isWarning = item.status?.toUpperCase().includes("WARN") || item.kind.toUpperCase().includes("WARN");
   const Icon = isWarning ? AlertTriangle : XCircle;
   const iconClass = isWarning ? "text-warning" : "text-error";
   return (
-    <div className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-2 py-1.5">
+    <div className="py-0.5">
       <div className="flex items-start gap-1.5">
         <span className="shrink-0 text-[rgb(var(--color-text-secondary))] tabular-nums">
           {formatUnixNanos(item.timestamp_unix_nanos)}
         </span>
         <Icon className={`mt-px h-3 w-3 shrink-0 ${iconClass}`} />
         <span className="shrink-0 text-[rgb(var(--color-text-secondary))]">{item.source}</span>
-        <span className="min-w-0 flex-1 truncate text-[rgb(var(--color-text))]">
+        <span
+          className={`min-w-0 flex-1 text-[rgb(var(--color-text))] ${expanded ? "whitespace-pre-wrap break-words" : "truncate"}`}
+        >
           {item.kind}: {item.title}
         </span>
-        {detail && (
+        {(detail || item.trace_id) && (
           <button
             onClick={() => setExpanded(!expanded)}
             className="shrink-0 text-[10px] text-[rgb(var(--color-accent))] hover:underline"
@@ -215,7 +255,7 @@ function DebugItemRow({ item }: { item: AuditaurDiagnosticItem }) {
           </button>
         )}
       </div>
-      {item.trace_id && (
+      {expanded && item.trace_id && (
         <div className="mt-0.5 truncate pl-[4.5rem] text-[10px] text-[rgb(var(--color-text-secondary))]">
           trace {item.trace_id}
         </div>
@@ -376,7 +416,7 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
             )}
           </>
         </div>
-        <div className={activeTab === "debug" ? "h-full overflow-y-auto p-2" : "hidden"}>
+        <div className={activeTab === "debug" ? "h-full min-h-0" : "hidden"}>
           <AuditaurDebugView
             summary={auditaurSummary}
             loading={debugLoading}
