@@ -8,7 +8,8 @@
     "send": "button[title=\"Send (Enter)\"]",
     "stop": "button[title=\"Stop generation\"]",
     "transcript": "[data-testid=\"chat-messages-scroll\"]",
-    "newChat": "button[aria-label=\"New Chat\"]"
+    "newChat": "button[aria-label=\"New Chat\"]",
+    "revealChat": "[data-testid=\"activity-chat\"]"
   },
   "fixture": {
     "prefix": "cutready-chat-drill-",

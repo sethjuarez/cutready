@@ -75,8 +75,10 @@ try {
   report.databasePath = readyStatus.databasePath;
   recordPhase("readiness", "passed", readyStatus);
 
-  // Chat auto-reveals when a project opens; wait for the composer.
-  await waitForSelector(sel.composer, 60_000, "chat composer");
+  // The chat surface is not guaranteed to be open when a project loads. If the
+  // composer is not already present, activate the chat activity control to reveal
+  // it (selector provided by the definition), then wait for the composer.
+  await revealChatComposer(60_000);
   recordPhase("composer-ready", "passed", { selector: sel.composer });
 
   let first = true;
@@ -235,6 +237,23 @@ async function pollExists(selector, wantVisible, timeoutMs) {
 async function waitForSelector(selector, timeoutMs, label) {
   const ok = await pollExists(selector, true, timeoutMs);
   if (!ok) throw new Error(`timed out waiting for ${label ?? selector}`);
+}
+
+// Reveal the chat composer if it is not already mounted. Newer builds do not
+// auto-open the chat surface on project load, so we click the chat activity
+// control (definition.selectors.revealChat) once and then wait for the composer.
+async function revealChatComposer(timeoutMs) {
+  if (await isVisible(sel.composer)) return;
+  if (sel.revealChat) {
+    await waitForSelector(sel.revealChat, 30_000, "chat activity control");
+    await drive("click", { selector: sel.revealChat });
+    if (await pollExists(sel.composer, true, 8_000)) return;
+    // A single click can land before the project finishes opening; try once more.
+    if (await isVisible(sel.revealChat)) {
+      await drive("click", { selector: sel.revealChat });
+    }
+  }
+  await waitForSelector(sel.composer, timeoutMs, "chat composer");
 }
 
 function existsTruthy(json) {
