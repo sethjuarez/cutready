@@ -589,7 +589,7 @@ export function ChatPanel({ focusMode = false }: { focusMode?: boolean }) {
 // ── Chat Tab ─────────────────────────────────────────────────────
 
 function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
-  const { settings, updateSetting, loaded: settingsLoaded } = useSettings();
+  const { settings, updateSetting, loaded: settingsLoaded, oauthRefreshPending } = useSettings();
   const chatFocusMode = useAppStore((s) => s.chatFocusMode);
   const setChatFocusMode = useAppStore((s) => s.setChatFocusMode);
   const currentProject = useAppStore((s) => s.currentProject);
@@ -1250,7 +1250,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       const effectiveProviderInput = await buildEffectiveProviderInput(effectiveAgent);
       const providerConfig = buildProviderConfig(
         effectiveProviderInput,
-        settings.aiAgentExecutionEngine || "agentive",
+        settings.aiAgentExecutionEngine || "prompty",
       );
       if (!resolveAgentProviderOverride(effectiveAgent, settings.aiAgentProviderOverrides) && freshBearerToken) {
         providerConfig.bearer_token = freshBearerToken;
@@ -1566,7 +1566,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     );
   }
 
-  if (providerConfigured === null) {
+  if (providerConfigured === null || (!isConfigured && oauthRefreshPending)) {
     return (
       <div className="flex-1 flex items-center justify-center p-4">
         <p className="text-xs text-[rgb(var(--color-text-secondary))] text-center">

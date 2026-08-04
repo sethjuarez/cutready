@@ -138,7 +138,8 @@ export interface GlobalSettings {
   aiWebAccess: "disabled" | "enabled";
   /** Maximum agent tool-call rounds before stopping a run. */
   aiMaxToolRounds: number;
-  /** Agent orchestration engine. Prompty is an experimental pressure-test path. */
+  /** Agent orchestration engine. Prompty's durable TurnEngine is the sole engine;
+   * "agentive" persists only as a deprecated alias the backend maps to Prompty. */
   aiAgentExecutionEngine: AiAgentExecutionEngine;
   /** Whether write-capable AI shortcuts prompt before mutating project files. */
   aiApplyMode: AiApplyMode;
@@ -348,7 +349,7 @@ const defaultGlobalSettings: GlobalSettings = {
   aiModelSupportsVision: "",
   aiWebAccess: "disabled",
   aiMaxToolRounds: 50,
-  aiAgentExecutionEngine: "agentive",
+  aiAgentExecutionEngine: "prompty",
   aiApplyMode: "ask",
   aiProviders: [],
   aiActiveProviderId: "",
@@ -658,6 +659,12 @@ interface SettingsStore {
   settings: AppSettings;
   loaded: boolean;
   workspaceLoaded: boolean;
+  /**
+   * True while a startup OAuth token refresh is in flight. Consumers should treat
+   * "provider not configured" as "still loading" while this is true, to avoid
+   * flashing a misconfiguration banner before the refreshed access token lands.
+   */
+  oauthRefreshPending: boolean;
   _store: LazyStore | null;
   _loadSettings: () => Promise<void>;
   _loadWorkspaceSettings: () => Promise<void>;
@@ -669,6 +676,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   settings: defaultSettings,
   loaded: false,
   workspaceLoaded: false,
+  oauthRefreshPending: false,
   _store: null,
 
   _loadSettings: async () => {
@@ -739,11 +747,16 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         console.warn("[settings] Failed to migrate AI provider settings:", err);
       }
 
-      set({ settings: { ...get().settings, ...result }, loaded: true });
-
       // Auto-refresh OAuth token on startup if we have a refresh token
       const needsOAuth = result.aiAuthMode === "azure_oauth" &&
         (result.aiProvider === "azure_openai" || result.aiProvider === "microsoft_foundry");
+      // Only gate the UI when a refresh could flip the provider from "not
+      // configured" to "configured" (i.e. no cached access token yet). If a
+      // token is already present the provider is usable immediately.
+      const refreshPending = needsOAuth && !!result.aiRefreshToken && !result.aiAccessToken;
+
+      set({ settings: { ...get().settings, ...result }, loaded: true, oauthRefreshPending: refreshPending });
+
       if (needsOAuth && result.aiRefreshToken) {
         try {
           const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>(
@@ -772,12 +785,14 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
           }
         } catch {
           // Token refresh failed silently — user will re-auth when needed
+        } finally {
+          set({ oauthRefreshPending: false });
         }
       }
     } catch (err) {
       // Catastrophic settings failure — still mark loaded so the app renders
       console.error("[settings] Failed to load settings, using defaults:", err);
-      set({ loaded: true });
+      set({ loaded: true, oauthRefreshPending: false });
     }
   },
 
@@ -929,10 +944,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 export function useSettings() {
   const settings = useSettingsStore((s) => s.settings);
   const loaded = useSettingsStore((s) => s.loaded);
+  const oauthRefreshPending = useSettingsStore((s) => s.oauthRefreshPending);
   const updateSetting = useSettingsStore((s) => s.updateSetting);
   const loadSettings = useSettingsStore((s) => s._loadSettings);
 
   useEffect(() => { loadSettings(); }, [loadSettings]);
 
-  return { settings, updateSetting, loaded };
+  return { settings, updateSetting, loaded, oauthRefreshPending };
 }

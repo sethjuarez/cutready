@@ -1272,7 +1272,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   versions: [],
   timelines: [],
   graphNodes: [],
-  showSecondaryPanel: savedLayout.showSecondaryPanel ?? false,
+  showSecondaryPanel: savedLayout.showSecondaryPanel ?? true,
   snapshotPromptOpen: false,
   pendingNavAfterSave: null,
   pendingTimelineAfterSave: null,
