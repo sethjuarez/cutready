@@ -520,8 +520,6 @@ function useDropdownMaxHeight(
 
 export function ChatPanel({ focusMode = false }: { focusMode?: boolean }) {
   const [activeTab, setActiveTab] = useState<SecondaryTab>("chat");
-  const sidebarPosition = useAppStore((s) => s.sidebarPosition);
-  const railOnLeft = sidebarPosition === "right";
   const tabs: Array<{ id: SecondaryTab; label: string; icon: ReactNode }> = [
     { id: "chat", label: "Chat", icon: <IconSparkles size={13} /> },
     { id: "sessions", label: "Session History", icon: <IconSessions size={13} /> },
@@ -529,9 +527,7 @@ export function ChatPanel({ focusMode = false }: { focusMode?: boolean }) {
     { id: "database", label: "Database", icon: <IconDatabase size={13} /> },
   ];
   const rail = (
-    <nav className={`no-select flex w-12 shrink-0 flex-col items-center gap-1.5 bg-[rgb(var(--color-surface))] py-3 ${
-      railOnLeft ? "border-r border-[rgb(var(--color-border))]" : "border-l border-[rgb(var(--color-border))]"
-    }`}>
+    <nav className="no-select flex w-12 shrink-0 flex-col items-center gap-1.5 border-l border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] py-3">
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
         return (
@@ -549,9 +545,7 @@ export function ChatPanel({ focusMode = false }: { focusMode?: boolean }) {
           >
             {tab.icon}
             {isActive && (
-              <span className={`absolute top-1/4 h-1/2 w-[2px] rounded-full bg-[rgb(var(--color-accent))] ${
-                railOnLeft ? "left-[-6px]" : "right-[-6px]"
-              }`} />
+              <span className="absolute right-[-6px] top-1/4 h-1/2 w-[2px] rounded-full bg-[rgb(var(--color-accent))]" />
             )}
           </button>
         );
@@ -571,8 +565,6 @@ export function ChatPanel({ focusMode = false }: { focusMode?: boolean }) {
 
   return (
     <div className="flex h-full bg-[rgb(var(--color-surface-inset))]">
-      {railOnLeft && rail}
-
       {/* Tab content */}
       <div className="flex-1 min-w-0 min-h-0">
         {activeTab === "chat" && <ChatTab />}
@@ -581,7 +573,7 @@ export function ChatPanel({ focusMode = false }: { focusMode?: boolean }) {
         {activeTab === "database" && <AgentStateDatabasePanel />}
       </div>
 
-      {!railOnLeft && rail}
+      {rail}
     </div>
   );
 }

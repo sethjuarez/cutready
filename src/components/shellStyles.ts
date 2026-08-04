@@ -1,6 +1,3 @@
-export const titlebarButtonClass =
-  "flex items-center justify-center w-7 h-6 rounded transition-colors text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]";
-
 export function titlebarToggleClass(active: boolean): string {
   return `flex items-center justify-center w-7 h-6 rounded transition-colors ${
     active

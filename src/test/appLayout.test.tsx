@@ -12,9 +12,6 @@ vi.mock("../components/HomePanel", () => ({
 vi.mock("../components/RecordingPanel", () => ({
   RecordingPanel: () => <div />,
 }));
-vi.mock("../components/ScriptEditorPanel", () => ({
-  ScriptEditorPanel: () => <div />,
-}));
 vi.mock("../components/SettingsPanel", () => ({
   SettingsPanel: () => <div />,
 }));

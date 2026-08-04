@@ -26,7 +26,6 @@ export function StoryboardPanel() {
   const activeSketch = useAppStore((s) => s.activeSketch);
   const activeNotePath = useAppStore((s) => s.activeNotePath);
   const showSecondaryPanel = useAppStore((s) => s.showSecondaryPanel);
-  const sidebarPosition = useAppStore((s) => s.sidebarPosition);
   const openTabs = useAppStore((s) => s.openTabs);
   const activeTabId = useAppStore((s) => s.activeTabId);
   const splitTabs = useAppStore((s) => s.splitTabs);
@@ -53,14 +52,12 @@ export function StoryboardPanel() {
 
   const [splitWidth, setSplitWidth] = useState<number | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const secondaryOnLeft = sidebarPosition === "right";
 
   const handleSecondaryResize = useCallback(
     (delta: number) => {
-      const adjusted = secondaryOnLeft ? delta : -delta;
-      setSecondaryWidth((width) => width + adjusted);
+      setSecondaryWidth((width) => width - delta);
     },
-    [secondaryOnLeft, setSecondaryWidth],
+    [setSecondaryWidth],
   );
 
   const handleSplitResize = useCallback(
@@ -74,7 +71,7 @@ export function StoryboardPanel() {
 
   const secondaryPanel = showSecondaryPanel ? (
     <>
-      {!secondaryOnLeft && <ResizeHandle direction="horizontal" onResize={handleSecondaryResize} />}
+      <ResizeHandle direction="horizontal" onResize={handleSecondaryResize} />
       <div
         data-testid="secondary-chat-panel"
         className="shrink-0 h-full bg-[rgb(var(--color-surface-inset))] border-l border-[rgb(var(--color-border))]"
@@ -82,15 +79,11 @@ export function StoryboardPanel() {
       >
         <ChatPanel />
       </div>
-      {secondaryOnLeft && <ResizeHandle direction="horizontal" onResize={handleSecondaryResize} />}
     </>
   ) : null;
 
   return (
     <div className="flex h-full min-h-0 overflow-hidden">
-      {/* Secondary panel on left when sidebar is right */}
-      {secondaryOnLeft && secondaryPanel}
-
       {/* Editor area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
         {/* Tab bar row — main + split side by side */}
@@ -154,8 +147,8 @@ export function StoryboardPanel() {
         </div>
       </div>
 
-      {/* Secondary panel on right when sidebar is left */}
-      {!secondaryOnLeft && secondaryPanel}
+      {/* Secondary chat panel */}
+      {secondaryPanel}
     </div>
   );
 }
