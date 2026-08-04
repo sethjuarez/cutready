@@ -1,20 +1,18 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useState } from "react";
 import type { MouseEvent } from "react";
-import { Copy, LayoutGrid, Minus, Search, Square, X } from "lucide-react";
+import { Copy, Minus, Search, Square, X } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { isMac, formatKeybinding } from "../utils/platform";
 import { ProjectSwitcher } from "./ProjectSwitcher";
-import { titlebarButtonClass, titlebarToggleClass } from "./shellStyles";
+import { titlebarToggleClass } from "./shellStyles";
 
 interface TitleBarProps {
   onCommandPaletteOpen?: () => void;
   sidebarVisible?: boolean;
-  sidebarPosition?: "left" | "right";
   outputVisible?: boolean;
   secondaryVisible?: boolean;
   onToggleSidebar?: () => void;
-  onToggleSidebarPosition?: () => void;
   onToggleOutput?: () => void;
   onToggleSecondary?: () => void;
 }
@@ -22,11 +20,9 @@ interface TitleBarProps {
 export function TitleBar({
   onCommandPaletteOpen,
   sidebarVisible = true,
-  sidebarPosition = "left",
   outputVisible = false,
   secondaryVisible = false,
   onToggleSidebar,
-  onToggleSidebarPosition,
   onToggleOutput,
   onToggleSecondary,
 }: TitleBarProps) {
@@ -110,17 +106,9 @@ export function TitleBar({
         {/* Right: Panel toggles */}
         <div className="flex items-center gap-0.5">
           <button
-            className={titlebarButtonClass}
-            onClick={onToggleSidebarPosition}
-            title={`Move Sidebar to the ${sidebarPosition === "left" ? "Right" : "Left"}`}
-          >
-            <LayoutGrid className="w-3.5 h-3.5" />
-          </button>
-          <div className="w-px h-3 bg-[rgb(var(--color-border))] mx-0.5 shrink-0" />
-          <button
-            className={titlebarToggleClass(sidebarPosition === "left" ? sidebarVisible : secondaryVisible)}
-            onClick={sidebarPosition === "left" ? onToggleSidebar : onToggleSecondary}
-            title={sidebarPosition === "left" ? formatKeybinding("Toggle Sidebar (Ctrl+B)") : formatKeybinding("Toggle Secondary Panel (Ctrl+Shift+B)")}
+            className={titlebarToggleClass(sidebarVisible)}
+            onClick={onToggleSidebar}
+            title={formatKeybinding("Toggle Sidebar (Ctrl+B)")}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -138,9 +126,9 @@ export function TitleBar({
             </svg>
           </button>
           <button
-            className={titlebarToggleClass(sidebarPosition === "right" ? sidebarVisible : secondaryVisible)}
-            onClick={sidebarPosition === "right" ? onToggleSidebar : onToggleSecondary}
-            title={sidebarPosition === "right" ? formatKeybinding("Toggle Sidebar (Ctrl+B)") : formatKeybinding("Toggle Secondary Panel (Ctrl+Shift+B)")}
+            className={titlebarToggleClass(secondaryVisible)}
+            onClick={onToggleSecondary}
+            title={formatKeybinding("Toggle Secondary Panel (Ctrl+Shift+B)")}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -207,20 +195,11 @@ export function TitleBar({
       <div className="flex items-center h-full shrink-0">
         {/* Panel layout toggles */}
         <div className="flex items-center gap-0.5 px-2">
-          {/* Move sidebar to other side — leftmost so it's clearly separate from the layout toggles */}
-          <button
-            className={titlebarButtonClass}
-            onClick={onToggleSidebarPosition}
-            title={`Move Sidebar to the ${sidebarPosition === "left" ? "Right" : "Left"}`}
-          >
-            <LayoutGrid className="w-3.5 h-3.5" />
-          </button>
-          <div className="w-px h-3 bg-[rgb(var(--color-border))] mx-0.5 shrink-0" />
           {/* Left panel (sidebar) */}
           <button
-            className={titlebarToggleClass(sidebarPosition === "left" ? sidebarVisible : secondaryVisible)}
-            onClick={sidebarPosition === "left" ? onToggleSidebar : onToggleSecondary}
-            title={sidebarPosition === "left" ? formatKeybinding("Toggle Sidebar (Ctrl+B)") : formatKeybinding("Toggle Secondary Panel (Ctrl+Shift+B)")}
+            className={titlebarToggleClass(sidebarVisible)}
+            onClick={onToggleSidebar}
+            title={formatKeybinding("Toggle Sidebar (Ctrl+B)")}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -238,11 +217,11 @@ export function TitleBar({
               <line x1="3" y1="15" x2="21" y2="15" />
             </svg>
           </button>
-          {/* Right panel (secondary/version history) */}
+          {/* Right panel (secondary/chat) */}
           <button
-            className={titlebarToggleClass(sidebarPosition === "right" ? sidebarVisible : secondaryVisible)}
-            onClick={sidebarPosition === "right" ? onToggleSidebar : onToggleSecondary}
-            title={sidebarPosition === "right" ? formatKeybinding("Toggle Sidebar (Ctrl+B)") : formatKeybinding("Toggle Secondary Panel (Ctrl+Shift+B)")}
+            className={titlebarToggleClass(secondaryVisible)}
+            onClick={onToggleSecondary}
+            title={formatKeybinding("Toggle Secondary Panel (Ctrl+Shift+B)")}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" />

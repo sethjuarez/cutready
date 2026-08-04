@@ -249,10 +249,7 @@ function scopedPathVariants(filePath: string, currentProject: ProjectView | null
 }
 
 /** The panels / views available in the app. */
-export type AppView = "home" | "project" | "sketch" | "assets" | "narrations" | "editor" | "recording" | "settings" | "chat" | "changes";
-
-/** Sidebar position. */
-export type SidebarPosition = "left" | "right";
+export type AppView = "home" | "project" | "assets" | "narrations" | "recording" | "settings" | "chat" | "changes";
 
 /** Output panel tabs. */
 export type OutputTab = "activity" | "debug" | "terminal";
@@ -441,8 +438,6 @@ interface AppStoreState {
   outputHeight: number;
   /** Width of the secondary chat/history panel in pixels. */
   secondaryWidth: number;
-  /** Sidebar position: left or right. */
-  sidebarPosition: SidebarPosition;
 
   // ── Tabs ───────────────────────────────────────────────
 
@@ -521,8 +516,6 @@ interface AppStoreState {
   pendingChatPrompt: { text: string; silent?: boolean; agent?: string } | null;
   /** Whether chat is occupying the main work area as an intentional focus mode. */
   chatFocusMode: boolean;
-  /** Whether the terminal output tab is occupying the main work area as an intentional focus mode. */
-  terminalFocusMode: boolean;
   /** Activity log entries for the output panel. */
   activityLog: ActivityEntry[];
   /** Debug log entries for the debug panel. */
@@ -648,8 +641,6 @@ interface AppStoreState {
   setOutputHeight: (height: number) => void;
   /** Set secondary chat/history panel width. */
   setSecondaryWidth: (width: number | ((current: number) => number)) => void;
-  /** Toggle sidebar position (left/right). */
-  toggleSidebarPosition: () => void;
 
   // ── Tab actions ────────────────────────────────────────
 
@@ -811,8 +802,6 @@ interface AppStoreState {
   sendChatPrompt: (prompt: string, opts?: { silent?: boolean; agent?: string }) => void;
   /** Enter or exit chat focus mode. */
   setChatFocusMode: (enabled: boolean) => void;
-  /** Enter or exit terminal focus mode. */
-  setTerminalFocusMode: (enabled: boolean) => void;
   /** Add entries to activity log. */
   addActivityEntries: (entries: ActivityEntry[]) => void;
   /** Clear activity log. */
@@ -978,7 +967,6 @@ const LAYOUT_KEY = "cutready:layout";
 function loadLayout(): Partial<{
   sidebarWidth: number;
   sidebarVisible: boolean;
-  sidebarPosition: "left" | "right";
   outputVisible: boolean;
   outputHeight: number;
   secondaryWidth: number;
@@ -1232,7 +1220,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   outputActiveTab: "activity",
   outputHeight: clampOutputHeight(savedLayout.outputHeight ?? 200),
   secondaryWidth: clampSecondaryWidth(savedLayout.secondaryWidth ?? 420),
-  sidebarPosition: savedLayout.sidebarPosition ?? "left",
 
   openTabs: [],
   activeTabId: null,
@@ -1266,7 +1253,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   chatStreamingDrafts: [],
   pendingChatPrompt: null,
   chatFocusMode: false,
-  terminalFocusMode: false,
   activityLog: [],
   debugLog: [],
   versions: [],
@@ -1348,12 +1334,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     set({ secondaryWidth: w });
     saveLayout({ secondaryWidth: w });
   },
-  toggleSidebarPosition: () => set((s) => {
-    const pos = s.sidebarPosition === "left" ? "right" : "left";
-    saveLayout({ sidebarPosition: pos });
-    return { sidebarPosition: pos };
-  }),
-
   // Persist workspace state. Chat transcripts live in agent-state runs.
   _persistTabs: () => {
     const { openTabs, activeTabId } = get();
@@ -2363,7 +2343,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const filename = path.split("/").pop() ?? path;
     get().openTab({ type: "asset", path, title: filename });
     // Navigate to assets view if not already there
-    if (get().view !== "assets" && get().view !== "sketch" && get().view !== "project") {
+    if (get().view !== "assets" && get().view !== "project") {
       set({ view: "assets" });
     }
   },
@@ -2493,7 +2473,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   }),
   sendChatPrompt: (prompt, opts) => set({ pendingChatPrompt: { text: prompt, silent: opts?.silent, agent: opts?.agent } }),
   setChatFocusMode: (enabled) => set({ chatFocusMode: enabled }),
-  setTerminalFocusMode: (enabled) => set({ terminalFocusMode: enabled, outputVisible: true, outputActiveTab: "terminal" }),
   addActivityEntries: (entries) => {
     recordActivityEntries(entries);
     set((s) => ({ activityLog: [...s.activityLog, ...entries] }));

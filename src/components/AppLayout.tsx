@@ -4,7 +4,6 @@ import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
 import { HomePanel } from "./HomePanel";
 import { RecordingPanel } from "./RecordingPanel";
-import { ScriptEditorPanel } from "./ScriptEditorPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { Sidebar } from "./Sidebar";
 import { StoryboardPanel } from "./StoryboardPanel";
@@ -37,15 +36,12 @@ import {
   Settings,
   Search,
   Columns2,
-  LayoutGrid,
   MessageSquare,
   MessageSquareMore,
   Sun,
   Download,
   Terminal,
   Bookmark,
-  FileText,
-  Play,
 } from "lucide-react";
 
 export function AppLayout() {
@@ -53,8 +49,6 @@ export function AppLayout() {
   const setView = useAppStore((s) => s.setView);
   const sidebarVisible = useAppStore((s) => s.sidebarVisible);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
-  const toggleSidebarPosition = useAppStore((s) => s.toggleSidebarPosition);
-  const sidebarPosition = useAppStore((s) => s.sidebarPosition);
   const outputVisible = useAppStore((s) => s.outputVisible);
   const outputHeight = useAppStore((s) => s.outputHeight);
   const setOutputHeight = useAppStore((s) => s.setOutputHeight);
@@ -65,8 +59,6 @@ export function AppLayout() {
   const showSecondaryPanel = useAppStore((s) => s.showSecondaryPanel);
   const chatFocusMode = useAppStore((s) => s.chatFocusMode);
   const setChatFocusMode = useAppStore((s) => s.setChatFocusMode);
-  const terminalFocusMode = useAppStore((s) => s.terminalFocusMode);
-  const setTerminalFocusMode = useAppStore((s) => s.setTerminalFocusMode);
   const isMerging = useAppStore((s) => s.isMerging);
   const projectSwitching = useAppStore((s) => s.projectSwitching);
   const currentProject = useAppStore((s) => s.currentProject);
@@ -90,7 +82,7 @@ export function AppLayout() {
   }, [view]);
 
   useEffect(() => {
-    if (view === "project" || view === "sketch" || view === "assets" || view === "narrations" || view === "changes") {
+    if (view === "project" || view === "assets" || view === "narrations" || view === "changes") {
       lastWorkspaceViewRef.current = view;
     }
   }, [view]);
@@ -181,13 +173,6 @@ export function AppLayout() {
         },
       },
       {
-        id: "view.toggleSidebarPosition",
-        title: "Move Sidebar to Other Side",
-        category: "View",
-        icon: <LayoutGrid className="w-4 h-4" />,
-        handler: () => toggleSidebarPosition(),
-      },
-      {
         id: "view.toggleSecondary",
         title: "Toggle Secondary Panel",
         category: "View",
@@ -259,17 +244,6 @@ export function AppLayout() {
         },
       },
       {
-        id: "snapshot.saveAs",
-        title: "Save Snapshot As\u2026",
-        category: "Snapshot",
-        keybinding: "Ctrl+Shift+S",
-        icon: <Bookmark className="w-4 h-4" />,
-        handler: () => {
-          const { currentProject, promptSnapshot } = useAppStore.getState();
-          if (currentProject) promptSnapshot();
-        },
-      },
-      {
         id: "help.keyboardShortcuts",
         title: "Keyboard Shortcuts",
         category: "Help",
@@ -310,26 +284,8 @@ export function AppLayout() {
           }
         },
       },
-      {
-        id: "sketch.exportWord",
-        title: "Export Sketch to Word",
-        category: "Sketch",
-        icon: <FileText className="w-4 h-4" />,
-        handler: () => {
-          // TODO: Needs active sketch context from SketchForm — wire via appStore event or shared ref
-        },
-      },
-      {
-        id: "sketch.preview",
-        title: "Preview Sketch",
-        category: "Sketch",
-        icon: <Play className="w-4 h-4" />,
-        handler: () => {
-          // TODO: Needs active sketch context from SketchForm — wire via appStore event or shared ref
-        },
-      },
     ]);
-  }, [setView, showOutputTab, toggleChatSurface, toggleSidebar, toggleSidebarPosition, toggleOutput, toggleSecondaryPanel, toggleTheme]);
+  }, [setView, showOutputTab, toggleChatSurface, toggleSidebar, toggleOutput, toggleSecondaryPanel, toggleTheme]);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -346,12 +302,6 @@ export function AppLayout() {
 
         e.preventDefault();
         setChatFocusMode(false);
-        return;
-      }
-
-      if (e.key === "Escape" && terminalFocusMode) {
-        e.preventDefault();
-        setTerminalFocusMode(false);
         return;
       }
 
@@ -392,13 +342,7 @@ export function AppLayout() {
         e.preventDefault();
         toggleOutput();
       }
-      if (mod && e.shiftKey && (e.key === "S" || e.key === "s")) {
-        e.preventDefault();
-        const { currentProject, promptSnapshot } = useAppStore.getState();
-        if (currentProject) {
-          promptSnapshot();
-        }
-      } else if ((e.ctrlKey || e.metaKey) && (e.key === "S" || e.key === "s")) {
+      if (mod && (e.key === "S" || e.key === "s")) {
         e.preventDefault();
         const { currentProject, promptSnapshot } = useAppStore.getState();
         if (currentProject) {
@@ -412,8 +356,6 @@ export function AppLayout() {
     chatFocusMode,
     commandPaletteOpen,
     setChatFocusMode,
-    setTerminalFocusMode,
-    terminalFocusMode,
     toggleChatSurface,
     toggleOutput,
     toggleSecondaryPanel,
@@ -474,18 +416,16 @@ export function AppLayout() {
   );
   const contentView = view === "settings" ? settingsBackgroundView : view;
   const outputPanelAvailable = contentView !== "home" && contentView !== "chat" && !projectSwitching;
-  const outputPanelVisible = terminalFocusMode || (outputPanelAvailable && outputVisible);
+  const outputPanelVisible = outputPanelAvailable && outputVisible;
 
   return (
     <div className="flex flex-col h-full">
       <TitleBar
         onCommandPaletteOpen={() => setCommandPaletteOpen(true)}
         sidebarVisible={sidebarVisible}
-        sidebarPosition={sidebarPosition}
         outputVisible={outputVisible}
         secondaryVisible={showSecondaryPanel}
         onToggleSidebar={toggleSidebar}
-        onToggleSidebarPosition={toggleSidebarPosition}
         onToggleOutput={toggleOutput}
         onToggleSecondary={toggleSecondaryPanel}
       />
@@ -498,8 +438,8 @@ export function AppLayout() {
         }}
       >
         <div className="flex flex-1 overflow-hidden" ref={mainRef}>
-          {/* Activity bar on left (hidden on home) */}
-          {view !== "home" && sidebarPosition === "left" && (
+          {/* Activity bar (hidden on home) */}
+          {view !== "home" && (
             <Sidebar
               onFeedback={() => setFeedbackOpen(true)}
               onChatToggle={toggleChatSurface}
@@ -508,7 +448,7 @@ export function AppLayout() {
           )}
 
           {/* Primary sidebar (hidden on home and chat) */}
-          {contentView !== "home" && contentView !== "chat" && !projectSwitching && sidebarVisible && sidebarPosition === "left" && <PrimarySidebar viewOverride={contentView} />}
+          {contentView !== "home" && contentView !== "chat" && !projectSwitching && sidebarVisible && <PrimarySidebar viewOverride={contentView} />}
 
           {/* Center column: content + output panel */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -516,14 +456,13 @@ export function AppLayout() {
             <div className="relative flex-1 min-h-0">
               {contentView === "home" && <div className="h-full overflow-y-auto"><HomePanel /></div>}
               {projectSwitching && <ProjectSwitchingState />}
-              {!projectSwitching && (contentView === "project" || contentView === "sketch" || contentView === "assets" || contentView === "narrations" || contentView === "changes") && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
-              {!projectSwitching && contentView === "editor" && <div className="h-full overflow-y-auto"><ScriptEditorPanel /></div>}
+              {!projectSwitching && (contentView === "project" || contentView === "assets" || contentView === "narrations" || contentView === "changes") && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
               {!projectSwitching && contentView === "recording" && displaySettings.featureRecording && <div className="h-full overflow-y-auto"><RecordingPanel /></div>}
               {contentView === "chat" && <div className="h-full overflow-hidden"><ChatPanel /></div>}
             </div>
 
             {/* Lower: output panel. Keep it mounted so terminal sessions survive navigation. */}
-            {outputPanelAvailable && outputVisible && !terminalFocusMode && (
+            {outputPanelAvailable && outputVisible && (
               <ResizeHandle direction="vertical" onResize={handleOutputResize} />
             )}
             <div
@@ -537,17 +476,6 @@ export function AppLayout() {
             </div>
           </div>
 
-          {/* Primary sidebar on right (hidden on home and chat views) */}
-          {contentView !== "home" && contentView !== "chat" && !projectSwitching && sidebarVisible && sidebarPosition === "right" && <PrimarySidebar viewOverride={contentView} />}
-
-          {/* Activity bar on right (hidden on home) */}
-          {view !== "home" && sidebarPosition === "right" && (
-            <Sidebar
-              onFeedback={() => setFeedbackOpen(true)}
-              onChatToggle={toggleChatSurface}
-              chatActive={chatFocusMode || showSecondaryPanel || view === "chat"}
-            />
-          )}
         </div>
       </div>
 
@@ -564,8 +492,8 @@ export function AppLayout() {
           style={{
             top: "var(--titlebar-height)",
             bottom: "var(--statusbar-height)",
-            left: sidebarPosition === "left" ? "3rem" : 0,
-            right: sidebarPosition === "right" ? "3rem" : 0,
+            left: "3rem",
+            right: 0,
           }}
           role="dialog"
           aria-label="Chat focus mode"
@@ -610,19 +538,14 @@ function PrimarySidebar({ viewOverride }: { viewOverride?: AppView }) {
   const view = viewOverride ?? storeView;
   const sidebarWidth = useAppStore((s) => s.sidebarWidth);
   const setSidebarWidth = useAppStore((s) => s.setSidebarWidth);
-  const sidebarPosition = useAppStore((s) => s.sidebarPosition);
 
   const handleResize = useCallback(
-    (delta: number) => {
-      const adjusted = sidebarPosition === "right" ? -delta : delta;
-      setSidebarWidth((width) => width + adjusted);
-    },
-    [setSidebarWidth, sidebarPosition],
+    (delta: number) => setSidebarWidth((width) => width + delta),
+    [setSidebarWidth],
   );
 
   return (
     <>
-      {sidebarPosition === "right" && <ResizeHandle direction="horizontal" onResize={handleResize} />}
       <div className="h-full shrink-0" style={{ width: sidebarWidth }}>
         {view === "assets" ? (
           <AssetList />
@@ -634,7 +557,7 @@ function PrimarySidebar({ viewOverride }: { viewOverride?: AppView }) {
           <StoryboardList />
         )}
       </div>
-      {sidebarPosition === "left" && <ResizeHandle direction="horizontal" onResize={handleResize} />}
+      <ResizeHandle direction="horizontal" onResize={handleResize} />
     </>
   );
 }

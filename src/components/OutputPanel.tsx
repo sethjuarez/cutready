@@ -278,8 +278,6 @@ interface OutputPanelProps {
 export function OutputPanel({ onCollapse }: OutputPanelProps) {
   const activeTab = useAppStore((s) => s.outputActiveTab);
   const setActiveTab = useAppStore((s) => s.showOutputTab);
-  const terminalFocusMode = useAppStore((s) => s.terminalFocusMode);
-  const setTerminalFocusMode = useAppStore((s) => s.setTerminalFocusMode);
   const outputs = useAppStore((s) => s.activityLog);
   const debugEntries = useAppStore((s) => s.debugLog);
   const clearActivityLog = useAppStore((s) => s.clearActivityLog);
@@ -308,33 +306,9 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
     if (activeTab === "terminal") setTerminalActivated(true);
   }, [activeTab]);
 
-  useEffect(() => {
-    if (activeTab !== "terminal" && terminalFocusMode) setTerminalFocusMode(false);
-  }, [activeTab, setTerminalFocusMode, terminalFocusMode]);
-
-  const handleCollapse = useCallback(() => {
-    if (terminalFocusMode) {
-      setTerminalFocusMode(false);
-      return;
-    }
-
-    onCollapse();
-  }, [onCollapse, setTerminalFocusMode, terminalFocusMode]);
-
   return (
-    <div
-      className={`flex flex-col bg-[rgb(var(--color-surface-inset))] border-t border-[rgb(var(--color-border))] ${
-        terminalFocusMode
-          ? "fixed left-0 right-0 z-20 overflow-hidden border-y shadow-2xl"
-          : "h-full"
-      }`}
-      style={terminalFocusMode ? { top: "var(--titlebar-height)", bottom: "var(--statusbar-height)" } : undefined}
-      role={terminalFocusMode ? "dialog" : undefined}
-      aria-label={terminalFocusMode ? "Terminal focus mode" : undefined}
-      aria-modal={terminalFocusMode ? true : undefined}
-    >
-      {!terminalFocusMode && (
-        <div className="no-select flex items-center justify-between px-3 shrink-0 border-b border-[rgb(var(--color-border))]">
+    <div className="flex h-full flex-col bg-[rgb(var(--color-surface-inset))] border-t border-[rgb(var(--color-border))]">
+      <div className="no-select flex items-center justify-between px-3 shrink-0 border-b border-[rgb(var(--color-border))]">
           <div className="flex items-stretch gap-0">
             <TabButton
               active={activeTab === "activity"}
@@ -378,7 +352,7 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
               </>
             )}
             <button
-              onClick={handleCollapse}
+              onClick={onCollapse}
               className="p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
               title="Collapse panel"
             >
@@ -386,7 +360,6 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
             </button>
           </div>
         </div>
-      )}
 
       {/* Content — auto-scrolls to latest */}
       <div className="flex-1 min-h-0 text-xs font-mono">

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
-import { AlertTriangle, Maximize2, Minimize2, SquareTerminal } from "lucide-react";
+import { AlertTriangle, SquareTerminal } from "lucide-react";
 import { Channel, invoke } from "../services/tauri";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
@@ -35,8 +35,6 @@ function outputBytes(data: TerminalOutput) {
 
 export function TerminalPanel({ active }: { active: boolean }) {
   const currentProject = useAppStore((state) => state.currentProject);
-  const terminalFocusMode = useAppStore((state) => state.terminalFocusMode);
-  const setTerminalFocusMode = useAppStore((state) => state.setTerminalFocusMode);
   const { settings } = useSettings();
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -212,31 +210,7 @@ export function TerminalPanel({ active }: { active: boolean }) {
           {status === "opening" ? "Starting terminal..." : sessionInfo?.cwd ?? currentProject?.root}
         </div>
         {status === "open" && sessionInfo && (
-          <div className="flex shrink-0 items-center gap-1.5">
-            <span className="truncate" title={sessionInfo.shell}>{sessionInfo.shell}</span>
-            <button
-              className={`flex h-5 items-center justify-center gap-1 rounded px-1.5 transition-colors ${
-                terminalFocusMode
-                  ? "font-medium text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10"
-                  : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-toolbar))] hover:text-[rgb(var(--color-text))]"
-              }`}
-              onClick={() => setTerminalFocusMode(!terminalFocusMode)}
-              title={terminalFocusMode ? "Exit terminal focus mode" : "Expand terminal to focus mode"}
-              aria-label={terminalFocusMode ? "Exit terminal focus mode" : "Expand terminal to focus mode"}
-            >
-              {terminalFocusMode ? (
-                <>
-                  <Minimize2 className="h-3 w-3" />
-                  <span>Exit focus</span>
-                </>
-              ) : (
-                <>
-                  <Maximize2 className="h-3 w-3" />
-                  <span>Focus</span>
-                </>
-              )}
-            </button>
-          </div>
+          <span className="shrink-0 truncate" title={sessionInfo.shell}>{sessionInfo.shell}</span>
         )}
         {status === "error" && (
           <span className="flex shrink-0 items-center gap-1 text-error" title={error ?? undefined}>
