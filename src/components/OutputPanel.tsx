@@ -69,9 +69,52 @@ async function exportAuditaurDiagnostics(summary: AuditaurDiagnosticsSummary | n
   URL.revokeObjectURL(url);
 }
 
-type DebugFilter = "all" | "frontend" | "ipc" | "trace" | "log";
+export type DebugFilter = "all" | "frontend" | "ipc" | "trace" | "log";
 
-type DebugStreamItem = AuditaurDiagnosticItem & { category: DebugFilter | "legacy" };
+export type DebugStreamItem = AuditaurDiagnosticItem & { category: DebugFilter | "legacy" };
+
+/** Malformed timestamps sort last rather than throwing out of BigInt(). */
+function debugTimestamp(value: string): bigint {
+  try {
+    return BigInt(value);
+  } catch {
+    return 0n;
+  }
+}
+
+/** Merges Auditaur diagnostics and legacy activity entries into one newest-first stream. */
+export function buildDebugStream(
+  summary: Pick<
+    AuditaurDiagnosticsSummary,
+    "frontend_errors" | "failed_ipc" | "failed_traces" | "warning_logs"
+  >,
+  legacyDebugEntries: ActivityEntry[],
+  legacyLimit = 50,
+): DebugStreamItem[] {
+  return [
+    ...summary.frontend_errors.map((item) => ({ ...item, category: "frontend" as const })),
+    ...summary.failed_ipc.map((item) => ({ ...item, category: "ipc" as const })),
+    ...summary.failed_traces.map((item) => ({ ...item, category: "trace" as const })),
+    ...summary.warning_logs.map((item) => ({ ...item, category: "log" as const })),
+    ...legacyDebugEntries.slice(-legacyLimit).map((entry) => ({
+      timestamp_unix_nanos: (entry.timestamp.getTime() * 1_000_000).toString(),
+      source: entry.source,
+      kind: entry.level,
+      title: entry.content,
+      detail: null,
+      status: entry.level,
+      trace_id: null,
+      span_id: null,
+      window_label: null,
+      category: "legacy" as const,
+    })),
+  ].sort((a, b) => {
+    const left = debugTimestamp(a.timestamp_unix_nanos);
+    const right = debugTimestamp(b.timestamp_unix_nanos);
+    if (left === right) return 0;
+    return left < right ? 1 : -1;
+  });
+}
 
 const DEBUG_FILTERS: {
   id: Exclude<DebugFilter, "all">;
@@ -121,24 +164,7 @@ function AuditaurDebugView({
     );
   }
 
-  const stream: DebugStreamItem[] = [
-    ...summary.frontend_errors.map((item) => ({ ...item, category: "frontend" as const })),
-    ...summary.failed_ipc.map((item) => ({ ...item, category: "ipc" as const })),
-    ...summary.failed_traces.map((item) => ({ ...item, category: "trace" as const })),
-    ...summary.warning_logs.map((item) => ({ ...item, category: "log" as const })),
-    ...legacyDebugEntries.slice(-50).map((entry) => ({
-      timestamp_unix_nanos: (entry.timestamp.getTime() * 1_000_000).toString(),
-      source: entry.source,
-      kind: entry.level,
-      title: entry.content,
-      detail: null,
-      status: entry.level,
-      trace_id: null,
-      span_id: null,
-      window_label: null,
-      category: "legacy" as const,
-    })),
-  ].sort((a, b) => (BigInt(a.timestamp_unix_nanos) < BigInt(b.timestamp_unix_nanos) ? 1 : -1));
+  const stream = buildDebugStream(summary, legacyDebugEntries);
 
   const visible = filter === "all" ? stream : stream.filter((item) => item.category === filter);
 
@@ -296,7 +322,7 @@ type AuditaurDiagnosticsSummary = {
   notes: string[];
 };
 
-type AuditaurDiagnosticItem = {
+export type AuditaurDiagnosticItem = {
   timestamp_unix_nanos: string;
   source: string;
   kind: string;
