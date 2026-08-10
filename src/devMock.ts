@@ -252,6 +252,13 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return null;
     case "save_narration_voice_preview":
       return "C:/mock-app-data/narration-previews/voice-sample.wav";
+    case "synthesize_speech_audio":
+      return {
+        audio_data: [82, 73, 70, 70, 36, 0, 0, 0, 87, 65, 86, 69],
+        mime_type: "audio/x-wav",
+      };
+    case "validate_narration_ssml":
+      return { valid: true, errors: [] };
     case "import_video":
     case "import_video_with_progress":
       sendMockProgress(args, {

@@ -1,4 +1,16 @@
+import { invoke } from "./tauri";
+
 export const SPEECH_TOKEN_SCOPE = "https://cognitiveservices.azure.com/.default";
+
+interface SpeechSynthesisResult {
+  audio_data: number[];
+  mime_type: string;
+}
+
+export interface SsmlValidationResult {
+  valid: boolean;
+  errors: string[];
+}
 
 function escapeSsmlText(value: string): string {
   return value
@@ -23,31 +35,30 @@ export function buildPlainSsml(text: string, voiceName: string): string {
 export async function synthesizeSpeechAudio({
   accessToken,
   speechEndpoint,
+  voice,
   ssml,
   outputFormat,
 }: {
   accessToken: string;
   speechEndpoint: string;
+  voice: string;
   ssml: string;
   outputFormat: string;
 }): Promise<{ audioData: ArrayBuffer; mimeType: string }> {
-  const response = await fetch(`${speechEndpoint}/tts/cognitiveservices/v1`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/ssml+xml",
-      "X-Microsoft-OutputFormat": outputFormat,
-      "User-Agent": "cutready",
-    },
-    body: ssml,
+  const result = await invoke<SpeechSynthesisResult>("synthesize_speech_audio", {
+    accessToken,
+    speechEndpoint,
+    voice,
+    ssml,
+    outputFormat,
   });
-  const audioData = await response.arrayBuffer();
-  if (!response.ok) {
-    const details = new TextDecoder().decode(audioData.slice(0, 500));
-    throw new Error(details || `Azure Speech returned ${response.status}`);
-  }
+  const bytes = Uint8Array.from(result.audio_data);
   return {
-    audioData,
-    mimeType: response.headers.get("content-type") || "audio/x-wav",
+    audioData: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+    mimeType: result.mime_type || "audio/x-wav",
   };
+}
+
+export async function validateNarrationSsml(ssml: string, voice: string): Promise<SsmlValidationResult> {
+  return invoke<SsmlValidationResult>("validate_narration_ssml", { ssml, voice });
 }

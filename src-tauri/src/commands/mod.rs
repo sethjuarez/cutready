@@ -10,6 +10,7 @@ pub mod import;
 pub mod interaction;
 pub mod note;
 pub mod narration_preview;
+pub mod narration_speech;
 pub mod project;
 pub mod recording;
 pub mod screenshot;

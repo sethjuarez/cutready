@@ -39,7 +39,7 @@ import { parseDurationSeconds, summarizeSketchDuration, type DurationDisplayMode
 import { preferredNarrationMimeType } from "../utils/narrationAudio";
 import { activeProvider, activeProviderInput, buildProviderConfig, providerById } from "../utils/providerConfig";
 import { getProviderSecret, setProviderSecret } from "../hooks/useSecretStore";
-import { buildPlainSsml, inferSpeechEndpoint, SPEECH_TOKEN_SCOPE, synthesizeSpeechAudio } from "../services/narrationSpeech";
+import { buildPlainSsml, inferSpeechEndpoint, SPEECH_TOKEN_SCOPE, synthesizeSpeechAudio, validateNarrationSsml } from "../services/narrationSpeech";
 import { validateGeneratedSsml } from "../services/narrationSsml";
 
 interface MonitorInfo {
@@ -93,6 +93,7 @@ type NarrationSsmlRow = {
 type NarrationSsmlPlan = { rows: NarrationSsmlRow[] };
 type MotionDirectorRow = { row_number: number; motion_plan: MotionPlan };
 type MotionDirectorPlan = { rows: MotionDirectorRow[] };
+type NarrationSsmlValidationIssue = { row_number: number; errors: string[] };
 
 function projectAssetSrc(projectRoot: string | undefined | null, relativePath: string | null | undefined): string {
   if (!projectRoot || !relativePath) return "";
@@ -130,12 +131,55 @@ function parseNarrationSsmlPlan(response: string): NarrationSsmlPlan {
   return { rows };
 }
 
+async function validateNarrationSsmlPlan(plan: NarrationSsmlPlan, voice: string): Promise<NarrationSsmlValidationIssue[]> {
+  const validations = await Promise.all(plan.rows.map(async (row) => ({
+    row_number: row.row_number,
+    result: await validateNarrationSsml(row.ssml, voice),
+  })));
+  return validations
+    .filter(({ result }) => !result.valid)
+    .map(({ row_number, result }) => ({ row_number, errors: result.errors }));
+}
+
 function isStringRecord(value: unknown): value is Record<string, string> {
   return value !== null && typeof value === "object" && Object.values(value).every((entry) => typeof entry === "string");
 }
 
 function narrationLocaleForVoice(voice: string): string {
   return voice.match(/^[a-z]{2}-[a-z]{2}/i)?.[0] ?? "en-US";
+}
+
+function narrationSsmlGuidanceForVoice(voice: string): string {
+  if (voice.includes(":MAI-Voice-")) {
+    return [
+      "Selected voice family: MAI/OpenAI-compatible Azure Speech voice.",
+      "Allowed SSML tags: <speak>, <voice>, <s>, <break>, <say-as>, <sub>, and <lang>.",
+      "Do not use <p>, <prosody>, <emphasis>, <phoneme>, <mstts:express-as>, <audio>, <lexicon>, bookmarks, visemes, or additional voices.",
+      "For expressiveness, use better wording, sentence grouping with <s>, and well-placed <break time=\"...ms\"/> pauses.",
+      "For pronunciation hints, prefer <sub alias=\"...\">term</sub> or supported <say-as> values; never use <say-as interpret-as=\"name\">.",
+    ].join("\n");
+  }
+  if (voice.includes(":DragonHDOmni")) {
+    return [
+      "Selected voice family: Azure Speech Dragon HD Omni.",
+      "Allowed SSML tags: <speak>, <voice>, <p>, <s>, <lang>, <say-as>, <sub>, and <mstts:express-as>.",
+      "Do not use <break>, <prosody>, <emphasis>, <phoneme>, <audio>, <lexicon>, bookmarks, visemes, or additional voices.",
+      "For expressiveness, prefer <mstts:express-as> when a style meaningfully improves delivery.",
+    ].join("\n");
+  }
+  if (voice.includes(":DragonHD")) {
+    return [
+      "Selected voice family: Azure Speech DragonHD.",
+      "Allowed SSML tags: <speak>, <voice>, <p>, <s>, <break>, <lang>, <say-as>, <sub>, and <phoneme>.",
+      "Do not use <mstts:express-as>, <prosody>, <emphasis>, <audio>, <lexicon>, bookmarks, visemes, or additional voices.",
+      "For expressiveness, use wording, sentence structure, <break>, and optional voice parameters rather than style tags.",
+    ].join("\n");
+  }
+  return [
+    "Selected voice family: Azure Speech Neural or custom voice.",
+    "Use only Azure Speech SSML that the selected voice is likely to support.",
+    "Keep expressive tags sparse, and avoid external URLs, lexicons, bookmarks, background audio, visemes, voice conversion, or additional voices.",
+  ].join("\n");
 }
 
 function normalizeNarrationPlan(
@@ -1502,6 +1546,7 @@ The Actions describe what happens on screen — use them as visual design hints.
     const { audioData, mimeType } = await synthesizeSpeechAudio({
       accessToken,
       speechEndpoint,
+      voice: narrationPlan.voice,
       ssml: validateGeneratedSsml(narrationPlan.ssml, narrationPlan.voice),
       outputFormat: settings.narrationSpeechOutputFormat,
     });
@@ -1603,6 +1648,7 @@ The Actions describe what happens on screen — use them as visual design hints.
         visual: row.visual,
       })),
     };
+    const ssmlGuidance = narrationSsmlGuidanceForVoice(settings.narrationVoiceName);
     const systemPrompt = `You are CutReady's Narration Director, an expert scriptwriter and SSML author for Azure Speech.
 
 Your job is to turn a complete demo sketch into compelling spoken narration SSML for ${settings.narrationVoiceName}.
@@ -1614,7 +1660,8 @@ Rules:
 - Each ssml value must be a complete Azure Speech SSML document with a <speak> root and <voice name="${settings.narrationVoiceName}">.
 - Use natural spoken delivery, short sentences, and clean transitions across rows.
 - Style direction: ${settings.narrationStylePrompt || "Natural presenter delivery."}
-- Be creatively intentional with supported Azure SSML: use <p>/<s>, <break>, <prosody>, <emphasis>, <say-as>, <sub>, <phoneme>, <lang>, and <mstts:express-as> only when they improve natural delivery. Keep emphasis and prosody sparse.
+- Be creatively intentional within the selected voice's SSML capabilities.
+- ${ssmlGuidance.replace(/\n/g, "\n- ")}
 - The planning time is a drafting estimate, never a narration target. Favor clear, natural speech; CutReady will adapt video timing to the measured audio.
 - Return concise beats for meaningful delivery or visual transitions. Beats describe the SSML you wrote; they do not add facts.
 - Do not include <audio>, external URLs, lexicons, bookmarks, background audio, visemes, voice conversion, or additional voices.
@@ -1622,18 +1669,41 @@ Rules:
 - Avoid hype words and AI marketing cliches. Use plain, presenter-like language.
 - Use ASCII punctuation in text content.`;
 
-    const result = await invoke<AgentChatResult>("agent_chat_with_tools", {
+    const invokeNarrationDirector = async (userContent: string) => invoke<AgentChatResult>("agent_chat_with_tools", {
       config: providerConfig,
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: `Generate narration SSML for this sketch:\n${JSON.stringify(sketchContext, null, 2)}` },
+        { role: "user", content: userContent },
       ],
       agentPrompts: {},
       agentId: "narration-director",
       emitEvents: false,
       allowMutationTools: false,
     });
-    return parseNarrationSsmlPlan(result.response);
+
+    const result = await invokeNarrationDirector(`Generate narration SSML for this sketch:\n${JSON.stringify(sketchContext, null, 2)}`);
+    let plan = parseNarrationSsmlPlan(result.response);
+    let issues = await validateNarrationSsmlPlan(plan, settings.narrationVoiceName);
+    for (let attempt = 1; issues.length > 0 && attempt <= 2; attempt += 1) {
+      const repair = await invokeNarrationDirector(`Repair this narration SSML so it passes CutReady's backend Azure Speech validator for voice ${settings.narrationVoiceName}.
+
+Return ONLY the same JSON shape as before. Keep the source_text, row_number, beats, and pronunciation_overrides unless they directly cause a validation error. Prefer expressive SSML where the selected voice supports it, but remove or replace unsupported tags and attributes.
+
+Selected voice SSML guidance:
+${ssmlGuidance}
+
+Validation errors:
+${JSON.stringify(issues, null, 2)}
+
+Current JSON:
+${JSON.stringify(plan, null, 2)}`);
+      plan = parseNarrationSsmlPlan(repair.response);
+      issues = await validateNarrationSsmlPlan(plan, settings.narrationVoiceName);
+    }
+    if (issues.length > 0) {
+      throw new Error(`Narration Director returned SSML that failed validation: ${issues.map((issue) => `row ${issue.row_number}: ${issue.errors.join("; ")}`).join(" | ")}`);
+    }
+    return plan;
   }, [localDesc, localRows, localTitle, refreshAgentAccessToken, settings]);
 
   const generateSketchMotionPlans = useCallback(async (eligibleRows: { row: PlanningRow; index: number }[]) => {

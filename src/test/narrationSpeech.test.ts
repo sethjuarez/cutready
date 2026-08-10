@@ -15,6 +15,13 @@ describe("narration speech helpers", () => {
     );
   });
 
+  test("plain SSML avoids expressive tags that Azure rejects for MAI voices", () => {
+    const ssml = buildPlainSsml("Caldova uses Foundry IQ.", "en-US-Harper:MAI-Voice-2");
+
+    expect(ssml).not.toContain("mstts:express-as");
+    expect(ssml).toContain("en-US-Harper:MAI-Voice-2");
+  });
+
   test("rejects prohibited SSML elements regardless of namespace prefix", () => {
     const voice = "en-US-Harper:MAI-Voice-2";
     const ssml = `<speak xmlns="http://www.w3.org/2001/10/synthesis" xmlns:x="https://www.w3.org/2001/mstts"><voice name="${voice}"><x:backgroundaudio src="https://example.invalid/audio.mp3" /></voice></speak>`;

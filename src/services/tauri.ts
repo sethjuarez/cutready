@@ -29,6 +29,8 @@ const SENSITIVE_INVOKE_COMMANDS = new Set([
   "read_narration_asset",
   "save_feedback",
   "save_narration_recording",
+  "synthesize_speech_audio",
+  "validate_narration_ssml",
 ]);
 
 function isTauriRuntime() {

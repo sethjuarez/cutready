@@ -75,6 +75,7 @@ export async function ensureCachedNarrationVoicePreview({
   const { audioData } = await synthesizeSpeechAudio({
     accessToken: token.access_token,
     speechEndpoint: inferSpeechEndpoint(selectedProvider.endpoint),
+    voice: settings.narrationVoiceName,
     ssml: buildPlainSsml(NARRATION_VOICE_SAMPLE, settings.narrationVoiceName),
     outputFormat: settings.narrationSpeechOutputFormat,
   });
