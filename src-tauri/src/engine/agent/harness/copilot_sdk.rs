@@ -44,6 +44,199 @@ pub fn is_available() -> bool {
     copilot_sdk::find_copilot_cli().is_some()
 }
 
+/// Plain, host-facing snapshot of GitHub Copilot CLI availability and sign-in
+/// state.
+///
+/// Deliberately a CutReady-owned DTO with **no** `copilot_sdk::*` types, so it
+/// can cross the harness boundary — into the Tauri command layer and the
+/// settings UI — without leaking the SDK's native `GetAuthStatusResponse`. The
+/// only place that native type is touched is [`probe_auth`], immediately below.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CopilotAuthStatus {
+    /// Whether the `copilot` CLI could be located on this host.
+    pub installed: bool,
+    /// Whether the CLI reports an authenticated GitHub Copilot session.
+    pub authenticated: bool,
+    /// The signed-in GitHub login (`@login`), when authenticated.
+    pub login: Option<String>,
+    /// A human-readable status/detail message from the CLI or probe, if any.
+    pub message: Option<String>,
+    /// The detected CLI version, when the client could be started.
+    pub cli_version: Option<String>,
+}
+
+/// Probe the GitHub Copilot CLI for install + sign-in state, returning a plain
+/// host DTO.
+///
+/// This confines every `copilot_sdk::*` call to this module: it builds a
+/// short-lived client, asks the CLI for its version and auth status over
+/// JSON-RPC, and **always** shuts the client (and its CLI subprocess) down
+/// before returning. When the CLI is not installed it returns early without
+/// spawning anything, so a red "not installed" state is cheap.
+///
+/// `use_logged_in_user(false)` maps to the CLI's `--no-auto-login`, so merely
+/// probing never triggers an interactive sign-in as a side effect. The SDK's
+/// own process spawn already sets `CREATE_NO_WINDOW`, so no console window
+/// flashes while probing on Windows.
+pub async fn probe_auth() -> CopilotAuthStatus {
+    if !is_available() {
+        return CopilotAuthStatus {
+            installed: false,
+            ..Default::default()
+        };
+    }
+
+    let client = match copilot_sdk::Client::builder()
+        .use_stdio(true)
+        .use_logged_in_user(false)
+        .build()
+    {
+        Ok(client) => client,
+        Err(error) => {
+            return CopilotAuthStatus {
+                installed: true,
+                message: Some(format!("Failed to build Copilot client: {error}")),
+                ..Default::default()
+            };
+        }
+    };
+
+    if let Err(error) = client.start().await {
+        let _ = client.stop().await;
+        return CopilotAuthStatus {
+            installed: true,
+            message: Some(format!("Failed to start Copilot CLI: {error}")),
+            ..Default::default()
+        };
+    }
+
+    let cli_version = client
+        .get_status()
+        .await
+        .ok()
+        .and_then(|status| non_empty(&status.version));
+
+    let result = match client.get_auth_status().await {
+        Ok(status) => auth_status_from_parts(
+            status.is_authenticated,
+            status.login.as_deref(),
+            status.status_message.as_deref(),
+            cli_version,
+        ),
+        Err(error) => CopilotAuthStatus {
+            installed: true,
+            authenticated: false,
+            login: None,
+            message: Some(format!("Could not read Copilot auth status: {error}")),
+            cli_version,
+        },
+    };
+
+    // Tear the CLI down regardless of outcome.
+    let _ = client.stop().await;
+    result
+}
+
+/// Build a [`CopilotAuthStatus`] from the plain fields the CLI reports.
+///
+/// Kept as a pure helper (no `copilot_sdk::*` types) so the mapping — trimming
+/// blank logins/messages to `None`, marking the CLI installed — is unit-tested
+/// without a live CLI subprocess.
+fn auth_status_from_parts(
+    is_authenticated: bool,
+    login: Option<&str>,
+    message: Option<&str>,
+    cli_version: Option<String>,
+) -> CopilotAuthStatus {
+    CopilotAuthStatus {
+        installed: true,
+        authenticated: is_authenticated,
+        login: login.and_then(non_empty),
+        message: message.and_then(non_empty),
+        cli_version,
+    }
+}
+
+/// Launch the GitHub Copilot CLI sign-in flow and wait for it to finish.
+///
+/// On a local desktop `copilot login` opens the system browser and captures the
+/// result on a loopback callback, so this is a genuine one-click sign-in for
+/// non-technical users — no device code needs to be surfaced or parsed. The
+/// call blocks until the CLI exits (bounded by a timeout) and returns an error
+/// with a short output tail if sign-in did not complete, so the caller can fall
+/// back to guided steps and the Recheck button.
+///
+/// The subprocess sets `CREATE_NO_WINDOW` on Windows (no console flash) and
+/// `kill_on_drop` so an abandoned attempt does not leak a process.
+pub async fn sign_in() -> Result<(), String> {
+    let Some(cli) = copilot_sdk::find_copilot_cli() else {
+        return Err(
+            "GitHub Copilot CLI was not found on this system. Install it first, then try again."
+                .to_string(),
+        );
+    };
+
+    let mut command = tokio::process::Command::new(cli);
+    command
+        .arg("login")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+
+    let child = command
+        .spawn()
+        .map_err(|error| format!("Failed to launch `copilot login`: {error}"))?;
+
+    let output =
+        match tokio::time::timeout(Duration::from_secs(300), child.wait_with_output()).await {
+            Ok(Ok(output)) => output,
+            Ok(Err(error)) => return Err(format!("`copilot login` failed: {error}")),
+            Err(_) => {
+                return Err(
+                    "Sign-in timed out. Finish signing in in your browser, then click Recheck."
+                        .to_string(),
+                )
+            }
+        };
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let tail = sign_in_error_tail(&output.stderr, &output.stdout);
+    Err(if tail.is_empty() {
+        "`copilot login` did not complete. Try running `copilot login` in a terminal, then click Recheck."
+            .to_string()
+    } else {
+        tail
+    })
+}
+
+/// Extract a short, human-readable tail from a failed `copilot login` run,
+/// preferring stderr and capping the length so the UI stays tidy.
+fn sign_in_error_tail(stderr: &[u8], stdout: &[u8]) -> String {
+    let source = if stderr.iter().any(|byte| !byte.is_ascii_whitespace()) {
+        stderr
+    } else {
+        stdout
+    };
+    let text = String::from_utf8_lossy(source);
+    let trimmed = text.trim();
+    let chars: Vec<char> = trimmed.chars().collect();
+    if chars.len() <= 400 {
+        return trimmed.to_string();
+    }
+    let tail: String = chars[chars.len() - 400..].iter().collect();
+    format!("…{tail}")
+}
+
 /// Capability metadata for the Copilot SDK runtime.
 ///
 /// The Copilot CLI streams assistant deltas and runs its own tool loop, so
@@ -662,5 +855,70 @@ mod tests {
         assert_eq!(title_case("writer"), "Writer");
         assert_eq!(title_case("system-designer"), "System Designer");
         assert_eq!(title_case("copilot_sdk"), "Copilot Sdk");
+    }
+
+    #[test]
+    fn auth_status_mapping_trims_blank_login_and_message() {
+        let status = auth_status_from_parts(
+            true,
+            Some("  octocat  "),
+            Some("   "),
+            Some("0.9.0".to_string()),
+        );
+        assert!(status.installed);
+        assert!(status.authenticated);
+        // Blank/whitespace fields collapse to None; real values are trimmed.
+        assert_eq!(status.login.as_deref(), Some("octocat"));
+        assert_eq!(status.message, None);
+        assert_eq!(status.cli_version.as_deref(), Some("0.9.0"));
+    }
+
+    #[test]
+    fn auth_status_mapping_marks_installed_even_when_unauthenticated() {
+        let status = auth_status_from_parts(false, None, Some("not signed in"), None);
+        assert!(status.installed);
+        assert!(!status.authenticated);
+        assert_eq!(status.login, None);
+        assert_eq!(status.message.as_deref(), Some("not signed in"));
+    }
+
+    #[test]
+    fn auth_status_serializes_with_camel_case_keys() {
+        // The settings UI reads `cliVersion`, so the DTO must serialize in
+        // camelCase, not the Rust snake_case field name.
+        let status = auth_status_from_parts(true, Some("octocat"), None, Some("1.2.3".to_string()));
+        let value = serde_json::to_value(&status).expect("serialize");
+        assert_eq!(value["installed"], serde_json::json!(true));
+        assert_eq!(value["authenticated"], serde_json::json!(true));
+        assert_eq!(value["login"], serde_json::json!("octocat"));
+        assert_eq!(value["cliVersion"], serde_json::json!("1.2.3"));
+        assert!(value.get("cli_version").is_none());
+    }
+
+    #[test]
+    fn not_installed_status_is_the_default_all_false_shape() {
+        let status = CopilotAuthStatus {
+            installed: false,
+            ..Default::default()
+        };
+        assert!(!status.installed);
+        assert!(!status.authenticated);
+        assert_eq!(status.login, None);
+        assert_eq!(status.cli_version, None);
+    }
+
+    #[test]
+    fn sign_in_error_tail_prefers_stderr_and_caps_length() {
+        assert_eq!(
+            sign_in_error_tail(b"  boom  ", b"stdout noise"),
+            "boom".to_string()
+        );
+        // Falls back to stdout when stderr is blank.
+        assert_eq!(sign_in_error_tail(b"   ", b" fallback "), "fallback".to_string());
+        // Long output is truncated to a bounded tail with a leading ellipsis.
+        let long = "x".repeat(1000);
+        let tail = sign_in_error_tail(long.as_bytes(), b"");
+        assert!(tail.starts_with('…'));
+        assert_eq!(tail.chars().count(), 401); // 400 chars + ellipsis
     }
 }
