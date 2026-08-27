@@ -77,7 +77,7 @@ pub async fn clear_local_recordings(state: State<'_, AppState>) -> Result<u64, S
     recording::clear_local_recordings(&root).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn check_ffmpeg_status() -> Result<recording::FfmpegStatus, String> {
     Ok(recording::check_ffmpeg_status())
 }

@@ -1119,8 +1119,19 @@ pub async fn fetch_url_content(url: String) -> Result<String, String> {
 /// The settings UI calls this to let users see and switch between harnesses.
 /// Enumeration is static host metadata (no provider or project state needed), so
 /// this is infallible.
+///
+/// Instrumented with `#[instrument_ipc]` rather than `#[auditaur_command]`
+/// because the latter injects a borrowed `tauri::ipc::Request<'_>` parameter,
+/// which would force this infallible command to return a `Result` and change the
+/// bare `Vec<HarnessDescriptor>` frontend contract. `instrument_ipc` continues
+/// the frontend trace via the reserved `auditaur_trace_context` carrier argument
+/// while preserving the plain return. The carrier is supplied automatically by
+/// `@auditaur/api`.
 #[tauri::command]
-pub fn list_agent_harnesses() -> Vec<crate::engine::agent::harness::HarnessDescriptor> {
+#[instrument_ipc(skip_all)]
+pub fn list_agent_harnesses(
+    auditaur_trace_context: Option<IpcTraceContext>,
+) -> Vec<crate::engine::agent::harness::HarnessDescriptor> {
     crate::engine::agent::harness::HarnessRegistry::available_harnesses()
 }
 
