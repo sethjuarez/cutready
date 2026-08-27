@@ -550,4 +550,36 @@ mod tests {
             assert_eq!(descriptor.contract, expected);
         }
     }
+
+    #[test]
+    fn descriptor_json_shape_matches_the_frontend_contract() {
+        // The TS `HarnessDescriptor` interface flattens capabilities, nests
+        // `contract`, and expects lowercase ownership strings. Lock that wire
+        // shape so a rename can't silently break Settings' harness picker.
+        let copilot = HarnessRegistry::available_harnesses()
+            .into_iter()
+            .find(|descriptor| descriptor.capabilities.id == "copilot-sdk")
+            .expect("copilot-sdk descriptor");
+        let value = serde_json::to_value(&copilot).unwrap();
+
+        // Capabilities are flattened onto the descriptor root, not nested.
+        assert_eq!(value["id"], "copilot-sdk");
+        assert_eq!(value["streaming"], true);
+        assert!(value.get("capabilities").is_none());
+
+        // `contract` is a nested object with lowercase ownership stances.
+        let contract = &value["contract"];
+        assert_eq!(contract["provider"], "provides");
+        assert_eq!(contract["personas"], "augments");
+        assert_eq!(contract["tools"], "provides");
+        assert_eq!(contract["memory"], "provides");
+
+        // Prompty requires its provider.
+        let prompty = HarnessRegistry::available_harnesses()
+            .into_iter()
+            .find(|descriptor| descriptor.capabilities.id == "prompty")
+            .expect("prompty descriptor");
+        let prompty_value = serde_json::to_value(&prompty).unwrap();
+        assert_eq!(prompty_value["contract"]["provider"], "requires");
+    }
 }

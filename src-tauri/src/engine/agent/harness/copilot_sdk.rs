@@ -176,11 +176,7 @@ impl AgentHarness for CopilotSdkHarness {
         // Copilot's own base prompt instead of clobbering it, so Copilot keeps
         // its native capabilities while CutReady's persona stays authoritative
         // for the turn's intent.
-        let system_content = compose_system_message(&agent_id, &agent_prompts, &context_items);
-        let system_message = system_content.map(|content| copilot_sdk::SystemMessageConfig {
-            mode: Some(copilot_sdk::SystemMessageMode::Append),
-            content: Some(content),
-        });
+        let system_message = build_system_message(&agent_id, &agent_prompts, &context_items);
 
         // Register CutReady's personas as native Copilot custom agents so the
         // host-owned prompts are available for delegation under their own names,
@@ -368,6 +364,25 @@ fn compose_system_message(
         blocks.push(context);
     }
     (!blocks.is_empty()).then(|| blocks.join("\n\n"))
+}
+
+/// Build the CLI system-message config from the composed persona/context text.
+///
+/// Uses [`copilot_sdk::SystemMessageMode::Append`] so CutReady's persona layers
+/// onto Copilot's own base prompt rather than replacing it (the earlier
+/// `Replace` clobbered Copilot's base capabilities). Returns `None` when there
+/// is nothing host-side to contribute, letting the CLI run on its own prompt.
+fn build_system_message(
+    agent_id: &str,
+    agent_prompts: &std::collections::HashMap<String, String>,
+    context_items: &[ContextItem],
+) -> Option<copilot_sdk::SystemMessageConfig> {
+    compose_system_message(agent_id, agent_prompts, context_items).map(|content| {
+        copilot_sdk::SystemMessageConfig {
+            mode: Some(copilot_sdk::SystemMessageMode::Append),
+            content: Some(content),
+        }
+    })
 }
 
 /// Register CutReady's agent personas as native Copilot custom agents.
@@ -620,6 +635,26 @@ mod tests {
         map.insert("planner".to_string(), "  ".to_string());
         assert!(build_custom_agents(&map).is_none());
         assert!(build_custom_agents(&HashMap::new()).is_none());
+    }
+
+    #[test]
+    fn system_message_uses_append_mode_and_carries_active_persona() {
+        // Regression guard for the Replace->Append fix: the CutReady persona
+        // must layer onto Copilot's base prompt, never clobber it.
+        let message = build_system_message("planner", &prompts(), &[])
+            .expect("expected a system message for a non-empty persona");
+        assert!(matches!(
+            message.mode,
+            Some(copilot_sdk::SystemMessageMode::Append)
+        ));
+        assert_eq!(message.content.as_deref(), Some("Plan the demo."));
+    }
+
+    #[test]
+    fn system_message_none_when_nothing_host_side_to_contribute() {
+        // Unknown persona id and no context => nothing to append, so the CLI
+        // runs on its own base prompt.
+        assert!(build_system_message("unknown", &prompts(), &[]).is_none());
     }
 
     #[test]
