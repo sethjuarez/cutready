@@ -762,6 +762,16 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return { storyboards: [], sketches: [], notes: [] };
     case "get_workspace_state":
       return { open_tabs: [], active_tab_id: null, chat_session_path: null };
+    case "copilot_auth_status":
+      return {
+        installed: true,
+        authenticated: true,
+        login: "octocat",
+        message: null,
+        cliVersion: "0.1.0",
+      };
+    case "copilot_sign_in":
+      return null;
     case "list_agent_runs":
       return [
         {

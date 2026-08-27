@@ -43,6 +43,8 @@ import {
   FlaskConical,
   Keyboard,
   SlidersHorizontal,
+  Copy,
+  LogIn,
 } from "lucide-react";
 
 interface ModelInfo {
@@ -3343,6 +3345,257 @@ const HARNESS_CAPABILITY_LABELS: { key: keyof HarnessDescriptor; label: string }
   { key: "durable_state", label: "Durable state" },
 ];
 
+/** Canonical id of the GitHub Copilot (copilot-sdk) harness. */
+const COPILOT_HARNESS_ID = "copilot-sdk";
+
+/** Live install + sign-in snapshot returned by the `copilot_auth_status` command. */
+interface CopilotAuthStatus {
+  installed: boolean;
+  authenticated: boolean;
+  login?: string | null;
+  message?: string | null;
+  cliVersion?: string | null;
+}
+
+const COPILOT_INSTALL_COMMAND = "npm install -g @github/copilot";
+const COPILOT_LOGIN_COMMAND = "copilot login";
+const COPILOT_CLI_DOCS_URL = "https://docs.github.com/copilot/how-tos/copilot-cli";
+
+/** A small copy-to-clipboard command chip with inline "copied" feedback. */
+function CommandCopyRow({
+  command,
+  copiedKey,
+  onCopy,
+  copyKey,
+  ariaLabel,
+}: {
+  command: string;
+  copiedKey: string | null;
+  onCopy: (text: string, key: string) => void;
+  copyKey: string;
+  ariaLabel: string;
+}) {
+  const copied = copiedKey === copyKey;
+  return (
+    <div className="flex items-center gap-1.5">
+      <code className="min-w-0 flex-1 truncate rounded-md bg-[rgb(var(--color-surface))] px-2 py-1 font-mono text-[11px] text-[rgb(var(--color-text))]">
+        {command}
+      </code>
+      <button
+        type="button"
+        onClick={() => onCopy(command, copyKey)}
+        aria-label={ariaLabel}
+        title={copied ? "Copied" : "Copy"}
+        className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))]"
+      >
+        {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Live GitHub Copilot connection panel for the copilot-sdk harness card.
+ *
+ * Probes the CLI's install + sign-in state on mount and on an explicit Recheck
+ * (never on a timer), and guides a non-technical user from "not installed" →
+ * "not signed in" → "signed in as @user" without leaving the app. Sign-in
+ * launches the CLI's own browser flow; guided steps + Recheck are always
+ * available as a fallback.
+ */
+function CopilotConnect() {
+  const [status, setStatus] = useState<CopilotAuthStatus | null>(null);
+  const [phase, setPhase] = useState<"loading" | "ready" | "signing">("loading");
+  const [error, setError] = useState("");
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const probe = useCallback(async () => {
+    setError("");
+    try {
+      const next = await invoke<CopilotAuthStatus>("copilot_auth_status");
+      setStatus(next);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setPhase("ready");
+    }
+  }, []);
+
+  useEffect(() => {
+    void probe();
+  }, [probe]);
+
+  const copy = useCallback(async (text: string, key: string) => {
+    try {
+      await navigator.clipboard?.writeText(text);
+      setCopiedKey(key);
+      window.setTimeout(() => setCopiedKey((current) => (current === key ? null : current)), 1500);
+    } catch {
+      /* clipboard unavailable (e.g. dev web shim) */
+    }
+  }, []);
+
+  const recheck = useCallback(() => {
+    setPhase("loading");
+    void probe();
+  }, [probe]);
+
+  const signIn = useCallback(async () => {
+    setPhase("signing");
+    setError("");
+    try {
+      await invoke("copilot_sign_in");
+    } catch (e) {
+      setError(String(e));
+    }
+    setPhase("loading");
+    await probe();
+  }, [probe]);
+
+  const isSigningIn = phase === "signing";
+
+  const RecheckButton = (
+    <button
+      type="button"
+      onClick={recheck}
+      disabled={phase === "loading" || isSigningIn}
+      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:opacity-50"
+    >
+      <RefreshCw className={`h-3 w-3 ${phase === "loading" ? "animate-spin" : ""}`} /> Recheck
+    </button>
+  );
+
+  if (phase === "loading" && !status) {
+    return (
+      <div className="flex items-center gap-1.5 text-[11px] text-[rgb(var(--color-text-secondary))]">
+        <RefreshCw className="h-3 w-3 animate-spin" /> Checking GitHub Copilot…
+      </div>
+    );
+  }
+
+  const notInstalled = !!status && !status.installed;
+  const needsSignIn = !!status && status.installed && !status.authenticated;
+  const signedIn = !!status && status.installed && status.authenticated;
+
+  return (
+    <div className="flex flex-col gap-2">
+      {/* Status chip */}
+      <div className="flex items-center gap-2">
+        {signedIn && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">
+            <span className="h-1.5 w-1.5 rounded-full bg-success" />
+            Signed in{status?.login ? ` as @${status.login}` : ""}
+          </span>
+        )}
+        {needsSignIn && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning">
+            <span className="h-1.5 w-1.5 rounded-full bg-warning" />
+            Installed — not signed in
+          </span>
+        )}
+        {notInstalled && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-error/10 px-2 py-0.5 text-[11px] font-medium text-error">
+            <span className="h-1.5 w-1.5 rounded-full bg-error" />
+            Copilot CLI not installed
+          </span>
+        )}
+        {status?.cliVersion && signedIn && (
+          <span className="text-[10px] font-mono text-[rgb(var(--color-text-secondary))]">
+            CLI {status.cliVersion}
+          </span>
+        )}
+      </div>
+
+      {/* Signed in: reassure that no chat provider is needed. */}
+      {signedIn && (
+        <p className="flex items-start gap-1.5 text-[11px] leading-snug text-[rgb(var(--color-text-secondary))]">
+          <CheckCircle className="mt-0.5 h-3 w-3 shrink-0 text-success" />
+          <span>
+            GitHub Copilot brings its own model for agent turns, so you don&apos;t need to configure a
+            chat provider for the agent.
+          </span>
+        </p>
+      )}
+
+      {/* Not signed in: one-click browser sign-in + a terminal fallback. */}
+      {needsSignIn && (
+        <div className="flex flex-col gap-2">
+          <p className="text-[11px] leading-snug text-[rgb(var(--color-text-secondary))]">
+            Sign in with your GitHub account to use Copilot for agent turns. This opens your browser
+            to finish authorizing.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={signIn}
+              disabled={isSigningIn}
+              className="inline-flex items-center gap-1.5 rounded-md bg-[rgb(var(--color-accent))] px-2.5 py-1 text-[11px] font-medium text-[rgb(var(--color-accent-fg))] transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {isSigningIn ? (
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <LogIn className="h-3.5 w-3.5" />
+              )}
+              {isSigningIn ? "Waiting for browser…" : "Sign in"}
+            </button>
+            {RecheckButton}
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">
+              Or run this in a terminal, then Recheck:
+            </span>
+            <CommandCopyRow
+              command={COPILOT_LOGIN_COMMAND}
+              copiedKey={copiedKey}
+              onCopy={copy}
+              copyKey="login"
+              ariaLabel="Copy Copilot sign-in command"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Not installed: concise install guidance + docs link. */}
+      {notInstalled && (
+        <div className="flex flex-col gap-2">
+          <p className="text-[11px] leading-snug text-[rgb(var(--color-text-secondary))]">
+            Install the GitHub Copilot CLI, then Recheck:
+          </p>
+          <CommandCopyRow
+            command={COPILOT_INSTALL_COMMAND}
+            copiedKey={copiedKey}
+            onCopy={copy}
+            copyKey="install"
+            ariaLabel="Copy Copilot CLI install command"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                void shellOpen(COPILOT_CLI_DOCS_URL);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-[rgb(var(--color-accent))] transition-colors hover:bg-[rgb(var(--color-accent))]/10"
+            >
+              <ExternalLink className="h-3 w-3" /> Installation guide
+            </button>
+            {RecheckButton}
+          </div>
+        </div>
+      )}
+
+      {/* Recheck is always reachable, even in the signed-in state. */}
+      {signedIn && <div className="flex items-center">{RecheckButton}</div>}
+
+      {status?.message && (needsSignIn || notInstalled) && (
+        <p className="text-[10px] leading-snug text-[rgb(var(--color-text-secondary))]">
+          {status.message}
+        </p>
+      )}
+      {error && <p className="text-[11px] leading-snug text-error">{error}</p>}
+    </div>
+  );
+}
+
 /**
  * Runtime harness picker. Lists every harness the backend registry advertises,
  * shows honest capability metadata, and lets the user switch which runtime
@@ -3375,18 +3628,14 @@ function HarnessPicker({ value, onChange }: { value: string; onChange: (id: stri
         {harnesses.map((harness) => {
           const selected = harness.id === value;
           const selectable = harness.available;
-          return (
-            <button
-              key={harness.id}
-              type="button"
-              disabled={!selectable}
-              onClick={() => selectable && onChange(harness.id)}
-              className={`text-left border rounded-lg p-3 transition-colors ${
-                selected
-                  ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/5"
-                  : "border-[rgb(var(--color-border))]"
-              } ${selectable ? "hover:border-[rgb(var(--color-accent))]/60 cursor-pointer" : "opacity-60 cursor-not-allowed"}`}
-            >
+          const isCopilot = harness.id === COPILOT_HARNESS_ID;
+          const baseCardClass = `border rounded-lg p-3 transition-colors ${
+            selected
+              ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/5"
+              : "border-[rgb(var(--color-border))]"
+          }`;
+          const cardBody = (
+            <>
               <div className="flex items-center gap-2 mb-1.5">
                 <span className="text-sm font-medium">{harness.display_name}</span>
                 <span className="text-[10px] font-mono text-[rgb(var(--color-text-secondary))]">{harness.id}</span>
@@ -3432,6 +3681,42 @@ function HarnessPicker({ value, onChange }: { value: string; onChange: (id: stri
                   </span>
                 </p>
               )}
+            </>
+          );
+
+          // The Copilot card carries an interactive connect block (Sign in /
+          // Recheck / Copy buttons), so it can't be a single <button> — nesting
+          // buttons is invalid. Wrap it in a <div> with the selection <button>
+          // and the connect block as siblings. The connect block stays
+          // full-opacity even when the CLI is unavailable, so users can act on
+          // the install guidance.
+          if (isCopilot) {
+            return (
+              <div key={harness.id} className={`${baseCardClass} ${selectable ? "hover:border-[rgb(var(--color-accent))]/60" : ""}`}>
+                <button
+                  type="button"
+                  disabled={!selectable}
+                  onClick={() => selectable && onChange(harness.id)}
+                  className={`w-full text-left ${selectable ? "cursor-pointer" : "opacity-60 cursor-not-allowed"}`}
+                >
+                  {cardBody}
+                </button>
+                <div className="mt-2.5 pt-2.5 border-t border-[rgb(var(--color-border))]">
+                  <CopilotConnect />
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <button
+              key={harness.id}
+              type="button"
+              disabled={!selectable}
+              onClick={() => selectable && onChange(harness.id)}
+              className={`text-left ${baseCardClass} ${selectable ? "hover:border-[rgb(var(--color-accent))]/60 cursor-pointer" : "opacity-60 cursor-not-allowed"}`}
+            >
+              {cardBody}
             </button>
           );
         })}

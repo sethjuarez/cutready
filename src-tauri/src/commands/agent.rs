@@ -1124,6 +1124,28 @@ pub fn list_agent_harnesses() -> Vec<crate::engine::agent::harness::HarnessDescr
     crate::engine::agent::harness::HarnessRegistry::available_harnesses()
 }
 
+/// Report GitHub Copilot CLI install + sign-in status for the settings UI.
+///
+/// Delegates to the harness boundary, which owns all `copilot_sdk::*` usage and
+/// hands back a plain host DTO. Read-only and cheap: it spins the CLI up over
+/// JSON-RPC only long enough to read status, then shuts it down (see
+/// [`copilot_sdk::probe_auth`]). Infallible — failures are reported inside the
+/// DTO's `message`/`installed` fields, mirroring `list_agent_harnesses`.
+#[tauri::command]
+pub async fn copilot_auth_status() -> crate::engine::agent::harness::copilot_sdk::CopilotAuthStatus
+{
+    crate::engine::agent::harness::copilot_sdk::probe_auth().await
+}
+
+/// Launch the GitHub Copilot CLI sign-in flow (browser web flow on desktop) and
+/// wait for it to finish. The settings UI re-probes status afterward via
+/// `copilot_auth_status`. Returns an error with a short detail on failure so the
+/// UI can fall back to guided steps.
+#[tauri::command]
+pub async fn copilot_sign_in() -> Result<(), String> {
+    crate::engine::agent::harness::copilot_sdk::sign_in().await
+}
+
 /// Serializable result from the agentic chat.
 #[derive(serde::Serialize)]
 pub struct AgentChatResult {
