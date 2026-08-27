@@ -17,6 +17,8 @@
 //! and the Copilot SDK spike (issue #247) each add a new adapter module and a
 //! new registry arm without touching this boundary.
 
+pub mod agentive;
+pub mod copilot_sdk;
 pub mod prompty;
 
 use std::collections::HashMap;
@@ -122,7 +124,6 @@ pub struct AgentRunResult {
 ///
 /// Only conformance tests consume this today; the registry and adapters that
 /// read capabilities at runtime arrive with issues #246/#247.
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct HarnessCapabilities {
     /// Canonical harness identifier (matches [`AgentHarness::id`]).
@@ -145,6 +146,22 @@ pub struct HarnessCapabilities {
     pub cancellation: bool,
     /// Persists durable run/checkpoint state.
     pub durable_state: bool,
+}
+
+/// A harness entry as surfaced to the host/UI: its capabilities plus whether it
+/// can execute a run right now.
+///
+/// `available` lets the settings UI list every known harness (so users see
+/// what's coming) while only enabling the ones whose runtime is wired. A harness
+/// that is declared but not yet runnable is advertised honestly rather than
+/// hidden or silently mapped onto another runtime.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HarnessDescriptor {
+    /// Capability metadata for the harness.
+    #[serde(flatten)]
+    pub capabilities: HarnessCapabilities,
+    /// Whether the harness can currently be resolved and run.
+    pub available: bool,
 }
 
 /// A pluggable agent runtime behind the CutReady host boundary.
@@ -225,6 +242,30 @@ impl HarnessRegistry {
             DEFAULT_HARNESS_ID => Ok(PromptyHarness::static_capabilities()),
             other => Err(unsupported_harness_error(other)),
         }
+    }
+
+    /// Enumerate every known harness with its capabilities and availability.
+    ///
+    /// This is the single source the host exposes to the settings UI so users
+    /// can see and switch between harnesses. Harnesses whose runtime is not yet
+    /// wired report `available: false` and stay honest about it rather than
+    /// being hidden or aliased onto another runtime. The order is stable and
+    /// UI-facing: the default harness first, then the others.
+    pub fn available_harnesses() -> Vec<HarnessDescriptor> {
+        vec![
+            HarnessDescriptor {
+                capabilities: PromptyHarness::static_capabilities(),
+                available: true,
+            },
+            HarnessDescriptor {
+                capabilities: agentive::static_capabilities(),
+                available: agentive::AVAILABLE,
+            },
+            HarnessDescriptor {
+                capabilities: copilot_sdk::static_capabilities(),
+                available: copilot_sdk::AVAILABLE,
+            },
+        ]
     }
 }
 
@@ -320,5 +361,31 @@ mod tests {
             harness.capabilities(),
             PromptyHarness::static_capabilities()
         );
+    }
+
+    #[test]
+    fn enumeration_lists_every_known_harness_with_honest_availability() {
+        let harnesses = HarnessRegistry::available_harnesses();
+        let ids: Vec<&str> = harnesses
+            .iter()
+            .map(|descriptor| descriptor.capabilities.id.as_str())
+            .collect();
+        assert_eq!(ids, vec!["prompty", "agentive", "copilot-sdk"]);
+
+        let find = |id: &str| {
+            harnesses
+                .iter()
+                .find(|descriptor| descriptor.capabilities.id == id)
+                .unwrap_or_else(|| panic!("missing harness {id}"))
+        };
+
+        // Prompty is the wired default and must resolve.
+        assert!(find("prompty").available);
+        registry().resolve(Some("prompty")).unwrap();
+
+        // The other harnesses are declared with honest capability metadata; their
+        // availability tracks whether their adapter can execute a run yet.
+        assert_eq!(find("agentive").available, agentive::AVAILABLE);
+        assert_eq!(find("copilot-sdk").available, copilot_sdk::AVAILABLE);
     }
 }

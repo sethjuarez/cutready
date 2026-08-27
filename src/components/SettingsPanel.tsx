@@ -3307,6 +3307,119 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
 
 // ── Agents Tab ───────────────────────────────────────────────────
 
+interface HarnessDescriptor {
+  id: string;
+  display_name: string;
+  streaming: boolean;
+  tool_calls: boolean;
+  vision: boolean;
+  web_search: boolean;
+  delegation: boolean;
+  steering: boolean;
+  cancellation: boolean;
+  durable_state: boolean;
+  available: boolean;
+}
+
+const HARNESS_CAPABILITY_LABELS: { key: keyof HarnessDescriptor; label: string }[] = [
+  { key: "streaming", label: "Streaming" },
+  { key: "tool_calls", label: "Tools" },
+  { key: "vision", label: "Vision" },
+  { key: "web_search", label: "Web" },
+  { key: "delegation", label: "Delegation" },
+  { key: "steering", label: "Steering" },
+  { key: "cancellation", label: "Cancellation" },
+  { key: "durable_state", label: "Durable state" },
+];
+
+/**
+ * Runtime harness picker. Lists every harness the backend registry advertises,
+ * shows honest capability metadata, and lets the user switch which runtime
+ * executes agent turns. Unavailable harnesses are shown but not selectable.
+ */
+function HarnessPicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+  const [harnesses, setHarnesses] = useState<HarnessDescriptor[]>([]);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    invoke<HarnessDescriptor[]>("list_agent_harnesses")
+      .then((list) => { if (active) setHarnesses(list); })
+      .catch((e) => { if (active) setError(String(e)); });
+    return () => { active = false; };
+  }, []);
+
+  const selectedKnown = harnesses.some((h) => h.id === value);
+
+  return (
+    <div>
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] mb-1 flex items-center gap-1.5">
+        <Bot className="w-3.5 h-3.5" /> Runtime Harness
+      </h3>
+      <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-3">
+        The engine that drives agent turns. Capabilities are reported by each harness — differences are explicit, never silently downgraded.
+      </p>
+      {error && <p className="text-xs text-error mb-2">Could not load harnesses: {error}</p>}
+      <div className="flex flex-col gap-2">
+        {harnesses.map((harness) => {
+          const selected = harness.id === value;
+          const selectable = harness.available;
+          return (
+            <button
+              key={harness.id}
+              type="button"
+              disabled={!selectable}
+              onClick={() => selectable && onChange(harness.id)}
+              className={`text-left border rounded-lg p-3 transition-colors ${
+                selected
+                  ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/5"
+                  : "border-[rgb(var(--color-border))]"
+              } ${selectable ? "hover:border-[rgb(var(--color-accent))]/60 cursor-pointer" : "opacity-60 cursor-not-allowed"}`}
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-sm font-medium">{harness.display_name}</span>
+                <span className="text-[10px] font-mono text-[rgb(var(--color-text-secondary))]">{harness.id}</span>
+                {selected && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))] font-medium flex items-center gap-1">
+                    <Check className="w-3 h-3" /> Active
+                  </span>
+                )}
+                {!harness.available && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-text-secondary))]/10 text-[rgb(var(--color-text-secondary))] font-medium flex items-center gap-1">
+                    <FlaskConical className="w-3 h-3" /> Coming soon
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {HARNESS_CAPABILITY_LABELS.map(({ key, label }) => {
+                  const on = harness[key] as boolean;
+                  return (
+                    <span
+                      key={key}
+                      className={`text-[10px] px-1.5 py-0.5 rounded ${
+                        on
+                          ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
+                          : "bg-[rgb(var(--color-text-secondary))]/8 text-[rgb(var(--color-text-secondary))] line-through"
+                      }`}
+                    >
+                      {label}
+                    </span>
+                  );
+                })}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {harnesses.length > 0 && !selectedKnown && (
+        <p className="text-xs text-[rgb(var(--color-text-secondary))] mt-2 flex items-center gap-1.5">
+          <Info className="w-3.5 h-3.5" /> Current selection <span className="font-mono">{value}</span> is not a known harness; it will be validated when a run starts.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function AgentsTab({ settings, updateSetting, models, loadingModels, canFetchModels, fetchModels, modelError }: {
   settings: ReturnType<typeof useSettings>["settings"];
   updateSetting: ReturnType<typeof useSettings>["updateSetting"];
@@ -3467,6 +3580,12 @@ function AgentsTab({ settings, updateSetting, models, loadingModels, canFetchMod
       {modelError && (
         <p className="text-xs text-error">{modelError}</p>
       )}
+
+      {/* Runtime harness selector */}
+      <HarnessPicker
+        value={settings.aiAgentExecutionEngine}
+        onChange={(id) => updateSetting("aiAgentExecutionEngine", id)}
+      />
 
       {/* Built-in agents (read-only) */}
       <div>

@@ -1,6 +1,11 @@
 import type { AiProviderConfig, AiProviderKind, AiAuthMode } from "../hooks/useSettings";
 
-export type AgentExecutionEngine = "agentive" | "prompty";
+/**
+ * Identifier of the agent harness (runtime). Known built-ins are `"prompty"`,
+ * `"agentive"`, and `"copilot-sdk"`; kept as a plain string so harnesses added
+ * to the backend registry flow through without a frontend change.
+ */
+export type AgentExecutionEngine = string;
 
 export interface ProviderSettings {
   aiProvider: string;

@@ -1114,6 +1114,16 @@ pub async fn fetch_url_content(url: String) -> Result<String, String> {
     crate::engine::agent::web::fetch_and_clean(&url).await
 }
 
+/// List every known agent harness with its capabilities and whether it can run.
+///
+/// The settings UI calls this to let users see and switch between harnesses.
+/// Enumeration is static host metadata (no provider or project state needed), so
+/// this is infallible.
+#[tauri::command]
+pub fn list_agent_harnesses() -> Vec<crate::engine::agent::harness::HarnessDescriptor> {
+    crate::engine::agent::harness::HarnessRegistry::available_harnesses()
+}
+
 /// Serializable result from the agentic chat.
 #[derive(serde::Serialize)]
 pub struct AgentChatResult {
