@@ -229,10 +229,11 @@ impl HarnessRegistry {
 }
 
 fn unsupported_harness_error(requested: &str) -> String {
-    format!(
-        "Unsupported agent harness '{requested}'. Supported harness IDs: {DEFAULT_HARNESS_ID} \
-         (deprecated alias: {DEPRECATED_AGENTIVE_ALIAS})."
-    )
+    // Preserve the exact user-facing contract from the pre-seam
+    // `ExecutionEngine::from_config`: the frontend still sends this value under
+    // the `execution_engine` config key, so the error names that key and lists
+    // the one supported value.
+    format!("Unsupported execution_engine '{requested}'. Expected 'prompty'.")
 }
 
 #[cfg(test)]
@@ -287,6 +288,12 @@ mod tests {
         assert!(
             err.contains("prompty"),
             "error should list supported ids: {err}"
+        );
+        // The exact user-facing contract is preserved from the pre-seam
+        // `ExecutionEngine::from_config`, keyed on `execution_engine`.
+        assert_eq!(
+            err,
+            "Unsupported execution_engine 'copilot-sdk'. Expected 'prompty'."
         );
 
         let capability_err = HarnessRegistry::capabilities(Some("copilot-sdk")).unwrap_err();

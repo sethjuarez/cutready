@@ -994,6 +994,12 @@ pub async fn agent_chat_with_tools(
         };
         harness.run(request, emit).await
     };
+    // Any harness failure -- including model construction, which now lives
+    // inside the adapter -- flows through the unified finalization below. The
+    // durable run row was already created by `insert_run` above, so routing
+    // setup failures through `finish_run`/failure-trace correctly finalizes it
+    // instead of leaking a `running` row. The command still returns the same
+    // `Err(message)` to the frontend.
     let runner_result = if cancellation.is_cancelled() {
         Err(AGENT_RUN_CANCELLED_ERROR.into())
     } else {
@@ -1643,7 +1649,10 @@ mod tests {
             HarnessRegistry::canonical_id(Some("prompty")).unwrap(),
             crate::engine::agent::harness::DEFAULT_HARNESS_ID
         );
-        assert!(HarnessRegistry::canonical_id(Some("other")).is_err());
+        assert_eq!(
+            HarnessRegistry::canonical_id(Some("other")).unwrap_err(),
+            "Unsupported execution_engine 'other'. Expected 'prompty'."
+        );
     }
 
     #[test]
