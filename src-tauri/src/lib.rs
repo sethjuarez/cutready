@@ -770,6 +770,7 @@ pub fn run() {
             commands::agent::compact_agent_state_database,
             commands::agent::clear_saved_context,
             commands::agent::fetch_url_content,
+            commands::agent::list_agent_harnesses,
             commands::agent::get_memory_context,
             commands::agent::archive_chat_session,
             commands::agent::update_chat_summary,

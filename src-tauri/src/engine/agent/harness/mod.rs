@@ -17,6 +17,8 @@
 //! and the Copilot SDK spike (issue #247) each add a new adapter module and a
 //! new registry arm without touching this boundary.
 
+pub mod agentive;
+pub mod copilot_sdk;
 pub mod prompty;
 
 use std::collections::HashMap;
@@ -41,6 +43,8 @@ use crate::engine::agent::execution::{
 use crate::engine::agent::llm::LlmConfig;
 use crate::engine::agent_state::AgentStateStore;
 
+use self::agentive::AgentiveHarness;
+use self::copilot_sdk::CopilotSdkHarness;
 use self::prompty::PromptyHarness;
 
 // ---------------------------------------------------------------------------
@@ -122,7 +126,6 @@ pub struct AgentRunResult {
 ///
 /// Only conformance tests consume this today; the registry and adapters that
 /// read capabilities at runtime arrive with issues #246/#247.
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct HarnessCapabilities {
     /// Canonical harness identifier (matches [`AgentHarness::id`]).
@@ -145,6 +148,22 @@ pub struct HarnessCapabilities {
     pub cancellation: bool,
     /// Persists durable run/checkpoint state.
     pub durable_state: bool,
+}
+
+/// A harness entry as surfaced to the host/UI: its capabilities plus whether it
+/// can execute a run right now.
+///
+/// `available` lets the settings UI list every known harness (so users see
+/// what's coming) while only enabling the ones whose runtime is wired. A harness
+/// that is declared but not yet runnable is advertised honestly rather than
+/// hidden or silently mapped onto another runtime.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HarnessDescriptor {
+    /// Capability metadata for the harness.
+    #[serde(flatten)]
+    pub capabilities: HarnessCapabilities,
+    /// Whether the harness can currently be resolved and run.
+    pub available: bool,
 }
 
 /// A pluggable agent runtime behind the CutReady host boundary.
@@ -172,10 +191,14 @@ pub trait AgentHarness: Send + Sync {
 /// Canonical id of the harness selected when the host requests no specific one.
 pub const DEFAULT_HARNESS_ID: &str = "prompty";
 
-/// Deprecated harness id still accepted from persisted configs; it maps onto the
-/// current default. Kept so older settings that named `"agentive"` keep working
-/// until the real agentive harness returns in issue #246.
-pub const DEPRECATED_AGENTIVE_ALIAS: &str = "agentive";
+/// A second selectable harness id. Now that the agentive adapter is wired
+/// (issue #246), `"agentive"` resolves to the real [`agentive::AgentiveHarness`]
+/// rather than aliasing onto Prompty.
+pub const AGENTIVE_HARNESS_ID: &str = "agentive";
+
+/// The GitHub Copilot SDK harness id (issue #247). Resolves to the real
+/// [`copilot_sdk::CopilotSdkHarness`], which drives the GitHub Copilot CLI.
+pub const COPILOT_SDK_HARNESS_ID: &str = "copilot-sdk";
 
 /// Resolves harness identifiers to concrete [`AgentHarness`] instances.
 ///
@@ -198,11 +221,11 @@ impl HarnessRegistry {
     pub fn canonical_id(requested: Option<&str>) -> Result<&'static str, String> {
         match requested.map(str::trim).filter(|value| !value.is_empty()) {
             None | Some("prompty") => Ok(DEFAULT_HARNESS_ID),
-            // `agentive` is a deprecated alias while Prompty is the sole
-            // runtime; persisted configs still naming it map onto Prompty
-            // rather than erroring. Issue #246 reintroduces a real agentive
-            // harness under its own id.
-            Some(alias) if alias == DEPRECATED_AGENTIVE_ALIAS => Ok(DEFAULT_HARNESS_ID),
+            // The agentive adapter is wired (issue #246), so its id resolves to
+            // the real harness rather than aliasing onto Prompty.
+            Some(id) if id == AGENTIVE_HARNESS_ID => Ok(AGENTIVE_HARNESS_ID),
+            // The Copilot SDK adapter is wired (issue #247).
+            Some(id) if id == COPILOT_SDK_HARNESS_ID => Ok(COPILOT_SDK_HARNESS_ID),
             Some(other) => Err(unsupported_harness_error(other)),
         }
     }
@@ -211,29 +234,59 @@ impl HarnessRegistry {
     pub fn resolve(&self, requested: Option<&str>) -> Result<Arc<dyn AgentHarness>, String> {
         match Self::canonical_id(requested)? {
             DEFAULT_HARNESS_ID => Ok(Arc::new(PromptyHarness::new(self.prompty_steering.clone()))),
+            AGENTIVE_HARNESS_ID => Ok(Arc::new(AgentiveHarness::new())),
+            COPILOT_SDK_HARNESS_ID => Ok(Arc::new(CopilotSdkHarness::new())),
             // `canonical_id` only ever yields ids we can build.
             other => Err(unsupported_harness_error(other)),
         }
     }
 
     /// Report capability metadata for a requested harness id without building
-    /// the harness. Consumed by conformance tests now; wired into diagnostics
-    /// surfaces alongside the additional adapters in issues #246/#247.
+    /// the harness. Consumed by conformance tests and diagnostics surfaces.
     #[allow(dead_code)]
     pub fn capabilities(requested: Option<&str>) -> Result<HarnessCapabilities, String> {
         match Self::canonical_id(requested)? {
             DEFAULT_HARNESS_ID => Ok(PromptyHarness::static_capabilities()),
+            AGENTIVE_HARNESS_ID => Ok(agentive::static_capabilities()),
+            COPILOT_SDK_HARNESS_ID => Ok(copilot_sdk::static_capabilities()),
             other => Err(unsupported_harness_error(other)),
         }
+    }
+
+    /// Enumerate every known harness with its capabilities and availability.
+    ///
+    /// This is the single source the host exposes to the settings UI so users
+    /// can see and switch between harnesses. Harnesses whose runtime is not yet
+    /// wired report `available: false` and stay honest about it rather than
+    /// being hidden or aliased onto another runtime. The order is stable and
+    /// UI-facing: the default harness first, then the others.
+    pub fn available_harnesses() -> Vec<HarnessDescriptor> {
+        vec![
+            HarnessDescriptor {
+                capabilities: PromptyHarness::static_capabilities(),
+                available: true,
+            },
+            HarnessDescriptor {
+                capabilities: agentive::static_capabilities(),
+                available: agentive::AVAILABLE,
+            },
+            HarnessDescriptor {
+                capabilities: copilot_sdk::static_capabilities(),
+                available: copilot_sdk::is_available(),
+            },
+        ]
     }
 }
 
 fn unsupported_harness_error(requested: &str) -> String {
-    // Preserve the exact user-facing contract from the pre-seam
+    // Preserve the user-facing contract from the pre-seam
     // `ExecutionEngine::from_config`: the frontend still sends this value under
     // the `execution_engine` config key, so the error names that key and lists
-    // the one supported value.
-    format!("Unsupported execution_engine '{requested}'. Expected 'prompty'.")
+    // the currently supported values.
+    format!(
+        "Unsupported execution_engine '{requested}'. Expected one of 'prompty', 'agentive', \
+         'copilot-sdk'."
+    )
 }
 
 #[cfg(test)]
@@ -254,13 +307,19 @@ mod tests {
     }
 
     #[test]
-    fn deprecated_agentive_alias_still_maps_to_prompty() {
+    fn agentive_id_resolves_to_the_agentive_harness() {
+        // Once the agentive adapter is wired (issue #246) its id resolves to the
+        // real harness instead of aliasing onto Prompty.
         assert_eq!(
             HarnessRegistry::canonical_id(Some("agentive")).unwrap(),
-            DEFAULT_HARNESS_ID
+            AGENTIVE_HARNESS_ID
         );
         let harness = registry().resolve(Some("  agentive  ")).unwrap();
-        assert_eq!(harness.id(), DEFAULT_HARNESS_ID);
+        assert_eq!(harness.id(), AGENTIVE_HARNESS_ID);
+        assert_eq!(
+            harness.capabilities(),
+            agentive::static_capabilities()
+        );
     }
 
     #[test]
@@ -276,13 +335,26 @@ mod tests {
     }
 
     #[test]
+    fn copilot_sdk_id_resolves_to_the_copilot_sdk_harness() {
+        // The Copilot SDK adapter is wired (issue #247); its id resolves to the
+        // real harness.
+        assert_eq!(
+            HarnessRegistry::canonical_id(Some("copilot-sdk")).unwrap(),
+            COPILOT_SDK_HARNESS_ID
+        );
+        let harness = registry().resolve(Some("  copilot-sdk  ")).unwrap();
+        assert_eq!(harness.id(), COPILOT_SDK_HARNESS_ID);
+        assert_eq!(harness.capabilities(), copilot_sdk::static_capabilities());
+    }
+
+    #[test]
     fn unsupported_id_is_reported_clearly() {
-        let err = match registry().resolve(Some("copilot-sdk")) {
+        let err = match registry().resolve(Some("totally-unknown")) {
             Ok(_) => panic!("unsupported id should not resolve"),
             Err(err) => err,
         };
         assert!(
-            err.contains("copilot-sdk"),
+            err.contains("totally-unknown"),
             "error should echo the bad id: {err}"
         );
         assert!(
@@ -290,13 +362,15 @@ mod tests {
             "error should list supported ids: {err}"
         );
         // The exact user-facing contract is preserved from the pre-seam
-        // `ExecutionEngine::from_config`, keyed on `execution_engine`.
+        // `ExecutionEngine::from_config`, keyed on `execution_engine`, now
+        // listing every selectable harness.
         assert_eq!(
             err,
-            "Unsupported execution_engine 'copilot-sdk'. Expected 'prompty'."
+            "Unsupported execution_engine 'totally-unknown'. Expected one of 'prompty', \
+             'agentive', 'copilot-sdk'."
         );
 
-        let capability_err = HarnessRegistry::capabilities(Some("copilot-sdk")).unwrap_err();
+        let capability_err = HarnessRegistry::capabilities(Some("totally-unknown")).unwrap_err();
         assert_eq!(capability_err, err);
     }
 
@@ -320,5 +394,32 @@ mod tests {
             harness.capabilities(),
             PromptyHarness::static_capabilities()
         );
+    }
+
+    #[test]
+    fn enumeration_lists_every_known_harness_with_honest_availability() {
+        let harnesses = HarnessRegistry::available_harnesses();
+        let ids: Vec<&str> = harnesses
+            .iter()
+            .map(|descriptor| descriptor.capabilities.id.as_str())
+            .collect();
+        assert_eq!(ids, vec!["prompty", "agentive", "copilot-sdk"]);
+
+        let find = |id: &str| {
+            harnesses
+                .iter()
+                .find(|descriptor| descriptor.capabilities.id == id)
+                .unwrap_or_else(|| panic!("missing harness {id}"))
+        };
+
+        // Prompty is the wired default and must resolve.
+        assert!(find("prompty").available);
+        registry().resolve(Some("prompty")).unwrap();
+
+        // The other harnesses are declared with honest capability metadata; their
+        // availability tracks whether their adapter can execute a run yet
+        // (agentive is always wired; the Copilot harness needs its CLI present).
+        assert_eq!(find("agentive").available, agentive::AVAILABLE);
+        assert_eq!(find("copilot-sdk").available, copilot_sdk::is_available());
     }
 }
