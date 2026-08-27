@@ -832,8 +832,8 @@ pub async fn agent_chat_with_tools(
         .clamp(1, 200);
     let mutation_tools_enabled = allow_mutation_tools.unwrap_or(false);
     // Engine selection lives in the harness registry, not in ad hoc command
-    // logic. The registry applies the deprecated `"agentive"` alias and rejects
-    // unknown ids with a clear message.
+    // logic. The registry maps the requested id to a concrete harness and
+    // rejects unknown ids with a clear message.
     let harness = HarnessRegistry::new(state.prompty_steering.clone())
         .resolve(config.execution_engine.as_deref())?;
     let harness_id = harness.id().to_string();
@@ -1112,6 +1112,16 @@ pub async fn cancel_agent_chat_run(
 #[tauri::command]
 pub async fn fetch_url_content(url: String) -> Result<String, String> {
     crate::engine::agent::web::fetch_and_clean(&url).await
+}
+
+/// List every known agent harness with its capabilities and whether it can run.
+///
+/// The settings UI calls this to let users see and switch between harnesses.
+/// Enumeration is static host metadata (no provider or project state needed), so
+/// this is infallible.
+#[tauri::command]
+pub fn list_agent_harnesses() -> Vec<crate::engine::agent::harness::HarnessDescriptor> {
+    crate::engine::agent::harness::HarnessRegistry::available_harnesses()
 }
 
 /// Serializable result from the agentic chat.
@@ -1636,14 +1646,16 @@ mod tests {
     }
 
     #[test]
-    fn execution_engine_defaults_to_prompty_and_accepts_agentive_alias() {
+    fn execution_engine_defaults_to_prompty_and_resolves_agentive() {
         assert_eq!(
             HarnessRegistry::canonical_id(None).unwrap(),
             crate::engine::agent::harness::DEFAULT_HARNESS_ID
         );
+        // Agentive is now a real, selectable harness (issue #246) and resolves
+        // to its own id rather than aliasing onto Prompty.
         assert_eq!(
             HarnessRegistry::canonical_id(Some("agentive")).unwrap(),
-            crate::engine::agent::harness::DEFAULT_HARNESS_ID
+            crate::engine::agent::harness::AGENTIVE_HARNESS_ID
         );
         assert_eq!(
             HarnessRegistry::canonical_id(Some("prompty")).unwrap(),
@@ -1651,7 +1663,8 @@ mod tests {
         );
         assert_eq!(
             HarnessRegistry::canonical_id(Some("other")).unwrap_err(),
-            "Unsupported execution_engine 'other'. Expected 'prompty'."
+            "Unsupported execution_engine 'other'. Expected one of 'prompty', 'agentive', \
+             'copilot-sdk'."
         );
     }
 
@@ -1690,13 +1703,22 @@ mod tests {
     }
 
     #[test]
-    fn production_prompty_selection_is_the_only_engine() {
+    fn all_known_engines_resolve_through_the_registry() {
+        // Engine selection is centralized in the registry. Every selectable id
+        // maps to its own canonical harness; agentive (#246) and the Copilot SDK
+        // (#247) are wired alongside the Prompty default.
         assert_eq!(
             HarnessRegistry::canonical_id(Some("prompty")).unwrap(),
             crate::engine::agent::harness::DEFAULT_HARNESS_ID
         );
-        // No harness other than Prompty is selectable in this PR.
-        assert!(HarnessRegistry::canonical_id(Some("copilot-sdk")).is_err());
+        assert_eq!(
+            HarnessRegistry::canonical_id(Some("agentive")).unwrap(),
+            crate::engine::agent::harness::AGENTIVE_HARNESS_ID
+        );
+        assert_eq!(
+            HarnessRegistry::canonical_id(Some("copilot-sdk")).unwrap(),
+            crate::engine::agent::harness::COPILOT_SDK_HARNESS_ID
+        );
     }
 
     #[test]

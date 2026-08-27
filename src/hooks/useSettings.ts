@@ -28,7 +28,13 @@ export interface AgentPreset {
 export type AiProviderKind = "microsoft_foundry" | "azure_openai" | "openai" | "anthropic";
 export type AiAuthMode = "api_key" | "azure_oauth";
 export type AiApplyMode = "ask" | "auto";
-export type AiAgentExecutionEngine = "agentive" | "prompty";
+/**
+ * Identifier of the agent harness (runtime) that executes agent turns. Known
+ * built-ins are `"prompty"`, `"agentive"`, and `"copilot-sdk"`, but this is a
+ * plain string so new harnesses surfaced by the backend registry work without a
+ * frontend change. The backend validates unknown ids.
+ */
+export type AiAgentExecutionEngine = string;
 export type NarrationConnectionMode = "reuse_active_foundry" | "dedicated";
 
 export interface AiProviderConfig {

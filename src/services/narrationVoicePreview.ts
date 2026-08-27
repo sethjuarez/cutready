@@ -1,6 +1,6 @@
 import type { AppSettings } from "../hooks/useSettings";
 import { getProviderSecret, setProviderSecret } from "../hooks/useSecretStore";
-import { activeProvider, providerById } from "../utils/providerConfig";
+import { narrationProvider } from "../utils/providerConfig";
 import { invoke } from "./tauri";
 import {
   buildPlainSsml,
@@ -30,16 +30,7 @@ export async function ensureCachedNarrationVoicePreview({
     if (cachedPath) return { path: cachedPath, generated: false };
   }
 
-  const providers = settings.aiProviders ?? [];
-  const narrationProviders = providers.filter((provider) =>
-    (provider.provider === "microsoft_foundry" || provider.provider === "azure_openai") && provider.endpoint,
-  );
-  const selectedNarrationProvider = narrationProviders.find(
-    (provider) => provider.id === settings.narrationProviderId,
-  ) ?? narrationProviders[0] ?? null;
-  const selectedProvider = settings.narrationConnectionMode === "dedicated"
-    ? providerById(settings, settings.narrationProviderId) ?? selectedNarrationProvider
-    : activeProvider(settings);
+  const selectedProvider = narrationProvider(settings);
   if (!selectedProvider || !["microsoft_foundry", "azure_openai"].includes(selectedProvider.provider) || !selectedProvider.endpoint) {
     throw new Error("Select a Foundry or Azure narration connection before previewing a voice.");
   }

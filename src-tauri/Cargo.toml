@@ -30,6 +30,15 @@ reqwest = { version = "0.12", features = ["json", "stream"] }
 scraper = "0.22"
 tokio-stream = "0.1"
 futures-util = "0.3"
+# Agentive agent harness runtime. Pinned to a pushed origin/main rev so the API
+# matches the adapter in engine/agent/harness/agentive.rs. Kept behind that
+# adapter — no `agentive::*` type leaks past the harness boundary.
+agentive = { git = "https://github.com/sethjuarez/agentive", rev = "457365f5e9ab35fbd78702ddf9f2742046f90d1c" }
+# GitHub Copilot SDK agent harness runtime (issue #247). Pinned to a pushed
+# origin/main rev so the API matches the adapter in
+# engine/agent/harness/copilot_sdk.rs. Kept behind that adapter — no
+# `copilot_sdk::*` type leaks past the harness boundary.
+copilot-sdk = { git = "https://github.com/sethjuarez/copilot-sdk-rust", rev = "96ef003e1037086322f61599deb55aa3e6a810a7" }
 draftline = "0.2.15"
 keyring = "4.1.2"
 xcap = "0.8"
