@@ -3385,8 +3385,11 @@ function HarnessPicker({ value, onChange }: { value: string; onChange: (id: stri
                   </span>
                 )}
                 {!harness.available && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-text-secondary))]/10 text-[rgb(var(--color-text-secondary))] font-medium flex items-center gap-1">
-                    <FlaskConical className="w-3 h-3" /> Coming soon
+                  <span
+                    className="text-[10px] px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-text-secondary))]/10 text-[rgb(var(--color-text-secondary))] font-medium flex items-center gap-1"
+                    title="This harness is wired but can't run here right now (its runtime or CLI isn't available on this system)."
+                  >
+                    <FlaskConical className="w-3 h-3" /> Unavailable
                   </span>
                 )}
               </div>

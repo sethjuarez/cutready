@@ -1663,7 +1663,8 @@ mod tests {
         );
         assert_eq!(
             HarnessRegistry::canonical_id(Some("other")).unwrap_err(),
-            "Unsupported execution_engine 'other'. Expected one of 'prompty', 'agentive'."
+            "Unsupported execution_engine 'other'. Expected one of 'prompty', 'agentive', \
+             'copilot-sdk'."
         );
     }
 
@@ -1702,13 +1703,22 @@ mod tests {
     }
 
     #[test]
-    fn production_prompty_selection_is_the_only_engine() {
+    fn all_known_engines_resolve_through_the_registry() {
+        // Engine selection is centralized in the registry. Every selectable id
+        // maps to its own canonical harness; agentive (#246) and the Copilot SDK
+        // (#247) are wired alongside the Prompty default.
         assert_eq!(
             HarnessRegistry::canonical_id(Some("prompty")).unwrap(),
             crate::engine::agent::harness::DEFAULT_HARNESS_ID
         );
-        // No harness other than Prompty is selectable in this PR.
-        assert!(HarnessRegistry::canonical_id(Some("copilot-sdk")).is_err());
+        assert_eq!(
+            HarnessRegistry::canonical_id(Some("agentive")).unwrap(),
+            crate::engine::agent::harness::AGENTIVE_HARNESS_ID
+        );
+        assert_eq!(
+            HarnessRegistry::canonical_id(Some("copilot-sdk")).unwrap(),
+            crate::engine::agent::harness::COPILOT_SDK_HARNESS_ID
+        );
     }
 
     #[test]
