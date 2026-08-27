@@ -18,7 +18,7 @@ use prompty_foundry::{DeviceCodeResponse, TokenResponse};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tauri_plugin_auditaur::auditaur_command;
+use tauri_plugin_auditaur::{auditaur_command, instrument_ipc, IpcTraceContext};
 
 const SIMPLE_CHAT_TIMEOUT: Duration = Duration::from_secs(45);
 const MIN_SIMPLE_CHAT_TIMEOUT_MS: u64 = 5_000;
@@ -1131,8 +1131,18 @@ pub fn list_agent_harnesses() -> Vec<crate::engine::agent::harness::HarnessDescr
 /// JSON-RPC only long enough to read status, then shuts it down (see
 /// [`copilot_sdk::probe_auth`]). Infallible — failures are reported inside the
 /// DTO's `message`/`installed` fields, mirroring `list_agent_harnesses`.
+///
+/// Instrumented with `#[instrument_ipc]` rather than `#[auditaur_command]`
+/// because the latter injects a borrowed `tauri::ipc::Request<'_>` parameter,
+/// which would force this infallible `async` command to return a `Result`.
+/// `instrument_ipc` continues the frontend trace via the reserved
+/// `auditaur_trace_context` carrier argument while preserving the plain DTO
+/// return. The carrier is supplied automatically by `@auditaur/api`.
 #[tauri::command]
-pub async fn copilot_auth_status() -> crate::engine::agent::harness::copilot_sdk::CopilotAuthStatus
+#[instrument_ipc(skip_all)]
+pub async fn copilot_auth_status(
+    auditaur_trace_context: Option<IpcTraceContext>,
+) -> crate::engine::agent::harness::copilot_sdk::CopilotAuthStatus
 {
     crate::engine::agent::harness::copilot_sdk::probe_auth().await
 }
@@ -1141,7 +1151,7 @@ pub async fn copilot_auth_status() -> crate::engine::agent::harness::copilot_sdk
 /// wait for it to finish. The settings UI re-probes status afterward via
 /// `copilot_auth_status`. Returns an error with a short detail on failure so the
 /// UI can fall back to guided steps.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn copilot_sign_in() -> Result<(), String> {
     crate::engine::agent::harness::copilot_sdk::sign_in().await
 }

@@ -79,13 +79,17 @@ pub struct CopilotAuthStatus {
 /// probing never triggers an interactive sign-in as a side effect. The SDK's
 /// own process spawn already sets `CREATE_NO_WINDOW`, so no console window
 /// flashes while probing on Windows.
+#[tracing::instrument(name = "copilot_probe_auth", skip_all)]
 pub async fn probe_auth() -> CopilotAuthStatus {
     if !is_available() {
+        tracing::debug!(installed = false, "copilot cli not installed");
         return CopilotAuthStatus {
             installed: false,
             ..Default::default()
         };
     }
+
+    tracing::debug!("probing copilot auth status");
 
     let client = match copilot_sdk::Client::builder()
         .use_stdio(true)
@@ -94,6 +98,7 @@ pub async fn probe_auth() -> CopilotAuthStatus {
     {
         Ok(client) => client,
         Err(error) => {
+            tracing::warn!(error = %error, "failed to build copilot client");
             return CopilotAuthStatus {
                 installed: true,
                 message: Some(format!("Failed to build Copilot client: {error}")),
@@ -103,6 +108,7 @@ pub async fn probe_auth() -> CopilotAuthStatus {
     };
 
     if let Err(error) = client.start().await {
+        tracing::warn!(error = %error, "failed to start copilot cli");
         let _ = client.stop().await;
         return CopilotAuthStatus {
             installed: true,
@@ -118,19 +124,29 @@ pub async fn probe_auth() -> CopilotAuthStatus {
         .and_then(|status| non_empty(&status.version));
 
     let result = match client.get_auth_status().await {
-        Ok(status) => auth_status_from_parts(
-            status.is_authenticated,
-            status.login.as_deref(),
-            status.status_message.as_deref(),
-            cli_version,
-        ),
-        Err(error) => CopilotAuthStatus {
-            installed: true,
-            authenticated: false,
-            login: None,
-            message: Some(format!("Could not read Copilot auth status: {error}")),
-            cli_version,
-        },
+        Ok(status) => {
+            tracing::info!(
+                authenticated = status.is_authenticated,
+                cli_version = cli_version.as_deref(),
+                "copilot auth status probed"
+            );
+            auth_status_from_parts(
+                status.is_authenticated,
+                status.login.as_deref(),
+                status.status_message.as_deref(),
+                cli_version,
+            )
+        }
+        Err(error) => {
+            tracing::warn!(error = %error, "could not read copilot auth status");
+            CopilotAuthStatus {
+                installed: true,
+                authenticated: false,
+                login: None,
+                message: Some(format!("Could not read Copilot auth status: {error}")),
+                cli_version,
+            }
+        }
     };
 
     // Tear the CLI down regardless of outcome.
@@ -169,8 +185,10 @@ fn auth_status_from_parts(
 ///
 /// The subprocess sets `CREATE_NO_WINDOW` on Windows (no console flash) and
 /// `kill_on_drop` so an abandoned attempt does not leak a process.
+#[tracing::instrument(name = "copilot_sign_in", skip_all)]
 pub async fn sign_in() -> Result<(), String> {
     let Some(cli) = copilot_sdk::find_copilot_cli() else {
+        tracing::warn!("copilot cli not found for sign-in");
         return Err(
             "GitHub Copilot CLI was not found on this system. Install it first, then try again."
                 .to_string(),
@@ -190,6 +208,7 @@ pub async fn sign_in() -> Result<(), String> {
         command.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
 
+    tracing::info!("launching copilot login");
     let child = command
         .spawn()
         .map_err(|error| format!("Failed to launch `copilot login`: {error}"))?;
@@ -197,20 +216,26 @@ pub async fn sign_in() -> Result<(), String> {
     let output =
         match tokio::time::timeout(Duration::from_secs(300), child.wait_with_output()).await {
             Ok(Ok(output)) => output,
-            Ok(Err(error)) => return Err(format!("`copilot login` failed: {error}")),
+            Ok(Err(error)) => {
+                tracing::warn!(error = %error, "copilot login process failed");
+                return Err(format!("`copilot login` failed: {error}"));
+            }
             Err(_) => {
+                tracing::warn!("copilot login timed out");
                 return Err(
                     "Sign-in timed out. Finish signing in in your browser, then click Recheck."
                         .to_string(),
-                )
+                );
             }
         };
 
     if output.status.success() {
+        tracing::info!("copilot login completed");
         return Ok(());
     }
 
     let tail = sign_in_error_tail(&output.stderr, &output.stdout);
+    tracing::warn!(reason = %tail, "copilot login did not complete");
     Err(if tail.is_empty() {
         "`copilot login` did not complete. Try running `copilot login` in a terminal, then click Recheck."
             .to_string()
