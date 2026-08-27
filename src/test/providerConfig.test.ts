@@ -7,6 +7,7 @@ import {
   defaultProvider,
   isAiProviderConfigured,
   isProviderInputConfigured,
+  narrationProvider,
   providerById,
   providerToConfigInput,
 } from "../utils/providerConfig";
@@ -348,5 +349,88 @@ describe("isAiProviderConfigured", () => {
       aiApiKey: "sk-ant-test",
       aiModel: "",
     })).toBe(false);
+  });
+});
+
+// ── narrationProvider (shared connection pool) ──────────────────
+
+describe("narrationProvider", () => {
+  const foundry: AiProviderConfig = {
+    id: "foundry-1",
+    name: "Foundry",
+    provider: "microsoft_foundry",
+    authMode: "azure_oauth",
+    endpoint: "https://demo.services.ai.azure.com",
+    model: "gpt-4o",
+    contextLength: 128000,
+    modelSupportsVision: "true",
+    tenantId: "",
+    clientId: "",
+    subscriptionId: "",
+    resourceGroup: "",
+    resourceName: "",
+  };
+  const openai: AiProviderConfig = {
+    ...foundry,
+    id: "openai-1",
+    name: "OpenAI",
+    provider: "openai",
+    authMode: "api_key",
+    endpoint: "",
+  };
+  const base = {
+    aiProvider: "openai",
+    aiEndpoint: "",
+    aiApiKey: "",
+    aiModel: "",
+    aiAuthMode: "api_key",
+    aiAccessToken: "",
+  };
+
+  test("shared mode reuses the active provider when it can serve narration", () => {
+    const chosen = narrationProvider({
+      ...base,
+      aiProviders: [foundry],
+      aiActiveProviderId: "foundry-1",
+      narrationConnectionMode: "reuse_active_foundry",
+      narrationProviderId: "",
+    });
+    expect(chosen?.id).toBe("foundry-1");
+  });
+
+  test("shared mode falls back to a dedicated pool connection when the active provider can't serve narration", () => {
+    // Active harness provides its own (non-Azure/Foundry) provider — e.g. the
+    // Copilot entitlement — so narration must not break; it falls back to the
+    // Foundry connection still present in the shared pool.
+    const chosen = narrationProvider({
+      ...base,
+      aiProviders: [openai, foundry],
+      aiActiveProviderId: "openai-1",
+      narrationConnectionMode: "reuse_active_foundry",
+      narrationProviderId: "foundry-1",
+    });
+    expect(chosen?.id).toBe("foundry-1");
+  });
+
+  test("dedicated mode uses the chosen narration connection", () => {
+    const chosen = narrationProvider({
+      ...base,
+      aiProviders: [openai, foundry],
+      aiActiveProviderId: "openai-1",
+      narrationConnectionMode: "dedicated",
+      narrationProviderId: "foundry-1",
+    });
+    expect(chosen?.id).toBe("foundry-1");
+  });
+
+  test("returns null when the shared pool has no Foundry/Azure connection", () => {
+    const chosen = narrationProvider({
+      ...base,
+      aiProviders: [openai],
+      aiActiveProviderId: "openai-1",
+      narrationConnectionMode: "reuse_active_foundry",
+      narrationProviderId: "",
+    });
+    expect(chosen).toBeNull();
   });
 });

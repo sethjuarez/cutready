@@ -13,7 +13,10 @@ use crate::engine::agent::execution::AgentEvent;
 use crate::engine::agent::prompty_model::build_production_model;
 use crate::engine::agent::prompty_runner;
 
-use super::{AgentHarness, AgentRunRequest, AgentRunResult, HarnessCapabilities, HarnessEventEmitter};
+use super::{
+    AgentHarness, AgentRunRequest, AgentRunResult, HarnessCapabilities, HarnessContract,
+    HarnessEventEmitter, Ownership,
+};
 
 /// CutReady's steering queue for the Prompty engine.
 ///
@@ -56,6 +59,21 @@ impl PromptyHarness {
             durable_state: true,
         }
     }
+
+    /// Ownership contract for the Prompty runtime.
+    ///
+    /// Prompty is a host-driven engine: CutReady must supply the model provider,
+    /// the agent personas, the tool contract, and the durable run state. It owns
+    /// none of them, so every concern is [`Ownership::Requires`].
+    #[allow(dead_code)]
+    pub fn static_contract() -> HarnessContract {
+        HarnessContract {
+            provider: Ownership::Requires,
+            personas: Ownership::Requires,
+            tools: Ownership::Requires,
+            memory: Ownership::Requires,
+        }
+    }
 }
 
 #[async_trait]
@@ -66,6 +84,10 @@ impl AgentHarness for PromptyHarness {
 
     fn capabilities(&self) -> HarnessCapabilities {
         Self::static_capabilities()
+    }
+
+    fn contract(&self) -> HarnessContract {
+        Self::static_contract()
     }
 
     async fn run(

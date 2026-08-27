@@ -108,6 +108,39 @@ export function providerById(settings: ProviderSettings, providerId?: string): A
   return (settings.aiProviders || []).find((provider) => provider.id === providerId) ?? null;
 }
 
+/**
+ * Pick the Foundry/Azure connection the narration/voice layer should use.
+ *
+ * Narration is a shared-pool consumer, independent of the agent harness. In
+ * "dedicated" mode it uses the explicitly chosen narration connection. In shared
+ * mode ("reuse_active_foundry") it reuses the active agent provider — but when
+ * the active harness supplies no usable Azure/Foundry provider (for example the
+ * copilot-sdk harness running on the Copilot entitlement with no BYOK), it falls
+ * back to a dedicated narration connection from the shared pool instead of
+ * breaking narration. Returns the chosen provider (which callers still validate
+ * for auth/endpoint), or null when the pool has no Foundry/Azure connection.
+ */
+export function narrationProvider(
+  settings: ProviderSettings & { narrationConnectionMode?: string; narrationProviderId?: string },
+): AiProviderConfig | null {
+  const pool = (settings.aiProviders || []).filter(
+    (provider) =>
+      (provider.provider === "microsoft_foundry" || provider.provider === "azure_openai") &&
+      !!provider.endpoint,
+  );
+  const dedicated = providerById(settings, settings.narrationProviderId) ?? pool[0] ?? null;
+  if (settings.narrationConnectionMode === "dedicated") return dedicated;
+
+  const shared = activeProvider(settings);
+  const sharedUsable =
+    !!shared &&
+    (shared.provider === "microsoft_foundry" || shared.provider === "azure_openai") &&
+    !!shared.endpoint;
+  // Shared mode: reuse the active agent provider when it can serve narration,
+  // otherwise fall back to a dedicated narration connection from the pool.
+  return sharedUsable ? shared : dedicated;
+}
+
 export function flatProviderInput(settings: ProviderSettings): ProviderConfigInput {
   return {
     provider: settings.aiProvider,

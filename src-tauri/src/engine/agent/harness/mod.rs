@@ -150,6 +150,46 @@ pub struct HarnessCapabilities {
     pub durable_state: bool,
 }
 
+/// Per-concern ownership stance a harness declares for a host resource.
+///
+/// [`HarnessCapabilities`] describe *behavior*; this describes
+/// *provisioning/ownership* — for each host concern, who supplies it. The host
+/// reacts to the stance instead of assembling everything unconditionally and
+/// hoping the adapter ignores what it does not use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Ownership {
+    /// The host must supply this; the harness cannot run without it (for
+    /// example prompty/agentive require a provider config and tool set).
+    Requires,
+    /// The harness owns it and the host must not send its own (for example the
+    /// Copilot harness runs its own tool loop and session memory).
+    Provides,
+    /// The host sends its contribution and the harness merges it with its own
+    /// (for example CutReady personas registered as native Copilot agents, or
+    /// an optional BYOK provider layered over the Copilot entitlement).
+    Augments,
+}
+
+/// Declarative, per-concern ownership contract for a harness.
+///
+/// Sits alongside [`HarnessCapabilities`] on the CutReady-owned boundary. It
+/// covers the concerns whose *provisioning* differs between harnesses; the host
+/// invariants that can never be opted out of — path confinement, the
+/// [`AgentEvent`] DTO shape, and persistence policy — are deliberately absent
+/// here so the contract can never weaken them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct HarnessContract {
+    /// Who supplies the model provider / auth for agent turns.
+    pub provider: Ownership,
+    /// Who supplies the agent personas / system prompts.
+    pub personas: Ownership,
+    /// Who supplies the tool contract the model may call.
+    pub tools: Ownership,
+    /// Who supplies durable run/checkpoint memory.
+    pub memory: Ownership,
+}
+
 /// A harness entry as surfaced to the host/UI: its capabilities plus whether it
 /// can execute a run right now.
 ///
@@ -162,6 +202,8 @@ pub struct HarnessDescriptor {
     /// Capability metadata for the harness.
     #[serde(flatten)]
     pub capabilities: HarnessCapabilities,
+    /// Per-concern ownership contract for the harness.
+    pub contract: HarnessContract,
     /// Whether the harness can currently be resolved and run.
     pub available: bool,
 }
@@ -175,6 +217,11 @@ pub trait AgentHarness: Send + Sync {
     /// Capability metadata describing what this harness supports.
     #[allow(dead_code)]
     fn capabilities(&self) -> HarnessCapabilities;
+
+    /// Ownership contract describing who provisions each host concern for this
+    /// harness (provider, personas, tools, memory).
+    #[allow(dead_code)]
+    fn contract(&self) -> HarnessContract;
 
     /// Execute one agent run, forwarding events through `emit`.
     async fn run(
@@ -253,6 +300,19 @@ impl HarnessRegistry {
         }
     }
 
+    /// Report the ownership contract for a requested harness id without building
+    /// the harness. Consumed by conformance tests and the contract-aware
+    /// settings UI.
+    #[allow(dead_code)]
+    pub fn contract(requested: Option<&str>) -> Result<HarnessContract, String> {
+        match Self::canonical_id(requested)? {
+            DEFAULT_HARNESS_ID => Ok(PromptyHarness::static_contract()),
+            AGENTIVE_HARNESS_ID => Ok(agentive::static_contract()),
+            COPILOT_SDK_HARNESS_ID => Ok(copilot_sdk::static_contract()),
+            other => Err(unsupported_harness_error(other)),
+        }
+    }
+
     /// Enumerate every known harness with its capabilities and availability.
     ///
     /// This is the single source the host exposes to the settings UI so users
@@ -264,14 +324,17 @@ impl HarnessRegistry {
         vec![
             HarnessDescriptor {
                 capabilities: PromptyHarness::static_capabilities(),
+                contract: PromptyHarness::static_contract(),
                 available: true,
             },
             HarnessDescriptor {
                 capabilities: agentive::static_capabilities(),
+                contract: agentive::static_contract(),
                 available: agentive::AVAILABLE,
             },
             HarnessDescriptor {
                 capabilities: copilot_sdk::static_capabilities(),
+                contract: copilot_sdk::static_contract(),
                 available: copilot_sdk::is_available(),
             },
         ]
@@ -421,5 +484,70 @@ mod tests {
         // (agentive is always wired; the Copilot harness needs its CLI present).
         assert_eq!(find("agentive").available, agentive::AVAILABLE);
         assert_eq!(find("copilot-sdk").available, copilot_sdk::is_available());
+    }
+
+    #[test]
+    fn provider_requiring_harnesses_declare_requires() {
+        // Prompty and agentive cannot run without a host-supplied provider, so
+        // they must advertise that stance rather than silently tolerating a
+        // missing one.
+        for id in ["prompty", "agentive"] {
+            let contract = HarnessRegistry::contract(Some(id)).unwrap();
+            assert_eq!(
+                contract.provider,
+                Ownership::Requires,
+                "{id} must require a host provider"
+            );
+            assert_eq!(contract.personas, Ownership::Requires);
+            assert_eq!(contract.tools, Ownership::Requires);
+            assert_eq!(contract.memory, Ownership::Requires);
+        }
+    }
+
+    #[test]
+    fn copilot_sdk_provides_its_own_provider_and_augments_personas() {
+        // The Copilot harness runs on the GitHub Copilot entitlement, owns its
+        // tool loop and session memory, and merges CutReady personas into its
+        // own base prompt as native custom agents.
+        let contract = HarnessRegistry::contract(Some("copilot-sdk")).unwrap();
+        assert_eq!(contract.provider, Ownership::Provides);
+        assert_eq!(contract.personas, Ownership::Augments);
+        assert_eq!(contract.tools, Ownership::Provides);
+        assert_eq!(contract.memory, Ownership::Provides);
+    }
+
+    #[test]
+    fn contract_default_matches_prompty_and_resolved_harness() {
+        // A missing id falls back to the default harness for the contract just
+        // like it does for capabilities and resolution.
+        let default_contract = HarnessRegistry::contract(None).unwrap();
+        assert_eq!(default_contract, PromptyHarness::static_contract());
+
+        let harness = registry().resolve(None).unwrap();
+        assert_eq!(harness.contract(), PromptyHarness::static_contract());
+    }
+
+    #[test]
+    fn contract_for_unsupported_id_is_reported_clearly() {
+        // Unsupported concerns/ids surface the same clear error as capabilities
+        // and resolution rather than defaulting silently.
+        let err = HarnessRegistry::contract(Some("totally-unknown")).unwrap_err();
+        assert_eq!(
+            err,
+            HarnessRegistry::capabilities(Some("totally-unknown")).unwrap_err()
+        );
+        assert!(err.contains("totally-unknown"));
+    }
+
+    #[test]
+    fn enumeration_carries_each_harness_contract() {
+        // The UI-facing descriptor list must expose the ownership contract next
+        // to capabilities so Settings can gate the agent provider affordance.
+        let harnesses = HarnessRegistry::available_harnesses();
+        for descriptor in &harnesses {
+            let expected =
+                HarnessRegistry::contract(Some(descriptor.capabilities.id.as_str())).unwrap();
+            assert_eq!(descriptor.contract, expected);
+        }
     }
 }

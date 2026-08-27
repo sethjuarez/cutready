@@ -37,7 +37,7 @@ import { SketchIcon } from "./Icons";
 import type { RecordingTake } from "../types/recording";
 import { parseDurationSeconds, summarizeSketchDuration, type DurationDisplayMode } from "../utils/documentMetadata";
 import { preferredNarrationMimeType } from "../utils/narrationAudio";
-import { activeProvider, activeProviderInput, buildProviderConfig, providerById } from "../utils/providerConfig";
+import { activeProviderInput, buildProviderConfig, narrationProvider } from "../utils/providerConfig";
 import { getProviderSecret, setProviderSecret } from "../hooks/useSecretStore";
 import { buildPlainSsml, inferSpeechEndpoint, SPEECH_TOKEN_SCOPE, synthesizeSpeechAudio } from "../services/narrationSpeech";
 import { validateGeneratedSsml } from "../services/narrationSsml";
@@ -1553,12 +1553,7 @@ The Actions describe what happens on screen — use them as visual design hints.
   }, [activeSketchPath, settings.narrationSpeechOutputFormat]);
 
   const refreshSpeechAccess = useCallback(async () => {
-    const narrationProviders = settings.aiProviders?.filter((provider) =>
-      (provider.provider === "microsoft_foundry" || provider.provider === "azure_openai") && provider.endpoint
-    ) ?? [];
-    const selectedProvider = settings.narrationConnectionMode === "dedicated"
-      ? providerById(settings, settings.narrationProviderId) ?? narrationProviders[0] ?? null
-      : activeProvider(settings);
+    const selectedProvider = narrationProvider(settings);
     if (!selectedProvider || !["microsoft_foundry", "azure_openai"].includes(selectedProvider.provider) || !selectedProvider.endpoint) {
       throw new Error("Select a Foundry/Azure narration connection before generating narration.");
     }

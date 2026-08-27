@@ -23,7 +23,8 @@ use crate::engine::agent::llm::{LlmConfig, LlmProvider};
 use crate::engine::agent::tools::{execute_tool, ToolDefinition};
 
 use super::{
-    AgentHarness, AgentRunRequest, AgentRunResult, HarnessCapabilities, HarnessEventEmitter,
+    AgentHarness, AgentRunRequest, AgentRunResult, HarnessCapabilities, HarnessContract,
+    HarnessEventEmitter, Ownership,
 };
 
 /// Canonical, stable identifier for the agentive harness.
@@ -58,6 +59,22 @@ pub fn static_capabilities() -> HarnessCapabilities {
     }
 }
 
+/// Ownership contract for the agentive runtime.
+///
+/// Like Prompty, the agentive loop is host-driven: CutReady supplies the model
+/// provider, the personas, and the tool contract, and owns run state. It
+/// provisions none of them itself, so every concern is [`Ownership::Requires`].
+/// (Durable state is advertised unsupported via capabilities, but the host is
+/// still the party that would own it — the harness never provides its own.)
+pub fn static_contract() -> HarnessContract {
+    HarnessContract {
+        provider: Ownership::Requires,
+        personas: Ownership::Requires,
+        tools: Ownership::Requires,
+        memory: Ownership::Requires,
+    }
+}
+
 /// Production harness backed by the [`agentive`] agentic loop.
 ///
 /// Stateless: unlike Prompty it carries no host-owned steering queue, so the
@@ -79,6 +96,10 @@ impl AgentHarness for AgentiveHarness {
 
     fn capabilities(&self) -> HarnessCapabilities {
         static_capabilities()
+    }
+
+    fn contract(&self) -> HarnessContract {
+        static_contract()
     }
 
     async fn run(

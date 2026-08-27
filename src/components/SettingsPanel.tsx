@@ -3307,6 +3307,16 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
 
 // ── Agents Tab ───────────────────────────────────────────────────
 
+/** Per-concern ownership stance a harness declares (mirrors the backend enum). */
+type HarnessOwnership = "requires" | "provides" | "augments";
+
+interface HarnessContract {
+  provider: HarnessOwnership;
+  personas: HarnessOwnership;
+  tools: HarnessOwnership;
+  memory: HarnessOwnership;
+}
+
 interface HarnessDescriptor {
   id: string;
   display_name: string;
@@ -3318,6 +3328,7 @@ interface HarnessDescriptor {
   steering: boolean;
   cancellation: boolean;
   durable_state: boolean;
+  contract: HarnessContract;
   available: boolean;
 }
 
@@ -3410,6 +3421,17 @@ function HarnessPicker({ value, onChange }: { value: string; onChange: (id: stri
                   );
                 })}
               </div>
+              {selected && harness.contract && harness.contract.provider !== "requires" && (
+                <p className="text-[11px] leading-snug text-[rgb(var(--color-text-secondary))] mt-2 flex items-start gap-1.5">
+                  <Info className="w-3 h-3 mt-0.5 shrink-0" />
+                  <span>
+                    {harness.contract.provider === "provides"
+                      ? "Signed in with GitHub Copilot — this harness brings its own model provider for agent turns, so you don't need to configure a chat provider for the agent. A bring-your-own-key provider is optional."
+                      : "This harness layers your provider over its own for agent turns, so configuring a chat provider for the agent is optional."}
+                    {" "}The AI Providers below are still used for narration and voice.
+                  </span>
+                </p>
+              )}
             </button>
           );
         })}

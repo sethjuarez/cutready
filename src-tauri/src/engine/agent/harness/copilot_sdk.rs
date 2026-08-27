@@ -26,7 +26,8 @@ use crate::engine::agent::execution::{AgentEvent, ChatMessage, ContextItem, Usag
 use crate::engine::agent::llm::{LlmConfig, LlmProvider};
 
 use super::{
-    AgentHarness, AgentRunRequest, AgentRunResult, HarnessCapabilities, HarnessEventEmitter,
+    AgentHarness, AgentRunRequest, AgentRunResult, HarnessCapabilities, HarnessContract,
+    HarnessEventEmitter, Ownership,
 };
 
 /// Canonical, stable identifier for the Copilot SDK harness.
@@ -65,6 +66,25 @@ pub fn static_capabilities() -> HarnessCapabilities {
     }
 }
 
+/// Ownership contract for the Copilot SDK runtime.
+///
+/// The Copilot harness runs on the GitHub Copilot entitlement and drives
+/// Copilot's own agent loop, so it *provides* its own provider, tool contract,
+/// and session memory rather than requiring the host to supply them. CutReady's
+/// personas are still authoritative, but they are layered onto Copilot's base
+/// prompt (via `SystemMessageMode::Append`) and registered as native custom
+/// agents, so personas are *augmented* rather than owned outright. An optional
+/// BYOK provider (see [`build_provider_config`]) also merely augments the
+/// entitlement, which is why `provider` is `Provides` rather than `Requires`.
+pub fn static_contract() -> HarnessContract {
+    HarnessContract {
+        provider: Ownership::Provides,
+        personas: Ownership::Augments,
+        tools: Ownership::Provides,
+        memory: Ownership::Provides,
+    }
+}
+
 /// Production harness backed by the GitHub Copilot CLI via [`copilot_sdk`].
 ///
 /// Stateless: the registry constructs it fresh per resolve. Each run spins up a
@@ -92,6 +112,10 @@ impl AgentHarness for CopilotSdkHarness {
 
     fn capabilities(&self) -> HarnessCapabilities {
         static_capabilities()
+    }
+
+    fn contract(&self) -> HarnessContract {
+        static_contract()
     }
 
     async fn run(
@@ -146,20 +170,28 @@ impl AgentHarness for CopilotSdkHarness {
             return fail(&emit, format!("Failed to start Copilot CLI: {error}"));
         }
 
-        // Compose the system message: the agent persona prompt plus any
+        // Compose the system message: the active agent persona prompt plus any
         // preselected context items, folded in so nothing the host gathered is
-        // silently dropped. `Replace` mode makes the CutReady persona the
-        // authoritative system prompt for the turn.
+        // silently dropped. `Append` mode layers the CutReady persona onto
+        // Copilot's own base prompt instead of clobbering it, so Copilot keeps
+        // its native capabilities while CutReady's persona stays authoritative
+        // for the turn's intent.
         let system_content = compose_system_message(&agent_id, &agent_prompts, &context_items);
         let system_message = system_content.map(|content| copilot_sdk::SystemMessageConfig {
-            mode: Some(copilot_sdk::SystemMessageMode::Replace),
+            mode: Some(copilot_sdk::SystemMessageMode::Append),
             content: Some(content),
         });
+
+        // Register CutReady's personas as native Copilot custom agents so the
+        // host-owned prompts are available for delegation under their own names,
+        // not just as the single active system message.
+        let custom_agents = build_custom_agents(&agent_prompts);
 
         let model = config.llm.model.trim().to_string();
         let session_config = copilot_sdk::SessionConfig {
             model: (!model.is_empty()).then(|| model.clone()),
             system_message,
+            custom_agents,
             provider: build_provider_config(&config.llm),
             streaming: true,
             working_directory: project_root.to_str().map(str::to_string),
@@ -338,6 +370,57 @@ fn compose_system_message(
     (!blocks.is_empty()).then(|| blocks.join("\n\n"))
 }
 
+/// Register CutReady's agent personas as native Copilot custom agents.
+///
+/// Each host persona prompt becomes a [`copilot_sdk::CustomAgentConfig`] keyed
+/// by its stable persona id (for example `planner`, `writer`, `editor`,
+/// `designer`), so Copilot can address them by name and delegate between them
+/// while the host-owned prompt stays authoritative. Ordering is stable
+/// (sorted by id) so session config is deterministic. Returns `None` when no
+/// non-empty personas are configured.
+fn build_custom_agents(
+    agent_prompts: &std::collections::HashMap<String, String>,
+) -> Option<Vec<copilot_sdk::CustomAgentConfig>> {
+    let mut entries: Vec<(&String, &String)> = agent_prompts
+        .iter()
+        .filter(|(id, prompt)| !id.trim().is_empty() && !prompt.trim().is_empty())
+        .collect();
+    if entries.is_empty() {
+        return None;
+    }
+    entries.sort_by(|a, b| a.0.cmp(b.0));
+
+    let agents = entries
+        .into_iter()
+        .map(|(id, prompt)| copilot_sdk::CustomAgentConfig {
+            name: id.trim().to_string(),
+            prompt: prompt.trim().to_string(),
+            display_name: Some(title_case(id.trim())),
+            description: None,
+            tools: None,
+            mcp_servers: None,
+            infer: None,
+        })
+        .collect();
+    Some(agents)
+}
+
+/// Title-case a persona id for a human-friendly display name (`writer` ->
+/// `Writer`). Non-alphanumeric separators are preserved as spaces.
+fn title_case(id: &str) -> String {
+    id.split(|c: char| c == '-' || c == '_' || c == ' ')
+        .filter(|word| !word.is_empty())
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Fold preselected context items into a single text block so nothing the host
 /// gathered is silently dropped.
 fn context_items_to_block(items: &[ContextItem]) -> Option<String> {
@@ -493,4 +576,56 @@ fn fail(emit: &HarnessEventEmitter, message: String) -> Result<AgentRunResult, S
         message: message.clone(),
     });
     Err(message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn prompts() -> HashMap<String, String> {
+        let mut map = HashMap::new();
+        map.insert("planner".to_string(), "Plan the demo.".to_string());
+        map.insert("writer".to_string(), "Write the narration.".to_string());
+        map.insert("blank".to_string(), "   ".to_string());
+        map
+    }
+
+    #[test]
+    fn contract_provides_provider_and_augments_personas() {
+        let contract = static_contract();
+        assert_eq!(contract.provider, Ownership::Provides);
+        assert_eq!(contract.personas, Ownership::Augments);
+        assert_eq!(contract.tools, Ownership::Provides);
+        assert_eq!(contract.memory, Ownership::Provides);
+    }
+
+    #[test]
+    fn custom_agents_are_built_from_non_empty_personas_in_stable_order() {
+        let agents = build_custom_agents(&prompts()).expect("expected custom agents");
+        // Blank persona is dropped; remaining are sorted by id for determinism.
+        let names: Vec<&str> = agents.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, vec!["planner", "writer"]);
+
+        let planner = &agents[0];
+        assert_eq!(planner.prompt, "Plan the demo.");
+        assert_eq!(planner.display_name.as_deref(), Some("Planner"));
+        assert!(planner.tools.is_none());
+        assert!(planner.mcp_servers.is_none());
+    }
+
+    #[test]
+    fn custom_agents_none_when_no_usable_personas() {
+        let mut map = HashMap::new();
+        map.insert("planner".to_string(), "  ".to_string());
+        assert!(build_custom_agents(&map).is_none());
+        assert!(build_custom_agents(&HashMap::new()).is_none());
+    }
+
+    #[test]
+    fn title_case_humanizes_persona_ids() {
+        assert_eq!(title_case("writer"), "Writer");
+        assert_eq!(title_case("system-designer"), "System Designer");
+        assert_eq!(title_case("copilot_sdk"), "Copilot Sdk");
+    }
 }
