@@ -832,8 +832,8 @@ pub async fn agent_chat_with_tools(
         .clamp(1, 200);
     let mutation_tools_enabled = allow_mutation_tools.unwrap_or(false);
     // Engine selection lives in the harness registry, not in ad hoc command
-    // logic. The registry applies the deprecated `"agentive"` alias and rejects
-    // unknown ids with a clear message.
+    // logic. The registry maps the requested id to a concrete harness and
+    // rejects unknown ids with a clear message.
     let harness = HarnessRegistry::new(state.prompty_steering.clone())
         .resolve(config.execution_engine.as_deref())?;
     let harness_id = harness.id().to_string();
@@ -1646,14 +1646,16 @@ mod tests {
     }
 
     #[test]
-    fn execution_engine_defaults_to_prompty_and_accepts_agentive_alias() {
+    fn execution_engine_defaults_to_prompty_and_resolves_agentive() {
         assert_eq!(
             HarnessRegistry::canonical_id(None).unwrap(),
             crate::engine::agent::harness::DEFAULT_HARNESS_ID
         );
+        // Agentive is now a real, selectable harness (issue #246) and resolves
+        // to its own id rather than aliasing onto Prompty.
         assert_eq!(
             HarnessRegistry::canonical_id(Some("agentive")).unwrap(),
-            crate::engine::agent::harness::DEFAULT_HARNESS_ID
+            crate::engine::agent::harness::AGENTIVE_HARNESS_ID
         );
         assert_eq!(
             HarnessRegistry::canonical_id(Some("prompty")).unwrap(),
@@ -1661,7 +1663,7 @@ mod tests {
         );
         assert_eq!(
             HarnessRegistry::canonical_id(Some("other")).unwrap_err(),
-            "Unsupported execution_engine 'other'. Expected 'prompty'."
+            "Unsupported execution_engine 'other'. Expected one of 'prompty', 'agentive'."
         );
     }
 

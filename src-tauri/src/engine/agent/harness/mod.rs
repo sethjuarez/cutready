@@ -43,6 +43,7 @@ use crate::engine::agent::execution::{
 use crate::engine::agent::llm::LlmConfig;
 use crate::engine::agent_state::AgentStateStore;
 
+use self::agentive::AgentiveHarness;
 use self::prompty::PromptyHarness;
 
 // ---------------------------------------------------------------------------
@@ -189,10 +190,10 @@ pub trait AgentHarness: Send + Sync {
 /// Canonical id of the harness selected when the host requests no specific one.
 pub const DEFAULT_HARNESS_ID: &str = "prompty";
 
-/// Deprecated harness id still accepted from persisted configs; it maps onto the
-/// current default. Kept so older settings that named `"agentive"` keep working
-/// until the real agentive harness returns in issue #246.
-pub const DEPRECATED_AGENTIVE_ALIAS: &str = "agentive";
+/// A second selectable harness id. Now that the agentive adapter is wired
+/// (issue #246), `"agentive"` resolves to the real [`agentive::AgentiveHarness`]
+/// rather than aliasing onto Prompty.
+pub const AGENTIVE_HARNESS_ID: &str = "agentive";
 
 /// Resolves harness identifiers to concrete [`AgentHarness`] instances.
 ///
@@ -215,11 +216,9 @@ impl HarnessRegistry {
     pub fn canonical_id(requested: Option<&str>) -> Result<&'static str, String> {
         match requested.map(str::trim).filter(|value| !value.is_empty()) {
             None | Some("prompty") => Ok(DEFAULT_HARNESS_ID),
-            // `agentive` is a deprecated alias while Prompty is the sole
-            // runtime; persisted configs still naming it map onto Prompty
-            // rather than erroring. Issue #246 reintroduces a real agentive
-            // harness under its own id.
-            Some(alias) if alias == DEPRECATED_AGENTIVE_ALIAS => Ok(DEFAULT_HARNESS_ID),
+            // The agentive adapter is wired (issue #246), so its id resolves to
+            // the real harness rather than aliasing onto Prompty.
+            Some(id) if id == AGENTIVE_HARNESS_ID => Ok(AGENTIVE_HARNESS_ID),
             Some(other) => Err(unsupported_harness_error(other)),
         }
     }
@@ -228,18 +227,19 @@ impl HarnessRegistry {
     pub fn resolve(&self, requested: Option<&str>) -> Result<Arc<dyn AgentHarness>, String> {
         match Self::canonical_id(requested)? {
             DEFAULT_HARNESS_ID => Ok(Arc::new(PromptyHarness::new(self.prompty_steering.clone()))),
+            AGENTIVE_HARNESS_ID => Ok(Arc::new(AgentiveHarness::new())),
             // `canonical_id` only ever yields ids we can build.
             other => Err(unsupported_harness_error(other)),
         }
     }
 
     /// Report capability metadata for a requested harness id without building
-    /// the harness. Consumed by conformance tests now; wired into diagnostics
-    /// surfaces alongside the additional adapters in issues #246/#247.
+    /// the harness. Consumed by conformance tests and diagnostics surfaces.
     #[allow(dead_code)]
     pub fn capabilities(requested: Option<&str>) -> Result<HarnessCapabilities, String> {
         match Self::canonical_id(requested)? {
             DEFAULT_HARNESS_ID => Ok(PromptyHarness::static_capabilities()),
+            AGENTIVE_HARNESS_ID => Ok(agentive::static_capabilities()),
             other => Err(unsupported_harness_error(other)),
         }
     }
@@ -270,11 +270,11 @@ impl HarnessRegistry {
 }
 
 fn unsupported_harness_error(requested: &str) -> String {
-    // Preserve the exact user-facing contract from the pre-seam
+    // Preserve the user-facing contract from the pre-seam
     // `ExecutionEngine::from_config`: the frontend still sends this value under
     // the `execution_engine` config key, so the error names that key and lists
-    // the one supported value.
-    format!("Unsupported execution_engine '{requested}'. Expected 'prompty'.")
+    // the currently supported values.
+    format!("Unsupported execution_engine '{requested}'. Expected one of 'prompty', 'agentive'.")
 }
 
 #[cfg(test)]
@@ -295,13 +295,19 @@ mod tests {
     }
 
     #[test]
-    fn deprecated_agentive_alias_still_maps_to_prompty() {
+    fn agentive_id_resolves_to_the_agentive_harness() {
+        // Once the agentive adapter is wired (issue #246) its id resolves to the
+        // real harness instead of aliasing onto Prompty.
         assert_eq!(
             HarnessRegistry::canonical_id(Some("agentive")).unwrap(),
-            DEFAULT_HARNESS_ID
+            AGENTIVE_HARNESS_ID
         );
         let harness = registry().resolve(Some("  agentive  ")).unwrap();
-        assert_eq!(harness.id(), DEFAULT_HARNESS_ID);
+        assert_eq!(harness.id(), AGENTIVE_HARNESS_ID);
+        assert_eq!(
+            harness.capabilities(),
+            agentive::static_capabilities()
+        );
     }
 
     #[test]
@@ -331,10 +337,11 @@ mod tests {
             "error should list supported ids: {err}"
         );
         // The exact user-facing contract is preserved from the pre-seam
-        // `ExecutionEngine::from_config`, keyed on `execution_engine`.
+        // `ExecutionEngine::from_config`, keyed on `execution_engine`, now
+        // listing every selectable harness.
         assert_eq!(
             err,
-            "Unsupported execution_engine 'copilot-sdk'. Expected 'prompty'."
+            "Unsupported execution_engine 'copilot-sdk'. Expected one of 'prompty', 'agentive'."
         );
 
         let capability_err = HarnessRegistry::capabilities(Some("copilot-sdk")).unwrap_err();
