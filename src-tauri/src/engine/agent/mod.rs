@@ -4,6 +4,7 @@
 //! function calling, streaming, and the agentic tool loop.
 
 pub mod execution;
+pub mod harness;
 pub mod llm;
 pub mod prompty_model;
 pub mod prompty_runner;

@@ -6,6 +6,7 @@ use crate::engine::agent::execution::{
     estimate_message_chars, AgentEvent, ChatMessage, ContextItem, ContextKind, ContextScope,
     ContextSource, LargeContextRef, RunCancellation, VisionConfig, WebAccessConfig,
 };
+use crate::engine::agent::harness::{AgentRunRequest, HarnessConfig, HarnessRegistry};
 use crate::engine::agent::llm::{self, LlmConfig, LlmProvider, ModelInfo};
 use crate::engine::agent_state::{
     AgentRunDetail, AgentRunSummary, AgentStateMaintenanceResult, AgentStateStore, ChatSessionPage,
@@ -182,31 +183,6 @@ pub struct ProviderConfig {
     /// Experimental orchestration path. Omitted or "agentive" preserves the current default.
     #[serde(default)]
     pub execution_engine: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ExecutionEngine {
-    Prompty,
-}
-
-impl ExecutionEngine {
-    fn from_config(value: Option<&str>) -> Result<Self, String> {
-        // "agentive" is accepted as a deprecated alias now that the Prompty
-        // TurnEngine is the sole runtime; persisted configs still using it map
-        // to Prompty rather than erroring.
-        match value.map(str::trim).filter(|value| !value.is_empty()) {
-            None | Some("prompty") | Some("agentive") => Ok(Self::Prompty),
-            Some(value) => Err(format!(
-                "Unsupported execution_engine '{value}'. Expected 'prompty'."
-            )),
-        }
-    }
-
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Prompty => "prompty",
-        }
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -855,7 +831,12 @@ pub async fn agent_chat_with_tools(
         .unwrap_or(crate::engine::agent::prompty_runner::DEFAULT_MAX_TOOL_ROUNDS)
         .clamp(1, 200);
     let mutation_tools_enabled = allow_mutation_tools.unwrap_or(false);
-    let execution_engine = ExecutionEngine::from_config(config.execution_engine.as_deref())?;
+    // Engine selection lives in the harness registry, not in ad hoc command
+    // logic. The registry applies the deprecated `"agentive"` alias and rejects
+    // unknown ids with a clear message.
+    let harness = HarnessRegistry::new(state.prompty_steering.clone())
+        .resolve(config.execution_engine.as_deref())?;
+    let harness_id = harness.id().to_string();
     let provider_name = config.provider.clone();
     let configured_provider_name = config.provider_name.clone();
     let configured_provider_id = config.provider_id.clone();
@@ -896,7 +877,7 @@ pub async fn agent_chat_with_tools(
                     "vision_enabled": vision.enabled,
                     "web_search_enabled": web_access.search_enabled,
                     "mutation_tools_enabled": mutation_tools_enabled,
-                    "execution_engine": execution_engine.as_str(),
+                    "execution_engine": harness_id.as_str(),
                     "max_tool_rounds": max_tool_rounds,
                     "agent_prompts": prompts.len(),
                     "agent_id": &agent_id,
@@ -933,7 +914,7 @@ pub async fn agent_chat_with_tools(
     log::info!(
         "[agent_chat_with_tools] start run_id={} engine={} agent={} provider={} model={} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} mutation_tools={} max_tool_rounds={} prompts={}",
         run_id,
-        execution_engine.as_str(),
+        harness_id.as_str(),
         agent_id,
         provider_name,
         model,
@@ -955,7 +936,7 @@ pub async fn agent_chat_with_tools(
             "provider_id": &configured_provider_id,
             "provider_name": &configured_provider_name,
             "model": model,
-            "execution_engine": execution_engine.as_str(),
+            "execution_engine": harness_id.as_str(),
             "run_id": &run_id,
             "messages": message_count,
             "chars": message_chars,
@@ -973,13 +954,16 @@ pub async fn agent_chat_with_tools(
 
     let should_emit_events = emit_events.unwrap_or(true);
     let emit_handle = app.clone();
-    let emit = move |event: AgentEvent| {
-        if should_emit_events {
-            let payload = agent_event_payload(&event, client_run_id.as_deref());
-            let _ = emit_handle.emit("agent-event", payload);
-        }
-    };
+    let emit: crate::engine::agent::harness::HarnessEventEmitter =
+        Arc::new(move |event: AgentEvent| {
+            if should_emit_events {
+                let payload = agent_event_payload(&event, client_run_id.as_deref());
+                let _ = emit_handle.emit("agent-event", payload);
+            }
+        });
     let runner_result = {
+        // CutReady owns tool selection and policy; the harness only adapts the
+        // resulting contract into its native runtime.
         let project_workspace_tools_enabled =
             agent_id.eq_ignore_ascii_case("writer") && mutation_tools_enabled;
         let mut tool_definitions = crate::engine::agent::tools::all_tools(
@@ -988,34 +972,34 @@ pub async fn agent_chat_with_tools(
             mutation_tools_enabled,
         );
         tool_definitions.retain(|tool| tool.function.name != "delegate_to_agent");
-        let production_model = crate::engine::agent::prompty_model::build_production_model(
-            &llm_config,
-            reported_context,
-            tool_definitions,
-        )?;
-        crate::engine::agent::prompty_runner::run(
-            production_model.port,
-            production_model.provider_name,
-            production_model.model_name,
-            production_model.context_budget_chars,
+        let request = AgentRunRequest {
+            config: HarnessConfig {
+                llm: llm_config,
+                reported_context_length: reported_context,
+                max_tool_rounds,
+                vision,
+                web_access,
+            },
             messages,
-            &repo_root,
-            &project_root,
-            &agent_id,
-            &prompts,
-            state.prompty_steering.clone(),
-            &vision,
-            &web_access,
+            repo_root,
+            project_root,
+            agent_id,
+            agent_prompts: prompts,
             mutation_tools_enabled,
-            max_tool_rounds,
+            tools: tool_definitions,
             context_items,
-            Some(run_id.clone()),
-            agent_state.clone(),
-            cancellation.clone(),
-            emit,
-        )
-        .await
+            run_id: run_id.clone(),
+            agent_state: agent_state.clone(),
+            cancellation: cancellation.clone(),
+        };
+        harness.run(request, emit).await
     };
+    // Any harness failure -- including model construction, which now lives
+    // inside the adapter -- flows through the unified finalization below. The
+    // durable run row was already created by `insert_run` above, so routing
+    // setup failures through `finish_run`/failure-trace correctly finalizes it
+    // instead of leaking a `running` row. The command still returns the same
+    // `Err(message)` to the frontend.
     let runner_result = if cancellation.is_cancelled() {
         Err(AGENT_RUN_CANCELLED_ERROR.into())
     } else {
@@ -1026,13 +1010,13 @@ pub async fn agent_chat_with_tools(
             let elapsed_ms = started.elapsed().as_millis();
             log::info!(
                 "[agent_chat_with_tools] done engine={} provider={} model={} elapsed={}ms response_chars={} total_messages={} total_tokens={}",
-                execution_engine.as_str(),
+                harness_id.as_str(),
                 provider_name,
                 model,
                 elapsed_ms,
                 result.response.len(),
                 result.messages.len(),
-                result.total_usage.total_tokens
+                result.usage.total_tokens
             );
             crate::util::trace::emit(
                 "agent_chat_with_tools_done",
@@ -1040,12 +1024,12 @@ pub async fn agent_chat_with_tools(
                 serde_json::json!({
                     "provider": provider_name,
                     "model": model,
-                    "execution_engine": execution_engine.as_str(),
+                    "execution_engine": harness_id.as_str(),
                     "run_id": &run_id,
                     "elapsed_ms": elapsed_ms,
                     "response_chars": result.response.len(),
                     "total_messages": result.messages.len(),
-                    "total_tokens": result.total_usage.total_tokens,
+                    "total_tokens": result.usage.total_tokens,
                 }),
             );
             if let Some(agent_state) = &agent_state {
@@ -1061,7 +1045,7 @@ pub async fn agent_chat_with_tools(
             if cancelled {
                 log::info!(
                     "[agent_chat_with_tools] cancelled engine={} provider={} model={} elapsed={}ms",
-                    execution_engine.as_str(),
+                    harness_id.as_str(),
                     provider_name,
                     model,
                     elapsed_ms,
@@ -1069,7 +1053,7 @@ pub async fn agent_chat_with_tools(
             } else {
                 log::warn!(
                     "[agent_chat_with_tools] error engine={} provider={} model={} elapsed={}ms error={}",
-                    execution_engine.as_str(),
+                    harness_id.as_str(),
                     provider_name,
                     model,
                     elapsed_ms,
@@ -1086,7 +1070,7 @@ pub async fn agent_chat_with_tools(
                 agent_run_failure_trace_payload(
                     &provider_name,
                     &model,
-                    execution_engine.as_str(),
+                    harness_id.as_str(),
                     &run_id,
                     elapsed_ms,
                     cancelled,
@@ -1654,18 +1638,21 @@ mod tests {
     #[test]
     fn execution_engine_defaults_to_prompty_and_accepts_agentive_alias() {
         assert_eq!(
-            ExecutionEngine::from_config(None).unwrap(),
-            ExecutionEngine::Prompty
+            HarnessRegistry::canonical_id(None).unwrap(),
+            crate::engine::agent::harness::DEFAULT_HARNESS_ID
         );
         assert_eq!(
-            ExecutionEngine::from_config(Some("agentive")).unwrap(),
-            ExecutionEngine::Prompty
+            HarnessRegistry::canonical_id(Some("agentive")).unwrap(),
+            crate::engine::agent::harness::DEFAULT_HARNESS_ID
         );
         assert_eq!(
-            ExecutionEngine::from_config(Some("prompty")).unwrap(),
-            ExecutionEngine::Prompty
+            HarnessRegistry::canonical_id(Some("prompty")).unwrap(),
+            crate::engine::agent::harness::DEFAULT_HARNESS_ID
         );
-        assert!(ExecutionEngine::from_config(Some("other")).is_err());
+        assert_eq!(
+            HarnessRegistry::canonical_id(Some("other")).unwrap_err(),
+            "Unsupported execution_engine 'other'. Expected 'prompty'."
+        );
     }
 
     #[test]
@@ -1705,16 +1692,18 @@ mod tests {
     #[test]
     fn production_prompty_selection_is_the_only_engine() {
         assert_eq!(
-            ExecutionEngine::from_config(Some("prompty")).unwrap(),
-            ExecutionEngine::Prompty
+            HarnessRegistry::canonical_id(Some("prompty")).unwrap(),
+            crate::engine::agent::harness::DEFAULT_HARNESS_ID
         );
+        // No harness other than Prompty is selectable in this PR.
+        assert!(HarnessRegistry::canonical_id(Some("copilot-sdk")).is_err());
     }
 
     #[test]
     fn prompty_production_boundary_has_no_agentive_mapping_static_or_runtime() {
         assert_eq!(
-            ExecutionEngine::from_config(Some("prompty")).unwrap(),
-            ExecutionEngine::Prompty
+            HarnessRegistry::canonical_id(Some("prompty")).unwrap(),
+            crate::engine::agent::harness::DEFAULT_HARNESS_ID
         );
 
         let runner = include_str!("../engine/agent/prompty_runner.rs")
@@ -1722,6 +1711,12 @@ mod tests {
             .next()
             .unwrap();
         let model = include_str!("../engine/agent/prompty_model.rs")
+            .split("\n#[cfg(test)]\nmod tests")
+            .next()
+            .unwrap();
+        // The Prompty harness adapter must also stay free of agentive mappings;
+        // a real agentive harness arrives under its own adapter in issue #246.
+        let harness_adapter = include_str!("../engine/agent/harness/prompty.rs")
             .split("\n#[cfg(test)]\nmod tests")
             .next()
             .unwrap();
@@ -1733,7 +1728,9 @@ mod tests {
             "agentive::ToolResult",
         ] {
             assert!(
-                !runner.contains(forbidden) && !model.contains(forbidden),
+                !runner.contains(forbidden)
+                    && !model.contains(forbidden)
+                    && !harness_adapter.contains(forbidden),
                 "production Prompty boundary contains forbidden mapping: {forbidden}"
             );
         }
