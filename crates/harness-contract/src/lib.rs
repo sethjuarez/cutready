@@ -33,4 +33,4 @@ pub use harness::{
     HarnessContract, HarnessDescriptor, HarnessEventEmitter, Ownership,
 };
 pub use llm::{LlmConfig, LlmProvider};
-pub use tools::{ToolDefinition, ToolFunctionDefinition};
+pub use tools::{HostToolExecutor, ToolDefinition, ToolExecutionContext, ToolFunctionDefinition};

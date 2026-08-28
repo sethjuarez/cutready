@@ -1393,7 +1393,6 @@ dependencies = [
 name = "cutready"
 version = "1.32.0"
 dependencies = [
- "agentive",
  "anyhow",
  "async-trait",
  "base64 0.22.1",
@@ -1401,6 +1400,7 @@ dependencies = [
  "dirs 6.0.0",
  "draftline",
  "futures-util",
+ "harness-agentive",
  "harness-contract",
  "harness-copilot-sdk",
  "httpmock",
@@ -2884,6 +2884,18 @@ dependencies = [
  "cfg-if",
  "crunchy",
  "zerocopy",
+]
+
+[[package]]
+name = "harness-agentive"
+version = "0.1.0"
+dependencies = [
+ "agentive",
+ "async-trait",
+ "harness-contract",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

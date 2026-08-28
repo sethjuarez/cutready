@@ -17,7 +17,7 @@
 //! and the Copilot SDK spike (issue #247) each add a new adapter module and a
 //! new registry arm without touching this boundary.
 
-pub mod agentive;
+pub use harness_agentive as agentive;
 pub use harness_copilot_sdk as copilot_sdk;
 pub mod prompty;
 
@@ -44,6 +44,30 @@ use self::agentive::AgentiveHarness;
 use self::copilot_sdk::CopilotSdkHarness;
 use self::prompty::PromptyHarness;
 use crate::engine::agent_state::AgentStateStore;
+
+/// Host-side [`HostToolExecutor`](harness_contract::tools::HostToolExecutor)
+/// injected into the agentive harness. It forwards to the app's path-confined
+/// [`execute_tool`](crate::engine::agent::tools::execute_tool), keeping tool
+/// policy and filesystem confinement on the CutReady side of the seam while the
+/// adapter crate stays free of any app dependency.
+struct AppToolExecutor;
+
+impl harness_contract::tools::HostToolExecutor for AppToolExecutor {
+    fn execute(
+        &self,
+        call: &ToolCall,
+        ctx: &harness_contract::tools::ToolExecutionContext,
+    ) -> ToolOutput {
+        crate::engine::agent::tools::execute_tool(
+            call,
+            &ctx.repo_root,
+            &ctx.project_root,
+            ctx.vision_enabled,
+            ctx.project_workspace_tools_enabled,
+            ctx.mutation_tools_enabled,
+        )
+    }
+}
 // ---------------------------------------------------------------------------
 // Registry / factory
 // ---------------------------------------------------------------------------
@@ -105,7 +129,7 @@ impl HarnessRegistry {
                 self.prompty_steering.clone(),
                 agent_state,
             ))),
-            AGENTIVE_HARNESS_ID => Ok(Arc::new(AgentiveHarness::new())),
+            AGENTIVE_HARNESS_ID => Ok(Arc::new(AgentiveHarness::new(Arc::new(AppToolExecutor)))),
             COPILOT_SDK_HARNESS_ID => Ok(Arc::new(CopilotSdkHarness::new())),
             // `canonical_id` only ever yields ids we can build.
             other => Err(unsupported_harness_error(other)),

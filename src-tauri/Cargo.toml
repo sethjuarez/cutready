@@ -37,7 +37,7 @@ futures-util = "0.3"
 # Agentive agent harness runtime. Pinned to a pushed origin/main rev so the API
 # matches the adapter in engine/agent/harness/agentive.rs. Kept behind that
 # adapter — no `agentive::*` type leaks past the harness boundary.
-agentive = { git = "https://github.com/sethjuarez/agentive", rev = "457365f5e9ab35fbd78702ddf9f2742046f90d1c" }
+harness-agentive = { path = "../crates/harness-agentive" }
 # GitHub Copilot SDK agent harness runtime (issue #247). Pinned to a pushed
 # origin/main rev so the API matches the adapter in
 # engine/agent/harness/copilot_sdk.rs. Kept behind that adapter — no

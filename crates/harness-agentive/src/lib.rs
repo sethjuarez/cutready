@@ -3,26 +3,27 @@
 //! This module is the *only* place the [`agentive`] crate is wired into the
 //! harness seam. Everything `agentive::*` — providers, the run loop, its native
 //! message/tool/event types — stays behind this adapter and never leaks past the
-//! CutReady-owned boundary types in [`super`].
+//! CutReady-owned boundary types in [`harness_contract`].
 //!
 //! Capability metadata lives here so the registry can advertise agentive
 //! honestly (see [`static_capabilities`]). `AVAILABLE` is `true` because this
 //! adapter can execute a run end-to-end.
 
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::engine::agent::execution::{
+use harness_contract::execution::{
     AgentEvent, ChatMessage, ContextItem, ToolCall, ToolOutput, Usage,
 };
-use crate::engine::agent::llm::{LlmConfig, LlmProvider};
-use crate::engine::agent::tools::{execute_tool, ToolDefinition};
+use harness_contract::llm::{LlmConfig, LlmProvider};
+use harness_contract::tools::{HostToolExecutor, ToolDefinition, ToolExecutionContext};
 
-use super::{
+use harness_contract::{
     AgentHarness, AgentRunRequest, AgentRunResult, HarnessCapabilities, HarnessContract,
     HarnessEventEmitter, Ownership,
 };
@@ -79,12 +80,18 @@ pub fn static_contract() -> HarnessContract {
 ///
 /// Stateless: unlike Prompty it carries no host-owned steering queue, so the
 /// registry constructs it fresh per resolve.
-pub struct AgentiveHarness;
+/// Carries the host-owned [`HostToolExecutor`]: agentive drives the run loop but
+/// tool execution (path-confined project tools, web fetch, visuals, ...) stays
+/// on the CutReady side of the seam, injected rather than imported so this crate
+/// never depends on the app.
+pub struct AgentiveHarness {
+    tool_executor: Arc<dyn HostToolExecutor>,
+}
 
 impl AgentiveHarness {
-    /// Build an agentive harness.
-    pub fn new() -> Self {
-        Self
+    /// Build an agentive harness with the host's injected tool executor.
+    pub fn new(tool_executor: Arc<dyn HostToolExecutor>) -> Self {
+        Self { tool_executor }
     }
 }
 
@@ -157,20 +164,27 @@ impl AgentHarness for AgentiveHarness {
             Err(error) => return fail(&emit, error),
         };
 
-        // Tool executor. `execute_tool` is CutReady-owned and path-confined; the
+        // Tool executor. Tool execution is CutReady-owned and path-confined; the
         // adapter only bridges agentive's tool-call type in and its tool-output
-        // type out. It stays on the CutReady side of the seam so path
-        // confinement and tool policy never move into agentive.
+        // type out. The concrete executor is injected by the host so path
+        // confinement and tool policy never move into agentive, and this crate
+        // never depends on the app.
         let vision_enabled = config.vision.enabled;
         // Mirror the host command: project workspace tools are only offered to
         // the writer persona, and only when mutations are permitted.
         let project_workspace_tools_enabled =
             agent_id.eq_ignore_ascii_case("writer") && mutation_tools_enabled;
-        let executor_repo = repo_root.clone();
-        let executor_project = project_root.clone();
+        let exec_ctx = ToolExecutionContext {
+            repo_root: repo_root.clone(),
+            project_root: project_root.clone(),
+            vision_enabled,
+            project_workspace_tools_enabled,
+            mutation_tools_enabled,
+        };
+        let host_executor = self.tool_executor.clone();
         let tool_executor = move |call: agentive::ToolCall| {
-            let repo = executor_repo.clone();
-            let project = executor_project.clone();
+            let ctx = exec_ctx.clone();
+            let host_executor = host_executor.clone();
             async move {
                 let host_call: ToolCall = match reserialize(&call) {
                     Ok(call) => call,
@@ -180,17 +194,10 @@ impl AgentHarness for AgentiveHarness {
                         )));
                     }
                 };
-                // `execute_tool` is synchronous and may touch the filesystem, so
-                // run it off the async runtime.
+                // The host executor is synchronous and may touch the filesystem,
+                // so run it off the async runtime.
                 let output = tokio::task::spawn_blocking(move || {
-                    execute_tool(
-                        &host_call,
-                        &repo,
-                        &project,
-                        vision_enabled,
-                        project_workspace_tools_enabled,
-                        mutation_tools_enabled,
-                    )
+                    host_executor.execute(&host_call, &ctx)
                 })
                 .await;
                 match output {
@@ -283,12 +290,6 @@ impl AgentHarness for AgentiveHarness {
                 Err(message)
             }
         }
-    }
-}
-
-impl Default for AgentiveHarness {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -475,6 +476,67 @@ fn context_items_to_system_prompt(items: &[ContextItem]) -> Option<String> {
         }
     }
     wrote_any.then_some(block)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use harness_contract::execution::FunctionCall;
+    use std::path::PathBuf;
+    use std::sync::Mutex;
+
+    /// Records the exact call and context it receives so a test can prove the
+    /// injected executor is both retained and driven with unchanged arguments.
+    #[derive(Default)]
+    struct RecordingExecutor {
+        seen: Mutex<Option<(String, PathBuf, bool)>>,
+    }
+
+    impl HostToolExecutor for RecordingExecutor {
+        fn execute(&self, call: &ToolCall, ctx: &ToolExecutionContext) -> ToolOutput {
+            *self.seen.lock().unwrap() = Some((
+                call.function.name.clone(),
+                ctx.project_root.clone(),
+                ctx.mutation_tools_enabled,
+            ));
+            ToolOutput::Text(format!("ran {}", call.function.name))
+        }
+    }
+
+    #[test]
+    fn new_injects_and_routes_through_the_host_tool_executor() {
+        let executor = Arc::new(RecordingExecutor::default());
+        let harness = AgentiveHarness::new(executor.clone());
+
+        let call = ToolCall {
+            id: "call-1".into(),
+            call_type: "function".into(),
+            function: FunctionCall {
+                name: "demo_tool".into(),
+                arguments: "{}".into(),
+            },
+        };
+        let ctx = ToolExecutionContext {
+            repo_root: PathBuf::from("/repo"),
+            project_root: PathBuf::from("/repo/project"),
+            vision_enabled: false,
+            project_workspace_tools_enabled: true,
+            mutation_tools_enabled: true,
+        };
+
+        let output = harness.tool_executor.execute(&call, &ctx);
+
+        let seen = executor.seen.lock().unwrap().clone();
+        assert_eq!(
+            seen,
+            Some(("demo_tool".to_string(), PathBuf::from("/repo/project"), true)),
+            "the injected executor must receive the call and context unchanged"
+        );
+        match output {
+            ToolOutput::Text(text) => assert_eq!(text, "ran demo_tool"),
+            other => panic!("unexpected tool output: {other:?}"),
+        }
+    }
 }
 
 /// Emit an `Error` event and return the same message as the run failure.
