@@ -20,4 +20,5 @@ pub(crate) mod recording_native_audio_windows;
 pub(crate) mod recording_native_camera_windows;
 #[cfg(target_os = "windows")]
 pub(crate) mod recording_native_windows;
+pub mod speech;
 pub mod video_import;

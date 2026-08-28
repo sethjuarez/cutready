@@ -252,6 +252,13 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return null;
     case "save_narration_voice_preview":
       return "C:/mock-app-data/narration-previews/voice-sample.wav";
+    case "synthesize_narration_voice_preview":
+      return {
+        path: "C:/mock-app-data/narration-previews/voice-sample.wav",
+        generated: true,
+        accessToken: "mock-access-token",
+        refreshToken: "mock-refresh-token",
+      };
     case "import_video":
     case "import_video_with_progress":
       sendMockProgress(args, {
