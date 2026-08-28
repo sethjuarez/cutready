@@ -118,9 +118,11 @@ pub trait DurableRunStore: Send + Sync {
     ) -> Result<(), String>;
 }
 
+mod adapter;
 mod model;
 mod runner;
 
+pub use adapter::PromptyHarness;
 pub use model::{build_production_model, one_shot_chat, ProductionPromptyModel};
 pub use runner::{
     native_to_prompty_message, prompty_to_native_message, run, PromptySteering,

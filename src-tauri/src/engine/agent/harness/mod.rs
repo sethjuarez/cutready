@@ -19,7 +19,7 @@
 
 pub use harness_agentive as agentive;
 pub use harness_copilot_sdk as copilot_sdk;
-pub mod prompty;
+pub use harness_prompty as prompty;
 
 use std::sync::Arc;
 
@@ -27,7 +27,9 @@ use std::sync::Arc;
 // the `harness-contract` crate so harness adapter crates can depend on them
 // without depending on the app. Re-export the whole seam here so this module
 // stays the single import surface and existing `harness::` call sites are
-// unchanged.
+// unchanged. Some names are only consumed by adapter crates or tests; the seam
+// stays complete regardless, so unused-in-app re-exports are allowed.
+#[allow(unused_imports)]
 pub use harness_contract::harness::{
     AgentHarness, AgentRunRequest, AgentRunResult, HarnessCapabilities, HarnessConfig,
     HarnessContract, HarnessDescriptor, HarnessEventEmitter, Ownership,
@@ -228,10 +230,20 @@ impl HarnessRegistry {
         agent_state: Option<AgentStateStore>,
     ) -> Result<Arc<dyn AgentHarness>, String> {
         match Self::canonical_id(requested)? {
-            DEFAULT_HARNESS_ID => Ok(Arc::new(PromptyHarness::new(
-                self.prompty_steering.clone(),
-                agent_state,
-            ))),
+            DEFAULT_HARNESS_ID => {
+                // Prompty owns none of its tools, project knowledge, or durable
+                // state, so the host injects both seams here rather than the
+                // adapter crate importing app domain logic. Durability is only
+                // injected when the run has a store (`None` otherwise).
+                let host: Arc<dyn harness_prompty::PromptyHost> = Arc::new(AppPromptyHost);
+                let durable = agent_state
+                    .map(|store| Arc::new(store) as Arc<dyn harness_prompty::DurableRunStore>);
+                Ok(Arc::new(PromptyHarness::new(
+                    self.prompty_steering.clone(),
+                    host,
+                    durable,
+                )))
+            }
             AGENTIVE_HARNESS_ID => Ok(Arc::new(AgentiveHarness::new(Arc::new(AppToolExecutor)))),
             COPILOT_SDK_HARNESS_ID => Ok(Arc::new(CopilotSdkHarness::new())),
             // `canonical_id` only ever yields ids we can build.

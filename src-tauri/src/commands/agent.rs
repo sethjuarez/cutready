@@ -1797,8 +1797,8 @@ mod tests {
             .next()
             .unwrap();
         // The Prompty harness adapter must also stay free of agentive mappings;
-        // a real agentive harness arrives under its own adapter in issue #246.
-        let harness_adapter = include_str!("../engine/agent/harness/prompty.rs")
+        // the real agentive harness lives under its own adapter crate (#246).
+        let harness_adapter = include_str!("../../../crates/harness-prompty/src/adapter.rs")
             .split("\n#[cfg(test)]\nmod tests")
             .next()
             .unwrap();
