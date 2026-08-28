@@ -1403,6 +1403,7 @@ dependencies = [
  "harness-agentive",
  "harness-contract",
  "harness-copilot-sdk",
+ "harness-prompty",
  "httpmock",
  "image",
  "keyring",
@@ -2918,6 +2919,24 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "harness-prompty"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "harness-contract",
+ "log",
+ "prompty",
+ "prompty-anthropic",
+ "prompty-foundry",
+ "prompty-openai",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

@@ -8,6 +8,7 @@
 //! types in [`super`].
 
 use async_trait::async_trait;
+use std::sync::Arc;
 
 use crate::engine::agent::execution::AgentEvent;
 use crate::engine::agent::prompty_model::build_production_model;
@@ -125,7 +126,11 @@ impl AgentHarness for PromptyHarness {
         // not carried on the harness-agnostic request. Prompty is the only
         // harness that persists it; the store is `None` when durability is
         // unavailable for the run.
-        let agent_state = self.agent_state.clone();
+        let durable = self
+            .agent_state
+            .clone()
+            .map(|store| Arc::new(store) as Arc<dyn harness_prompty::DurableRunStore>);
+        let host: Arc<dyn harness_prompty::PromptyHost> = Arc::new(super::AppPromptyHost);
 
         // Translate the CutReady-owned tool contract and provider config into a
         // Prompty model. This is the boundary where `prompty::*` types begin.
@@ -156,7 +161,8 @@ impl AgentHarness for PromptyHarness {
             config.max_tool_rounds,
             context_items,
             Some(run_id),
-            agent_state,
+            host,
+            durable,
             cancellation,
             emit_for_runner,
         )

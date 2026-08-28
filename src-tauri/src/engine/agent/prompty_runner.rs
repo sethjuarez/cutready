@@ -28,13 +28,13 @@ use prompty::{
 };
 use serde_json::{json, Value};
 
-use super::reference_context::{resolve_project_references, ResolvedProjectReference};
-use super::tools;
+use harness_contract::tools::ToolExecutionContext;
+use harness_prompty::{DurableRunStore, PromptyHost, ResolvedProjectReference};
+
 use crate::engine::agent::execution::{
     parse_tool_arguments, AgentEvent, ChatMessage, ContentPart, ContextItem, MessageContent,
     RunCancellation, RunResult, ToolCall, ToolOutput, Usage, VisionConfig, WebAccessConfig,
 };
-use crate::engine::agent_state::AgentStateStore;
 
 const CANCELLED_ERROR: &str = "Agent run cancelled";
 /// Default cap on tool-call rounds within a single run.
@@ -193,7 +193,8 @@ struct PromptyTurn {
     run_id: String,
     parent_run_id: Option<String>,
     delegation_depth: i32,
-    agent_state: Option<AgentStateStore>,
+    host: Arc<dyn PromptyHost>,
+    durable: Option<Arc<dyn DurableRunStore>>,
     cancellation: RunCancellation,
     emit: EventEmitter,
 }
@@ -215,7 +216,8 @@ struct DelegationContext {
     mutation_tools_enabled: bool,
     max_tool_rounds: usize,
     context_items: Vec<ContextItem>,
-    agent_state: Option<AgentStateStore>,
+    host: Arc<dyn PromptyHost>,
+    durable: Option<Arc<dyn DurableRunStore>>,
     cancellation: RunCancellation,
     emit: EventEmitter,
     /// Shared durable session key (top-level run_id) so a nested child appends to the same
@@ -244,7 +246,8 @@ pub async fn run(
     max_tool_rounds: usize,
     context_items: Vec<ContextItem>,
     run_id: Option<String>,
-    agent_state: Option<AgentStateStore>,
+    host: Arc<dyn PromptyHost>,
+    durable: Option<Arc<dyn DurableRunStore>>,
     cancellation: RunCancellation,
     emit: impl Fn(AgentEvent) + Send + Sync + 'static,
 ) -> Result<RunResult, String> {
@@ -270,7 +273,8 @@ pub async fn run(
         run_id,
         parent_run_id: None,
         delegation_depth: 0,
-        agent_state,
+        host,
+        durable,
         cancellation,
         emit,
     })
@@ -299,13 +303,14 @@ async fn run_turn(turn: PromptyTurn) -> Result<RunResult, String> {
         run_id,
         parent_run_id,
         delegation_depth,
-        agent_state,
+        host,
+        durable,
         cancellation,
         emit,
     } = turn;
     let is_top_level = parent_run_id.is_none();
     let steering = steering.subscribe();
-    if agent_state.is_none() {
+    if durable.is_none() {
         let message = "Agent run state unavailable; continuing without durable checkpoints";
         log::warn!("[prompty-agent] run_id={run_id} {message}");
         crate::util::trace::emit(
@@ -329,7 +334,7 @@ async fn run_turn(turn: PromptyTurn) -> Result<RunResult, String> {
         .filter_map(ChatMessage::text)
         .map(str::to_string)
         .collect::<Vec<_>>();
-    let resolved_references = resolve_project_references(&project_root, &user_messages);
+    let resolved_references = host.resolve_project_references(&project_root, &user_messages);
     let model_input_budget_chars = context_budget_chars.saturating_mul(4) / 5;
     let requested_context_chars = context_items
         .iter()
@@ -349,7 +354,7 @@ async fn run_turn(turn: PromptyTurn) -> Result<RunResult, String> {
     let history_budget_chars = model_input_budget_chars.saturating_sub(context_reserve_chars);
     let project_workspace_tools_enabled =
         agent_id.eq_ignore_ascii_case("writer") && mutation_tools_enabled;
-    let tool_definitions = tools::all_tools(
+    let tool_definitions = host.all_tools(
         web_access.search_enabled,
         project_workspace_tools_enabled,
         mutation_tools_enabled,
@@ -377,7 +382,8 @@ async fn run_turn(turn: PromptyTurn) -> Result<RunResult, String> {
         mutation_tools_enabled,
         max_tool_rounds,
         context_items: context_items.clone(),
-        agent_state: agent_state.clone(),
+        host: host.clone(),
+        durable: durable.clone(),
         cancellation: cancellation.clone(),
         emit: emit.clone(),
         session_id: session_id.clone(),
@@ -404,6 +410,7 @@ async fn run_turn(turn: PromptyTurn) -> Result<RunResult, String> {
     let permission = Arc::new(CutReadyPermissionPort {
         allowed_tools,
         mutation_tools_enabled,
+        host: host.clone(),
     });
     let memory_promotions: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
     let tool_port = Arc::new(CutReadyToolPort {
@@ -412,17 +419,18 @@ async fn run_turn(turn: PromptyTurn) -> Result<RunResult, String> {
         project_workspace_tools_enabled,
         mutation_tools_enabled,
         vision_enabled: vision.enabled,
-        agent_state: agent_state.clone(),
+        host: host.clone(),
+        durable: durable.clone(),
         memory_promotions: memory_promotions.clone(),
         delegation: Some(delegation),
     });
     let post_commit = Arc::new(CutReadyPostCommitPort {
-        store: agent_state.clone(),
+        durable: durable.clone(),
         memory_promotions,
         emit: emit.clone(),
     });
     let durability = Arc::new(CutReadyDurabilityPort {
-        store: agent_state,
+        durable,
         emit: emit.clone(),
     });
     let context_source = Arc::new(CutReadyContextSource::new(
@@ -808,7 +816,7 @@ impl RetryPolicyPort for CutReadyRetryPolicy {
 /// recorded for committed turns. Failures are non-fatal: a deferred suggestion log
 /// must never fail an otherwise-successful turn.
 struct CutReadyPostCommitPort {
-    store: Option<AgentStateStore>,
+    durable: Option<Arc<dyn DurableRunStore>>,
     memory_promotions: Arc<Mutex<Vec<Value>>>,
     emit: EventEmitter,
 }
@@ -831,7 +839,7 @@ impl PostCommitPort for CutReadyPostCommitPort {
         if candidates.is_empty() {
             return Ok(());
         }
-        let Some(store) = self.store.as_ref() else {
+        let Some(store) = self.durable.as_ref() else {
             return Ok(());
         };
         let mut recorded = 0usize;
@@ -955,6 +963,7 @@ impl ConversationPort for CutReadyConversationPort {
 struct CutReadyPermissionPort {
     allowed_tools: HashSet<String>,
     mutation_tools_enabled: bool,
+    host: Arc<dyn PromptyHost>,
 }
 
 #[async_trait]
@@ -964,7 +973,7 @@ impl PermissionPort for CutReadyPermissionPort {
         request: &EngineToolRequest,
         _cancellation: &CancellationToken,
     ) -> Result<EnginePermissionDecision, PortError> {
-        let denial = if !self.mutation_tools_enabled && !tools::is_read_only_tool(&request.name) {
+        let denial = if !self.mutation_tools_enabled && !self.host.is_read_only_tool(&request.name) {
             Some(format!(
                 "Error: {} is disabled by the current AI mutation guard. Enable mutation tools before applying changes.",
                 request.name
@@ -994,7 +1003,8 @@ struct CutReadyToolPort {
     project_workspace_tools_enabled: bool,
     mutation_tools_enabled: bool,
     vision_enabled: bool,
-    agent_state: Option<AgentStateStore>,
+    host: Arc<dyn PromptyHost>,
+    durable: Option<Arc<dyn DurableRunStore>>,
     /// Host-owned buffer of memory-promotion candidates (as JSON) collected during
     /// tool execution and flushed post-commit by `CutReadyPostCommitPort`. Keeping the
     /// payload as `Value` means the native path never depends on the engine's promotion
@@ -1041,20 +1051,22 @@ impl ToolPort for CutReadyToolPort {
                 None => ToolOutput::from(UNSUPPORTED_DELEGATION_MESSAGE),
             }
         } else if request.name == "read_context_asset" {
-            read_context_asset_output(self.agent_state.as_ref(), &tool_call)
+            read_context_asset_output(self.durable.as_ref(), &tool_call)
                 .unwrap_or_else(ToolOutput::from)
         } else {
-            tools::execute_tool(
+            self.host.execute_tool(
                 &tool_call,
-                &self.repo_root,
-                &self.project_root,
-                self.vision_enabled,
-                self.project_workspace_tools_enabled,
-                self.mutation_tools_enabled,
+                &ToolExecutionContext {
+                    repo_root: self.repo_root.clone(),
+                    project_root: self.project_root.clone(),
+                    vision_enabled: self.vision_enabled,
+                    project_workspace_tools_enabled: self.project_workspace_tools_enabled,
+                    mutation_tools_enabled: self.mutation_tools_enabled,
+                },
             )
         };
         let text = tool_output_text_for_model(&output);
-        let failed = tools::is_tool_error(text.trim_start());
+        let failed = self.host.is_tool_error(text.trim_start());
         // Cap the model-facing result so an oversized tool output cannot blow the
         // context budget on the Prompty path (Agentive budgets this inside its loop).
         let budgeted_text = budget_tool_result_for_model(&text);
@@ -1154,7 +1166,8 @@ async fn run_delegated_agent(delegation: &DelegationContext, call: &ToolCall) ->
         run_id: uuid::Uuid::new_v4().to_string(),
         parent_run_id: Some(delegation.parent_run_id.clone()),
         delegation_depth: delegation.depth + 1,
-        agent_state: delegation.agent_state.clone(),
+        host: delegation.host.clone(),
+        durable: delegation.durable.clone(),
         // Sharing the parent's cancellation propagates cancel parent -> child automatically.
         cancellation: delegation.cancellation.clone(),
         emit: delegation.emit.clone(),
@@ -1205,11 +1218,11 @@ fn budget_tool_result_for_model(text: &str) -> String {
 }
 
 fn read_context_asset_output(
-    store: Option<&AgentStateStore>,
+    durable: Option<&Arc<dyn DurableRunStore>>,
     tool_call: &ToolCall,
 ) -> Result<ToolOutput, String> {
     let store =
-        store.ok_or_else(|| "No local context store is available for this run".to_string())?;
+        durable.ok_or_else(|| "No local context store is available for this run".to_string())?;
     let args = parse_tool_arguments(&tool_call.function.arguments).unwrap_or_else(|_| json!({}));
     let asset_id = args
         .get("asset_id")
@@ -1220,7 +1233,7 @@ fn read_context_asset_output(
     let excerpt = store.read_context_asset(asset_id, offset, limit)?;
     Ok(ToolOutput::from(format!(
         "[Stored context: {} | {} chars | offset {}]\n{}",
-        excerpt.asset.name,
+        excerpt.name,
         excerpt.excerpt.len(),
         offset,
         excerpt.excerpt
@@ -1351,15 +1364,15 @@ fn summarize_dropped_native_messages(messages: &[ChatMessage]) -> String {
 }
 
 struct CutReadyDurabilityPort {
-    store: Option<AgentStateStore>,
+    durable: Option<Arc<dyn DurableRunStore>>,
     emit: EventEmitter,
 }
 
 #[async_trait]
 impl DurabilityPort for CutReadyDurabilityPort {
     async fn append(&self, event: &EngineEvent) -> Result<(), PortError> {
-        if let Some(store) = &self.store {
-            store.append_prompty_event(event).map_err(PortError::new)?;
+        if let Some(store) = &self.durable {
+            store.append_event(event).map_err(PortError::new)?;
         } else {
             NoopDurabilityPort.append(event).await?;
         }
@@ -1372,9 +1385,9 @@ impl DurabilityPort for CutReadyDurabilityPort {
         events: &[EngineEvent],
         checkpoint: &EngineCheckpoint,
     ) -> Result<(), PortError> {
-        if let Some(store) = &self.store {
+        if let Some(store) = &self.durable {
             store
-                .append_prompty_events_with_checkpoint(events, checkpoint)
+                .append_events_with_checkpoint(events, checkpoint)
                 .map_err(PortError::new)?;
         } else {
             NoopDurabilityPort
@@ -1859,6 +1872,15 @@ mod tests {
     use tokio::sync::Notify;
 
     use super::*;
+    use crate::engine::agent_state::AgentStateStore;
+
+    fn test_host() -> Arc<dyn PromptyHost> {
+        Arc::new(crate::engine::agent::harness::AppPromptyHost)
+    }
+
+    fn wrap_durable(store: Option<AgentStateStore>) -> Option<Arc<dyn DurableRunStore>> {
+        store.map(|store| Arc::new(store) as Arc<dyn DurableRunStore>)
+    }
 
     #[test]
     fn tool_result_under_budget_is_passed_through_verbatim() {
@@ -1903,7 +1925,7 @@ mod tests {
         let events: Arc<Mutex<Vec<AgentEvent>>> = Arc::new(Mutex::new(Vec::new()));
         let events_for_emit = events.clone();
         let port = CutReadyPostCommitPort {
-            store: Some(store.clone()),
+            durable: wrap_durable(Some(store.clone())),
             memory_promotions: buffer.clone(),
             emit: Arc::new(move |event| events_for_emit.lock().unwrap().push(event)),
         };
@@ -2150,7 +2172,8 @@ mod tests {
             5,
             context_items,
             Some(run_id.into()),
-            agent_state,
+            test_host(),
+            wrap_durable(agent_state),
             RunCancellation::from_shared(cancelled),
             move |event| events.lock().unwrap().push(event),
         )
@@ -2190,7 +2213,8 @@ mod tests {
             5,
             Vec::new(),
             Some(run_id.into()),
-            Some(store),
+            test_host(),
+            wrap_durable(Some(store)),
             RunCancellation::from_shared(cancelled),
             move |event| events.lock().unwrap().push(event),
         )
@@ -2394,7 +2418,8 @@ mod tests {
             mutation_tools_enabled: false,
             max_tool_rounds: 5,
             context_items: Vec::new(),
-            agent_state: None,
+            host: test_host(),
+            durable: None,
             cancellation: RunCancellation::from_shared(Arc::new(AtomicBool::new(false))),
             emit: Arc::new(|_| {}),
             session_id: "session".into(),
@@ -2427,7 +2452,8 @@ mod tests {
             mutation_tools_enabled: false,
             max_tool_rounds: 5,
             context_items: Vec::new(),
-            agent_state: None,
+            host: test_host(),
+            durable: None,
             cancellation: RunCancellation::from_shared(Arc::new(AtomicBool::new(false))),
             emit: Arc::new(|_| {}),
             session_id: "session".into(),
@@ -2473,7 +2499,8 @@ mod tests {
             mutation_tools_enabled: false,
             max_tool_rounds: 5,
             context_items: Vec::new(),
-            agent_state: None,
+            host: test_host(),
+            durable: None,
             cancellation: RunCancellation::from_shared(cancelled),
             emit: Arc::new(|_| {}),
             session_id: "session".into(),
@@ -3383,7 +3410,7 @@ mod tests {
 
     #[test]
     fn validation_failures_use_the_shared_tool_error_semantics() {
-        assert!(tools::is_tool_error(
+        assert!(crate::engine::agent::tools::is_tool_error(
             "Validation failed: narration timing is invalid"
         ));
     }
@@ -3476,6 +3503,7 @@ mod tests {
             3,
             Vec::new(),
             Some("prompty-callback-panic".into()),
+            test_host(),
             None,
             RunCancellation::new(),
             |_event| panic!("injected host callback panic"),
@@ -3492,7 +3520,7 @@ mod tests {
         let visible = Arc::new(Mutex::new(Vec::new()));
         let visible_for_emit = visible.clone();
         let durability = CutReadyDurabilityPort {
-            store: None,
+            durable: None,
             emit: Arc::new(move |event| visible_for_emit.lock().unwrap().push(event)),
         };
         let event = |sequence, kind| EngineEvent {

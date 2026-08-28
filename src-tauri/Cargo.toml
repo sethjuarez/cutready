@@ -43,6 +43,7 @@ harness-agentive = { path = "../crates/harness-agentive" }
 # engine/agent/harness/copilot_sdk.rs. Kept behind that adapter — no
 # `copilot_sdk::*` type leaks past the harness boundary.
 harness-copilot-sdk = { path = "../crates/harness-copilot-sdk" }
+harness-prompty = { path = "../crates/harness-prompty" }
 draftline = "0.2.15"
 keyring = "4.1.2"
 xcap = "0.8"

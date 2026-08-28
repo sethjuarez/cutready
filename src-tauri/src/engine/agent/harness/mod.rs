@@ -72,6 +72,109 @@ impl harness_contract::tools::HostToolExecutor for AppToolExecutor {
 // Registry / factory
 // ---------------------------------------------------------------------------
 
+/// Host-side [`PromptyHost`](harness_prompty::PromptyHost) injected into the
+/// Prompty harness. Prompty owns none of its tools or project knowledge, so this
+/// forwards tool listing, path-confined execution, tool policy, and project
+/// reference resolution to the app while the adapter crate stays free of any app
+/// dependency.
+pub(crate) struct AppPromptyHost;
+
+impl harness_prompty::PromptyHost for AppPromptyHost {
+    fn all_tools(
+        &self,
+        web_search_enabled: bool,
+        project_workspace_tools_enabled: bool,
+        mutation_tools_enabled: bool,
+    ) -> Vec<ToolDefinition> {
+        crate::engine::agent::tools::all_tools(
+            web_search_enabled,
+            project_workspace_tools_enabled,
+            mutation_tools_enabled,
+        )
+    }
+
+    fn execute_tool(
+        &self,
+        call: &ToolCall,
+        ctx: &harness_contract::tools::ToolExecutionContext,
+    ) -> ToolOutput {
+        crate::engine::agent::tools::execute_tool(
+            call,
+            &ctx.repo_root,
+            &ctx.project_root,
+            ctx.vision_enabled,
+            ctx.project_workspace_tools_enabled,
+            ctx.mutation_tools_enabled,
+        )
+    }
+
+    fn is_read_only_tool(&self, name: &str) -> bool {
+        crate::engine::agent::tools::is_read_only_tool(name)
+    }
+
+    fn is_tool_error(&self, result_text: &str) -> bool {
+        crate::engine::agent::tools::is_tool_error(result_text)
+    }
+
+    fn resolve_project_references(
+        &self,
+        project_root: &std::path::Path,
+        user_messages: &[String],
+    ) -> Vec<harness_prompty::ResolvedProjectReference> {
+        crate::engine::agent::reference_context::resolve_project_references(
+            project_root,
+            user_messages,
+        )
+        .into_iter()
+        .map(|reference| harness_prompty::ResolvedProjectReference {
+            id: reference.id,
+            reference: reference.reference,
+            name: reference.name,
+            content: reference.content,
+            content_type: reference.content_type,
+        })
+        .collect()
+    }
+}
+
+/// The app's durable [`AgentStateStore`] is the concrete Prompty run-state store.
+/// Implementing the adapter crate's [`DurableRunStore`](harness_prompty::DurableRunStore)
+/// seam here keeps the SQLite-backed persistence on the CutReady side while the
+/// Prompty adapter depends only on the trait.
+impl harness_prompty::DurableRunStore for AgentStateStore {
+    fn append_event(&self, event: &::prompty::EngineEvent) -> Result<(), String> {
+        self.append_prompty_event(event)
+    }
+
+    fn append_events_with_checkpoint(
+        &self,
+        events: &[::prompty::EngineEvent],
+        checkpoint: &::prompty::EngineCheckpoint,
+    ) -> Result<(), String> {
+        self.append_prompty_events_with_checkpoint(events, checkpoint)
+    }
+
+    fn read_context_asset(
+        &self,
+        asset_id: &str,
+        offset: usize,
+        limit: usize,
+    ) -> Result<harness_prompty::ContextAssetExcerpt, String> {
+        let excerpt = AgentStateStore::read_context_asset(self, asset_id, offset, limit)?;
+        Ok(harness_prompty::ContextAssetExcerpt {
+            name: excerpt.asset.name,
+            excerpt: excerpt.excerpt,
+        })
+    }
+
+    fn record_native_memory_promotion(
+        &self,
+        candidate: &serde_json::Value,
+    ) -> Result<(), String> {
+        AgentStateStore::record_native_memory_promotion(self, candidate)
+    }
+}
+
 /// Canonical id of the harness selected when the host requests no specific one.
 pub const DEFAULT_HARNESS_ID: &str = "prompty";
 
