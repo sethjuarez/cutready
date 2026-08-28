@@ -43,6 +43,10 @@ import {
   FlaskConical,
   Keyboard,
   SlidersHorizontal,
+  Plug,
+  AudioLines,
+  Eye,
+  Captions,
   Copy,
   LogIn,
 } from "lucide-react";
@@ -85,6 +89,7 @@ const NARRATION_OUTPUT_FORMAT_OPTIONS = [
 ] as const;
 
 type SettingsTab = "ai" | "agents" | "memory" | "display" | "themes" | "presentation" | "narration" | "recording" | "export" | "feedback" | "repository" | "updates" | "experimental";
+type AiInnerTab = "connections" | "agent" | "voice" | "memory";
 const REQUESTED_SETTINGS_TAB_KEY = "cutready:requested-settings-tab";
 const SETTINGS_TABS: SettingsTab[] = ["ai", "agents", "memory", "display", "themes", "presentation", "narration", "recording", "export", "feedback", "repository", "updates", "experimental"];
 
@@ -136,10 +141,13 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
       : "app",
   );
   const [activeTab, setActiveTab] = useState<SettingsTab>(
-    requestedTab
+    (requestedTab === "agents" || requestedTab === "memory" ? "ai" : requestedTab)
       ?? (import.meta.env.DEV && import.meta.env.VITE_CUTREADY_STARTUP_SETTINGS_TAB === "repository"
       ? "repository"
       : "display"),
+  );
+  const [activeAiTab, setActiveAiTab] = useState<AiInnerTab>(
+    requestedTab === "agents" ? "agent" : requestedTab === "memory" ? "memory" : "connections",
   );
   const [settingsFilter, setSettingsFilter] = useState("");
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -156,10 +164,37 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
   }, [currentProject, onClose, setView]);
 
   const globalTabs: SettingsTab[] = settings.featureRecording
-    ? ["display", "themes", "presentation", "narration", "recording", "export", "ai", "agents", "feedback", "updates", "experimental"]
-    : ["display", "themes", "presentation", "narration", "export", "ai", "agents", "feedback", "updates", "experimental"];
-  const workspaceTabs: SettingsTab[] = ["repository", "memory", "display", "themes", "export", "ai", "agents"];
+    ? ["display", "themes", "presentation", "narration", "recording", "export", "ai", "feedback", "updates", "experimental"]
+    : ["display", "themes", "presentation", "narration", "export", "ai", "feedback", "updates", "experimental"];
+  const workspaceTabs: SettingsTab[] = ["repository", "display", "themes", "export", "ai"];
   const tabs: SettingsTab[] = scope === "workspace" ? workspaceTabs : globalTabs;
+
+  const aiInnerTabs: AiInnerTab[] = scope === "workspace"
+    ? ["connections", "agent", "memory"]
+    : ["connections", "agent", "voice"];
+  const aiInnerMeta: Record<AiInnerTab, { label: string; description: string; icon: ReactNode }> = {
+    connections: {
+      label: "Connections",
+      description: "Credentialed endpoints shared across every AI capability.",
+      icon: <Plug className="h-3.5 w-3.5" />,
+    },
+    agent: {
+      label: "Agent",
+      description: "Planner, writer, editor, designer, and tool-application defaults.",
+      icon: <SlidersHorizontal className="h-3.5 w-3.5" />,
+    },
+    voice: {
+      label: "Voice",
+      description: "Generate spoken narration with an Azure Speech voice bound to a connection.",
+      icon: <AudioLines className="h-3.5 w-3.5" />,
+    },
+    memory: {
+      label: "Memory",
+      description: "Local agent recall and workspace memory stored with this project.",
+      icon: <Brain className="h-3.5 w-3.5" />,
+    },
+  };
+  const currentAiTab: AiInnerTab = aiInnerTabs.includes(activeAiTab) ? activeAiTab : "connections";
 
   // OAuth flow state
   const [oauthStatus, setOauthStatus] = useState<"idle" | "waiting" | "polling" | "success" | "error">("idle");
@@ -176,6 +211,12 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
       setActiveTab(scope === "workspace" ? "repository" : "display");
     }
   }, [activeTab, currentProject, scope, tabs]);
+
+  useEffect(() => {
+    if (!aiInnerTabs.includes(activeAiTab)) {
+      setActiveAiTab("connections");
+    }
+  }, [aiInnerTabs, activeAiTab]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -341,11 +382,11 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
       keywords: "export video mp4 timing title card lead row transition final hold dip black motion zoom codec crf fps resolution",
     },
     ai: {
-      label: "AI providers",
-      eyebrow: "Model connection",
-      description: "Connect Foundry, Azure OpenAI, OpenAI-compatible, or Anthropic providers.",
+      label: "AI",
+      eyebrow: "Models & capabilities",
+      description: "Manage connections and the capabilities that use them — agent, voice, and memory.",
       icon: <Bot className="h-4 w-4" />,
-      keywords: "ai provider model foundry azure openai anthropic oauth token",
+      keywords: "ai provider connection connections model foundry azure openai anthropic oauth token agent agents planner writer editor designer voice tts speech narration memory recall transcription vision",
     },
     agents: {
       label: "Agents",
@@ -568,41 +609,84 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
                 <NarrationTab settings={settings} updateSetting={updateSetting} />
               )}
               {activeTab === "ai" && (
-                <AIProviderTab
-                  settings={settings}
-                  updateSetting={updateSetting}
-                  isAzure={isAzure}
-                  isFoundry={isFoundry}
-                  isAnthropic={isAnthropic}
-                  isOAuth={isOAuth}
-                  hasToken={hasToken}
-                  canFetchModels={canFetchModels}
-                  models={models}
-                  setModels={setModels}
-                  loadingModels={loadingModels}
-                  modelFilter={modelFilter}
-                  setModelFilter={setModelFilter}
-                  modelError={modelError}
-                  fetchModels={fetchModels}
-                  oauthStatus={oauthStatus}
-                  oauthError={oauthError}
-                  startOAuthFlow={startOAuthFlow}
-                  signOut={signOut}
-                />
-              )}
-              {activeTab === "agents" && (
-                <AgentsTab
-                  settings={settings}
-                  updateSetting={updateSetting}
-                  models={models}
-                  loadingModels={loadingModels}
-                  canFetchModels={canFetchModels}
-                  fetchModels={fetchModels}
-                  modelError={modelError}
-                />
-              )}
-              {activeTab === "memory" && (
-                <MemoryTab />
+                <div className="flex flex-col gap-5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {aiInnerTabs.map((tab) => {
+                      const meta = aiInnerMeta[tab];
+                      const active = currentAiTab === tab;
+                      return (
+                        <button
+                          key={tab}
+                          type="button"
+                          onClick={() => setActiveAiTab(tab)}
+                          data-testid={`settings-ai-tab-${tab}`}
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                            active
+                              ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text))]"
+                              : "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text-secondary))] hover:border-[rgb(var(--color-border-strong))] hover:text-[rgb(var(--color-text))]"
+                          }`}
+                        >
+                          {meta.icon}
+                          {meta.label}
+                        </button>
+                      );
+                    })}
+                    {(["transcription", "vision"] as const).map((soon) => (
+                      <span
+                        key={soon}
+                        title="Coming soon"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[rgb(var(--color-border))] px-3 py-1.5 text-xs font-medium text-[rgb(var(--color-text-secondary))] opacity-60"
+                      >
+                        {soon === "transcription" ? <Captions className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        {soon === "transcription" ? "Transcription" : "Vision"}
+                        <span className="ml-0.5 rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[9px] uppercase tracking-wide">Soon</span>
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-xs text-[rgb(var(--color-text-secondary))]">
+                    {aiInnerMeta[currentAiTab].description}
+                  </p>
+                  {currentAiTab === "connections" && (
+                    <AIProviderTab
+                      settings={settings}
+                      updateSetting={updateSetting}
+                      isAzure={isAzure}
+                      isFoundry={isFoundry}
+                      isAnthropic={isAnthropic}
+                      isOAuth={isOAuth}
+                      hasToken={hasToken}
+                      canFetchModels={canFetchModels}
+                      models={models}
+                      setModels={setModels}
+                      loadingModels={loadingModels}
+                      modelFilter={modelFilter}
+                      setModelFilter={setModelFilter}
+                      modelError={modelError}
+                      fetchModels={fetchModels}
+                      oauthStatus={oauthStatus}
+                      oauthError={oauthError}
+                      startOAuthFlow={startOAuthFlow}
+                      signOut={signOut}
+                    />
+                  )}
+                  {currentAiTab === "agent" && (
+                    <AgentsTab
+                      settings={settings}
+                      updateSetting={updateSetting}
+                      models={models}
+                      loadingModels={loadingModels}
+                      canFetchModels={canFetchModels}
+                      fetchModels={fetchModels}
+                      modelError={modelError}
+                    />
+                  )}
+                  {currentAiTab === "voice" && (
+                    <VoiceTab settings={settings} updateSetting={updateSetting} />
+                  )}
+                  {currentAiTab === "memory" && (
+                    <MemoryTab />
+                  )}
+                </div>
               )}
               {activeTab === "feedback" && (
                 <FeedbackListTab />
@@ -790,10 +874,6 @@ function NarrationTab({
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
   const [error, setError] = useState("");
-  const [voicePreviewPath, setVoicePreviewPath] = useState<string | null>(null);
-  const [generatingVoicePreview, setGeneratingVoicePreview] = useState(false);
-  const voicePreviewAudioRef = useRef<HTMLAudioElement>(null);
-  const playGeneratedVoicePreview = useRef(false);
 
   const refreshMicrophones = async () => {
     setLoading(true);
@@ -874,84 +954,6 @@ function NarrationTab({
           ? "Unavailable"
           : "Unknown";
 
-  const providers = settings.aiProviders ?? [];
-  const activeFoundryProvider = providers.find((provider) =>
-    provider.id === settings.aiActiveProviderId &&
-    (provider.provider === "microsoft_foundry" || provider.provider === "azure_openai") &&
-    provider.endpoint
-  );
-  const narrationProviders = providers.filter((provider) =>
-    (provider.provider === "microsoft_foundry" || provider.provider === "azure_openai") && provider.endpoint
-  );
-  const selectedNarrationProvider =
-    narrationProviders.find((provider) => provider.id === settings.narrationProviderId)
-    ?? narrationProviders[0]
-    ?? null;
-  const addNarrationProvider = async () => {
-    const next = {
-      ...createAiProviderConfig("microsoft_foundry", providers.length + 1),
-      name: `Narration Foundry${providers.length > 0 ? ` ${providers.length + 1}` : ""}`,
-      authMode: "azure_oauth" as const,
-    };
-    await updateSetting("aiProviders", [...providers, next]);
-    await updateSetting("narrationConnectionMode", "dedicated");
-    await updateSetting("narrationProviderId", next.id);
-    useToastStore.getState().show("Narration connection added. Select it in AI Providers to sign in and choose its Foundry resource.", 5000, "info");
-  };
-
-  const loadCachedVoicePreview = useCallback(async () => {
-    try {
-      const path = await invoke<string | null>("get_narration_voice_preview", {
-        voiceName: settings.narrationVoiceName,
-        outputFormat: settings.narrationSpeechOutputFormat,
-      });
-      setVoicePreviewPath(path);
-    } catch (err) {
-      console.warn("[SettingsPanel] Failed to load narration voice preview:", err);
-      setVoicePreviewPath(null);
-    }
-  }, [settings.narrationSpeechOutputFormat, settings.narrationVoiceName]);
-
-  useEffect(() => {
-    void loadCachedVoicePreview();
-  }, [loadCachedVoicePreview]);
-
-  useEffect(() => {
-    if (!voicePreviewPath || !playGeneratedVoicePreview.current) return;
-    playGeneratedVoicePreview.current = false;
-    void voicePreviewAudioRef.current?.play().catch((err) => {
-      useToastStore.getState().show(`Could not play voice sample: ${err}`, 5000, "error");
-    });
-  }, [voicePreviewPath]);
-
-  const generateVoicePreview = async (playAfterGeneration = false) => {
-    setGeneratingVoicePreview(true);
-    try {
-      const { path } = await ensureCachedNarrationVoicePreview({
-        settings,
-        updateSetting,
-        force: true,
-      });
-      playGeneratedVoicePreview.current = playAfterGeneration;
-      setVoicePreviewPath(path);
-      useToastStore.getState().show("Voice sample generated and saved for this app.", 3500, "success");
-    } catch (err) {
-      useToastStore.getState().show(`Could not generate voice sample: ${err}`, 6000, "error");
-    } finally {
-      setGeneratingVoicePreview(false);
-    }
-  };
-
-  const playVoicePreview = () => {
-    if (!voicePreviewPath) {
-      void generateVoicePreview(true);
-      return;
-    }
-    void voicePreviewAudioRef.current?.play().catch((err) => {
-      useToastStore.getState().show(`Could not play voice sample: ${err}`, 5000, "error");
-    });
-  };
-
   return (
     <div className="flex flex-col gap-6">
       <p className="text-xs text-[rgb(var(--color-text-secondary))]">
@@ -1026,6 +1028,107 @@ function NarrationTab({
           <p className="text-[10px] text-[rgb(var(--color-error))]">{error}</p>
         )}
       </label>
+    </div>
+  );
+}
+
+// ── Voice Tab (TTS generation) ────────────────────────────────────
+
+function VoiceTab({
+  settings,
+  updateSetting,
+}: {
+  settings: ReturnType<typeof useSettings>["settings"];
+  updateSetting: ReturnType<typeof useSettings>["updateSetting"];
+}) {
+  const [voicePreviewPath, setVoicePreviewPath] = useState<string | null>(null);
+  const [generatingVoicePreview, setGeneratingVoicePreview] = useState(false);
+  const voicePreviewAudioRef = useRef<HTMLAudioElement>(null);
+  const playGeneratedVoicePreview = useRef(false);
+
+  const providers = settings.aiProviders ?? [];
+  const activeFoundryProvider = providers.find((provider) =>
+    provider.id === settings.aiActiveProviderId &&
+    (provider.provider === "microsoft_foundry" || provider.provider === "azure_openai") &&
+    provider.endpoint
+  );
+  const narrationProviders = providers.filter((provider) =>
+    (provider.provider === "microsoft_foundry" || provider.provider === "azure_openai") && provider.endpoint
+  );
+  const selectedNarrationProvider =
+    narrationProviders.find((provider) => provider.id === settings.narrationProviderId)
+    ?? narrationProviders[0]
+    ?? null;
+  const addNarrationProvider = async () => {
+    const next = {
+      ...createAiProviderConfig("microsoft_foundry", providers.length + 1),
+      name: `Narration Foundry${providers.length > 0 ? ` ${providers.length + 1}` : ""}`,
+      authMode: "azure_oauth" as const,
+    };
+    await updateSetting("aiProviders", [...providers, next]);
+    await updateSetting("narrationConnectionMode", "dedicated");
+    await updateSetting("narrationProviderId", next.id);
+    useToastStore.getState().show("Narration connection added. Select it in Connections to sign in and choose its Foundry resource.", 5000, "info");
+  };
+
+  const loadCachedVoicePreview = useCallback(async () => {
+    try {
+      const path = await invoke<string | null>("get_narration_voice_preview", {
+        voiceName: settings.narrationVoiceName,
+        outputFormat: settings.narrationSpeechOutputFormat,
+      });
+      setVoicePreviewPath(path);
+    } catch (err) {
+      console.warn("[SettingsPanel] Failed to load narration voice preview:", err);
+      setVoicePreviewPath(null);
+    }
+  }, [settings.narrationSpeechOutputFormat, settings.narrationVoiceName]);
+
+  useEffect(() => {
+    void loadCachedVoicePreview();
+  }, [loadCachedVoicePreview]);
+
+  useEffect(() => {
+    if (!voicePreviewPath || !playGeneratedVoicePreview.current) return;
+    playGeneratedVoicePreview.current = false;
+    void voicePreviewAudioRef.current?.play().catch((err) => {
+      useToastStore.getState().show(`Could not play voice sample: ${err}`, 5000, "error");
+    });
+  }, [voicePreviewPath]);
+
+  const generateVoicePreview = async (playAfterGeneration = false) => {
+    setGeneratingVoicePreview(true);
+    try {
+      const { path } = await ensureCachedNarrationVoicePreview({
+        settings,
+        updateSetting,
+        force: true,
+      });
+      playGeneratedVoicePreview.current = playAfterGeneration;
+      setVoicePreviewPath(path);
+      useToastStore.getState().show("Voice sample generated and saved for this app.", 3500, "success");
+    } catch (err) {
+      useToastStore.getState().show(`Could not generate voice sample: ${err}`, 6000, "error");
+    } finally {
+      setGeneratingVoicePreview(false);
+    }
+  };
+
+  const playVoicePreview = () => {
+    if (!voicePreviewPath) {
+      void generateVoicePreview(true);
+      return;
+    }
+    void voicePreviewAudioRef.current?.play().catch((err) => {
+      useToastStore.getState().show(`Could not play voice sample: ${err}`, 5000, "error");
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-6">
+      <p className="text-xs text-[rgb(var(--color-text-secondary))]">
+        Generate spoken narration from your script using an Azure Speech voice, bound to a Foundry or Azure OpenAI connection.
+      </p>
 
       <fieldset className="flex flex-col gap-3 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/40 p-4">
         <div>
@@ -1104,7 +1207,7 @@ function NarrationTab({
               </button>
             </div>
             <p className="mt-2 text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
-              New narration connections are configured in AI Providers so endpoint, sign-in, and selected resource stay in one place.
+              New narration connections are configured in Connections so endpoint, sign-in, and selected resource stay in one place.
             </p>
           </div>
         )}
@@ -2808,7 +2911,7 @@ function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropi
       <div className="rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/40 p-4">
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-xl">
-            <h3 className="text-sm font-semibold text-[rgb(var(--color-text))]">Connected AI providers</h3>
+            <h3 className="text-sm font-semibold text-[rgb(var(--color-text))]">Connections</h3>
             <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
               Manage provider connections here. Selecting a card only edits that connection; the Default badge controls runtime routing for chat, notes, and agents.
             </p>
@@ -3677,7 +3780,7 @@ function HarnessPicker({ value, onChange }: { value: string; onChange: (id: stri
                     {harness.contract.provider === "provides"
                       ? "Signed in with GitHub Copilot — this harness brings its own model provider for agent turns, so you don't need to configure a chat provider for the agent. A bring-your-own-key provider is optional."
                       : "This harness layers your provider over its own for agent turns, so configuring a chat provider for the agent is optional."}
-                    {" "}The AI Providers below are still used for narration and voice.
+                    {" "}The Connections below are still used for narration and voice.
                   </span>
                 </p>
               )}
