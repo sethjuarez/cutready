@@ -143,7 +143,7 @@ pub struct AppState {
     /// Uses `tokio::sync::Mutex` because it's held across await points.
     pub browser: Arc<tokio::sync::Mutex<Option<BrowserConnection>>>,
     /// Steering queue used to inject messages into the active Prompty TurnEngine run.
-    pub prompty_steering: engine::agent::prompty_runner::PromptySteering,
+    pub prompty_steering: harness_prompty::PromptySteering,
     /// Agent-state run IDs that are actively owned by this process.
     pub active_agent_runs: Arc<Mutex<HashSet<String>>>,
     /// Cancellation senders for active chat runs, indexed by the frontend's client run ID.
@@ -385,7 +385,7 @@ pub fn run() {
         current_repo: Mutex::new(None),
         current_project: Mutex::new(None),
         browser: Arc::new(tokio::sync::Mutex::new(None)),
-        prompty_steering: engine::agent::prompty_runner::PromptySteering::new(),
+        prompty_steering: harness_prompty::PromptySteering::new(),
         active_agent_runs: Arc::new(Mutex::new(HashSet::new())),
         agent_chat_cancellations: Arc::new(Mutex::new(HashMap::new())),
         last_chat_summary: Mutex::new(None),

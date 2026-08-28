@@ -2926,7 +2926,10 @@ name = "harness-prompty"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
+ "futures-util",
  "harness-contract",
+ "httpmock",
  "log",
  "prompty",
  "prompty-anthropic",
@@ -2934,6 +2937,7 @@ dependencies = [
  "prompty-openai",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
  "uuid",

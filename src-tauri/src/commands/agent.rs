@@ -519,7 +519,7 @@ pub async fn agent_chat(
 
     match tokio::time::timeout(
         timeout,
-        crate::engine::agent::prompty_model::one_shot_chat(&llm_config, &messages),
+        harness_prompty::one_shot_chat(&llm_config, &messages),
     )
     .await
     {
@@ -828,7 +828,7 @@ pub async fn agent_chat_with_tools(
     let search_enabled = config.web_access.as_deref() == Some("enabled");
     let max_tool_rounds = config
         .max_tool_rounds
-        .unwrap_or(crate::engine::agent::prompty_runner::DEFAULT_MAX_TOOL_ROUNDS)
+        .unwrap_or(harness_prompty::DEFAULT_MAX_TOOL_ROUNDS)
         .clamp(1, 200);
     let mutation_tools_enabled = allow_mutation_tools.unwrap_or(false);
     // Engine selection lives in the harness registry, not in ad hoc command
@@ -1700,7 +1700,7 @@ mod tests {
             vision_mode: Some("off".into()),
             model_supports_vision: Some(true),
             web_access: Some("disabled".into()),
-            max_tool_rounds: Some(crate::engine::agent::prompty_runner::DEFAULT_MAX_TOOL_ROUNDS),
+            max_tool_rounds: Some(harness_prompty::DEFAULT_MAX_TOOL_ROUNDS),
             execution_engine: None,
         }
     }
@@ -1788,11 +1788,11 @@ mod tests {
             crate::engine::agent::harness::DEFAULT_HARNESS_ID
         );
 
-        let runner = include_str!("../engine/agent/prompty_runner.rs")
+        let runner = include_str!("../../../crates/harness-prompty/src/runner.rs")
             .split("\n#[cfg(test)]\nmod tests")
             .next()
             .unwrap();
-        let model = include_str!("../engine/agent/prompty_model.rs")
+        let model = include_str!("../../../crates/harness-prompty/src/model.rs")
             .split("\n#[cfg(test)]\nmod tests")
             .next()
             .unwrap();

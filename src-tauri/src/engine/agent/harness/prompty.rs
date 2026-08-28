@@ -2,7 +2,7 @@
 //!
 //! This module is the *only* place the production Prompty runtime is wired into
 //! the harness seam. Everything Prompty-specific — building the Prompty model,
-//! driving the `TurnEngine` through [`crate::engine::agent::prompty_runner`],
+//! driving the `TurnEngine` through [`harness_prompty`],
 //! and the per-run steering queue — stays behind this adapter. Nothing
 //! harness-native is exposed to the host beyond the CutReady-owned boundary
 //! types in [`super`].
@@ -11,8 +11,7 @@ use async_trait::async_trait;
 use std::sync::Arc;
 
 use crate::engine::agent::execution::AgentEvent;
-use crate::engine::agent::prompty_model::build_production_model;
-use crate::engine::agent::prompty_runner;
+use harness_prompty::build_production_model;
 use crate::engine::agent_state::AgentStateStore;
 
 use super::{
@@ -22,10 +21,10 @@ use super::{
 
 /// CutReady's steering queue for the Prompty engine.
 ///
-/// It is defined in [`prompty_runner`] and owned by the Prompty adapter so that
+/// It is defined in [`harness_prompty`] and owned by the Prompty adapter so that
 /// steering never crosses the harness boundary. Re-exported here as the
 /// harness-facing handle the registry threads through from app state.
-pub use crate::engine::agent::prompty_runner::PromptySteering;
+pub use harness_prompty::PromptySteering;
 
 /// Production harness backed by the Prompty `TurnEngine`.
 pub struct PromptyHarness {
@@ -144,7 +143,7 @@ impl AgentHarness for PromptyHarness {
             (*emit)(event);
         };
 
-        let result = prompty_runner::run(
+        let result = harness_prompty::run(
             production_model.port,
             production_model.provider_name,
             production_model.model_name,

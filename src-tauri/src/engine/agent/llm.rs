@@ -1,8 +1,8 @@
 //! LLM provider configuration and model discovery.
 //!
 //! Bridges CutReady's settings (LlmProvider, LlmConfig) to the Prompty
-//! provider crates.  Execution and one-shot turns run through
-//! [`super::prompty_model`]; model discovery calls each provider crate's
+//! provider crates.  Execution and one-shot turns run through the
+//! [`harness_prompty`] crate; model discovery calls each provider crate's
 //! `list_models_async`.  This module owns only CutReady-specific policy
 //! (model heuristics, context budget) and the frontend-facing `ModelInfo`
 //! presentation DTO.

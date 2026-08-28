@@ -20,6 +20,7 @@
 pub mod execution;
 pub mod harness;
 pub mod llm;
+pub mod sanitize;
 pub mod tools;
 
 pub use execution::{
