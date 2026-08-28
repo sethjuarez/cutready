@@ -39,7 +39,7 @@ import { parseDurationSeconds, summarizeSketchDuration, type DurationDisplayMode
 import { preferredNarrationMimeType } from "../utils/narrationAudio";
 import { activeProviderInput, buildProviderConfig, narrationProvider } from "../utils/providerConfig";
 import { getProviderSecret, setProviderSecret } from "../hooks/useSecretStore";
-import { buildPlainSsml, inferSpeechEndpoint, SPEECH_TOKEN_SCOPE, synthesizeSpeechAudio } from "../services/narrationSpeech";
+import { buildPlainSsml, inferSpeechEndpoint, SPEECH_TOKEN_SCOPE } from "../services/narrationSpeech";
 import { validateGeneratedSsml } from "../services/narrationSsml";
 import { readClipboardImage } from "../utils/clipboardImage";
 
@@ -226,20 +226,6 @@ function parseMotionPlan(response: string, maxScale: number): MotionDirectorPlan
     };
   });
   return { rows };
-}
-
-async function decodeAudioDurationMs(data: ArrayBuffer): Promise<number | null> {
-  try {
-    const context = new AudioContext();
-    try {
-      const buffer = await context.decodeAudioData(data.slice(0));
-      return Math.round(buffer.duration * 1000);
-    } finally {
-      void context.close();
-    }
-  } catch {
-    return null;
-  }
 }
 
 async function sha256Hex(value: string): Promise<string> {
@@ -1527,25 +1513,22 @@ The Actions describe what happens on screen — use them as visual design hints.
     speechEndpoint: string,
   ) => {
     if (!activeSketchPath) throw new Error("No active sketch is open.");
-    const { audioData, mimeType } = await synthesizeSpeechAudio({
-      accessToken,
-      speechEndpoint,
-      ssml: validateGeneratedSsml(narrationPlan.ssml, narrationPlan.voice),
-      outputFormat: settings.narrationSpeechOutputFormat,
-    });
-
-    const durationMs = await decodeAudioDurationMs(audioData);
-    const sketch = await invoke<Sketch>("save_narration_recording", {
-      sketchPath: activeSketchPath,
-      rowIndex,
-      audioData: Array.from(new Uint8Array(audioData)),
-      mimeType,
-      durationMs,
-      sourceText: narrationPlan.source_text,
-      leadingSilenceMs: 0,
-      trailingSilenceMs: 0,
-      silenceThresholdDb: null,
-      narrationPlan,
+    // Synthesis, duration probing, and disk write all run in the backend
+    // (SpeechSynthesizer seam, issue #256): the audio bytes never cross IPC and
+    // ffprobe replaces the former WebAudio duration decode. The Entra token is
+    // refreshed once by the caller and reused across the batch.
+    const sketch = await invoke<Sketch>("synthesize_narration_recording", {
+      request: {
+        sketchPath: activeSketchPath,
+        rowIndex,
+        endpoint: speechEndpoint,
+        accessToken,
+        ssml: validateGeneratedSsml(narrationPlan.ssml, narrationPlan.voice),
+        sourceText: narrationPlan.source_text,
+        voiceName: narrationPlan.voice,
+        outputFormat: settings.narrationSpeechOutputFormat,
+        narrationPlan,
+      },
     });
     useAppStore.setState({ activeSketch: sketch });
     setLocalRows(sketch.rows ?? []);

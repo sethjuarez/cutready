@@ -1098,6 +1098,32 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         } : row),
       };
     }
+    case "synthesize_narration_recording": {
+      const { rowIndex, sourceText, narrationPlan } = (args as {
+        request?: { rowIndex?: number; sourceText?: string; narrationPlan?: unknown };
+      }).request ?? {};
+      const index = rowIndex ?? 0;
+      return {
+        ...MOCK_SKETCH,
+        rows: MOCK_SKETCH.rows.map((row, i) => i === index ? {
+          ...row,
+          narration: {
+            path: `.cutready/narration/mock-row-${index + 1}.wav`,
+            source_text: sourceText ?? row.narrative,
+            source_text_hash: "mock-source-text-hash",
+            mime_type: "audio/x-wav",
+            duration_ms: 4200,
+            leading_silence_ms: 0,
+            trailing_silence_ms: 0,
+            silence_threshold_db: null,
+            byte_size: 45678,
+            recorded_at: new Date().toISOString(),
+          },
+          narration_plan: narrationPlan ?? null,
+          motion_plan: null,
+        } : row),
+      };
+    }
     case "list_project_narration_assets":
       return [
         {

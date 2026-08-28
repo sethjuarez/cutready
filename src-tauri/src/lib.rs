@@ -706,6 +706,7 @@ pub fn run() {
             commands::recording::list_project_narration_assets,
             commands::recording::read_narration_asset,
             commands::recording::save_narration_recording,
+            commands::recording::synthesize_narration_recording,
             commands::recording::start_recording_take,
             commands::recording::stop_recording_take,
             commands::recording::discard_recording_take,

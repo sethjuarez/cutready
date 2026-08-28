@@ -86,7 +86,10 @@ impl SpeechSynthesizer for AzureSpeechSynthesizer {
 
     async fn synthesize(&self, request: SynthesisRequest) -> Result<SynthesisResult, String> {
         let speech_endpoint = infer_speech_endpoint(&request.connection.endpoint)?;
-        let ssml = build_plain_ssml(&request.text, &request.voice_name);
+        let ssml = match request.ssml {
+            Some(ref markup) if !markup.trim().is_empty() => markup.clone(),
+            _ => build_plain_ssml(&request.text, &request.voice_name),
+        };
         let url = format!("{speech_endpoint}/tts/cognitiveservices/v1");
 
         let auth_value = ["Bearer ", request.connection.access_token.as_str()].concat();

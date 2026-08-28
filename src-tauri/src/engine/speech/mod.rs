@@ -46,8 +46,13 @@ pub struct TtsConnection {
 /// Everything a synthesizer needs to render one clip. All CutReady-owned types.
 #[derive(Debug, Clone)]
 pub struct SynthesisRequest {
-    /// Plain narration text to speak (adapters build any SSML themselves).
+    /// Plain narration text to speak (adapters build any SSML themselves when
+    /// [`ssml`](Self::ssml) is `None`).
     pub text: String,
+    /// Pre-authored SSML to speak verbatim. When present (for example the
+    /// Narration Director's generated markup) the adapter uses it directly
+    /// instead of wrapping [`text`](Self::text); requires `capabilities.ssml`.
+    pub ssml: Option<String>,
     /// Provider voice identifier (for example `en-US-Harper:MAI-Voice-2`).
     pub voice_name: String,
     /// Provider output-format token (for example `riff-24khz-16bit-mono-pcm`).

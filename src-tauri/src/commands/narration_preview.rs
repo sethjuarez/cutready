@@ -118,6 +118,7 @@ pub async fn synthesize_narration_voice_preview(
     let result = synthesizer
         .synthesize(SynthesisRequest {
             text: request.text,
+            ssml: None,
             voice_name: request.voice_name.clone(),
             output_format: request.output_format.clone(),
             connection: TtsConnection {
