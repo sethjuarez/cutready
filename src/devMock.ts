@@ -252,6 +252,13 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return null;
     case "save_narration_voice_preview":
       return "C:/mock-app-data/narration-previews/voice-sample.wav";
+    case "synthesize_narration_voice_preview":
+      return {
+        path: "C:/mock-app-data/narration-previews/voice-sample.wav",
+        generated: true,
+        accessToken: "mock-access-token",
+        refreshToken: "mock-refresh-token",
+      };
     case "import_video":
     case "import_video_with_progress":
       sendMockProgress(args, {
@@ -1084,6 +1091,32 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
             trailing_silence_ms: trailingSilenceMs ?? null,
             silence_threshold_db: silenceThresholdDb ?? null,
             byte_size: 12345,
+            recorded_at: new Date().toISOString(),
+          },
+          narration_plan: narrationPlan ?? null,
+          motion_plan: null,
+        } : row),
+      };
+    }
+    case "synthesize_narration_recording": {
+      const { rowIndex, sourceText, narrationPlan } = (args as {
+        request?: { rowIndex?: number; sourceText?: string; narrationPlan?: unknown };
+      }).request ?? {};
+      const index = rowIndex ?? 0;
+      return {
+        ...MOCK_SKETCH,
+        rows: MOCK_SKETCH.rows.map((row, i) => i === index ? {
+          ...row,
+          narration: {
+            path: `.cutready/narration/mock-row-${index + 1}.wav`,
+            source_text: sourceText ?? row.narrative,
+            source_text_hash: "mock-source-text-hash",
+            mime_type: "audio/x-wav",
+            duration_ms: 4200,
+            leading_silence_ms: 0,
+            trailing_silence_ms: 0,
+            silence_threshold_db: null,
+            byte_size: 45678,
             recorded_at: new Date().toISOString(),
           },
           narration_plan: narrationPlan ?? null,

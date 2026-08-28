@@ -2,16 +2,17 @@ import type { AppSettings } from "../hooks/useSettings";
 import { getProviderSecret, setProviderSecret } from "../hooks/useSecretStore";
 import { narrationProvider } from "../utils/providerConfig";
 import { invoke } from "./tauri";
-import {
-  buildPlainSsml,
-  inferSpeechEndpoint,
-  SPEECH_TOKEN_SCOPE,
-  synthesizeSpeechAudio,
-} from "./narrationSpeech";
 
 export const NARRATION_VOICE_SAMPLE = "Welcome to CutReady. Together, we'll turn your product story into a polished, confident demo.";
 
 type UpdateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => Promise<void>;
+
+interface NarrationVoicePreviewResult {
+  path: string;
+  generated: boolean;
+  accessToken?: string | null;
+  refreshToken?: string | null;
+}
 
 export async function ensureCachedNarrationVoicePreview({
   settings,
@@ -43,36 +44,33 @@ export async function ensureCachedNarrationVoicePreview({
     : await getProviderSecret(selectedProvider.id, "refreshToken");
   if (!refreshToken) throw new Error("Sign in to the selected narration connection before previewing a voice.");
 
-  const token = await invoke<{ access_token: string; refresh_token?: string }>("azure_token_refresh", {
-    tenantId: selectedProvider.tenantId || settings.aiTenantId || "",
-    refreshToken,
-    clientId: selectedProvider.clientId || settings.aiClientId || null,
-    scope: SPEECH_TOKEN_SCOPE,
+  // Synthesis, token refresh, and disk write all happen in the Rust backend
+  // (the SpeechSynthesizer seam, issue #256): the audio bytes never cross the
+  // IPC boundary and the round-trips collapse into this single command.
+  const result = await invoke<NarrationVoicePreviewResult>("synthesize_narration_voice_preview", {
+    request: {
+      voiceName: settings.narrationVoiceName,
+      outputFormat: settings.narrationSpeechOutputFormat,
+      text: NARRATION_VOICE_SAMPLE,
+      endpoint: selectedProvider.endpoint,
+      tenantId: selectedProvider.tenantId || settings.aiTenantId || "",
+      clientId: selectedProvider.clientId || settings.aiClientId || null,
+      refreshToken,
+      force,
+    },
   });
-  if (!token.access_token) throw new Error("Azure Speech token refresh did not return an access token.");
 
-  if (selectedProvider.id === settings.aiActiveProviderId) {
-    await updateSetting("aiAccessToken", token.access_token);
-    if (token.refresh_token) await updateSetting("aiRefreshToken", token.refresh_token);
-  } else {
-    await setProviderSecret(selectedProvider.id, "accessToken", token.access_token);
-    if (token.refresh_token) await setProviderSecret(selectedProvider.id, "refreshToken", token.refresh_token);
+  // Persist any rotated credentials the backend returned (token storage stays a
+  // frontend concern; only the network work moved to the backend).
+  if (result.generated && result.accessToken) {
+    if (selectedProvider.id === settings.aiActiveProviderId) {
+      await updateSetting("aiAccessToken", result.accessToken);
+      if (result.refreshToken) await updateSetting("aiRefreshToken", result.refreshToken);
+    } else {
+      await setProviderSecret(selectedProvider.id, "accessToken", result.accessToken);
+      if (result.refreshToken) await setProviderSecret(selectedProvider.id, "refreshToken", result.refreshToken);
+    }
   }
 
-  console.info("[narrationVoicePreview] generating cached voice preview", {
-    voice: settings.narrationVoiceName,
-    outputFormat: settings.narrationSpeechOutputFormat,
-  });
-  const { audioData } = await synthesizeSpeechAudio({
-    accessToken: token.access_token,
-    speechEndpoint: inferSpeechEndpoint(selectedProvider.endpoint),
-    ssml: buildPlainSsml(NARRATION_VOICE_SAMPLE, settings.narrationVoiceName),
-    outputFormat: settings.narrationSpeechOutputFormat,
-  });
-  const path = await invoke<string>("save_narration_voice_preview", {
-    voiceName: settings.narrationVoiceName,
-    outputFormat: settings.narrationSpeechOutputFormat,
-    audioData: Array.from(new Uint8Array(audioData)),
-  });
-  return { path, generated: true };
+  return { path: result.path, generated: result.generated };
 }

@@ -10,7 +10,10 @@ use tauri_plugin_auditaur::auditaur_command;
 use uuid::Uuid;
 
 use crate::{
-    engine::{project, recording},
+    engine::{
+        project, recording,
+        speech::{SynthesisRequest, TtsConnection, TtsRegistry},
+    },
     models::sketch::{NarrationAsset, NarrationPlan, Sketch},
     AppState,
 };
@@ -229,7 +232,42 @@ pub async fn save_narration_recording(
     }
 
     let root = project_root(&state)?;
-    let sketch_abs = project::safe_resolve(&root, &sketch_path).map_err(|e| e.to_string())?;
+    persist_narration_asset(
+        &root,
+        &sketch_path,
+        row_index,
+        &audio_data,
+        &mime_type,
+        duration_ms,
+        source_text,
+        leading_silence_ms,
+        trailing_silence_ms,
+        silence_threshold_db,
+        narration_plan,
+    )
+}
+
+/// Persist synthesized/recorded narration audio onto a planning row.
+///
+/// Shared by [`save_narration_recording`] (frontend-supplied bytes, e.g.
+/// microphone takes) and [`synthesize_narration_recording`] (backend TTS). The
+/// host owns artifact placement: bytes always land under `.cutready/narration/`
+/// via `safe_resolve`, so no synthesizer ever chooses a path.
+#[allow(clippy::too_many_arguments)]
+fn persist_narration_asset(
+    root: &Path,
+    sketch_path: &str,
+    row_index: usize,
+    audio_data: &[u8],
+    mime_type: &str,
+    duration_ms: Option<u32>,
+    source_text: String,
+    leading_silence_ms: Option<u32>,
+    trailing_silence_ms: Option<u32>,
+    silence_threshold_db: Option<f32>,
+    narration_plan: Option<NarrationPlan>,
+) -> Result<Sketch, String> {
+    let sketch_abs = project::safe_resolve(root, sketch_path).map_err(|e| e.to_string())?;
     let mut sketch = project::read_sketch(&sketch_abs).map_err(|e| e.to_string())?;
     project::ensure_sketch_unlocked(&sketch).map_err(|e| e.to_string())?;
 
@@ -245,7 +283,7 @@ pub async fn save_narration_recording(
     std::fs::create_dir_all(&narration_dir)
         .map_err(|e| format!("Failed to create narration directory: {e}"))?;
 
-    let extension = narration_extension(&mime_type);
+    let extension = narration_extension(mime_type);
     let file_name = format!(
         "row-{}-{}.{}",
         row_index + 1,
@@ -253,9 +291,9 @@ pub async fn save_narration_recording(
         extension
     );
     let relative_path = format!(".cutready/narration/{file_name}");
-    let output_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+    let output_path = project::safe_resolve(root, &relative_path).map_err(|e| e.to_string())?;
     let tmp_path = output_path.with_extension(format!("{extension}.tmp"));
-    std::fs::write(&tmp_path, &audio_data)
+    std::fs::write(&tmp_path, audio_data)
         .map_err(|e| format!("Failed to write narration recording: {e}"))?;
     std::fs::rename(&tmp_path, &output_path)
         .map_err(|e| format!("Failed to finalize narration recording: {e}"))?;
@@ -264,7 +302,7 @@ pub async fn save_narration_recording(
         path: relative_path,
         source_text_hash: sha256_hex(&source_text),
         source_text,
-        mime_type,
+        mime_type: mime_type.to_string(),
         duration_ms,
         leading_silence_ms,
         trailing_silence_ms,
@@ -277,7 +315,7 @@ pub async fn save_narration_recording(
     row.motion_plan = None;
     sketch.updated_at = Utc::now();
 
-    project::write_sketch(&sketch, &sketch_abs, &root).map_err(|e| e.to_string())?;
+    project::write_sketch(&sketch, &sketch_abs, root).map_err(|e| e.to_string())?;
     tracing::info!(
         target: "cutready::recording",
         sketch_path = %sketch_path,
@@ -286,9 +324,111 @@ pub async fn save_narration_recording(
         leading_silence_ms,
         trailing_silence_ms,
         silence_threshold_db,
-        "saved narration recording"
+        "saved narration asset"
     );
     Ok(sketch)
+}
+
+/// Backend narration synthesis for a single planning row (issue #256 follow-up).
+///
+/// Mirrors the voice-preview path but writes a production narration asset: the
+/// audio bytes never cross the IPC boundary, and the clip duration is probed
+/// server-side with ffprobe instead of the former frontend WebAudio decode.
+///
+/// The Entra token is refreshed by the caller (once per batch) and passed in as
+/// `access_token`, preserving the single-refresh behavior of the sketch-wide
+/// narration flow.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SynthesizeNarrationRecordingRequest {
+    sketch_path: String,
+    row_index: usize,
+    /// Provider resource endpoint (raw or already inferred; inference is
+    /// idempotent).
+    endpoint: String,
+    /// Entra access token already scoped for the Speech API.
+    access_token: String,
+    /// Agent-authored, already-validated SSML to speak verbatim.
+    ssml: String,
+    source_text: String,
+    voice_name: String,
+    output_format: String,
+    narration_plan: Option<NarrationPlan>,
+    synthesizer_id: Option<String>,
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn synthesize_narration_recording(
+    request: SynthesizeNarrationRecordingRequest,
+    state: State<'_, AppState>,
+) -> Result<Sketch, String> {
+    let root = project_root(&state)?;
+
+    let synthesizer = TtsRegistry::resolve(request.synthesizer_id.as_deref())?;
+    let result = synthesizer
+        .synthesize(SynthesisRequest {
+            text: request.source_text.clone(),
+            ssml: Some(request.ssml),
+            voice_name: request.voice_name,
+            output_format: request.output_format,
+            connection: TtsConnection {
+                endpoint: request.endpoint,
+                access_token: request.access_token,
+            },
+        })
+        .await?;
+
+    let duration_ms = probe_audio_duration_ms(&result.audio, &result.mime_type);
+
+    persist_narration_asset(
+        &root,
+        &request.sketch_path,
+        request.row_index,
+        &result.audio,
+        &result.mime_type,
+        duration_ms,
+        request.source_text,
+        Some(0),
+        Some(0),
+        None,
+        request.narration_plan,
+    )
+}
+
+/// Probe a synthesized clip's duration by writing the bytes to a temp file and
+/// running ffprobe. Returns `None` on any failure — duration is a best-effort
+/// hint and must never block saving the narration asset.
+fn probe_audio_duration_ms(audio: &[u8], mime_type: &str) -> Option<u32> {
+    let extension = narration_extension(mime_type);
+    let tmp = std::env::temp_dir().join(format!(
+        "cutready-tts-{}.{}",
+        Uuid::new_v4().simple(),
+        extension
+    ));
+    if std::fs::write(&tmp, audio).is_err() {
+        return None;
+    }
+    let duration_ms = crate::engine::ffmpeg::run_ffprobe([
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        tmp.to_string_lossy().as_ref(),
+    ])
+    .ok()
+    .filter(|output| output.status.success())
+    .and_then(|output| {
+        String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .parse::<f64>()
+            .ok()
+    })
+    .filter(|seconds| seconds.is_finite() && *seconds > 0.0)
+    .map(|seconds| (seconds * 1000.0).round() as u32);
+    let _ = std::fs::remove_file(&tmp);
+    duration_ms
 }
 
 fn narration_extension(mime_type: &str) -> &'static str {
