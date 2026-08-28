@@ -105,31 +105,11 @@ pub fn context_budget(model: &str, reported_context: Option<usize>) -> usize {
 // CutReady-specific provider configuration
 // ---------------------------------------------------------------------------
 
-/// Which LLM provider to use.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum LlmProvider {
-    MicrosoftFoundry,
-    AzureOpenai,
-    Openai,
-    Anthropic,
-}
-
-/// Full configuration for an LLM provider.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LlmConfig {
-    pub provider: LlmProvider,
-    /// For Azure/Foundry: resource endpoint.  For OpenAI: optional.
-    /// For Anthropic: ignored (fixed to api.anthropic.com).
-    pub endpoint: String,
-    /// API key (OpenAI, Azure api_key mode, Anthropic).
-    pub api_key: String,
-    /// Deployment / model name (e.g. "gpt-4o", "claude-sonnet-4").
-    pub model: String,
-    /// Bearer token (Entra OAuth for Azure/Foundry).
-    #[serde(default)]
-    pub bearer_token: Option<String>,
-}
+/// Provider configuration (`LlmProvider`, `LlmConfig`) now lives in the
+/// `harness-contract` crate — the harness boundary vocabulary. Re-exported
+/// here so existing call sites and the discovery functions below resolve them
+/// at this path unchanged.
+pub use harness_contract::llm::{LlmConfig, LlmProvider};
 
 // ---------------------------------------------------------------------------
 // Model discovery (Prompty provider crates)

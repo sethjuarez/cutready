@@ -1339,7 +1339,9 @@ mod tests {
         // Bump this constant whenever the pin moves.
         const VERSION: &str = "2.0.0-beta.4";
         let manifest = include_str!("../../../Cargo.toml");
-        let lockfile = include_str!("../../../Cargo.lock");
+        // The lockfile now lives at the workspace root (one level above
+        // src-tauri), so reach up an extra directory versus the manifest.
+        let lockfile = include_str!("../../../../Cargo.lock");
 
         assert_eq!(
             manifest

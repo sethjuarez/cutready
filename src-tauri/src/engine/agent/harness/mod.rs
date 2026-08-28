@@ -21,216 +21,28 @@ pub mod agentive;
 pub mod copilot_sdk;
 pub mod prompty;
 
-use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use serde::Serialize;
+// The stable host boundary vocabulary and the `AgentHarness` trait now live in
+// the `harness-contract` crate so harness adapter crates can depend on them
+// without depending on the app. Re-export the whole seam here so this module
+// stays the single import surface and existing `harness::` call sites are
+// unchanged.
+pub use harness_contract::harness::{
+    AgentHarness, AgentRunRequest, AgentRunResult, HarnessCapabilities, HarnessConfig,
+    HarnessContract, HarnessDescriptor, HarnessEventEmitter, Ownership, RunStateHandle,
+};
 
-// Stable host boundary types are CutReady-owned. Several already live in
-// `execution.rs` and `tools.rs`; re-export them here so the harness module is
-// the single import surface for the seam. `ToolCall`/`ToolOutput` are part of
-// that surface for harness authors even though the host command still imports
-// them from their original module today.
+// Boundary DTOs the seam also surfaces. They live in `execution.rs` / `tools.rs`
+// (which now re-export from the contract crate); kept here so harness authors
+// have a single import surface for the seam.
 #[allow(unused_imports)]
 pub use crate::engine::agent::execution::{AgentEvent, ContextItem, ToolCall, ToolOutput};
 pub use crate::engine::agent::tools::ToolDefinition;
 
-use crate::engine::agent::execution::{
-    ChatMessage, RunCancellation, Usage, VisionConfig, WebAccessConfig,
-};
-use crate::engine::agent::llm::LlmConfig;
-use crate::engine::agent_state::AgentStateStore;
-
 use self::agentive::AgentiveHarness;
 use self::copilot_sdk::CopilotSdkHarness;
 use self::prompty::PromptyHarness;
-
-// ---------------------------------------------------------------------------
-// Stable host boundary types (CutReady-owned)
-// ---------------------------------------------------------------------------
-
-/// Streaming sink for [`AgentEvent`]s produced during a run.
-///
-/// The host builds the emitter (it owns the event DTO shape and the Tauri
-/// channel); the harness only forwards events through it.
-pub type HarnessEventEmitter = Arc<dyn Fn(AgentEvent) + Send + Sync>;
-
-/// Configuration used to build and drive a harness for a single run.
-///
-/// This is the CutReady-level, harness-agnostic view of provider and run
-/// settings. Adapters translate it into their own native configuration behind
-/// the seam.
-#[derive(Debug, Clone)]
-pub struct HarnessConfig {
-    /// Provider/model configuration (CutReady's provider abstraction).
-    pub llm: LlmConfig,
-    /// API-reported context window (tokens) for the selected model, if known.
-    pub reported_context_length: Option<usize>,
-    /// Maximum tool-call rounds before the run stops.
-    pub max_tool_rounds: usize,
-    /// Effective vision configuration for this run.
-    pub vision: VisionConfig,
-    /// Effective web-access configuration for this run.
-    pub web_access: WebAccessConfig,
-}
-
-/// Everything a harness needs to execute one agent run.
-///
-/// All fields are CutReady-owned types. The harness must not require any
-/// harness-native type to be constructed by the host.
-pub struct AgentRunRequest {
-    /// Provider/run configuration.
-    pub config: HarnessConfig,
-    /// Conversation so far (already sanitized by the host).
-    pub messages: Vec<ChatMessage>,
-    /// Repository root for path confinement.
-    pub repo_root: PathBuf,
-    /// Active project root for path confinement.
-    pub project_root: PathBuf,
-    /// Which built-in agent persona to run (planner, writer, editor, ...).
-    pub agent_id: String,
-    /// Per-agent system prompt overrides supplied by the host.
-    pub agent_prompts: HashMap<String, String>,
-    /// Whether mutation (write) tools are permitted for this run.
-    pub mutation_tools_enabled: bool,
-    /// Tool contract the model may call. The host owns tool selection/policy.
-    pub tools: Vec<ToolDefinition>,
-    /// Preselected context items for the run.
-    pub context_items: Vec<ContextItem>,
-    /// Stable run identifier for durable state and tracing.
-    pub run_id: String,
-    /// Durable agent-state store, when available.
-    pub agent_state: Option<AgentStateStore>,
-    /// Cooperative cancellation handle for the run.
-    pub cancellation: RunCancellation,
-}
-
-/// Outcome of an agent run, in host terms.
-#[derive(Debug, Clone)]
-pub struct AgentRunResult {
-    /// Full message history after the run.
-    pub messages: Vec<ChatMessage>,
-    /// Final assistant response text.
-    pub response: String,
-    /// Aggregate token usage for the run.
-    pub usage: Usage,
-}
-
-/// Declarative description of what a harness supports.
-///
-/// Differences between harnesses are represented explicitly here rather than by
-/// silently downgrading behavior. Later adapters advertise their own honest
-/// capability set instead of pretending to match Prompty.
-///
-/// Only conformance tests consume this today; the registry and adapters that
-/// read capabilities at runtime arrive with issues #246/#247.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct HarnessCapabilities {
-    /// Canonical harness identifier (matches [`AgentHarness::id`]).
-    pub id: String,
-    /// Human-readable name for settings/diagnostics surfaces.
-    pub display_name: String,
-    /// Emits incremental token deltas while generating.
-    pub streaming: bool,
-    /// Supports function/tool calling.
-    pub tool_calls: bool,
-    /// Can consume image content when the model allows it.
-    pub vision: bool,
-    /// Exposes a web-search/browse tool.
-    pub web_search: bool,
-    /// Supports sub-agent delegation.
-    pub delegation: bool,
-    /// Supports mid-run steering messages.
-    pub steering: bool,
-    /// Honors cooperative cancellation.
-    pub cancellation: bool,
-    /// Persists durable run/checkpoint state.
-    pub durable_state: bool,
-}
-
-/// Per-concern ownership stance a harness declares for a host resource.
-///
-/// [`HarnessCapabilities`] describe *behavior*; this describes
-/// *provisioning/ownership* — for each host concern, who supplies it. The host
-/// reacts to the stance instead of assembling everything unconditionally and
-/// hoping the adapter ignores what it does not use.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Ownership {
-    /// The host must supply this; the harness cannot run without it (for
-    /// example prompty/agentive require a provider config and tool set).
-    Requires,
-    /// The harness owns it and the host must not send its own (for example the
-    /// Copilot harness runs its own tool loop and session memory).
-    Provides,
-    /// The host sends its contribution and the harness merges it with its own
-    /// (for example CutReady personas registered as native Copilot agents, or
-    /// an optional BYOK provider layered over the Copilot entitlement).
-    Augments,
-}
-
-/// Declarative, per-concern ownership contract for a harness.
-///
-/// Sits alongside [`HarnessCapabilities`] on the CutReady-owned boundary. It
-/// covers the concerns whose *provisioning* differs between harnesses; the host
-/// invariants that can never be opted out of — path confinement, the
-/// [`AgentEvent`] DTO shape, and persistence policy — are deliberately absent
-/// here so the contract can never weaken them.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub struct HarnessContract {
-    /// Who supplies the model provider / auth for agent turns.
-    pub provider: Ownership,
-    /// Who supplies the agent personas / system prompts.
-    pub personas: Ownership,
-    /// Who supplies the tool contract the model may call.
-    pub tools: Ownership,
-    /// Who supplies durable run/checkpoint memory.
-    pub memory: Ownership,
-}
-
-/// A harness entry as surfaced to the host/UI: its capabilities plus whether it
-/// can execute a run right now.
-///
-/// `available` lets the settings UI list every known harness (so users see
-/// what's coming) while only enabling the ones whose runtime is wired. A harness
-/// that is declared but not yet runnable is advertised honestly rather than
-/// hidden or silently mapped onto another runtime.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct HarnessDescriptor {
-    /// Capability metadata for the harness.
-    #[serde(flatten)]
-    pub capabilities: HarnessCapabilities,
-    /// Per-concern ownership contract for the harness.
-    pub contract: HarnessContract,
-    /// Whether the harness can currently be resolved and run.
-    pub available: bool,
-}
-
-/// A pluggable agent runtime behind the CutReady host boundary.
-#[async_trait]
-pub trait AgentHarness: Send + Sync {
-    /// Canonical, stable identifier for this harness (for example `"prompty"`).
-    fn id(&self) -> &str;
-
-    /// Capability metadata describing what this harness supports.
-    #[allow(dead_code)]
-    fn capabilities(&self) -> HarnessCapabilities;
-
-    /// Ownership contract describing who provisions each host concern for this
-    /// harness (provider, personas, tools, memory).
-    #[allow(dead_code)]
-    fn contract(&self) -> HarnessContract;
-
-    /// Execute one agent run, forwarding events through `emit`.
-    async fn run(
-        &self,
-        request: AgentRunRequest,
-        emit: HarnessEventEmitter,
-    ) -> Result<AgentRunResult, String>;
-}
-
 // ---------------------------------------------------------------------------
 // Registry / factory
 // ---------------------------------------------------------------------------

@@ -12,6 +12,7 @@ use async_trait::async_trait;
 use crate::engine::agent::execution::AgentEvent;
 use crate::engine::agent::prompty_model::build_production_model;
 use crate::engine::agent::prompty_runner;
+use crate::engine::agent_state::AgentStateStore;
 
 use super::{
     AgentHarness, AgentRunRequest, AgentRunResult, HarnessCapabilities, HarnessContract,
@@ -109,6 +110,13 @@ impl AgentHarness for PromptyHarness {
             agent_state,
             cancellation,
         } = request;
+
+        // Recover the concrete durable store from the opaque, host-owned
+        // [`RunStateHandle`]. Prompty is the only harness that consumes durable
+        // run state; the downcast yields `None` for any other handle type.
+        let agent_state = agent_state
+            .and_then(|handle| handle.into_any().downcast::<AgentStateStore>().ok())
+            .map(|store| (*store).clone());
 
         // Translate the CutReady-owned tool contract and provider config into a
         // Prompty model. This is the boundary where `prompty::*` types begin.

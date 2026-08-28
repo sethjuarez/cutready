@@ -6,7 +6,9 @@ use crate::engine::agent::execution::{
     estimate_message_chars, AgentEvent, ChatMessage, ContextItem, ContextKind, ContextScope,
     ContextSource, LargeContextRef, RunCancellation, VisionConfig, WebAccessConfig,
 };
-use crate::engine::agent::harness::{AgentRunRequest, HarnessConfig, HarnessRegistry};
+use crate::engine::agent::harness::{
+    AgentRunRequest, HarnessConfig, HarnessRegistry, RunStateHandle,
+};
 use crate::engine::agent::llm::{self, LlmConfig, LlmProvider, ModelInfo};
 use crate::engine::agent_state::{
     AgentRunDetail, AgentRunSummary, AgentStateMaintenanceResult, AgentStateStore, ChatSessionPage,
@@ -989,7 +991,11 @@ pub async fn agent_chat_with_tools(
             tools: tool_definitions,
             context_items,
             run_id: run_id.clone(),
-            agent_state: agent_state.clone(),
+            // Erase the concrete store to the harness boundary's opaque handle;
+            // the consuming adapter (Prompty) downcasts it back.
+            agent_state: agent_state
+                .clone()
+                .map(|store| Arc::new(store) as Arc<dyn RunStateHandle>),
             cancellation: cancellation.clone(),
         };
         harness.run(request, emit).await
