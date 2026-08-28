@@ -1563,7 +1563,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     return (
       <div className="flex-1 flex items-center justify-center p-4">
         <p className="text-xs text-[rgb(var(--color-text-secondary))] text-center">
-          Loading AI provider settings…
+          Loading Connections settings…
         </p>
       </div>
     );
@@ -1574,7 +1574,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="text-center">
           <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-2">
-            Configure an AI provider and model in Settings to use the assistant
+            Configure a Connection and model in Settings to use the assistant
           </p>
           <button
             className="text-xs text-[rgb(var(--color-accent))] hover:underline"
