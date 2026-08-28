@@ -32,16 +32,6 @@ pub struct AgentStateStore {
     run_id: Arc<str>,
 }
 
-/// Bridges the concrete durable store to the harness boundary's opaque
-/// [`RunStateHandle`]. The contract crate never sees this SQLite-backed type;
-/// harness adapters that need durable state (only Prompty today) recover it by
-/// downcasting the handle back to `AgentStateStore`.
-impl harness_contract::harness::RunStateHandle for AgentStateStore {
-    fn into_any(self: Arc<Self>) -> Arc<dyn std::any::Any + Send + Sync> {
-        self
-    }
-}
-
 #[allow(dead_code)]
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct AgentRunRecord {

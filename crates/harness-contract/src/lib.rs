@@ -11,10 +11,11 @@
 //! types (`prompty::*`, `agentive::*`, `copilot_sdk::*`) stay confined to their
 //! own adapter and never appear here or leak past [`AgentHarness::run`].
 //!
-//! Persistence is deliberately abstracted: durable run state is a host-owned
-//! concern, so this crate only knows it through the opaque [`RunStateHandle`]
-//! marker. The concrete store (SQLite-backed) lives in the app and is recovered
-//! by the one adapter that consumes it.
+//! Persistence is deliberately kept out of this contract: durable run state is
+//! a per-adapter concern (only the Prompty harness persists it), so the host
+//! injects the concrete SQLite-backed store into that one adapter instead of
+//! routing a handle through the shared request that every harness would have to
+//! accept and most would discard.
 
 pub mod execution;
 pub mod harness;
@@ -29,7 +30,7 @@ pub use execution::{
 };
 pub use harness::{
     AgentHarness, AgentRunRequest, AgentRunResult, HarnessCapabilities, HarnessConfig,
-    HarnessContract, HarnessDescriptor, HarnessEventEmitter, Ownership, RunStateHandle,
+    HarnessContract, HarnessDescriptor, HarnessEventEmitter, Ownership,
 };
 pub use llm::{LlmConfig, LlmProvider};
 pub use tools::{ToolDefinition, ToolFunctionDefinition};

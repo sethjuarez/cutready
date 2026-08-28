@@ -356,9 +356,6 @@ impl AgentHarness for CopilotSdkHarness {
             tools: _tools,
             context_items,
             run_id: _run_id,
-            // Durable run-state persistence is not a Copilot-harness capability
-            // (advertised as `durable_state: false`), so the store is not used.
-            agent_state: _agent_state,
             cancellation,
         } = request;
 

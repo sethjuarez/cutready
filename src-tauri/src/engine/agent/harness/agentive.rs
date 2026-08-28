@@ -118,10 +118,6 @@ impl AgentHarness for AgentiveHarness {
             tools,
             context_items,
             run_id,
-            // Durable run-state persistence is a Prompty-only capability today
-            // (advertised as `durable_state: false`), so the agentive adapter
-            // deliberately does not consume the store.
-            agent_state: _agent_state,
             cancellation,
         } = request;
 

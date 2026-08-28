@@ -29,15 +29,26 @@ pub use crate::engine::agent::prompty_runner::PromptySteering;
 /// Production harness backed by the Prompty `TurnEngine`.
 pub struct PromptyHarness {
     steering: PromptySteering,
+    /// Concrete durable run-state store for this run, when available.
+    ///
+    /// Durable persistence is a Prompty-only concern, so the host injects the
+    /// concrete store directly into this adapter (via [`PromptyHarness::new`])
+    /// instead of routing it through the harness-agnostic [`AgentRunRequest`].
+    /// The other adapters never receive it.
+    agent_state: Option<AgentStateStore>,
 }
 
 impl PromptyHarness {
     /// Canonical, stable identifier for this harness.
     pub const ID: &'static str = "prompty";
 
-    /// Build a Prompty harness bound to the host-owned steering queue.
-    pub fn new(steering: PromptySteering) -> Self {
-        Self { steering }
+    /// Build a Prompty harness bound to the host-owned steering queue and the
+    /// per-run durable store (when durability is available for the run).
+    pub fn new(steering: PromptySteering, agent_state: Option<AgentStateStore>) -> Self {
+        Self {
+            steering,
+            agent_state,
+        }
     }
 
     /// Capability metadata for the Prompty runtime.
@@ -107,16 +118,14 @@ impl AgentHarness for PromptyHarness {
             tools,
             context_items,
             run_id,
-            agent_state,
             cancellation,
         } = request;
 
-        // Recover the concrete durable store from the opaque, host-owned
-        // [`RunStateHandle`]. Prompty is the only harness that consumes durable
-        // run state; the downcast yields `None` for any other handle type.
-        let agent_state = agent_state
-            .and_then(|handle| handle.into_any().downcast::<AgentStateStore>().ok())
-            .map(|store| (*store).clone());
+        // Durable run state is injected directly into this adapter by the host,
+        // not carried on the harness-agnostic request. Prompty is the only
+        // harness that persists it; the store is `None` when durability is
+        // unavailable for the run.
+        let agent_state = self.agent_state.clone();
 
         // Translate the CutReady-owned tool contract and provider config into a
         // Prompty model. This is the boundary where `prompty::*` types begin.
@@ -158,5 +167,40 @@ impl AgentHarness for PromptyHarness {
             response: result.response,
             usage: result.total_usage,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The host injects the concrete durable store through the constructor
+    /// (never through the harness-agnostic request), so the adapter must retain
+    /// exactly what it was handed. This guards the injection seam that replaced
+    /// the removed `AgentRunRequest::agent_state` field: a regression that drops
+    /// the store on the floor would silently disable durable checkpoints.
+    #[test]
+    fn new_retains_injected_durable_store() {
+        let project_root = tempfile::tempdir().unwrap().keep();
+        let store =
+            AgentStateStore::for_project(&project_root, &project_root, "run-harness-injection")
+                .unwrap();
+
+        let harness = PromptyHarness::new(PromptySteering::new(), Some(store));
+
+        let injected = harness
+            .agent_state
+            .as_ref()
+            .expect("Prompty adapter must retain the injected durable store");
+        assert_eq!(injected.run_id(), "run-harness-injection");
+    }
+
+    /// When durability is unavailable the host injects `None`, and the adapter
+    /// must not fabricate a store — the downstream runner keys its "durable
+    /// checkpoints unavailable" fallback off this being absent.
+    #[test]
+    fn new_without_store_leaves_durability_absent() {
+        let harness = PromptyHarness::new(PromptySteering::new(), None);
+        assert!(harness.agent_state.is_none());
     }
 }

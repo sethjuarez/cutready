@@ -6,7 +6,6 @@
 //! Nothing harness-specific may appear in this module or leak past
 //! [`AgentHarness::run`].
 
-use std::any::Any;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -25,18 +24,6 @@ use crate::tools::ToolDefinition;
 /// The host builds the emitter (it owns the event DTO shape and the Tauri
 /// channel); the harness only forwards events through it.
 pub type HarnessEventEmitter = Arc<dyn Fn(AgentEvent) + Send + Sync>;
-
-/// Opaque, host-owned handle to durable run/checkpoint state.
-///
-/// Persistence is a non-negotiable host concern, so the contract crate never
-/// sees the concrete store (which is SQLite-backed and lives in the app). A
-/// harness that needs durable state recovers the concrete type by downcasting
-/// this handle; harnesses that manage their own memory ignore it.
-pub trait RunStateHandle: Any + Send + Sync {
-    /// Recover the concrete store by erasing to [`Any`]. The app implements
-    /// this by returning `self`; adapters downcast the result.
-    fn into_any(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
-}
 
 /// Configuration used to build and drive a harness for a single run.
 ///
@@ -81,10 +68,13 @@ pub struct AgentRunRequest {
     /// Preselected context items for the run.
     pub context_items: Vec<ContextItem>,
     /// Stable run identifier for durable state and tracing.
+    ///
+    /// Durable run/checkpoint state is deliberately *not* a field here: it is a
+    /// per-adapter concern (only the Prompty harness persists it; agentive runs
+    /// stateless and the Copilot harness `Provides` its own session memory). The
+    /// host injects the concrete store into the one adapter that owns it rather
+    /// than threading a handle every harness must accept and most must discard.
     pub run_id: String,
-    /// Durable run-state handle, when available. Opaque to the contract; the
-    /// consuming adapter recovers the concrete store via [`RunStateHandle`].
-    pub agent_state: Option<Arc<dyn RunStateHandle>>,
     /// Cooperative cancellation handle for the run.
     pub cancellation: RunCancellation,
 }

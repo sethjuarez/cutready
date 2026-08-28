@@ -30,7 +30,7 @@ use std::sync::Arc;
 // unchanged.
 pub use harness_contract::harness::{
     AgentHarness, AgentRunRequest, AgentRunResult, HarnessCapabilities, HarnessConfig,
-    HarnessContract, HarnessDescriptor, HarnessEventEmitter, Ownership, RunStateHandle,
+    HarnessContract, HarnessDescriptor, HarnessEventEmitter, Ownership,
 };
 
 // Boundary DTOs the seam also surfaces. They live in `execution.rs` / `tools.rs`
@@ -43,6 +43,7 @@ pub use crate::engine::agent::tools::ToolDefinition;
 use self::agentive::AgentiveHarness;
 use self::copilot_sdk::CopilotSdkHarness;
 use self::prompty::PromptyHarness;
+use crate::engine::agent_state::AgentStateStore;
 // ---------------------------------------------------------------------------
 // Registry / factory
 // ---------------------------------------------------------------------------
@@ -90,9 +91,20 @@ impl HarnessRegistry {
     }
 
     /// Resolve a requested harness id to a ready-to-run harness instance.
-    pub fn resolve(&self, requested: Option<&str>) -> Result<Arc<dyn AgentHarness>, String> {
+    ///
+    /// `agent_state` is the per-run durable store. It is injected only into the
+    /// harness that owns durable persistence (Prompty today); the other adapters
+    /// run stateless or provide their own memory and never receive it.
+    pub fn resolve(
+        &self,
+        requested: Option<&str>,
+        agent_state: Option<AgentStateStore>,
+    ) -> Result<Arc<dyn AgentHarness>, String> {
         match Self::canonical_id(requested)? {
-            DEFAULT_HARNESS_ID => Ok(Arc::new(PromptyHarness::new(self.prompty_steering.clone()))),
+            DEFAULT_HARNESS_ID => Ok(Arc::new(PromptyHarness::new(
+                self.prompty_steering.clone(),
+                agent_state,
+            ))),
             AGENTIVE_HARNESS_ID => Ok(Arc::new(AgentiveHarness::new())),
             COPILOT_SDK_HARNESS_ID => Ok(Arc::new(CopilotSdkHarness::new())),
             // `canonical_id` only ever yields ids we can build.
@@ -174,10 +186,10 @@ mod tests {
 
     #[test]
     fn default_selection_resolves_to_prompty() {
-        let harness = registry().resolve(None).unwrap();
+        let harness = registry().resolve(None, None).unwrap();
         assert_eq!(harness.id(), DEFAULT_HARNESS_ID);
 
-        let explicit = registry().resolve(Some("prompty")).unwrap();
+        let explicit = registry().resolve(Some("prompty"), None).unwrap();
         assert_eq!(explicit.id(), DEFAULT_HARNESS_ID);
     }
 
@@ -189,7 +201,7 @@ mod tests {
             HarnessRegistry::canonical_id(Some("agentive")).unwrap(),
             AGENTIVE_HARNESS_ID
         );
-        let harness = registry().resolve(Some("  agentive  ")).unwrap();
+        let harness = registry().resolve(Some("  agentive  "), None).unwrap();
         assert_eq!(harness.id(), AGENTIVE_HARNESS_ID);
         assert_eq!(
             harness.capabilities(),
@@ -217,14 +229,14 @@ mod tests {
             HarnessRegistry::canonical_id(Some("copilot-sdk")).unwrap(),
             COPILOT_SDK_HARNESS_ID
         );
-        let harness = registry().resolve(Some("  copilot-sdk  ")).unwrap();
+        let harness = registry().resolve(Some("  copilot-sdk  "), None).unwrap();
         assert_eq!(harness.id(), COPILOT_SDK_HARNESS_ID);
         assert_eq!(harness.capabilities(), copilot_sdk::static_capabilities());
     }
 
     #[test]
     fn unsupported_id_is_reported_clearly() {
-        let err = match registry().resolve(Some("totally-unknown")) {
+        let err = match registry().resolve(Some("totally-unknown"), None) {
             Ok(_) => panic!("unsupported id should not resolve"),
             Err(err) => err,
         };
@@ -264,7 +276,7 @@ mod tests {
 
     #[test]
     fn resolved_harness_reports_matching_capabilities() {
-        let harness = registry().resolve(None).unwrap();
+        let harness = registry().resolve(None, None).unwrap();
         assert_eq!(
             harness.capabilities(),
             PromptyHarness::static_capabilities()
@@ -289,7 +301,7 @@ mod tests {
 
         // Prompty is the wired default and must resolve.
         assert!(find("prompty").available);
-        registry().resolve(Some("prompty")).unwrap();
+        registry().resolve(Some("prompty"), None).unwrap();
 
         // The other harnesses are declared with honest capability metadata; their
         // availability tracks whether their adapter can execute a run yet
@@ -335,7 +347,7 @@ mod tests {
         let default_contract = HarnessRegistry::contract(None).unwrap();
         assert_eq!(default_contract, PromptyHarness::static_contract());
 
-        let harness = registry().resolve(None).unwrap();
+        let harness = registry().resolve(None, None).unwrap();
         assert_eq!(harness.contract(), PromptyHarness::static_contract());
     }
 

@@ -6,9 +6,7 @@ use crate::engine::agent::execution::{
     estimate_message_chars, AgentEvent, ChatMessage, ContextItem, ContextKind, ContextScope,
     ContextSource, LargeContextRef, RunCancellation, VisionConfig, WebAccessConfig,
 };
-use crate::engine::agent::harness::{
-    AgentRunRequest, HarnessConfig, HarnessRegistry, RunStateHandle,
-};
+use crate::engine::agent::harness::{AgentRunRequest, HarnessConfig, HarnessRegistry};
 use crate::engine::agent::llm::{self, LlmConfig, LlmProvider, ModelInfo};
 use crate::engine::agent_state::{
     AgentRunDetail, AgentRunSummary, AgentStateMaintenanceResult, AgentStateStore, ChatSessionPage,
@@ -834,11 +832,11 @@ pub async fn agent_chat_with_tools(
         .clamp(1, 200);
     let mutation_tools_enabled = allow_mutation_tools.unwrap_or(false);
     // Engine selection lives in the harness registry, not in ad hoc command
-    // logic. The registry maps the requested id to a concrete harness and
-    // rejects unknown ids with a clear message.
-    let harness = HarnessRegistry::new(state.prompty_steering.clone())
-        .resolve(config.execution_engine.as_deref())?;
-    let harness_id = harness.id().to_string();
+    // logic. Resolve only the canonical id up front (needed for the durable run
+    // row's metadata); the harness itself is built after the store below so the
+    // per-run store can be injected into the harness that owns durability.
+    let harness_id =
+        HarnessRegistry::canonical_id(config.execution_engine.as_deref())?.to_string();
     let provider_name = config.provider.clone();
     let configured_provider_name = config.provider_name.clone();
     let configured_provider_id = config.provider_id.clone();
@@ -964,41 +962,54 @@ pub async fn agent_chat_with_tools(
             }
         });
     let runner_result = {
-        // CutReady owns tool selection and policy; the harness only adapts the
-        // resulting contract into its native runtime.
-        let project_workspace_tools_enabled =
-            agent_id.eq_ignore_ascii_case("writer") && mutation_tools_enabled;
-        let mut tool_definitions = crate::engine::agent::tools::all_tools(
-            web_access.search_enabled,
-            project_workspace_tools_enabled,
-            mutation_tools_enabled,
-        );
-        tool_definitions.retain(|tool| tool.function.name != "delegate_to_agent");
-        let request = AgentRunRequest {
-            config: HarnessConfig {
-                llm: llm_config,
-                reported_context_length: reported_context,
-                max_tool_rounds,
-                vision,
-                web_access,
-            },
-            messages,
-            repo_root,
-            project_root,
-            agent_id,
-            agent_prompts: prompts,
-            mutation_tools_enabled,
-            tools: tool_definitions,
-            context_items,
-            run_id: run_id.clone(),
-            // Erase the concrete store to the harness boundary's opaque handle;
-            // the consuming adapter (Prompty) downcasts it back.
-            agent_state: agent_state
-                .clone()
-                .map(|store| Arc::new(store) as Arc<dyn RunStateHandle>),
-            cancellation: cancellation.clone(),
-        };
-        harness.run(request, emit).await
+        // Build the harness now that the per-run durable store exists, injecting
+        // it into the adapter that owns durability (Prompty). The store is a
+        // per-adapter concern, so it is passed to the registry rather than
+        // routed through the harness-agnostic request below.
+        //
+        // A resolution failure is routed through the same finalization below (as
+        // an `Err` runner_result) rather than returned early, so the durable run
+        // row created by `insert_run` above is always finalized instead of
+        // leaking a `running` row. (The id was already validated by
+        // `canonical_id` above, so this cannot fail today, but keeping it on the
+        // finalized path stays correct if a harness gains a fallible builder.)
+        match HarnessRegistry::new(state.prompty_steering.clone())
+            .resolve(Some(&harness_id), agent_state.clone())
+        {
+            Ok(harness) => {
+                // CutReady owns tool selection and policy; the harness only
+                // adapts the resulting contract into its native runtime.
+                let project_workspace_tools_enabled =
+                    agent_id.eq_ignore_ascii_case("writer") && mutation_tools_enabled;
+                let mut tool_definitions = crate::engine::agent::tools::all_tools(
+                    web_access.search_enabled,
+                    project_workspace_tools_enabled,
+                    mutation_tools_enabled,
+                );
+                tool_definitions.retain(|tool| tool.function.name != "delegate_to_agent");
+                let request = AgentRunRequest {
+                    config: HarnessConfig {
+                        llm: llm_config,
+                        reported_context_length: reported_context,
+                        max_tool_rounds,
+                        vision,
+                        web_access,
+                    },
+                    messages,
+                    repo_root,
+                    project_root,
+                    agent_id,
+                    agent_prompts: prompts,
+                    mutation_tools_enabled,
+                    tools: tool_definitions,
+                    context_items,
+                    run_id: run_id.clone(),
+                    cancellation: cancellation.clone(),
+                };
+                harness.run(request, emit).await
+            }
+            Err(err) => Err(err),
+        }
     };
     // Any harness failure -- including model construction, which now lives
     // inside the adapter -- flows through the unified finalization below. The
