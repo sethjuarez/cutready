@@ -18,7 +18,7 @@
 //! new registry arm without touching this boundary.
 
 pub mod agentive;
-pub mod copilot_sdk;
+pub use harness_copilot_sdk as copilot_sdk;
 pub mod prompty;
 
 use std::sync::Arc;

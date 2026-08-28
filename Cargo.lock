@@ -1398,11 +1398,11 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "chrono",
- "copilot-sdk",
  "dirs 6.0.0",
  "draftline",
  "futures-util",
  "harness-contract",
+ "harness-copilot-sdk",
  "httpmock",
  "image",
  "keyring",
@@ -2893,6 +2893,19 @@ dependencies = [
  "async-trait",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "harness-copilot-sdk"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "copilot-sdk",
+ "harness-contract",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

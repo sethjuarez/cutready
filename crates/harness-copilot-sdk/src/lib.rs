@@ -4,7 +4,7 @@
 //! harness seam. The Copilot runtime is the GitHub Copilot CLI driven as a
 //! subprocess over JSON-RPC; all `copilot_sdk::*` types — client, session,
 //! events — stay behind this adapter and never leak past the CutReady-owned
-//! boundary types in [`super`].
+//! boundary types in [`harness_contract`].
 //!
 //! Unlike the Prompty and agentive harnesses, the Copilot harness runs
 //! Copilot's *own* agent loop with Copilot's *own* tools; it does not drive
@@ -22,10 +22,10 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
-use crate::engine::agent::execution::{AgentEvent, ChatMessage, ContextItem, Usage};
-use crate::engine::agent::llm::{LlmConfig, LlmProvider};
+use harness_contract::execution::{AgentEvent, ChatMessage, ContextItem, Usage};
+use harness_contract::llm::{LlmConfig, LlmProvider};
 
-use super::{
+use harness_contract::{
     AgentHarness, AgentRunRequest, AgentRunResult, HarnessCapabilities, HarnessContract,
     HarnessEventEmitter, Ownership,
 };

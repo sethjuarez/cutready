@@ -226,7 +226,7 @@ After the agentive `azure_oauth` module lands, CutReady's migration should also:
 
 - **Build**: `npm run build` (tsc + vite)
 - **TypeScript check**: `npx tsc --noEmit`
-- **Rust tests**: `cd src-tauri && cargo test`
+- **Rust tests**: `cargo test --workspace` (from the repo root, covers `src-tauri` plus the `crates/*` harness crates). Use `cargo test -p <crate>` to target one crate.
 - **Vitest**: `npx vitest run`
 - **E2E tests**: `npm run test:e2e` runs the Auditaur drill against the real Tauri debug app with frontend telemetry and the native drive bridge required.
 - **Default app validation**: `npm run debug` runs the real Tauri app; debug builds enable Auditaur end-to-end observability for frontend console/errors, Tauri IPC/events, backend traces, and the Tauri-native drive bridge.

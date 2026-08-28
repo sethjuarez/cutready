@@ -42,7 +42,7 @@ agentive = { git = "https://github.com/sethjuarez/agentive", rev = "457365f5e9ab
 # origin/main rev so the API matches the adapter in
 # engine/agent/harness/copilot_sdk.rs. Kept behind that adapter — no
 # `copilot_sdk::*` type leaks past the harness boundary.
-copilot-sdk = { git = "https://github.com/sethjuarez/copilot-sdk-rust", rev = "96ef003e1037086322f61599deb55aa3e6a810a7" }
+harness-copilot-sdk = { path = "../crates/harness-copilot-sdk" }
 draftline = "0.2.15"
 keyring = "4.1.2"
 xcap = "0.8"
