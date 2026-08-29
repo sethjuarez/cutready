@@ -3725,7 +3725,7 @@ export function HarnessPicker({ value, onChange }: { value: string; onChange: (i
   const selectedKnown = harnesses.some((h) => h.id === effectiveValue);
 
   return (
-    <div>
+    <div data-testid="harness-picker">
       <h3 className="text-xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] mb-1 flex items-center gap-1.5">
         <Bot className="w-3.5 h-3.5" /> Runtime Harness
       </h3>
@@ -3801,7 +3801,7 @@ export function HarnessPicker({ value, onChange }: { value: string; onChange: (i
           // the install guidance.
           if (isCopilot) {
             return (
-              <div key={harness.id} className={`${baseCardClass} ${selectable ? "hover:border-[rgb(var(--color-accent))]/60" : ""}`}>
+              <div key={harness.id} data-testid={`harness-option-${harness.id}`} data-selected={selected} className={`${baseCardClass} ${selectable ? "hover:border-[rgb(var(--color-accent))]/60" : ""}`}>
                 <button
                   type="button"
                   disabled={!selectable}
@@ -3821,6 +3821,8 @@ export function HarnessPicker({ value, onChange }: { value: string; onChange: (i
             <button
               key={harness.id}
               type="button"
+              data-testid={`harness-option-${harness.id}`}
+              data-selected={selected}
               disabled={!selectable}
               onClick={() => selectable && onChange(harness.id)}
               className={`text-left ${baseCardClass} ${selectable ? "hover:border-[rgb(var(--color-accent))]/60 cursor-pointer" : "opacity-60 cursor-not-allowed"}`}
@@ -3841,7 +3843,7 @@ export function HarnessPicker({ value, onChange }: { value: string; onChange: (i
           harnesses.find((h) => h.available) ??
           harnesses[0];
         return (
-          <div className="mt-2 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-text-secondary))]/5 p-2.5">
+          <div data-testid="harness-unavailable-warning" className="mt-2 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-text-secondary))]/5 p-2.5">
             <p className="text-xs text-[rgb(var(--color-text-secondary))] flex items-start gap-1.5">
               <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
               <span>
@@ -3853,6 +3855,7 @@ export function HarnessPicker({ value, onChange }: { value: string; onChange: (i
             {fallback && fallback.id !== value && (
               <button
                 type="button"
+                data-testid="harness-switch-fallback"
                 onClick={() => onChange(fallback.id)}
                 className="mt-2 text-xs px-2 py-1 rounded-md border border-[rgb(var(--color-accent))] text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
               >

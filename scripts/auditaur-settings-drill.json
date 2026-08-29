@@ -1,0 +1,133 @@
+{
+  "app": "cutready",
+  "label": "settings",
+  "timeoutSeconds": 240,
+  "globalSettings": {
+    "seed": {
+      "aiAgentExecutionEngine": "drill-unavailable-harness"
+    }
+  },
+  "fixture": {
+    "prefix": "cutready-settings-drill-",
+    "sketches": [
+      {
+        "path": "intro.sk",
+        "title": "Settings Drill Fixture",
+        "narrative": "A sketch so the app opens into the full workspace shell."
+      }
+    ]
+  },
+  "steps": [
+    {
+      "id": "wait-for-shell",
+      "drive": "wait",
+      "selector": "[data-testid=\"activity-settings\"]",
+      "timeoutMs": 45000
+    },
+    {
+      "id": "open-settings",
+      "drive": "click",
+      "selector": "[data-testid=\"activity-settings\"]"
+    },
+    {
+      "id": "wait-ai-tab",
+      "drive": "wait",
+      "selector": "[data-testid=\"settings-tab-ai\"]",
+      "timeoutMs": 15000
+    },
+    {
+      "id": "open-ai-section",
+      "drive": "click",
+      "selector": "[data-testid=\"settings-tab-ai\"]"
+    },
+    {
+      "id": "wait-agent-subtab",
+      "drive": "wait",
+      "selector": "[data-testid=\"settings-ai-tab-agent\"]",
+      "timeoutMs": 15000
+    },
+    {
+      "id": "open-agent-subtab",
+      "drive": "click",
+      "selector": "[data-testid=\"settings-ai-tab-agent\"]"
+    },
+    {
+      "id": "wait-harness-picker",
+      "drive": "wait",
+      "selector": "[data-testid=\"harness-picker\"]",
+      "timeoutMs": 15000
+    },
+    {
+      "id": "harness-cards-render",
+      "drive": "evaluate",
+      "expression": "(function(){var q=function(s){return document.querySelector(s);};if(!q('[data-testid=\"harness-picker\"]'))return 'no-picker';if(!q('[data-testid=\"harness-option-prompty\"]'))return 'no-prompty-card';if(!/runtime harness/i.test(document.body.innerText||''))return 'no-header';return 'ok';})()",
+      "expectValue": "ok"
+    },
+    {
+      "id": "honest-capability-copy",
+      "expectText": "never silently downgraded"
+    },
+    {
+      "id": "unavailable-warning-renders",
+      "drive": "wait",
+      "selector": "[data-testid=\"harness-unavailable-warning\"]",
+      "timeoutMs": 10000
+    },
+    {
+      "id": "warning-copy",
+      "expectText": "the run will fail"
+    },
+    {
+      "id": "wait-switch-button",
+      "drive": "wait",
+      "selector": "[data-testid=\"harness-switch-fallback\"]",
+      "timeoutMs": 10000
+    },
+    {
+      "id": "switch-button-label",
+      "drive": "evaluate",
+      "expression": "(function(){var b=document.querySelector('[data-testid=\"harness-switch-fallback\"]');return b?b.textContent.trim():'no-button';})()",
+      "expectContains": "Switch to Prompty"
+    },
+    {
+      "id": "click-switch-to-prompty",
+      "drive": "click",
+      "selector": "[data-testid=\"harness-switch-fallback\"]"
+    },
+    {
+      "id": "prompty-now-selected",
+      "drive": "wait",
+      "selector": "[data-testid=\"harness-option-prompty\"][data-selected=\"true\"]",
+      "timeoutMs": 10000
+    },
+    {
+      "id": "warning-cleared",
+      "drive": "evaluate",
+      "expression": "(function(){return document.querySelector('[data-testid=\"harness-unavailable-warning\"]')?'warning-still-shown':'cleared';})()",
+      "expectValue": "cleared"
+    },
+    {
+      "id": "capture-evidence",
+      "drive": "screenshot",
+      "output": "target/auditaur-settings-drill.png"
+    },
+    {
+      "id": "no-reload-fallback",
+      "forbidText": ["Something went wrong", "Reload interface"]
+    },
+    {
+      "id": "frontend-errors",
+      "telemetry": "errors",
+      "maxCount": 0
+    },
+    {
+      "id": "failed-ipc",
+      "telemetry": "failed-ipc",
+      "maxCount": 0
+    },
+    {
+      "id": "explain",
+      "telemetry": "explain"
+    }
+  ]
+}

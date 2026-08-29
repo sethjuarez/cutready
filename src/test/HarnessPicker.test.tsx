@@ -92,4 +92,35 @@ describe("HarnessPicker unavailable-selection handling", () => {
     fireEvent.click(button);
     expect(onChange).toHaveBeenCalledWith("other-engine");
   });
+
+  // These data-testid handles are the contract the Auditaur settings drill drives
+  // against. If a refactor drops one, the E2E drill would fail opaquely at runtime;
+  // this locks the handles at the unit layer so a break is caught deterministically.
+  it("exposes stable data-testid handles for E2E drills", async () => {
+    mockHarnesses([descriptor("prompty"), descriptor("copilot-sdk", { display_name: "GitHub Copilot" })]);
+    const { container } = render(<HarnessPicker value="mystery-engine" onChange={vi.fn()} />);
+
+    // Picker root + one option card per harness, tagged by canonical id.
+    await screen.findByTestId("harness-picker");
+    expect(container.querySelector('[data-testid="harness-option-prompty"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="harness-option-copilot-sdk"]')).not.toBeNull();
+
+    // Unknown selection surfaces the warning + actionable switch handle.
+    expect(await screen.findByTestId("harness-unavailable-warning")).toBeTruthy();
+    expect(await screen.findByTestId("harness-switch-fallback")).toBeTruthy();
+  });
+
+  it("marks the active harness card via data-selected", async () => {
+    mockHarnesses([descriptor("prompty"), descriptor("agentive")]);
+    const { container } = render(<HarnessPicker value="prompty" onChange={vi.fn()} />);
+
+    await screen.findByTestId("harness-option-prompty");
+    expect(
+      container.querySelector('[data-testid="harness-option-prompty"]')?.getAttribute("data-selected"),
+    ).toBe("true");
+    expect(
+      container.querySelector('[data-testid="harness-option-agentive"]')?.getAttribute("data-selected"),
+    ).toBe("false");
+    expect(screen.queryByTestId("harness-unavailable-warning")).toBeNull();
+  });
 });
