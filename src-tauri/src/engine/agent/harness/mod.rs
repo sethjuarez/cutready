@@ -325,10 +325,17 @@ fn unsupported_harness_error(requested: &str) -> String {
     // Preserve the user-facing contract from the pre-seam
     // `ExecutionEngine::from_config`: the frontend still sends this value under
     // the `execution_engine` config key, so the error names that key and lists
-    // the currently supported values.
+    // the currently supported values. The list tracks the compiled-in adapters
+    // so a reduced (feature-gated) build never claims to support a harness it
+    // cannot build.
+    let mut ids = vec!["'prompty'"];
+    #[cfg(feature = "harness-agentive")]
+    ids.push("'agentive'");
+    #[cfg(feature = "harness-copilot-sdk")]
+    ids.push("'copilot-sdk'");
     format!(
-        "Unsupported execution_engine '{requested}'. Expected one of 'prompty', 'agentive', \
-         'copilot-sdk'."
+        "Unsupported execution_engine '{requested}'. Expected one of {}.",
+        ids.join(", ")
     )
 }
 
@@ -408,11 +415,18 @@ mod tests {
         );
         // The exact user-facing contract is preserved from the pre-seam
         // `ExecutionEngine::from_config`, keyed on `execution_engine`, now
-        // listing every selectable harness.
+        // listing every selectable harness the build actually links.
+        let mut expected_ids = vec!["'prompty'"];
+        #[cfg(feature = "harness-agentive")]
+        expected_ids.push("'agentive'");
+        #[cfg(feature = "harness-copilot-sdk")]
+        expected_ids.push("'copilot-sdk'");
         assert_eq!(
             err,
-            "Unsupported execution_engine 'totally-unknown'. Expected one of 'prompty', \
-             'agentive', 'copilot-sdk'."
+            format!(
+                "Unsupported execution_engine 'totally-unknown'. Expected one of {}.",
+                expected_ids.join(", ")
+            )
         );
 
         let capability_err = HarnessRegistry::capabilities(Some("totally-unknown")).unwrap_err();
@@ -441,7 +455,6 @@ mod tests {
         );
     }
 
-    #[cfg(all(feature = "harness-agentive", feature = "harness-copilot-sdk"))]
     #[test]
     fn enumeration_lists_every_known_harness_with_honest_availability() {
         let harnesses = HarnessRegistry::available_harnesses();
@@ -449,7 +462,15 @@ mod tests {
             .iter()
             .map(|descriptor| descriptor.capabilities.id.as_str())
             .collect();
-        assert_eq!(ids, vec!["prompty", "agentive", "copilot-sdk"]);
+        // The enumeration tracks exactly the compiled-in adapters, in stable
+        // UI order: the default harness first, then each optional adapter the
+        // build actually links.
+        let mut expected = vec!["prompty"];
+        #[cfg(feature = "harness-agentive")]
+        expected.push("agentive");
+        #[cfg(feature = "harness-copilot-sdk")]
+        expected.push("copilot-sdk");
+        assert_eq!(ids, expected);
 
         let find = |id: &str| {
             harnesses
@@ -465,8 +486,17 @@ mod tests {
         // The other harnesses are declared with honest capability metadata; their
         // availability tracks whether their adapter can execute a run yet
         // (agentive is always wired; the Copilot harness needs its CLI present).
+        #[cfg(feature = "harness-agentive")]
         assert_eq!(find("agentive").available, agentive::AVAILABLE);
+        #[cfg(feature = "harness-copilot-sdk")]
         assert_eq!(find("copilot-sdk").available, copilot_sdk::is_available());
+
+        // A compiled-out adapter is not silently present — its id is rejected
+        // rather than enumerated.
+        #[cfg(not(feature = "harness-agentive"))]
+        assert!(HarnessRegistry::canonical_id(Some("agentive")).is_err());
+        #[cfg(not(feature = "harness-copilot-sdk"))]
+        assert!(HarnessRegistry::canonical_id(Some("copilot-sdk")).is_err());
     }
 
     #[test]

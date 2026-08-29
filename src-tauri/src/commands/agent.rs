@@ -1724,10 +1724,17 @@ mod tests {
             HarnessRegistry::canonical_id(Some("prompty")).unwrap(),
             crate::engine::agent::harness::DEFAULT_HARNESS_ID
         );
+        let mut expected_ids = vec!["'prompty'"];
+        #[cfg(feature = "harness-agentive")]
+        expected_ids.push("'agentive'");
+        #[cfg(feature = "harness-copilot-sdk")]
+        expected_ids.push("'copilot-sdk'");
         assert_eq!(
             HarnessRegistry::canonical_id(Some("other")).unwrap_err(),
-            "Unsupported execution_engine 'other'. Expected one of 'prompty', 'agentive', \
-             'copilot-sdk'."
+            format!(
+                "Unsupported execution_engine 'other'. Expected one of {}.",
+                expected_ids.join(", ")
+            )
         );
     }
 
