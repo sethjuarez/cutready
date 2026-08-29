@@ -3707,7 +3707,7 @@ function CopilotConnect() {
  * shows honest capability metadata, and lets the user switch which runtime
  * executes agent turns. Unavailable harnesses are shown but not selectable.
  */
-function HarnessPicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+export function HarnessPicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
   const [harnesses, setHarnesses] = useState<HarnessDescriptor[]>([]);
   const [error, setError] = useState("");
 
@@ -3719,7 +3719,10 @@ function HarnessPicker({ value, onChange }: { value: string; onChange: (id: stri
     return () => { active = false; };
   }, []);
 
-  const selectedKnown = harnesses.some((h) => h.id === value);
+  // Mirror the backend's canonical_id normalization (trim; empty → Prompty) so a
+  // blank or whitespace-padded stored value isn't falsely flagged as unavailable.
+  const effectiveValue = value.trim() || PROMPTY_HARNESS_ID;
+  const selectedKnown = harnesses.some((h) => h.id === effectiveValue);
 
   return (
     <div>
