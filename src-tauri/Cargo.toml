@@ -8,6 +8,22 @@ description = "Product demo video authoring tool"
 name = "cutready_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
+# Harness adapter selection (issue #251). Each first-party agent-harness adapter
+# is a sibling workspace crate; the app links which ones to compile in via these
+# features. `default` keeps every adapter so stock builds are unchanged.
+#
+# `harness-agentive` and `harness-copilot-sdk` are genuinely optional adapters
+# and can be dropped individually to slim a build. The prompty adapter is NOT
+# optional: the app's durable run-state, agent memory, model discovery, and
+# one-shot LLM helpers are built directly on the Prompty engine SDK
+# (see engine/agent_state.rs, engine/memory.rs, engine/agent/llm.rs) and are not
+# harness-swappable today. Fully decoupling "LLM backbone" from "agent harness"
+# is tracked by the capability-provider seam work (#250).
+[features]
+default = ["harness-agentive", "harness-copilot-sdk"]
+harness-agentive = ["dep:harness-agentive"]
+harness-copilot-sdk = ["dep:harness-copilot-sdk"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -37,12 +53,12 @@ futures-util = "0.3"
 # Agentive agent harness runtime. Pinned to a pushed origin/main rev so the API
 # matches the adapter in engine/agent/harness/agentive.rs. Kept behind that
 # adapter — no `agentive::*` type leaks past the harness boundary.
-harness-agentive = { path = "../crates/harness-agentive" }
+harness-agentive = { path = "../crates/harness-agentive", optional = true }
 # GitHub Copilot SDK agent harness runtime (issue #247). Pinned to a pushed
 # origin/main rev so the API matches the adapter in
 # engine/agent/harness/copilot_sdk.rs. Kept behind that adapter — no
 # `copilot_sdk::*` type leaks past the harness boundary.
-harness-copilot-sdk = { path = "../crates/harness-copilot-sdk" }
+harness-copilot-sdk = { path = "../crates/harness-copilot-sdk", optional = true }
 harness-prompty = { path = "../crates/harness-prompty" }
 draftline = "0.2.15"
 keyring = "4.1.2"

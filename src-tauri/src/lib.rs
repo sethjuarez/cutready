@@ -772,7 +772,9 @@ pub fn run() {
             commands::agent::clear_saved_context,
             commands::agent::fetch_url_content,
             commands::agent::list_agent_harnesses,
+            #[cfg(feature = "harness-copilot-sdk")]
             commands::agent::copilot_auth_status,
+            #[cfg(feature = "harness-copilot-sdk")]
             commands::agent::copilot_sign_in,
             commands::agent::get_memory_context,
             commands::agent::archive_chat_session,

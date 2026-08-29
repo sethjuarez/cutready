@@ -1166,6 +1166,7 @@ pub fn list_agent_harnesses(
 /// `instrument_ipc` continues the frontend trace via the reserved
 /// `auditaur_trace_context` carrier argument while preserving the plain DTO
 /// return. The carrier is supplied automatically by `@auditaur/api`.
+#[cfg(feature = "harness-copilot-sdk")]
 #[tauri::command]
 #[instrument_ipc(skip_all)]
 pub async fn copilot_auth_status(
@@ -1179,6 +1180,7 @@ pub async fn copilot_auth_status(
 /// wait for it to finish. The settings UI re-probes status afterward via
 /// `copilot_auth_status`. Returns an error with a short detail on failure so the
 /// UI can fall back to guided steps.
+#[cfg(feature = "harness-copilot-sdk")]
 #[auditaur_command(skip_all, err)]
 pub async fn copilot_sign_in() -> Result<(), String> {
     crate::engine::agent::harness::copilot_sdk::sign_in().await
@@ -1705,6 +1707,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "harness-agentive")]
     #[test]
     fn execution_engine_defaults_to_prompty_and_resolves_agentive() {
         assert_eq!(
@@ -1762,6 +1765,7 @@ mod tests {
         assert_eq!(config.provider, LlmProvider::AzureOpenai);
     }
 
+    #[cfg(all(feature = "harness-agentive", feature = "harness-copilot-sdk"))]
     #[test]
     fn all_known_engines_resolve_through_the_registry() {
         // Engine selection is centralized in the registry. Every selectable id
