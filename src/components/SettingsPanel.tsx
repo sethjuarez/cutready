@@ -3451,6 +3451,9 @@ const HARNESS_CAPABILITY_LABELS: { key: keyof HarnessDescriptor; label: string }
 /** Canonical id of the GitHub Copilot (copilot-sdk) harness. */
 const COPILOT_HARNESS_ID = "copilot-sdk";
 
+/** Canonical id of the always-linked Prompty harness (the app's backbone runtime). */
+const PROMPTY_HARNESS_ID = "prompty";
+
 /** Live install + sign-in snapshot returned by the `copilot_auth_status` command. */
 interface CopilotAuthStatus {
   installed: boolean;
@@ -3824,11 +3827,38 @@ function HarnessPicker({ value, onChange }: { value: string; onChange: (id: stri
           );
         })}
       </div>
-      {harnesses.length > 0 && !selectedKnown && (
-        <p className="text-xs text-[rgb(var(--color-text-secondary))] mt-2 flex items-center gap-1.5">
-          <Info className="w-3.5 h-3.5" /> Current selection <span className="font-mono">{value}</span> is not a known harness; it will be validated when a run starts.
-        </p>
-      )}
+      {harnesses.length > 0 && !selectedKnown && (() => {
+        // The saved selection isn't one of the harnesses compiled into this
+        // build. It may still be a backend-resolvable alias, so we don't
+        // silently switch it (differences are explicit, never downgraded) —
+        // instead we surface the risk and offer a one-click move to a harness
+        // we can see. Prompty is the always-linked backbone, so prefer it.
+        const fallback =
+          harnesses.find((h) => h.id === PROMPTY_HARNESS_ID) ??
+          harnesses.find((h) => h.available) ??
+          harnesses[0];
+        return (
+          <div className="mt-2 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-text-secondary))]/5 p-2.5">
+            <p className="text-xs text-[rgb(var(--color-text-secondary))] flex items-start gap-1.5">
+              <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+              <span>
+                Current selection <span className="font-mono">{value}</span> isn't one of
+                the harnesses available in this build. If the backend can't resolve it when
+                a run starts, the run will fail — switch to a listed harness to be sure.
+              </span>
+            </p>
+            {fallback && fallback.id !== value && (
+              <button
+                type="button"
+                onClick={() => onChange(fallback.id)}
+                className="mt-2 text-xs px-2 py-1 rounded-md border border-[rgb(var(--color-accent))] text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
+              >
+                Switch to {fallback.display_name}
+              </button>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
