@@ -576,6 +576,50 @@ mod tests {
         assert_eq!(sent.bearer_token, original.bearer_token);
     }
 
+    fn sample_host_tools() -> Vec<ToolDefinition> {
+        vec![ToolDefinition::function(
+            "read_sketch",
+            "Read a sketch",
+            serde_json::json!({"type": "object"}),
+        )]
+    }
+
+    fn sample_host_prompts() -> std::collections::HashMap<String, String> {
+        std::collections::HashMap::from([("writer".to_string(), "You are the writer.".to_string())])
+    }
+
+    #[cfg(feature = "harness-copilot-sdk")]
+    #[test]
+    fn copilot_sdk_contract_withholds_host_tools_but_forwards_personas_via_registry() {
+        // copilot-sdk Provides its own tool loop, so the host tool contract must
+        // be withheld end-to-end through the real registry contract. It Augments
+        // personas (registers host personas as native custom agents), so the
+        // host prompts must still be forwarded.
+        let contract = HarnessRegistry::contract(Some("copilot-sdk")).unwrap();
+        assert!(
+            contract.host_tools(sample_host_tools()).is_empty(),
+            "a Provides-tools harness must receive no host tools"
+        );
+        let prompts = contract.host_agent_prompts(sample_host_prompts());
+        assert_eq!(
+            prompts.get("writer").map(String::as_str),
+            Some("You are the writer."),
+            "an Augments-personas harness must still receive host personas"
+        );
+    }
+
+    #[test]
+    fn prompty_contract_forwards_host_tools_and_personas_via_registry() {
+        // A Requires harness cannot run without the host tools or personas, so
+        // the registry contract must forward both verbatim.
+        let contract = HarnessRegistry::contract(Some("prompty")).unwrap();
+        let tools = contract.host_tools(sample_host_tools());
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].function.name, "read_sketch");
+        let prompts = contract.host_agent_prompts(sample_host_prompts());
+        assert_eq!(prompts.get("writer").map(String::as_str), Some("You are the writer."));
+    }
+
     #[test]
     fn contract_default_matches_prompty_and_resolved_harness() {
         // A missing id falls back to the default harness for the contract just

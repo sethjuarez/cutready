@@ -202,6 +202,47 @@ impl HarnessContract {
     pub fn provides_own_provider(&self) -> bool {
         matches!(self.provider, Ownership::Provides)
     }
+
+    /// Apply this contract's tools-ownership stance to the host-supplied tool
+    /// contract, returning the tools the host is permitted to hand the harness.
+    ///
+    /// The tools concern covers the function/tool set the model may call. When
+    /// the harness [`Ownership::Provides`] its own tool loop — for example the
+    /// Copilot harness, which runs Copilot's own tools inside the CLI — the host
+    /// must not send its tool contract: handing over tools the harness neither
+    /// owns nor executes would blur the ownership boundary and grant a tool
+    /// surface it never asked for. So for [`Ownership::Provides`] the host tools
+    /// are withheld entirely and the harness runs on its own set.
+    ///
+    /// [`Ownership::Requires`] and [`Ownership::Augments`] both forward the host
+    /// tools unchanged: `Requires` cannot run without them, and `Augments`
+    /// layers them onto the harness's own tools.
+    pub fn host_tools(&self, tools: Vec<ToolDefinition>) -> Vec<ToolDefinition> {
+        match self.tools {
+            Ownership::Provides => Vec::new(),
+            Ownership::Requires | Ownership::Augments => tools,
+        }
+    }
+
+    /// Apply this contract's personas-ownership stance to the host-supplied
+    /// agent prompts, returning the personas the host is permitted to hand the
+    /// harness.
+    ///
+    /// The personas concern covers the agent system prompts. When the harness
+    /// [`Ownership::Provides`] its own personas the host withholds its prompts
+    /// entirely. [`Ownership::Requires`] (prompty/agentive drive the turn from
+    /// the host persona) and [`Ownership::Augments`] (the Copilot harness
+    /// registers the host personas as native custom agents and merges them with
+    /// its own) both forward the host prompts unchanged.
+    pub fn host_agent_prompts(
+        &self,
+        agent_prompts: HashMap<String, String>,
+    ) -> HashMap<String, String> {
+        match self.personas {
+            Ownership::Provides => HashMap::new(),
+            Ownership::Requires | Ownership::Augments => agent_prompts,
+        }
+    }
 }
 
 /// A harness entry as surfaced to the host/UI: its capabilities plus whether it
@@ -269,6 +310,36 @@ mod tests {
         }
     }
 
+    fn contract_with_tools(tools: Ownership) -> HarnessContract {
+        HarnessContract {
+            provider: Ownership::Requires,
+            personas: Ownership::Requires,
+            tools,
+            memory: Ownership::Requires,
+        }
+    }
+
+    fn contract_with_personas(personas: Ownership) -> HarnessContract {
+        HarnessContract {
+            provider: Ownership::Requires,
+            personas,
+            tools: Ownership::Requires,
+            memory: Ownership::Requires,
+        }
+    }
+
+    fn sample_tools() -> Vec<ToolDefinition> {
+        vec![ToolDefinition::function(
+            "read_sketch",
+            "Read a sketch",
+            serde_json::json!({"type": "object"}),
+        )]
+    }
+
+    fn sample_prompts() -> HashMap<String, String> {
+        HashMap::from([("writer".to_string(), "You are the writer.".to_string())])
+    }
+
     #[test]
     fn provides_strips_host_provider_credentials_and_model() {
         let out = contract_with_provider(Ownership::Provides).host_provider_config(byok_config());
@@ -303,5 +374,40 @@ mod tests {
         assert!(contract_with_provider(Ownership::Provides).provides_own_provider());
         assert!(!contract_with_provider(Ownership::Requires).provides_own_provider());
         assert!(!contract_with_provider(Ownership::Augments).provides_own_provider());
+    }
+
+    #[test]
+    fn provides_withholds_host_tools() {
+        let out = contract_with_tools(Ownership::Provides).host_tools(sample_tools());
+        assert!(
+            out.is_empty(),
+            "a harness that provides its own tool loop must receive no host tools"
+        );
+    }
+
+    #[test]
+    fn requires_and_augments_forward_host_tools_unchanged() {
+        for ownership in [Ownership::Requires, Ownership::Augments] {
+            let out = contract_with_tools(ownership).host_tools(sample_tools());
+            assert_eq!(out.len(), 1);
+            assert_eq!(out[0].function.name, "read_sketch");
+        }
+    }
+
+    #[test]
+    fn provides_withholds_host_agent_prompts() {
+        let out = contract_with_personas(Ownership::Provides).host_agent_prompts(sample_prompts());
+        assert!(
+            out.is_empty(),
+            "a harness that provides its own personas must receive no host prompts"
+        );
+    }
+
+    #[test]
+    fn requires_and_augments_forward_host_agent_prompts_unchanged() {
+        for ownership in [Ownership::Requires, Ownership::Augments] {
+            let out = contract_with_personas(ownership).host_agent_prompts(sample_prompts());
+            assert_eq!(out.get("writer").map(String::as_str), Some("You are the writer."));
+        }
     }
 }

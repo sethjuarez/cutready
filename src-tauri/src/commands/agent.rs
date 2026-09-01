@@ -1020,6 +1020,18 @@ pub async fn agent_chat_with_tools(
                 // adapter ignores what it does not own. This reuses the same
                 // authoritative contract resolved above for run diagnostics.
                 let harness_llm = harness_contract.host_provider_config(llm_config);
+                // Respect the tools and personas ownership stances the same way.
+                // A harness that *Provides* its own tool loop (copilot-sdk runs
+                // Copilot's own tools inside the CLI) must not receive the host
+                // tool contract; a harness that *Provides* its own personas must
+                // not receive the host prompts. `Requires`/`Augments` forward
+                // unchanged (prompty/agentive need the host tools+persona;
+                // copilot-sdk *Augments* personas by registering them as native
+                // custom agents). The host asks the contract what it may send
+                // instead of handing everything over and hoping the adapter
+                // ignores what it does not own.
+                let harness_tools = harness_contract.host_tools(tool_definitions);
+                let harness_agent_prompts = harness_contract.host_agent_prompts(prompts);
                 let request = AgentRunRequest {
                     config: HarnessConfig {
                         llm: harness_llm,
@@ -1032,9 +1044,9 @@ pub async fn agent_chat_with_tools(
                     repo_root,
                     project_root,
                     agent_id,
-                    agent_prompts: prompts,
+                    agent_prompts: harness_agent_prompts,
                     mutation_tools_enabled,
-                    tools: tool_definitions,
+                    tools: harness_tools,
                     context_items,
                     run_id: run_id.clone(),
                     cancellation: cancellation.clone(),
