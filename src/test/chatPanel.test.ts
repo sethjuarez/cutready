@@ -7,6 +7,7 @@ import {
   canUseChatMutationTools,
   cancelAgentChatRun,
   chatSessionTitle,
+  classifyError,
   describeToolCall,
   fetchWebReferenceContent,
   resolveWebReferenceContent,
@@ -23,6 +24,31 @@ import {
   agentRunStatusLabel,
 } from "../components/AgentRunInspector";
 import { sessionSourceLabel, sessionSourcePathLabel } from "../components/SessionHistoryPanel";
+
+describe("classifyError", () => {
+  it("maps an expired Entra/Foundry 401 to an actionable re-sign-in suggestion", () => {
+    const err =
+      "[agentive::openai] request failed status=401: the audience is invalid, expected https://ai.azure.com";
+    const { title, suggestion } = classifyError(err);
+    expect(title).toBe("Azure sign-in expired");
+    expect(suggestion).toContain("Settings → AI → Connections");
+  });
+
+  it("recognizes AADSTS token-expiry errors as an expired Azure sign-in", () => {
+    const { title } = classifyError("AADSTS700082: The refresh token has expired");
+    expect(title).toBe("Azure sign-in expired");
+  });
+
+  it("keeps the generic API-key suggestion for a plain 401 with no Entra markers", () => {
+    const { title, suggestion } = classifyError("401 Unauthorized");
+    expect(title).toBe("Authentication failed");
+    expect(suggestion).toContain("API key");
+  });
+
+  it("classifies rate-limit errors independently of auth", () => {
+    expect(classifyError("429 too many requests").title).toBe("Rate limit reached");
+  });
+});
 
 describe("describeToolCall", () => {
   it("summarizes planning row updates without exposing raw arguments", () => {
