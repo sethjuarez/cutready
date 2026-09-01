@@ -164,8 +164,8 @@
     {
       "id": "switched-harness-executes-turn",
       "trace": "logs",
-      "contains": ["agent_chat_with_tools_start", "prompty"],
-      "notContains": ["agent_chat_with_tools_start", "copilot-sdk"],
+      "contains": ["agent_chat_with_tools_start", "\"execution_engine\":\"prompty\""],
+      "notContains": ["agent_chat_with_tools_start", "\"execution_engine\":\"copilot-sdk\""],
       "timeoutMs": 60000
     }
   ]

@@ -203,7 +203,11 @@ async function runTraceStep(step) {
   let lastItems = [];
 
   const matchesAll = (item, needles) => {
-    const text = JSON.stringify(item);
+    // Trace payloads are often a nested JSON *string* (e.g. cutready_trace_data),
+    // so a naive JSON.stringify double-escapes quotes ("\"k\":\"v\""). Strip the
+    // escape backslashes first so precise `"execution_engine":"agentive"` needles
+    // match the underlying field regardless of nesting depth.
+    const text = JSON.stringify(item).replace(/\\/g, "");
     return needles.every((n) => text.includes(n));
   };
 
