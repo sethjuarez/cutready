@@ -17,6 +17,7 @@
 //   { expectText: "..." , timeoutMs }
 //   { forbidText: ["..."] }
 //   { telemetry: "errors|failed-ipc|explain", maxCount }
+//   { trace: "logs|traces", contains: ["..."], notContains: ["..."], timeoutMs }
 //
 // Requires: auditaur 0.4.1+ on PATH.
 
@@ -155,7 +156,46 @@ async function runStep(step) {
     return result.json;
   }
   if (step.telemetry) return runTelemetryStep(step);
+  if (step.trace) return runTraceStep(step);
   throw new Error(`Unsupported drill step: ${JSON.stringify(step)}`);
+}
+
+// Polls a telemetry stream (logs/traces) until at least one record whose
+// serialized JSON contains ALL of `contains` appears, and asserts that no
+// record contains ALL of `notContains`. This is how the drill proves the
+// switched harness actually executed a run (the run-start trace names the
+// resolved execution_engine) without depending on a fully healthy LLM call.
+async function runTraceStep(step) {
+  const stream = step.trace === "traces" ? "traces" : "logs";
+  const contains = step.contains ?? [];
+  const notContains = step.notContains ?? [];
+  const timeoutMs = step.timeoutMs ?? 60_000;
+  const deadline = Date.now() + timeoutMs;
+  let lastItems = [];
+
+  const matchesAll = (item, needles) => {
+    const text = JSON.stringify(item);
+    return needles.every((n) => text.includes(n));
+  };
+
+  while (Date.now() < deadline) {
+    const result = runJson([stream, "--json", "--session", report.sessionId]);
+    if (result.ok) {
+      lastItems = asArray(result.json);
+      const hit = contains.length === 0 || lastItems.some((item) => matchesAll(item, contains));
+      if (hit) {
+        const forbidden = notContains.length > 0
+          ? lastItems.find((item) => matchesAll(item, notContains))
+          : null;
+        if (forbidden) {
+          return recordAssertion(step.id, "failed", { forbidden }, `found forbidden trace matching ${JSON.stringify(notContains)}`);
+        }
+        return recordAssertion(step.id, "passed", { contains, matched: lastItems.length });
+      }
+    }
+    await delay(1_500);
+  }
+  return recordAssertion(step.id, "failed", { items: lastItems.length }, `timed out waiting for ${stream} matching ${JSON.stringify(contains)}`);
 }
 
 async function runDriveStep(step) {

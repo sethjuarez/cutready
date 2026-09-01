@@ -128,6 +128,45 @@
     {
       "id": "explain",
       "telemetry": "explain"
+    },
+    {
+      "id": "close-settings",
+      "drive": "click",
+      "selector": "[data-testid=\"settings-close\"]"
+    },
+    {
+      "id": "reveal-chat",
+      "drive": "click",
+      "selector": "[data-testid=\"activity-chat\"]"
+    },
+    {
+      "id": "wait-composer",
+      "drive": "wait",
+      "selector": "textarea[placeholder^=\"Ask about your demo plan\"]",
+      "timeoutMs": 20000
+    },
+    {
+      "id": "focus-composer",
+      "drive": "click",
+      "selector": "textarea[placeholder^=\"Ask about your demo plan\"]"
+    },
+    {
+      "id": "type-prompt",
+      "drive": "fill",
+      "selector": "textarea[placeholder^=\"Ask about your demo plan\"]",
+      "value": "Reply with the single word READY and nothing else."
+    },
+    {
+      "id": "send-turn",
+      "drive": "click",
+      "selector": "button[title=\"Send (Enter)\"]"
+    },
+    {
+      "id": "switched-harness-executes-turn",
+      "trace": "logs",
+      "contains": ["agent_chat_with_tools_start", "prompty"],
+      "notContains": ["agent_chat_with_tools_start", "copilot-sdk"],
+      "timeoutMs": 60000
     }
   ]
 }
