@@ -3563,6 +3563,7 @@ function CopilotConnect() {
   const RecheckButton = (
     <button
       type="button"
+      data-testid="copilot-recheck"
       onClick={recheck}
       disabled={phase === "loading" || isSigningIn}
       className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:opacity-50"
@@ -3573,7 +3574,11 @@ function CopilotConnect() {
 
   if (phase === "loading" && !status) {
     return (
-      <div className="flex items-center gap-1.5 text-[11px] text-[rgb(var(--color-text-secondary))]">
+      <div
+        data-testid="copilot-connect"
+        data-state="loading"
+        className="flex items-center gap-1.5 text-[11px] text-[rgb(var(--color-text-secondary))]"
+      >
         <RefreshCw className="h-3 w-3 animate-spin" /> Checking GitHub Copilot…
       </div>
     );
@@ -3582,9 +3587,16 @@ function CopilotConnect() {
   const notInstalled = !!status && !status.installed;
   const needsSignIn = !!status && status.installed && !status.authenticated;
   const signedIn = !!status && status.installed && status.authenticated;
+  const connectState = signedIn
+    ? "signed-in"
+    : needsSignIn
+      ? "needs-sign-in"
+      : notInstalled
+        ? "not-installed"
+        : "unknown";
 
   return (
-    <div className="flex flex-col gap-2">
+    <div data-testid="copilot-connect" data-state={connectState} className="flex flex-col gap-2">
       {/* Status chip */}
       <div className="flex items-center gap-2">
         {signedIn && (
@@ -3633,6 +3645,7 @@ function CopilotConnect() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
+              data-testid="copilot-sign-in"
               onClick={signIn}
               disabled={isSigningIn}
               className="inline-flex items-center gap-1.5 rounded-md bg-[rgb(var(--color-accent))] px-2.5 py-1 text-[11px] font-medium text-[rgb(var(--color-accent-fg))] transition-opacity hover:opacity-90 disabled:opacity-50"

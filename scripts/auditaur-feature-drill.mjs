@@ -18,6 +18,7 @@
 //   { forbidText: ["..."] }
 //   { telemetry: "errors|failed-ipc|explain", maxCount }
 //   { trace: "logs|traces", contains: ["..."], notContains: ["..."], timeoutMs }
+//   { manual: "instruction", gateFile: "target/...ok", timeoutMs }  // human gate
 //
 // Requires: auditaur 0.4.1+ on PATH.
 
@@ -35,7 +36,9 @@ import { dirname, join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 
 const definitionPath = resolve(
-  process.env.CUTREADY_AUDITAUR_FEATURE_DEFINITION ?? "scripts/auditaur-settings-drill.json",
+  process.argv[2] ??
+    process.env.CUTREADY_AUDITAUR_FEATURE_DEFINITION ??
+    "scripts/auditaur-settings-drill.json",
 );
 const definition = JSON.parse(readFileSync(definitionPath, "utf8"));
 const appName = definition.app ?? "cutready";
@@ -157,7 +160,33 @@ async function runStep(step) {
   }
   if (step.telemetry) return runTelemetryStep(step);
   if (step.trace) return runTraceStep(step);
+  if (step.manual) return runManualStep(step);
   throw new Error(`Unsupported drill step: ${JSON.stringify(step)}`);
+}
+
+// A human-in-the-loop gate. The drill prints instructions and then waits for a
+// gate file to appear on disk before continuing. An orchestrator (a person, or
+// an agent coordinating a sign-in) creates the gate file once the manual action
+// is done. Used for the copilot-sdk drill, where the GitHub Copilot CLI must be
+// signed in before a run can resolve the copilot-sdk harness.
+async function runManualStep(step) {
+  const gateFile = resolve(step.gateFile ?? `target/auditaur-${drillLabel}-gate.ok`);
+  const timeoutMs = step.timeoutMs ?? 600_000;
+  const deadline = Date.now() + timeoutMs;
+  mkdirSync(dirname(gateFile), { recursive: true });
+  if (existsSync(gateFile)) rmSync(gateFile, { force: true });
+  console.log(`\n⏸  MANUAL GATE: ${step.manual}`);
+  console.log(`   Waiting for gate file: ${gateFile}`);
+  console.log(`   Create it to continue (e.g. New-Item -ItemType File -Force "${gateFile}").\n`);
+  while (Date.now() < deadline) {
+    if (existsSync(gateFile)) {
+      rmSync(gateFile, { force: true });
+      return recordPhase(step.id, "passed", { manual: step.manual, gateFile });
+    }
+    await delay(2_000);
+  }
+  recordPhase(step.id, "failed", { gateFile }, `manual gate timed out after ${timeoutMs}ms`);
+  throw new Error(`${step.id} failed: manual gate timed out waiting for ${gateFile}.`);
 }
 
 // Polls a telemetry stream (logs/traces) until at least one record whose

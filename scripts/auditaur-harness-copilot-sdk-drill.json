@@ -1,0 +1,160 @@
+{
+  "app": "cutready",
+  "label": "harness-copilot-sdk",
+  "timeoutSeconds": 900,
+  "globalSettings": {
+    "seed": {
+      "aiAgentExecutionEngine": "prompty"
+    }
+  },
+  "fixture": {
+    "prefix": "cutready-harness-copilot-sdk-drill-",
+    "sketches": [
+      {
+        "path": "intro.sk",
+        "title": "Copilot SDK Harness Drill Fixture",
+        "narrative": "A sketch so the app opens into the full workspace shell."
+      }
+    ]
+  },
+  "steps": [
+    {
+      "id": "wait-for-shell",
+      "drive": "wait",
+      "selector": "[data-testid=\"activity-settings\"]",
+      "timeoutMs": 45000
+    },
+    {
+      "id": "open-settings",
+      "drive": "click",
+      "selector": "[data-testid=\"activity-settings\"]"
+    },
+    {
+      "id": "wait-ai-tab",
+      "drive": "wait",
+      "selector": "[data-testid=\"settings-tab-ai\"]",
+      "timeoutMs": 15000
+    },
+    {
+      "id": "open-ai-section",
+      "drive": "click",
+      "selector": "[data-testid=\"settings-tab-ai\"]"
+    },
+    {
+      "id": "wait-agent-subtab",
+      "drive": "wait",
+      "selector": "[data-testid=\"settings-ai-tab-agent\"]",
+      "timeoutMs": 15000
+    },
+    {
+      "id": "open-agent-subtab",
+      "drive": "click",
+      "selector": "[data-testid=\"settings-ai-tab-agent\"]"
+    },
+    {
+      "id": "wait-harness-picker",
+      "drive": "wait",
+      "selector": "[data-testid=\"harness-picker\"]",
+      "timeoutMs": 15000
+    },
+    {
+      "id": "copilot-card-present",
+      "drive": "wait",
+      "selector": "[data-testid=\"harness-option-copilot-sdk\"]",
+      "timeoutMs": 10000
+    },
+    {
+      "id": "copilot-cli-installed",
+      "drive": "evaluate",
+      "expression": "(function(){var c=document.querySelector('[data-testid=\"copilot-connect\"]');if(!c)return 'no-connect-block';var s=c.getAttribute('data-state');if(s==='not-installed')return 'cli-not-installed';return 'ok:'+s;})()",
+      "expectContains": "ok:"
+    },
+    {
+      "id": "capture-before-signin",
+      "drive": "screenshot",
+      "output": "target/auditaur-harness-copilot-sdk-before.png"
+    },
+    {
+      "id": "human-sign-in",
+      "manual": "Sign in to GitHub Copilot: click the 'Sign in' button in the GitHub Copilot card (opens your browser) OR run `copilot login` in a terminal. When the account is authorized, create the gate file to continue.",
+      "gateFile": "target/auditaur-harness-copilot-sdk-gate.ok",
+      "timeoutMs": 600000
+    },
+    {
+      "id": "recheck-sign-in",
+      "drive": "click",
+      "selector": "[data-testid=\"copilot-recheck\"]"
+    },
+    {
+      "id": "copilot-signed-in",
+      "drive": "wait",
+      "selector": "[data-testid=\"copilot-connect\"][data-state=\"signed-in\"]",
+      "timeoutMs": 30000
+    },
+    {
+      "id": "click-copilot-card",
+      "drive": "click",
+      "selector": "[data-testid=\"harness-option-copilot-sdk\"] button"
+    },
+    {
+      "id": "copilot-now-selected",
+      "drive": "wait",
+      "selector": "[data-testid=\"harness-option-copilot-sdk\"][data-selected=\"true\"]",
+      "timeoutMs": 10000
+    },
+    {
+      "id": "no-unavailable-warning",
+      "drive": "evaluate",
+      "expression": "(function(){return document.querySelector('[data-testid=\"harness-unavailable-warning\"]')?'warning-shown':'clean';})()",
+      "expectValue": "clean"
+    },
+    {
+      "id": "capture-after-select",
+      "drive": "screenshot",
+      "output": "target/auditaur-harness-copilot-sdk-selected.png"
+    },
+    {
+      "id": "no-reload-fallback",
+      "forbidText": ["Something went wrong", "Reload interface"]
+    },
+    {
+      "id": "close-settings",
+      "drive": "click",
+      "selector": "[data-testid=\"settings-close\"]"
+    },
+    {
+      "id": "reveal-chat",
+      "drive": "click",
+      "selector": "[data-testid=\"activity-chat\"]"
+    },
+    {
+      "id": "wait-composer",
+      "drive": "wait",
+      "selector": "textarea[placeholder^=\"Ask about your demo plan\"]",
+      "timeoutMs": 20000
+    },
+    {
+      "id": "focus-composer",
+      "drive": "click",
+      "selector": "textarea[placeholder^=\"Ask about your demo plan\"]"
+    },
+    {
+      "id": "type-prompt",
+      "drive": "fill",
+      "selector": "textarea[placeholder^=\"Ask about your demo plan\"]",
+      "value": "Reply with the single word READY and nothing else."
+    },
+    {
+      "id": "send-turn",
+      "drive": "click",
+      "selector": "button[title=\"Send (Enter)\"]"
+    },
+    {
+      "id": "copilot-sdk-harness-executes-turn",
+      "trace": "logs",
+      "contains": ["agent_chat_with_tools_start", "\"execution_engine\":\"copilot-sdk\""],
+      "notContains": ["agent_chat_with_tools_start", "\"execution_engine\":\"prompty\""],
+      "timeoutMs": 90000
+    }
+  ]
+}

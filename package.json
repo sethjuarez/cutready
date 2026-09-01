@@ -14,6 +14,8 @@
     "test:e2e:project-switch": "node scripts/auditaur-project-switch-drill.mjs",
     "test:e2e:chat": "node scripts/auditaur-chat-drill.mjs",
     "test:e2e:settings": "node scripts/auditaur-feature-drill.mjs",
+    "test:e2e:harness-agentive": "node scripts/auditaur-feature-drill.mjs scripts/auditaur-harness-agentive-drill.json",
+    "test:e2e:harness-copilot-sdk": "node scripts/auditaur-feature-drill.mjs scripts/auditaur-harness-copilot-sdk-drill.json",
     "test:e2e:github:manual": "node scripts/auditaur-github-human-drill.mjs",
     "test:watch": "vitest",
     "tauri": "tauri",
