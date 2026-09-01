@@ -34,7 +34,7 @@ use std::sync::Arc;
 #[allow(unused_imports)]
 pub use harness_contract::harness::{
     AgentHarness, AgentRunRequest, AgentRunResult, HarnessCapabilities, HarnessConfig,
-    HarnessContract, HarnessDescriptor, HarnessEventEmitter, Ownership,
+    HarnessContract, HarnessDescriptor, HarnessEventEmitter, HarnessStability, Ownership,
 };
 
 // Boundary DTOs the seam also surfaces. They live in `execution.rs` / `tools.rs`
@@ -304,18 +304,25 @@ impl HarnessRegistry {
             capabilities: PromptyHarness::static_capabilities(),
             contract: PromptyHarness::static_contract(),
             available: true,
+            // The always-linked backbone, but still maturing — advertised as
+            // experimental until its full capability breadth is proven.
+            stability: HarnessStability::Experimental,
         }];
         #[cfg(feature = "harness-agentive")]
         harnesses.push(HarnessDescriptor {
             capabilities: agentive::static_capabilities(),
             contract: agentive::static_contract(),
             available: agentive::AVAILABLE,
+            // The shipped bring-your-own-model runtime.
+            stability: HarnessStability::Stable,
         });
         #[cfg(feature = "harness-copilot-sdk")]
         harnesses.push(HarnessDescriptor {
             capabilities: copilot_sdk::static_capabilities(),
             contract: copilot_sdk::static_contract(),
             available: copilot_sdk::is_available(),
+            // The primary shipping path (GitHub Copilot entitlement).
+            stability: HarnessStability::Stable,
         });
         harnesses
     }
@@ -679,6 +686,10 @@ mod tests {
         assert_eq!(contract["tools"], "provides");
         assert_eq!(contract["memory"], "provides");
 
+        // Rollout maturity travels on the descriptor root as a lowercase string.
+        // copilot-sdk is the primary shipping path.
+        assert_eq!(value["stability"], "stable");
+
         // Prompty requires its provider.
         let prompty = HarnessRegistry::available_harnesses()
             .into_iter()
@@ -686,5 +697,29 @@ mod tests {
             .expect("prompty descriptor");
         let prompty_value = serde_json::to_value(&prompty).unwrap();
         assert_eq!(prompty_value["contract"]["provider"], "requires");
+        assert_eq!(prompty_value["stability"], "experimental");
+    }
+
+    #[test]
+    fn prompty_backbone_is_advertised_experimental() {
+        // The default backbone stays selectable but is honestly labeled
+        // experimental until its full capability breadth is proven end-to-end.
+        let prompty = HarnessRegistry::available_harnesses()
+            .into_iter()
+            .find(|descriptor| descriptor.capabilities.id == "prompty")
+            .expect("prompty descriptor");
+        assert_eq!(prompty.stability, HarnessStability::Experimental);
+        assert!(prompty.available);
+    }
+
+    #[cfg(feature = "harness-agentive")]
+    #[test]
+    fn agentive_shipped_runtime_is_advertised_stable() {
+        // agentive is the shipped bring-your-own-model runtime, not experimental.
+        let agentive = HarnessRegistry::available_harnesses()
+            .into_iter()
+            .find(|descriptor| descriptor.capabilities.id == "agentive")
+            .expect("agentive descriptor");
+        assert_eq!(agentive.stability, HarnessStability::Stable);
     }
 }

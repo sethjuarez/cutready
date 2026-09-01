@@ -3435,6 +3435,7 @@ interface HarnessDescriptor {
   durable_state: boolean;
   contract: HarnessContract;
   available: boolean;
+  stability?: "stable" | "experimental";
 }
 
 const HARNESS_CAPABILITY_LABELS: { key: keyof HarnessDescriptor; label: string }[] = [
@@ -3751,6 +3752,7 @@ export function HarnessPicker({ value, onChange }: { value: string; onChange: (i
           const selected = harness.id === value;
           const selectable = harness.available;
           const isCopilot = harness.id === COPILOT_HARNESS_ID;
+          const isExperimental = harness.stability === "experimental";
           const baseCardClass = `border rounded-lg p-3 transition-colors ${
             selected
               ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/5"
@@ -3772,6 +3774,15 @@ export function HarnessPicker({ value, onChange }: { value: string; onChange: (i
                     title="This harness is wired but can't run here right now (its runtime or CLI isn't available on this system)."
                   >
                     <FlaskConical className="w-3 h-3" /> Unavailable
+                  </span>
+                )}
+                {isExperimental && (
+                  <span
+                    data-testid={`harness-experimental-${harness.id}`}
+                    className="text-[10px] px-1.5 py-0.5 rounded-full bg-warning/15 text-warning font-medium flex items-center gap-1"
+                    title="Experimental: this harness is wired and runnable but still maturing — its full capability set isn't proven end-to-end yet."
+                  >
+                    <FlaskConical className="w-3 h-3" /> Experimental
                   </span>
                 )}
               </div>
@@ -3800,6 +3811,18 @@ export function HarnessPicker({ value, onChange }: { value: string; onChange: (i
                       ? "Signed in with GitHub Copilot — this harness brings its own model provider for agent turns, so you don't need to configure a chat provider for the agent. A bring-your-own-key provider is optional."
                       : "This harness layers your provider over its own for agent turns, so configuring a chat provider for the agent is optional."}
                     {" "}The Connections below are still used for narration and voice.
+                  </span>
+                </p>
+              )}
+              {selected && isExperimental && (
+                <p
+                  data-testid={`harness-experimental-note-${harness.id}`}
+                  className="text-[11px] leading-snug text-warning mt-2 flex items-start gap-1.5"
+                >
+                  <FlaskConical className="w-3 h-3 mt-0.5 shrink-0" />
+                  <span>
+                    This harness is experimental — it runs, but its full capability set isn't
+                    proven end-to-end yet. Prefer a stable harness for production demos.
                   </span>
                 </p>
               )}

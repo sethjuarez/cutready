@@ -245,13 +245,34 @@ impl HarnessContract {
     }
 }
 
+/// Rollout maturity of a harness, surfaced to the settings UI so users can tell
+/// a hardened runtime from one that is still maturing.
+///
+/// This is a *host/rollout* concern that sits alongside
+/// [`HarnessDescriptor::available`], not a capability: an experimental harness
+/// may be fully wired and runnable yet still have unproven breadth across its
+/// declared capabilities. New or not-yet-hardened harnesses default to
+/// [`HarnessStability::Experimental`] so maturity is opt-in and never silently
+/// overstated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum HarnessStability {
+    /// Hardened and exercised end-to-end; the default expectation for users.
+    Stable,
+    /// Wired and runnable but still maturing; capabilities may be incomplete or
+    /// unproven. Advertised honestly rather than presented as production-ready.
+    #[default]
+    Experimental,
+}
+
 /// A harness entry as surfaced to the host/UI: its capabilities plus whether it
 /// can execute a run right now.
 ///
 /// `available` lets the settings UI list every known harness (so users see
 /// what's coming) while only enabling the ones whose runtime is wired. A harness
 /// that is declared but not yet runnable is advertised honestly rather than
-/// hidden or silently mapped onto another runtime.
+/// hidden or silently mapped onto another runtime. `stability` is orthogonal to
+/// `available`: a harness can be runnable yet still experimental.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct HarnessDescriptor {
     /// Capability metadata for the harness.
@@ -261,6 +282,8 @@ pub struct HarnessDescriptor {
     pub contract: HarnessContract,
     /// Whether the harness can currently be resolved and run.
     pub available: bool,
+    /// Rollout maturity of the harness (stable vs. still-maturing).
+    pub stability: HarnessStability,
 }
 
 /// A pluggable agent runtime behind the CutReady host boundary.
@@ -338,6 +361,25 @@ mod tests {
 
     fn sample_prompts() -> HashMap<String, String> {
         HashMap::from([("writer".to_string(), "You are the writer.".to_string())])
+    }
+
+    #[test]
+    fn harness_stability_default_is_experimental() {
+        // Maturity must be opt-in: a harness that forgets to declare stability is
+        // treated as experimental rather than silently presented as production-ready.
+        assert_eq!(HarnessStability::default(), HarnessStability::Experimental);
+    }
+
+    #[test]
+    fn harness_stability_serializes_lowercase() {
+        assert_eq!(
+            serde_json::to_string(&HarnessStability::Stable).unwrap(),
+            "\"stable\""
+        );
+        assert_eq!(
+            serde_json::to_string(&HarnessStability::Experimental).unwrap(),
+            "\"experimental\""
+        );
     }
 
     #[test]
