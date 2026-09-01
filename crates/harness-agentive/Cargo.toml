@@ -1,0 +1,16 @@
+[package]
+name = "harness-agentive"
+version = "0.1.0"
+edition = "2021"
+description = "Agentive agent harness adapter for CutReady. Depends only on harness-contract and the agentive runtime; tool execution is injected via harness-contract's HostToolExecutor, so the adapter never depends on the app crate."
+
+[lib]
+name = "harness_agentive"
+
+[dependencies]
+harness-contract = { path = "../harness-contract" }
+agentive = { git = "https://github.com/sethjuarez/agentive", rev = "457365f5e9ab35fbd78702ddf9f2742046f90d1c" }
+async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "time"] }

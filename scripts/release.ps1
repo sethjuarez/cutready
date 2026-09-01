@@ -54,15 +54,15 @@ $tauri = Get-Content "$root\src-tauri\tauri.conf.json" -Raw
 $tauri = $tauri -replace '"version":\s*"[^"]+"', "`"version`": `"$Version`""
 Set-Content "$root\src-tauri\tauri.conf.json" $tauri -NoNewline
 
-# Update Cargo.lock
+# Update Cargo.lock (workspace lockfile lives at the repo root)
 Write-Host "  Updating Cargo.lock..." -ForegroundColor Yellow
-Push-Location "$root\src-tauri"
+Push-Location $root
 cargo update -p cutready --quiet 2>$null
 Pop-Location
 
 # Commit
 Write-Host "  Committing..." -ForegroundColor Yellow
-git -C $root add package.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json
+git -C $root add package.json src-tauri/Cargo.toml Cargo.lock src-tauri/tauri.conf.json
 git -C $root commit -m "chore: bump version to $Version"
 
 # Tag (uses your default signing config)

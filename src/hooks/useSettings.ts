@@ -144,8 +144,11 @@ export interface GlobalSettings {
   aiWebAccess: "disabled" | "enabled";
   /** Maximum agent tool-call rounds before stopping a run. */
   aiMaxToolRounds: number;
-  /** Agent orchestration engine. Prompty's durable TurnEngine is the sole engine;
-   * "agentive" persists only as a deprecated alias the backend maps to Prompty. */
+  /** Agent orchestration engine (harness) id, resolved per run by the backend
+   * HarnessRegistry. "prompty" (default, durable TurnEngine), "agentive"
+   * (issue #246), and "copilot-sdk" (issue #247) are real, distinct runtimes.
+   * The backend only falls back to Prompty for an id whose adapter feature was
+   * compiled out of the build; in a stock build every id runs its own harness. */
   aiAgentExecutionEngine: AiAgentExecutionEngine;
   /** Whether write-capable AI shortcuts prompt before mutating project files. */
   aiApplyMode: AiApplyMode;

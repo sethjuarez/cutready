@@ -4,7 +4,7 @@
 //! harness seam. The Copilot runtime is the GitHub Copilot CLI driven as a
 //! subprocess over JSON-RPC; all `copilot_sdk::*` types — client, session,
 //! events — stay behind this adapter and never leak past the CutReady-owned
-//! boundary types in [`super`].
+//! boundary types in [`harness_contract`].
 //!
 //! Unlike the Prompty and agentive harnesses, the Copilot harness runs
 //! Copilot's *own* agent loop with Copilot's *own* tools; it does not drive
@@ -22,10 +22,10 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
-use crate::engine::agent::execution::{AgentEvent, ChatMessage, ContextItem, Usage};
-use crate::engine::agent::llm::{LlmConfig, LlmProvider};
+use harness_contract::execution::{AgentEvent, ChatMessage, ContextItem, Usage};
+use harness_contract::llm::{LlmConfig, LlmProvider};
 
-use super::{
+use harness_contract::{
     AgentHarness, AgentRunRequest, AgentRunResult, HarnessCapabilities, HarnessContract,
     HarnessEventEmitter, Ownership,
 };
@@ -75,10 +75,17 @@ pub struct CopilotAuthStatus {
 /// before returning. When the CLI is not installed it returns early without
 /// spawning anything, so a red "not installed" state is cheap.
 ///
-/// `use_logged_in_user(false)` maps to the CLI's `--no-auto-login`, so merely
-/// probing never triggers an interactive sign-in as a side effect. The SDK's
-/// own process spawn already sets `CREATE_NO_WINDOW`, so no console window
-/// flashes while probing on Windows.
+/// The probe must report the same auth the *run* path will use. A real run
+/// builds its client with the SDK default (`use_logged_in_user` unset, which
+/// the SDK treats as `true` when no BYOK token is supplied), so it authenticates
+/// through the signed-in Copilot user. The probe therefore does the same: it
+/// asks the CLI for `auth.getStatus`, a passive JSON-RPC status read that
+/// reports the stored `copilot login` session without ever launching an
+/// interactive browser flow. (An earlier version forced `--no-auto-login` here,
+/// which also suppressed *detecting* the logged-in user — so a successful
+/// `copilot login` read back as "not signed in.") The SDK's own process spawn
+/// sets `CREATE_NO_WINDOW`, so no console window flashes while probing on
+/// Windows.
 #[tracing::instrument(name = "copilot_probe_auth", skip_all)]
 pub async fn probe_auth() -> CopilotAuthStatus {
     if !is_available() {
@@ -91,11 +98,7 @@ pub async fn probe_auth() -> CopilotAuthStatus {
 
     tracing::debug!("probing copilot auth status");
 
-    let client = match copilot_sdk::Client::builder()
-        .use_stdio(true)
-        .use_logged_in_user(false)
-        .build()
-    {
+    let client = match copilot_sdk::Client::builder().use_stdio(true).build() {
         Ok(client) => client,
         Err(error) => {
             tracing::warn!(error = %error, "failed to build copilot client");
@@ -291,9 +294,17 @@ pub fn static_capabilities() -> HarnessCapabilities {
 /// and session memory rather than requiring the host to supply them. CutReady's
 /// personas are still authoritative, but they are layered onto Copilot's base
 /// prompt (via `SystemMessageMode::Append`) and registered as native custom
-/// agents, so personas are *augmented* rather than owned outright. An optional
-/// BYOK provider (see [`build_provider_config`]) also merely augments the
-/// entitlement, which is why `provider` is `Provides` rather than `Requires`.
+/// agents, so personas are *augmented* rather than owned outright.
+///
+/// `provider` is `Provides`: the host must not send its own provider for agent
+/// turns, so [`HarnessContract::host_provider_config`] strips the shared
+/// connection credentials before this adapter runs (those creds are the
+/// narration/voice connection, not an agent BYOK opt-in). The adapter therefore
+/// authenticates through the signed-in Copilot user and lets Copilot pick its
+/// own model. A first-class BYOK-for-Copilot override would be modeled as
+/// `Augments` (host sends, harness merges) once there is an explicit,
+/// Copilot-specific provider setting to opt into — distinct from the shared
+/// connection that every harness would otherwise inherit.
 pub fn static_contract() -> HarnessContract {
     HarnessContract {
         provider: Ownership::Provides,
@@ -356,9 +367,6 @@ impl AgentHarness for CopilotSdkHarness {
             tools: _tools,
             context_items,
             run_id: _run_id,
-            // Durable run-state persistence is not a Copilot-harness capability
-            // (advertised as `durable_state: false`), so the store is not used.
-            agent_state: _agent_state,
             cancellation,
         } = request;
 

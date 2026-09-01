@@ -2821,10 +2821,30 @@ function ModelPickerDropdown({
 
 // ── Friendly Error Display ────────────────────────────────────────
 
-function classifyError(error: string): { title: string; suggestion: string } {
+export function classifyError(error: string): { title: string; suggestion: string } {
   const lower = error.toLowerCase();
-  if (lower.includes("401") || lower.includes("unauthorized") || lower.includes("authentication"))
+  // Distinguish an expired Entra/Foundry OAuth session from a plain API-key
+  // problem so the suggestion points at the correct remedy. These markers can
+  // appear without an explicit "401" (e.g. an AADSTS refresh-token failure).
+  const looksLikeEntra =
+    lower.includes("aadsts") ||
+    lower.includes("audience") ||
+    lower.includes("ai.azure.com") ||
+    lower.includes("services.ai.azure.com") ||
+    lower.includes("entra") ||
+    lower.includes("token is expired") ||
+    lower.includes("expired token") ||
+    (lower.includes("refresh token") && lower.includes("expired"));
+  const looksLikeAuth =
+    lower.includes("401") || lower.includes("unauthorized") || lower.includes("authentication");
+  if (looksLikeAuth || looksLikeEntra) {
+    if (looksLikeEntra)
+      return {
+        title: "Azure sign-in expired",
+        suggestion: "Your Microsoft sign-in has expired. Sign out and sign in again in Settings → AI → Connections.",
+      };
     return { title: "Authentication failed", suggestion: "Check your API key or refresh your login in Settings." };
+  }
   if (lower.includes("403") || lower.includes("forbidden"))
     return { title: "Access denied", suggestion: "Your account may not have access to this model or endpoint." };
   if (lower.includes("429") || lower.includes("rate limit") || lower.includes("too many"))

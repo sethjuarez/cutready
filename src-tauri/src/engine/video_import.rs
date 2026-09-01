@@ -13,7 +13,6 @@ use uuid::Uuid;
 
 use crate::engine::agent::execution::ChatMessage;
 use crate::engine::agent::llm::LlmConfig;
-use crate::engine::agent::prompty_model;
 use crate::engine::{ffmpeg, project};
 use crate::models::sketch::{PlanningRow, Sketch};
 
@@ -1239,7 +1238,7 @@ async fn refine_scenes_with_llm(
     ];
     let result = tokio::time::timeout(
         LLM_REFINEMENT_TIMEOUT,
-        prompty_model::one_shot_chat(&options.config, &messages),
+        harness_prompty::one_shot_chat(&options.config, &messages),
     )
     .await;
 

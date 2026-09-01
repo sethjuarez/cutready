@@ -519,7 +519,7 @@ pub async fn agent_chat(
 
     match tokio::time::timeout(
         timeout,
-        crate::engine::agent::prompty_model::one_shot_chat(&llm_config, &messages),
+        harness_prompty::one_shot_chat(&llm_config, &messages),
     )
     .await
     {
@@ -828,21 +828,36 @@ pub async fn agent_chat_with_tools(
     let search_enabled = config.web_access.as_deref() == Some("enabled");
     let max_tool_rounds = config
         .max_tool_rounds
-        .unwrap_or(crate::engine::agent::prompty_runner::DEFAULT_MAX_TOOL_ROUNDS)
+        .unwrap_or(harness_prompty::DEFAULT_MAX_TOOL_ROUNDS)
         .clamp(1, 200);
     let mutation_tools_enabled = allow_mutation_tools.unwrap_or(false);
     // Engine selection lives in the harness registry, not in ad hoc command
-    // logic. The registry maps the requested id to a concrete harness and
-    // rejects unknown ids with a clear message.
-    let harness = HarnessRegistry::new(state.prompty_steering.clone())
-        .resolve(config.execution_engine.as_deref())?;
-    let harness_id = harness.id().to_string();
+    // logic. Resolve only the canonical id up front (needed for the durable run
+    // row's metadata); the harness itself is built after the store below so the
+    // per-run store can be injected into the harness that owns durability.
+    let harness_id =
+        HarnessRegistry::canonical_id(config.execution_engine.as_deref())?.to_string();
     let provider_name = config.provider.clone();
     let configured_provider_name = config.provider_name.clone();
     let configured_provider_id = config.provider_id.clone();
     let model = config.model.clone();
     let llm_config: LlmConfig = config.into();
     let context_item_configs = context_items.unwrap_or_default();
+
+    // Resolve the ownership contract once, by canonical id, so run diagnostics
+    // and provider provisioning share a single authoritative source. A harness
+    // that provides its own provider (e.g. copilot-sdk on the Copilot
+    // entitlement) does not use the host's configured connection or model, so
+    // labelling the run with them would be misleading. `canonical_id` already
+    // succeeded above, so a missing contract is an internal invariant violation
+    // worth surfacing rather than silently mislabelling the run.
+    let harness_contract = HarnessRegistry::contract(Some(&harness_id))?;
+    let harness_provides_own_provider = harness_contract.provides_own_provider();
+    let (effective_provider, effective_model) = if harness_provides_own_provider {
+        (harness_id.clone(), "default".to_string())
+    } else {
+        (provider_name.clone(), model.clone())
+    };
 
     // Determine effective vision: user setting AND discovered/static model capability.
     let model_supports_vision =
@@ -865,12 +880,15 @@ pub async fn agent_chat_with_tools(
         Ok(store) => {
             let insert_result = store.insert_run(
                 None,
-                &provider_name,
-                &model,
+                &effective_provider,
+                &effective_model,
                 serde_json::json!({
                     "messages": message_count,
                     "provider_id": &configured_provider_id,
                     "provider_name": &configured_provider_name,
+                    "requested_provider": &provider_name,
+                    "requested_model": &model,
+                    "harness_provides_own_provider": harness_provides_own_provider,
                     "chars": message_chars,
                     "budget_chars": budget_chars,
                     "reported_context": reported_context,
@@ -912,10 +930,12 @@ pub async fn agent_chat_with_tools(
         .collect::<Result<Vec<_>, _>>()?;
     context_items.extend(recalled_context_items(&messages, agent_state.as_ref()));
     log::info!(
-        "[agent_chat_with_tools] start run_id={} engine={} agent={} provider={} model={} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} mutation_tools={} max_tool_rounds={} prompts={}",
+        "[agent_chat_with_tools] start run_id={} engine={} agent={} provider={} model={} requested_provider={} requested_model={} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} mutation_tools={} max_tool_rounds={} prompts={}",
         run_id,
         harness_id.as_str(),
         agent_id,
+        effective_provider,
+        effective_model,
         provider_name,
         model,
         message_count,
@@ -932,10 +952,13 @@ pub async fn agent_chat_with_tools(
         "agent_chat_with_tools_start",
         "agent",
         serde_json::json!({
-            "provider": provider_name,
+            "provider": effective_provider,
             "provider_id": &configured_provider_id,
             "provider_name": &configured_provider_name,
-            "model": model,
+            "model": effective_model,
+            "requested_provider": &provider_name,
+            "requested_model": &model,
+            "harness_provides_own_provider": harness_provides_own_provider,
             "execution_engine": harness_id.as_str(),
             "run_id": &run_id,
             "messages": message_count,
@@ -962,37 +985,76 @@ pub async fn agent_chat_with_tools(
             }
         });
     let runner_result = {
-        // CutReady owns tool selection and policy; the harness only adapts the
-        // resulting contract into its native runtime.
-        let project_workspace_tools_enabled =
-            agent_id.eq_ignore_ascii_case("writer") && mutation_tools_enabled;
-        let mut tool_definitions = crate::engine::agent::tools::all_tools(
-            web_access.search_enabled,
-            project_workspace_tools_enabled,
-            mutation_tools_enabled,
-        );
-        tool_definitions.retain(|tool| tool.function.name != "delegate_to_agent");
-        let request = AgentRunRequest {
-            config: HarnessConfig {
-                llm: llm_config,
-                reported_context_length: reported_context,
-                max_tool_rounds,
-                vision,
-                web_access,
-            },
-            messages,
-            repo_root,
-            project_root,
-            agent_id,
-            agent_prompts: prompts,
-            mutation_tools_enabled,
-            tools: tool_definitions,
-            context_items,
-            run_id: run_id.clone(),
-            agent_state: agent_state.clone(),
-            cancellation: cancellation.clone(),
-        };
-        harness.run(request, emit).await
+        // Build the harness now that the per-run durable store exists, injecting
+        // it into the adapter that owns durability (Prompty). The store is a
+        // per-adapter concern, so it is passed to the registry rather than
+        // routed through the harness-agnostic request below.
+        //
+        // A resolution failure is routed through the same finalization below (as
+        // an `Err` runner_result) rather than returned early, so the durable run
+        // row created by `insert_run` above is always finalized instead of
+        // leaking a `running` row. (The id was already validated by
+        // `canonical_id` above, so this cannot fail today, but keeping it on the
+        // finalized path stays correct if a harness gains a fallible builder.)
+        match HarnessRegistry::new(state.prompty_steering.clone())
+            .resolve(Some(&harness_id), agent_state.clone())
+        {
+            Ok(harness) => {
+                // CutReady owns tool selection and policy; the harness only
+                // adapts the resulting contract into its native runtime.
+                let project_workspace_tools_enabled =
+                    agent_id.eq_ignore_ascii_case("writer") && mutation_tools_enabled;
+                let mut tool_definitions = crate::engine::agent::tools::all_tools(
+                    web_access.search_enabled,
+                    project_workspace_tools_enabled,
+                    mutation_tools_enabled,
+                );
+                tool_definitions.retain(|tool| tool.function.name != "delegate_to_agent");
+                // Respect the harness ownership contract for the provider
+                // concern. A harness that *Provides* its own model provider
+                // (e.g. copilot-sdk, authenticated through the signed-in Copilot
+                // entitlement) must not receive the host's shared connection
+                // credentials — those belong to narration/voice, not agent
+                // turns. The host asks the contract what it may send instead of
+                // handing over `llm_config` unconditionally and hoping the
+                // adapter ignores what it does not own. This reuses the same
+                // authoritative contract resolved above for run diagnostics.
+                let harness_llm = harness_contract.host_provider_config(llm_config);
+                // Respect the tools and personas ownership stances the same way.
+                // A harness that *Provides* its own tool loop (copilot-sdk runs
+                // Copilot's own tools inside the CLI) must not receive the host
+                // tool contract; a harness that *Provides* its own personas must
+                // not receive the host prompts. `Requires`/`Augments` forward
+                // unchanged (prompty/agentive need the host tools+persona;
+                // copilot-sdk *Augments* personas by registering them as native
+                // custom agents). The host asks the contract what it may send
+                // instead of handing everything over and hoping the adapter
+                // ignores what it does not own.
+                let harness_tools = harness_contract.host_tools(tool_definitions);
+                let harness_agent_prompts = harness_contract.host_agent_prompts(prompts);
+                let request = AgentRunRequest {
+                    config: HarnessConfig {
+                        llm: harness_llm,
+                        reported_context_length: reported_context,
+                        max_tool_rounds,
+                        vision,
+                        web_access,
+                    },
+                    messages,
+                    repo_root,
+                    project_root,
+                    agent_id,
+                    agent_prompts: harness_agent_prompts,
+                    mutation_tools_enabled,
+                    tools: harness_tools,
+                    context_items,
+                    run_id: run_id.clone(),
+                    cancellation: cancellation.clone(),
+                };
+                harness.run(request, emit).await
+            }
+            Err(err) => Err(err),
+        }
     };
     // Any harness failure -- including model construction, which now lives
     // inside the adapter -- flows through the unified finalization below. The
@@ -1149,6 +1211,7 @@ pub fn list_agent_harnesses(
 /// `instrument_ipc` continues the frontend trace via the reserved
 /// `auditaur_trace_context` carrier argument while preserving the plain DTO
 /// return. The carrier is supplied automatically by `@auditaur/api`.
+#[cfg(feature = "harness-copilot-sdk")]
 #[tauri::command]
 #[instrument_ipc(skip_all)]
 pub async fn copilot_auth_status(
@@ -1162,6 +1225,7 @@ pub async fn copilot_auth_status(
 /// wait for it to finish. The settings UI re-probes status afterward via
 /// `copilot_auth_status`. Returns an error with a short detail on failure so the
 /// UI can fall back to guided steps.
+#[cfg(feature = "harness-copilot-sdk")]
 #[auditaur_command(skip_all, err)]
 pub async fn copilot_sign_in() -> Result<(), String> {
     crate::engine::agent::harness::copilot_sdk::sign_in().await
@@ -1683,11 +1747,12 @@ mod tests {
             vision_mode: Some("off".into()),
             model_supports_vision: Some(true),
             web_access: Some("disabled".into()),
-            max_tool_rounds: Some(crate::engine::agent::prompty_runner::DEFAULT_MAX_TOOL_ROUNDS),
+            max_tool_rounds: Some(harness_prompty::DEFAULT_MAX_TOOL_ROUNDS),
             execution_engine: None,
         }
     }
 
+    #[cfg(feature = "harness-agentive")]
     #[test]
     fn execution_engine_defaults_to_prompty_and_resolves_agentive() {
         assert_eq!(
@@ -1704,10 +1769,17 @@ mod tests {
             HarnessRegistry::canonical_id(Some("prompty")).unwrap(),
             crate::engine::agent::harness::DEFAULT_HARNESS_ID
         );
+        let mut expected_ids = vec!["'prompty'"];
+        #[cfg(feature = "harness-agentive")]
+        expected_ids.push("'agentive'");
+        #[cfg(feature = "harness-copilot-sdk")]
+        expected_ids.push("'copilot-sdk'");
         assert_eq!(
             HarnessRegistry::canonical_id(Some("other")).unwrap_err(),
-            "Unsupported execution_engine 'other'. Expected one of 'prompty', 'agentive', \
-             'copilot-sdk'."
+            format!(
+                "Unsupported execution_engine 'other'. Expected one of {}.",
+                expected_ids.join(", ")
+            )
         );
     }
 
@@ -1745,6 +1817,7 @@ mod tests {
         assert_eq!(config.provider, LlmProvider::AzureOpenai);
     }
 
+    #[cfg(all(feature = "harness-agentive", feature = "harness-copilot-sdk"))]
     #[test]
     fn all_known_engines_resolve_through_the_registry() {
         // Engine selection is centralized in the registry. Every selectable id
@@ -1771,17 +1844,17 @@ mod tests {
             crate::engine::agent::harness::DEFAULT_HARNESS_ID
         );
 
-        let runner = include_str!("../engine/agent/prompty_runner.rs")
+        let runner = include_str!("../../../crates/harness-prompty/src/runner.rs")
             .split("\n#[cfg(test)]\nmod tests")
             .next()
             .unwrap();
-        let model = include_str!("../engine/agent/prompty_model.rs")
+        let model = include_str!("../../../crates/harness-prompty/src/model.rs")
             .split("\n#[cfg(test)]\nmod tests")
             .next()
             .unwrap();
         // The Prompty harness adapter must also stay free of agentive mappings;
-        // a real agentive harness arrives under its own adapter in issue #246.
-        let harness_adapter = include_str!("../engine/agent/harness/prompty.rs")
+        // the real agentive harness lives under its own adapter crate (#246).
+        let harness_adapter = include_str!("../../../crates/harness-prompty/src/adapter.rs")
             .split("\n#[cfg(test)]\nmod tests")
             .next()
             .unwrap();

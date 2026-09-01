@@ -1,0 +1,15 @@
+# Cargo workspace root for CutReady.
+#
+# First-party harness/capability crates live under `crates/`; the Tauri app is
+# `src-tauri`. This is the packaging substrate for issues #250/#251: the app
+# depends on `harness-contract`, harness adapter crates depend only on the
+# contract, and the contract never depends on the app.
+[workspace]
+resolver = "2"
+members = ["src-tauri", "crates/*"]
+
+# Profiles are only honored at the workspace root, so app-specific profile
+# tuning lives here. Stronghold's scrypt dependency needs opt-level 3 even in
+# dev mode: https://github.com/tauri-apps/plugins-workspace/issues/2048
+[profile.dev.package.scrypt]
+opt-level = 3

@@ -3435,6 +3435,7 @@ interface HarnessDescriptor {
   durable_state: boolean;
   contract: HarnessContract;
   available: boolean;
+  stability?: "stable" | "experimental";
 }
 
 const HARNESS_CAPABILITY_LABELS: { key: keyof HarnessDescriptor; label: string }[] = [
@@ -3450,6 +3451,9 @@ const HARNESS_CAPABILITY_LABELS: { key: keyof HarnessDescriptor; label: string }
 
 /** Canonical id of the GitHub Copilot (copilot-sdk) harness. */
 const COPILOT_HARNESS_ID = "copilot-sdk";
+
+/** Canonical id of the always-linked Prompty harness (the app's backbone runtime). */
+const PROMPTY_HARNESS_ID = "prompty";
 
 /** Live install + sign-in snapshot returned by the `copilot_auth_status` command. */
 interface CopilotAuthStatus {
@@ -3560,6 +3564,7 @@ function CopilotConnect() {
   const RecheckButton = (
     <button
       type="button"
+      data-testid="copilot-recheck"
       onClick={recheck}
       disabled={phase === "loading" || isSigningIn}
       className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:opacity-50"
@@ -3570,7 +3575,11 @@ function CopilotConnect() {
 
   if (phase === "loading" && !status) {
     return (
-      <div className="flex items-center gap-1.5 text-[11px] text-[rgb(var(--color-text-secondary))]">
+      <div
+        data-testid="copilot-connect"
+        data-state="loading"
+        className="flex items-center gap-1.5 text-[11px] text-[rgb(var(--color-text-secondary))]"
+      >
         <RefreshCw className="h-3 w-3 animate-spin" /> Checking GitHub Copilot…
       </div>
     );
@@ -3579,9 +3588,16 @@ function CopilotConnect() {
   const notInstalled = !!status && !status.installed;
   const needsSignIn = !!status && status.installed && !status.authenticated;
   const signedIn = !!status && status.installed && status.authenticated;
+  const connectState = signedIn
+    ? "signed-in"
+    : needsSignIn
+      ? "needs-sign-in"
+      : notInstalled
+        ? "not-installed"
+        : "unknown";
 
   return (
-    <div className="flex flex-col gap-2">
+    <div data-testid="copilot-connect" data-state={connectState} className="flex flex-col gap-2">
       {/* Status chip */}
       <div className="flex items-center gap-2">
         {signedIn && (
@@ -3630,6 +3646,7 @@ function CopilotConnect() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
+              data-testid="copilot-sign-in"
               onClick={signIn}
               disabled={isSigningIn}
               className="inline-flex items-center gap-1.5 rounded-md bg-[rgb(var(--color-accent))] px-2.5 py-1 text-[11px] font-medium text-[rgb(var(--color-accent-fg))] transition-opacity hover:opacity-90 disabled:opacity-50"
@@ -3704,7 +3721,7 @@ function CopilotConnect() {
  * shows honest capability metadata, and lets the user switch which runtime
  * executes agent turns. Unavailable harnesses are shown but not selectable.
  */
-function HarnessPicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+export function HarnessPicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
   const [harnesses, setHarnesses] = useState<HarnessDescriptor[]>([]);
   const [error, setError] = useState("");
 
@@ -3716,10 +3733,13 @@ function HarnessPicker({ value, onChange }: { value: string; onChange: (id: stri
     return () => { active = false; };
   }, []);
 
-  const selectedKnown = harnesses.some((h) => h.id === value);
+  // Mirror the backend's canonical_id normalization (trim; empty → Prompty) so a
+  // blank or whitespace-padded stored value isn't falsely flagged as unavailable.
+  const effectiveValue = value.trim() || PROMPTY_HARNESS_ID;
+  const selectedKnown = harnesses.some((h) => h.id === effectiveValue);
 
   return (
-    <div>
+    <div data-testid="harness-picker">
       <h3 className="text-xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] mb-1 flex items-center gap-1.5">
         <Bot className="w-3.5 h-3.5" /> Runtime Harness
       </h3>
@@ -3732,6 +3752,7 @@ function HarnessPicker({ value, onChange }: { value: string; onChange: (id: stri
           const selected = harness.id === value;
           const selectable = harness.available;
           const isCopilot = harness.id === COPILOT_HARNESS_ID;
+          const isExperimental = harness.stability === "experimental";
           const baseCardClass = `border rounded-lg p-3 transition-colors ${
             selected
               ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/5"
@@ -3753,6 +3774,15 @@ function HarnessPicker({ value, onChange }: { value: string; onChange: (id: stri
                     title="This harness is wired but can't run here right now (its runtime or CLI isn't available on this system)."
                   >
                     <FlaskConical className="w-3 h-3" /> Unavailable
+                  </span>
+                )}
+                {isExperimental && (
+                  <span
+                    data-testid={`harness-experimental-${harness.id}`}
+                    className="text-[10px] px-1.5 py-0.5 rounded-full bg-warning/15 text-warning font-medium flex items-center gap-1"
+                    title="Experimental: this harness is wired and runnable but still maturing — its full capability set isn't proven end-to-end yet."
+                  >
+                    <FlaskConical className="w-3 h-3" /> Experimental
                   </span>
                 )}
               </div>
@@ -3784,6 +3814,18 @@ function HarnessPicker({ value, onChange }: { value: string; onChange: (id: stri
                   </span>
                 </p>
               )}
+              {selected && isExperimental && (
+                <p
+                  data-testid={`harness-experimental-note-${harness.id}`}
+                  className="text-[11px] leading-snug text-warning mt-2 flex items-start gap-1.5"
+                >
+                  <FlaskConical className="w-3 h-3 mt-0.5 shrink-0" />
+                  <span>
+                    This harness is experimental — it runs, but its full capability set isn't
+                    proven end-to-end yet. Prefer a stable harness for production demos.
+                  </span>
+                </p>
+              )}
             </>
           );
 
@@ -3795,7 +3837,7 @@ function HarnessPicker({ value, onChange }: { value: string; onChange: (id: stri
           // the install guidance.
           if (isCopilot) {
             return (
-              <div key={harness.id} className={`${baseCardClass} ${selectable ? "hover:border-[rgb(var(--color-accent))]/60" : ""}`}>
+              <div key={harness.id} data-testid={`harness-option-${harness.id}`} data-selected={selected} className={`${baseCardClass} ${selectable ? "hover:border-[rgb(var(--color-accent))]/60" : ""}`}>
                 <button
                   type="button"
                   disabled={!selectable}
@@ -3815,6 +3857,8 @@ function HarnessPicker({ value, onChange }: { value: string; onChange: (id: stri
             <button
               key={harness.id}
               type="button"
+              data-testid={`harness-option-${harness.id}`}
+              data-selected={selected}
               disabled={!selectable}
               onClick={() => selectable && onChange(harness.id)}
               className={`text-left ${baseCardClass} ${selectable ? "hover:border-[rgb(var(--color-accent))]/60 cursor-pointer" : "opacity-60 cursor-not-allowed"}`}
@@ -3824,11 +3868,39 @@ function HarnessPicker({ value, onChange }: { value: string; onChange: (id: stri
           );
         })}
       </div>
-      {harnesses.length > 0 && !selectedKnown && (
-        <p className="text-xs text-[rgb(var(--color-text-secondary))] mt-2 flex items-center gap-1.5">
-          <Info className="w-3.5 h-3.5" /> Current selection <span className="font-mono">{value}</span> is not a known harness; it will be validated when a run starts.
-        </p>
-      )}
+      {harnesses.length > 0 && !selectedKnown && (() => {
+        // The saved selection isn't one of the harnesses compiled into this
+        // build. It may still be a backend-resolvable alias, so we don't
+        // silently switch it (differences are explicit, never downgraded) —
+        // instead we surface the risk and offer a one-click move to a harness
+        // we can see. Prompty is the always-linked backbone, so prefer it.
+        const fallback =
+          harnesses.find((h) => h.id === PROMPTY_HARNESS_ID) ??
+          harnesses.find((h) => h.available) ??
+          harnesses[0];
+        return (
+          <div data-testid="harness-unavailable-warning" className="mt-2 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-text-secondary))]/5 p-2.5">
+            <p className="text-xs text-[rgb(var(--color-text-secondary))] flex items-start gap-1.5">
+              <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+              <span>
+                Current selection <span className="font-mono">{value}</span> isn't one of
+                the harnesses available in this build. If the backend can't resolve it when
+                a run starts, the run will fail — switch to a listed harness to be sure.
+              </span>
+            </p>
+            {fallback && fallback.id !== value && (
+              <button
+                type="button"
+                data-testid="harness-switch-fallback"
+                onClick={() => onChange(fallback.id)}
+                className="mt-2 text-xs px-2 py-1 rounded-md border border-[rgb(var(--color-accent))] text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
+              >
+                Switch to {fallback.display_name}
+              </button>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -1,0 +1,17 @@
+[package]
+name = "harness-copilot-sdk"
+version = "0.1.0"
+edition = "2021"
+description = "Copilot CLI SDK agent harness adapter for CutReady. Depends only on harness-contract and the copilot-sdk runtime; never on the app crate."
+
+[lib]
+name = "harness_copilot_sdk"
+
+[dependencies]
+harness-contract = { path = "../harness-contract" }
+copilot-sdk = { git = "https://github.com/sethjuarez/copilot-sdk-rust", rev = "96ef003e1037086322f61599deb55aa3e6a810a7" }
+async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tokio = { version = "1", features = ["process", "io-util", "sync", "time"] }

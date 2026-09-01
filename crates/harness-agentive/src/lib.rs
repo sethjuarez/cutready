@@ -3,26 +3,27 @@
 //! This module is the *only* place the [`agentive`] crate is wired into the
 //! harness seam. Everything `agentive::*` — providers, the run loop, its native
 //! message/tool/event types — stays behind this adapter and never leaks past the
-//! CutReady-owned boundary types in [`super`].
+//! CutReady-owned boundary types in [`harness_contract`].
 //!
 //! Capability metadata lives here so the registry can advertise agentive
 //! honestly (see [`static_capabilities`]). `AVAILABLE` is `true` because this
 //! adapter can execute a run end-to-end.
 
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::engine::agent::execution::{
+use harness_contract::execution::{
     AgentEvent, ChatMessage, ContextItem, ToolCall, ToolOutput, Usage,
 };
-use crate::engine::agent::llm::{LlmConfig, LlmProvider};
-use crate::engine::agent::tools::{execute_tool, ToolDefinition};
+use harness_contract::llm::{LlmConfig, LlmProvider};
+use harness_contract::tools::{HostToolExecutor, ToolDefinition, ToolExecutionContext};
 
-use super::{
+use harness_contract::{
     AgentHarness, AgentRunRequest, AgentRunResult, HarnessCapabilities, HarnessContract,
     HarnessEventEmitter, Ownership,
 };
@@ -79,12 +80,18 @@ pub fn static_contract() -> HarnessContract {
 ///
 /// Stateless: unlike Prompty it carries no host-owned steering queue, so the
 /// registry constructs it fresh per resolve.
-pub struct AgentiveHarness;
+/// Carries the host-owned [`HostToolExecutor`]: agentive drives the run loop but
+/// tool execution (path-confined project tools, web fetch, visuals, ...) stays
+/// on the CutReady side of the seam, injected rather than imported so this crate
+/// never depends on the app.
+pub struct AgentiveHarness {
+    tool_executor: Arc<dyn HostToolExecutor>,
+}
 
 impl AgentiveHarness {
-    /// Build an agentive harness.
-    pub fn new() -> Self {
-        Self
+    /// Build an agentive harness with the host's injected tool executor.
+    pub fn new(tool_executor: Arc<dyn HostToolExecutor>) -> Self {
+        Self { tool_executor }
     }
 }
 
@@ -118,10 +125,6 @@ impl AgentHarness for AgentiveHarness {
             tools,
             context_items,
             run_id,
-            // Durable run-state persistence is a Prompty-only capability today
-            // (advertised as `durable_state: false`), so the agentive adapter
-            // deliberately does not consume the store.
-            agent_state: _agent_state,
             cancellation,
         } = request;
 
@@ -161,20 +164,27 @@ impl AgentHarness for AgentiveHarness {
             Err(error) => return fail(&emit, error),
         };
 
-        // Tool executor. `execute_tool` is CutReady-owned and path-confined; the
+        // Tool executor. Tool execution is CutReady-owned and path-confined; the
         // adapter only bridges agentive's tool-call type in and its tool-output
-        // type out. It stays on the CutReady side of the seam so path
-        // confinement and tool policy never move into agentive.
+        // type out. The concrete executor is injected by the host so path
+        // confinement and tool policy never move into agentive, and this crate
+        // never depends on the app.
         let vision_enabled = config.vision.enabled;
         // Mirror the host command: project workspace tools are only offered to
         // the writer persona, and only when mutations are permitted.
         let project_workspace_tools_enabled =
             agent_id.eq_ignore_ascii_case("writer") && mutation_tools_enabled;
-        let executor_repo = repo_root.clone();
-        let executor_project = project_root.clone();
+        let exec_ctx = ToolExecutionContext {
+            repo_root: repo_root.clone(),
+            project_root: project_root.clone(),
+            vision_enabled,
+            project_workspace_tools_enabled,
+            mutation_tools_enabled,
+        };
+        let host_executor = self.tool_executor.clone();
         let tool_executor = move |call: agentive::ToolCall| {
-            let repo = executor_repo.clone();
-            let project = executor_project.clone();
+            let ctx = exec_ctx.clone();
+            let host_executor = host_executor.clone();
             async move {
                 let host_call: ToolCall = match reserialize(&call) {
                     Ok(call) => call,
@@ -184,17 +194,10 @@ impl AgentHarness for AgentiveHarness {
                         )));
                     }
                 };
-                // `execute_tool` is synchronous and may touch the filesystem, so
-                // run it off the async runtime.
+                // The host executor is synchronous and may touch the filesystem,
+                // so run it off the async runtime.
                 let output = tokio::task::spawn_blocking(move || {
-                    execute_tool(
-                        &host_call,
-                        &repo,
-                        &project,
-                        vision_enabled,
-                        project_workspace_tools_enabled,
-                        mutation_tools_enabled,
-                    )
+                    host_executor.execute(&host_call, &ctx)
                 })
                 .await;
                 match output {
@@ -290,12 +293,6 @@ impl AgentHarness for AgentiveHarness {
     }
 }
 
-impl Default for AgentiveHarness {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Provider construction
 // ---------------------------------------------------------------------------
@@ -318,13 +315,23 @@ fn build_agentive_provider(
                 .with_context_budget(agentive::default_context_budget(model)),
         )),
         LlmProvider::AzureOpenai | LlmProvider::MicrosoftFoundry => {
-            let endpoint = llm.endpoint.trim_end_matches('/');
-            if endpoint.is_empty() {
+            if llm.endpoint.trim_end_matches('/').is_empty() {
                 return Err(
                     "Azure/Foundry providers require an endpoint for the agentive harness."
                         .to_string(),
                 );
             }
+            // A Foundry project endpoint (`https://<res>.services.ai.azure.com/api/projects/<p>`)
+            // is NOT a valid inference host: agentive would otherwise POST to
+            // `.../services.ai.azure.com/openai/deployments/...`, which rejects the
+            // Entra token with a 401 even though the token is valid. Rewrite it to the
+            // OpenAI v1 surface on the `.openai.azure.com` host, mirroring the prompty
+            // harness. AzureOpenai endpoints already target the correct host, so they
+            // keep agentive's default deployment-path behavior.
+            let endpoint = match llm.provider {
+                LlmProvider::MicrosoftFoundry => foundry_openai_v1_chat_url(&llm.endpoint)?,
+                _ => llm.endpoint.trim_end_matches('/').to_string(),
+            };
             // Prefer an Entra bearer token when present (Foundry/Azure with
             // Entra); fall back to the classic api-key header otherwise. agentive
             // would auto-pick api-key for azure.com endpoints, which is wrong for
@@ -333,7 +340,7 @@ fn build_agentive_provider(
                 Some(token) => agentive::AuthStrategy::Bearer(token.to_string()),
                 None => agentive::AuthStrategy::ApiKey(llm.api_key.clone()),
             };
-            Ok(agentive::build_provider_with_auth(endpoint, auth, model))
+            Ok(agentive::build_provider_with_auth(&endpoint, auth, model))
         }
     }
 }
@@ -353,6 +360,30 @@ fn openai_endpoint(raw: &str) -> String {
     } else {
         format!("{base}/v1")
     }
+}
+
+/// Rewrite a Microsoft Foundry endpoint into a fully-qualified OpenAI v1
+/// chat-completions URL that agentive will POST to verbatim.
+///
+/// A Foundry connection is stored as a project endpoint like
+/// `https://<res>.services.ai.azure.com/api/projects/<project>`. That host does
+/// not serve the classic `/openai/deployments/{model}/chat/completions` route,
+/// so agentive's default join yields a 401 even with a valid Entra token. The
+/// inference surface lives on the `.openai.azure.com` host under `/openai/v1`,
+/// matching the prompty harness (`harness-prompty::foundry_openai_v1_endpoint`).
+/// The returned URL already contains `/chat/completions`, so agentive uses it
+/// as-is rather than appending a deployment path.
+fn foundry_openai_v1_chat_url(raw: &str) -> Result<String, String> {
+    let endpoint = raw.trim_end_matches('/');
+    let base = endpoint
+        .split_once("/api/projects")
+        .map(|(base, _)| base)
+        .unwrap_or(endpoint);
+    let base = base.replace(".services.ai.azure.com", ".openai.azure.com");
+    if base.is_empty() {
+        return Err("Foundry providers require a resource endpoint for the agentive harness.".into());
+    }
+    Ok(format!("{base}/openai/v1/chat/completions"))
 }
 
 // ---------------------------------------------------------------------------
@@ -479,6 +510,106 @@ fn context_items_to_system_prompt(items: &[ContextItem]) -> Option<String> {
         }
     }
     wrote_any.then_some(block)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use harness_contract::execution::FunctionCall;
+    use std::path::PathBuf;
+    use std::sync::Mutex;
+
+    /// Records the exact call and context it receives so a test can prove the
+    /// injected executor is both retained and driven with unchanged arguments.
+    #[derive(Default)]
+    struct RecordingExecutor {
+        seen: Mutex<Option<(String, PathBuf, bool)>>,
+    }
+
+    impl HostToolExecutor for RecordingExecutor {
+        fn execute(&self, call: &ToolCall, ctx: &ToolExecutionContext) -> ToolOutput {
+            *self.seen.lock().unwrap() = Some((
+                call.function.name.clone(),
+                ctx.project_root.clone(),
+                ctx.mutation_tools_enabled,
+            ));
+            ToolOutput::Text(format!("ran {}", call.function.name))
+        }
+    }
+
+    #[test]
+    fn new_injects_and_routes_through_the_host_tool_executor() {
+        let executor = Arc::new(RecordingExecutor::default());
+        let harness = AgentiveHarness::new(executor.clone());
+
+        let call = ToolCall {
+            id: "call-1".into(),
+            call_type: "function".into(),
+            function: FunctionCall {
+                name: "demo_tool".into(),
+                arguments: "{}".into(),
+            },
+        };
+        let ctx = ToolExecutionContext {
+            repo_root: PathBuf::from("/repo"),
+            project_root: PathBuf::from("/repo/project"),
+            vision_enabled: false,
+            project_workspace_tools_enabled: true,
+            mutation_tools_enabled: true,
+        };
+
+        let output = harness.tool_executor.execute(&call, &ctx);
+
+        let seen = executor.seen.lock().unwrap().clone();
+        assert_eq!(
+            seen,
+            Some(("demo_tool".to_string(), PathBuf::from("/repo/project"), true)),
+            "the injected executor must receive the call and context unchanged"
+        );
+        match output {
+            ToolOutput::Text(text) => assert_eq!(text, "ran demo_tool"),
+            other => panic!("unexpected tool output: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn foundry_project_endpoint_rewrites_to_openai_v1_host() {
+        let url = foundry_openai_v1_chat_url(
+            "https://seth-foundry-dev.services.ai.azure.com/api/projects/dev-models",
+        )
+        .expect("foundry endpoint should rewrite");
+        assert_eq!(
+            url,
+            "https://seth-foundry-dev.openai.azure.com/openai/v1/chat/completions",
+            "Foundry inference must target the .openai.azure.com host, not .services.ai.azure.com"
+        );
+    }
+
+    #[test]
+    fn foundry_endpoint_without_project_path_still_rewrites_host() {
+        let url = foundry_openai_v1_chat_url("https://res.services.ai.azure.com/")
+            .expect("host-only endpoint should rewrite");
+        assert_eq!(url, "https://res.openai.azure.com/openai/v1/chat/completions");
+    }
+
+    #[test]
+    fn foundry_url_is_fully_qualified_so_agentive_uses_it_verbatim() {
+        // agentive treats an endpoint containing "/chat/completions" as a
+        // complete URL; the rewrite must therefore include that suffix.
+        let url = foundry_openai_v1_chat_url(
+            "https://x.services.ai.azure.com/api/projects/p",
+        )
+        .unwrap();
+        assert!(url.contains("/chat/completions"));
+        assert!(!url.contains("/api/projects"));
+        assert!(!url.contains(".services.ai.azure.com"));
+    }
+
+    #[test]
+    fn foundry_empty_endpoint_is_rejected() {
+        assert!(foundry_openai_v1_chat_url("").is_err());
+        assert!(foundry_openai_v1_chat_url("/").is_err());
+    }
 }
 
 /// Emit an `Error` event and return the same message as the run failure.

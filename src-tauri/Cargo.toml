@@ -8,6 +8,22 @@ description = "Product demo video authoring tool"
 name = "cutready_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
+# Harness adapter selection (issue #251). Each first-party agent-harness adapter
+# is a sibling workspace crate; the app links which ones to compile in via these
+# features. `default` keeps every adapter so stock builds are unchanged.
+#
+# `harness-agentive` and `harness-copilot-sdk` are genuinely optional adapters
+# and can be dropped individually to slim a build. The prompty adapter is NOT
+# optional: the app's durable run-state, agent memory, model discovery, and
+# one-shot LLM helpers are built directly on the Prompty engine SDK
+# (see engine/agent_state.rs, engine/memory.rs, engine/agent/llm.rs) and are not
+# harness-swappable today. Fully decoupling "LLM backbone" from "agent harness"
+# is tracked by the capability-provider seam work (#250).
+[features]
+default = ["harness-agentive", "harness-copilot-sdk"]
+harness-agentive = ["dep:harness-agentive"]
+harness-copilot-sdk = ["dep:harness-copilot-sdk"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -20,6 +36,10 @@ chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1"
 thiserror = "2"
 async-trait = "0.1"
+# CutReady-owned agent harness seam (issue #251). Holds the stable boundary
+# DTOs, the capability/ownership contract, and the AgentHarness trait. The app
+# depends on it; harness adapters depend only on it; it never depends on the app.
+harness-contract = { path = "../crates/harness-contract" }
 tracing = "0.1"
 tracing-log = "0.2"
 tracing-subscriber = "0.3"
@@ -33,12 +53,13 @@ futures-util = "0.3"
 # Agentive agent harness runtime. Pinned to a pushed origin/main rev so the API
 # matches the adapter in engine/agent/harness/agentive.rs. Kept behind that
 # adapter — no `agentive::*` type leaks past the harness boundary.
-agentive = { git = "https://github.com/sethjuarez/agentive", rev = "457365f5e9ab35fbd78702ddf9f2742046f90d1c" }
+harness-agentive = { path = "../crates/harness-agentive", optional = true }
 # GitHub Copilot SDK agent harness runtime (issue #247). Pinned to a pushed
 # origin/main rev so the API matches the adapter in
 # engine/agent/harness/copilot_sdk.rs. Kept behind that adapter — no
 # `copilot_sdk::*` type leaks past the harness boundary.
-copilot-sdk = { git = "https://github.com/sethjuarez/copilot-sdk-rust", rev = "96ef003e1037086322f61599deb55aa3e6a810a7" }
+harness-copilot-sdk = { path = "../crates/harness-copilot-sdk", optional = true }
+harness-prompty = { path = "../crates/harness-prompty" }
 draftline = "0.2.15"
 keyring = "4.1.2"
 xcap = "0.8"
@@ -83,11 +104,6 @@ screencapturekit = "2"
 wasapi = "0.23.0"
 windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Graphics_Gdi", "Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
 windows-capture = "2.0.0"
-
-# Stronghold's scrypt dependency needs opt-level 3 even in dev mode
-# https://github.com/tauri-apps/plugins-workspace/issues/2048
-[profile.dev.package.scrypt]
-opt-level = 3
 
 [dev-dependencies]
 httpmock = "0.7"

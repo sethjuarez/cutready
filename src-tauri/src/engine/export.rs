@@ -5,6 +5,7 @@ use std::{
     fs,
     io::{Read, Write},
     path::{Path, PathBuf},
+    sync::OnceLock,
 };
 
 use chrono::Utc;
@@ -2257,7 +2258,8 @@ fn effective_source_duration_seconds(
 fn run_ffmpeg(args: Vec<String>) -> anyhow::Result<()> {
     let diagnostics = FfmpegFilterDiagnostics::from_args(&args);
     let mut args = args;
-    let _filter_scripts = match offload_large_filter_arguments(&mut args) {
+    let _filter_scripts = match offload_large_filter_arguments(&mut args, FilterFileSyntax::detect())
+    {
         Ok(scripts) => scripts,
         Err(error) => {
             log_ffmpeg_failure(
@@ -2350,10 +2352,13 @@ fn ffmpeg_filter_argument<'a>(args: &'a [String], flag: &str) -> Option<&'a str>
         .find_map(|arguments| (arguments[0] == flag).then_some(arguments[1].as_str()))
 }
 
-fn offload_large_filter_arguments(args: &mut [String]) -> anyhow::Result<Vec<tempfile::TempPath>> {
+fn offload_large_filter_arguments(
+    args: &mut [String],
+    syntax: FilterFileSyntax,
+) -> anyhow::Result<Vec<tempfile::TempPath>> {
     let mut scripts = Vec::new();
     for index in 0..args.len().saturating_sub(1) {
-        let Some(script_flag) = ffmpeg_filter_script_flag(&args[index]) else {
+        let Some(script_flag) = syntax.flag_for(&args[index]) else {
             continue;
         };
         if args[index + 1].len() <= FFMPEG_FILTER_SCRIPT_THRESHOLD_BYTES {
@@ -2376,13 +2381,77 @@ fn offload_large_filter_arguments(args: &mut [String]) -> anyhow::Result<Vec<tem
     Ok(scripts)
 }
 
-fn ffmpeg_filter_script_flag(flag: &str) -> Option<&'static str> {
-    match flag {
-        "-vf" => Some("-filter_script:v"),
-        "-af" => Some("-filter_script:a"),
-        "-filter_complex" => Some("-filter_complex_script"),
-        _ => None,
+/// Which flag family FFmpeg understands for reading a filtergraph from a file.
+///
+/// FFmpeg 9.0 removed the long-deprecated `-filter_script` /
+/// `-filter_complex_script` options in favor of the generic "read this option's
+/// value from a file" syntax (`-/vf <path>`). Older FFmpeg builds still accept
+/// the legacy flags they have always used, so we only switch syntax on the
+/// versions that actually dropped it — leaving every existing working install
+/// untouched.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FilterFileSyntax {
+    /// `-filter_script:v` / `-filter_script:a` / `-filter_complex_script`.
+    Legacy,
+    /// `-/vf` / `-/af` / `-/filter_complex`.
+    Generic,
+}
+
+impl FilterFileSyntax {
+    /// Detect the syntax the resolved FFmpeg understands (cached per process).
+    fn detect() -> Self {
+        static CHOICE: OnceLock<FilterFileSyntax> = OnceLock::new();
+        *CHOICE.get_or_init(|| {
+            if ffmpeg_major_version().is_some_and(|major| major >= 9) {
+                Self::Generic
+            } else {
+                // Unknown/unparseable versions fall back to legacy, which every
+                // FFmpeg predating the 9.0 removal accepts.
+                Self::Legacy
+            }
+        })
     }
+
+    /// Map an inline filter flag to its file-reading equivalent, or `None` when
+    /// the flag is not a filtergraph flag we offload.
+    fn flag_for(self, inline_flag: &str) -> Option<&'static str> {
+        match (self, inline_flag) {
+            (Self::Legacy, "-vf") => Some("-filter_script:v"),
+            (Self::Legacy, "-af") => Some("-filter_script:a"),
+            (Self::Legacy, "-filter_complex") => Some("-filter_complex_script"),
+            (Self::Generic, "-vf") => Some("-/vf"),
+            (Self::Generic, "-af") => Some("-/af"),
+            (Self::Generic, "-filter_complex") => Some("-/filter_complex"),
+            _ => None,
+        }
+    }
+}
+
+/// Run `ffmpeg -version` and parse the major version number, if available.
+fn ffmpeg_major_version() -> Option<u32> {
+    let output = ffmpeg::run_ffmpeg(["-version"]).ok()?;
+    let text = String::from_utf8_lossy(&output.stdout);
+    parse_ffmpeg_major_version(&text)
+}
+
+/// Parse the major version from `ffmpeg -version` output.
+///
+/// The first line looks like `ffmpeg version 9.0.1-full_build-www.gyan.dev ...`
+/// or a distro form like `ffmpeg version n6.1.1`. We only accept a dotted
+/// numeric version so that non-numeric git builds (`N-119000-g...`) fall
+/// through to the conservative legacy default rather than being misread.
+fn parse_ffmpeg_major_version(version_output: &str) -> Option<u32> {
+    let first_line = version_output.lines().next()?;
+    let after = first_line.split("version ").nth(1)?.trim_start();
+    // Skip an optional distro `n`/`N` prefix (e.g. `n6.1.1`).
+    let after = after.strip_prefix(['n', 'N']).unwrap_or(after);
+    let (major, rest) = after.split_once('.')?;
+    // Require the character after the major to keep parsing a version (a digit
+    // or another separator), guarding against stray non-version tokens.
+    if !rest.starts_with(|c: char| c.is_ascii_digit()) {
+        return None;
+    }
+    major.parse::<u32>().ok()
 }
 
 fn ffmpeg_failure_message<'a>(lines: &'a [&'a str]) -> &'a str {
@@ -2679,11 +2748,46 @@ mod tests {
         let filter = "null,".repeat(FFMPEG_FILTER_SCRIPT_THRESHOLD_BYTES / 4 + 1);
         let mut args = vec!["-vf".to_string(), filter.clone()];
 
-        let scripts = offload_large_filter_arguments(&mut args).unwrap();
+        let scripts =
+            offload_large_filter_arguments(&mut args, FilterFileSyntax::Legacy).unwrap();
 
         assert_eq!(args[0], "-filter_script:v");
         assert_eq!(scripts.len(), 1);
         assert_eq!(fs::read_to_string(&scripts[0]).unwrap(), filter);
+    }
+
+    #[test]
+    fn large_filter_arguments_use_generic_syntax_on_modern_ffmpeg() {
+        let filter = "null,".repeat(FFMPEG_FILTER_SCRIPT_THRESHOLD_BYTES / 4 + 1);
+        let mut args = vec!["-vf".to_string(), filter.clone()];
+
+        let scripts =
+            offload_large_filter_arguments(&mut args, FilterFileSyntax::Generic).unwrap();
+
+        // FFmpeg 9.0 removed `-filter_script`, so modern builds must receive the
+        // generic read-option-from-file flag instead.
+        assert_eq!(args[0], "-/vf");
+        assert_eq!(scripts.len(), 1);
+        assert_eq!(fs::read_to_string(&scripts[0]).unwrap(), filter);
+    }
+
+    #[test]
+    fn ffmpeg_major_version_parses_release_and_distro_forms() {
+        assert_eq!(
+            parse_ffmpeg_major_version("ffmpeg version 9.0.1-full_build-www.gyan.dev\n"),
+            Some(9)
+        );
+        assert_eq!(
+            parse_ffmpeg_major_version("ffmpeg version 6.1.1 Copyright (c) 2000-2023\n"),
+            Some(6)
+        );
+        assert_eq!(parse_ffmpeg_major_version("ffmpeg version n7.0\n"), Some(7));
+        // Non-dotted git builds are unparseable and fall back to legacy.
+        assert_eq!(
+            parse_ffmpeg_major_version("ffmpeg version N-119000-gabc123\n"),
+            None
+        );
+        assert_eq!(parse_ffmpeg_major_version("not ffmpeg output"), None);
     }
 
     #[test]

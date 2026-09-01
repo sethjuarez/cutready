@@ -17,8 +17,8 @@ use prompty::{
 };
 use serde_json::{json, Value};
 
-use super::llm::{context_budget, needs_responses_api, LlmConfig, LlmProvider};
-use super::tools::ToolDefinition;
+use harness_contract::llm::{context_budget, needs_responses_api, LlmConfig, LlmProvider};
+use harness_contract::tools::ToolDefinition;
 
 pub struct ProductionPromptyModel {
     pub port: Arc<PromptyExecutorModelPort>,
@@ -327,6 +327,16 @@ impl PromptyExecutorModelPort {
             processor,
         }
     }
+
+    /// Introspection accessor for the underlying Prompty agent.
+    ///
+    /// Exposed so host-side integration tests can assert on the wire-format
+    /// tool schemas (`prompty_openai::tools_to_wire`) produced from the app's
+    /// tool definitions without the crate depending on the app's tool set.
+    #[doc(hidden)]
+    pub fn agent(&self) -> &Prompty {
+        &self.agent
+    }
 }
 
 #[async_trait]
@@ -508,12 +518,12 @@ fn invoker_error_to_port(error: InvokerError) -> PortError {
 /// command and transcript-grounded video import) without the full agentic loop.
 pub async fn one_shot_chat(
     config: &LlmConfig,
-    messages: &[crate::engine::agent::execution::ChatMessage],
-) -> Result<crate::engine::agent::execution::ChatMessage, String> {
+    messages: &[harness_contract::execution::ChatMessage],
+) -> Result<harness_contract::execution::ChatMessage, String> {
     let model = build_production_model(config, None, Vec::new())?;
     let prompty_messages = messages
         .iter()
-        .map(super::prompty_runner::native_to_prompty_message)
+        .map(crate::runner::native_to_prompty_message)
         .collect::<Result<Vec<_>, _>>()?;
     let request = ModelInvocationRequest {
         context: ModelInvocationContextSnapshot {
@@ -541,7 +551,7 @@ pub async fn one_shot_chat(
         .assistant_messages
         .first()
         .ok_or_else(|| "Model returned no assistant message".to_string())?;
-    super::prompty_runner::prompty_to_native_message(assistant)
+    crate::runner::prompty_to_native_message(assistant)
 }
 
 fn responses_function_call_messages(response: &Value) -> Vec<Message> {
@@ -599,7 +609,6 @@ mod tests {
     };
 
     use super::*;
-    use crate::engine::agent::tools::all_tools;
 
     struct DropObservedStream {
         chunks: std::collections::VecDeque<Value>,
@@ -888,7 +897,7 @@ mod tests {
             "{\"include_images\":false}"
         );
         let native_calls =
-            serde_json::from_value::<Vec<crate::engine::agent::execution::ToolCall>>(
+            serde_json::from_value::<Vec<harness_contract::execution::ToolCall>>(
                 response.assistant_messages[0].metadata["tool_calls"].clone(),
             )
             .unwrap();
@@ -1276,42 +1285,6 @@ mod tests {
     }
 
     #[test]
-    fn production_tool_wire_preserves_cutready_nullable_union_schemas() {
-        let config = LlmConfig {
-            provider: LlmProvider::Openai,
-            endpoint: String::new(),
-            api_key: "test-key".into(),
-            model: "gpt-4o".into(),
-            bearer_token: None,
-        };
-        let production =
-            build_production_model(&config, Some(10_000), all_tools(true, true, true)).unwrap();
-        let tools = prompty_openai::tools_to_wire(&production.port.agent).unwrap();
-
-        let set_row_visual = tools
-            .iter()
-            .find(|tool| tool["function"]["name"] == "set_row_visual")
-            .unwrap();
-        assert_eq!(
-            set_row_visual["function"]["parameters"]["properties"]["visual"]["type"],
-            json!(["object", "null"])
-        );
-
-        let write_storyboard = tools
-            .iter()
-            .find(|tool| tool["function"]["name"] == "write_storyboard")
-            .unwrap();
-        let storyboard_items =
-            &write_storyboard["function"]["parameters"]["properties"]["items"]["items"];
-        assert_eq!(storyboard_items["anyOf"][0]["type"], "object");
-        assert_eq!(storyboard_items["anyOf"][1]["type"], "object");
-        assert_eq!(
-            storyboard_items["anyOf"][1]["required"],
-            json!(["sketches", "title", "type"])
-        );
-    }
-
-    #[test]
     fn production_factory_selects_openai_responses_without_agentive_transport() {
         let config = LlmConfig {
             provider: LlmProvider::Openai,
@@ -1338,7 +1311,9 @@ mod tests {
         // Production Prompty crates are pinned to one immutable crates.io release.
         // Bump this constant whenever the pin moves.
         const VERSION: &str = "2.0.0-beta.4";
-        let manifest = include_str!("../../../Cargo.toml");
+        let manifest = include_str!("../Cargo.toml");
+        // The lockfile lives at the workspace root, three directories above
+        // this crate source file (crates/harness-prompty/src/model.rs).
         let lockfile = include_str!("../../../Cargo.lock");
 
         assert_eq!(

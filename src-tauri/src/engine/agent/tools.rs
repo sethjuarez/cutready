@@ -19,32 +19,10 @@ use crate::engine::draftline_adapter::CutReadyDraftlineAdapter;
 use crate::engine::project;
 use crate::models::sketch::{MotionPlan, MotionPoint, PlanningRow, Sketch};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolDefinition {
-    #[serde(rename = "type")]
-    pub tool_type: String,
-    pub function: ToolFunctionDefinition,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolFunctionDefinition {
-    pub name: String,
-    pub description: String,
-    pub parameters: Value,
-}
-
-impl ToolDefinition {
-    pub fn function(name: &str, description: &str, parameters: Value) -> Self {
-        Self {
-            tool_type: "function".into(),
-            function: ToolFunctionDefinition {
-                name: name.into(),
-                description: description.into(),
-                parameters,
-            },
-        }
-    }
-}
+// `ToolDefinition` / `ToolFunctionDefinition` (the wire shape of the tool
+// contract) now live in the `harness-contract` crate. Re-exported here so the
+// concrete tool implementations below and external call sites are unchanged.
+pub use harness_contract::tools::{ToolDefinition, ToolFunctionDefinition};
 
 type Tool = ToolDefinition;
 
