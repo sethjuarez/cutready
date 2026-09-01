@@ -159,6 +159,51 @@ pub struct HarnessContract {
     pub memory: Ownership,
 }
 
+impl HarnessContract {
+    /// Apply this contract's provider-ownership stance to a host-supplied
+    /// provider configuration, returning the provider config the host is
+    /// permitted to hand the harness for agent turns.
+    ///
+    /// The provider concern covers the model *and* its auth ([`Self::provider`]
+    /// is "who supplies the model provider / auth for agent turns"). When the
+    /// harness [`Ownership::Provides`] its own provider — for example the
+    /// Copilot harness, which authenticates through the signed-in Copilot
+    /// entitlement — the host must not send its own: the shared connection
+    /// credentials belong to narration/voice, not to agent turns. Forwarding
+    /// them would turn an *optional* BYOK override into a mandatory one and make
+    /// the harness fail against a provider the user never chose for the agent.
+    /// So for [`Ownership::Provides`] the provider-owned fields (endpoint,
+    /// api_key, bearer_token, and model) are cleared and the harness falls back
+    /// to its own entitlement and default model.
+    ///
+    /// [`Ownership::Requires`] and [`Ownership::Augments`] both forward the host
+    /// configuration unchanged: `Requires` cannot run without it, and `Augments`
+    /// deliberately layers the host's provider over the harness's own.
+    pub fn host_provider_config(&self, llm: LlmConfig) -> LlmConfig {
+        match self.provider {
+            Ownership::Provides => LlmConfig {
+                provider: llm.provider,
+                endpoint: String::new(),
+                api_key: String::new(),
+                model: String::new(),
+                bearer_token: None,
+            },
+            Ownership::Requires | Ownership::Augments => llm,
+        }
+    }
+
+    /// Whether this harness supplies its own model provider for agent turns
+    /// (i.e. [`Self::provider`] is [`Ownership::Provides`]).
+    ///
+    /// When true, the host's configured provider/model are *not* the run's
+    /// effective provider/model — the harness authenticates and selects a model
+    /// on its own — so run diagnostics should record the harness as the provider
+    /// rather than the (unused) host connection.
+    pub fn provides_own_provider(&self) -> bool {
+        matches!(self.provider, Ownership::Provides)
+    }
+}
+
 /// A harness entry as surfaced to the host/UI: its capabilities plus whether it
 /// can execute a run right now.
 ///
@@ -198,4 +243,65 @@ pub trait AgentHarness: Send + Sync {
         request: AgentRunRequest,
         emit: HarnessEventEmitter,
     ) -> Result<AgentRunResult, String>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::llm::LlmProvider;
+
+    fn byok_config() -> LlmConfig {
+        LlmConfig {
+            provider: LlmProvider::MicrosoftFoundry,
+            endpoint: "https://example.services.ai.azure.com".to_string(),
+            api_key: "secret-key".to_string(),
+            model: "gpt-5.6-terra".to_string(),
+            bearer_token: Some("entra-token".to_string()),
+        }
+    }
+
+    fn contract_with_provider(provider: Ownership) -> HarnessContract {
+        HarnessContract {
+            provider,
+            personas: Ownership::Requires,
+            tools: Ownership::Requires,
+            memory: Ownership::Requires,
+        }
+    }
+
+    #[test]
+    fn provides_strips_host_provider_credentials_and_model() {
+        let out = contract_with_provider(Ownership::Provides).host_provider_config(byok_config());
+        // The provider concern (endpoint, auth, model) belongs to the harness;
+        // the host must not send its own. Only the discriminant is retained.
+        assert_eq!(out.provider, LlmProvider::MicrosoftFoundry);
+        assert!(out.endpoint.is_empty());
+        assert!(out.api_key.is_empty());
+        assert!(out.model.is_empty());
+        assert_eq!(out.bearer_token, None);
+    }
+
+    #[test]
+    fn requires_forwards_host_provider_unchanged() {
+        let out = contract_with_provider(Ownership::Requires).host_provider_config(byok_config());
+        assert_eq!(out.endpoint, "https://example.services.ai.azure.com");
+        assert_eq!(out.api_key, "secret-key");
+        assert_eq!(out.model, "gpt-5.6-terra");
+        assert_eq!(out.bearer_token.as_deref(), Some("entra-token"));
+    }
+
+    #[test]
+    fn augments_forwards_host_provider_unchanged() {
+        let out = contract_with_provider(Ownership::Augments).host_provider_config(byok_config());
+        assert_eq!(out.api_key, "secret-key");
+        assert_eq!(out.model, "gpt-5.6-terra");
+        assert_eq!(out.bearer_token.as_deref(), Some("entra-token"));
+    }
+
+    #[test]
+    fn provides_own_provider_is_true_only_for_provides() {
+        assert!(contract_with_provider(Ownership::Provides).provides_own_provider());
+        assert!(!contract_with_provider(Ownership::Requires).provides_own_provider());
+        assert!(!contract_with_provider(Ownership::Augments).provides_own_provider());
+    }
 }

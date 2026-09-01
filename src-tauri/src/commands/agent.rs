@@ -844,6 +844,21 @@ pub async fn agent_chat_with_tools(
     let llm_config: LlmConfig = config.into();
     let context_item_configs = context_items.unwrap_or_default();
 
+    // Resolve the ownership contract once, by canonical id, so run diagnostics
+    // and provider provisioning share a single authoritative source. A harness
+    // that provides its own provider (e.g. copilot-sdk on the Copilot
+    // entitlement) does not use the host's configured connection or model, so
+    // labelling the run with them would be misleading. `canonical_id` already
+    // succeeded above, so a missing contract is an internal invariant violation
+    // worth surfacing rather than silently mislabelling the run.
+    let harness_contract = HarnessRegistry::contract(Some(&harness_id))?;
+    let harness_provides_own_provider = harness_contract.provides_own_provider();
+    let (effective_provider, effective_model) = if harness_provides_own_provider {
+        (harness_id.clone(), "default".to_string())
+    } else {
+        (provider_name.clone(), model.clone())
+    };
+
     // Determine effective vision: user setting AND discovered/static model capability.
     let model_supports_vision =
         discovered_vision_support.unwrap_or_else(|| llm::supports_vision(&llm_config.model));
@@ -865,12 +880,15 @@ pub async fn agent_chat_with_tools(
         Ok(store) => {
             let insert_result = store.insert_run(
                 None,
-                &provider_name,
-                &model,
+                &effective_provider,
+                &effective_model,
                 serde_json::json!({
                     "messages": message_count,
                     "provider_id": &configured_provider_id,
                     "provider_name": &configured_provider_name,
+                    "requested_provider": &provider_name,
+                    "requested_model": &model,
+                    "harness_provides_own_provider": harness_provides_own_provider,
                     "chars": message_chars,
                     "budget_chars": budget_chars,
                     "reported_context": reported_context,
@@ -912,10 +930,12 @@ pub async fn agent_chat_with_tools(
         .collect::<Result<Vec<_>, _>>()?;
     context_items.extend(recalled_context_items(&messages, agent_state.as_ref()));
     log::info!(
-        "[agent_chat_with_tools] start run_id={} engine={} agent={} provider={} model={} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} mutation_tools={} max_tool_rounds={} prompts={}",
+        "[agent_chat_with_tools] start run_id={} engine={} agent={} provider={} model={} requested_provider={} requested_model={} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} mutation_tools={} max_tool_rounds={} prompts={}",
         run_id,
         harness_id.as_str(),
         agent_id,
+        effective_provider,
+        effective_model,
         provider_name,
         model,
         message_count,
@@ -932,10 +952,13 @@ pub async fn agent_chat_with_tools(
         "agent_chat_with_tools_start",
         "agent",
         serde_json::json!({
-            "provider": provider_name,
+            "provider": effective_provider,
             "provider_id": &configured_provider_id,
             "provider_name": &configured_provider_name,
-            "model": model,
+            "model": effective_model,
+            "requested_provider": &provider_name,
+            "requested_model": &model,
+            "harness_provides_own_provider": harness_provides_own_provider,
             "execution_engine": harness_id.as_str(),
             "run_id": &run_id,
             "messages": message_count,
@@ -987,9 +1010,19 @@ pub async fn agent_chat_with_tools(
                     mutation_tools_enabled,
                 );
                 tool_definitions.retain(|tool| tool.function.name != "delegate_to_agent");
+                // Respect the harness ownership contract for the provider
+                // concern. A harness that *Provides* its own model provider
+                // (e.g. copilot-sdk, authenticated through the signed-in Copilot
+                // entitlement) must not receive the host's shared connection
+                // credentials — those belong to narration/voice, not agent
+                // turns. The host asks the contract what it may send instead of
+                // handing over `llm_config` unconditionally and hoping the
+                // adapter ignores what it does not own. This reuses the same
+                // authoritative contract resolved above for run diagnostics.
+                let harness_llm = harness_contract.host_provider_config(llm_config);
                 let request = AgentRunRequest {
                     config: HarnessConfig {
-                        llm: llm_config,
+                        llm: harness_llm,
                         reported_context_length: reported_context,
                         max_tool_rounds,
                         vision,

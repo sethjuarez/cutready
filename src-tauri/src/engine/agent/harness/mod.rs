@@ -533,6 +533,49 @@ mod tests {
         assert_eq!(contract.memory, Ownership::Provides);
     }
 
+    fn populated_host_llm() -> crate::engine::agent::llm::LlmConfig {
+        use crate::engine::agent::llm::{LlmConfig, LlmProvider};
+        LlmConfig {
+            provider: LlmProvider::MicrosoftFoundry,
+            endpoint: "https://seth-foundry-dev.services.ai.azure.com".to_string(),
+            api_key: "shared-narration-key".to_string(),
+            model: "gpt-5.6-terra".to_string(),
+            bearer_token: Some("shared-bearer".to_string()),
+        }
+    }
+
+    #[cfg(feature = "harness-copilot-sdk")]
+    #[test]
+    fn copilot_sdk_contract_strips_host_provider_via_registry() {
+        // End-to-end through the real registry contract: a Provides harness
+        // must never receive the host's shared connection credentials for an
+        // agent turn. Only the provider discriminant survives so the adapter
+        // can route correctly; everything auth/model-bearing is cleared and the
+        // harness falls back to its own Copilot entitlement + default model.
+        use crate::engine::agent::llm::LlmProvider;
+        let contract = HarnessRegistry::contract(Some("copilot-sdk")).unwrap();
+        let sent = contract.host_provider_config(populated_host_llm());
+        assert_eq!(sent.provider, LlmProvider::MicrosoftFoundry);
+        assert!(sent.endpoint.is_empty(), "endpoint must be stripped");
+        assert!(sent.api_key.is_empty(), "api_key must be stripped");
+        assert!(sent.model.is_empty(), "model must be stripped");
+        assert!(sent.bearer_token.is_none(), "bearer_token must be stripped");
+    }
+
+    #[test]
+    fn prompty_contract_forwards_host_provider_via_registry() {
+        // A Requires harness cannot run without the host provider, so the
+        // registry contract must forward it verbatim.
+        let contract = HarnessRegistry::contract(Some("prompty")).unwrap();
+        let original = populated_host_llm();
+        let sent = contract.host_provider_config(original.clone());
+        assert_eq!(sent.provider, original.provider);
+        assert_eq!(sent.endpoint, original.endpoint);
+        assert_eq!(sent.api_key, original.api_key);
+        assert_eq!(sent.model, original.model);
+        assert_eq!(sent.bearer_token, original.bearer_token);
+    }
+
     #[test]
     fn contract_default_matches_prompty_and_resolved_harness() {
         // A missing id falls back to the default harness for the contract just
