@@ -315,13 +315,23 @@ fn build_agentive_provider(
                 .with_context_budget(agentive::default_context_budget(model)),
         )),
         LlmProvider::AzureOpenai | LlmProvider::MicrosoftFoundry => {
-            let endpoint = llm.endpoint.trim_end_matches('/');
-            if endpoint.is_empty() {
+            if llm.endpoint.trim_end_matches('/').is_empty() {
                 return Err(
                     "Azure/Foundry providers require an endpoint for the agentive harness."
                         .to_string(),
                 );
             }
+            // A Foundry project endpoint (`https://<res>.services.ai.azure.com/api/projects/<p>`)
+            // is NOT a valid inference host: agentive would otherwise POST to
+            // `.../services.ai.azure.com/openai/deployments/...`, which rejects the
+            // Entra token with a 401 even though the token is valid. Rewrite it to the
+            // OpenAI v1 surface on the `.openai.azure.com` host, mirroring the prompty
+            // harness. AzureOpenai endpoints already target the correct host, so they
+            // keep agentive's default deployment-path behavior.
+            let endpoint = match llm.provider {
+                LlmProvider::MicrosoftFoundry => foundry_openai_v1_chat_url(&llm.endpoint)?,
+                _ => llm.endpoint.trim_end_matches('/').to_string(),
+            };
             // Prefer an Entra bearer token when present (Foundry/Azure with
             // Entra); fall back to the classic api-key header otherwise. agentive
             // would auto-pick api-key for azure.com endpoints, which is wrong for
@@ -330,7 +340,7 @@ fn build_agentive_provider(
                 Some(token) => agentive::AuthStrategy::Bearer(token.to_string()),
                 None => agentive::AuthStrategy::ApiKey(llm.api_key.clone()),
             };
-            Ok(agentive::build_provider_with_auth(endpoint, auth, model))
+            Ok(agentive::build_provider_with_auth(&endpoint, auth, model))
         }
     }
 }
@@ -350,6 +360,30 @@ fn openai_endpoint(raw: &str) -> String {
     } else {
         format!("{base}/v1")
     }
+}
+
+/// Rewrite a Microsoft Foundry endpoint into a fully-qualified OpenAI v1
+/// chat-completions URL that agentive will POST to verbatim.
+///
+/// A Foundry connection is stored as a project endpoint like
+/// `https://<res>.services.ai.azure.com/api/projects/<project>`. That host does
+/// not serve the classic `/openai/deployments/{model}/chat/completions` route,
+/// so agentive's default join yields a 401 even with a valid Entra token. The
+/// inference surface lives on the `.openai.azure.com` host under `/openai/v1`,
+/// matching the prompty harness (`harness-prompty::foundry_openai_v1_endpoint`).
+/// The returned URL already contains `/chat/completions`, so agentive uses it
+/// as-is rather than appending a deployment path.
+fn foundry_openai_v1_chat_url(raw: &str) -> Result<String, String> {
+    let endpoint = raw.trim_end_matches('/');
+    let base = endpoint
+        .split_once("/api/projects")
+        .map(|(base, _)| base)
+        .unwrap_or(endpoint);
+    let base = base.replace(".services.ai.azure.com", ".openai.azure.com");
+    if base.is_empty() {
+        return Err("Foundry providers require a resource endpoint for the agentive harness.".into());
+    }
+    Ok(format!("{base}/openai/v1/chat/completions"))
 }
 
 // ---------------------------------------------------------------------------
@@ -536,6 +570,45 @@ mod tests {
             ToolOutput::Text(text) => assert_eq!(text, "ran demo_tool"),
             other => panic!("unexpected tool output: {other:?}"),
         }
+    }
+
+    #[test]
+    fn foundry_project_endpoint_rewrites_to_openai_v1_host() {
+        let url = foundry_openai_v1_chat_url(
+            "https://seth-foundry-dev.services.ai.azure.com/api/projects/dev-models",
+        )
+        .expect("foundry endpoint should rewrite");
+        assert_eq!(
+            url,
+            "https://seth-foundry-dev.openai.azure.com/openai/v1/chat/completions",
+            "Foundry inference must target the .openai.azure.com host, not .services.ai.azure.com"
+        );
+    }
+
+    #[test]
+    fn foundry_endpoint_without_project_path_still_rewrites_host() {
+        let url = foundry_openai_v1_chat_url("https://res.services.ai.azure.com/")
+            .expect("host-only endpoint should rewrite");
+        assert_eq!(url, "https://res.openai.azure.com/openai/v1/chat/completions");
+    }
+
+    #[test]
+    fn foundry_url_is_fully_qualified_so_agentive_uses_it_verbatim() {
+        // agentive treats an endpoint containing "/chat/completions" as a
+        // complete URL; the rewrite must therefore include that suffix.
+        let url = foundry_openai_v1_chat_url(
+            "https://x.services.ai.azure.com/api/projects/p",
+        )
+        .unwrap();
+        assert!(url.contains("/chat/completions"));
+        assert!(!url.contains("/api/projects"));
+        assert!(!url.contains(".services.ai.azure.com"));
+    }
+
+    #[test]
+    fn foundry_empty_endpoint_is_rejected() {
+        assert!(foundry_openai_v1_chat_url("").is_err());
+        assert!(foundry_openai_v1_chat_url("/").is_err());
     }
 }
 
