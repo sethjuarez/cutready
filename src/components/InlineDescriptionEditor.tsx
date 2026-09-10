@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { MarkdownPreview, continueMarkdownList } from "./MarkdownText";
+import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
+import { SafeMarkdown } from "./SafeMarkdown";
+import { continueMarkdownList } from "../utils/markdownList";
 
 interface InlineDescriptionEditorProps {
   value: string;
@@ -195,7 +198,9 @@ export function InlineDescriptionEditor({
           onFocus={() => { if (!disabled) setEditingState(true); }}
           className={previewClassName}
         >
-          <MarkdownPreview value={value} placeholder={placeholder} />
+          <SafeMarkdown placeholder={placeholder} remarkPlugins={[remarkGfm, remarkBreaks]}>
+            {value}
+          </SafeMarkdown>
         </div>
       )}
       {!editing && !disabled && action}

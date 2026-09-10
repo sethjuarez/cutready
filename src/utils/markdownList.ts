@@ -1,25 +1,3 @@
-import remarkBreaks from "remark-breaks";
-import remarkGfm from "remark-gfm";
-import { SafeMarkdown } from "./SafeMarkdown";
-
-interface MarkdownPreviewProps {
-  value: string;
-  placeholder: string;
-  placeholderClassName?: string;
-}
-
-export function MarkdownPreview({
-  value,
-  placeholder,
-  placeholderClassName = "text-[rgb(var(--color-text-secondary))]/40",
-}: MarkdownPreviewProps) {
-  if (!value.trim()) {
-    return <span className={placeholderClassName}>{placeholder}</span>;
-  }
-
-  return <SafeMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{value}</SafeMarkdown>;
-}
-
 interface ContinueMarkdownListOptions {
   value: string;
   selectionStart: number;

@@ -964,27 +964,55 @@ interface AppStoreState {
 // ── Layout persistence helpers ─────────────────────────────────
 const LAYOUT_KEY = "cutready:layout";
 
-function loadLayout(): Partial<{
+type PersistedLayout = {
   sidebarWidth: number;
   sidebarVisible: boolean;
   outputVisible: boolean;
   outputHeight: number;
   secondaryWidth: number;
   showSecondaryPanel: boolean;
-}> {
+};
+
+function numberValue(data: Record<string, unknown>, key: keyof PersistedLayout): number | undefined {
+  const value = data[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function booleanValue(data: Record<string, unknown>, key: string): boolean | undefined {
+  const value = data[key];
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function pruneLayout(data: Record<string, unknown>): Partial<PersistedLayout> {
+  const layout: Partial<PersistedLayout> = {};
+  const sidebarWidth = numberValue(data, "sidebarWidth");
+  const outputHeight = numberValue(data, "outputHeight");
+  const secondaryWidth = numberValue(data, "secondaryWidth");
+  const sidebarVisible = booleanValue(data, "sidebarVisible");
+  const outputVisible = booleanValue(data, "outputVisible");
+  const showSecondaryPanel =
+    booleanValue(data, "showSecondaryPanel") ?? booleanValue(data, "showVersionHistory");
+
+  if (sidebarWidth !== undefined) layout.sidebarWidth = sidebarWidth;
+  if (sidebarVisible !== undefined) layout.sidebarVisible = sidebarVisible;
+  if (outputVisible !== undefined) layout.outputVisible = outputVisible;
+  if (outputHeight !== undefined) layout.outputHeight = outputHeight;
+  if (secondaryWidth !== undefined) layout.secondaryWidth = secondaryWidth;
+  if (showSecondaryPanel !== undefined) layout.showSecondaryPanel = showSecondaryPanel;
+
+  return layout;
+}
+
+function loadLayout(): Partial<PersistedLayout> {
   try {
     const raw = localStorage.getItem(LAYOUT_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const legacySecondary = typeof parsed["showSecondaryPanel"] === "boolean"
-      ? parsed["showSecondaryPanel"]
-      : typeof parsed["showVersionHistory"] === "boolean"
-        ? parsed["showVersionHistory"]
-        : undefined;
-    return {
-      ...parsed,
-      ...(legacySecondary === undefined ? {} : { showSecondaryPanel: legacySecondary }),
-    };
+    const pruned = pruneLayout(parsed);
+    if (JSON.stringify(pruned) !== JSON.stringify(parsed)) {
+      localStorage.setItem(LAYOUT_KEY, JSON.stringify(pruned));
+    }
+    return pruned;
   } catch {
     return {};
   }

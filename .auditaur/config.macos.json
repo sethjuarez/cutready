@@ -1,6 +1,6 @@
 {
   "app": "cutready",
-  "start": ["node", "scripts/auditaur-start-debug.mjs"],
+  "start": ["npm", "run", "debug"],
   "readiness": {
     "frontend": true,
     "driveBridge": true,

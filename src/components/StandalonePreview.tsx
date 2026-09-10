@@ -1,11 +1,11 @@
 /**
  * Standalone preview window — rendered when __IS_PREVIEW flag is set.
- * Reads sketch data from localStorage and renders SketchPreview in fullscreen.
+ * Reads sketch data from localStorage and renders PresentationShell in fullscreen.
  */
 import { useEffect, useState } from "react";
 import { invoke } from "../services/tauri";
-import { SketchPreview, type PreviewSlide } from "./SketchPreview";
-import type { PresentationMode } from "./presentation/types";
+import { PresentationShell as SketchPreview } from "./presentation/PresentationShell";
+import type { PreviewSlide, PresentationMode } from "./presentation/types";
 import type { PlanningRow } from "../types/sketch";
 import { getThemePalette } from "../theme/appThemePalettes";
 import { applyThemeColorTokens, cacheThemePaletteForBootstrap } from "../theme/applyThemePalette";
