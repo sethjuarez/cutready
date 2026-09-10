@@ -595,14 +595,24 @@ pub async fn agent_chat(
     }
 }
 
-/// Push a message onto the pending stack while the agent loop is running.
+/// Push a message onto an in-flight run's steering queue.
+///
+/// `run_id` is the frontend client run id of the run the message is meant for,
+/// so steering reaches only that run. Returns whether the message was actually
+/// delivered: `false` when no active run matches the key (unknown, ended, or
+/// missing id), so the frontend can avoid falsely showing it as queued. A
+/// missing/unmatched key drops the message rather than risk steering the wrong
+/// run.
 #[auditaur_command(skip_all, err)]
 pub async fn push_pending_chat_message(
     state: tauri::State<'_, AppState>,
     message: String,
-) -> Result<(), String> {
-    state.prompty_steering.send(&message);
-    Ok(())
+    run_id: Option<String>,
+) -> Result<bool, String> {
+    let Some(run_key) = run_id.as_deref().map(str::trim).filter(|id| !id.is_empty()) else {
+        return Ok(false);
+    };
+    Ok(state.prompty_steering.send(run_key, &message))
 }
 
 #[auditaur_command(skip_all, err)]
@@ -975,6 +985,13 @@ pub async fn agent_chat_with_tools(
         }),
     );
 
+    // Route composer steering to *this* run only. Key by the frontend's client
+    // run id (the same identity used to cancel the run); fall back to the
+    // backend run id when the client supplied none. The guard deregisters the
+    // per-run queue when this run returns, so a later reused id can't inherit it.
+    let steering_key = client_run_id.clone().unwrap_or_else(|| run_id.clone());
+    let (run_steering, _steering_guard) = state.prompty_steering.register(steering_key);
+
     let should_emit_events = emit_events.unwrap_or(true);
     let emit_handle = app.clone();
     let emit: crate::engine::agent::harness::HarnessEventEmitter =
@@ -996,7 +1013,7 @@ pub async fn agent_chat_with_tools(
         // leaking a `running` row. (The id was already validated by
         // `canonical_id` above, so this cannot fail today, but keeping it on the
         // finalized path stays correct if a harness gains a fallible builder.)
-        match HarnessRegistry::new(state.prompty_steering.clone())
+        match HarnessRegistry::new(run_steering.clone())
             .resolve(Some(&harness_id), agent_state.clone())
         {
             Ok(harness) => {

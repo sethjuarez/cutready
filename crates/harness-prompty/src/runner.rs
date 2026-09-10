@@ -105,7 +105,11 @@ impl PromptySteering {
             .unwrap_or(false)
     }
 
-    fn subscribe(&self) -> PromptySteeringSubscription {
+    /// Subscribe a fresh drain cursor to this queue.
+    ///
+    /// Public so the host can route and observe steering (e.g. per-run
+    /// registries and their tests); the runner subscribes here at run start.
+    pub fn subscribe(&self) -> PromptySteeringSubscription {
         let id = uuid::Uuid::new_v4().to_string();
         if let Ok(mut state) = self.state.lock() {
             let next_sequence = state.next_sequence;
@@ -118,13 +122,13 @@ impl PromptySteering {
     }
 }
 
-struct PromptySteeringSubscription {
+pub struct PromptySteeringSubscription {
     id: String,
     state: Arc<Mutex<PromptySteeringState>>,
 }
 
 impl PromptySteeringSubscription {
-    fn drain(&self) -> Vec<String> {
+    pub fn drain(&self) -> Vec<String> {
         let Ok(mut state) = self.state.lock() else {
             return Vec::new();
         };

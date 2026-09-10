@@ -126,5 +126,5 @@ pub use adapter::PromptyHarness;
 pub use model::{build_production_model, one_shot_chat, ProductionPromptyModel};
 pub use runner::{
     native_to_prompty_message, prompty_to_native_message, run, PromptySteering,
-    DEFAULT_MAX_TOOL_ROUNDS,
+    PromptySteeringSubscription, DEFAULT_MAX_TOOL_ROUNDS,
 };

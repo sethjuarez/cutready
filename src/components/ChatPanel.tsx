@@ -190,7 +190,7 @@ export function askModeCancelledMessage(): string {
 }
 
 export async function cancelAgentChatRun(
-  clientRunId: number,
+  clientRunId: string | number,
   cancel: (clientRunId: string) => Promise<unknown> = (id) =>
     invoke("cancel_agent_chat_run", { clientRunId: id }),
 ): Promise<void> {
@@ -621,8 +621,9 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const thinkingRef = useRef("");
   const workingDraftsRef = useRef<string[]>([]);
   const abortedRef = useRef(false);
-  const nextSendIdRef = useRef(0);
-  const activePreflightSendIdRef = useRef<number | null>(null);
+  // Globally-unique run id (UUID) rather than a component-local counter, so
+  // concurrent chat panels can't mint colliding ids and steer each other's runs.
+  const activePreflightSendIdRef = useRef<string | null>(null);
   const pendingToolArgsRef = useRef<Record<string, string[]>>({});
   const handledSketchMutationsRef = useRef<Map<string, number>>(new Map());
 
@@ -1031,22 +1032,33 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     setShowAutocomplete(false);
     setShowContextPicker(false);
 
-    // If agent is already running, push to pending stack
+    // If agent is already running, push to the run's steering queue.
     if (loading) {
       try {
-        await invoke("push_pending_chat_message", { message: text });
-        // Show pending message with a queued marker (rendered specially by MessageRow)
-        const pendingMsg: ChatMessage = { role: "user", content: text, pending: true };
-        setChatMessages([...messages, pendingMsg]);
-        requestAnimationFrame(() => scrollMessagesToBottom());
+        const delivered = await invoke<boolean>("push_pending_chat_message", {
+          message: text,
+          runId: activePreflightSendIdRef.current ?? undefined,
+        });
+        if (delivered) {
+          // Show pending message with a queued marker (rendered specially by MessageRow)
+          const pendingMsg: ChatMessage = { role: "user", content: text, pending: true };
+          setChatMessages([...messages, pendingMsg]);
+          requestAnimationFrame(() => scrollMessagesToBottom());
+        } else {
+          // No active run received the message — it targets a run owned by
+          // another panel, or the run just ended. Don't show a misleading
+          // "queued" bubble; restore the text so it isn't silently lost.
+          setInput(text);
+        }
       } catch (err) {
         console.error("Failed to push pending message:", err);
+        setInput(text);
       }
       return;
     }
 
     setChatError(null);
-    const sendId = ++nextSendIdRef.current;
+    const sendId = crypto.randomUUID();
     activePreflightSendIdRef.current = sendId;
     abortedRef.current = false;
 
@@ -1232,7 +1244,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
             agentPrompts,
             agentId: effectiveAgent.id,
             allowMutationTools,
-            clientRunId: sendId.toString(),
+            clientRunId: sendId,
           });
 
       // Activity logging now handled by real-time agent-event listener
