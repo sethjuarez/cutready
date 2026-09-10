@@ -1,5 +1,49 @@
 import Foundation
 
+/// Dynamic coding key used to capture document fields the mobile models do not
+/// model explicitly, so companion edits stay lossless for desktop-authored data
+/// (issue #272). Also see `UnknownFieldCodec`.
+struct AnyCodingKey: CodingKey {
+    let stringValue: String
+    var intValue: Int? { nil }
+    init(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { nil }
+}
+
+/// Lossless document adapter: captures any JSON keys not covered by a model's
+/// explicit `CodingKeys` on decode and re-emits them on encode. This preserves
+/// current desktop-only fields (e.g. `motion_points`, `typing_spots`,
+/// `motion_plan`, `narration_plan`) AND unknown future fields through a mobile
+/// structured edit, without the mobile models needing to understand them.
+///
+/// Decision (issue #272): unknown top-level fields on `PlanningRow` and `Sketch`
+/// are preserved verbatim. Boundaries of this guarantee, by design:
+/// - Preservation is not recursive: unknown keys nested inside a *modeled*
+///   object (e.g. `RowNarration`) are not retained. New desktop data that must
+///   survive mobile edits should be added as a top-level row/document field, or
+///   the containing model must adopt this same passthrough.
+/// - Numbers round-trip through `JSONValue.number(Double)`, so integers beyond
+///   2^53 are not bit-preserved. All current authoring fields are well within
+///   that range.
+enum UnknownFieldCodec {
+    static func decode(from decoder: Decoder, knownKeys: Set<String>) throws -> [String: JSONValue] {
+        let container = try decoder.container(keyedBy: AnyCodingKey.self)
+        var extras: [String: JSONValue] = [:]
+        for key in container.allKeys where !knownKeys.contains(key.stringValue) {
+            extras[key.stringValue] = try container.decode(JSONValue.self, forKey: key)
+        }
+        return extras
+    }
+
+    static func encode(_ fields: [String: JSONValue], to encoder: Encoder, knownKeys: Set<String>) throws {
+        guard !fields.isEmpty else { return }
+        var container = encoder.container(keyedBy: AnyCodingKey.self)
+        for (key, value) in fields where !knownKeys.contains(key) {
+            try container.encode(value, forKey: AnyCodingKey(stringValue: key))
+        }
+    }
+}
+
 enum CutReadyDocumentDateCodec {
     static func string(from date: Date) -> String {
         iso8601WithFractions.string(from: date)
@@ -162,6 +206,10 @@ public struct PlanningRow: Codable, Equatable, Sendable {
     public var visual: JSONValue?
     public var designPlan: String?
     public var narration: RowNarration?
+    /// Desktop-authored fields the mobile model does not model explicitly
+    /// (e.g. `motion_points`, `typing_spots`, `motion_plan`, `narration_plan`)
+    /// plus any unknown future fields, preserved verbatim across mobile edits.
+    public var unknownFields: [String: JSONValue]
 
     public init(
         locked: Bool? = nil,
@@ -173,7 +221,8 @@ public struct PlanningRow: Codable, Equatable, Sendable {
         screenshot: String? = nil,
         visual: JSONValue? = nil,
         designPlan: String? = nil,
-        narration: RowNarration? = nil
+        narration: RowNarration? = nil,
+        unknownFields: [String: JSONValue] = [:]
     ) {
         self.locked = locked
         self.locks = locks
@@ -185,9 +234,10 @@ public struct PlanningRow: Codable, Equatable, Sendable {
         self.visual = visual
         self.designPlan = designPlan
         self.narration = narration
+        self.unknownFields = unknownFields
     }
 
-    private enum CodingKeys: String, CodingKey {
+    private enum CodingKeys: String, CodingKey, CaseIterable {
         case locked
         case locks
         case time
@@ -199,6 +249,8 @@ public struct PlanningRow: Codable, Equatable, Sendable {
         case designPlan = "design_plan"
         case narration
     }
+
+    private static let knownKeys = Set(CodingKeys.allCases.map(\.rawValue))
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -212,6 +264,7 @@ public struct PlanningRow: Codable, Equatable, Sendable {
         visual = try container.decodeIfPresent(JSONValue.self, forKey: .visual)
         designPlan = try container.decodeIfPresent(String.self, forKey: .designPlan)
         narration = try container.decodeIfPresent(RowNarration.self, forKey: .narration)
+        unknownFields = try UnknownFieldCodec.decode(from: decoder, knownKeys: Self.knownKeys)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -229,6 +282,7 @@ public struct PlanningRow: Codable, Equatable, Sendable {
         try container.encodeIfPresent(visual, forKey: .visual)
         try container.encodeIfPresent(designPlan, forKey: .designPlan)
         try container.encodeIfPresent(narration, forKey: .narration)
+        try UnknownFieldCodec.encode(unknownFields, to: encoder, knownKeys: Self.knownKeys)
     }
 
     private static func decodeLocks(from container: KeyedDecodingContainer<CodingKeys>) throws -> [PlanningCellField: Bool]? {
@@ -256,6 +310,9 @@ public struct Sketch: Codable, Equatable, Sendable {
     public var state: SketchState
     public var createdAt: Date
     public var updatedAt: Date
+    /// Top-level sketch fields the mobile model does not model explicitly, plus
+    /// any unknown future fields, preserved verbatim across mobile edits (#272).
+    public var unknownFields: [String: JSONValue]
 
     public init(
         title: String,
@@ -265,7 +322,8 @@ public struct Sketch: Codable, Equatable, Sendable {
         metadata: DocumentMetadata? = nil,
         state: SketchState = .draft,
         createdAt: Date,
-        updatedAt: Date
+        updatedAt: Date,
+        unknownFields: [String: JSONValue] = [:]
     ) {
         self.title = title
         self.locked = locked
@@ -275,9 +333,10 @@ public struct Sketch: Codable, Equatable, Sendable {
         self.state = state
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.unknownFields = unknownFields
     }
 
-    private enum CodingKeys: String, CodingKey {
+    private enum CodingKeys: String, CodingKey, CaseIterable {
         case title
         case locked
         case description
@@ -287,6 +346,8 @@ public struct Sketch: Codable, Equatable, Sendable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
+
+    private static let knownKeys = Set(CodingKeys.allCases.map(\.rawValue))
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -298,6 +359,7 @@ public struct Sketch: Codable, Equatable, Sendable {
         state = try container.decodeIfPresent(SketchState.self, forKey: .state) ?? .draft
         createdAt = try CutReadyDocumentDateCodec.decode(from: container, forKey: .createdAt) ?? Date(timeIntervalSince1970: 0)
         updatedAt = try CutReadyDocumentDateCodec.decode(from: container, forKey: .updatedAt) ?? createdAt
+        unknownFields = try UnknownFieldCodec.decode(from: decoder, knownKeys: Self.knownKeys)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -310,6 +372,7 @@ public struct Sketch: Codable, Equatable, Sendable {
         try container.encode(state, forKey: .state)
         try container.encode(CutReadyDocumentDateCodec.string(from: createdAt), forKey: .createdAt)
         try container.encode(CutReadyDocumentDateCodec.string(from: updatedAt), forKey: .updatedAt)
+        try UnknownFieldCodec.encode(unknownFields, to: encoder, knownKeys: Self.knownKeys)
     }
 }
 
