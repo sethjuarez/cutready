@@ -148,8 +148,40 @@ pub struct AppState {
     pub active_agent_runs: Arc<Mutex<HashSet<String>>>,
     /// Cancellation senders for active chat runs, indexed by the frontend's client run ID.
     pub agent_chat_cancellations: AgentChatCancellationRegistry,
-    /// Last chat session summary (updated by frontend, archived on window close).
-    pub last_chat_summary: Mutex<Option<(String, String)>>, // (session_id, summary)
+    /// Last chat session summary (updated by frontend, archived on window close),
+    /// tagged with the project it originated in so archival attributes it correctly.
+    pub last_chat_summary: Mutex<Option<PendingChatSummary>>,
+}
+
+/// A chat summary awaiting archival, tagged with the project it originated in.
+///
+/// The frontend pushes summaries periodically ([`commands::agent::update_chat_summary`])
+/// and the summary may only be archived later — on explicit session end or on window
+/// close. Recording the originating project roots here means a project switch or close
+/// in between can never reattribute the summary to the wrong project.
+#[derive(Debug, Clone)]
+pub struct PendingChatSummary {
+    pub session_id: String,
+    pub summary: String,
+    pub repo_root: std::path::PathBuf,
+    pub root: std::path::PathBuf,
+}
+
+impl PendingChatSummary {
+    /// Choose the roots to archive `session_id` under: the pending summary's own
+    /// origin when it belongs to the same session, otherwise `fallback` (the
+    /// active project). Keeps a summary bound to the project it was produced in
+    /// even after the active project changes.
+    pub fn origin_for(
+        pending: Option<&PendingChatSummary>,
+        session_id: &str,
+        fallback: Option<(std::path::PathBuf, std::path::PathBuf)>,
+    ) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+        match pending {
+            Some(p) if p.session_id == session_id => Some((p.repo_root.clone(), p.root.clone())),
+            _ => fallback,
+        }
+    }
 }
 
 pub struct AgentChatCancellationEntry {
@@ -816,24 +848,18 @@ pub fn run() {
         .on_window_event(|window, event| {
             match event {
                 tauri::WindowEvent::CloseRequested { .. } if window.label() == "main" => {
-                    // Archive any pending chat summary before the window closes
+                    // Archive any pending chat summary before the window closes,
+                    // under the project it originated in (not the currently active
+                    // one, which may have changed since the summary was captured).
                     let app = window.app_handle();
                     if let Some(state) = app.try_state::<AppState>() {
                         let summary = state.last_chat_summary.lock().unwrap().take();
-                        let roots = state
-                            .current_project
-                            .lock()
-                            .unwrap()
-                            .as_ref()
-                            .map(|p| (p.repo_root.clone(), p.root.clone()));
-                        if let (Some((session_id, text)), Some((repo_root, root))) =
-                            (summary, roots)
-                        {
+                        if let Some(pending) = summary {
                             let _ = crate::engine::memory::archive_session(
-                                &repo_root,
-                                &root,
-                                &text,
-                                &session_id,
+                                &pending.repo_root,
+                                &pending.root,
+                                &pending.summary,
+                                &pending.session_id,
                             );
                         }
                     }
@@ -855,4 +881,52 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod pending_summary_tests {
+    use super::PendingChatSummary;
+    use std::path::PathBuf;
+
+    fn summary(session_id: &str) -> PendingChatSummary {
+        PendingChatSummary {
+            session_id: session_id.to_string(),
+            summary: "text".to_string(),
+            repo_root: PathBuf::from("/repo/alpha"),
+            root: PathBuf::from("/repo/alpha"),
+        }
+    }
+
+    #[test]
+    fn origin_prefers_the_pending_summarys_project_when_the_session_matches() {
+        let pending = summary("s1");
+        let fallback = Some((PathBuf::from("/repo/beta"), PathBuf::from("/repo/beta")));
+        let origin = PendingChatSummary::origin_for(Some(&pending), "s1", fallback);
+        assert_eq!(
+            origin,
+            Some((PathBuf::from("/repo/alpha"), PathBuf::from("/repo/alpha"))),
+            "a summary must archive under the project it originated in"
+        );
+    }
+
+    #[test]
+    fn origin_falls_back_to_the_active_project_when_no_pending_summary_matches() {
+        let fallback = Some((PathBuf::from("/repo/beta"), PathBuf::from("/repo/beta")));
+        // No pending summary at all.
+        assert_eq!(
+            PendingChatSummary::origin_for(None, "s1", fallback.clone()),
+            fallback
+        );
+        // Pending summary is for a different session.
+        let other = summary("other");
+        assert_eq!(
+            PendingChatSummary::origin_for(Some(&other), "s1", fallback.clone()),
+            fallback
+        );
+    }
+
+    #[test]
+    fn origin_is_none_when_no_pending_match_and_no_active_project() {
+        assert_eq!(PendingChatSummary::origin_for(None, "s1", None), None);
+    }
 }

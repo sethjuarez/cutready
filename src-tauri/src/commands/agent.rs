@@ -1262,25 +1262,69 @@ pub async fn archive_chat_session(
     summary: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
-        let view = guard.as_ref().ok_or("No project open")?;
-        (view.repo_root.clone(), view.root.clone())
+    // Prefer the originating project recorded with the pending summary, so a
+    // project switch before archival can't reattribute the session; fall back to
+    // the active project when no matching pending origin exists. Only consume the
+    // pending summary when it belongs to this session.
+    let matched = {
+        let mut guard = state.last_chat_summary.lock().unwrap();
+        match guard.as_ref() {
+            Some(p) if p.session_id == session_id => {
+                guard.take().map(|p| (p.repo_root, p.root))
+            }
+            _ => None,
+        }
     };
-    // Clear the pending summary since we're archiving now
-    *state.last_chat_summary.lock().unwrap() = None;
+    let (repo_root, root) = match matched {
+        Some(roots) => roots,
+        None => {
+            let guard = state.current_project.lock().unwrap();
+            let view = guard.as_ref().ok_or("No project open")?;
+            (view.repo_root.clone(), view.root.clone())
+        }
+    };
     crate::engine::memory::archive_session(&repo_root, &root, &summary, &session_id)
 }
 
 /// Update the current chat summary (called periodically by frontend).
-/// Stored in AppState so the Rust-side window close handler can archive it.
+/// Stored in AppState so the Rust-side window close handler can archive it,
+/// tagged with the originating project. The frontend captures the originating
+/// project synchronously with the summary and passes it here, so a project
+/// switch that races this async command can never rebind the summary to the
+/// wrong project.
 #[auditaur_command(skip_all, err)]
 pub async fn update_chat_summary(
     session_id: String,
     summary: String,
+    origin_repo_root: Option<String>,
+    origin_root: Option<String>,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    *state.last_chat_summary.lock().unwrap() = Some((session_id, summary));
+    // Prefer the frontend-supplied origin (captured with the summary). Fall back
+    // to the active project only for older callers that supply no origin.
+    let origin = match (origin_repo_root, origin_root) {
+        (Some(repo_root), Some(root)) if !repo_root.is_empty() && !root.is_empty() => {
+            Some((std::path::PathBuf::from(repo_root), std::path::PathBuf::from(root)))
+        }
+        _ => {
+            let guard = state.current_project.lock().unwrap();
+            guard.as_ref().map(|v| (v.repo_root.clone(), v.root.clone()))
+        }
+    };
+    let mut pending = state.last_chat_summary.lock().unwrap();
+    match origin {
+        Some((repo_root, root)) => {
+            *pending = Some(crate::PendingChatSummary {
+                session_id,
+                summary,
+                repo_root,
+                root,
+            });
+        }
+        // No attributable origin for this update; leave any previously captured
+        // (already project-tagged) summary intact rather than dropping a valid one.
+        None => {}
+    }
     Ok(())
 }
 

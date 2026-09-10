@@ -980,7 +980,10 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   }, [currentProject]);
 
   // Keep Rust-side chat summary in sync so window close can archive reliably.
-  // Updates whenever messages change (debounced by React's batching).
+  // Updates whenever messages change (debounced by React's batching). The
+  // originating project is captured synchronously here (from the same committed
+  // render as the messages) and passed to Rust, so a project switch that races
+  // this async invoke cannot rebind the summary to the wrong project.
   useEffect(() => {
     if (messages.length > 1 && chatSessionPath) {
       const userMsgs = messages.filter((m) => m.role === "user");
@@ -989,10 +992,12 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
         invoke("update_chat_summary", {
           sessionId: chatSessionPath,
           summary: `Topics discussed: ${summary}`,
+          originRepoRoot: currentProject?.repo_root,
+          originRoot: currentProject?.root,
         }).catch(() => {});
       }
     }
-  }, [messages, chatSessionPath]);
+  }, [messages, chatSessionPath, currentProject]);
 
   const systemPrompt = useMemo(() => {
     const agentId = settings.aiSelectedAgent || "planner";
