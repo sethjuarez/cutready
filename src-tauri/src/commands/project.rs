@@ -861,16 +861,48 @@ pub async fn rename_project(
     }
 
     // Rename the folder on disk if the path changed
+    let mut relocated_paths: Option<(std::path::PathBuf, std::path::PathBuf)> = None;
     if new_path != project_path {
         let old_dir = root.join(&project_path);
         let new_dir = root.join(&new_path);
         if new_dir.exists() {
             return Err(format!("Directory '{}' already exists", new_path));
         }
+        // Relocate local runtime state (agent DB, memory, workspace/sidebar state)
+        // before the content move so a live database (active run holding a lock)
+        // rejects the rename up front, leaving the working tree untouched.
+        project::relocate_project_state(&root, &old_dir, &new_dir).map_err(|e| e.to_string())?;
         if old_dir.exists() {
-            std::fs::rename(&old_dir, &new_dir).map_err(|e| e.to_string())?;
+            if let Err(err) = std::fs::rename(&old_dir, &new_dir) {
+                // The content move failed after state relocated — put the runtime
+                // state back so the project stays coherent under its original path.
+                if let Err(state_err) = project::relocate_project_state(&root, &new_dir, &old_dir) {
+                    return Err(format!(
+                        "Rename failed ({err}); runtime state could not be restored to {} ({state_err})",
+                        old_dir.display()
+                    ));
+                }
+                return Err(err.to_string());
+            }
         }
+        relocated_paths = Some((old_dir, new_dir));
     }
+
+    // Helper: unwind a completed path move (content + runtime state) so a later
+    // failure leaves the project fully recoverable under its original path. Any
+    // reverse step that itself fails is reported so a split layout is not hidden.
+    let rollback_move = |relocated: &Option<(std::path::PathBuf, std::path::PathBuf)>| -> Vec<String> {
+        let mut stranded = Vec::new();
+        if let Some((old_dir, new_dir)) = relocated {
+            if new_dir.exists() && std::fs::rename(new_dir, old_dir).is_err() {
+                stranded.push(format!("content at {}", new_dir.display()));
+            }
+            if let Err(state_err) = project::relocate_project_state(&root, new_dir, old_dir) {
+                stranded.push(format!("runtime state ({state_err})"));
+            }
+        }
+        stranded
+    };
 
     // Update manifest: both name and path
     if let Some(mut manifest) = manifest.take() {
@@ -882,7 +914,18 @@ pub async fn rename_project(
             entry.name = new_name.clone();
             entry.path = new_path.clone();
         }
-        project::write_manifest(&root, &manifest).map_err(|e| e.to_string())?;
+        if let Err(err) = project::write_manifest(&root, &manifest) {
+            // Manifest is the source of truth: if it can't record the new path,
+            // move content and runtime state back so nothing dangles.
+            let stranded = rollback_move(&relocated_paths);
+            if stranded.is_empty() {
+                return Err(err.to_string());
+            }
+            return Err(format!(
+                "Manifest update failed ({err}); rollback incomplete, artifacts stranded at: {}",
+                stranded.join(", ")
+            ));
+        }
     }
 
     snapshot_workspace_structure(&root, "Rename workspace project")?;
