@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Download, AlertCircle } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
-import { Dialog } from "./Dialog";
+import { PromptDialog } from "./PromptDialog";
 import { generateSnapshotName } from "../utils/snapshotName";
 
 /**
@@ -23,7 +23,6 @@ export function SnapshotDialog() {
   const [label, setLabel] = useState("");
   const [forkLabel, setForkLabel] = useState("");
   const [saving, setSaving] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   // Auto-generate a snapshot name (and fork label when rewound) on open
   useEffect(() => {
@@ -75,97 +74,54 @@ export function SnapshotDialog() {
     }
   }, [label, forkLabel, isRewound, saveVersion, loadGraphData, loadTimelines, pendingNavAfterSave, pendingTimelineAfterSave, navigateToSnapshot, switchTimeline, close]);
 
-  // Auto-focus and select input when opened
-  useEffect(() => {
-    if (snapshotPromptOpen) {
-      requestAnimationFrame(() => {
-        inputRef.current?.focus();
-        inputRef.current?.select();
-      });
-    }
-  }, [snapshotPromptOpen]);
-
   if (!snapshotPromptOpen) return null;
 
   const willFork = isRewound;
 
   return (
-    <Dialog isOpen={snapshotPromptOpen} onClose={close} align="top" topOffset="20vh" width="w-full max-w-md mx-4">
-      <div className="cr-modal-surface rounded-xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center gap-2.5 px-5 pt-5 pb-3">
-          <div className="p-2 rounded-lg bg-[rgb(var(--color-accent))]/10">
-            <Download className="w-5 h-5" style={{ stroke: "rgb(var(--color-accent))" }} />
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold text-[rgb(var(--color-text))]">Save Snapshot</h2>
-            <p className="text-[11px] text-[rgb(var(--color-text-secondary))]">
-              Save the current state of {isMultiProject ? "this workspace" : "this project"}
-            </p>
-          </div>
+    <PromptDialog
+      open={snapshotPromptOpen}
+      title="Save Snapshot"
+      description={`Save the current state of ${isMultiProject ? "this workspace" : "this project"}`}
+      icon={<Download className="h-5 w-5" />}
+      onClose={close}
+      focusKey={`${snapshotPromptOpen}:${isRewound}`}
+      noticeTone="accent"
+      notice={willFork ? (
+        <div className="flex items-start gap-2 text-[11px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[rgb(var(--color-accent))]" />
+          <span>
+            <span className="mb-0.5 block font-medium text-[rgb(var(--color-accent))]">Creating a new branch</span>
+            Your changes will be saved on a separate timeline, so the original history stays safe.
+          </span>
         </div>
-
-        {/* Body */}
-        <div className="px-5 pb-5 flex flex-col gap-3">
-          {/* Fork warning */}
-          {willFork && (
-            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-[rgb(var(--color-accent))]/10 border border-[rgb(var(--color-accent))]/20">
-              <AlertCircle className="w-3.5 h-3.5 text-[rgb(var(--color-accent))] shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <div className="text-[11px] font-medium text-[rgb(var(--color-accent))] mb-0.5">
-                  Creating a new branch
-                </div>
-                <div className="text-[10px] text-[rgb(var(--color-text-secondary))] mb-2">
-                  Your changes will be saved on a separate timeline, so the original history stays safe.
-                </div>
-                <input
-                  type="text"
-                  value={forkLabel}
-                  onChange={(e) => setForkLabel(e.target.value)}
-                  placeholder="e.g. Alternative intro, V2 approach..."
-                  className="w-full px-2.5 py-1.5 rounded-md bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/20 text-xs text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Snapshot name */}
-          <div>
-            <label htmlFor="snapshot-name-input" className="block text-xs font-medium text-[rgb(var(--color-text-secondary))] mb-1.5">
-              Snapshot name
-            </label>
-            <input
-              id="snapshot-name-input"
-              ref={inputRef}
-              type="text"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSave();
-              }}
-              placeholder="e.g. Added intro sketch, refined transitions..."
-              className="w-full px-3 py-2 rounded-lg bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-sm text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-accent))]/40"
-            />
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-2 pt-1">
-            <button
-              onClick={close}
-              className="px-3 py-1.5 rounded-lg text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={!label.trim() || (willFork && !forkLabel.trim()) || saving}
-            className="px-4 py-1.5 rounded-lg text-xs font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-40 transition-colors"
-            >
-              {saving ? "Saving..." : "Save Snapshot"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </Dialog>
+      ) : undefined}
+      fields={[
+        {
+          id: "snapshot-name-input",
+          label: "Snapshot name",
+          value: label,
+          onChange: setLabel,
+          placeholder: "e.g. Added intro sketch, refined transitions...",
+        },
+        ...(willFork ? [{
+          id: "snapshot-fork-label-input",
+          label: "New timeline name",
+          value: forkLabel,
+          onChange: setForkLabel,
+          placeholder: "e.g. Alternative intro, V2 approach...",
+        }] : []),
+      ]}
+      actions={[
+        { id: "cancel", label: "Cancel", onSelect: close },
+        {
+          id: "save",
+          label: saving ? "Saving..." : "Save Snapshot",
+          onSelect: handleSave,
+          variant: "primary",
+          disabled: !label.trim() || (willFork && !forkLabel.trim()) || saving,
+        },
+      ]}
+    />
   );
 }

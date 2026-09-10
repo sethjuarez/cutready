@@ -29,7 +29,7 @@ import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
 import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
 import { SketchPickerItem } from "./SketchCard";
-import { SketchPreview } from "./SketchPreview";
+import { PresentationShell as SketchPreview } from "./presentation/PresentationShell";
 import { ScriptTable } from "./ScriptTable";
 import { useConfirmDialog } from "./ConfirmDialog";
 import { exportStoryboardToWord, type WordOrientation } from "../utils/exportToWord";

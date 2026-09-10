@@ -10,7 +10,7 @@ import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
 import { ScriptTable } from "./ScriptTable";
 import { ProjectImage } from "./ProjectImage";
 import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
-import { SketchPreview } from "./SketchPreview";
+import { PresentationShell as SketchPreview } from "./presentation/PresentationShell";
 import { DocumentHeader } from "./DocumentHeader";
 import { Dialog } from "./Dialog";
 import { FieldAiButton } from "./FieldAiButton";

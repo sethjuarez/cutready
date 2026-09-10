@@ -64,14 +64,32 @@ export function DocumentToolbar({
   lockLabel,
   unlockLabel,
 }: DocumentToolbarProps) {
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const [compactActions, setCompactActions] = useState(false);
   const overflowGroups: ToolbarOverflowGroup[] = [
     { id: "present", label: "Present", icon: <Monitor className="h-3.5 w-3.5" />, actions: presentActions },
     { id: "ai", label: "AI assist", icon: <Sparkles className="h-3.5 w-3.5" />, actions: aiActions },
     { id: "export", label: "Export", icon: <Download className="h-3.5 w-3.5" />, actions: exportActions },
   ].filter((group) => group.actions.length > 0);
 
+  useEffect(() => {
+    const toolbar = toolbarRef.current;
+    const container = toolbar?.closest(".document-header");
+    if (!container || typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(([entry]) => {
+      const width = entry.contentRect.width;
+      setCompactActions((current) => width < 736 || (current && width < 776));
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <div className="flex max-w-full shrink-0 flex-nowrap items-center justify-end gap-1 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/80 p-1 pr-2">
+    <div
+      ref={toolbarRef}
+      className="flex max-w-full shrink-0 flex-nowrap items-center justify-end gap-1 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/80 p-1 pr-2"
+    >
       {modeActions.length > 0 && <ToolbarSegmentedGroup actions={modeActions} />}
 
       {showRecord && (
@@ -87,27 +105,29 @@ export function DocumentToolbar({
         </button>
       )}
 
-      <ToolbarMenu label="Present" icon={<Monitor className="h-3.5 w-3.5" />} actions={presentActions} className="document-toolbar-wide-action" />
+      {compactActions ? (
+        <ToolbarOverflowMenu groups={overflowGroups} />
+      ) : (
+        <>
+          <ToolbarMenu label="Present" icon={<Monitor className="h-3.5 w-3.5" />} actions={presentActions} />
 
-      {aiActions.length > 0 && (
-        <ToolbarMenu
-          label="AI"
-          icon={<Sparkles className="h-3.5 w-3.5" />}
-          actions={aiActions}
-          className="document-toolbar-wide-action"
-        />
+          {aiActions.length > 0 && (
+            <ToolbarMenu
+              label="AI"
+              icon={<Sparkles className="h-3.5 w-3.5" />}
+              actions={aiActions}
+            />
+          )}
+
+          {exportActions.length > 0 && (
+            <ToolbarMenu
+              label="Export"
+              icon={<Download className="h-3.5 w-3.5" />}
+              actions={exportActions}
+            />
+          )}
+        </>
       )}
-
-      {exportActions.length > 0 && (
-        <ToolbarMenu
-          label="Export"
-          icon={<Download className="h-3.5 w-3.5" />}
-          actions={exportActions}
-          className="document-toolbar-wide-action"
-        />
-      )}
-
-      <ToolbarOverflowMenu groups={overflowGroups} />
 
       <button
         type="button"
@@ -155,7 +175,7 @@ function ToolbarOverflowMenu({ groups }: { groups: ToolbarOverflowGroup[] }) {
   if (!enabled) return null;
 
   return (
-    <div ref={ref} className="document-toolbar-overflow relative">
+    <div ref={ref} className="relative">
       <button
         type="button"
         onClick={() => {
@@ -241,7 +261,6 @@ interface ToolbarMenuProps {
   label: string;
   icon: ReactNode;
   actions: DocumentToolbarAction[];
-  className?: string;
 }
 
 interface ToolbarOverflowGroup {
@@ -251,7 +270,7 @@ interface ToolbarOverflowGroup {
   actions: DocumentToolbarAction[];
 }
 
-function ToolbarMenu({ label, icon, actions, className = "" }: ToolbarMenuProps) {
+function ToolbarMenu({ label, icon, actions }: ToolbarMenuProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const enabled = actions.length > 0;
@@ -281,7 +300,7 @@ function ToolbarMenu({ label, icon, actions, className = "" }: ToolbarMenuProps)
   if (!enabled) return null;
 
   return (
-    <div ref={ref} className={`relative ${className}`}>
+    <div ref={ref} className="relative">
       <button
         type="button"
         onClick={() => {

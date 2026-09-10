@@ -479,6 +479,16 @@ const WORKSPACE_KEYS: (keyof WorkspaceSettings)[] = [
   "workspaceTypingOverlayFontScale",
 ];
 
+function pruneWorkspaceSettings(data: Record<string, unknown>): Record<string, unknown> {
+  const pruned: Record<string, unknown> = {};
+  for (const key of WORKSPACE_KEYS) {
+    if (data[key] !== null && data[key] !== undefined && !isSecretKey(key)) {
+      pruned[key] = data[key];
+    }
+  }
+  return pruned;
+}
+
 function providerLabel(provider: AiProviderKind): string {
   switch (provider) {
     case "microsoft_foundry": return "Microsoft Foundry";
@@ -771,10 +781,11 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   _loadWorkspaceSettings: async () => {
     try {
       const data = await invoke<Record<string, unknown>>("get_workspace_settings");
+      const pruned = pruneWorkspaceSettings(data);
       const ws = { ...defaultWorkspaceSettings };
       for (const key of WORKSPACE_KEYS) {
-        if (data[key] !== null && data[key] !== undefined) {
-          (ws as Record<string, unknown>)[key] = data[key];
+        if (pruned[key] !== null && pruned[key] !== undefined) {
+          (ws as Record<string, unknown>)[key] = pruned[key];
         }
       }
       set((state) => ({ settings: { ...state.settings, ...ws }, workspaceLoaded: true }));
@@ -870,11 +881,12 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       }
       try {
         const data = await invoke<Record<string, unknown>>("get_workspace_settings");
+        const pruned = pruneWorkspaceSettings(data);
         // Don't persist secrets in workspace settings file
         if (!isSecretKey(key as string)) {
-          data[key] = value;
+          pruned[key] = value;
         }
-        await invoke("set_workspace_settings", { settings: data });
+        await invoke("set_workspace_settings", { settings: pruned });
       } catch {
         // No repo open — setting stored in memory only
       }

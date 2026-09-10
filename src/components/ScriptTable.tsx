@@ -41,6 +41,8 @@ import {
   Type,
   type LucideIcon,
 } from "lucide-react";
+import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
 import type { MotionPoint, PlanningCellField, PlanningRow, TypingSpot } from "../types/sketch";
 import { normalizeDocument } from "@elucim/dsl";
 import type { CutReadyElucimDocument } from "../types/elucim";
@@ -48,7 +50,8 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { useProjectImage } from "../hooks/useProjectImage";
 import { parseDurationSeconds } from "../utils/documentMetadata";
 import { useConfirmDialog } from "./ConfirmDialog";
-import { MarkdownPreview, continueMarkdownList } from "./MarkdownText";
+import { SafeMarkdown } from "./SafeMarkdown";
+import { continueMarkdownList } from "../utils/markdownList";
 
 
 const VisualCell = lazy(() => import("./VisualCell"));
@@ -927,7 +930,9 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                     <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">Narrative</div>
                     <div className="max-h-24 overflow-y-auto text-xs leading-5 text-[rgb(var(--color-text))]">
                       {rows[lightboxImage.rowIndex]?.narrative ? (
-                        <MarkdownPreview value={rows[lightboxImage.rowIndex].narrative} placeholder="No narrative yet." />
+                        <SafeMarkdown placeholder="No narrative yet." remarkPlugins={[remarkGfm, remarkBreaks]}>
+                          {rows[lightboxImage.rowIndex].narrative}
+                        </SafeMarkdown>
                       ) : (
                         <span className="text-[rgb(var(--color-text-secondary))]">No narrative yet.</span>
                       )}
@@ -937,7 +942,9 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                     <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">Actions</div>
                     <div className="max-h-24 overflow-y-auto text-xs leading-5 text-[rgb(var(--color-text))]">
                       {rows[lightboxImage.rowIndex]?.demo_actions ? (
-                        <MarkdownPreview value={rows[lightboxImage.rowIndex].demo_actions} placeholder="No actions yet." />
+                        <SafeMarkdown placeholder="No actions yet." remarkPlugins={[remarkGfm, remarkBreaks]}>
+                          {rows[lightboxImage.rowIndex].demo_actions}
+                        </SafeMarkdown>
                       ) : (
                         <span className="text-[rgb(var(--color-text-secondary))]">No actions yet.</span>
                       )}
@@ -1979,11 +1986,13 @@ function MarkdownCell({
           }
         }}
       >
-        <MarkdownPreview
-          value={localValue}
+        <SafeMarkdown
           placeholder={placeholder}
           placeholderClassName="text-[rgb(var(--color-text-secondary))] opacity-40"
-        />
+          remarkPlugins={[remarkGfm, remarkBreaks]}
+        >
+          {localValue}
+        </SafeMarkdown>
       </div>
     );
   }

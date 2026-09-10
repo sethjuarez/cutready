@@ -10,6 +10,7 @@
  * browser via Tauri's shell plugin instead of navigating the webview.
  */
 import { useCallback, useMemo } from "react";
+import type { ReactNode } from "react";
 import ReactMarkdown, { type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -28,6 +29,9 @@ async function openExternal(url: string) {
 type SafeMarkdownProps = Options & {
   /** Extra class applied to the error-fallback wrapper (not the markdown). */
   fallbackClassName?: string;
+  /** Content rendered when the markdown string is empty. */
+  placeholder?: ReactNode;
+  placeholderClassName?: string;
 };
 
 export function SafeMarkdown({
@@ -35,6 +39,8 @@ export function SafeMarkdown({
   remarkPlugins = [remarkGfm],
   rehypePlugins = [rehypeRaw],
   fallbackClassName,
+  placeholder,
+  placeholderClassName = "text-[rgb(var(--color-text-secondary))]/40",
   components,
   ...rest
 }: SafeMarkdownProps) {
@@ -71,6 +77,10 @@ export function SafeMarkdown({
     () => ({ a: ExternalLink, ...components }),
     [ExternalLink, components],
   );
+
+  if (typeof children === "string" && !children.trim() && placeholder !== undefined) {
+    return <span className={placeholderClassName}>{placeholder}</span>;
+  }
 
   return (
     <ErrorBoundary
