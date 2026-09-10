@@ -1644,7 +1644,21 @@ fn spawn_capture_process(
         }
     }
 
-    let args = build_ffmpeg_capture_args(settings, output_path)?;
+    // Resolve the stored microphone selection against live device discovery so
+    // the FFmpeg backend receives a backend-appropriate selector (DirectShow
+    // friendly name on Windows, avfoundation index on macOS). Only discover when
+    // a microphone is actually selected.
+    let devices = if settings
+        .mic_device_id
+        .as_deref()
+        .map(|selection| !selection.trim().is_empty())
+        .unwrap_or(false)
+    {
+        discover_recording_devices().devices
+    } else {
+        Vec::new()
+    };
+    let args = build_ffmpeg_capture_args(settings, output_path, &devices)?;
     write_ffmpeg_log_header(log_path, &args)?;
     log::info!(
         "[recording] starting FFmpeg capture capture_area={:?} frame_rate={} output={}",
@@ -2050,9 +2064,139 @@ fn run_ffmpeg_vec(args: Vec<String>) -> anyhow::Result<FfmpegCommandOutput> {
     })
 }
 
+/// Failure resolving a stored microphone selection into a concrete backend
+/// selector. Callers surface this as an explicit capture error rather than
+/// silently recording from the wrong microphone.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MicrophoneResolveError {
+    /// The stored selection matched no discovered microphone for this backend.
+    Unavailable(String),
+    /// The stored selection resolved to a selector shared by several
+    /// microphones, so the backend cannot pick one unambiguously.
+    Ambiguous(String),
+}
+
+impl std::fmt::Display for MicrophoneResolveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MicrophoneResolveError::Unavailable(selection) => write!(
+                f,
+                "selected microphone '{selection}' was not found among the available capture devices"
+            ),
+            MicrophoneResolveError::Ambiguous(selection) => write!(
+                f,
+                "selected microphone '{selection}' matched more than one capture device"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for MicrophoneResolveError {}
+
+/// Resolve a stored microphone selection to an FFmpeg DirectShow `audio=`
+/// selector (Windows).
+///
+/// Windows device discovery returns native WASAPI endpoint ids as `id` and the
+/// friendly device name as `label`, but FFmpeg's DirectShow demuxer selects a
+/// microphone by its friendly name. Map the stored selection — a WASAPI id, or
+/// a selection already stored as a DirectShow/friendly name — to the matching
+/// device's `label`. When discovery yields no microphones (e.g. enumeration
+/// failed), fall back to the literal selection instead of guessing.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn resolve_directshow_microphone(
+    selection: &str,
+    devices: &[RecordingDeviceInfo],
+) -> Result<String, MicrophoneResolveError> {
+    let selection = selection.trim();
+    let mics: Vec<&RecordingDeviceInfo> = devices
+        .iter()
+        .filter(|device| device.kind == RecordingDeviceKind::Microphone)
+        .collect();
+
+    if mics.is_empty() {
+        // No discovery to resolve against; honor the user's literal selection.
+        return Ok(selection.to_string());
+    }
+
+    // Prefer an exact WASAPI-id match (the common handoff), then fall back to a
+    // friendly-name match for selections already stored as DirectShow names.
+    let device = mics
+        .iter()
+        .find(|device| device.id == selection)
+        .or_else(|| mics.iter().find(|device| device.label == selection));
+
+    let Some(device) = device else {
+        return Err(MicrophoneResolveError::Unavailable(selection.to_string()));
+    };
+
+    // DirectShow selects purely by friendly name; if several microphones share
+    // that name the demuxer cannot disambiguate, so reject rather than gamble.
+    let sharing_name = mics
+        .iter()
+        .filter(|candidate| candidate.label == device.label)
+        .count();
+    if sharing_name > 1 {
+        return Err(MicrophoneResolveError::Ambiguous(selection.to_string()));
+    }
+
+    Ok(device.label.clone())
+}
+
+/// Resolve a stored microphone selection to an AVFoundation audio device index
+/// (macOS).
+///
+/// FFmpeg's avfoundation input addresses audio devices by their ordinal among
+/// the discovered microphones, but device discovery stores the device *name* as
+/// `id`. Map the stored selection (a device name, or a legacy numeric index) to
+/// its position among microphones. A selection that resolves to nothing is an
+/// error rather than a silent fall back to device index 0.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn resolve_avfoundation_microphone(
+    selection: &str,
+    devices: &[RecordingDeviceInfo],
+) -> Result<u32, MicrophoneResolveError> {
+    let selection = selection.trim();
+    let mics: Vec<&RecordingDeviceInfo> = devices
+        .iter()
+        .filter(|device| device.kind == RecordingDeviceKind::Microphone)
+        .collect();
+
+    // Legacy back-compat: a selection already stored as a numeric index is used
+    // as-is when it falls within the discovered range (or when discovery is
+    // unavailable and we cannot validate it).
+    if let Ok(index) = selection.parse::<u32>() {
+        if mics.is_empty() || (index as usize) < mics.len() {
+            return Ok(index);
+        }
+        return Err(MicrophoneResolveError::Unavailable(selection.to_string()));
+    }
+
+    if mics.is_empty() {
+        return Err(MicrophoneResolveError::Unavailable(selection.to_string()));
+    }
+
+    // AVFoundation stores the device name as both `id` and `label`, so two
+    // microphones sharing a name are indistinguishable by a legacy name
+    // selection; reject rather than silently record the first, mirroring the
+    // DirectShow resolver's ambiguity handling.
+    let matches: Vec<usize> = mics
+        .iter()
+        .enumerate()
+        .filter(|(_, device)| device.id == selection || device.label == selection)
+        .map(|(index, _)| index)
+        .collect();
+
+    match matches.as_slice() {
+        [] => Err(MicrophoneResolveError::Unavailable(selection.to_string())),
+        [index] => Ok(*index as u32),
+        _ => Err(MicrophoneResolveError::Ambiguous(selection.to_string())),
+    }
+}
+
 fn build_ffmpeg_capture_args(
     settings: &RecorderSettings,
     output_path: &Path,
+    devices: &[RecordingDeviceInfo],
 ) -> anyhow::Result<Vec<String>> {
     if settings.capture_source != CaptureSource::FullScreen {
         anyhow::bail!("Only full-screen recording is available in this build");
@@ -2101,11 +2245,9 @@ fn build_ffmpeg_capture_args(
 
         // avfoundation input format: "video_device_index:audio_device_index"
         if has_mic {
-            let mic_index = settings
-                .mic_device_id
-                .as_ref()
-                .and_then(|d| d.parse::<u32>().ok())
-                .unwrap_or(0);
+            let selection = settings.mic_device_id.as_deref().unwrap_or("");
+            let mic_index = resolve_avfoundation_microphone(selection, devices)
+                .map_err(|err| anyhow::anyhow!(err))?;
             args.extend(["-i".to_string(), format!("{screen_avf_index}:{mic_index}")]);
         } else {
             args.extend(["-i".to_string(), format!("{screen_avf_index}:none")]);
@@ -2188,6 +2330,7 @@ fn build_ffmpeg_capture_args(
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
         let _ = output_path;
+        let _ = devices;
         return Err(anyhow::anyhow!(
             "Recording capture is not implemented for this platform yet"
         ));
@@ -2275,11 +2418,13 @@ fn build_ffmpeg_capture_args(
             .as_ref()
             .map(|device| !device.trim().is_empty())
             .unwrap_or(false);
-        if let Some(device) = settings
+        if let Some(selection) = settings
             .mic_device_id
             .as_ref()
             .filter(|device| !device.trim().is_empty())
         {
+            let device = resolve_directshow_microphone(selection, devices)
+                .map_err(|err| anyhow::anyhow!(err))?;
             args.extend([
                 "-f".to_string(),
                 "dshow".to_string(),
@@ -2791,6 +2936,148 @@ mod tests {
         }
     }
 
+    fn mic_device(id: &str, label: &str) -> RecordingDeviceInfo {
+        RecordingDeviceInfo {
+            id: id.into(),
+            label: label.into(),
+            kind: RecordingDeviceKind::Microphone,
+            is_default: false,
+            camera_formats: Vec::new(),
+        }
+    }
+
+    fn camera_device(id: &str, label: &str) -> RecordingDeviceInfo {
+        RecordingDeviceInfo {
+            id: id.into(),
+            label: label.into(),
+            kind: RecordingDeviceKind::Camera,
+            is_default: false,
+            camera_formats: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn directshow_resolver_maps_wasapi_id_to_friendly_name() {
+        let devices = vec![
+            camera_device("cam-0", "HD Webcam"),
+            mic_device("{0.0.1.00000000}.{endpoint}", "Microphone (RODECaster Pro II)"),
+        ];
+
+        let selector =
+            resolve_directshow_microphone("{0.0.1.00000000}.{endpoint}", &devices).unwrap();
+
+        assert_eq!(selector, "Microphone (RODECaster Pro II)");
+    }
+
+    #[test]
+    fn directshow_resolver_accepts_selection_already_stored_as_friendly_name() {
+        let devices = vec![mic_device("{0.0.1.00000000}.{endpoint}", "Studio Microphone")];
+
+        let selector = resolve_directshow_microphone("Studio Microphone", &devices).unwrap();
+
+        assert_eq!(selector, "Studio Microphone");
+    }
+
+    #[test]
+    fn directshow_resolver_passes_through_when_discovery_is_empty() {
+        let selector = resolve_directshow_microphone("Studio Microphone", &[]).unwrap();
+
+        assert_eq!(selector, "Studio Microphone");
+    }
+
+    #[test]
+    fn directshow_resolver_rejects_unknown_selection() {
+        let devices = vec![mic_device("id-a", "Microphone A")];
+
+        let err = resolve_directshow_microphone("id-missing", &devices).unwrap_err();
+
+        assert_eq!(err, MicrophoneResolveError::Unavailable("id-missing".into()));
+    }
+
+    #[test]
+    fn directshow_resolver_rejects_ambiguous_shared_friendly_name() {
+        let devices = vec![
+            mic_device("id-a", "USB Microphone"),
+            mic_device("id-b", "USB Microphone"),
+        ];
+
+        let err = resolve_directshow_microphone("USB Microphone", &devices).unwrap_err();
+
+        assert_eq!(
+            err,
+            MicrophoneResolveError::Ambiguous("USB Microphone".into())
+        );
+    }
+
+    #[test]
+    fn avfoundation_resolver_maps_second_named_mic_to_its_index() {
+        let devices = vec![
+            mic_device("Built-in Microphone", "Built-in Microphone"),
+            mic_device("RODECaster Pro II", "RODECaster Pro II"),
+        ];
+
+        let index = resolve_avfoundation_microphone("RODECaster Pro II", &devices).unwrap();
+
+        assert_eq!(index, 1);
+    }
+
+    #[test]
+    fn avfoundation_resolver_ignores_non_microphone_devices_when_indexing() {
+        // Cameras must not shift audio device indices.
+        let devices = vec![
+            camera_device("FaceTime HD Camera", "FaceTime HD Camera"),
+            mic_device("Built-in Microphone", "Built-in Microphone"),
+            mic_device("External Mic", "External Mic"),
+        ];
+
+        let index = resolve_avfoundation_microphone("External Mic", &devices).unwrap();
+
+        assert_eq!(index, 1);
+    }
+
+    #[test]
+    fn avfoundation_resolver_accepts_legacy_numeric_index() {
+        let devices = vec![
+            mic_device("Built-in Microphone", "Built-in Microphone"),
+            mic_device("External Mic", "External Mic"),
+        ];
+
+        let index = resolve_avfoundation_microphone("1", &devices).unwrap();
+
+        assert_eq!(index, 1);
+    }
+
+    #[test]
+    fn avfoundation_resolver_rejects_out_of_range_numeric_index() {
+        let devices = vec![mic_device("Built-in Microphone", "Built-in Microphone")];
+
+        let err = resolve_avfoundation_microphone("3", &devices).unwrap_err();
+
+        assert_eq!(err, MicrophoneResolveError::Unavailable("3".into()));
+    }
+
+    #[test]
+    fn avfoundation_resolver_rejects_unknown_named_selection() {
+        let devices = vec![mic_device("Built-in Microphone", "Built-in Microphone")];
+
+        let err = resolve_avfoundation_microphone("Ghost Mic", &devices).unwrap_err();
+
+        assert_eq!(err, MicrophoneResolveError::Unavailable("Ghost Mic".into()));
+    }
+
+    #[test]
+    fn avfoundation_resolver_rejects_duplicate_named_microphones() {
+        // Two mics share a name, so a legacy name selection cannot pick one.
+        let devices = vec![
+            mic_device("USB Audio", "USB Audio"),
+            mic_device("USB Audio", "USB Audio"),
+        ];
+
+        let err = resolve_avfoundation_microphone("USB Audio", &devices).unwrap_err();
+
+        assert_eq!(err, MicrophoneResolveError::Ambiguous("USB Audio".into()));
+    }
+
     #[test]
     fn prompter_script_uses_narrative_and_action_cues() {
         let mut sketch = Sketch::new("Intro");
@@ -3149,10 +3436,17 @@ Error opening input file dummy.
     #[test]
     fn builds_full_screen_ffmpeg_capture_args_with_microphone() {
         let mut settings = default_settings();
-        settings.mic_device_id = Some("Microphone (RODECaster Pro II Main Stereo)".into());
+        // The stored selection is a native WASAPI endpoint id; discovery maps it
+        // to the DirectShow friendly name FFmpeg actually selects by.
+        settings.mic_device_id = Some("{0.0.1.00000000}.{rodecaster-endpoint}".into());
+        let devices = vec![mic_device(
+            "{0.0.1.00000000}.{rodecaster-endpoint}",
+            "Microphone (RODECaster Pro II Main Stereo)",
+        )];
 
         let args =
-            build_ffmpeg_capture_args(&settings, Path::new("C:\\takes\\screen.mkv")).unwrap();
+            build_ffmpeg_capture_args(&settings, Path::new("C:\\takes\\screen.mkv"), &devices)
+                .unwrap();
 
         assert!(args.windows(2).any(|pair| pair == ["-f", "gdigrab"]));
         assert!(args.windows(2).any(|pair| pair == ["-i", "desktop"]));
@@ -3176,7 +3470,7 @@ Error opening input file dummy.
         let mut settings = default_settings();
         settings.frame_rate = 60;
 
-        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mkv")).unwrap();
+        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mkv"), &[]).unwrap();
 
         assert!(args.windows(2).any(|pair| pair == ["-framerate", "60"]));
         assert!(args.windows(2).any(|pair| pair == ["-r", "60"]));
@@ -3190,7 +3484,7 @@ Error opening input file dummy.
         settings.frame_rate = 60;
         settings.mic_device_id = Some("Studio Microphone".into());
 
-        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mp4")).unwrap();
+        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mp4"), &[]).unwrap();
 
         assert!(args.windows(2).any(|pair| pair == ["-framerate", "60"]));
         assert!(!args.windows(2).any(|pair| pair == ["-r", "60"]));
@@ -3323,7 +3617,7 @@ Error opening input file dummy.
             dxgi_output_index: None,
         });
 
-        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mkv")).unwrap();
+        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mkv"), &[]).unwrap();
 
         assert!(args.windows(2).any(|pair| pair == ["-offset_x", "1920"]));
         assert!(args.windows(2).any(|pair| pair == ["-offset_y", "0"]));
@@ -3349,7 +3643,7 @@ Error opening input file dummy.
             dxgi_output_index: None,
         });
 
-        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mp4")).unwrap();
+        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mp4"), &[]).unwrap();
 
         assert!(args.windows(2).any(|pair| pair == ["-f", "gdigrab"]));
         assert!(args.windows(2).any(|pair| pair == ["-offset_x", "-1920"]));
@@ -3379,7 +3673,7 @@ Error opening input file dummy.
             dxgi_output_index: None,
         });
 
-        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mp4")).unwrap();
+        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mp4"), &[]).unwrap();
 
         assert!(args.windows(2).any(|pair| pair == ["-f", "lavfi"]));
         assert!(args.windows(2).any(|pair| {
@@ -3415,7 +3709,7 @@ Error opening input file dummy.
             dxgi_output_index: Some(1),
         });
 
-        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mp4")).unwrap();
+        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mp4"), &[]).unwrap();
 
         assert!(args.windows(2).any(|pair| pair == ["-f", "lavfi"]));
         assert!(args.windows(2).any(|pair| {
@@ -3481,7 +3775,7 @@ Error opening input file dummy.
             dxgi_output_index: Some(1),
         });
 
-        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mp4")).unwrap();
+        let args = build_ffmpeg_capture_args(&settings, Path::new("screen.mp4"), &[]).unwrap();
 
         assert!(args.windows(2).any(|pair| pair == ["-f", "gdigrab"]));
         assert!(args.windows(2).any(|pair| pair == ["-offset_x", "10"]));
@@ -3494,7 +3788,7 @@ Error opening input file dummy.
         let mut settings = default_settings();
         settings.capture_source = CaptureSource::Region;
 
-        let err = build_ffmpeg_capture_args(&settings, Path::new("screen.mkv")).unwrap_err();
+        let err = build_ffmpeg_capture_args(&settings, Path::new("screen.mkv"), &[]).unwrap_err();
 
         assert!(err.to_string().contains("Only full-screen recording"));
     }
