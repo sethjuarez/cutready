@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::engine::agent::execution::{
-    parse_tool_arguments, ContentPart, ImageUrl, ResourceOperation, ToolCall, ToolOutput,
-    TouchedResource, VerificationResult, VerificationStatus,
+    parse_tool_arguments, ContentPart, ImageUrl, ResourceOperation, ToolCall, ToolExecutionStatus,
+    ToolOutput, TouchedResource, VerificationResult, VerificationStatus,
 };
 use crate::engine::draftline_adapter::CutReadyDraftlineAdapter;
 use crate::engine::project;
@@ -805,15 +805,15 @@ fn run_elucim_bridge(payload: &Value) -> Result<Value, String> {
     Ok(response)
 }
 
-fn exec_elucim_agent_operation(args: &Value) -> String {
+fn exec_elucim_agent_operation(args: &Value) -> ToolOutput {
     if !elucim_bridge_enabled() {
-        return "Elucim agent bridge is disabled. Set CUTREADY_ELUCIM_BRIDGE=1 to enable local authoring helpers.".into();
+        return ToolOutput::failed("Elucim agent bridge is disabled. Set CUTREADY_ELUCIM_BRIDGE=1 to enable local authoring helpers.");
     }
     match run_elucim_bridge(args) {
-        Ok(response) => {
-            serde_json::to_string_pretty(&response).unwrap_or_else(|_| response.to_string())
-        }
-        Err(e) => format!("Elucim bridge error: {e}"),
+        Ok(response) => ToolOutput::from(
+            serde_json::to_string_pretty(&response).unwrap_or_else(|_| response.to_string()),
+        ),
+        Err(e) => ToolOutput::failed(format!("Elucim bridge error: {e}")),
     }
 }
 
@@ -886,7 +886,7 @@ pub fn execute_tool(
     );
 
     if !mutation_tools_enabled && !is_read_only_tool(&call.function.name) {
-        return ToolOutput::from(format!(
+        return ToolOutput::failed(format!(
             "Error: {} is disabled by the current AI mutation guard. In Ask Mode, approve the permission prompt before applying changes or switch Settings > AI apply behavior to Auto-apply AI changes.",
             call.function.name
         ));
@@ -899,36 +899,30 @@ pub fn execute_tool(
                 ToolOutput::from(exec_create_project(project_root, &args))
             }
             "create_project" => {
-                ToolOutput::from("Error: create_project is only available to the Writer agent")
+                ToolOutput::failed("Error: create_project is only available to the Writer agent")
             }
             "add_items_to_project" => {
                 if project_workspace_tools_enabled {
                     ToolOutput::from(exec_add_items_to_project(project_root, &args))
                 } else {
-                    ToolOutput::from(
+                    ToolOutput::failed(
                         "Error: add_items_to_project is only available to the Writer agent",
                     )
                 }
             }
             "read_note" => exec_read_note(project_root, &args, vision_enabled),
-            "write_note" => ToolOutput::from(exec_write_note(project_root, &args)),
+            "write_note" => exec_write_note(project_root, &args),
             "read_sketch" => exec_read_sketch(project_root, &args, vision_enabled),
-            "write_sketch" => ToolOutput::from(exec_write_sketch(project_root, &args)),
-            "update_planning_row" => {
-                ToolOutput::from(exec_update_planning_row(project_root, &args))
-            }
-            "set_row_visual" => ToolOutput::from(exec_set_row_visual(project_root, &args)),
-            "review_row_visual" => ToolOutput::from(exec_review_row_visual(project_root, &args)),
-            "apply_row_visual_nudge" => {
-                ToolOutput::from(exec_apply_row_visual_nudge(project_root, &args))
-            }
-            "apply_row_visual_command" => {
-                ToolOutput::from(exec_apply_row_visual_command(project_root, &args))
-            }
+            "write_sketch" => exec_write_sketch(project_root, &args),
+            "update_planning_row" => exec_update_planning_row(project_root, &args),
+            "set_row_visual" => exec_set_row_visual(project_root, &args),
+            "review_row_visual" => exec_review_row_visual(project_root, &args),
+            "apply_row_visual_nudge" => exec_apply_row_visual_nudge(project_root, &args),
+            "apply_row_visual_command" => exec_apply_row_visual_command(project_root, &args),
             "design_plan" => ToolOutput::from(exec_design_plan(project_root, &args)),
-            "elucim_agent_operation" => ToolOutput::from(exec_elucim_agent_operation(&args)),
-            "read_storyboard" => ToolOutput::from(exec_read_storyboard(project_root, &args)),
-            "write_storyboard" => ToolOutput::from(exec_write_storyboard(project_root, &args)),
+            "elucim_agent_operation" => exec_elucim_agent_operation(&args),
+            "read_storyboard" => exec_read_storyboard(project_root, &args),
+            "write_storyboard" => exec_write_storyboard(project_root, &args),
             "recall_memory" => ToolOutput::from(exec_recall_memory(repo_root, project_root, &args)),
             "save_memory" => ToolOutput::from(exec_save_memory(repo_root, project_root, &args)),
             "fetch_url" => {
@@ -978,7 +972,7 @@ pub fn execute_tool(
                     })
                 }))
             }
-            other => ToolOutput::from(format!("Unknown tool: {other}")),
+            other => ToolOutput::failed(format!("Unknown tool: {other}")),
         }
     }));
 
@@ -1001,11 +995,21 @@ pub fn execute_tool(
                     "panic": msg,
                 }),
             );
-            ToolOutput::from(format!("Error: internal tool panic: {msg}"))
+            ToolOutput::failed(format!("Error: internal tool panic: {msg}"))
         }
     };
 
     let elapsed = start.elapsed();
+
+    // Resolve the explicit, host-owned outcome once. A producer that set an
+    // explicit status (write/read failures, permission denials, validation) is
+    // authoritative; only when a producer left it unknown do we fall back to the
+    // legacy text classifier. Every returned output then carries an explicit
+    // status, so downstream consumers never have to re-derive it from text.
+    let status = output
+        .status()
+        .unwrap_or_else(|| classify_tool_text(output.text()));
+    let output = output.with_status(status);
     let result_text = output.text();
     log::debug!(
         "[tool] {} → {}chars in {:?}",
@@ -1014,8 +1018,7 @@ pub fn execute_tool(
         elapsed
     );
 
-    let is_error =
-        result_text.starts_with("Error:") || result_text.starts_with("Validation failed");
+    let is_error = matches!(status, ToolExecutionStatus::Failure);
     // Privacy: tool results can contain user document content (note/sketch bodies,
     // web page text). Telemetry stays metadata-only — emit the result length and an
     // error flag, never the result content itself. See the chat acceptance drill's
@@ -1036,7 +1039,12 @@ pub fn execute_tool(
 
 pub fn decorate_tool_output(tool_name: &str, args: &Value, output: ToolOutput) -> ToolOutput {
     let mut resources = touched_resources_for_tool(tool_name, args);
-    let success = !is_tool_error(output.text());
+    // Prefer the explicit host-owned outcome; only classify text when a producer
+    // left the status unknown (legacy paths and historical outputs).
+    let success = match output.status() {
+        Some(status) => matches!(status, ToolExecutionStatus::Success),
+        None => !is_tool_error(output.text()),
+    };
     let verification = VerificationResult::new(
         format!("Tool {tool_name} completed"),
         if success {
@@ -1062,8 +1070,21 @@ pub fn decorate_tool_output(tool_name: &str, args: &Value, output: ToolOutput) -
     output.with_metadata(resources, vec![verification], Vec::new())
 }
 
+/// Map an already-produced tool result string to an explicit outcome. This is
+/// the legacy fallback used only when a producer did not set an explicit status
+/// (older tools and historical sessions). It is intentionally broad so it does
+/// not silently misclassify producer errors such as `Error writing sketch: ...`
+/// or `Error reading storyboard: ...` as success.
+pub(super) fn classify_tool_text(result_text: &str) -> ToolExecutionStatus {
+    if is_tool_error(result_text) {
+        ToolExecutionStatus::Failure
+    } else {
+        ToolExecutionStatus::Success
+    }
+}
+
 pub(super) fn is_tool_error(result_text: &str) -> bool {
-    result_text.starts_with("Error:") || result_text.starts_with("Validation failed")
+    crate::engine::agent::execution::text_indicates_tool_error(result_text)
 }
 
 fn touched_resources_for_tool(tool_name: &str, args: &Value) -> Vec<TouchedResource> {
@@ -2136,7 +2157,7 @@ fn exec_list_project_files(root: &Path, args: &Value) -> String {
 fn exec_read_note(root: &Path, args: &Value, vision_enabled: bool) -> ToolOutput {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
-        None => return ToolOutput::from("Error: missing 'path' argument"),
+        None => return ToolOutput::failed("Error: missing 'path' argument"),
     };
     match project::read_note(&path) {
         Ok(content) => {
@@ -2152,7 +2173,7 @@ fn exec_read_note(root: &Path, args: &Value, vision_enabled: bool) -> ToolOutput
                 ToolOutput::from(content)
             }
         }
-        Err(e) => ToolOutput::from(format!("Error reading note: {e}")),
+        Err(e) => ToolOutput::failed(format!("Error reading note: {e}")),
     }
 }
 
@@ -2161,7 +2182,7 @@ fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> ToolOutp
         Some(p) => resolve_path(root, p),
         None => {
             let listing = exec_list_project_files(root, &Value::Null);
-            return ToolOutput::from(format!(
+            return ToolOutput::failed(format!(
                 "Error: missing 'path' argument. Call read_sketch with a path from the list below.\n\n{listing}"
             ));
         }
@@ -2232,18 +2253,18 @@ fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> ToolOutp
                 ToolOutput::from(out)
             }
         }
-        Err(e) => ToolOutput::from(format!("Error reading sketch: {e}")),
+        Err(e) => ToolOutput::failed(format!("Error reading sketch: {e}")),
     }
 }
 
-fn exec_write_sketch(root: &Path, args: &Value) -> String {
+fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
-        None => return "Error: missing 'path' argument".into(),
+        None => return ToolOutput::failed("Error: missing 'path' argument"),
     };
     let rows_val = match args.get("rows") {
         Some(v) => v,
-        None => return "Error: missing 'rows' argument".into(),
+        None => return ToolOutput::failed("Error: missing 'rows' argument"),
     };
 
     let mut new_rows: Vec<PlanningRow> = match rows_val.as_array() {
@@ -2296,7 +2317,7 @@ fn exec_write_sketch(root: &Path, args: &Value) -> String {
                 narration_plan: None,
             })
             .collect(),
-        None => return "Error: 'rows' must be an array".into(),
+        None => return ToolOutput::failed("Error: 'rows' must be an array"),
     };
 
     // Load existing sketch or create a new one
@@ -2327,7 +2348,9 @@ fn exec_write_sketch(root: &Path, args: &Value) -> String {
     };
 
     if sketch.locked {
-        return "Error: This sketch is locked. Unlock it before editing with AI.".into();
+        return ToolOutput::failed(
+            "Error: This sketch is locked. Unlock it before editing with AI.",
+        );
     }
 
     // Apply optional title/description updates (works for both new and existing sketches)
@@ -2339,53 +2362,55 @@ fn exec_write_sketch(root: &Path, args: &Value) -> String {
     }
 
     if let Err(e) = project::validate_rows_update_allowed(&sketch.rows, &new_rows) {
-        return format!("Error: {e}");
+        return ToolOutput::failed(format!("Error: {e}"));
     }
     project::apply_locked_row_metadata(&sketch.rows, &mut new_rows);
     let count = new_rows.len();
     sketch.rows = new_rows;
 
     match project::write_sketch(&sketch, &path, root) {
-        Ok(()) => format!("Set {count} planning rows in {}", path.display()),
-        Err(e) => format!("Error writing sketch: {e}"),
+        Ok(()) => ToolOutput::from(format!("Set {count} planning rows in {}", path.display())),
+        Err(e) => ToolOutput::failed(format!("Error writing sketch: {e}")),
     }
 }
 
-fn exec_update_planning_row(root: &Path, args: &Value) -> String {
+fn exec_update_planning_row(root: &Path, args: &Value) -> ToolOutput {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
         None => {
             let listing = exec_list_project_files(root, &Value::Null);
-            return format!(
+            return ToolOutput::failed(format!(
                 "Error: missing 'path' argument. Call update_planning_row with a path from the list below.\n\n{listing}"
-            );
+            ));
         }
     };
     let mut sketch = match project::read_sketch(&path) {
         Ok(s) => s,
-        Err(e) => return format!("Error reading sketch: {e}"),
+        Err(e) => return ToolOutput::failed(format!("Error reading sketch: {e}")),
     };
     let index = match parse_row_target(args, sketch.rows.len()) {
         Ok(index) => index,
-        Err(e) => return e,
+        Err(e) => return ToolOutput::failed(e),
     };
 
     if sketch.locked {
-        return "Error: This sketch is locked. Unlock it before editing with AI.".into();
+        return ToolOutput::failed(
+            "Error: This sketch is locked. Unlock it before editing with AI.",
+        );
     }
     if sketch.rows[index].locked {
-        return format!(
+        return ToolOutput::failed(format!(
             "Error: Planning row {} is locked. Unlock it before editing with AI.",
             index + 1
-        );
+        ));
     }
     for field in ["time", "narrative", "demo_actions", "screenshot"] {
         if args.get(field).is_some() && sketch.rows[index].locks.is_locked(field) {
-            return format!(
+            return ToolOutput::failed(format!(
                 "Error: Planning row {} {} cell is locked. Unlock it before editing with AI.",
                 index + 1,
                 field.replace('_', " ")
-            );
+            ));
         }
     }
 
@@ -2406,7 +2431,7 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> String {
         ),
     ] {
         if let Err(e) = verify_expected_row_value(args, key, actual, label, row_number) {
-            return e;
+            return ToolOutput::failed(e);
         }
     }
 
@@ -2425,8 +2450,8 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> String {
     }
 
     match project::write_sketch(&sketch, &path, root) {
-        Ok(()) => format!("Updated row {} in {}", index + 1, path.display()),
-        Err(e) => format!("Error writing sketch: {e}"),
+        Ok(()) => ToolOutput::from(format!("Updated row {} in {}", index + 1, path.display())),
+        Err(e) => ToolOutput::failed(format!("Error writing sketch: {e}")),
     }
 }
 
@@ -2472,41 +2497,41 @@ fn format_visual_row_context(sketch: &Sketch, index: usize) -> String {
     )
 }
 
-fn exec_set_row_visual(root: &Path, args: &Value) -> String {
+fn exec_set_row_visual(root: &Path, args: &Value) -> ToolOutput {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
         None => {
             let listing = exec_list_project_files(root, &Value::Null);
-            return format!(
+            return ToolOutput::failed(format!(
                 "Error: missing 'path' argument. Call set_row_visual with a path from the list below.\n\n{listing}"
-            );
+            ));
         }
     };
     let mut sketch = match project::read_sketch(&path) {
         Ok(s) => s,
-        Err(e) => return format!("Error reading sketch: {e}"),
+        Err(e) => return ToolOutput::failed(format!("Error reading sketch: {e}")),
     };
     let index = match parse_row_target(args, sketch.rows.len()) {
         Ok(index) => index,
-        Err(e) => return e,
+        Err(e) => return ToolOutput::failed(e),
     };
 
     if sketch.locked {
-        return "Error: This sketch is locked. Unlock it before editing with AI.".into();
+        return ToolOutput::failed("Error: This sketch is locked. Unlock it before editing with AI.");
     }
     if sketch.rows[index].locked {
-        return format!(
+        return ToolOutput::failed(format!(
             "Error: Planning row {} is locked. Unlock it before editing with AI.",
             index + 1
-        );
+        ));
     }
     if sketch.rows[index].locks.is_locked("visual")
         || sketch.rows[index].locks.is_locked("screenshot")
     {
-        return format!(
+        return ToolOutput::failed(format!(
             "Error: Planning row {} media cell is locked. Unlock it before editing with AI.",
             index + 1
-        );
+        ));
     }
 
     let row_context = format_visual_row_context(&sketch, index);
@@ -2521,23 +2546,23 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
         _ => {
             let visual = match extract_json_object(args, "visual") {
                 Ok(v) => v,
-                Err(e) => return e,
+                Err(e) => return ToolOutput::failed(e),
             };
             // Auto-normalize to v2 and validate before writing. CutReady stores
             // Elucim visuals canonically, while critique still runs through the
             // renderable v1 compatibility shape used by the current renderer.
             let visual = match normalize_visual_document_for_save(&visual) {
                 Ok(v) => v,
-                Err(e) => return format!("Validation failed (1 error) — fix this and call set_row_visual again:\n  • {e}\n\n{row_context}"),
+                Err(e) => return ToolOutput::failed(format!("Validation failed (1 error) — fix this and call set_row_visual again:\n  • {e}\n\n{row_context}")),
             };
             let renderable_visual = match visual_to_renderable_v1(&visual) {
                 Ok(v) => v,
-                Err(e) => return format!("Validation failed (1 error) — visual could not be made renderable:\n  • {e}\n\n{row_context}"),
+                Err(e) => return ToolOutput::failed(format!("Validation failed (1 error) — visual could not be made renderable:\n  • {e}\n\n{row_context}")),
             };
             let mut errors = Vec::new();
             validate_dsl_doc(&visual, &mut errors);
             if !errors.is_empty() {
-                return format!(
+                return ToolOutput::failed(format!(
                     "Validation failed ({} error{}) — fix these and call set_row_visual again:\n{}\n\n{}",
                     errors.len(),
                     if errors.len() == 1 { "" } else { "s" },
@@ -2547,12 +2572,12 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
                         .collect::<Vec<_>>()
                         .join("\n"),
                     row_context
-                );
+                ));
             }
             let mut render_errors = Vec::new();
             validate_dsl_doc(&renderable_visual, &mut render_errors);
             if !render_errors.is_empty() {
-                return format!(
+                return ToolOutput::failed(format!(
                     "Validation failed ({} renderability error{}) — fix these and call set_row_visual again:\n{}\n\n{}",
                     render_errors.len(),
                     if render_errors.len() == 1 { "" } else { "s" },
@@ -2562,12 +2587,12 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
                         .collect::<Vec<_>>()
                         .join("\n"),
                     row_context
-                );
+                ));
             }
             // Auto-critique for layout/readability issues
             if let Ok((issues, suggestions)) = critique_visual_doc(&renderable_visual) {
                 if !issues.is_empty() {
-                    return format!(
+                    return ToolOutput::failed(format!(
                         "Critique failed ({} issue{}) — fix these and call set_row_visual again:\n{}\n\n{}",
                         issues.len(),
                         if issues.len() == 1 { "" } else { "s" },
@@ -2575,7 +2600,7 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
                             .map(|(i, e)| format!("  ISSUE {}: {e}", i + 1))
                             .collect::<Vec<_>>().join("\n"),
                         row_context
-                    );
+                    ));
                 }
                 if !suggestions.is_empty() {
                     critique_note = format!(
@@ -2594,7 +2619,7 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
                 Ok(rel_path) => {
                     row.visual = Some(serde_json::Value::String(rel_path));
                 }
-                Err(e) => return format!("Error writing visual file: {e}"),
+                Err(e) => return ToolOutput::failed(format!("Error writing visual file: {e}")),
             }
             let nudges = suggest_visual_nudges(&visual);
             if !nudges.is_empty() {
@@ -2615,40 +2640,40 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
     match project::write_sketch(&sketch, &path, root) {
         Ok(()) => {
             if sketch.rows[index].visual.is_some() {
-                format!(
+                ToolOutput::from(format!(
                     "✓ Visual saved on row {} in {}\n\n{}{}",
                     index + 1,
                     path.display(),
                     row_context,
                     critique_note
-                )
+                ))
             } else {
-                format!(
+                ToolOutput::from(format!(
                     "Removed visual from row {} in {}",
                     index + 1,
                     path.display()
-                )
+                ))
             }
         }
-        Err(e) => format!("Error writing sketch: {e}"),
+        Err(e) => ToolOutput::failed(format!("Error writing sketch: {e}")),
     }
 }
 
-fn exec_review_row_visual(root: &Path, args: &Value) -> String {
+fn exec_review_row_visual(root: &Path, args: &Value) -> ToolOutput {
     let (_path, sketch, index, visual) = match load_row_visual(root, args) {
         Ok(loaded) => loaded,
-        Err(e) => return e,
+        Err(e) => return ToolOutput::failed(e),
     };
 
     let normalized = match normalize_visual_to_v2(&visual) {
         Ok(v) => v,
-        Err(e) => return format!("Visual validation failed:\n  • {e}"),
+        Err(e) => return ToolOutput::failed(format!("Visual validation failed:\n  • {e}")),
     };
     let mut errors = Vec::new();
     validate_dsl_doc(&normalized, &mut errors);
     let renderable = match visual_to_renderable_v1(&normalized) {
         Ok(v) => v,
-        Err(e) => return format!("Visual renderability failed:\n  • {e}"),
+        Err(e) => return ToolOutput::failed(format!("Visual renderability failed:\n  • {e}")),
     };
     let (issues, suggestions) = critique_visual_doc(&renderable).unwrap_or_default();
     let summary = summarize_v2_visual(&normalized);
@@ -2720,80 +2745,80 @@ fn exec_review_row_visual(root: &Path, args: &Value) -> String {
         }
     }
     parts.push(format!("\n{row_context}"));
-    parts.join("\n")
+    ToolOutput::from(parts.join("\n"))
 }
 
-fn exec_apply_row_visual_nudge(root: &Path, args: &Value) -> String {
+fn exec_apply_row_visual_nudge(root: &Path, args: &Value) -> ToolOutput {
     let nudge_id = match args.get("nudge_id").and_then(|v| v.as_str()) {
         Some(id) if !id.trim().is_empty() => id.trim(),
-        _ => return "Error: missing 'nudge_id' argument".into(),
+        _ => return ToolOutput::failed("Error: missing 'nudge_id' argument"),
     };
     let (path, mut sketch, index, visual) = match load_row_visual(root, args) {
         Ok(loaded) => loaded,
-        Err(e) => return e,
+        Err(e) => return ToolOutput::failed(e),
     };
     if let Err(e) = ensure_row_visual_editable(&sketch, index) {
-        return e;
+        return ToolOutput::failed(e);
     }
 
     let normalized = match normalize_visual_to_v2(&visual) {
         Ok(v) => v,
-        Err(e) => return format!("Visual validation failed:\n  • {e}"),
+        Err(e) => return ToolOutput::failed(format!("Visual validation failed:\n  • {e}")),
     };
     let before = normalized.clone();
     let updated = match apply_visual_nudge(&normalized, nudge_id) {
         Ok(v) => v,
-        Err(e) => return e,
+        Err(e) => return ToolOutput::failed(e),
     };
     let changed = count_changed_paths(&before, &updated);
     if let Err(e) = validate_agentic_visual(&updated) {
-        return format!("Nudge produced an invalid visual; nothing saved:\n  • {e}");
+        return ToolOutput::failed(format!("Nudge produced an invalid visual; nothing saved:\n  • {e}"));
     }
     match save_row_visual(root, &path, &mut sketch, index, &updated) {
-        Ok(rel_path) => format!(
+        Ok(rel_path) => ToolOutput::from(format!(
             "Applied visual nudge '{nudge_id}' to row {}. Changed paths: {changed}. Saved: {rel_path}",
             index + 1
-        ),
-        Err(e) => e,
+        )),
+        Err(e) => ToolOutput::failed(e),
     }
 }
 
-fn exec_apply_row_visual_command(root: &Path, args: &Value) -> String {
+fn exec_apply_row_visual_command(root: &Path, args: &Value) -> ToolOutput {
     let command = match args.get("command") {
         Some(v) if v.is_object() => v,
-        _ => return "Error: missing 'command' object".into(),
+        _ => return ToolOutput::failed("Error: missing 'command' object"),
     };
     let (path, mut sketch, index, visual) = match load_row_visual(root, args) {
         Ok(loaded) => loaded,
-        Err(e) => return e,
+        Err(e) => return ToolOutput::failed(e),
     };
     if let Err(e) = ensure_row_visual_editable(&sketch, index) {
-        return e;
+        return ToolOutput::failed(e);
     }
 
     let normalized = match normalize_visual_to_v2(&visual) {
         Ok(v) => v,
-        Err(e) => return format!("Visual validation failed:\n  • {e}"),
+        Err(e) => return ToolOutput::failed(format!("Visual validation failed:\n  • {e}")),
     };
     let before = normalized.clone();
     let updated = match apply_visual_command(&normalized, command) {
         Ok(v) => v,
-        Err(e) => return e,
+        Err(e) => return ToolOutput::failed(e),
     };
     let changed = count_changed_paths(&before, &updated);
     if let Err(e) = validate_agentic_visual(&updated) {
-        return format!("Command produced an invalid visual; nothing saved:\n  • {e}");
+        return ToolOutput::failed(format!("Command produced an invalid visual; nothing saved:\n  • {e}"));
     }
     let op = command
         .get("op")
         .and_then(|v| v.as_str())
         .unwrap_or("unknown");
     match save_row_visual(root, &path, &mut sketch, index, &updated) {
-        Ok(rel_path) => format!(
+        Ok(rel_path) => ToolOutput::from(format!(
             "Applied visual command '{op}' to row {}. Changed paths: {changed}. Saved: {rel_path}",
             index + 1
-        ),
-        Err(e) => e,
+        )),
+        Err(e) => ToolOutput::failed(e),
     }
 }
 
@@ -4434,10 +4459,10 @@ fn validate_dsl_doc(visual: &Value, errors: &mut Vec<String>) {
     }
 }
 
-fn exec_write_note(root: &Path, args: &Value) -> String {
+fn exec_write_note(root: &Path, args: &Value) -> ToolOutput {
     let rel = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => p,
-        None => return "Error: missing 'path' argument (e.g. 'my-note.md')".into(),
+        None => return ToolOutput::failed("Error: missing 'path' argument (e.g. 'my-note.md')"),
     };
     // Enforce .md extension and safe path
     let safe_rel = {
@@ -4450,20 +4475,24 @@ fn exec_write_note(root: &Path, args: &Value) -> String {
     };
     let path = match project::safe_resolve(root, &safe_rel) {
         Ok(p) => p,
-        Err(_) => return format!("Error: invalid path '{safe_rel}' — path traversal not allowed"),
+        Err(_) => {
+            return ToolOutput::failed(format!(
+                "Error: invalid path '{safe_rel}' — path traversal not allowed"
+            ))
+        }
     };
     let content = match args.get("content").and_then(|v| v.as_str()) {
         Some(c) => c,
-        None => return "Error: missing 'content' argument".into(),
+        None => return ToolOutput::failed("Error: missing 'content' argument"),
     };
     if let Err(e) = project::ensure_note_unlocked(root, &safe_rel) {
-        return format!("Error: {e}");
+        return ToolOutput::failed(format!("Error: {e}"));
     }
 
     if let Some(parent) = path.parent() {
         if !parent.exists() {
             if let Err(e) = std::fs::create_dir_all(parent) {
-                return format!("Error creating directories: {e}");
+                return ToolOutput::failed(format!("Error creating directories: {e}"));
             }
         }
     }
@@ -4472,31 +4501,31 @@ fn exec_write_note(root: &Path, args: &Value) -> String {
     match project::write_note(&path, content) {
         Ok(()) => {
             if created {
-                format!("Created note '{safe_rel}'")
+                ToolOutput::from(format!("Created note '{safe_rel}'"))
             } else {
-                format!("Updated note '{safe_rel}'")
+                ToolOutput::from(format!("Updated note '{safe_rel}'"))
             }
         }
-        Err(e) => format!("Error writing note: {e}"),
+        Err(e) => ToolOutput::failed(format!("Error writing note: {e}")),
     }
 }
 
-fn exec_read_storyboard(root: &Path, args: &Value) -> String {
+fn exec_read_storyboard(root: &Path, args: &Value) -> ToolOutput {
     let rel = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => p,
-        None => return "Error: missing 'path' argument".into(),
+        None => return ToolOutput::failed("Error: missing 'path' argument"),
     };
     let path = resolve_path(root, rel);
     match project::read_storyboard(&path) {
-        Ok(sb) => format_storyboard_for_agent(root, &sb),
-        Err(e) => format!("Error reading storyboard: {e}"),
+        Ok(sb) => ToolOutput::from(format_storyboard_for_agent(root, &sb)),
+        Err(e) => ToolOutput::failed(format!("Error reading storyboard: {e}")),
     }
 }
 
-fn exec_write_storyboard(root: &Path, args: &Value) -> String {
+fn exec_write_storyboard(root: &Path, args: &Value) -> ToolOutput {
     let rel = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => p,
-        None => return "Error: missing 'path' argument".into(),
+        None => return ToolOutput::failed("Error: missing 'path' argument"),
     };
     let safe_rel = {
         let trimmed = rel.trim().replace(['\\'], "/");
@@ -4508,14 +4537,18 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
     };
     let path = match project::safe_resolve(root, &safe_rel) {
         Ok(p) => p,
-        Err(_) => return format!("Error: invalid path '{safe_rel}' — path traversal not allowed"),
+        Err(_) => {
+            return ToolOutput::failed(format!(
+                "Error: invalid path '{safe_rel}' — path traversal not allowed"
+            ))
+        }
     };
 
     // Load existing or create new
     let mut sb = match project::read_storyboard(&path) {
         Ok(existing) => {
             if let Err(e) = project::ensure_storyboard_unlocked(&existing) {
-                return format!("Error writing storyboard: {e}");
+                return ToolOutput::failed(format!("Error writing storyboard: {e}"));
             }
             existing
         }
@@ -4542,10 +4575,14 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
                 "sketch_ref" => {
                     let sketch_path = match item.get("path").and_then(|v| v.as_str()) {
                         Some(p) => p.to_string(),
-                        None => return format!("Error: items[{i}] sketch_ref is missing 'path'"),
+                        None => {
+                            return ToolOutput::failed(format!(
+                                "Error: items[{i}] sketch_ref is missing 'path'"
+                            ))
+                        }
                     };
                     if !sketch_path.ends_with(".sk") {
-                        return format!("Error: items[{i}] sketch_ref path must end with .sk (got '{sketch_path}')");
+                        return ToolOutput::failed(format!("Error: items[{i}] sketch_ref path must end with .sk (got '{sketch_path}')"));
                     }
                     new_items.push(crate::models::sketch::StoryboardItem::SketchRef {
                         path: sketch_path,
@@ -4554,7 +4591,11 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
                 "section" => {
                     let title = match item.get("title").and_then(|v| v.as_str()) {
                         Some(t) if !t.trim().is_empty() => t.to_string(),
-                        _ => return format!("Error: items[{i}] section is missing 'title'"),
+                        _ => {
+                            return ToolOutput::failed(format!(
+                                "Error: items[{i}] section is missing 'title'"
+                            ))
+                        }
                     };
                     let description = item
                         .get("description")
@@ -4568,14 +4609,14 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
                                 .filter_map(|v| v.as_str().map(|s| s.to_string()))
                                 .collect(),
                             None => {
-                                return format!(
+                                return ToolOutput::failed(format!(
                                 "Error: items[{i}] section '{title}' is missing 'sketches' array"
-                            )
+                            ))
                             }
                         };
                     for sp in &sketches {
                         if !sp.ends_with(".sk") {
-                            return format!("Error: items[{i}] section sketch path must end with .sk (got '{sp}')");
+                            return ToolOutput::failed(format!("Error: items[{i}] section sketch path must end with .sk (got '{sp}')"));
                         }
                     }
                     new_items.push(crate::models::sketch::StoryboardItem::Section {
@@ -4585,9 +4626,9 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
                     });
                 }
                 other => {
-                    return format!(
+                    return ToolOutput::failed(format!(
                     "Error: items[{i}] unknown type '{other}' — must be 'sketch_ref' or 'section'"
-                )
+                ))
                 }
             }
         }
@@ -4597,12 +4638,12 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
     sb.updated_at = chrono::Utc::now();
 
     match project::write_storyboard(&sb, &path, root) {
-        Ok(()) => format!(
+        Ok(()) => ToolOutput::from(format!(
             "Saved storyboard \"{}\" at '{safe_rel}' ({} items)",
             sb.title,
             sb.items.len()
-        ),
-        Err(e) => format!("Error writing storyboard: {e}"),
+        )),
+        Err(e) => ToolOutput::failed(format!("Error writing storyboard: {e}")),
     }
 }
 
@@ -5250,7 +5291,9 @@ mod tests {
         match output {
             ToolOutput::Text(text) => text,
             ToolOutput::WithImages { text, .. } => text,
-            ToolOutput::WithMetadata { output, .. } => tool_output_text(*output),
+            ToolOutput::WithMetadata { output, .. } | ToolOutput::WithStatus { output, .. } => {
+                tool_output_text(*output)
+            }
         }
     }
 
@@ -5465,6 +5508,180 @@ mod tests {
             .text()
             .contains("disabled by the current AI mutation guard"));
         assert!(!tmp.path().join("draft.md").exists());
+    }
+
+    #[test]
+    fn explicit_failure_status_survives_benign_wording() {
+        // Acceptance #1: an explicit failure cannot be flipped to success by
+        // changing the error wording. "Sketch not found: ..." does not match the
+        // text fallback, yet the outcome is authoritative and stays Failure.
+        let output = ToolOutput::failed("Sketch not found: intro.sk");
+        assert_eq!(output.status(), Some(ToolExecutionStatus::Failure));
+        assert!(
+            !is_tool_error(output.text()),
+            "text fallback alone would misjudge this as success"
+        );
+        // The end-of-execute_tool resolution keeps the explicit status.
+        let resolved = output
+            .status()
+            .unwrap_or_else(|| classify_tool_text(output.text()));
+        assert_eq!(resolved, ToolExecutionStatus::Failure);
+    }
+
+    #[test]
+    fn historical_output_without_status_falls_back_to_text() {
+        // Acceptance #5: outputs that predate explicit status (no WithStatus)
+        // remain classifiable via the hardened text fallback.
+        let legacy_failure = ToolOutput::from("Error reading storyboard: demo.sb");
+        assert_eq!(legacy_failure.status(), None);
+        assert_eq!(
+            classify_tool_text(legacy_failure.text()),
+            ToolExecutionStatus::Failure
+        );
+
+        let legacy_success = ToolOutput::from("Wrote note draft.md");
+        assert_eq!(legacy_success.status(), None);
+        assert_eq!(
+            classify_tool_text(legacy_success.text()),
+            ToolExecutionStatus::Success
+        );
+    }
+
+    fn tool_call(name: &str, args: Value) -> ToolCall {
+        ToolCall {
+            id: "call-1".into(),
+            call_type: "function".into(),
+            function: crate::engine::agent::execution::FunctionCall {
+                name: name.into(),
+                arguments: args.to_string(),
+            },
+        }
+    }
+
+    #[test]
+    fn execute_tool_always_supplies_explicit_status() {
+        // Acceptance #2 and #5: every execution path — success, missing-file,
+        // permission rejection, and mutation-guard rejection — carries an
+        // explicit host-owned status rather than leaving it to be inferred.
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        // Success: write a note with mutations enabled.
+        let ok = execute_tool(
+            &tool_call("write_note", json!({ "path": "notes/a.md", "content": "hi" })),
+            root,
+            root,
+            false,
+            true,
+            true,
+        );
+        assert_eq!(ok.status(), Some(ToolExecutionStatus::Success));
+
+        // Missing-file read.
+        let missing = execute_tool(
+            &tool_call("read_sketch", json!({ "path": "does-not-exist.sk" })),
+            root,
+            root,
+            false,
+            false,
+            true,
+        );
+        assert_eq!(missing.status(), Some(ToolExecutionStatus::Failure));
+
+        // Early permission rejection: create_project offered only to the Writer.
+        let permission = execute_tool(
+            &tool_call("create_project", json!({ "name": "Nope" })),
+            root,
+            root,
+            false,
+            false,
+            true,
+        );
+        assert_eq!(permission.status(), Some(ToolExecutionStatus::Failure));
+
+        // Mutation-guard rejection: a write tool with mutations disabled.
+        let guarded = execute_tool(
+            &tool_call("write_note", json!({ "path": "b.md", "content": "x" })),
+            root,
+            root,
+            false,
+            true,
+            false,
+        );
+        assert_eq!(guarded.status(), Some(ToolExecutionStatus::Failure));
+
+        // Unknown tool.
+        let unknown = execute_tool(
+            &tool_call("no_such_tool", json!({})),
+            root,
+            root,
+            false,
+            false,
+            true,
+        );
+        assert_eq!(unknown.status(), Some(ToolExecutionStatus::Failure));
+    }
+
+    #[test]
+    fn visual_producers_carry_explicit_failure_status() {
+        // Acceptance #1: visual-family producers return an explicit host-owned
+        // outcome, so a real failure can never reach end-of-execute_tool without a
+        // status and be inferred as success — even when the wording ("Validation
+        // failed", "no visual") is benign or unusual.
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        write_test_sketch(root, "demo.sk", PlanningRow::new());
+
+        // set_row_visual with a structurally invalid visual document fails.
+        let bad_set = execute_tool(
+            &tool_call(
+                "set_row_visual",
+                json!({ "path": "demo.sk", "row_number": 1, "visual": { "not_a_real_field": true } }),
+            ),
+            root,
+            root,
+            false,
+            true,
+            true,
+        );
+        assert_eq!(
+            bad_set.status(),
+            Some(ToolExecutionStatus::Failure),
+            "an invalid visual must be an explicit failure, not an inferred success"
+        );
+
+        // review_row_visual on a row that has no visual fails via load_row_visual.
+        let bad_review = execute_tool(
+            &tool_call("review_row_visual", json!({ "path": "demo.sk", "row_number": 1 })),
+            root,
+            root,
+            false,
+            true,
+            true,
+        );
+        assert_eq!(
+            bad_review.status(),
+            Some(ToolExecutionStatus::Failure),
+            "reviewing a row with no visual must carry an explicit failure status"
+        );
+
+        // apply_row_visual_nudge on a row that has no visual fails likewise.
+        let bad_nudge = execute_tool(
+            &tool_call(
+                "apply_row_visual_nudge",
+                json!({ "path": "demo.sk", "row_number": 1, "nudge_id": "whatever" }),
+            ),
+            root,
+            root,
+            false,
+            true,
+            true,
+        );
+        assert_eq!(
+            bad_nudge.status(),
+            Some(ToolExecutionStatus::Failure),
+            "nudging a row with no visual must carry an explicit failure status"
+        );
     }
 
     #[test]
@@ -5685,6 +5902,7 @@ mod tests {
                 "description": "AI rewrite"
             }),
         );
+        let result = result.text();
 
         assert!(result.starts_with("Error writing storyboard:"), "{result}");
         assert!(result.contains("storyboard is locked"), "{result}");
@@ -5714,6 +5932,7 @@ mod tests {
                 }]
             }),
         );
+        let result = result.text();
 
         assert!(
             result.starts_with("Error:"),
@@ -5746,6 +5965,7 @@ mod tests {
                 "time": "0:20"
             }),
         );
+        let result = result.text();
 
         assert!(result.starts_with("Error:"), "{result}");
         assert!(result.contains("time cell is locked"), "{result}");
@@ -5775,6 +5995,7 @@ mod tests {
                 "narrative": "Updated first row"
             }),
         );
+        let result = result.text();
 
         assert!(result.contains("Updated row 1"), "{result}");
         let saved = project::read_sketch(&root.join(rel)).unwrap();
@@ -5799,6 +6020,7 @@ mod tests {
                 "narrative": "Legacy update"
             }),
         );
+        let result = result.text();
 
         assert!(result.contains("Updated row 1"), "{result}");
         let saved = project::read_sketch(&root.join(rel)).unwrap();
@@ -5820,6 +6042,7 @@ mod tests {
                 "narrative": "Should not save"
             }),
         );
+        let zero_result = zero_result.text();
         assert!(
             zero_result.contains("row_number is 1-based"),
             "{zero_result}"
@@ -5834,6 +6057,7 @@ mod tests {
                 "narrative": "Should not save"
             }),
         );
+        let conflict_result = conflict_result.text();
         assert!(
             conflict_result.contains("conflicts with legacy index"),
             "{conflict_result}"
@@ -5858,6 +6082,7 @@ mod tests {
                 "narrative": "Should not save"
             }),
         );
+        let result = result.text();
 
         assert!(result.contains("no longer matches"), "{result}");
         let saved = project::read_sketch(&root.join(rel)).unwrap();
@@ -5897,7 +6122,9 @@ mod tests {
                 "index": 0,
                 "visual": null
             }),
-        );
+        )
+        .text()
+        .to_string();
 
         assert!(result.starts_with("Error:"), "{result}");
         assert!(result.contains("media cell is locked"), "{result}");
@@ -5943,7 +6170,9 @@ mod tests {
                     }
                 }
             }),
-        );
+        )
+        .text()
+        .to_string();
 
         assert!(result.contains("Visual saved"), "{result}");
         let saved = project::read_sketch(&root.join(rel)).unwrap();
@@ -6011,7 +6240,9 @@ mod tests {
                     }
                 }
             }),
-        );
+        )
+        .text()
+        .to_string();
 
         assert!(result.contains("Visual saved"), "{result}");
         let saved = project::read_sketch(&root.join(rel)).unwrap();
@@ -6068,7 +6299,9 @@ mod tests {
                     }
                 }
             }),
-        );
+        )
+        .text()
+        .to_string();
 
         assert!(result.contains("Visual saved"), "{result}");
         let saved = project::read_sketch(&root.join(rel)).unwrap();
@@ -6088,7 +6321,9 @@ mod tests {
         row.visual = Some(Value::String(visual_path));
         write_test_sketch(root, "demo.sk", row);
 
-        let result = exec_review_row_visual(root, &json!({ "path": "demo.sk", "index": 0 }));
+        let result = exec_review_row_visual(root, &json!({ "path": "demo.sk", "index": 0 }))
+            .text()
+            .to_string();
 
         assert!(result.contains("Elucim visual review"), "{result}");
         assert!(result.contains("Valid: yes"), "{result}");
@@ -6115,7 +6350,9 @@ mod tests {
                 "index": 0,
                 "nudge_id": "mark-refined"
             }),
-        );
+        )
+        .text()
+        .to_string();
 
         assert!(result.contains("Applied visual nudge"), "{result}");
         let saved = project::read_sketch(&root.join("demo.sk")).unwrap();
@@ -6151,7 +6388,9 @@ mod tests {
                     "durationFrames": 20
                 }
             }),
-        );
+        )
+        .text()
+        .to_string();
 
         assert!(result.contains("Applied visual command"), "{result}");
         let saved = project::read_sketch(&root.join("demo.sk")).unwrap();
@@ -6279,7 +6518,9 @@ mod tests {
                 "index": 0,
                 "nudge_id": "annotate-element-intent"
             }),
-        );
+        )
+        .text()
+        .to_string();
 
         assert!(result.contains("Applied visual nudge"), "{result}");
         let saved = project::read_sketch(&root.join("demo.sk")).unwrap();
@@ -6497,6 +6738,7 @@ mod tests {
                 "content": "AI rewrite"
             }),
         );
+        let result = result.text();
 
         assert!(result.starts_with("Error:"), "{result}");
         assert!(result.contains("This note is locked"), "{result}");

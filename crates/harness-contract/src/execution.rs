@@ -23,7 +23,14 @@ pub enum AgentEvent {
     #[serde(rename = "tool_call")]
     ToolCall { name: String, arguments: String },
     #[serde(rename = "tool_result")]
-    ToolResult { name: String, result: String },
+    ToolResult {
+        name: String,
+        result: String,
+        /// Explicit host-owned execution outcome for this tool call. Consumers
+        /// (UI, mutation refresh) must key off this rather than re-deriving
+        /// success from the `result` text. Always populated on new executions.
+        status: ToolExecutionStatus,
+    },
     #[serde(rename = "context_prepared")]
     ContextPrepared {
         selected_count: usize,
@@ -525,6 +532,42 @@ pub enum ToolOutput {
         verification_results: Vec<VerificationResult>,
         memory_promotions: Vec<MemoryPromotionCandidate>,
     },
+    /// Wraps an output with an explicit host-owned execution outcome. Producers
+    /// that know they failed (missing file, invalid document, permission denied,
+    /// validation failed) set this so downstream consumers never have to infer
+    /// success from message text. Absent status means "unknown" — only then may
+    /// a consumer fall back to the legacy text classifier.
+    WithStatus {
+        output: Box<ToolOutput>,
+        status: ToolExecutionStatus,
+    },
+}
+
+/// Explicit, host-owned outcome of a single tool execution.
+///
+/// This is deliberately distinct from "the model's answer is correct": a tool
+/// can execute successfully and still return content the model misuses. It only
+/// records whether the tool itself completed its work.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolExecutionStatus {
+    Success,
+    Failure,
+}
+
+/// Fallback text classifier for tool outputs that carry no explicit
+/// [`ToolExecutionStatus`] — historical/resumed results and any producer that
+/// has not yet been migrated to set an authoritative status. New executions
+/// always supply an explicit status, so this only guards the legacy path.
+///
+/// Centralized here so every consumer (host, Prompty durability port, ...) uses
+/// the exact same rule and a producer's error wording can never flip a failure
+/// into a success.
+pub fn text_indicates_tool_error(result_text: &str) -> bool {
+    let text = result_text.trim_start();
+    text.starts_with("Error")
+        || text.starts_with("Validation failed")
+        || text.starts_with("Unknown tool")
 }
 
 impl ToolOutput {
@@ -532,6 +575,49 @@ impl ToolOutput {
         Self::WithImages {
             text: text.into(),
             images,
+        }
+    }
+
+    /// Build an output that explicitly reports a failed execution.
+    pub fn failed(text: impl Into<String>) -> Self {
+        Self::Text(text.into()).with_status(ToolExecutionStatus::Failure)
+    }
+
+    /// Build an output that explicitly reports a successful execution.
+    pub fn succeeded(text: impl Into<String>) -> Self {
+        Self::Text(text.into()).with_status(ToolExecutionStatus::Success)
+    }
+
+    /// Attach an explicit execution outcome, replacing any prior status but
+    /// preserving text, images, and metadata. Never double-wraps.
+    pub fn with_status(self, status: ToolExecutionStatus) -> Self {
+        match self {
+            Self::WithStatus { output, .. } => Self::WithStatus { output, status },
+            Self::WithMetadata {
+                output,
+                touched_resources,
+                verification_results,
+                memory_promotions,
+            } => Self::WithMetadata {
+                output: Box::new((*output).with_status(status)),
+                touched_resources,
+                verification_results,
+                memory_promotions,
+            },
+            other => Self::WithStatus {
+                output: Box::new(other),
+                status,
+            },
+        }
+    }
+
+    /// The explicit host-owned outcome, if a producer set one. `None` means the
+    /// outcome is unknown and a consumer may consult the legacy text classifier.
+    pub fn status(&self) -> Option<ToolExecutionStatus> {
+        match self {
+            Self::WithStatus { status, .. } => Some(*status),
+            Self::WithMetadata { output, .. } => output.status(),
+            Self::Text(_) | Self::WithImages { .. } => None,
         }
     }
 
@@ -570,14 +656,14 @@ impl ToolOutput {
     pub fn text(&self) -> &str {
         match self {
             Self::Text(text) | Self::WithImages { text, .. } => text,
-            Self::WithMetadata { output, .. } => output.text(),
+            Self::WithMetadata { output, .. } | Self::WithStatus { output, .. } => output.text(),
         }
     }
 
     pub fn images(&self) -> Option<&[ContentPart]> {
         match self {
             Self::WithImages { images, .. } => Some(images),
-            Self::WithMetadata { output, .. } => output.images(),
+            Self::WithMetadata { output, .. } | Self::WithStatus { output, .. } => output.images(),
             Self::Text(_) => None,
         }
     }
@@ -587,6 +673,7 @@ impl ToolOutput {
             Self::WithMetadata {
                 touched_resources, ..
             } => touched_resources,
+            Self::WithStatus { output, .. } => output.touched_resources(),
             _ => &[],
         }
     }
@@ -597,6 +684,7 @@ impl ToolOutput {
                 verification_results,
                 ..
             } => verification_results,
+            Self::WithStatus { output, .. } => output.verification_results(),
             _ => &[],
         }
     }
@@ -606,6 +694,7 @@ impl ToolOutput {
             Self::WithMetadata {
                 memory_promotions, ..
             } => memory_promotions,
+            Self::WithStatus { output, .. } => output.memory_promotions(),
             _ => &[],
         }
     }
@@ -748,5 +837,43 @@ mod tests {
     fn prompty_tool_argument_parser_recovers_fences_and_trailing_commas() {
         let parsed = parse_tool_arguments("```json\n{\"path\":\"intro.sk\",}\n```").unwrap();
         assert_eq!(parsed, json!({"path": "intro.sk"}));
+    }
+
+    #[test]
+    fn explicit_status_is_authoritative_and_wording_independent() {
+        // An explicit failure stays a failure regardless of wording, even when
+        // the text fallback would read it as success.
+        let output = ToolOutput::failed("Sketch not found: intro.sk");
+        assert_eq!(output.status(), Some(ToolExecutionStatus::Failure));
+        assert!(!text_indicates_tool_error(output.text()));
+
+        // Attaching metadata (decoration) must not lose the inner status.
+        let decorated = output.with_metadata(Vec::new(), Vec::new(), Vec::new());
+        assert_eq!(decorated.status(), Some(ToolExecutionStatus::Failure));
+        assert_eq!(decorated.text(), "Sketch not found: intro.sk");
+
+        // with_status never double-wraps and replaces a prior status in place.
+        let flipped = decorated.with_status(ToolExecutionStatus::Success);
+        assert_eq!(flipped.status(), Some(ToolExecutionStatus::Success));
+    }
+
+    #[test]
+    fn tool_execution_status_serializes_snake_case() {
+        assert_eq!(
+            serde_json::to_value(ToolExecutionStatus::Success).unwrap(),
+            json!("success")
+        );
+        assert_eq!(
+            serde_json::to_value(ToolExecutionStatus::Failure).unwrap(),
+            json!("failure")
+        );
+    }
+
+    #[test]
+    fn text_fallback_flags_producer_error_prefixes() {
+        assert!(text_indicates_tool_error("Error writing sketch: locked"));
+        assert!(text_indicates_tool_error("  Validation failed: bad rows"));
+        assert!(text_indicates_tool_error("Unknown tool: frobnicate"));
+        assert!(!text_indicates_tool_error("Wrote sketch intro.sk"));
     }
 }

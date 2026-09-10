@@ -665,7 +665,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     const shouldListen = focusMode || !chatFocusMode;
     if (!shouldListen) return;
 
-    const unlisten = listen<{ type: string; content?: string; message?: string; name?: string; arguments?: string; result?: string; response?: string; agent_id?: string; task?: string; selected_count?: number; dropped_count?: number; total_bytes?: number; budget_bytes?: number; iteration?: number; attempt?: number; client_run_id?: string }>("agent-event", (event) => {
+    const unlisten = listen<{ type: string; content?: string; message?: string; name?: string; arguments?: string; result?: string; status?: "success" | "failure"; response?: string; agent_id?: string; task?: string; selected_count?: number; dropped_count?: number; total_bytes?: number; budget_bytes?: number; iteration?: number; attempt?: number; client_run_id?: string }>("agent-event", (event) => {
       const ev = event.payload;
       if (
         ev.client_run_id
@@ -753,17 +753,21 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           }]);
           break;
         case "tool_result": {
+          const toolName = ev.name ?? "";
+          const resultText = ev.result ?? "";
+          // Prefer the explicit host-owned outcome; fall back to text inspection
+          // only for historical events that predate the status field.
+          const isSuccess = ev.status
+            ? ev.status === "success"
+            : !resultText.startsWith("Error");
           addActivityEntries([{
             id: crypto.randomUUID(),
             timestamp: new Date(),
             source: `result ${ev.name ?? ""}`.trim(),
-            content: boundedToolActivityResult(ev.result ?? ""),
-            level: "success",
+            content: boundedToolActivityResult(resultText),
+            level: isSuccess ? "success" : "error",
           }]);
           // Auto-refresh sidebar and open sketches after tool mutations
-          const toolName = ev.name ?? "";
-          const resultText = ev.result ?? "";
-          const isSuccess = !resultText.startsWith("Error");
           if (isSuccess && SKETCH_MUTATION_TOOLS.has(toolName)) {
             const argsJson = consumeQueuedToolArgs(pendingToolArgsRef.current, toolName);
             const mutation = sketchMutationInfo(toolName, argsJson, useAppStore.getState().activeSketchPath);

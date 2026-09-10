@@ -989,7 +989,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         await new Promise(r => setTimeout(r, 300));
         if (!emit({ type: "tool_call", name: "list_project_files", arguments: "{}" })) return;
         await new Promise(r => setTimeout(r, 200));
-        if (!emit({ type: "tool_result", name: "list_project_files", result: "sketches/intro.sk, notes/outline.md" })) return;
+        if (!emit({ type: "tool_result", name: "list_project_files", result: "sketches/intro.sk, notes/outline.md", status: "success" })) return;
         await new Promise(r => setTimeout(r, 200));
         if (!emit({ type: "status", message: "Thinking… (round 2)" })) return;
         await new Promise(r => setTimeout(r, 200));

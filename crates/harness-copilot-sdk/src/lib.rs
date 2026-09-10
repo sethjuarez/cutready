@@ -22,7 +22,9 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
-use harness_contract::execution::{AgentEvent, ChatMessage, ContextItem, Usage};
+use harness_contract::execution::{
+    AgentEvent, ChatMessage, ContextItem, ToolExecutionStatus, Usage,
+};
 use harness_contract::llm::{LlmConfig, LlmProvider};
 
 use harness_contract::{
@@ -502,6 +504,11 @@ impl AgentHarness for CopilotSdkHarness {
                             });
                         }
                         Data::ToolExecutionComplete(tool) => {
+                            let status = if tool.success {
+                                ToolExecutionStatus::Success
+                            } else {
+                                ToolExecutionStatus::Failure
+                            };
                             let result = if tool.success {
                                 tool.result
                                     .map(|content| content.content)
@@ -514,7 +521,11 @@ impl AgentHarness for CopilotSdkHarness {
                             let name = tool_names
                                 .remove(&tool.tool_call_id)
                                 .unwrap_or_else(|| tool.tool_call_id.clone());
-                            (*emit)(AgentEvent::ToolResult { name, result });
+                            (*emit)(AgentEvent::ToolResult {
+                                name,
+                                result,
+                                status,
+                            });
                         }
                         Data::AssistantUsage(reported) => {
                             usage = to_host_usage(&reported);
