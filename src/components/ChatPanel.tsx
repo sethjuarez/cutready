@@ -11,17 +11,18 @@ import { contentTypeTone } from "../utils/contentTypeTheme";
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useAiApplyGateStore } from "../stores/aiApplyGateStore";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
-import { loadProviderSecrets } from "../hooks/useSecretStore";
 import { BUILT_IN_AGENTS, resolveAgentPrompt } from "../agents/builtInAgents";
 import {
   activeProviderInput,
   buildProviderConfig,
-  defaultProvider,
   isAiProviderConfigured,
   isProviderInputConfigured,
-  providerById,
-  providerToConfigInput,
 } from "../utils/providerConfig";
+import {
+  buildEffectiveProviderInput as buildEffectiveProviderInputShared,
+  buildRefreshedProviderInput,
+  resolveAgentModelOverride,
+} from "../utils/agentProvider";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import type { ChatMessage, ChatToolActivity, ChatWorkingNotes } from "../types/sketch";
 import {
@@ -433,20 +434,6 @@ interface FileReference {
 }
 
 type SecondaryTab = "chat" | "sessions" | "runs" | "database";
-
-function resolveAgentModelOverride(
-  agent: AgentPreset,
-  overrides: Record<string, string> | undefined,
-): string {
-  return (overrides?.[agent.id] || agent.modelOverride || "").trim();
-}
-
-function resolveAgentProviderOverride(
-  agent: AgentPreset,
-  overrides: Record<string, string> | undefined,
-): string {
-  return (overrides?.[agent.id] || agent.providerOverride || "").trim();
-}
 
 // ── SVG Icons (using Heroicons) ──────────────────────────────────
 
@@ -934,20 +921,10 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       .slice(0, 10);
   }, [showContextPicker, contextFilter, allFiles, references]);
 
-  const buildEffectiveProviderInput = useCallback(async (agent: AgentPreset) => {
-    const providerOverride = resolveAgentProviderOverride(agent, settings.aiAgentProviderOverrides);
-    const overrideProvider = providerById(settings, providerOverride);
-    const selectedProvider = overrideProvider ?? defaultProvider(settings);
-    if (!selectedProvider) return activeProviderInput(settings);
-
-    const secrets = selectedProvider.id === settings.aiActiveProviderId
-      ? { apiKey: settings.aiApiKey, accessToken: settings.aiAccessToken }
-      : await loadProviderSecrets(selectedProvider.id);
-    return providerToConfigInput(selectedProvider, settings, {
-      apiKey: secrets.apiKey,
-      accessToken: secrets.accessToken,
-    });
-  }, [settings]);
+  const buildEffectiveProviderInput = useCallback(
+    (agent: AgentPreset) => buildEffectiveProviderInputShared(settings, agent),
+    [settings],
+  );
 
   useEffect(() => {
     if (!settingsLoaded) {
@@ -1211,43 +1188,17 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       level: "info",
     }]);
     try {
-      // Auto-refresh OAuth token if we have a refresh token
-      let freshBearerToken = settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null;
-      if (settings.aiAuthMode === "azure_oauth" && settings.aiRefreshToken) {
-        try {
-          const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>(
-            "azure_token_refresh",
-            {
-              tenantId: settings.aiTenantId || "",
-              refreshToken: settings.aiRefreshToken,
-              clientId: settings.aiClientId || null,
-            },
-          );
-          if (tokenResult.access_token) {
-            freshBearerToken = tokenResult.access_token;
-            await updateSetting("aiAccessToken", tokenResult.access_token);
-            if (tokenResult.refresh_token) {
-              await updateSetting("aiRefreshToken", tokenResult.refresh_token);
-            }
-          }
-        } catch {
-          // Refresh failed — will try with existing token
-        }
-      }
-
       // Resolve the effective agent — override agent (from ✨ buttons) takes priority
       const effectiveAgent = agentOverride
         ? [...BUILT_IN_AGENTS, ...(settings.aiAgents || [])].find(a => a.id === agentOverride) ?? selectedAgent
         : selectedAgent;
       const modelOverride = resolveAgentModelOverride(effectiveAgent, settings.aiAgentModelOverrides);
-      const effectiveProviderInput = await buildEffectiveProviderInput(effectiveAgent);
+      // Resolve the effective connection first, then refresh ITS credentials (#262).
+      const effectiveProviderInput = await buildRefreshedProviderInput(settings, effectiveAgent, updateSetting);
       const providerConfig = buildProviderConfig(
         effectiveProviderInput,
         settings.aiAgentExecutionEngine || "prompty",
       );
-      if (!resolveAgentProviderOverride(effectiveAgent, settings.aiAgentProviderOverrides) && freshBearerToken) {
-        providerConfig.bearer_token = freshBearerToken;
-      }
       const config = {
         ...providerConfig,
         // Apply per-agent model override when configured; otherwise use the provider model.

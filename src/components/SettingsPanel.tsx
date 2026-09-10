@@ -117,6 +117,7 @@ import {
 } from "../theme/terminalThemes";
 import { sanitizeDiagnosticsLog } from "../utils/diagnosticsSanitizer";
 import { activeProvider, buildProviderConfig, canFetchModelsFor, createAiProviderConfig, isAiProviderConfigured } from "../utils/providerConfig";
+import { persistConnectionTokens, clearConnectionTokens } from "../utils/agentProvider";
 import { isMac } from "../utils/platform";
 import { ensureCachedNarrationVoicePreview, NARRATION_VOICE_SAMPLE } from "../services/narrationVoicePreview";
 import {
@@ -266,6 +267,10 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
   const startOAuthFlow = async () => {
     setOauthStatus("waiting");
     setOauthError("");
+    // Bind this sign-in to the connection that initiated it. If the user switches
+    // the active connection during the (up to 300s) browser flow, the minted
+    // tokens must still land in this connection, not whichever is active later.
+    const initiatingProviderId = settings.aiActiveProviderId || settings.aiDefaultProviderId || "";
     try {
       const init = await invoke<AuthCodeFlowInit>("azure_browser_auth_start", {
         tenantId: settings.aiTenantId || "",
@@ -289,14 +294,16 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
         has_refresh: Boolean(token.refreshToken),
         scope: token.scope ?? null,
       });
-      await updateSetting("aiAccessToken", token.accessToken);
-      if (token.refreshToken) {
-        await updateSetting("aiRefreshToken", token.refreshToken);
-      }
+      await persistConnectionTokens(
+        initiatingProviderId,
+        { accessToken: token.accessToken, refreshToken: token.refreshToken || undefined },
+        updateSetting,
+      );
       console.info({
         type: "cutready.ai.oauth",
         phase: "tokens_persisted",
         active_provider: settings.aiActiveProviderId,
+        initiating_provider: initiatingProviderId,
       });
       setOauthStatus("success");
     } catch (e) {
@@ -307,9 +314,10 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
   };
 
   const signOut = async () => {
-    await updateSetting("aiAccessToken", "");
-    await updateSetting("aiRefreshToken", "");
-    await updateSetting("aiManagementToken", "");
+    // Bind sign-out to the connection that initiated it so switching mid-flow
+    // cannot leave the original connection's vault tokens stale (#262).
+    const initiatingProviderId = settings.aiActiveProviderId || settings.aiDefaultProviderId || "";
+    await clearConnectionTokens(initiatingProviderId, updateSetting);
     await updateSetting("aiSubscriptionId", "");
     await updateSetting("aiResourceGroup", "");
     await updateSetting("aiResourceName", "");
