@@ -1048,6 +1048,10 @@ export function SketchForm() {
   const titleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [narrationDialogRow, setNarrationDialogRow] = useState<number | null>(null);
+  // The sketch a narration take is being recorded against. Captured when the
+  // dialog opens so the take always commits to its originating document, even
+  // if the active sketch is switched (e.g. by an agent tool) while it is open.
+  const [narrationDialogPath, setNarrationDialogPath] = useState<string | null>(null);
   const [returnToNarrationAfterCapture, setReturnToNarrationAfterCapture] = useState<number | null>(null);
 
   const currentProject = useAppStore((s) => s.currentProject);
@@ -1066,8 +1070,8 @@ export function SketchForm() {
       title: string | null,
       rows: PlanningRow[] | null,
       reason: string,
-    ) => {
-      if (shouldSuppressEditorFlush(path)) return;
+    ): Promise<boolean> => {
+      if (shouldSuppressEditorFlush(path)) return false;
       try {
         if (title !== null) {
           await invoke("update_sketch_title", { relativePath: path, title });
@@ -1085,9 +1089,11 @@ export function SketchForm() {
         }
         await useAppStore.getState().checkDirty();
         await useAppStore.getState().refreshChangedFiles();
+        return true;
       } catch (err) {
         console.error(`[SketchForm] Failed to save pending sketch edits (${reason}):`, err);
         useToastStore.getState().show("Failed to save pending sketch changes", 5000, "error");
+        return false;
       }
     },
     [],
@@ -1481,6 +1487,7 @@ The Actions describe what happens on screen — use them as visual design hints.
 
   const handleStopNarrationRecording = useCallback(() => {
     setNarrationDialogRow(null);
+    setNarrationDialogPath(null);
     setNarrationRecordingRow(null);
   }, []);
 
@@ -1492,7 +1499,11 @@ The Actions describe what happens on screen — use them as visual design hints.
     }
 
     try {
-      await saveSketchEditsForPath(activeSketchPath, null, localRows, "narration recording");
+      // A failed prerequisite commit must not open the recorder — the take
+      // would otherwise be captured against an uncommitted sketch revision.
+      const committed = await saveSketchEditsForPath(activeSketchPath, null, localRows, "narration recording");
+      if (!committed) return;
+      setNarrationDialogPath(activeSketchPath);
       setNarrationDialogRow(rowIndex);
     } catch (err) {
       console.error("[SketchForm] Failed to prepare narration recording:", err);
@@ -1513,6 +1524,7 @@ The Actions describe what happens on screen — use them as visual design hints.
     speechEndpoint: string,
   ) => {
     if (!activeSketchPath) throw new Error("No active sketch is open.");
+    const targetPath = activeSketchPath;
     // Synthesis, duration probing, and disk write all run in the backend
     // (SpeechSynthesizer seam, issue #256): the audio bytes never cross IPC and
     // ffprobe replaces the former WebAudio duration decode. The Entra token is
@@ -1530,8 +1542,12 @@ The Actions describe what happens on screen — use them as visual design hints.
         narrationPlan,
       },
     });
-    useAppStore.setState({ activeSketch: sketch });
-    setLocalRows(sketch.rows ?? []);
+    // Publish only while this sketch is still active — a late-completing synth
+    // must not overwrite a different document the user has since switched to.
+    if (useAppStore.getState().activeSketchPath === targetPath) {
+      useAppStore.setState({ activeSketch: sketch });
+      setLocalRows(sketch.rows ?? []);
+    }
     return sketch;
   }, [activeSketchPath, settings.narrationSpeechOutputFormat]);
 
@@ -1715,7 +1731,9 @@ Rules:
       total: totalSteps,
       message: "Saving the latest sketch edits before planning camera motion.",
     });
-    await saveSketchEditsForPath(activeSketchPath, null, rows, "motion generation");
+    if (!(await saveSketchEditsForPath(activeSketchPath, null, rows, "motion generation"))) {
+      return null;
+    }
     useToastStore.getState().show("Motion Director is planning camera moves...", 3000, "info");
     setVideoExportProgress({
       phase: "motion-director",
@@ -1741,8 +1759,10 @@ Rules:
       total: totalSteps,
       message: "Saving generated motion plans before video export.",
     });
+    if (!(await saveSketchEditsForPath(activeSketchPath, null, updatedRows, "AI motion generation"))) {
+      return null;
+    }
     setLocalRows(updatedRows);
-    await saveSketchEditsForPath(activeSketchPath, null, updatedRows, "AI motion generation");
     const { refreshChangedFiles, checkDirty, addActivityEntries } = useAppStore.getState();
     await checkDirty();
     await refreshChangedFiles();
@@ -1788,7 +1808,9 @@ Rules:
 
     setNarrationSavingRows((rows) => new Set(rows).add(rowIndex));
     try {
-      await saveSketchEditsForPath(activeSketchPath, null, localRows, "generated narration");
+      if (!(await saveSketchEditsForPath(activeSketchPath, null, localRows, "generated narration"))) {
+        return;
+      }
       const { accessToken, speechEndpoint } = await refreshSpeechAccess();
       console.info("[SketchForm] generating Azure Speech narration", {
         rowIndex,
@@ -1883,7 +1905,9 @@ Rules:
         total: totalSteps,
         message: "Saving the latest sketch edits before writing narration.",
       });
-      await saveSketchEditsForPath(activeSketchPath, null, localRows, "AI narration generation");
+      if (!(await saveSketchEditsForPath(activeSketchPath, null, localRows, "AI narration generation"))) {
+        return;
+      }
       useToastStore.getState().show("Narration Director is writing SSML...", 3000, "info");
 
       setNarrationGenerationProgress({
@@ -1963,15 +1987,17 @@ Rules:
   ]);
 
   const handleSaveNarrationTake = useCallback(async (
+    sketchPath: string | null,
     rowIndex: number,
     take: NarrationRecordingTake,
     options?: { navigateToRow?: number | null },
   ) => {
-    if (!activeSketchPath) return;
+    if (!sketchPath) return;
+    const targetPath = sketchPath;
     setNarrationSavingRows((rows) => new Set(rows).add(rowIndex));
     try {
       const sketch = await invoke<Sketch>("save_narration_recording", {
-        sketchPath: activeSketchPath,
+        sketchPath: targetPath,
         rowIndex,
         audioData: take.audioData,
         mimeType: take.mimeType,
@@ -1981,9 +2007,14 @@ Rules:
         trailingSilenceMs: take.trailingSilenceMs,
         silenceThresholdDb: take.silenceThresholdDb,
       });
-      useAppStore.setState({ activeSketch: sketch });
-      setLocalRows(sketch.rows ?? []);
       const { loadSketches, loadNarrationAssets, refreshChangedFiles, checkDirty, addActivityEntries } = useAppStore.getState();
+      // Publish the saved take only while its sketch is still active, so a take
+      // that finishes saving after the user switched sketches cannot overwrite a
+      // different document.
+      if (useAppStore.getState().activeSketchPath === targetPath) {
+        useAppStore.setState({ activeSketch: sketch });
+        setLocalRows(sketch.rows ?? []);
+      }
       await loadSketches();
       await loadNarrationAssets();
       await checkDirty();
@@ -1995,15 +2026,20 @@ Rules:
         content: `Saved narration for row ${rowIndex + 1}`,
         level: "success",
       }]);
-      const navigateToRow = options?.navigateToRow;
-      setNarrationDialogRow(
-        typeof navigateToRow === "number" && navigateToRow >= 0 && navigateToRow < (sketch.rows?.length ?? 0)
-          ? navigateToRow
-          : rowIndex,
-      );
+      if (useAppStore.getState().activeSketchPath === targetPath) {
+        const navigateToRow = options?.navigateToRow;
+        setNarrationDialogRow(
+          typeof navigateToRow === "number" && navigateToRow >= 0 && navigateToRow < (sketch.rows?.length ?? 0)
+            ? navigateToRow
+            : rowIndex,
+        );
+      }
     } catch (err) {
       console.error("[SketchForm] Failed to save narration recording:", err);
       useToastStore.getState().show(`Could not save narration: ${err}`, 5000, "error");
+      // Propagate so the recording dialog retains the unsaved take for retry
+      // instead of treating a failed save as success and clearing the blob.
+      throw err;
     } finally {
       setNarrationSavingRows((rows) => {
         const next = new Set(rows);
@@ -2011,7 +2047,7 @@ Rules:
         return next;
       });
     }
-  }, [activeSketchPath]);
+  }, []);
 
   /** Launch fullscreen preview on a specific monitor */
   const launchPreviewOnMonitor = useCallback(async (monitor: MonitorInfo | null, mode: PresentationMode = "slides") => {
@@ -2105,7 +2141,9 @@ Rules:
       message: "Preparing sketch video export",
     });
     try {
-      await saveSketchEditsForPath(activeSketchPath, localTitle, rowsForExport, "video export");
+      if (!(await saveSketchEditsForPath(activeSketchPath, localTitle, rowsForExport, "video export"))) {
+        return;
+      }
       const progressChannel = new Channel<SketchVideoExportProgress>();
       progressChannel.onmessage = (progress) => {
         setVideoExportProgress(progress);
@@ -2246,7 +2284,10 @@ Rules:
       const outputPath = await promptForVideoOutputPath();
       if (!outputPath) return;
       const rowsForExport = await generateAndSaveMotionRows(localRows);
-      if (!rowsForExport) return;
+      if (!rowsForExport) {
+        setVideoExportProgress(null);
+        return;
+      }
       await handleExportVideo(rowsForExport, outputPath);
     } catch (err) {
       console.warn("[SketchForm] Failed to generate video:", err);
@@ -2669,10 +2710,10 @@ The row already has a visual and design_plan. You may read the sketch for contex
             setNarrationDialogRow(null);
             setCaptureRowIdx(narrationDialogRow);
           }}
-          onCancel={() => setNarrationDialogRow(null)}
+          onCancel={() => { setNarrationDialogRow(null); setNarrationDialogPath(null); }}
           onNavigatePrevious={() => setNarrationDialogRow(Math.max(0, narrationDialogRow - 1))}
           onNavigateNext={() => setNarrationDialogRow(Math.min(localRows.length - 1, narrationDialogRow + 1))}
-          onSave={(take, options) => handleSaveNarrationTake(narrationDialogRow, take, options)}
+          onSave={(take, options) => handleSaveNarrationTake(narrationDialogPath ?? activeSketchPath, narrationDialogRow, take, options)}
         />
       )}
 
