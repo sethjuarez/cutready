@@ -12,6 +12,7 @@ import {
   adoptDraftlineRemoteBranch,
   createDraftlineVariation,
   diffDraftlineVersions,
+  discardDraftlineChanges,
   hasDraftlineChanges,
   deleteDraftlineVariation,
   isDraftlineVariationCreateConflictError,
@@ -831,6 +832,38 @@ describe("draftlineVersioning", () => {
     });
   });
 
+  it("falls back to the rewritten version through the captured workspace facade (#263)", async () => {
+    mockInvoke
+      .mockRejectedValueOnce(new Error("unknown version"))
+      .mockResolvedValueOnce({
+        requested: "1111111111111111111111111111111111111111",
+        disposition: {
+          kind: "squashed_into",
+          version: "3333333333333333333333333333333333333333",
+        },
+      })
+      .mockResolvedValueOnce({
+        from_version: "3333333333333333333333333333333333333333",
+        to_version: null,
+        files: [{ path: "intro.sk", kind: "Modified", is_binary: false, is_large: false }],
+        patch: null,
+      });
+
+    await expect(previewDraftlineVersion("1111111111111111111111111111111111111111")).resolves.toEqual([
+      { path: "intro.sk", status: "modified", additions: 0, deletions: 0 },
+    ]);
+
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "diff_version_to_workspace", {
+      request: { workspace_path: WORKSPACE, version_id: "1111111111111111111111111111111111111111" },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "resolve_rewritten_version", {
+      request: { workspace_path: WORKSPACE, version_id: "1111111111111111111111111111111111111111" },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(3, "diff_version_to_workspace", {
+      request: { workspace_path: WORKSPACE, version_id: "3333333333333333333333333333333333333333" },
+    });
+  });
+
   it("uses Draftline summary and save commands for the adapter lane", async () => {
     mockInvoke
       .mockResolvedValueOnce({
@@ -906,6 +939,118 @@ describe("draftlineVersioning", () => {
     });
     expect(mockInvoke).toHaveBeenNthCalledWith(6, "delete_shelf", {
       request: { workspace_path: WORKSPACE, shelf_id: "cutready-stash" },
+    });
+  });
+
+  describe("binds operations to the initiating workspace (#263)", () => {
+    const OTHER = "D:\\other-project";
+
+    function requestWorkspace(call: unknown[] | undefined): string | undefined {
+      const arg = call?.[1] as { request?: { workspace_path?: string } } | undefined;
+      return arg?.request?.workspace_path;
+    }
+
+    it("discards against the workspace that started the operation", async () => {
+      // A workspace switch lands after `get_changes` resolves but before the
+      // discard request is issued. The discard must still target WORKSPACE.
+      mockInvoke
+        .mockImplementationOnce(async () => {
+          setDraftlineWorkspacePath(OTHER);
+          return {
+            files: [{ path: "intro.sk", kind: "Modified", is_binary: false, is_large: false }],
+            diff: null,
+          };
+        })
+        .mockResolvedValueOnce(undefined);
+
+      await discardDraftlineChanges();
+
+      expect(mockInvoke).toHaveBeenNthCalledWith(1, "get_changes", {
+        request: { workspace_path: WORKSPACE },
+      });
+      expect(requestWorkspace(mockInvoke.mock.calls[1])).toBe(WORKSPACE);
+      expect(requestWorkspace(mockInvoke.mock.calls[1])).not.toBe(OTHER);
+    });
+
+    it("shelves against the workspace that started the operation", async () => {
+      mockInvoke
+        .mockImplementationOnce(async () => {
+          setDraftlineWorkspacePath(OTHER);
+          return {
+            files: [{ path: "intro.sk", kind: "Modified", is_binary: false, is_large: false }],
+            diff: null,
+          };
+        })
+        .mockResolvedValueOnce({
+          shelf: {
+            id: "cutready-stash",
+            version: version("3333333333333333333333333333333333333333", "Shelved", 1_700_000_200),
+          },
+          postconditions: { errors: [] },
+        });
+
+      await shelveDraftlineChanges();
+
+      expect(mockInvoke).toHaveBeenNthCalledWith(1, "get_changes", {
+        request: { workspace_path: WORKSPACE },
+      });
+      expect(requestWorkspace(mockInvoke.mock.calls[1])).toBe(WORKSPACE);
+    });
+
+    it("builds the variation graph from the initiating workspace", async () => {
+      mockInvoke
+        .mockImplementationOnce(async () => {
+          setDraftlineWorkspacePath(OTHER);
+          return [
+            {
+              variation: variation("main", "Main"),
+              head_version: version("2222222222222222222222222222222222222222", "Second", 1_700_000_100),
+              reachable_version_count: 1,
+            },
+          ];
+        })
+        .mockResolvedValueOnce({
+          workspace_id: { root: WORKSPACE },
+          current_variation: "main",
+          current_version: "2222222222222222222222222222222222222222",
+          dirty: { is_dirty: false, files: [] },
+          recovery: null,
+          state_may_be_inconsistent: false,
+          snapshot_id: "snapshot-1",
+          was_pruned: false,
+          has_more: false,
+          nodes: [],
+          refs: [],
+        });
+
+      await listDraftlineGraphNodes();
+
+      expect(requestWorkspace(mockInvoke.mock.calls[1])).toBe(WORKSPACE);
+      expect(requestWorkspace(mockInvoke.mock.calls[1])).not.toBe(OTHER);
+    });
+
+    it("keeps the guarded variation-create flow on the initiating workspace", async () => {
+      // Preflight resolves, then the workspace switches before the guarded
+      // create request. The guarded create must still target WORKSPACE.
+      mockInvoke
+        .mockImplementationOnce(async () => {
+          setDraftlineWorkspacePath(OTHER);
+          return {
+            can_create: true,
+            token: { kind: "create", nonce: "abc" },
+            conflicts: [],
+          };
+        })
+        .mockResolvedValueOnce({
+          variation: variation("feature", "feature"),
+          postconditions: { errors: [] },
+        });
+
+      await createDraftlineVariation("2222222222222222222222222222222222222222", "feature");
+
+      expect(requestWorkspace(mockInvoke.mock.calls[0])).toBe(WORKSPACE);
+      expect(requestWorkspace(mockInvoke.mock.calls[1])).toBe(WORKSPACE);
+      expect(requestWorkspace(mockInvoke.mock.calls[1])).not.toBe(OTHER);
     });
   });
 });

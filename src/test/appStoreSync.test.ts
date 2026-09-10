@@ -503,4 +503,35 @@ describe("appStore remote sync status", () => {
     expect(requestPrePushMilestone).not.toHaveBeenCalled();
     expect(mockPublishDraftlineChanges).toHaveBeenCalledWith("origin");
   });
+
+  it("does not repopulate sync status for a workspace that closed mid-refresh (#263)", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    let resolveStatus!: (status: { ahead: number; behind: number }) => void;
+    mockGetDraftlineSyncStatus.mockReturnValueOnce(
+      new Promise<{ ahead: number; behind: number }>((resolve) => {
+        resolveStatus = resolve;
+      }),
+    );
+    useAppStore.setState({
+      currentProject: { root: "D:\\ws\\alpha", repo_root: "D:\\ws\\alpha", name: "Alpha" },
+      currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
+      syncStatus: null,
+      loadTimelines: async () => {},
+      loadGraphData: async () => {},
+      loadVersions: async () => {},
+    });
+
+    const refresh = useAppStore.getState().refreshSyncStatus();
+
+    // The workspace closes while the sync request is still in flight.
+    useAppStore.getState().closeProject();
+    // A sentinel a subsequent (empty-workspace) refresh would own; the stale
+    // continuation must not clobber it.
+    useAppStore.setState({ syncStatus: { ahead: 9, behind: 9 } });
+
+    resolveStatus({ ahead: 1, behind: 2 });
+    await refresh;
+
+    expect(useAppStore.getState().syncStatus).toEqual({ ahead: 9, behind: 9 });
+  });
 });

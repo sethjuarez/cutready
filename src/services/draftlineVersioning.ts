@@ -158,20 +158,36 @@ function facade(): DraftlineHostFacade {
   return cachedFacade;
 }
 
+/**
+ * Resolve the current workspace path exactly once for an operation.
+ *
+ * Operations that span multiple awaits must capture the workspace path (or a
+ * facade, which is itself workspace-bound) at their start and reuse that
+ * snapshot. Re-reading the mutable global after an await lets a concurrent
+ * workspace switch retarget the operation (see issue #263).
+ */
+function requireWorkspacePath(): string {
+  if (!draftlineWorkspacePath) {
+    throw new Error("No Draftline workspace is currently open");
+  }
+  return draftlineWorkspacePath;
+}
+
 export async function listDraftlineVersions(): Promise<VersionEntry[]> {
   const summary = await facade().inspect();
   return summary.summary.versions.map(versionToEntry);
 }
 
 export async function listDraftlineGraphNodes(): Promise<GraphNode[]> {
-  const variations = await facade().variations();
+  const f = facade();
+  const variations = await f.variations();
   if (variations.length === 0) {
     return [];
   }
   const activeVariation = variations.find((entry) => entry.variation.is_current)?.variation.id
     ?? variations[0]?.variation.id
     ?? "";
-  const graph = await facade().workspaceGraphForVariation(activeVariation, {
+  const graph = await f.workspaceGraphForVariation(activeVariation, {
     include_remotes: true,
     include_support_refs: true,
     limit: 250,
@@ -214,15 +230,16 @@ export async function listDraftlineTimelines(): Promise<TimelineInfo[]> {
 }
 
 export async function previewDraftlineVersion(version: string): Promise<DiffEntry[]> {
+  const f = facade();
   try {
-    return versionDiffToDiffEntries(await facade().diffVersionToWorkspace(version));
+    return versionDiffToDiffEntries(await f.diffVersionToWorkspace(version));
   } catch (error) {
-    const resolution = await resolveDraftlineRewrittenVersion(version);
+    const resolution = await f.resolveRewrittenVersion(version);
     if (
       (resolution.disposition.kind === "live" || resolution.disposition.kind === "squashed_into")
       && resolution.disposition.version !== version
     ) {
-      return versionDiffToDiffEntries(await facade().diffVersionToWorkspace(resolution.disposition.version));
+      return versionDiffToDiffEntries(await f.diffVersionToWorkspace(resolution.disposition.version));
     }
     throw error;
   }
@@ -251,11 +268,12 @@ export async function previewDraftlineWorkspaceFile(path: string): Promise<Draft
 }
 
 export async function previewDraftlineWorkspaceDiffFile(path: string): Promise<DraftlineFileDiffContent> {
-  const summary = await facade().inspect();
+  const f = facade();
+  const summary = await f.inspect();
   const head = summary.summary.versions[0]?.id;
   const [headFile, workingFile] = await Promise.all([
-    head ? facade().previewVersionFile(head, path) : Promise.resolve(null),
-    facade().previewWorkspaceFile(path),
+    head ? f.previewVersionFile(head, path) : Promise.resolve(null),
+    f.previewWorkspaceFile(path),
   ]);
   return {
     path,
@@ -276,13 +294,11 @@ export async function createDraftlineVariation(
   name: string,
   remote?: string | null,
 ): Promise<void> {
-  if (!draftlineWorkspacePath) {
-    throw new Error("No Draftline workspace is currently open");
-  }
+  const workspacePath = requireWorkspacePath();
 
   const metadata = { label: name, slug: name };
   const preflight = await draftlineClient.preflightCreateVariationFromVersion({
-    workspace_path: draftlineWorkspacePath,
+    workspace_path: workspacePath,
     version_id: fromVersion,
     name,
     remote: remote ?? null,
@@ -293,7 +309,7 @@ export async function createDraftlineVariation(
 
   try {
     await draftlineClient.createVariationFromVersionGuarded({
-      workspace_path: draftlineWorkspacePath,
+      workspace_path: workspacePath,
       token: preflight.token,
       metadata,
     });
@@ -304,7 +320,7 @@ export async function createDraftlineVariation(
     }
 
     const refreshed = await draftlineClient.preflightCreateVariationFromVersion({
-      workspace_path: draftlineWorkspacePath,
+      workspace_path: workspacePath,
       version_id: fromVersion,
       name,
       remote: remote ?? null,
@@ -471,9 +487,10 @@ export async function inspectDraftlineChanges() {
 }
 
 export async function discardDraftlineChanges(): Promise<void> {
-  const changes = await facade().changes();
+  const f = facade();
+  const changes = await f.changes();
   if (changes.files.length === 0) return;
-  await facade().selectedDiscard(changes.files.map((file) => file.path));
+  await f.selectedDiscard(changes.files.map((file) => file.path));
 }
 
 export async function discardDraftlineFile(path: string): Promise<void> {
@@ -486,12 +503,13 @@ export async function hasDraftlineChanges(): Promise<boolean> {
 }
 
 export async function listDraftlineChangedFiles(): Promise<DiffEntry[]> {
-  const summary = await facade().inspect();
+  const f = facade();
+  const summary = await f.inspect();
   const head = summary.summary.versions[0]?.id;
   if (!head) {
     return changedFilesToDiffEntries(summary.summary.dirty_files);
   }
-  return versionDiffToDiffEntries(await facade().diffVersionToWorkspace(head));
+  return versionDiffToDiffEntries(await f.diffVersionToWorkspace(head));
 }
 
 export async function listDraftlineLargeChangedFiles(): Promise<string[]> {
@@ -509,9 +527,10 @@ export async function saveDraftlineVersion(label: string): Promise<string> {
 const CUTREADY_STASH_SHELF = "cutready-stash";
 
 export async function shelveDraftlineChanges(): Promise<void> {
-  const changes = await facade().changes();
+  const f = facade();
+  const changes = await f.changes();
   if (changes.files.length === 0) return;
-  await facade().selectedShelve(changes.files.map((file) => file.path), CUTREADY_STASH_SHELF);
+  await f.selectedShelve(changes.files.map((file) => file.path), CUTREADY_STASH_SHELF);
 }
 
 export async function hasDraftlineShelf(): Promise<boolean> {
@@ -520,12 +539,14 @@ export async function hasDraftlineShelf(): Promise<boolean> {
 }
 
 export async function popDraftlineShelf(): Promise<boolean> {
-  const shelves = await facade().shelves();
+  const workspacePath = requireWorkspacePath();
+  const f = facade();
+  const shelves = await f.shelves();
   const shelf = shelves.find((candidate) => candidate.id === CUTREADY_STASH_SHELF);
   if (!shelf) return false;
-  await facade().applyShelf(shelf.id);
+  await f.applyShelf(shelf.id);
   await invoke("delete_shelf", {
-    request: { workspace_path: draftlineWorkspacePath, shelf_id: shelf.id },
+    request: { workspace_path: workspacePath, shelf_id: shelf.id },
   });
   return true;
 }

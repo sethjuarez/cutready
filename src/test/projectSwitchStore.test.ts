@@ -24,6 +24,7 @@ vi.mock("../services/githubSetup", () => ({
 }));
 
 import { useAppStore } from "../stores/appStore";
+import { setDraftlineWorkspacePath } from "../services/draftlineVersioning";
 import type { Sketch, SketchSummary } from "../types/sketch";
 
 const oldProject = {
@@ -365,5 +366,58 @@ describe("project switch store side effects", () => {
       path: "old.sk",
       title: "Old sketch",
     });
+  });
+
+  it("does not repopulate versions for a workspace closed mid-load (#263)", async () => {
+    setDraftlineWorkspacePath("D:\\workspace");
+    let resolveInspect!: (value: unknown) => void;
+    mockInvoke.mockImplementation((command: string) => {
+      if (command === "inspect_workspace") {
+        return new Promise((resolve) => {
+          resolveInspect = resolve;
+        });
+      }
+      return Promise.resolve([]);
+    });
+
+    const sentinelVersions = [
+      { id: "sentinel", message: "kept", timestamp: "2026-01-01T00:00:00Z", summary: "kept" },
+    ];
+
+    useAppStore.setState({ currentProject: oldProject, versions: [] });
+
+    const load = useAppStore.getState().loadVersions();
+
+    // The workspace closes while inspect is still pending.
+    useAppStore.getState().closeProject();
+    // A sentinel the new (empty) workspace owns; the stale load must not clobber it.
+    useAppStore.setState({ versions: sentinelVersions });
+
+    // The tauri invoke bridge dispatches asynchronously, so wait until the
+    // inspect request has actually been issued before resolving it.
+    await vi.waitFor(() => expect(resolveInspect).toBeTypeOf("function"));
+
+    resolveInspect({
+      summary: {
+        active_variation: { id: "main", name: "main", metadata: { label: "main", slug: "main" }, is_current: true },
+        variations: [],
+        versions: [
+          {
+            id: "1111111111111111111111111111111111111111",
+            label: "Stale head",
+            author: { name: "Seth", email: null },
+            saved_by: { name: "Seth", email: null },
+            time_seconds: 1_700_000_000,
+          },
+        ],
+        dirty_files: [],
+        is_dirty: false,
+        recovery: null,
+        state_may_be_inconsistent: false,
+      },
+    });
+    await load;
+
+    expect(useAppStore.getState().versions).toEqual(sentinelVersions);
   });
 });
