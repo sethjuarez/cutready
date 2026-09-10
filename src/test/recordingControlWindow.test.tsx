@@ -4,12 +4,20 @@ import { RecordingControlWindow } from "../components/RecordingControlWindow";
 
 const mocks = vi.hoisted(() => {
   const closeState: { handler: null | ((event: { preventDefault: () => void }) => void) } = { handler: null };
+  const listeners: Record<string, (event: { payload?: unknown }) => void> = {};
   return {
     emit: vi.fn((..._args: unknown[]) => Promise.resolve()),
     invoke: vi.fn(),
     setSize: vi.fn(() => Promise.resolve()),
     startDragging: vi.fn(() => Promise.resolve()),
     closeState,
+    listeners,
+    listen: vi.fn((event: string, handler: (e: { payload?: unknown }) => void) => {
+      listeners[event] = handler;
+      return Promise.resolve(() => {
+        delete listeners[event];
+      });
+    }),
     onCloseRequested: vi.fn((handler: (event: { preventDefault: () => void }) => void) => {
       closeState.handler = handler;
       return Promise.resolve(() => undefined);
@@ -40,7 +48,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 vi.mock("@tauri-apps/api/event", () => ({
   emit: (...args: unknown[]) => mocks.emit(...args),
-  listen: vi.fn(() => Promise.resolve(() => undefined)),
+  listen: (...args: unknown[]) => (mocks.listen as (...a: unknown[]) => unknown)(...args),
 }));
 
 vi.mock("@tauri-apps/api/window", () => ({
@@ -130,6 +138,7 @@ describe("RecordingControlWindow", () => {
   afterEach(() => {
     vi.clearAllMocks();
     mocks.closeState.handler = null;
+    for (const key of Object.keys(mocks.listeners)) delete mocks.listeners[key];
   });
 
   it("starts a take with the selected screen and separate audio settings", async () => {
@@ -409,5 +418,302 @@ describe("RecordingControlWindow", () => {
     await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("discard_recording_take"));
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(mocks.emit).toHaveBeenCalledWith("recording-control-discarded", expect.objectContaining({ id: "take_close" }));
+  });
+
+  it("discards a start that completes after a close was requested during startup", async () => {
+    let resolveStart: (take: unknown) => void = () => {};
+    const preventDefault = vi.fn();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "get_recording_control_params") return Promise.resolve({ document_title: "Intro sketch", scope });
+      if (command === "get_recording_platform_capabilities") return Promise.resolve({
+        platform: "windows",
+        supports_system_audio: true,
+        supports_native_monitor_capture: true,
+        supports_window_capture_exclusion: true,
+        supports_click_through_prompter: true,
+        supports_camera_format_discovery: true,
+      });
+      if (command === "list_monitors") return Promise.resolve(monitors);
+      if (command === "get_recording_audio_level") return Promise.resolve({ available: false, rms: 0, peak: 0, bytes: 0 });
+      if (command === "close_recording_countdown_window") return Promise.resolve();
+      if (command === "start_recording_take") return new Promise((resolve) => { resolveStart = resolve; });
+      if (command === "discard_recording_take") return Promise.resolve({ id: "take_late", status: "failed", scope });
+      if (command === "close_recording_control_window") return Promise.resolve();
+      return Promise.resolve();
+    });
+
+    render(<RecordingControlWindow />);
+
+    await screen.findByText("Intro sketch");
+    fireEvent.click(screen.getByRole("button", { name: /start recording/i }));
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("start_recording_take", expect.anything()));
+
+    // Request close while the native start is still in flight.
+    await waitFor(() => expect(mocks.onCloseRequested.mock.calls.length).toBeGreaterThanOrEqual(1));
+    act(() => {
+      mocks.closeState.handler?.({ preventDefault });
+    });
+    // Cleanup is deferred to the pending start — the window is not closed yet.
+    expect(mocks.invoke).not.toHaveBeenCalledWith("close_recording_control_window");
+
+    // The start now completes: the just-installed capture must be discarded and
+    // the window closed, and success must NOT be published to the main window.
+    await act(async () => {
+      resolveStart({ id: "take_late", status: "recording", scope });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("discard_recording_take"));
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("close_recording_control_window"));
+    expect(mocks.emit).not.toHaveBeenCalledWith("recording-control-started", expect.anything());
+  });
+
+  it("closes without starting native capture when canceled during the countdown", async () => {
+    mocks.settings.recorderCountdownSeconds = 5;
+    const preventDefault = vi.fn();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "get_recording_control_params") return Promise.resolve({ document_title: "Intro sketch", scope });
+      if (command === "get_recording_platform_capabilities") return Promise.resolve({
+        platform: "windows",
+        supports_system_audio: true,
+        supports_native_monitor_capture: true,
+        supports_window_capture_exclusion: true,
+        supports_click_through_prompter: true,
+        supports_camera_format_discovery: true,
+      });
+      if (command === "list_monitors") return Promise.resolve(monitors);
+      if (command === "get_recording_audio_level") return Promise.resolve({ available: false, rms: 0, peak: 0, bytes: 0 });
+      if (command === "open_recording_countdown_window") return Promise.resolve();
+      if (command === "close_recording_countdown_window") return Promise.resolve();
+      if (command === "close_recording_control_window") return Promise.resolve();
+      if (command === "start_recording_take") return Promise.resolve({ id: "should_not_start", status: "recording", scope });
+      return Promise.resolve();
+    });
+
+    render(<RecordingControlWindow />);
+
+    await screen.findByText("Intro sketch");
+    fireEvent.click(screen.getByRole("button", { name: /start recording/i }));
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("open_recording_countdown_window", expect.anything()));
+
+    await waitFor(() => expect(mocks.onCloseRequested.mock.calls.length).toBeGreaterThanOrEqual(1));
+    await act(async () => {
+      mocks.closeState.handler?.({ preventDefault });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("close_recording_control_window"));
+    expect(mocks.invoke).not.toHaveBeenCalledWith("start_recording_take", expect.anything());
+  });
+
+  it("ignores a concurrent second start while one is already in flight", async () => {
+    let startCalls = 0;
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "get_recording_control_params") return Promise.resolve({ document_title: "Intro sketch", scope });
+      if (command === "get_recording_platform_capabilities") return Promise.resolve({
+        platform: "windows",
+        supports_system_audio: true,
+        supports_native_monitor_capture: true,
+        supports_window_capture_exclusion: true,
+        supports_click_through_prompter: true,
+        supports_camera_format_discovery: true,
+      });
+      if (command === "list_monitors") return Promise.resolve(monitors);
+      if (command === "get_recording_audio_level") return Promise.resolve({ available: false, rms: 0, peak: 0, bytes: 0 });
+      if (command === "close_recording_countdown_window") return Promise.resolve();
+      if (command === "start_recording_take") {
+        startCalls += 1;
+        return Promise.resolve({ id: "take_1", status: "recording", scope });
+      }
+      return Promise.resolve();
+    });
+
+    render(<RecordingControlWindow />);
+
+    await screen.findByText("Intro sketch");
+    const startButton = screen.getByRole("button", { name: /start recording/i });
+    await act(async () => {
+      fireEvent.click(startButton);
+      fireEvent.click(startButton);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(startCalls).toBe(1));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(startCalls).toBe(1);
+  });
+
+  it("returns to setup and releases the guard on a countdown-cancel event", async () => {
+    mocks.settings.recorderCountdownSeconds = 5;
+    let countdownOpens = 0;
+    let startCalls = 0;
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "get_recording_control_params") return Promise.resolve({ document_title: "Intro sketch", scope });
+      if (command === "get_recording_platform_capabilities") return Promise.resolve({
+        platform: "windows",
+        supports_system_audio: true,
+        supports_native_monitor_capture: true,
+        supports_window_capture_exclusion: true,
+        supports_click_through_prompter: true,
+        supports_camera_format_discovery: true,
+      });
+      if (command === "list_monitors") return Promise.resolve(monitors);
+      if (command === "get_recording_audio_level") return Promise.resolve({ available: false, rms: 0, peak: 0, bytes: 0 });
+      if (command === "open_recording_countdown_window") {
+        countdownOpens += 1;
+        return Promise.resolve();
+      }
+      if (command === "close_recording_countdown_window") return Promise.resolve();
+      if (command === "start_recording_take") {
+        startCalls += 1;
+        return Promise.resolve({ id: "take_1", status: "recording", scope });
+      }
+      return Promise.resolve();
+    });
+
+    render(<RecordingControlWindow />);
+
+    await screen.findByText("Intro sketch");
+    fireEvent.click(screen.getByRole("button", { name: /start recording/i }));
+    await waitFor(() => expect(countdownOpens).toBe(1));
+
+    // The user dismisses the countdown (Esc / cancel button emits the event).
+    await waitFor(() => expect(typeof mocks.listeners["recording-countdown-cancel"]).toBe("function"));
+    await act(async () => {
+      mocks.listeners["recording-countdown-cancel"]({ payload: {} });
+      await Promise.resolve();
+    });
+
+    // We are back in setup with the single-flight guard released: a fresh start
+    // proceeds to a second countdown, and no native capture was ever started.
+    const startButton = await screen.findByRole("button", { name: /start recording/i });
+    await waitFor(() => expect(startButton).toBeEnabled());
+    fireEvent.click(startButton);
+    await waitFor(() => expect(countdownOpens).toBe(2));
+    expect(startCalls).toBe(0);
+  });
+
+  it("ignores a countdown-cancel whose attempt id does not match the current countdown", async () => {
+    mocks.settings.recorderCountdownSeconds = 5;
+    let countdownOpens = 0;
+    let capturedAttemptId: number | undefined;
+    let startCalls = 0;
+    mocks.invoke.mockImplementation((command: string, args?: { attemptId?: number }) => {
+      if (command === "get_recording_control_params") return Promise.resolve({ document_title: "Intro sketch", scope });
+      if (command === "get_recording_platform_capabilities") return Promise.resolve({
+        platform: "windows",
+        supports_system_audio: true,
+        supports_native_monitor_capture: true,
+        supports_window_capture_exclusion: true,
+        supports_click_through_prompter: true,
+        supports_camera_format_discovery: true,
+      });
+      if (command === "list_monitors") return Promise.resolve(monitors);
+      if (command === "get_recording_audio_level") return Promise.resolve({ available: false, rms: 0, peak: 0, bytes: 0 });
+      if (command === "open_recording_countdown_window") {
+        countdownOpens += 1;
+        capturedAttemptId = args?.attemptId;
+        return Promise.resolve();
+      }
+      if (command === "close_recording_countdown_window") return Promise.resolve();
+      if (command === "start_recording_take") {
+        startCalls += 1;
+        return Promise.resolve({ id: "take_1", status: "recording", scope });
+      }
+      return Promise.resolve();
+    });
+
+    render(<RecordingControlWindow />);
+
+    await screen.findByText("Intro sketch");
+    fireEvent.click(screen.getByRole("button", { name: /start recording/i }));
+    await waitFor(() => expect(countdownOpens).toBe(1));
+    await waitFor(() => expect(typeof mocks.listeners["recording-countdown-cancel"]).toBe("function"));
+    await waitFor(() => expect(typeof capturedAttemptId).toBe("number"));
+
+    // A stale cancel naming a different (superseded) countdown must be ignored:
+    // the current countdown stays parked and the Start button stays disabled.
+    await act(async () => {
+      mocks.listeners["recording-countdown-cancel"]({ payload: { attemptId: (capturedAttemptId as number) + 999 } });
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("button", { name: /start recording/i })).toBeDisabled();
+
+    // The cancel that names the current attempt returns us to setup.
+    await act(async () => {
+      mocks.listeners["recording-countdown-cancel"]({ payload: { attemptId: capturedAttemptId } });
+      await Promise.resolve();
+    });
+    const startButton = await screen.findByRole("button", { name: /start recording/i });
+    await waitFor(() => expect(startButton).toBeEnabled());
+    expect(startCalls).toBe(0);
+  });
+
+  it("discards the live capture when the window closes during the post-start resize", async () => {
+    let resolveSize: () => void = () => {};
+    let startInvoked = false;
+    let resizeDeferred = false;
+    mocks.setSize.mockImplementation(() => {
+      if (startInvoked && !resizeDeferred) {
+        resizeDeferred = true;
+        return new Promise<void>((resolve) => { resolveSize = resolve; });
+      }
+      return Promise.resolve();
+    });
+    const preventDefault = vi.fn();
+    mocks.invoke.mockImplementation((command: string) => {
+      if (command === "get_recording_control_params") return Promise.resolve({ document_title: "Intro sketch", scope });
+      if (command === "get_recording_platform_capabilities") return Promise.resolve({
+        platform: "windows",
+        supports_system_audio: true,
+        supports_native_monitor_capture: true,
+        supports_window_capture_exclusion: true,
+        supports_click_through_prompter: true,
+        supports_camera_format_discovery: true,
+      });
+      if (command === "list_monitors") return Promise.resolve(monitors);
+      if (command === "get_recording_audio_level") return Promise.resolve({ available: false, rms: 0, peak: 0, bytes: 0 });
+      if (command === "close_recording_countdown_window") return Promise.resolve();
+      if (command === "start_recording_take") {
+        startInvoked = true;
+        return Promise.resolve({ id: "take_live", status: "recording", scope });
+      }
+      if (command === "discard_recording_take") return Promise.resolve({ id: "take_live", status: "failed", scope });
+      if (command === "close_recording_control_window") return Promise.resolve();
+      return Promise.resolve();
+    });
+
+    render(<RecordingControlWindow />);
+
+    await screen.findByText("Intro sketch");
+    fireEvent.click(screen.getByRole("button", { name: /start recording/i }));
+    // The native start resolved; startTake is now parked on `await setSize(HUD)`.
+    await waitFor(() => expect(resizeDeferred).toBe(true));
+
+    // A close arrives during the resize, before the "recording" phase render is
+    // guaranteed to have re-registered the close listener.
+    await waitFor(() => expect(mocks.closeState.handler).toBeTypeOf("function"));
+    await act(async () => {
+      mocks.closeState.handler?.({ preventDefault });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // The installed capture is discarded rather than closed over, and success is
+    // never published even after the resize finally resolves.
+    await waitFor(() => expect(mocks.invoke).toHaveBeenCalledWith("discard_recording_take"));
+    await act(async () => {
+      resolveSize();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(mocks.emit).not.toHaveBeenCalledWith("recording-control-started", expect.anything());
   });
 });

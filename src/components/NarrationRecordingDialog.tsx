@@ -60,6 +60,18 @@ function amplitudeFromDb(db: number): number {
   return 10 ** (db / 20);
 }
 
+/**
+ * Thrown when a microphone acquisition resolves after its owner disposed (dialog
+ * closed/unmounted). Signals callers to abandon the result silently rather than
+ * surface an error — the late stream has already been released.
+ */
+class AcquisitionDisposedError extends Error {
+  constructor() {
+    super("Microphone acquisition was disposed before it resolved.");
+    this.name = "AcquisitionDisposedError";
+  }
+}
+
 function closeAudioContext(context: AudioContext | null) {
   if (!context || context.state === "closed") return;
   void context.close().catch((error: unknown) => {
@@ -281,6 +293,10 @@ export function NarrationRecordingDialog({
   const startedAtRef = useRef(0);
   const preparedInputRef = useRef<PreparedRecordingInput | null>(null);
   const prepareInputPromiseRef = useRef<Promise<PreparedRecordingInput> | null>(null);
+  // Monotonic disposal epoch: bumped whenever input resources are torn down so a
+  // microphone acquisition still in flight can detect that its owner is gone and
+  // release its late-delivered stream instead of installing an unowned resource.
+  const acquisitionEpochRef = useRef(0);
   const recordedBlobRef = useRef<Blob | null>(null);
   const recordedUrlRef = useRef("");
   const recordedUrlIsObjectRef = useRef(false);
@@ -322,6 +338,9 @@ export function NarrationRecordingDialog({
   }, []);
 
   const cleanupInput = useCallback(() => {
+    // Invalidate any in-flight acquisition so a late getUserMedia() resolution
+    // releases its stream instead of re-installing resources we just tore down.
+    acquisitionEpochRef.current += 1;
     stopVisualizer();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -346,8 +365,15 @@ export function NarrationRecordingDialog({
     if (prepareInputPromiseRef.current) return prepareInputPromiseRef.current;
 
     setInputStatus("preparing");
+    const epoch = acquisitionEpochRef.current;
     const preparePromise = navigator.mediaDevices.getUserMedia({ audio })
       .then((stream) => {
+        // Disposed while acquiring: release the late stream and install nothing.
+        // No AudioContext is created on this path, so there is nothing to close.
+        if (acquisitionEpochRef.current !== epoch) {
+          stream.getTracks().forEach((track) => track.stop());
+          throw new AcquisitionDisposedError();
+        }
         const context = new AudioContext();
         const analyser = context.createAnalyser();
         analyser.fftSize = 2048;
@@ -365,11 +391,18 @@ export function NarrationRecordingDialog({
         return prepared;
       })
       .catch((err: unknown) => {
+        // A disposed acquisition is an expected teardown race, not a device
+        // error: propagate the sentinel without flipping UI into an error state.
+        if (err instanceof AcquisitionDisposedError) throw err;
         setInputStatus("error");
         throw err;
       })
       .finally(() => {
-        prepareInputPromiseRef.current = null;
+        // Only clear the ref if it still points at THIS acquisition; a newer
+        // acquisition may already own it after an intervening cleanup.
+        if (prepareInputPromiseRef.current === preparePromise) {
+          prepareInputPromiseRef.current = null;
+        }
       });
     prepareInputPromiseRef.current = preparePromise;
 
@@ -389,12 +422,18 @@ export function NarrationRecordingDialog({
     recordedBlobRef.current = null;
     setError("");
     setStatus("preparing");
+    // Capture the disposal epoch so we can bail out if the dialog is torn down
+    // during any await below (acquisition or context.resume()) before we build
+    // the recorder and its timers on now-disposed resources.
+    const epoch = acquisitionEpochRef.current;
 
     try {
       const preparedInput = await prepareRecordingInput();
+      if (acquisitionEpochRef.current !== epoch) throw new AcquisitionDisposedError();
       if (preparedInput.context.state === "suspended") {
         await preparedInput.context.resume();
       }
+      if (acquisitionEpochRef.current !== epoch) throw new AcquisitionDisposedError();
 
       const recorder = mimeType ? new MediaRecorder(preparedInput.stream, { mimeType }) : new MediaRecorder(preparedInput.stream);
       const canvas = canvasRef.current;
@@ -402,6 +441,12 @@ export function NarrationRecordingDialog({
       let startFallbackTimer: number | null = null;
       const startRecordingUi = () => {
         if (recordingUiStarted) return;
+        // A newer recorder replaced this one: a stale callback must not drive
+        // the UI or install render/timer loops for a superseded take.
+        if (recorderRef.current !== recorder) return;
+        // Disposed after the recorder started: do not install render/timer
+        // loops or flip UI state on a torn-down dialog.
+        if (acquisitionEpochRef.current !== epoch) return;
         recordingUiStarted = true;
         startedAtRef.current = performance.now();
         setElapsedMs(0);
@@ -421,29 +466,51 @@ export function NarrationRecordingDialog({
       setElapsedMs(0);
 
       recorder.ondataavailable = (event) => {
+        // Ignore buffered data from a recorder a newer take has replaced, so a
+        // stale flush cannot pollute the current take's chunk list.
+        if (recorderRef.current !== recorder) return;
         if (event.data.size > 0) startRecordingUi();
         if (event.data.size > 0) chunksRef.current.push(event.data);
       };
       recorder.onstart = () => {
+        if (recorderRef.current !== recorder) return;
         startRecordingUi();
       };
       recorder.onerror = () => {
+        // A newer recorder owns the shared refs now: drop this stale error
+        // without clearing the timer, nulling the ref, or touching chunks.
+        if (recorderRef.current !== recorder) return;
         if (startFallbackTimer !== null) window.clearTimeout(startFallbackTimer);
+        recorderRef.current = null;
+        // Disposed before this async error fired: drop it silently rather than
+        // flip an unmounted dialog into an error state.
+        if (acquisitionEpochRef.current !== epoch) {
+          chunksRef.current = [];
+          return;
+        }
         setStatus("error");
         setError("Narration recording failed.");
         cleanupInput();
       };
       recorder.onstop = () => {
+        // Stale callback from a superseded recorder: leave the current take's
+        // refs and chunks untouched.
+        if (recorderRef.current !== recorder) return;
         if (startFallbackTimer !== null) window.clearTimeout(startFallbackTimer);
+        recorderRef.current = null;
+        const chunks = chunksRef.current;
+        chunksRef.current = [];
+        // The dialog was torn down between stop() and this async onstop: release
+        // the chunks without creating an object URL or updating unmounted state.
+        // cleanupInput already ran on the disposal path, so nothing else to do.
+        if (acquisitionEpochRef.current !== epoch) return;
         const durationMs = Math.max(0, Math.round(performance.now() - startedAtRef.current));
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || mimeType || "audio/webm" });
+        const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || "audio/webm" });
         recordedBlobRef.current = blob;
         setElapsedMs(durationMs);
         replaceRecordedUrl(URL.createObjectURL(blob), true);
         setHasUnsavedTake(true);
         setStatus("recorded");
-        recorderRef.current = null;
-        chunksRef.current = [];
         cleanupInput();
       };
       recorder.start();
@@ -451,6 +518,7 @@ export function NarrationRecordingDialog({
         if (recorder.state === "recording") startRecordingUi();
       }, 250);
     } catch (err) {
+      if (err instanceof AcquisitionDisposedError) return;
       setStatus("error");
       setError(`Could not prepare microphone recording: ${err}`);
       cleanupInput();
@@ -562,6 +630,7 @@ export function NarrationRecordingDialog({
   useEffect(() => {
     if (status === "preparing" || status === "recording" || hasUnsavedTake) return;
     void prepareRecordingInput().catch((err: unknown) => {
+      if (err instanceof AcquisitionDisposedError) return;
       console.warn("[NarrationRecordingDialog] failed to prewarm microphone", { error: err });
     });
   }, [hasUnsavedTake, prepareRecordingInput, status]);
