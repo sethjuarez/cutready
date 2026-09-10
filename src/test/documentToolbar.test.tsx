@@ -1,8 +1,42 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DocumentToolbar } from "../components/DocumentToolbar";
 
+function stubResizeObserver() {
+  let callback: ResizeObserverCallback | null = null;
+  const observe = vi.fn();
+  const disconnect = vi.fn();
+
+  class MockResizeObserver {
+    constructor(cb: ResizeObserverCallback) {
+      callback = cb;
+    }
+
+    observe = observe;
+    disconnect = disconnect;
+  }
+
+  vi.stubGlobal("ResizeObserver", MockResizeObserver);
+
+  return {
+    resize(width: number) {
+      act(() => {
+        callback?.(
+          [{ contentRect: { width } } as ResizeObserverEntry],
+          {} as ResizeObserver,
+        );
+      });
+    },
+    observe,
+    disconnect,
+  };
+}
+
 describe("DocumentToolbar", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("runs grouped actions from dropdown menus", () => {
     const onPreview = vi.fn();
 
@@ -23,6 +57,61 @@ describe("DocumentToolbar", () => {
 
     expect(onPreview).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("does not render duplicate wide and overflow action controls", () => {
+    render(
+      <DocumentToolbar
+        canRecord
+        onRecord={vi.fn()}
+        presentActions={[{ id: "preview", label: "Preview", onSelect: vi.fn() }]}
+        aiActions={[{ id: "polish", label: "Polish", onSelect: vi.fn() }]}
+        exportActions={[{ id: "word", label: "Word", onSelect: vi.fn() }]}
+        locked={false}
+        onToggleLock={vi.fn()}
+        lockLabel="Lock sketch"
+        unlockLabel="Unlock sketch"
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /more document actions/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /present/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ai actions/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /export actions/i })).toBeInTheDocument();
+  });
+
+  it("switches between wide action menus and a single compact overflow menu", () => {
+    const observer = stubResizeObserver();
+
+    render(
+      <div className="document-header">
+        <DocumentToolbar
+          canRecord
+          onRecord={vi.fn()}
+          presentActions={[{ id: "preview", label: "Preview", onSelect: vi.fn() }]}
+          aiActions={[{ id: "polish", label: "Polish", onSelect: vi.fn() }]}
+          exportActions={[{ id: "word", label: "Word", onSelect: vi.fn() }]}
+          locked={false}
+          onToggleLock={vi.fn()}
+          lockLabel="Lock sketch"
+          unlockLabel="Unlock sketch"
+        />
+      </div>,
+    );
+
+    expect(observer.observe).toHaveBeenCalled();
+
+    observer.resize(700);
+    expect(screen.getByRole("button", { name: /more document actions/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /present/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /ai actions/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /export actions/i })).not.toBeInTheDocument();
+
+    observer.resize(800);
+    expect(screen.queryByRole("button", { name: /more document actions/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /present/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ai actions/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /export actions/i })).toBeInTheDocument();
   });
 
   it("does not run disabled record or menu actions", () => {

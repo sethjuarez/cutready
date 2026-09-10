@@ -221,24 +221,6 @@ body.recording-prompter-root #root {
   container-type: inline-size;
 }
 
-.document-toolbar-wide-action {
-  display: none;
-}
-
-.document-toolbar-overflow {
-  display: block;
-}
-
-@container (min-width: 46rem) {
-  .document-toolbar-wide-action {
-    display: block;
-  }
-
-  .document-toolbar-overflow {
-    display: none;
-  }
-}
-
 /* ── History Graph Header ─────────────────────────────────── */
 
 .history-graph-header {
