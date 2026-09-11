@@ -11,9 +11,13 @@ import {
   classifyError,
   describeToolCall,
   fetchWebReferenceContent,
+  formatRunDuration,
+  formatRunTokens,
+  harnessRunLabel,
   resolveWebReferenceContent,
   extractInlineToolActivity,
   isChatScrolledNearBottom,
+  providerRunLabel,
   reconcileMessagesForDisplay,
   scrollChatContainerToBottom,
   shouldRequestChatMutationApproval,
@@ -370,6 +374,23 @@ describe("workingNotesPreview", () => {
     expect(workingNotesPreview({
       drafts: ["First draft.", "Second draft has a lot more detail."],
     }, 18)).toBe("Second draft has…");
+  });
+});
+
+describe("run details formatting", () => {
+  it("formats provider and harness labels for the run details popover", () => {
+    expect(providerRunLabel("microsoft_foundry")).toBe("Microsoft Foundry");
+    expect(providerRunLabel("openai")).toBe("OpenAI");
+    expect(harnessRunLabel("prompty")).toBe("Prompty");
+    expect(harnessRunLabel("copilot-sdk")).toBe("GitHub Copilot");
+  });
+
+  it("formats run duration and token counts without implying unknown precision", () => {
+    expect(formatRunDuration(850)).toBe("850ms");
+    expect(formatRunDuration(12_400)).toBe("12s");
+    expect(formatRunDuration(undefined)).toBe("—");
+    expect(formatRunTokens(8142)).toBe("8,142");
+    expect(formatRunTokens(undefined)).toBe("—");
   });
 });
 

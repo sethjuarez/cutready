@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::engine::agent::execution::{
     estimate_message_chars, AgentEvent, ChatMessage, ContextItem, ContextKind, ContextScope,
-    ContextSource, LargeContextRef, RunCancellation, VisionConfig, WebAccessConfig,
+    ContextSource, LargeContextRef, RunCancellation, Usage, VisionConfig, WebAccessConfig,
 };
 use crate::engine::agent::harness::{AgentRunRequest, HarnessConfig, HarnessRegistry};
 use crate::engine::agent::llm::{self, LlmConfig, LlmProvider, ModelInfo};
@@ -1059,7 +1059,7 @@ pub async fn agent_chat_with_tools(
                     messages,
                     repo_root,
                     project_root,
-                    agent_id,
+                    agent_id: agent_id.clone(),
                     agent_prompts: harness_agent_prompts,
                     mutation_tools_enabled,
                     tools: harness_tools,
@@ -1170,6 +1170,13 @@ pub async fn agent_chat_with_tools(
     Ok(AgentChatResult {
         messages: result.messages,
         response: result.response,
+        provider: effective_provider,
+        model: effective_model,
+        execution_engine: harness_id,
+        agent_id,
+        run_id,
+        elapsed_ms: started.elapsed().as_millis(),
+        usage: result.usage,
     })
 }
 
@@ -1252,6 +1259,13 @@ pub async fn copilot_sign_in() -> Result<(), String> {
 pub struct AgentChatResult {
     pub messages: Vec<ChatMessage>,
     pub response: String,
+    pub provider: String,
+    pub model: String,
+    pub execution_engine: String,
+    pub agent_id: String,
+    pub run_id: String,
+    pub elapsed_ms: u128,
+    pub usage: Usage,
 }
 
 // ---------------------------------------------------------------------------

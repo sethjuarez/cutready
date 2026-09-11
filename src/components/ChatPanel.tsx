@@ -28,7 +28,7 @@ import {
   resolveAgentModelOverride,
 } from "../utils/agentProvider";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
-import type { ChatMessage, ChatToolActivity, ChatWorkingNotes } from "../types/sketch";
+import type { ChatMessage, ChatRunDetails, ChatToolActivity, ChatWorkingNotes } from "../types/sketch";
 import {
   Sparkles,
   Clock,
@@ -45,6 +45,7 @@ import {
   Menu,
   Square,
   Activity,
+  CircleHelp,
   Database,
   Maximize2,
   Minimize2,
@@ -249,6 +250,62 @@ function textContent(content: ChatMessage["content"]): string {
 interface AgentChatResult {
   messages: ChatMessage[];
   response: string;
+  provider: string;
+  model: string;
+  execution_engine: string;
+  agent_id: string;
+  run_id: string;
+  elapsed_ms: number;
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+}
+
+export function providerRunLabel(provider: string | undefined): string {
+  switch ((provider ?? "").toLowerCase()) {
+    case "microsoft_foundry":
+      return "Microsoft Foundry";
+    case "azure_openai":
+      return "Azure OpenAI";
+    case "openai":
+      return "OpenAI";
+    case "anthropic":
+      return "Anthropic";
+    case "copilot-sdk":
+      return "GitHub Copilot";
+    default:
+      return provider?.trim() || "—";
+  }
+}
+
+export function harnessRunLabel(harness: string | undefined): string {
+  switch ((harness ?? "").toLowerCase()) {
+    case "prompty":
+      return "Prompty";
+    case "agentive":
+      return "Agentive";
+    case "copilot-sdk":
+      return "GitHub Copilot";
+    default:
+      return harness?.trim() || "—";
+  }
+}
+
+export function formatRunDuration(ms: number | undefined): string {
+  if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) return "—";
+  if (ms < 1_000) return `${Math.round(ms)}ms`;
+  const seconds = ms / 1_000;
+  if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  return `${minutes}m ${remainingSeconds}s`;
+}
+
+export function formatRunTokens(tokens: number | undefined): string {
+  if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens < 0) return "—";
+  return Math.round(tokens).toLocaleString();
 }
 
 const ROW_TARGETED_SKETCH_MUTATION_TOOLS = new Set([
@@ -1315,6 +1372,9 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
         assistantResponse: result.response,
         logger: (message, details) => console.warn(`[chat] ${message}`, details),
       });
+      const toolCallCount = backendMessages.filter(
+        (m) => m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0,
+      ).reduce((n, m) => n + (m.tool_calls?.length ?? 0), 0);
       const workingNotes = buildChatWorkingNotes({
         drafts: workingDraftsRef.current,
         thinking: thinkingRef.current,
@@ -1339,11 +1399,35 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           };
         }
       }
+      const finalAssistantIndex = (() => {
+        for (let i = backendMessages.length - 1; i >= 0; i -= 1) {
+          if (backendMessages[i].role === "assistant" && textContent(backendMessages[i].content).trim() === result.response.trim()) {
+            return i;
+          }
+        }
+        return -1;
+      })();
+      if (finalAssistantIndex >= 0) {
+        const finalAssistant = backendMessages[finalAssistantIndex];
+        backendMessages[finalAssistantIndex] = {
+          ...finalAssistant,
+          cutready: {
+            ...finalAssistant.cutready,
+            runDetails: {
+              provider: result.provider,
+              model: result.model,
+              execution_engine: result.execution_engine,
+              agent_id: result.agent_id,
+              run_id: result.run_id,
+              elapsed_ms: result.elapsed_ms,
+              tool_calls: toolCallCount,
+              usage: result.usage,
+            },
+          },
+        };
+      }
 
       // Log response to activity
-      const toolCallCount = backendMessages.filter(
-        (m) => m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0,
-      ).reduce((n, m) => n + (m.tool_calls?.length ?? 0), 0);
       addActivityEntries([{
         id: crypto.randomUUID(),
         timestamp: new Date(),
@@ -2319,6 +2403,7 @@ function MessageRow({
   if (message.role === "assistant") {
     const assistantText = textContent(message.content).trim();
     const workingNotes = message.cutready?.workingNotes;
+    const runDetails = message.cutready?.runDetails;
     if (!assistantText && inlineToolActivity.length === 0 && !workingNotes) return null;
 
     return (
@@ -2336,6 +2421,12 @@ function MessageRow({
                   <IconSparkles size={11} />
                 </span>
                 {agentName}
+                {runDetails && (
+                  <RunDetailsPopover
+                    details={runDetails}
+                    toolCount={inlineToolActivity.length}
+                  />
+                )}
               </div>
               <div className="rounded-2xl rounded-tl-sm border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/80 shadow-sm">
                 <div className="px-5 py-[1.125rem] text-[14px] leading-[1.78] text-[rgb(var(--color-text)_/_0.92)]">
@@ -2355,6 +2446,75 @@ function MessageRow({
   }
 
   return null;
+}
+
+function RunDetailsPopover({ details, toolCount }: { details: ChatRunDetails; toolCount: number }) {
+  const [open, setOpen] = useState(false);
+  const usage = details.usage;
+  const effectiveToolCount = details.tool_calls ?? toolCount;
+  const rows = [
+    ["Harness", harnessRunLabel(details.execution_engine)],
+    ["Provider", providerRunLabel(details.provider)],
+    ["Model", details.model || "—"],
+    ["Agent", details.agent_id || "—"],
+    ["Duration", formatRunDuration(details.elapsed_ms)],
+    ["Tools", `${effectiveToolCount} call${effectiveToolCount === 1 ? "" : "s"}`],
+    ["Tokens", usage ? `${formatRunTokens(usage.prompt_tokens)} in / ${formatRunTokens(usage.completion_tokens)} out` : "—"],
+  ];
+
+  return (
+    <span className="relative inline-flex items-center">
+      <button
+        type="button"
+        aria-label="Show run details"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setOpen(false);
+            event.currentTarget.blur();
+          }
+        }}
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/50 text-[rgb(var(--color-text-secondary))]/70 transition-colors hover:border-[rgb(var(--color-accent))]/45 hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]/35"
+        title="Show run details"
+      >
+        <CircleHelp className="h-3.5 w-3.5" />
+      </button>
+      {open && (
+        <span
+          role="dialog"
+          aria-label="Run details"
+          className="absolute left-0 top-6 z-30 block w-72 rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] p-3 text-left normal-case tracking-normal text-[rgb(var(--color-text))] shadow-xl"
+        >
+          <span className="mb-2 flex items-center justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
+              Run details
+            </span>
+            <span className="rounded-full bg-[rgb(var(--color-accent))]/10 px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--color-accent))]">
+              Completed
+            </span>
+          </span>
+          <span className="grid grid-cols-[5.75rem_minmax(0,1fr)] gap-x-3 gap-y-1.5">
+            {rows.map(([label, value]) => (
+              <span key={label} className="contents">
+                <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))]/75">
+                  {label}
+                </span>
+                <span className="truncate font-mono text-[11px] normal-case tracking-normal text-[rgb(var(--color-text))]/90">
+                  {value}
+                </span>
+              </span>
+            ))}
+          </span>
+          {details.run_id && (
+            <span className="mt-2 block truncate border-t border-[rgb(var(--color-border-subtle))] pt-2 font-mono text-[10px] normal-case tracking-normal text-[rgb(var(--color-text-secondary))]/70">
+              {details.run_id}
+            </span>
+          )}
+        </span>
+      )}
+    </span>
+  );
 }
 
 function WorkingNotesInline({ notes, defaultOpen = false, live = false }: { notes: ChatWorkingNotes; defaultOpen?: boolean; live?: boolean }) {
