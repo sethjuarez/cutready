@@ -70,6 +70,14 @@ function boundedToolActivityResult(content: string): string {
   return `${content.slice(0, TOOL_ACTIVITY_PREVIEW_MAX_CHARS).trimEnd()}\n\n[Tool result preview truncated]`;
 }
 
+export function toolResultActivityLevel(
+  status: string | undefined,
+  resultText: string,
+): "success" | "warn" {
+  if (status) return status === "success" ? "success" : "warn";
+  return resultText.trimStart().startsWith("Error") ? "warn" : "success";
+}
+
 function formatContextBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   return `${(bytes / 1024).toFixed(bytes >= 10_240 ? 0 : 1)} KB`;
@@ -758,15 +766,14 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           const resultText = ev.result ?? "";
           // Prefer the explicit host-owned outcome; fall back to text inspection
           // only for historical events that predate the status field.
-          const isSuccess = ev.status
-            ? ev.status === "success"
-            : !resultText.startsWith("Error");
+          const level = toolResultActivityLevel(ev.status, resultText);
+          const isSuccess = level === "success";
           addActivityEntries([{
             id: crypto.randomUUID(),
             timestamp: new Date(),
             source: `result ${ev.name ?? ""}`.trim(),
             content: boundedToolActivityResult(resultText),
-            level: isSuccess ? "success" : "error",
+            level,
           }]);
           // Auto-refresh sidebar and open sketches after tool mutations
           if (isSuccess && SKETCH_MUTATION_TOOLS.has(toolName)) {

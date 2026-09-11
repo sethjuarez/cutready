@@ -16,6 +16,7 @@ import {
   reconcileMessagesForDisplay,
   scrollChatContainerToBottom,
   shouldRequestChatMutationApproval,
+  toolResultActivityLevel,
 } from "../components/ChatPanel";
 import type { ChatMessage } from "../types/sketch";
 import {
@@ -32,6 +33,20 @@ describe("classifyError", () => {
     const { title, suggestion } = classifyError(err);
     expect(title).toBe("Azure sign-in expired");
     expect(suggestion).toContain("Settings → AI → Connections");
+  });
+
+  describe("toolResultActivityLevel", () => {
+    it("keeps successful tool results as success", () => {
+      expect(toolResultActivityLevel("success", "Read note")).toBe("success");
+    });
+
+    it("treats explicit tool failures as warnings because the turn can recover", () => {
+      expect(toolResultActivityLevel("failure", "Error reading note: missing.md")).toBe("warn");
+    });
+
+    it("treats legacy error-looking tool results as warnings", () => {
+      expect(toolResultActivityLevel(undefined, "Error reading note: missing.md")).toBe("warn");
+    });
   });
 
   it("recognizes AADSTS token-expiry errors as an expired Azure sign-in", () => {
