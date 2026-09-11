@@ -8,6 +8,7 @@ import {
   loadAllSecrets,
   setProviderSecret,
   setSecret,
+  SECRET_KEYS,
   type ProviderSecretName,
   type SecretKey,
 } from "./useSecretStore";
@@ -645,6 +646,14 @@ interface SettingsStore {
   updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => Promise<void>;
 }
 
+/**
+ * Single-flight guard for _loadSettings. The store's `loaded` flag flips only
+ * near the end of a load, so it cannot serialize the concurrent loads that fire
+ * when many useSettings consumers mount at startup. This module-level promise
+ * ensures exactly one load runs at a time.
+ */
+let settingsLoadPromise: Promise<void> | null = null;
+
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
   settings: defaultSettings,
   loaded: false,
@@ -653,7 +662,13 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   _store: null,
 
   _loadSettings: async () => {
+    // Join an in-flight load first so callers that arrive after `loaded` flips
+    // true (but while the post-load OAuth refresh is still running) await the
+    // same promise. Once the load fully settles, settingsLoadPromise is null and
+    // the `loaded` check short-circuits repeat calls.
+    if (settingsLoadPromise) return settingsLoadPromise;
     if (get().loaded) return;
+    settingsLoadPromise = (async () => {
     try {
       const store = new LazyStore(STORE_PATH);
       set({ _store: store });
@@ -727,6 +742,17 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       // token is already present the provider is usable immediately.
       const refreshPending = needsOAuth && !!result.aiRefreshToken && !result.aiAccessToken;
 
+      // Never let a blank secret read overlay a good in-memory value. Even with
+      // the hardened vault, a genuine double-failure could yield "" here; the
+      // merge below is last-write-wins, so guard it explicitly.
+      for (const sk of SECRET_KEYS) {
+        const incoming = (result as Record<string, unknown>)[sk] as string | undefined;
+        const existing = (get().settings as unknown as Record<string, unknown>)[sk] as string | undefined;
+        if (!incoming && existing) {
+          (result as Record<string, unknown>)[sk] = existing;
+        }
+      }
+
       set({ settings: { ...get().settings, ...result }, loaded: true, oauthRefreshPending: refreshPending });
 
       if (needsOAuth && result.aiRefreshToken) {
@@ -766,6 +792,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       console.error("[settings] Failed to load settings, using defaults:", err);
       set({ loaded: true, oauthRefreshPending: false });
     }
+    })().finally(() => {
+      settingsLoadPromise = null;
+    });
+    return settingsLoadPromise;
   },
 
   _loadWorkspaceSettings: async () => {
