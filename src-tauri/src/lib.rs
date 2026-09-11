@@ -847,6 +847,7 @@ pub fn run() {
             commands::github::github_sign_out,
             commands::terminal::terminal_open,
             commands::terminal::terminal_write,
+            commands::terminal::terminal_is_alive,
             commands::terminal::terminal_resize,
             commands::terminal::terminal_close,
         ])

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
@@ -30,6 +31,11 @@ type RuntimeTerminal = {
   host: HTMLDivElement;
   sessionId: string | null;
   dataDisposable: { dispose: () => void };
+  helperKeyDisposable: { dispose: () => void };
+  exitCheckTimers: number[];
+  helperFallbackTimer: number | null;
+  hasInputSinceSubmit: boolean;
+  dataSeq: number;
   disposed: boolean;
 };
 
@@ -76,6 +82,15 @@ async function closeRuntime(id: string) {
   terminalRuntimes.delete(id);
   runtime.disposed = true;
   runtime.dataDisposable.dispose();
+  runtime.helperKeyDisposable.dispose();
+  for (const timer of runtime.exitCheckTimers) {
+    window.clearTimeout(timer);
+  }
+  runtime.exitCheckTimers = [];
+  if (runtime.helperFallbackTimer !== null) {
+    window.clearTimeout(runtime.helperFallbackTimer);
+    runtime.helperFallbackTimer = null;
+  }
   runtime.host.remove();
   const sessionId = runtime.sessionId;
   runtime.sessionId = null;
@@ -85,7 +100,15 @@ async function closeRuntime(id: string) {
   runtime.term.dispose();
 }
 
-export function TerminalPanel({ active }: { active: boolean }) {
+export function TerminalPanel({
+  active,
+  onRequestActivate,
+  toolbarHost,
+}: {
+  active: boolean;
+  onRequestActivate?: () => void;
+  toolbarHost?: HTMLElement | null;
+}) {
   const currentProject = useAppStore((state) => state.currentProject);
   const { settings } = useSettings();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -217,6 +240,11 @@ export function TerminalPanel({ active }: { active: boolean }) {
         host,
         sessionId: null,
         dataDisposable: { dispose: () => {} },
+        helperKeyDisposable: { dispose: () => {} },
+        exitCheckTimers: [],
+        helperFallbackTimer: null,
+        hasInputSinceSubmit: false,
+        dataSeq: 0,
         disposed: false,
       };
       terminalRuntimes.set(id, runtime);
@@ -227,21 +255,97 @@ export function TerminalPanel({ active }: { active: boolean }) {
       };
 
       runtime.dataDisposable = term.onData((data) => {
+        runtime.dataSeq += 1;
+        const submitsInput = isTerminalSubmitInput(data);
+        if (submitsInput) {
+          runtime.hasInputSinceSubmit = false;
+        } else if (data.length > 0) {
+          runtime.hasInputSinceSubmit = true;
+        }
         if (!runtime.sessionId) return;
         void invoke("terminal_write", {
           sessionId: runtime.sessionId,
           data: Array.from(encoder().encode(data)),
-        }).catch((error) => {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          updateTerminal(id, {
-            status: "exited",
-            error: message,
-            sessionId: null,
+        })
+          .then(() => {
+            scheduleExitReconcile(id, runtime, data);
+          })
+          .catch((error) => {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            updateTerminal(id, {
+              status: "exited",
+              error: message,
+              sessionId: null,
+            });
+            runtime.sessionId = null;
           });
-          runtime.sessionId = null;
-        });
       });
+
+      const helper = host.querySelector<HTMLTextAreaElement>(
+        ".xterm-helper-textarea",
+      );
+      if (helper) {
+        const onKeyDown = (event: KeyboardEvent) => {
+          if (
+            event.key !== "Enter" ||
+            event.isComposing ||
+            event.keyCode === 229 ||
+            event.altKey ||
+            event.ctrlKey ||
+            event.metaKey
+          ) {
+            return;
+          }
+          const pending = helper.value;
+          if (!pending) return;
+          if (!runtime.sessionId) {
+            helper.value = "";
+            event.preventDefault();
+            return;
+          }
+          const dataSeqAtKeyDown = runtime.dataSeq;
+          if (runtime.helperFallbackTimer !== null) {
+            window.clearTimeout(runtime.helperFallbackTimer);
+          }
+          runtime.helperFallbackTimer = window.setTimeout(() => {
+            runtime.helperFallbackTimer = null;
+            const stuckInput = helper.value;
+            if (!stuckInput) return;
+            helper.value = "";
+            if (runtime.disposed || !runtime.sessionId) return;
+            if (runtime.dataSeq !== dataSeqAtKeyDown) return;
+            const commandText = stuckInput.replace(/[\r\n]+$/, "");
+            if (!commandText) return;
+            const fallbackData = runtime.hasInputSinceSubmit
+              ? "\r"
+              : `${commandText}\r`;
+            runtime.hasInputSinceSubmit = false;
+            void invoke("terminal_write", {
+              sessionId: runtime.sessionId,
+              data: Array.from(encoder().encode(fallbackData)),
+            })
+              .then(() => {
+                scheduleExitReconcile(id, runtime, fallbackData);
+              })
+              .catch((error) => {
+                const message =
+                  error instanceof Error ? error.message : String(error);
+                updateTerminal(id, {
+                  status: "exited",
+                  error: message,
+                  sessionId: null,
+                });
+                runtime.sessionId = null;
+              });
+          }, 50);
+        };
+        helper.addEventListener("keydown", onKeyDown, { capture: true });
+        runtime.helperKeyDisposable = {
+          dispose: () =>
+            helper.removeEventListener("keydown", onKeyDown, { capture: true }),
+        };
+      }
 
       try {
         const initialDimensions = dimensions(runtime) ?? { cols: 80, rows: 24 };
@@ -398,6 +502,18 @@ export function TerminalPanel({ active }: { active: boolean }) {
     [closeTerminalRecord],
   );
 
+  const terminalTabs = (
+    <TerminalTabs
+      activePanel={active}
+      activeTerminalId={activeTerminalId}
+      closeTerminal={closeTerminal}
+      onRequestActivate={onRequestActivate}
+      openTerminal={openTerminal}
+      setActiveTerminal={setActiveTerminal}
+      terminals={terminals}
+    />
+  );
+
   if (!hasProject) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center">
@@ -411,59 +527,7 @@ export function TerminalPanel({ active }: { active: boolean }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-1 border-b border-[rgb(var(--color-border))] px-2 py-1">
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-          {terminals.map((terminal) => (
-            <button
-              key={terminal.id}
-              type="button"
-              className={`group flex max-w-48 shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[10px] transition-colors ${
-                terminal.id === activeTerminalId
-                  ? "border-[rgb(var(--color-accent))]/50 bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text))]"
-                  : "border-transparent text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))]"
-              }`}
-              onClick={() => setActiveTerminal(terminal.id)}
-              title={`${terminal.title}${terminal.shell ? ` - ${terminal.shell}` : ""}`}
-            >
-              {terminal.status === "error" ? (
-                <AlertTriangle className="h-3 w-3 text-error" />
-              ) : (
-                <SquareTerminal className="h-3 w-3" />
-              )}
-              <span className="truncate">{terminal.title}</span>
-              {terminal.status === "exited" && (
-                <span className="text-[rgb(var(--color-warning))]">exited</span>
-              )}
-              <span
-                role="button"
-                tabIndex={0}
-                className="rounded p-0.5 opacity-60 hover:bg-[rgb(var(--color-surface))] hover:opacity-100"
-                title={`Close ${terminal.title}`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void closeTerminal(terminal.id);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" && event.key !== " ") return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  void closeTerminal(terminal.id);
-                }}
-              >
-                <X className="h-3 w-3" />
-              </span>
-            </button>
-          ))}
-        </div>
-        <button
-          type="button"
-          className="rounded-md border border-[rgb(var(--color-border))] p-1 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
-          title="New terminal"
-          onClick={() => void openTerminal()}
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </button>
-      </div>
+      {toolbarHost ? createPortal(terminalTabs, toolbarHost) : terminalTabs}
 
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[rgb(var(--color-border))] px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
         <div className="min-w-0 truncate">
@@ -517,6 +581,128 @@ export function TerminalPanel({ active }: { active: boolean }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function isTerminalSubmitInput(data: string) {
+  return /[\r\n\u0003\u0004]/.test(data);
+}
+
+function scheduleExitReconcile(
+  id: string,
+  runtime: RuntimeTerminal,
+  data: string,
+) {
+  if (!isTerminalSubmitInput(data)) return;
+  for (const delay of [150, 1_000]) {
+    const timer = window.setTimeout(() => {
+      runtime.exitCheckTimers = runtime.exitCheckTimers.filter(
+        (queued) => queued !== timer,
+      );
+      void reconcileTerminalRuntime(id, runtime);
+    }, delay);
+    runtime.exitCheckTimers.push(timer);
+  }
+}
+
+async function reconcileTerminalRuntime(
+  id: string,
+  runtime: RuntimeTerminal,
+) {
+  try {
+    const sessionId = runtime.sessionId;
+    if (!sessionId) return;
+    const alive = await invoke<boolean>("terminal_is_alive", { sessionId });
+    if (runtime.disposed || runtime.sessionId !== sessionId || alive) return;
+    runtime.sessionId = null;
+    useTerminalStore
+      .getState()
+      .updateTerminal(id, { status: "exited", sessionId: null, error: null });
+  } catch {
+    // Keep terminal input responsive; normal command errors are surfaced by writes.
+  }
+}
+
+function TerminalTabs({
+  activeTerminalId,
+  activePanel,
+  closeTerminal,
+  onRequestActivate,
+  openTerminal,
+  setActiveTerminal,
+  terminals,
+}: {
+  activeTerminalId: string | null;
+  activePanel: boolean;
+  closeTerminal: (id: string) => Promise<void>;
+  onRequestActivate?: () => void;
+  openTerminal: (restartId?: string) => Promise<void>;
+  setActiveTerminal: (id: string | null) => void;
+  terminals: TerminalRecord[];
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
+        {terminals.map((terminal) => (
+          <div
+            key={terminal.id}
+            className={`group flex max-w-44 shrink-0 items-center gap-1 rounded-md border text-[10px] transition-colors ${
+              activePanel && terminal.id === activeTerminalId
+                ? "border-[rgb(var(--color-accent))]/50 bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text))]"
+                : "border-transparent text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))]"
+            }`}
+            title={`${terminal.title}${terminal.shell ? ` - ${terminal.shell}` : ""}`}
+          >
+            <button
+              type="button"
+              className="flex min-w-0 items-center gap-1 py-1 pl-2"
+              onClick={() => {
+                onRequestActivate?.();
+                setActiveTerminal(terminal.id);
+              }}
+            >
+              {terminal.status === "error" ? (
+                <AlertTriangle className="h-3 w-3 text-error" />
+              ) : (
+                <SquareTerminal className="h-3 w-3" />
+              )}
+              <span className="truncate">{terminal.title}</span>
+              {terminal.status === "exited" && (
+                <span className="text-[rgb(var(--color-warning))]">exited</span>
+              )}
+            </button>
+            <button
+              type="button"
+              className="mr-1 rounded p-0.5 opacity-60 hover:bg-[rgb(var(--color-surface))] hover:opacity-100"
+              title={`Close ${terminal.title}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                void closeTerminal(terminal.id);
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                event.stopPropagation();
+                void closeTerminal(terminal.id);
+              }}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        className="rounded-md border border-[rgb(var(--color-border))] p-1 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+        title="New terminal"
+        onClick={() => {
+          onRequestActivate?.();
+          void openTerminal();
+        }}
+      >
+        <Plus className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }

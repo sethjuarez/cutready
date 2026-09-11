@@ -10,12 +10,12 @@ import {
   ChevronDown,
   XCircle,
   MessageSquare,
+  Plus,
   Check,
   Clock,
   FileText,
   Users,
   Wrench,
-  SquareTerminal,
   RefreshCw,
   AlertTriangle,
 } from "lucide-react";
@@ -344,6 +344,7 @@ interface OutputPanelProps {
 export function OutputPanel({ onCollapse }: OutputPanelProps) {
   const activeTab = useAppStore((s) => s.outputActiveTab);
   const setActiveTab = useAppStore((s) => s.showOutputTab);
+  const currentProject = useAppStore((s) => s.currentProject);
   const outputs = useAppStore((s) => s.activityLog);
   const debugEntries = useAppStore((s) => s.debugLog);
   const clearActivityLog = useAppStore((s) => s.clearActivityLog);
@@ -351,6 +352,8 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
   const [debugLoading, setDebugLoading] = useState(false);
   const [debugError, setDebugError] = useState<string | null>(null);
   const [terminalActivated, setTerminalActivated] = useState(false);
+  const [terminalToolbarHost, setTerminalToolbarHost] =
+    useState<HTMLDivElement | null>(null);
 
   const loadAuditaurDiagnostics = useCallback(async () => {
     setDebugLoading(true);
@@ -390,13 +393,27 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
               <Bug className="w-3 h-3" />
               Debug
             </TabButton>
-            <TabButton
-              active={activeTab === "terminal"}
-              onClick={() => setActiveTab("terminal")}
-            >
-              <SquareTerminal className="w-3 h-3" />
-              Terminal
-            </TabButton>
+            <div
+              ref={setTerminalToolbarHost}
+              className={
+                terminalActivated && currentProject
+                  ? "flex min-w-0 items-center border-l border-[rgb(var(--color-border))] pl-2"
+                  : "hidden"
+              }
+            />
+            {!(terminalActivated && currentProject) && (
+              <button
+                type="button"
+                className="ml-1 flex items-center gap-1 rounded-md border border-transparent px-2 py-1 text-[11px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-border))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+                title="New terminal"
+                onClick={() => {
+                  setTerminalActivated(true);
+                  setActiveTab("terminal");
+                }}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-1">
             {activeTab !== "terminal" && (
@@ -451,8 +468,16 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
           />
         </div>
         {terminalActivated && (
-          <div className={activeTab === "terminal" ? "h-full min-h-0 overflow-hidden" : "hidden"}>
-            <TerminalPanel active={activeTab === "terminal"} />
+          <div
+            className={
+              activeTab === "terminal" ? "h-full min-h-0 overflow-hidden" : "hidden"
+            }
+          >
+            <TerminalPanel
+              active={activeTab === "terminal"}
+              onRequestActivate={() => setActiveTab("terminal")}
+              toolbarHost={terminalToolbarHost}
+            />
           </div>
         )}
       </div>

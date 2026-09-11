@@ -170,6 +170,34 @@ pub async fn terminal_write(
 }
 
 #[auditaur_command(skip_all, err)]
+pub async fn terminal_is_alive(
+    session_id: String,
+    terminal_state: State<'_, TerminalState>,
+) -> Result<bool, String> {
+    let exited_session = {
+        let mut sessions = terminal_state
+            .sessions
+            .lock()
+            .map_err(|error| error.to_string())?;
+        let Some(session) = sessions.get_mut(&session_id) else {
+            return Ok(false);
+        };
+        match session.child.try_wait() {
+            Ok(Some(_status)) => sessions.remove(&session_id),
+            Ok(None) => return Ok(true),
+            Err(error) => {
+                return Err(format!("Failed to check terminal process: {error}"));
+            }
+        }
+    };
+
+    if let Some(session) = exited_session {
+        release_exited_session(session);
+    }
+    Ok(false)
+}
+
+#[auditaur_command(skip_all, err)]
 pub async fn terminal_resize(
     session_id: String,
     cols: u16,
@@ -236,6 +264,13 @@ fn close_session(mut session: TerminalSession) {
     if let Some(reader) = session.reader.take() {
         let _ = reader.join();
     }
+}
+
+fn release_exited_session(mut session: TerminalSession) {
+    let _ = session.writer.flush();
+    drop(session.writer);
+    drop(session.master);
+    let _ = session.reader.take();
 }
 
 fn remove_reader_session(
