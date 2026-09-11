@@ -2705,6 +2705,9 @@ The row already has a visual and design_plan. You may read the sketch for contex
               onStartNarrationRecording={handleStartNarrationRecording}
               onGenerateNarration={handleGenerateNarration}
               onPickNarration={handlePickNarration}
+              onStopNarrationRecording={handleStopNarrationRecording}
+              narrationRecordingRow={narrationRecordingRow}
+              narrationSavingRows={narrationSavingRows}
               onRemoveNarration={handleRemoveNarration}
             />
           ) : (
@@ -2725,6 +2728,9 @@ The row already has a visual and design_plan. You may read the sketch for contex
               onStartNarrationRecording={handleStartNarrationRecording}
               onGenerateNarration={handleGenerateNarration}
               onPickNarration={handlePickNarration}
+              onStopNarrationRecording={handleStopNarrationRecording}
+              narrationRecordingRow={narrationRecordingRow}
+              narrationSavingRows={narrationSavingRows}
               onRemoveNarration={handleRemoveNarration}
             />
           )}

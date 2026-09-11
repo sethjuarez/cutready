@@ -1,9 +1,10 @@
-import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent } from "react";
-import { Camera, FolderOpen, Image as ImageIcon, Mic2, Plus, Sparkles, Trash2, Upload, X } from "lucide-react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent } from "react";
+import { Camera, FolderOpen, Image as ImageIcon, Loader2, Mic2, Pause, Play, Plus, Sparkles, Square, Trash2, Upload, X } from "lucide-react";
 import type { PlanningCellField, PlanningRow } from "../types/sketch";
 import VisualCell from "./VisualCell";
 import { useProjectImage } from "../hooks/useProjectImage";
 import { parseDurationSeconds } from "../utils/documentMetadata";
+import { invoke } from "../services/tauri";
 
 interface SketchVisualViewProps {
   rows: PlanningRow[];
@@ -19,12 +20,17 @@ interface SketchVisualViewProps {
   onStartNarrationRecording?: (rowIndex: number) => void;
   onGenerateNarration?: (rowIndex: number) => void;
   onPickNarration?: (rowIndex: number) => void;
+  onStopNarrationRecording?: () => void;
+  narrationRecordingRow?: number | null;
+  narrationSavingRows?: Set<number>;
   onRemoveNarration?: (rowIndex: number) => void;
 }
 
 type MediaPreview =
   | { kind: "screenshot"; src: string; rowIndex: number }
   | { kind: "visual"; visualPath: string; rowIndex: number };
+
+type NarrationAssetData = { data: number[]; mimeType: string };
 
 function rowMediaLabel(row: PlanningRow): string {
   if (row.visual) return "Elucim visual";
@@ -213,7 +219,7 @@ function MediaActions({
   if (actions.length === 0) return null;
 
   return (
-    <div className="absolute bottom-2 left-2 right-2 flex flex-wrap gap-1 opacity-0 transition-opacity group-hover/media:opacity-100 group-focus-within/media:opacity-100">
+    <div className="pointer-events-none absolute right-2 top-2 z-20 flex flex-wrap justify-end gap-1 opacity-0 transition-opacity group-hover/media:opacity-100 group-focus-within/media:opacity-100">
       {actions.map((item) => {
         if (!item) return null;
         const Icon = item.icon;
@@ -225,11 +231,11 @@ function MediaActions({
               onClickCapture(event);
               item.action(rowIndex);
             }}
-            className="inline-flex items-center gap-1 rounded-full bg-[rgb(var(--color-surface))]/95 px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-text))] shadow-sm ring-1 ring-[rgb(var(--color-border))] backdrop-blur transition-colors hover:text-[rgb(var(--color-accent))]"
+            className="pointer-events-auto grid h-8 w-8 place-items-center rounded-full bg-[rgb(var(--color-media-control-bg)/0.72)] text-[rgb(var(--color-media-control-fg))] shadow-sm ring-1 ring-[rgb(var(--color-media-control-fg)/0.16)] backdrop-blur transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-accent))]"
+            aria-label={item.label}
             title={item.label}
           >
             <Icon className="h-3 w-3" />
-            <span>{item.label}</span>
           </button>
         );
       })}
@@ -240,7 +246,6 @@ function MediaActions({
 function RowChips({ row }: { row: PlanningRow }) {
   const chips = [
     row.time?.trim() ? row.time.trim() : null,
-    row.narration?.path ? "Narration" : null,
     row.motion_plan ? "Motion" : null,
     row.visual ? "Visual" : null,
   ].filter(Boolean);
@@ -261,33 +266,239 @@ function RowChips({ row }: { row: PlanningRow }) {
   );
 }
 
-function formatNarrationDuration(durationMs?: number | null): string | null {
-  if (!durationMs || durationMs <= 0) return null;
-  const seconds = Math.round(durationMs / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return minutes > 0 ? `${minutes}:${String(remainder).padStart(2, "0")}` : `${seconds}s`;
+function formatPlaybackTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "0:00";
+  const rounded = Math.floor(seconds);
+  const minutes = Math.floor(rounded / 60);
+  const remainder = rounded % 60;
+  return `${minutes}:${remainder.toString().padStart(2, "0")}`;
 }
 
-function RowNarration({ row, compact = false }: { row: PlanningRow; compact?: boolean }) {
-  if (!row.narration) return null;
+function RowNarration({
+  row,
+  rowIndex,
+  readOnly,
+  mediaLocked,
+  recording,
+  saving,
+  recordDisabled,
+  onStartNarrationRecording,
+  onStopNarrationRecording,
+  onRemoveNarration,
+}: {
+  row: PlanningRow;
+  rowIndex: number;
+  readOnly: boolean;
+  mediaLocked: boolean;
+  recording: boolean;
+  saving: boolean;
+  recordDisabled: boolean;
+  onStartNarrationRecording?: (rowIndex: number) => void;
+  onStopNarrationRecording?: () => void;
+  onRemoveNarration?: (rowIndex: number) => void;
+}) {
+  const narration = row.narration;
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const objectUrlRef = useRef("");
+  const pendingAutoplaySrcRef = useRef("");
+  const [src, setSrc] = useState("");
+  const [duration, setDuration] = useState(narration?.duration_ms ? narration.duration_ms / 1000 : 0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
-  const duration = formatNarrationDuration(row.narration.duration_ms);
-  const source = row.narration.source_text?.trim() || row.narrative.trim();
+  useEffect(() => {
+    const objectUrl = objectUrlRef.current;
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    objectUrlRef.current = "";
+    pendingAutoplaySrcRef.current = "";
+    setSrc("");
+    setCurrentTime(0);
+    setDuration(narration?.duration_ms ? narration.duration_ms / 1000 : 0);
+    setPlaying(false);
+    setLoading(false);
+    setLoadError("");
+
+    return () => {
+      const currentObjectUrl = objectUrlRef.current;
+      if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+      objectUrlRef.current = "";
+      pendingAutoplaySrcRef.current = "";
+    };
+  }, [narration?.path, narration?.duration_ms]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    setCurrentTime(0);
+    setPlaying(false);
+    audio.pause();
+    audio.load();
+
+    if (!src || pendingAutoplaySrcRef.current !== src) return;
+
+    let cancelled = false;
+    const playLoadedAudio = () => {
+      if (cancelled || pendingAutoplaySrcRef.current !== src) return;
+      pendingAutoplaySrcRef.current = "";
+      void audio.play().catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setLoadError(`Could not play narration: ${err}`);
+      });
+    };
+
+    if (audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      queueMicrotask(playLoadedAudio);
+      return () => { cancelled = true; };
+    }
+
+    audio.addEventListener("canplay", playLoadedAudio, { once: true });
+    return () => {
+      cancelled = true;
+      audio.removeEventListener("canplay", playLoadedAudio);
+    };
+  }, [src]);
+
+  const loadNarrationForPlayback = async (autoplay = false) => {
+    if (src) return src;
+    if (!narration?.path) return "";
+    setLoading(true);
+    setLoadError("");
+    try {
+      const asset = await invoke<NarrationAssetData>("read_narration_asset", { relativePath: narration.path });
+      const objectUrl = URL.createObjectURL(new Blob([new Uint8Array(asset.data)], { type: asset.mimeType }));
+      objectUrlRef.current = objectUrl;
+      if (autoplay) pendingAutoplaySrcRef.current = objectUrl;
+      setSrc(objectUrl);
+      return objectUrl;
+    } catch (err) {
+      setLoadError(`Could not load narration: ${err}`);
+      return "";
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const togglePlayback = async () => {
+    const audio = audioRef.current;
+    if (!audio || loading) return;
+    if (audio.paused) {
+      if (src) {
+        setLoadError("");
+        await audio.play().catch((err: unknown) => {
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          setLoadError(`Could not play narration: ${err}`);
+        });
+        return;
+      }
+      await loadNarrationForPlayback(true);
+    } else {
+      pendingAutoplaySrcRef.current = "";
+      audio.pause();
+    }
+  };
+
+  const seek = (value: string) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const nextTime = Number(value);
+    audio.currentTime = nextTime;
+    setCurrentTime(nextTime);
+  };
+
+  if (!narration) return null;
+
+  const isStale = narration.source_text !== row.narrative;
+  const canEditNarration = !readOnly && !mediaLocked;
 
   return (
-    <div className={`rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/70 ${compact ? "px-2 py-1.5" : "px-3 py-2"}`}>
-      <div className="mb-1 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
-        <span className="inline-flex items-center gap-1.5">
-          <Mic2 className="h-3 w-3 text-[rgb(var(--color-accent))]" />
-          Narration
+    <div className={`rounded-lg border px-2 py-1.5 ${
+      isStale
+        ? "border-[rgb(var(--color-warning))]/30 bg-[rgb(var(--color-warning))]/8"
+        : "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/55"
+    }`}>
+      <audio
+        ref={audioRef}
+        src={src || undefined}
+        preload="metadata"
+        onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || duration)}
+        onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => setPlaying(false)}
+      />
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={togglePlayback}
+          disabled={loading}
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] text-[rgb(var(--color-accent))] transition-colors hover:border-[rgb(var(--color-accent))]/35 hover:bg-[rgb(var(--color-accent))]/8 disabled:opacity-50"
+          aria-label={playing ? "Pause narration" : loading ? "Loading narration" : "Play narration"}
+          title={playing ? "Pause narration" : loading ? "Loading narration" : "Play narration"}
+        >
+          {loading ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : playing ? (
+            <Pause className="h-3 w-3" strokeWidth={2.4} />
+          ) : (
+            <Play className="h-3.5 w-3.5 fill-current" />
+          )}
+        </button>
+        <Mic2 className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--color-accent))]" />
+        <span className="min-w-0 shrink-0 text-[11px] tabular-nums text-[rgb(var(--color-text-secondary))]">
+          {formatPlaybackTime(currentTime)} / {formatPlaybackTime(duration)}
         </span>
-        {duration && <span>{duration}</span>}
+        <input
+          type="range"
+          min={0}
+          max={duration || 0}
+          step={0.1}
+          value={Math.min(currentTime, duration || 0)}
+          onChange={(event) => seek(event.target.value)}
+          disabled={!duration}
+          className="min-w-0 flex-1 accent-[rgb(var(--color-accent))] disabled:opacity-50"
+          aria-label="Scrub narration"
+        />
+        {canEditNarration && onRemoveNarration && (
+          <button
+            type="button"
+            onClick={() => onRemoveNarration(rowIndex)}
+            disabled={saving || recording}
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-error))]/10 hover:text-[rgb(var(--color-error))] disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label="Remove narration"
+            title="Remove narration"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {canEditNarration && onStartNarrationRecording && (
+          <button
+            type="button"
+            onClick={() => recording ? onStopNarrationRecording?.() : onStartNarrationRecording(rowIndex)}
+            disabled={saving || recordDisabled}
+            className={`grid h-7 w-7 shrink-0 place-items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+              recording
+                ? "bg-[rgb(var(--color-error))]/10 text-[rgb(var(--color-error))]"
+                : "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))]"
+            }`}
+            aria-label={recording ? "Stop narration recording" : "Rerecord narration"}
+            title={recording ? "Stop narration recording" : "Rerecord narration"}
+          >
+            {saving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : recording ? (
+              <Square className="h-3.5 w-3.5 fill-current" />
+            ) : (
+              <Mic2 className="h-3.5 w-3.5" />
+            )}
+          </button>
+        )}
       </div>
-      {source && (
-        <p className={`${compact ? "line-clamp-1" : "line-clamp-2"} text-xs leading-5 text-[rgb(var(--color-text-secondary))]`}>
-          {source}
-        </p>
+      {loadError && (
+        <div className="mt-1 text-[11px] text-[rgb(var(--color-error))]">
+          {loadError}
+        </div>
       )}
     </div>
   );
@@ -554,6 +765,9 @@ export function SketchBalancedView({
   onStartNarrationRecording,
   onGenerateNarration,
   onPickNarration,
+  onStopNarrationRecording,
+  narrationRecordingRow,
+  narrationSavingRows,
   onRemoveNarration,
 }: SketchVisualViewProps) {
   const [preview, setPreview] = useState<MediaPreview | null>(null);
@@ -571,19 +785,41 @@ export function SketchBalancedView({
             key={index}
             className="grid gap-3 rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/45 p-3 shadow-sm md:grid-cols-[minmax(220px,0.92fr)_minmax(0,1fr)]"
           >
-            <RowMedia
-              row={row}
-              rowIndex={index}
-              projectRoot={projectRoot}
-              readOnly={readOnly}
-              onOpenPreview={setPreview}
-              onCaptureScreenshot={onCaptureScreenshot}
-              onPasteImage={onPasteImage}
-              onPickImage={onPickImage}
-              onBrowseImage={onBrowseImage}
-              onGenerateVisual={onGenerateVisual}
-              onRemoveMedia={onRemoveMedia}
-            />
+            <div className="min-w-0 space-y-2">
+              <RowMedia
+                row={row}
+                rowIndex={index}
+                projectRoot={projectRoot}
+                readOnly={readOnly}
+                onOpenPreview={setPreview}
+                onCaptureScreenshot={onCaptureScreenshot}
+                onPasteImage={onPasteImage}
+                onPickImage={onPickImage}
+                onBrowseImage={onBrowseImage}
+                onGenerateVisual={onGenerateVisual}
+                onRemoveMedia={onRemoveMedia}
+              />
+              <RowNarration
+                row={row}
+                rowIndex={index}
+                readOnly={readOnly}
+                mediaLocked={isCellLocked(row, "screenshot") || isCellLocked(row, "visual")}
+                recording={narrationRecordingRow === index}
+                saving={narrationSavingRows?.has(index) ?? false}
+                recordDisabled={narrationRecordingRow !== null && narrationRecordingRow !== undefined && narrationRecordingRow !== index}
+                onStartNarrationRecording={onStartNarrationRecording}
+                onStopNarrationRecording={onStopNarrationRecording}
+                onRemoveNarration={onRemoveNarration}
+              />
+              <NarrationActions
+                rowIndex={index}
+                readOnly={readOnly || Boolean(row.narration) || isCellLocked(row, "screenshot") || isCellLocked(row, "visual")}
+                onStartNarrationRecording={onStartNarrationRecording}
+                onGenerateNarration={onGenerateNarration}
+                onPickNarration={onPickNarration}
+                onRemoveNarration={row.narration ? onRemoveNarration : undefined}
+              />
+            </div>
             <div className="flex min-w-0 flex-col gap-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2">
@@ -628,16 +864,7 @@ export function SketchBalancedView({
                   onChange={(value) => updateField(index, "demo_actions", value)}
                 />
               </div>
-              <RowNarration row={row} />
               <RowChips row={row} />
-              <NarrationActions
-                rowIndex={index}
-                readOnly={readOnly || isCellLocked(row, "screenshot") || isCellLocked(row, "visual")}
-                onStartNarrationRecording={onStartNarrationRecording}
-                onGenerateNarration={onGenerateNarration}
-                onPickNarration={onPickNarration}
-                onRemoveNarration={row.narration ? onRemoveNarration : undefined}
-              />
             </div>
           </article>
         ))}
@@ -662,6 +889,9 @@ export function SketchScreenView({
   onStartNarrationRecording,
   onGenerateNarration,
   onPickNarration,
+  onStopNarrationRecording,
+  narrationRecordingRow,
+  narrationSavingRows,
   onRemoveNarration,
 }: SketchVisualViewProps) {
   const [preview, setPreview] = useState<MediaPreview | null>(null);
@@ -679,21 +909,45 @@ export function SketchScreenView({
             key={index}
             className="grid overflow-hidden rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/45 shadow-sm md:grid-cols-[minmax(360px,1.45fr)_minmax(0,0.75fr)]"
           >
-            <RowMedia
-              row={row}
-              rowIndex={index}
-              projectRoot={projectRoot}
-              readOnly={readOnly}
-              className="aspect-video min-h-0 rounded-none border-0 md:min-h-[280px]"
-              imageClassName="h-full w-full object-contain"
-              onOpenPreview={setPreview}
-              onCaptureScreenshot={onCaptureScreenshot}
-              onPasteImage={onPasteImage}
-              onPickImage={onPickImage}
-              onBrowseImage={onBrowseImage}
-              onGenerateVisual={onGenerateVisual}
-              onRemoveMedia={onRemoveMedia}
-            />
+            <div className="min-w-0">
+              <RowMedia
+                row={row}
+                rowIndex={index}
+                projectRoot={projectRoot}
+                readOnly={readOnly}
+                className="aspect-video min-h-0 rounded-none border-0 md:min-h-[280px]"
+                imageClassName="h-full w-full object-contain"
+                onOpenPreview={setPreview}
+                onCaptureScreenshot={onCaptureScreenshot}
+                onPasteImage={onPasteImage}
+                onPickImage={onPickImage}
+                onBrowseImage={onBrowseImage}
+                onGenerateVisual={onGenerateVisual}
+                onRemoveMedia={onRemoveMedia}
+              />
+              <div className="space-y-2 px-3 pb-3 pt-2">
+                <RowNarration
+                  row={row}
+                  rowIndex={index}
+                  readOnly={readOnly}
+                  mediaLocked={isCellLocked(row, "screenshot") || isCellLocked(row, "visual")}
+                  recording={narrationRecordingRow === index}
+                  saving={narrationSavingRows?.has(index) ?? false}
+                  recordDisabled={narrationRecordingRow !== null && narrationRecordingRow !== undefined && narrationRecordingRow !== index}
+                  onStartNarrationRecording={onStartNarrationRecording}
+                  onStopNarrationRecording={onStopNarrationRecording}
+                  onRemoveNarration={onRemoveNarration}
+                />
+                <NarrationActions
+                  rowIndex={index}
+                  readOnly={readOnly || Boolean(row.narration) || isCellLocked(row, "screenshot") || isCellLocked(row, "visual")}
+                  onStartNarrationRecording={onStartNarrationRecording}
+                  onGenerateNarration={onGenerateNarration}
+                  onPickNarration={onPickNarration}
+                  onRemoveNarration={row.narration ? onRemoveNarration : undefined}
+                />
+              </div>
+            </div>
             <div className="space-y-2.5 p-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
@@ -739,15 +993,6 @@ export function SketchScreenView({
                   onChange={(value) => updateField(index, "demo_actions", value)}
                 />
               </div>
-              <RowNarration row={row} compact />
-              <NarrationActions
-                rowIndex={index}
-                readOnly={readOnly || isCellLocked(row, "screenshot") || isCellLocked(row, "visual")}
-                onStartNarrationRecording={onStartNarrationRecording}
-                onGenerateNarration={onGenerateNarration}
-                onPickNarration={onPickNarration}
-                onRemoveNarration={row.narration ? onRemoveNarration : undefined}
-              />
               <RowChips row={row} />
             </div>
           </article>
