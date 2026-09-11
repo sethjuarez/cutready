@@ -10,6 +10,7 @@ import { contentTypeTone } from "../utils/contentTypeTheme";
 
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useAiApplyGateStore } from "../stores/aiApplyGateStore";
+import { loadProviderSecrets } from "../hooks/useSecretStore";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
 import { BUILT_IN_AGENTS, resolveAgentPrompt } from "../agents/builtInAgents";
 import {
@@ -17,10 +18,13 @@ import {
   buildProviderConfig,
   isAiProviderConfigured,
   isProviderInputConfigured,
+  providerById,
+  providerToConfigInput,
 } from "../utils/providerConfig";
 import {
   buildEffectiveProviderInput as buildEffectiveProviderInputShared,
   buildRefreshedProviderInput,
+  resolveEffectiveProvider,
   resolveAgentModelOverride,
 } from "../utils/agentProvider";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
@@ -865,6 +869,15 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     const id = settings.aiSelectedAgent || "planner";
     return allAgents.find((a) => a.id === id) ?? BUILT_IN_AGENTS[0];
   }, [settings.aiSelectedAgent, allAgents]);
+  const effectiveProvider = useMemo(
+    () => resolveEffectiveProvider(settings, selectedAgent),
+    [settings, selectedAgent],
+  );
+  const selectedAgentModelOverride = useMemo(
+    () => resolveAgentModelOverride(selectedAgent, settings.aiAgentModelOverrides),
+    [selectedAgent, settings.aiAgentModelOverrides],
+  );
+  const effectiveModel = selectedAgentModelOverride || effectiveProvider?.model || settings.aiModel || "";
   const [providerConfigured, setProviderConfigured] = useState<boolean | null>(null);
 
   const handleMessagesScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
@@ -2007,14 +2020,15 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                   : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))]"
               }`}
               onClick={() => setShowModelPicker(!showModelPicker)}
-              title="Select Model"
+              title={effectiveProvider?.name ? `Select Model (${effectiveProvider.name})` : "Select Model"}
             >
-              <span className="max-w-[100px] truncate">{settings.aiModel || "Model"}</span>
+              <span className="max-w-[100px] truncate">{effectiveModel || "Model"}</span>
               <IconChevronDown size={10} />
             </button>
             {showModelPicker && (
               <ModelPickerDropdown
-                currentModel={settings.aiModel}
+                currentModel={effectiveModel}
+                providerId={effectiveProvider?.id}
                 onClose={() => setShowModelPicker(false)}
                 maxHeight={modelMaxH}
               />
@@ -2707,20 +2721,25 @@ const MODEL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 function ModelPickerDropdown({
   currentModel,
+  providerId,
   onClose,
   maxHeight,
 }: {
   currentModel: string;
+  providerId?: string;
   onClose: () => void;
   maxHeight: number;
 }) {
   const { settings, updateSetting } = useSettings();
   const [models, setModels] = useState<string[]>(modelCache.models);
   const [loadingModels, setLoadingModels] = useState(false);
+  const provider = providerId ? providerById(settings, providerId) : null;
 
   useEffect(() => {
     let cancelled = false;
-    const cacheKey = `${settings.aiProvider}|${settings.aiEndpoint}|${settings.aiAuthMode}`;
+    const cacheKey = provider
+      ? `${provider.id}|${provider.provider}|${provider.endpoint}|${provider.authMode}`
+      : `${settings.aiProvider}|${settings.aiEndpoint}|${settings.aiAuthMode}`;
 
     // Use cache if key matches and not expired
     if (modelCache.key === cacheKey && modelCache.models.length > 0 && Date.now() - modelCache.ts < MODEL_CACHE_TTL) {
@@ -2731,13 +2750,19 @@ function ModelPickerDropdown({
     async function load() {
       setLoadingModels(true);
       try {
-        const config = {
-          provider: settings.aiProvider,
-          endpoint: settings.aiEndpoint,
-          api_key: settings.aiApiKey,
-          model: settings.aiModel || "unused",
-          bearer_token: settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null,
-        };
+        const secrets = provider && provider.id !== settings.aiActiveProviderId
+          ? await loadProviderSecrets(provider.id)
+          : { apiKey: settings.aiApiKey, accessToken: settings.aiAccessToken };
+        const providerInput = provider
+          ? providerToConfigInput(provider, settings, {
+              apiKey: secrets.apiKey,
+              accessToken: secrets.accessToken,
+            })
+          : activeProviderInput(settings);
+        const config = buildProviderConfig(
+          providerInput,
+          settings.aiAgentExecutionEngine || "prompty",
+        );
         const result = await invoke<{ id: string; name: string; capabilities?: Record<string, string> }[]>("list_models", { config });
         if (!cancelled) {
           // Show chat-capable models AND Responses API models (codex/pro)
@@ -2762,7 +2787,7 @@ function ModelPickerDropdown({
     }
     load();
     return () => { cancelled = true; };
-  }, [settings, currentModel]);
+  }, [settings, currentModel, provider]);
 
   return (
     <div className="absolute bottom-full left-0 mb-1 w-[200px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight }}>
@@ -2782,7 +2807,13 @@ function ModelPickerDropdown({
                   : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
               }`}
               onClick={() => {
-                updateSetting("aiModel", model);
+                if (provider?.id && settings.aiProviders?.some((candidate) => candidate.id === provider.id)) {
+                  updateSetting("aiProviders", settings.aiProviders.map((candidate) =>
+                    candidate.id === provider.id ? { ...candidate, model } : candidate,
+                  ));
+                } else {
+                  updateSetting("aiModel", model);
+                }
                 onClose();
               }}
             >
