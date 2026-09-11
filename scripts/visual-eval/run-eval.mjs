@@ -2,6 +2,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import {
   applyNudge,
   diffDocuments,
@@ -14,7 +15,7 @@ import {
 import { evaluateSceneForAgent } from "@elucim/dsl/agent";
 import { formatConsoleReport, scoreVisual } from "./score-visuals.mjs";
 
-const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, "$1");
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_BRIEFS = path.join(SCRIPT_DIR, "briefs.json");
 const RUNS_DIR = path.join(SCRIPT_DIR, "runs");
 const DEFAULT_API_VERSION = "2024-10-21";

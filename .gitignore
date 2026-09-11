@@ -43,6 +43,7 @@ test-results/
 .playwright-mcp/
 scripts/visual-eval/reports/
 scripts/visual-eval/runs/
+scripts/agent-eval/reports/
 
 # Copilot CLI
 skills-lock.json

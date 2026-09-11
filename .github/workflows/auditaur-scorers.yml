@@ -1,0 +1,38 @@
+name: Auditaur scorers
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-scorers:
+    name: Deterministic scorer drills
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run deterministic scorers
+        run: npm run auditaur:score
+
+      - name: Upload scorer reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auditaur-scorer-reports
+          path: target/auditaur-scorers
+          if-no-files-found: ignore

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
 import {
   applyCommand,
@@ -17,7 +17,8 @@ import {
 } from "@elucim/dsl";
 import { evaluateSceneForAgent } from "@elucim/dsl/agent";
 
-const DEFAULT_TARGET = "D:\\cutready";
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const DEFAULT_TARGET = path.join(REPO_ROOT, "docs", "examples", "cutready-demo-project", ".cutready", "visuals");
 const REPORT_DIR = path.join(process.cwd(), "scripts", "visual-eval", "reports");
 const DEFAULT_OUT = path.join(REPORT_DIR, "elucim-smoke-report.json");
 

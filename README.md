@@ -22,6 +22,7 @@ Built with [Tauri v2](https://tauri.app/) (Rust + React/TypeScript).
 | [North Star](docs/reference/NORTH_STAR.md) | The press release — the vision and "why" for CutReady |
 | [Feature Guidance](docs/reference/GUIDANCE.md) | Everything CutReady can do, organized by workflow phase |
 | [Architecture](docs/reference/ARCHITECTURE.md) | Technical design: Tauri, Rust backend, React frontend, engines, data model |
+| [Validation](docs/reference/VALIDATION.md) | Deterministic scorer drills, CI validation, and human-gated drill boundaries |
 
 ## Tech Stack
 
