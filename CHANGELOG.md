@@ -10,6 +10,13 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.35.0](https://github.com/sethjuarez/cutready/compare/v1.34.0...v1.35.0) (2026-09-11)
+
+
+### Features
+
+* **editor:** add visual sketch and storyboard modes ([863de53](https://github.com/sethjuarez/cutready/commit/863de539a60fc98201887c9ae828731977088a82))
+
 ## [1.34.0](https://github.com/sethjuarez/cutready/compare/v1.33.1...v1.34.0) (2026-09-11)
 
 
