@@ -1,6 +1,6 @@
 //! Tauri commands for the AI assistant (chat, model listing, ✨ generation).
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::engine::agent::execution::{
     estimate_message_chars, AgentEvent, ChatMessage, ContextItem, ContextKind, ContextScope,
@@ -1754,14 +1754,75 @@ p{{font-size:14px;opacity:.7;line-height:1.5}}\
 // ARM Resource Discovery (Microsoft Foundry setup wizard)
 // ---------------------------------------------------------------------------
 
-use prompty_foundry::arm_discovery::{AiResource, FoundryProject, Subscription};
+use prompty_foundry::arm_discovery::{
+    AiResource as PromptyAiResource, FoundryProject as PromptyFoundryProject,
+    Subscription as PromptySubscription,
+};
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Subscription {
+    subscription_id: String,
+    display_name: String,
+    state: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiResource {
+    name: String,
+    resource_group: String,
+    kind: String,
+    endpoint: String,
+    location: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FoundryProject {
+    name: String,
+    endpoint: String,
+}
+
+impl From<PromptySubscription> for Subscription {
+    fn from(value: PromptySubscription) -> Self {
+        Self {
+            subscription_id: value.subscription_id,
+            display_name: value.display_name,
+            state: value.state,
+        }
+    }
+}
+
+impl From<PromptyAiResource> for AiResource {
+    fn from(value: PromptyAiResource) -> Self {
+        Self {
+            name: value.name,
+            resource_group: value.resource_group,
+            kind: value.kind,
+            endpoint: value.endpoint,
+            location: value.location,
+        }
+    }
+}
+
+impl From<PromptyFoundryProject> for FoundryProject {
+    fn from(value: PromptyFoundryProject) -> Self {
+        Self {
+            name: value.name,
+            endpoint: value.endpoint,
+        }
+    }
+}
 
 /// List Azure subscriptions accessible to the user.
 #[tauri::command]
 pub async fn list_azure_subscriptions(
     management_token: String,
 ) -> Result<Vec<Subscription>, String> {
-    prompty_foundry::arm_discovery::list_subscriptions(&management_token).await
+    prompty_foundry::arm_discovery::list_subscriptions(&management_token)
+        .await
+        .map(|items| items.into_iter().map(Subscription::from).collect())
 }
 
 /// List AI resources (Azure OpenAI / AI Services) in a subscription.
@@ -1770,7 +1831,9 @@ pub async fn list_azure_ai_resources(
     management_token: String,
     subscription_id: String,
 ) -> Result<Vec<AiResource>, String> {
-    prompty_foundry::arm_discovery::list_ai_resources(&management_token, &subscription_id).await
+    prompty_foundry::arm_discovery::list_ai_resources(&management_token, &subscription_id)
+        .await
+        .map(|items| items.into_iter().map(AiResource::from).collect())
 }
 
 /// List Foundry projects under an AI resource.
@@ -1788,6 +1851,7 @@ pub async fn list_foundry_projects(
         &resource_name,
     )
     .await
+    .map(|items| items.into_iter().map(FoundryProject::from).collect())
 }
 
 #[cfg(test)]

@@ -170,11 +170,11 @@ impl ModelPort for ScriptedModelPort {
                 }
                 Ok(ModelInvocationResponse {
                     output: Some(Value::String(text.clone())),
-                    assistant_messages: vec![native_to_prompty_message(&ChatMessage::assistant(
+                    assistant_messages: Some(vec![native_to_prompty_message(&ChatMessage::assistant(
                         &text,
                     ))
-                    .map_err(PortError::configuration)?],
-                    tool_requests: Vec::new(),
+                    .map_err(PortError::configuration)?]),
+                    tool_requests: Some(Vec::new()),
                     next_context_state: None,
                     usage: Some(InvocationUsage {
                         input_tokens: 3,
@@ -195,9 +195,9 @@ impl ModelPort for ScriptedModelPort {
                 let assistant = ChatMessage::assistant_with_tool_calls(vec![tool_call.clone()]);
                 Ok(ModelInvocationResponse {
                     output: None,
-                    assistant_messages: vec![native_to_prompty_message(&assistant)
-                        .map_err(PortError::configuration)?],
-                    tool_requests: vec![EngineToolRequest {
+                    assistant_messages: Some(vec![native_to_prompty_message(&assistant)
+                        .map_err(PortError::configuration)?]),
+                    tool_requests: Some(vec![EngineToolRequest {
                         id: tool_call.id,
                         name: tool_call.function.name,
                         arguments: Some(
@@ -209,7 +209,7 @@ impl ModelPort for ScriptedModelPort {
                             "arguments_json": tool_call.function.arguments,
                             "call_type": tool_call.call_type,
                         }),
-                    }],
+                    }]),
                     next_context_state: None,
                     usage: Some(InvocationUsage {
                         input_tokens: 4,
@@ -335,7 +335,7 @@ async fn post_commit_flushes_buffered_memory_promotions_into_host_store() {
         last_sequence: 1,
         context_state: InvocationContextState {
             portability: prompty::ContextPortability::Portable,
-            delegated_state: Vec::new(),
+            delegated_state: Some(Vec::new()),
         },
         model_reconciliation: None,
     };

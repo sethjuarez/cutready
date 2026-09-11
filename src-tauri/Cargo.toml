@@ -89,10 +89,10 @@ tauri-plugin-updater = "2"
 tauri-plugin-opener = "2.5.3"
 tauri-plugin-stronghold = "2"
 
-prompty = { version = "2.0.0-beta.4" }
-prompty-openai = { version = "2.0.0-beta.4" }
-prompty-foundry = { version = "2.0.0-beta.4" }
-prompty-anthropic = { version = "2.0.0-beta.4" }
+prompty = { version = "2.0.0" }
+prompty-openai = { version = "2.0.0" }
+prompty-foundry = { version = "2.0.0" }
+prompty-anthropic = { version = "2.0.0" }
 portable-pty = "0.9.0"
 
 # Vendor OpenSSL on macOS to support cross-compilation (ARM → Intel)
