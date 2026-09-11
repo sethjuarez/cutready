@@ -10,6 +10,13 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.34.0](https://github.com/sethjuarez/cutready/compare/v1.33.1...v1.34.0) (2026-09-11)
+
+
+### Features
+
+* complete issue burn-down improvements ([8b43e59](https://github.com/sethjuarez/cutready/commit/8b43e5902bc7e74cdfb9a4c629d76458c487f2a8))
+
 ## [1.33.1](https://github.com/sethjuarez/cutready/compare/v1.33.0...v1.33.1) (2026-09-11)
 
 
