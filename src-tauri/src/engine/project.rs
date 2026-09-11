@@ -50,7 +50,8 @@ pub struct SidebarOrder {
 /// Resolve a user-provided relative path against a project root,
 /// ensuring the result stays within the project directory.
 ///
-/// Rejects absolute paths, `..` traversal, and any result that escapes root.
+/// Rejects absolute paths, drive-less root paths, `..` traversal, and any
+/// result that escapes root.
 pub fn safe_resolve(root: &Path, relative_path: &str) -> Result<PathBuf, ProjectError> {
     let rel = Path::new(relative_path);
 
@@ -59,10 +60,14 @@ pub fn safe_resolve(root: &Path, relative_path: &str) -> Result<PathBuf, Project
         return Err(ProjectError::PathTraversal(relative_path.to_string()));
     }
 
-    // Reject any component that is ".." or has a prefix (e.g., C:)
+    // Reject any component that is "..", root-relative, or has a prefix (e.g., C:).
+    // On Windows, `/foo` is a drive-less root path: `Path::is_absolute()` is
+    // false, but `root.join("/foo")` escapes to the drive root.
     for component in rel.components() {
         match component {
-            std::path::Component::ParentDir | std::path::Component::Prefix(_) => {
+            std::path::Component::ParentDir
+            | std::path::Component::RootDir
+            | std::path::Component::Prefix(_) => {
                 return Err(ProjectError::PathTraversal(relative_path.to_string()));
             }
             _ => {}
@@ -3530,15 +3535,54 @@ mod tests {
     }
 
     #[test]
-    fn safe_resolve_rejects_absolute_paths() {
+    fn safe_resolve_rejects_absolute_and_root_relative_paths() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
 
         #[cfg(target_os = "windows")]
         assert!(safe_resolve(root, "C:\\Windows\\System32\\cmd.exe").is_err());
 
-        #[cfg(not(target_os = "windows"))]
         assert!(safe_resolve(root, "/etc/passwd").is_err());
+
+        #[cfg(target_os = "windows")]
+        assert!(safe_resolve(root, "\\Windows\\System32\\cmd.exe").is_err());
+    }
+
+    #[test]
+    fn safe_resolve_rejects_canonicalized_escape_from_nested_root() {
+        let tmp = TempDir::new().unwrap();
+        let workspace = tmp.path();
+        let source_root = workspace.join("repo").join("project");
+        let sibling_root = workspace.join("repo").join("other");
+        std::fs::create_dir_all(&source_root).unwrap();
+        std::fs::create_dir_all(&sibling_root).unwrap();
+        std::fs::write(sibling_root.join("observable.txt"), "outside").unwrap();
+
+        let err = safe_resolve(&source_root, "../other/observable.txt").unwrap_err();
+        assert!(err.to_string().contains("Path traversal"));
+    }
+
+    #[test]
+    fn safe_resolve_rejects_canonicalized_symlink_escape() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path().join("project");
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("observable.txt"), "outside").unwrap();
+
+        let link = root.join("linked-outside");
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(&outside, &link).unwrap();
+        }
+        #[cfg(windows)]
+        {
+            std::os::windows::fs::symlink_dir(&outside, &link).unwrap();
+        }
+
+        let err = safe_resolve(&root, "linked-outside/observable.txt").unwrap_err();
+        assert!(err.to_string().contains("Path traversal"));
     }
 
     // ── extract_screenshot_refs tests ─────────────────────────

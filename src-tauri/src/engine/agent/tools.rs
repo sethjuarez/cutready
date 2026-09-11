@@ -122,7 +122,7 @@ pub fn extract_and_encode_images(markdown: &str, root: &Path) -> (String, Vec<Co
 /// Encode a single image file as a base64 data URI ContentPart.
 /// Returns the part and the base64 string length (for budget tracking).
 fn encode_image_file(root: &Path, rel_path: &str) -> Option<(ContentPart, usize)> {
-    let path = root.join(rel_path);
+    let path = project::safe_resolve(root, rel_path).ok()?;
     if !path.exists() || !path.is_file() {
         return None;
     }
@@ -1253,8 +1253,34 @@ fn extract_json_object<'a>(
     }
 }
 
-fn resolve_path(project_root: &Path, rel: &str) -> PathBuf {
-    project_root.join(rel)
+fn resolve_path(project_root: &Path, rel: &str) -> Result<PathBuf, String> {
+    project::safe_resolve(project_root, rel).map_err(|e| format!("Error: {e}"))
+}
+
+fn validate_project_relative_value(root: &Path, label: &str, rel: &str) -> Result<(), String> {
+    if rel.trim().is_empty() {
+        return Ok(());
+    }
+    project::safe_resolve(root, rel)
+        .map(|_| ())
+        .map_err(|e| format!("Error: invalid {label} path: {e}"))
+}
+
+fn validate_planning_row_asset_paths(root: &Path, rows: &[PlanningRow]) -> Result<(), String> {
+    for (index, row) in rows.iter().enumerate() {
+        let row_number = index + 1;
+        if let Some(screenshot) = row.screenshot.as_deref() {
+            validate_project_relative_value(
+                root,
+                &format!("screenshot in row {row_number}"),
+                screenshot,
+            )?;
+        }
+        if let Some(visual) = row.visual.as_ref().and_then(Value::as_str) {
+            validate_project_relative_value(root, &format!("visual in row {row_number}"), visual)?;
+        }
+    }
+    Ok(())
 }
 
 fn parse_integer_arg(args: &Value, key: &str) -> Result<Option<usize>, String> {
@@ -2160,7 +2186,10 @@ fn exec_list_project_files(root: &Path, args: &Value) -> String {
 
 fn exec_read_note(root: &Path, args: &Value, vision_enabled: bool) -> ToolOutput {
     let path = match args.get("path").and_then(|v| v.as_str()) {
-        Some(p) => resolve_path(root, p),
+        Some(p) => match resolve_path(root, p) {
+            Ok(path) => path,
+            Err(e) => return ToolOutput::failed(e),
+        },
         None => return ToolOutput::failed("Error: missing 'path' argument"),
     };
     match project::read_note(&path) {
@@ -2183,7 +2212,10 @@ fn exec_read_note(root: &Path, args: &Value, vision_enabled: bool) -> ToolOutput
 
 fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> ToolOutput {
     let path = match args.get("path").and_then(|v| v.as_str()) {
-        Some(p) => resolve_path(root, p),
+        Some(p) => match resolve_path(root, p) {
+            Ok(path) => path,
+            Err(e) => return ToolOutput::failed(e),
+        },
         None => {
             let listing = exec_list_project_files(root, &Value::Null);
             return ToolOutput::failed(format!(
@@ -2263,7 +2295,10 @@ fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> ToolOutp
 
 fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
     let path = match args.get("path").and_then(|v| v.as_str()) {
-        Some(p) => resolve_path(root, p),
+        Some(p) => match resolve_path(root, p) {
+            Ok(path) => path,
+            Err(e) => return ToolOutput::failed(e),
+        },
         None => return ToolOutput::failed("Error: missing 'path' argument"),
     };
     let rows_val = match args.get("rows") {
@@ -2323,6 +2358,9 @@ fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
             .collect(),
         None => return ToolOutput::failed("Error: 'rows' must be an array"),
     };
+    if let Err(e) = validate_planning_row_asset_paths(root, &new_rows) {
+        return ToolOutput::failed(e);
+    }
 
     // Load existing sketch or create a new one
     let mut sketch = match project::read_sketch(&path).ok() {
@@ -2380,7 +2418,10 @@ fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
 
 fn exec_update_planning_row(root: &Path, args: &Value) -> ToolOutput {
     let path = match args.get("path").and_then(|v| v.as_str()) {
-        Some(p) => resolve_path(root, p),
+        Some(p) => match resolve_path(root, p) {
+            Ok(path) => path,
+            Err(e) => return ToolOutput::failed(e),
+        },
         None => {
             let listing = exec_list_project_files(root, &Value::Null);
             return ToolOutput::failed(format!(
@@ -2450,6 +2491,9 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> ToolOutput {
         row.demo_actions = d.into();
     }
     if let Some(s) = args.get("screenshot").and_then(|v| v.as_str()) {
+        if let Err(e) = validate_project_relative_value(root, "screenshot", s) {
+            return ToolOutput::failed(e);
+        }
         row.screenshot = Some(s.into());
     }
 
@@ -2503,7 +2547,10 @@ fn format_visual_row_context(sketch: &Sketch, index: usize) -> String {
 
 fn exec_set_row_visual(root: &Path, args: &Value) -> ToolOutput {
     let path = match args.get("path").and_then(|v| v.as_str()) {
-        Some(p) => resolve_path(root, p),
+        Some(p) => match resolve_path(root, p) {
+            Ok(path) => path,
+            Err(e) => return ToolOutput::failed(e),
+        },
         None => {
             let listing = exec_list_project_files(root, &Value::Null);
             return ToolOutput::failed(format!(
@@ -2828,7 +2875,10 @@ fn exec_apply_row_visual_command(root: &Path, args: &Value) -> ToolOutput {
 
 fn exec_design_plan(root: &Path, args: &Value) -> String {
     let path = match args.get("path").and_then(|v| v.as_str()) {
-        Some(p) => resolve_path(root, p),
+        Some(p) => match resolve_path(root, p) {
+            Ok(path) => path,
+            Err(e) => return e,
+        },
         None => {
             let listing = exec_list_project_files(root, &Value::Null);
             return format!(
@@ -2895,7 +2945,7 @@ struct VisualNudge {
 
 fn load_row_visual(root: &Path, args: &Value) -> Result<(PathBuf, Sketch, usize, Value), String> {
     let path = match args.get("path").and_then(|v| v.as_str()) {
-        Some(p) => resolve_path(root, p),
+        Some(p) => resolve_path(root, p)?,
         None => {
             let listing = exec_list_project_files(root, &Value::Null);
             return Err(format!(
@@ -3389,7 +3439,10 @@ fn exec_read_storyboard(root: &Path, args: &Value) -> ToolOutput {
         Some(p) => p,
         None => return ToolOutput::failed("Error: missing 'path' argument"),
     };
-    let path = resolve_path(root, rel);
+    let path = match resolve_path(root, rel) {
+        Ok(path) => path,
+        Err(e) => return ToolOutput::failed(e),
+    };
     match project::read_storyboard(&path) {
         Ok(sb) => ToolOutput::from(format_storyboard_for_agent(root, &sb)),
         Err(e) => ToolOutput::failed(format!("Error reading storyboard: {e}")),
@@ -4169,6 +4222,169 @@ mod tests {
                 tool_output_text(*output)
             }
         }
+    }
+
+    #[test]
+    fn extract_and_encode_images_rejects_model_supplied_path_escape() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path().join("project");
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("leak.png"), b"not really an image").unwrap();
+
+        let (_text, image_parts) =
+            extract_and_encode_images("![leak](../outside/leak.png)", &root);
+
+        assert!(
+            image_parts.is_empty(),
+            "agent image extraction must not encode files outside the project root"
+        );
+    }
+
+    #[test]
+    fn agent_read_tools_reject_model_supplied_path_escape() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path().join("project");
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("secret.md"), "do not leak").unwrap();
+        project::write_sketch(&Sketch::new("Secret"), &outside.join("secret.sk"), &outside)
+            .unwrap();
+
+        for (tool, path) in [
+            ("read_note", "../outside/secret.md"),
+            ("read_sketch", "../outside/secret.sk"),
+        ] {
+            let output = execute_tool(
+                &tool_call(tool, json!({ "path": path })),
+                &root,
+                &root,
+                false,
+                true,
+                true,
+            );
+
+            assert_eq!(output.status(), Some(ToolExecutionStatus::Failure));
+            assert!(
+                output.text().contains("Path traversal"),
+                "{tool} should report path traversal for {path}: {}",
+                output.text()
+            );
+            assert!(
+                !output.text().contains("do not leak") && !output.text().contains("Secret"),
+                "{tool} should not leak escaped file content"
+            );
+        }
+    }
+
+    #[test]
+    fn agent_write_sketch_rejects_model_supplied_path_escape() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path().join("project");
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+
+        let output = execute_tool(
+            &tool_call(
+                "write_sketch",
+                json!({
+                    "path": "../outside/evil.sk",
+                    "title": "Escaped",
+                    "rows": []
+                }),
+            ),
+            &root,
+            &root,
+            false,
+            true,
+            true,
+        );
+
+        assert_eq!(output.status(), Some(ToolExecutionStatus::Failure));
+        assert!(output.text().contains("Path traversal"));
+        assert!(!outside.join("evil.sk").exists());
+    }
+
+    #[test]
+    fn agent_write_sketch_rejects_escaped_row_asset_paths() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path().join("project");
+        std::fs::create_dir_all(&root).unwrap();
+
+        let output = execute_tool(
+            &tool_call(
+                "write_sketch",
+                json!({
+                    "path": "intro.sk",
+                    "title": "Intro",
+                    "rows": [{
+                        "time": "0:00",
+                        "narrative": "Narrate",
+                        "demo_actions": "Act",
+                        "screenshot": "../outside/leak.png"
+                    }]
+                }),
+            ),
+            &root,
+            &root,
+            false,
+            true,
+            true,
+        );
+
+        assert_eq!(output.status(), Some(ToolExecutionStatus::Failure));
+        assert!(output.text().contains("invalid screenshot"));
+        assert!(!root.join("intro.sk").exists());
+    }
+
+    #[test]
+    fn agent_update_planning_row_rejects_escaped_screenshot_path() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path().join("project");
+        std::fs::create_dir_all(&root).unwrap();
+        let mut sketch = Sketch::new("Intro");
+        sketch.rows.push(PlanningRow {
+            time: "0:00".into(),
+            duration_seconds: None,
+            narrative: "Narrate".into(),
+            demo_actions: "Act".into(),
+            screenshot: None,
+            visual: None,
+            motion_points: Vec::new(),
+            typing_spots: Vec::new(),
+            motion_plan: None,
+            design_plan: None,
+            narration: None,
+            narration_plan: None,
+            locked: false,
+            locks: Default::default(),
+        });
+        let sketch_path = root.join("intro.sk");
+        project::write_sketch(&sketch, &sketch_path, &root).unwrap();
+
+        let output = execute_tool(
+            &tool_call(
+                "update_planning_row",
+                json!({
+                    "path": "intro.sk",
+                    "row_number": 1,
+                    "screenshot": "../outside/leak.png"
+                }),
+            ),
+            &root,
+            &root,
+            false,
+            true,
+            true,
+        );
+
+        assert_eq!(output.status(), Some(ToolExecutionStatus::Failure));
+        assert!(output.text().contains("invalid screenshot"));
+        let saved = project::read_sketch(&sketch_path).unwrap();
+        assert_eq!(saved.rows[0].screenshot, None);
     }
 
     #[test]

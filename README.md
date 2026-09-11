@@ -23,6 +23,7 @@ Built with [Tauri v2](https://tauri.app/) (Rust + React/TypeScript).
 | [Feature Guidance](docs/reference/GUIDANCE.md) | Everything CutReady can do, organized by workflow phase |
 | [Architecture](docs/reference/ARCHITECTURE.md) | Technical design: Tauri, Rust backend, React frontend, engines, data model |
 | [Validation](docs/reference/VALIDATION.md) | Deterministic scorer drills, CI validation, and human-gated drill boundaries |
+| [Path Safety](docs/reference/PATH_SAFETY.md) | Checklist for caller- and model-supplied file paths |
 
 ## Tech Stack
 
