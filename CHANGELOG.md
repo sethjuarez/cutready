@@ -10,6 +10,13 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.33.1](https://github.com/sethjuarez/cutready/compare/v1.33.0...v1.33.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* **build:** align Tauri plugin JS packages with Rust crate minors ([#279](https://github.com/sethjuarez/cutready/issues/279)) ([4d38b9a](https://github.com/sethjuarez/cutready/commit/4d38b9ac346d6dcf3497dab7853612e3767b9882))
+
 ## [1.33.0](https://github.com/sethjuarez/cutready/compare/v1.32.0...v1.33.0) (2026-09-11)
 
 
