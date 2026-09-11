@@ -363,6 +363,35 @@ describe("StoryboardView", () => {
     expect(screen.queryByRole("button", { name: "Add Row" })).not.toBeInTheDocument();
   });
 
+  it("keeps visual storyboard modes focused on contained items", () => {
+    const items: StoryboardItem[] = [
+      { type: "sketch_ref", path: "intro.sk" },
+      {
+        type: "section",
+        title: "Build",
+        description: "Original section framing",
+        sketches: ["prototype.sk"],
+      },
+    ];
+    useAppStore.setState({
+      activeStoryboard: activeStoryboard("Original description", false, items),
+      sketches: [
+        sketchSummary("Intro", "intro.sk", 1),
+        sketchSummary("Prototype", "prototype.sk", 1),
+      ],
+    });
+
+    render(<StoryboardView />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Balanced" }));
+
+    expect(screen.queryByRole("button", { name: "New Sketch" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Existing Sketch" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Section" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Drag to reorder sketch")).toBeInTheDocument();
+    expect(screen.getByLabelText("Drag to reorder section")).toBeInTheDocument();
+  });
+
   it("offers AI improvement for section descriptions", async () => {
     const section: StoryboardItem = {
       type: "section",

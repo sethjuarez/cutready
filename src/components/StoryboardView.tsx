@@ -717,45 +717,55 @@ export function StoryboardView() {
 
         {/* Items */}
         {viewMode === "balanced" ? (
-          <StoryboardBalancedView
-            items={activeStoryboard.items}
-            sketchMap={sketchMap}
-            sketchCache={sketchCache}
-            projectRoot={currentProject?.root}
-            durationDisplayMode={durationDisplayMode}
-            onOpenSketch={openSketch}
-            locked={storyboardLocked}
-            collapsedItems={collapsedItems}
-            setCollapsedItems={setCollapsedItems}
-            onAddNewSketch={() => void handleAddNewSketch()}
-            onPickExisting={() => setPickerTarget({ type: "top" })}
-            onAddSection={() => handleAddSection()}
-            onAddNewSketchToSection={(sectionIndex) => void handleAddNewSketch({ type: "section", sectionIndex })}
-            onPickExistingForSection={(sectionIndex) => setPickerTarget({ type: "section", sectionIndex })}
-            onRemoveTopLevelSketch={(index) => void confirmRemoveFromStoryboard(index)}
-            onRemoveSectionSketch={(sectionIndex, sketchIndex) => void confirmRemoveFromSection(sectionIndex, sketchIndex)}
-            onRemoveSection={(sectionIndex) => void confirmRemoveSection(sectionIndex)}
-          />
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={activeStoryboard.items.map((_, i) => i)} strategy={verticalListSortingStrategy}>
+              <StoryboardBalancedView
+                items={activeStoryboard.items}
+                sketchMap={sketchMap}
+                sketchCache={sketchCache}
+                projectRoot={currentProject?.root}
+                durationDisplayMode={durationDisplayMode}
+                onOpenSketch={openSketch}
+                locked={storyboardLocked}
+                sortable
+                collapsedItems={collapsedItems}
+                setCollapsedItems={setCollapsedItems}
+                onAddNewSketch={() => void handleAddNewSketch()}
+                onPickExisting={() => setPickerTarget({ type: "top" })}
+                onAddSection={() => handleAddSection()}
+                onAddNewSketchToSection={(sectionIndex) => void handleAddNewSketch({ type: "section", sectionIndex })}
+                onPickExistingForSection={(sectionIndex) => setPickerTarget({ type: "section", sectionIndex })}
+                onRemoveTopLevelSketch={(index) => void confirmRemoveFromStoryboard(index)}
+                onRemoveSectionSketch={(sectionIndex, sketchIndex) => void confirmRemoveFromSection(sectionIndex, sketchIndex)}
+                onRemoveSection={(sectionIndex) => void confirmRemoveSection(sectionIndex)}
+              />
+            </SortableContext>
+          </DndContext>
         ) : viewMode === "screen" ? (
-          <StoryboardScreenView
-            items={activeStoryboard.items}
-            sketchMap={sketchMap}
-            sketchCache={sketchCache}
-            projectRoot={currentProject?.root}
-            durationDisplayMode={durationDisplayMode}
-            onOpenSketch={openSketch}
-            locked={storyboardLocked}
-            collapsedItems={collapsedItems}
-            setCollapsedItems={setCollapsedItems}
-            onAddNewSketch={() => void handleAddNewSketch()}
-            onPickExisting={() => setPickerTarget({ type: "top" })}
-            onAddSection={() => handleAddSection()}
-            onAddNewSketchToSection={(sectionIndex) => void handleAddNewSketch({ type: "section", sectionIndex })}
-            onPickExistingForSection={(sectionIndex) => setPickerTarget({ type: "section", sectionIndex })}
-            onRemoveTopLevelSketch={(index) => void confirmRemoveFromStoryboard(index)}
-            onRemoveSectionSketch={(sectionIndex, sketchIndex) => void confirmRemoveFromSection(sectionIndex, sketchIndex)}
-            onRemoveSection={(sectionIndex) => void confirmRemoveSection(sectionIndex)}
-          />
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={activeStoryboard.items.map((_, i) => i)} strategy={verticalListSortingStrategy}>
+              <StoryboardScreenView
+                items={activeStoryboard.items}
+                sketchMap={sketchMap}
+                sketchCache={sketchCache}
+                projectRoot={currentProject?.root}
+                durationDisplayMode={durationDisplayMode}
+                onOpenSketch={openSketch}
+                locked={storyboardLocked}
+                sortable
+                collapsedItems={collapsedItems}
+                setCollapsedItems={setCollapsedItems}
+                onAddNewSketch={() => void handleAddNewSketch()}
+                onPickExisting={() => setPickerTarget({ type: "top" })}
+                onAddSection={() => handleAddSection()}
+                onAddNewSketchToSection={(sectionIndex) => void handleAddNewSketch({ type: "section", sectionIndex })}
+                onPickExistingForSection={(sectionIndex) => setPickerTarget({ type: "section", sectionIndex })}
+                onRemoveTopLevelSketch={(index) => void confirmRemoveFromStoryboard(index)}
+                onRemoveSectionSketch={(sectionIndex, sketchIndex) => void confirmRemoveFromSection(sectionIndex, sketchIndex)}
+                onRemoveSection={(sectionIndex) => void confirmRemoveSection(sectionIndex)}
+              />
+            </SortableContext>
+          </DndContext>
         ) : activeStoryboard.items.length === 0 ? (
           <EmptyState
             onAddNew={() => handleAddNewSketch()}

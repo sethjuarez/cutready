@@ -1,4 +1,6 @@
 import { type Dispatch, type SetStateAction } from "react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { ChevronRight, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import type { Sketch, SketchSummary, StoryboardItem } from "../types/sketch";
 import { formatDurationSummary, summarizeSketchDuration, summarizeSketchPathsDuration, type DurationDisplayMode } from "../utils/documentMetadata";
@@ -15,6 +17,7 @@ interface StoryboardVisualViewProps {
   durationDisplayMode: DurationDisplayMode;
   onOpenSketch: (path: string) => void;
   locked?: boolean;
+  sortable?: boolean;
   collapsedItems: Set<string>;
   setCollapsedItems: Dispatch<SetStateAction<Set<string>>>;
   onAddNewSketch?: () => void;
@@ -25,6 +28,51 @@ interface StoryboardVisualViewProps {
   onRemoveTopLevelSketch?: (index: number) => void;
   onRemoveSectionSketch?: (sectionIndex: number, sketchIndex: number) => void;
   onRemoveSection?: (sectionIndex: number) => void;
+}
+
+function DragHandle({ dragListeners, label }: { dragListeners?: Record<string, any>; label: string }) {
+  if (!dragListeners) return null;
+
+  return (
+    <div
+      {...dragListeners}
+      className="mt-1 shrink-0 cursor-grab text-[rgb(var(--color-text-secondary))]/25 opacity-0 transition-opacity hover:text-[rgb(var(--color-text-secondary))]/60 hover:opacity-100 active:cursor-grabbing group-hover/sketch:opacity-100 group-hover/section:opacity-100"
+      title={label}
+      aria-label={label}
+    >
+      <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" aria-hidden="true">
+        <circle cx="2" cy="2" r="1.2" />
+        <circle cx="6" cy="2" r="1.2" />
+        <circle cx="2" cy="7" r="1.2" />
+        <circle cx="6" cy="7" r="1.2" />
+        <circle cx="2" cy="12" r="1.2" />
+        <circle cx="6" cy="12" r="1.2" />
+      </svg>
+    </div>
+  );
+}
+
+function SortableStoryboardVisualItem({
+  id,
+  disabled,
+  children,
+}: {
+  id: number;
+  disabled?: boolean;
+  children: (dragListeners?: Record<string, any>) => React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} className="outline-none">
+      {children(disabled ? undefined : listeners ?? {})}
+    </div>
+  );
 }
 
 function getTopLevelCollapseKey(index: number): string {
@@ -180,6 +228,7 @@ function ContainedSketch({
   onOpen,
   locked,
   onRemove,
+  dragListeners,
   outlineLevel = "top",
 }: {
   mode: StoryboardVisualMode;
@@ -193,6 +242,7 @@ function ContainedSketch({
   onOpen: () => void;
   locked?: boolean;
   onRemove?: () => void;
+  dragListeners?: Record<string, any>;
   outlineLevel?: "top" | "nested";
 }) {
   const summary = sketchMap.get(path) ?? makePlaceholder(path);
@@ -203,6 +253,7 @@ function ContainedSketch({
   return (
     <div className={`group/sketch ${isTopLevel ? "rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/25 px-3 py-2.5" : "rounded-lg bg-[rgb(var(--color-surface))]/25 px-3 py-1.5"}`}>
       <div className={`flex items-start gap-3 ${isTopLevel ? "" : "py-1"}`}>
+        <DragHandle dragListeners={dragListeners} label="Drag to reorder sketch" />
         <div className="min-w-0 flex-1">
           {isTopLevel && (
             <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[rgb(var(--color-text-secondary))]/60">
@@ -303,6 +354,7 @@ function SectionBlock({
   onPickExisting,
   onRemoveSketch,
   onRemoveSection,
+  dragListeners,
 }: {
   mode: StoryboardVisualMode;
   item: Extract<StoryboardItem, { type: "section" }>;
@@ -321,6 +373,7 @@ function SectionBlock({
   onPickExisting?: () => void;
   onRemoveSketch?: (sketchIndex: number) => void;
   onRemoveSection?: () => void;
+  dragListeners?: Record<string, any>;
 }) {
   const duration = item.sketches.length > 0
     ? formatDurationSummary(summarizeSketchPathsDuration(item.sketches, sketchCache), durationDisplayMode)
@@ -329,6 +382,7 @@ function SectionBlock({
   return (
     <section className="group/section rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/25 px-3 py-2.5">
       <div className="flex items-start gap-3">
+        <DragHandle dragListeners={dragListeners} label="Drag to reorder section" />
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[rgb(var(--color-text-secondary))]/60">
             <span>Section</span>
@@ -444,6 +498,7 @@ function StoryboardVisualView({ mode, ...props }: StoryboardVisualViewProps & { 
     durationDisplayMode,
     onOpenSketch,
     locked,
+    sortable,
     collapsedItems,
     setCollapsedItems,
     onAddNewSketch,
@@ -469,54 +524,56 @@ function StoryboardVisualView({ mode, ...props }: StoryboardVisualViewProps & { 
 
   return (
     <div className="space-y-4">
-      <StoryboardActionBar
-        locked={locked}
-        onAddNewSketch={onAddNewSketch}
-        onPickExisting={onPickExisting}
-        onAddSection={onAddSection}
-      />
       {items.map((item, index) => {
         const collapseKey = getTopLevelCollapseKey(index);
         if (item.type === "sketch_ref") {
           return (
-            <ContainedSketch
-              key={`${item.path}-${index}`}
-              mode={mode}
-              path={item.path}
-              sketchMap={sketchMap}
-              sketchCache={sketchCache}
-              projectRoot={projectRoot}
-              durationDisplayMode={durationDisplayMode}
-              collapsed={collapsedItems.has(collapseKey)}
-              onToggleCollapse={() => toggleCollapse(setCollapsedItems, collapseKey)}
-              onOpen={() => onOpenSketch(item.path)}
-              locked={locked}
-              onRemove={onRemoveTopLevelSketch ? () => onRemoveTopLevelSketch(index) : undefined}
-            />
+            <SortableStoryboardVisualItem key={`${item.path}-${index}`} id={index} disabled={!sortable || locked}>
+              {(dragListeners) => (
+                <ContainedSketch
+                  mode={mode}
+                  path={item.path}
+                  sketchMap={sketchMap}
+                  sketchCache={sketchCache}
+                  projectRoot={projectRoot}
+                  durationDisplayMode={durationDisplayMode}
+                  collapsed={collapsedItems.has(collapseKey)}
+                  onToggleCollapse={() => toggleCollapse(setCollapsedItems, collapseKey)}
+                  onOpen={() => onOpenSketch(item.path)}
+                  locked={locked}
+                  onRemove={onRemoveTopLevelSketch ? () => onRemoveTopLevelSketch(index) : undefined}
+                  dragListeners={dragListeners}
+                />
+              )}
+            </SortableStoryboardVisualItem>
           );
         }
 
         return (
-          <SectionBlock
-            key={`${item.title}-${index}`}
-            mode={mode}
-            item={item}
-            index={index}
-            sketchMap={sketchMap}
-            sketchCache={sketchCache}
-            projectRoot={projectRoot}
-            durationDisplayMode={durationDisplayMode}
-            locked={locked}
-            collapsed={collapsedItems.has(collapseKey)}
-            onToggleCollapse={() => toggleCollapse(setCollapsedItems, collapseKey)}
-            collapsedItems={collapsedItems}
-            setCollapsedItems={setCollapsedItems}
-            onOpenSketch={onOpenSketch}
-            onAddNewSketch={onAddNewSketchToSection ? () => onAddNewSketchToSection(index) : undefined}
-            onPickExisting={onPickExistingForSection ? () => onPickExistingForSection(index) : undefined}
-            onRemoveSketch={onRemoveSectionSketch ? (sketchIndex) => onRemoveSectionSketch(index, sketchIndex) : undefined}
-            onRemoveSection={onRemoveSection ? () => onRemoveSection(index) : undefined}
-          />
+          <SortableStoryboardVisualItem key={`${item.title}-${index}`} id={index} disabled={!sortable || locked}>
+            {(dragListeners) => (
+              <SectionBlock
+                mode={mode}
+                item={item}
+                index={index}
+                sketchMap={sketchMap}
+                sketchCache={sketchCache}
+                projectRoot={projectRoot}
+                durationDisplayMode={durationDisplayMode}
+                locked={locked}
+                collapsed={collapsedItems.has(collapseKey)}
+                onToggleCollapse={() => toggleCollapse(setCollapsedItems, collapseKey)}
+                collapsedItems={collapsedItems}
+                setCollapsedItems={setCollapsedItems}
+                onOpenSketch={onOpenSketch}
+                onAddNewSketch={onAddNewSketchToSection ? () => onAddNewSketchToSection(index) : undefined}
+                onPickExisting={onPickExistingForSection ? () => onPickExistingForSection(index) : undefined}
+                onRemoveSketch={onRemoveSectionSketch ? (sketchIndex) => onRemoveSectionSketch(index, sketchIndex) : undefined}
+                onRemoveSection={onRemoveSection ? () => onRemoveSection(index) : undefined}
+                dragListeners={dragListeners}
+              />
+            )}
+          </SortableStoryboardVisualItem>
         );
       })}
     </div>
