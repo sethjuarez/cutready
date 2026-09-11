@@ -243,7 +243,6 @@ function MediaActions({
 
 function RowChips({ row }: { row: PlanningRow }) {
   const chips = [
-    row.time?.trim() ? row.time.trim() : null,
     row.motion_plan ? "Motion" : null,
     row.visual ? "Visual" : null,
   ].filter(Boolean);
@@ -898,7 +897,7 @@ function EditableText({
 
     return (
       <div
-        className={`md-cell-preview min-h-[2rem] rounded-lg border border-transparent px-2 py-1 outline-none transition-colors ${className} ${readOnly ? "" : "cursor-text hover:border-[rgb(var(--color-border))] focus:border-[rgb(var(--color-accent))]/45 focus:bg-[rgb(var(--color-surface))] focus:ring-1 focus:ring-[rgb(var(--color-accent))]/25"}`}
+        className={`md-cell-preview visual-md-preview min-h-[2rem] rounded-lg border border-transparent px-2 py-1 outline-none transition-colors ${className} ${readOnly ? "" : "cursor-text hover:border-[rgb(var(--color-border))] focus:border-[rgb(var(--color-accent))]/45 focus:bg-[rgb(var(--color-surface))] focus:ring-1 focus:ring-[rgb(var(--color-accent))]/25"}`}
         tabIndex={readOnly ? undefined : 0}
         onClick={beginEditing}
         onFocus={beginEditing}

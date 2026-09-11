@@ -372,6 +372,42 @@ body.recording-prompter-root #root {
   background: rgb(var(--color-surface-alt));
 }
 
+.visual-md-preview {
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.visual-md-preview p + p,
+.visual-md-preview p + ul,
+.visual-md-preview p + ol,
+.visual-md-preview ul + p,
+.visual-md-preview ol + p,
+.visual-md-preview ul + ul,
+.visual-md-preview ol + ol {
+  margin-top: 0.125rem;
+}
+
+.visual-md-preview ul,
+.visual-md-preview ol {
+  padding-left: 1rem;
+}
+
+.visual-md-preview li {
+  padding: 0;
+}
+
+.visual-md-preview li > p + p {
+  margin-top: 0.125rem;
+}
+
+.visual-md-preview li + li {
+  margin-top: 0;
+}
+
+.visual-md-preview li > p {
+  margin: 0;
+}
+
 .md-cell-editor {
   appearance: none;
   display: block;
