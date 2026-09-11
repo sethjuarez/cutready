@@ -177,10 +177,10 @@ pub struct ProviderConfig {
     /// Web search access: "disabled" or "enabled".
     #[serde(default)]
     pub web_access: Option<String>,
-    /// Maximum agentive tool-call rounds before stopping the run.
+    /// Maximum agent tool-call rounds before stopping the run.
     #[serde(default)]
     pub max_tool_rounds: Option<usize>,
-    /// Experimental orchestration path. Omitted or "agentive" preserves the current default.
+    /// Agent runtime harness id. Omitted or blank resolves to the Prompty default.
     #[serde(default)]
     pub execution_engine: Option<String>,
 }

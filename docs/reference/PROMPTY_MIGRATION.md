@@ -9,10 +9,9 @@ The goal is to **fully remove `agentive` from `src-tauri/Cargo.toml`** while
 preserving CutReady's product-specific control over project tools, safe file
 access, memory, visual validation, and UI event semantics.
 
-> **Status**: Prompty is the preferred strategic direction. Do not do a big-bang
-> swap. Migrate in phases, keeping `agentive` during the transition until the
-> Prompty Rust runtime can preserve CutReady's current rich tool outputs,
-> streaming events, provider behavior, and Azure/Foundry auth flows.
+> **Status**: Prompty is the default, stable CutReady harness. Keep `agentive`
+> available as a fallback during the transition, but new agent work should target
+> the Prompty runtime and its cross-platform ergonomics.
 
 ## Recommendation
 
@@ -206,20 +205,20 @@ policy, link formatting, and future auth requirements belong in CutReady.
 
 ## Current Prompty Readiness
 
-Prompty v2 has the right architecture, but the Rust runtime still needs careful
-verification against CutReady requirements.
+Prompty v2 is CutReady's default stable harness. It has been verified through
+unit, integration, and Auditaur drills across Foundry, OpenAI, and Anthropic.
 
 | Area | Current assessment |
 | --- | --- |
 | `.prompty` file format | Strong fit. |
-| Rust `turn()` agent loop | Strong fit conceptually; verify event parity and errors. |
+| Rust `turn()` agent loop | Verified for CutReady chat turns, events, errors, and durable state. |
 | Runtime controls | Strong fit: events, cancellation, steering, guardrails, context, compaction, retries. |
 | Structured outputs | Strong fit for typed artifacts and validation-first workflows. |
-| Model discovery | Partially present in provider crates; verify capability fields needed by CutReady. |
-| Foundry/OpenAI/Anthropic providers | Good direction; verify Responses API, vision, and streaming behavior. |
-| Entra/Foundry auth | Prompty has Foundry/connection concepts and `entra_id` direction; CutReady browser/device flows may still need local wrappers. |
-| Rich tool results | Main blocker. CutReady needs structured text plus images from tool results. |
-| Tool handler return type | Verify/extend beyond string-only returns before switching vision workflows. |
+| Model discovery | Wired through provider crates with CutReady capability normalization. |
+| Foundry/OpenAI/Anthropic providers | Verified in real app drills. |
+| Entra/Foundry auth | Wired through Prompty Foundry OAuth helpers with CutReady command wrappers. |
+| Rich tool results | Host-owned tools preserve structured text, images, and verification metadata. |
+| Tool handler return type | Verified through read, mutation, storyboard, visual, delegation, and cancellation drills. |
 | MCP/OpenAPI tools | Useful later, not required for the migration. |
 
 ## Prompty-Side Changes or Verifications Required
@@ -427,11 +426,12 @@ Exit criteria:
 - Rust handlers preserve existing validation and error messages.
 - Mutating tools remain serial by default.
 
-### Phase 5: Run Prompty `turn()` Behind a Feature Flag
+### Phase 5: Run Prompty `turn()` as the Default Harness
 
-Add a feature flag such as `promptyAgentRuntime` in the Experimental settings.
+Prompty now runs as the default harness, with `agentive` kept selectable as a
+stable fallback during the transition.
 
-When enabled:
+The runtime:
 
 - load the selected `.prompty` agent;
 - inject conversation history as a `kind: thread` input;
@@ -557,11 +557,11 @@ Add tests at each phase rather than waiting for the final swap.
 
 1. Ship `.prompty` assets with agentive still active.
 2. Ship structured-output helpers for low-risk one-shot tasks.
-3. Add Prompty runtime behind an Experimental setting.
-4. Dogfood Prompty runtime for non-mutating Planner flows first.
-5. Enable Writer/Editor with guardrails and serial mutating tools.
-6. Enable Designer only after rich tool results and visual validation parity.
-7. Make Prompty default once telemetry and tests show parity.
+3. Add Prompty runtime as a selectable harness. _(done)_
+4. Dogfood Prompty runtime for non-mutating Planner flows first. _(done)_
+5. Enable Writer/Editor with guardrails and serial mutating tools. _(done)_
+6. Enable Designer after rich tool results and visual validation parity. _(done)_
+7. Make Prompty the stable default once telemetry and tests show parity. _(done)_
 8. Remove agentive after at least one release with Prompty as the default and no
    fallback usage required.
 

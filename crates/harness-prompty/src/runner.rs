@@ -506,7 +506,7 @@ async fn run_turn(turn: PromptyTurn) -> Result<RunResult, String> {
         emit_host_event(
             &emit,
             AgentEvent::Status {
-                message: "Running with experimental Prompty TurnEngine".into(),
+                message: "Running with Prompty TurnEngine".into(),
             },
         );
     }
