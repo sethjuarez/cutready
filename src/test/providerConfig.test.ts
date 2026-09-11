@@ -10,6 +10,7 @@ import {
   narrationProvider,
   providerById,
   providerToConfigInput,
+  supportedReasoningEfforts,
 } from "../utils/providerConfig";
 import type { AiProviderConfig } from "../hooks/useSettings";
 
@@ -84,6 +85,36 @@ describe("buildProviderConfig", () => {
     });
 
     expect(cfg.web_access).toBe("enabled");
+  });
+
+  test("includes supported reasoning effort and drops unsupported selections", () => {
+    expect(supportedReasoningEfforts("openai", "gpt-5.6-terra")).toContain("xhigh");
+
+    const supported = buildProviderConfig({
+      ...base,
+      aiModel: "gpt-5.6-terra",
+      aiReasoningEffort: "high",
+    });
+    expect(supported.reasoning_effort).toBe("high");
+
+    const unsupported = buildProviderConfig({
+      ...base,
+      aiModel: "gpt-4o",
+      aiReasoningEffort: "high",
+    });
+    expect(unsupported.reasoning_effort).toBeNull();
+  });
+
+  test("uses discovered reasoning efforts for deployment aliases", () => {
+    const cfg = buildProviderConfig({
+      ...base,
+      aiProvider: "microsoft_foundry",
+      aiModel: "demo-deployment",
+      aiModelReasoningEfforts: "low,medium,high",
+      aiReasoningEffort: "medium",
+    });
+
+    expect(cfg.reasoning_effort).toBe("medium");
   });
 
   test("Anthropic in api_key mode: bearer_token null", () => {

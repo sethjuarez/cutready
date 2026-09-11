@@ -54,6 +54,7 @@ fn production_tool_wire_preserves_cutready_nullable_union_schemas() {
         api_key: "test-key".into(),
         model: "gpt-4o".into(),
         bearer_token: None,
+        reasoning_effort: None,
     };
     let production =
         build_production_model(&config, Some(10_000), all_tools(true, true, true)).unwrap();

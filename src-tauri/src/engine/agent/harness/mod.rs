@@ -547,6 +547,7 @@ mod tests {
             api_key: "shared-narration-key".to_string(),
             model: "gpt-5.6-terra".to_string(),
             bearer_token: Some("shared-bearer".to_string()),
+            reasoning_effort: None,
         }
     }
 

@@ -180,6 +180,12 @@ pub struct ProviderConfig {
     /// Maximum agent tool-call rounds before stopping the run.
     #[serde(default)]
     pub max_tool_rounds: Option<usize>,
+    /// Optional reasoning effort for reasoning-capable models.
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
+    /// Comma-separated supported reasoning efforts discovered for this model/deployment.
+    #[serde(default)]
+    pub model_reasoning_efforts: Option<String>,
     /// Agent runtime harness id. Omitted or blank resolves to the Prompty default.
     #[serde(default)]
     pub execution_engine: Option<String>,
@@ -299,6 +305,39 @@ fn bounded_context_preview(content: &str, max_bytes: usize) -> String {
     )
 }
 
+fn normalize_reasoning_effort(
+    effort: Option<&str>,
+    provider: &str,
+    model: &str,
+    discovered_efforts: Option<&str>,
+) -> Result<Option<String>, String> {
+    let Some(effort) = effort.map(str::trim).filter(|effort| !effort.is_empty()) else {
+        return Ok(None);
+    };
+    let effort = effort.to_ascii_lowercase();
+    let openai_wire_provider = matches!(
+        provider,
+        "openai" | "azure_openai" | "microsoft_foundry"
+    );
+    let supported = if !openai_wire_provider {
+        Vec::new()
+    } else if let Some(discovered) = discovered_efforts {
+        discovered
+            .split(',')
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+            .collect::<Vec<_>>()
+    } else {
+        llm::supported_reasoning_efforts(model)
+    };
+    if supported.iter().any(|supported| *supported == effort) {
+        return Ok(Some(effort));
+    }
+    Err(format!(
+        "Reasoning effort '{effort}' is not supported for provider '{provider}' and model '{model}'"
+    ))
+}
+
 fn context_kind_from_name(kind: &str) -> ContextKind {
     match kind {
         "recent_turn" => ContextKind::RecentTurn,
@@ -372,6 +411,7 @@ impl From<ProviderConfig> for LlmConfig {
             api_key: c.api_key,
             model: c.model,
             bearer_token: c.bearer_token,
+            reasoning_effort: c.reasoning_effort,
         }
     }
 }
@@ -777,7 +817,7 @@ pub async fn clear_saved_context(state: tauri::State<'_, AppState>) -> Result<us
 pub async fn agent_chat_with_tools(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
-    config: ProviderConfig,
+    mut config: ProviderConfig,
     messages: Vec<ChatMessage>,
     context_items: Option<Vec<AgentContextItemConfig>>,
     agent_prompts: Option<std::collections::HashMap<String, String>>,
@@ -851,6 +891,12 @@ pub async fn agent_chat_with_tools(
     let configured_provider_name = config.provider_name.clone();
     let configured_provider_id = config.provider_id.clone();
     let model = config.model.clone();
+    config.reasoning_effort = normalize_reasoning_effort(
+        config.reasoning_effort.as_deref(),
+        &provider_name,
+        &model,
+        config.model_reasoning_efforts.as_deref(),
+    )?;
     let llm_config: LlmConfig = config.into();
     let context_item_configs = context_items.unwrap_or_default();
 
@@ -867,6 +913,11 @@ pub async fn agent_chat_with_tools(
         (harness_id.clone(), "default".to_string())
     } else {
         (provider_name.clone(), model.clone())
+    };
+    let effective_reasoning_effort = if harness_provides_own_provider {
+        None
+    } else {
+        llm_config.reasoning_effort.clone()
     };
 
     // Determine effective vision: user setting AND discovered/static model capability.
@@ -1176,6 +1227,7 @@ pub async fn agent_chat_with_tools(
         agent_id,
         run_id,
         elapsed_ms: started.elapsed().as_millis(),
+        reasoning_effort: effective_reasoning_effort,
         usage: result.usage,
     })
 }
@@ -1265,6 +1317,7 @@ pub struct AgentChatResult {
     pub agent_id: String,
     pub run_id: String,
     pub elapsed_ms: u128,
+    pub reasoning_effort: Option<String>,
     pub usage: Usage,
 }
 
@@ -1886,6 +1939,8 @@ mod tests {
             model_supports_vision: Some(true),
             web_access: Some("disabled".into()),
             max_tool_rounds: Some(harness_prompty::DEFAULT_MAX_TOOL_ROUNDS),
+            reasoning_effort: None,
+            model_reasoning_efforts: None,
             execution_engine: None,
         }
     }
@@ -1929,6 +1984,47 @@ mod tests {
         assert_eq!(config.api_key, "key");
         assert_eq!(config.model, "gpt-4o");
         assert_eq!(config.bearer_token, Some("token".into()));
+    }
+
+    #[test]
+    fn provider_config_to_llm_config_preserves_reasoning_effort() {
+        let mut config = make_config("openai");
+        config.model = "gpt-5.6-terra".into();
+        config.reasoning_effort = Some("high".into());
+        let config: LlmConfig = config.into();
+        assert_eq!(config.reasoning_effort.as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn reasoning_effort_validation_rejects_unsupported_model() {
+        let error = normalize_reasoning_effort(Some("high"), "openai", "gpt-4o", None)
+            .expect_err("gpt-4o should not accept reasoning effort");
+        assert!(error.contains("not supported"));
+        assert_eq!(
+            normalize_reasoning_effort(Some("high"), "openai", "gpt-5.6-terra", None).unwrap(),
+            Some("high".into())
+        );
+    }
+
+    #[test]
+    fn reasoning_effort_validation_accepts_discovered_deployment_capability() {
+        assert_eq!(
+            normalize_reasoning_effort(
+                Some("medium"),
+                "microsoft_foundry",
+                "demo-deployment",
+                Some("low,medium,high")
+            )
+            .unwrap(),
+            Some("medium".into())
+        );
+        assert!(normalize_reasoning_effort(
+            Some("medium"),
+            "anthropic",
+            "claude-opus-4-8",
+            Some("low,medium,high")
+        )
+        .is_err());
     }
 
     #[test]

@@ -135,6 +135,15 @@ pub fn build_production_model(
         .iter()
         .map(tool_definition_to_prompty_value)
         .collect::<Result<Vec<_>, _>>()?;
+    let mut options = json!({ "stream": true });
+    if let Some(reasoning_effort) = config
+        .reasoning_effort
+        .as_deref()
+        .map(str::trim)
+        .filter(|effort| !effort.is_empty())
+    {
+        options["reasoningEffort"] = Value::String(reasoning_effort.to_string());
+    }
     let agent = Prompty::load_from_value(
         &json!({
             "name": "CutReady",
@@ -143,7 +152,7 @@ pub fn build_production_model(
                 "provider": provider_name,
                 "apiType": api_type,
                 "connection": connection,
-                "options": { "stream": true },
+                "options": options,
             },
             "tools": tool_values,
         }),
@@ -1074,6 +1083,7 @@ mod tests {
                 api_key: "test-key".into(),
                 model: "gpt-5.1-codex".into(),
                 bearer_token: None,
+                reasoning_effort: None,
             },
             None,
             Vec::new(),
@@ -1120,6 +1130,7 @@ mod tests {
                 api_key: "test-key".into(),
                 model: "gpt-5.1-codex".into(),
                 bearer_token: None,
+                reasoning_effort: None,
             },
             None,
             Vec::new(),
@@ -1191,6 +1202,7 @@ mod tests {
                 api_key: "test-key".into(),
                 model: "gpt-5.1-codex".into(),
                 bearer_token: None,
+                reasoning_effort: None,
             },
             None,
             Vec::new(),
@@ -1319,6 +1331,7 @@ mod tests {
             api_key: "test-key".into(),
             model: "gpt-5.1-codex".into(),
             bearer_token: None,
+            reasoning_effort: None,
         };
 
         let production = build_production_model(&config, Some(10_000), Vec::new()).unwrap();
@@ -1331,6 +1344,25 @@ mod tests {
             Some("openai")
         );
         assert_eq!(production.port.agent.model["id"], "gpt-5.1-codex");
+    }
+
+    #[test]
+    fn production_factory_maps_reasoning_effort_to_prompty_options() {
+        let config = LlmConfig {
+            provider: LlmProvider::Openai,
+            endpoint: String::new(),
+            api_key: "test-key".into(),
+            model: "gpt-5.1-codex".into(),
+            bearer_token: None,
+            reasoning_effort: Some("high".into()),
+        };
+
+        let production = build_production_model(&config, Some(10_000), Vec::new()).unwrap();
+
+        assert_eq!(
+            production.port.agent.model["options"]["reasoningEffort"],
+            "high"
+        );
     }
 
     #[test]
@@ -1361,6 +1393,7 @@ mod tests {
             api_key: String::new(),
             model: "gpt-4o".into(),
             bearer_token: None,
+            reasoning_effort: None,
         };
 
         let error = build_production_model(&config, None, Vec::new())
@@ -1378,6 +1411,7 @@ mod tests {
             api_key: "legacy-key".into(),
             model: "gpt-4o".into(),
             bearer_token: Some("entra-token".into()),
+            reasoning_effort: None,
         };
 
         let production = build_production_model(&config, None, Vec::new()).unwrap();

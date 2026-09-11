@@ -1,4 +1,4 @@
-import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from "react";
+import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject, type UIEvent } from "react";
 import { invoke, listen } from "../services/tauri";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { AgentRunInspector } from "./AgentRunInspector";
@@ -11,7 +11,7 @@ import { contentTypeTone } from "../utils/contentTypeTheme";
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useAiApplyGateStore } from "../stores/aiApplyGateStore";
 import { loadProviderSecrets } from "../hooks/useSecretStore";
-import { useSettings, type AgentPreset } from "../hooks/useSettings";
+import { useSettings, type AgentPreset, type AiReasoningEffort } from "../hooks/useSettings";
 import { BUILT_IN_AGENTS, resolveAgentPrompt } from "../agents/builtInAgents";
 import {
   activeProviderInput,
@@ -20,6 +20,8 @@ import {
   isProviderInputConfigured,
   providerById,
   providerToConfigInput,
+  supportedReasoningEfforts,
+  normalizeReasoningEffort,
 } from "../utils/providerConfig";
 import {
   buildEffectiveProviderInput as buildEffectiveProviderInputShared,
@@ -31,6 +33,7 @@ import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import type { ChatMessage, ChatRunDetails, ChatToolActivity, ChatWorkingNotes } from "../types/sketch";
 import {
   Sparkles,
+  Brain,
   Clock,
   Send,
   FileText,
@@ -256,6 +259,7 @@ interface AgentChatResult {
   agent_id: string;
   run_id: string;
   elapsed_ms: number;
+  reasoning_effort?: string | null;
   usage: {
     prompt_tokens: number;
     completion_tokens: number;
@@ -691,6 +695,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const [showContextPicker, setShowContextPicker] = useState(false);
   const [contextFilter, setContextFilter] = useState("");
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [showReasoningPicker, setShowReasoningPicker] = useState(false);
   const [showAgentPicker, setShowAgentPicker] = useState(false);
   const [expandedWebRef, setExpandedWebRef] = useState<string | null>(null);
   const streamingText = useAppStore((s) => s.chatStreamingText);
@@ -944,7 +949,8 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const autocompleteRef = useRef<HTMLDivElement>(null);
   const contextPickerRef = useRef<HTMLDivElement>(null);
   const modelPickerRef = useRef<HTMLDivElement>(null);
-  const agentPickerRef= useRef<HTMLDivElement>(null);
+  const reasoningPickerRef = useRef<HTMLDivElement>(null);
+  const agentPickerRef = useRef<HTMLDivElement>(null);
 
   // Constrain dropdown heights to available viewport space
   const acMaxH = useDropdownMaxHeight(autocompleteRef, showAutocomplete);
@@ -971,6 +977,15 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     [selectedAgent, settings.aiAgentModelOverrides],
   );
   const effectiveModel = selectedAgentModelOverride || effectiveProvider?.model || settings.aiModel || "";
+  const effectiveModelReasoningEfforts = selectedAgentModelOverride ? "" : settings.aiModelReasoningEfforts;
+  const reasoningEfforts = useMemo(
+    () => supportedReasoningEfforts(effectiveProvider?.provider, effectiveModel, effectiveModelReasoningEfforts),
+    [effectiveModel, effectiveModelReasoningEfforts, effectiveProvider?.provider],
+  );
+  const effectiveReasoningEffort = useMemo(
+    () => normalizeReasoningEffort(settings.aiReasoningEffort, effectiveProvider?.provider, effectiveModel, effectiveModelReasoningEfforts),
+    [effectiveModel, effectiveModelReasoningEfforts, effectiveProvider?.provider, settings.aiReasoningEffort],
+  );
   const latestRunDetails = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
       const runDetails = messages[i].cutready?.runDetails;
@@ -983,7 +998,8 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     model: effectiveModel,
     execution_engine: settings.aiAgentExecutionEngine || "prompty",
     agent_id: selectedAgent.id,
-  }, [effectiveModel, effectiveProvider?.provider, latestRunDetails, selectedAgent.id, settings.aiAgentExecutionEngine]);
+    reasoning_effort: effectiveReasoningEffort || null,
+  }, [effectiveModel, effectiveProvider?.provider, effectiveReasoningEffort, latestRunDetails, selectedAgent.id, settings.aiAgentExecutionEngine]);
   const [providerConfigured, setProviderConfigured] = useState<boolean | null>(null);
 
   const handleMessagesScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
@@ -1013,15 +1029,16 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
 
   // Click-outside to close pickers
   useEffect(() => {
-    if (!showContextPicker && !showModelPicker && !showAgentPicker) return;
+    if (!showContextPicker && !showModelPicker && !showReasoningPicker && !showAgentPicker) return;
     const handle = (e: MouseEvent) => {
       if (showContextPicker && contextPickerRef.current && !contextPickerRef.current.contains(e.target as Node)) setShowContextPicker(false);
       if (showModelPicker && modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) setShowModelPicker(false);
+      if (showReasoningPicker && reasoningPickerRef.current && !reasoningPickerRef.current.contains(e.target as Node)) setShowReasoningPicker(false);
       if (showAgentPicker && agentPickerRef.current && !agentPickerRef.current.contains(e.target as Node)) setShowAgentPicker(false);
     };
     window.addEventListener("mousedown", handle);
     return () => window.removeEventListener("mousedown", handle);
-  }, [showContextPicker, showModelPicker, showAgentPicker]);
+  }, [showContextPicker, showModelPicker, showReasoningPicker, showAgentPicker]);
 
   // All referenceable files
   const allFiles = useMemo<FileReference[]>(() => {
@@ -1351,6 +1368,12 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
         // Apply per-agent model override when configured; otherwise use the provider model.
         ...(modelOverride ? { model: modelOverride } : {}),
       };
+      config.reasoning_effort = normalizeReasoningEffort(
+        settings.aiReasoningEffort,
+        config.provider,
+        config.model,
+        modelOverride ? "" : effectiveProviderInput.modelReasoningEfforts,
+      ) || null;
 
       // Build agent prompts map for sub-agent delegation
       const agentPrompts: Record<string, string> = {};
@@ -1433,6 +1456,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
               agent_id: result.agent_id,
               run_id: result.run_id,
               elapsed_ms: result.elapsed_ms,
+              reasoning_effort: result.reasoning_effort,
               tool_calls: toolCallCount,
               usage: result.usage,
             },
@@ -2147,6 +2171,19 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
               details={visibleRunDetails}
               status={latestRunDetails ? "Completed" : "Configured"}
             />
+            {reasoningEfforts.length > 0 && (
+              <ReasoningEffortPicker
+                value={effectiveReasoningEffort}
+                efforts={reasoningEfforts}
+                open={showReasoningPicker}
+                pickerRef={reasoningPickerRef}
+                onToggle={() => setShowReasoningPicker((value) => !value)}
+                onChange={(next) => {
+                  void updateSetting("aiReasoningEffort", next);
+                  setShowReasoningPicker(false);
+                }}
+              />
+            )}
             {showModelPicker && (
               <ModelPickerDropdown
                 currentModel={effectiveModel}
@@ -2474,6 +2511,7 @@ function RunDetailsPopover({
     ["Harness", harnessRunLabel(details.execution_engine)],
     ["Provider", providerRunLabel(details.provider)],
     ["Model", details.model || "—"],
+    ["Reasoning", reasoningEffortLabel(details.reasoning_effort ?? "")],
     ["Agent", details.agent_id || "—"],
     ["Duration", formatRunDuration(details.elapsed_ms)],
     ["Tools", `${effectiveToolCount} call${effectiveToolCount === 1 ? "" : "s"}`],
@@ -2532,6 +2570,76 @@ function RunDetailsPopover({
         </span>
       )}
     </span>
+  );
+}
+
+function reasoningEffortLabel(effort: string | undefined): string {
+  if (!effort) return "Default";
+  return effort === "xhigh" ? "X-high" : effort[0].toUpperCase() + effort.slice(1);
+}
+
+function ReasoningEffortPicker({
+  value,
+  efforts,
+  open,
+  pickerRef,
+  onToggle,
+  onChange,
+}: {
+  value: string;
+  efforts: string[];
+  open: boolean;
+  pickerRef: RefObject<HTMLDivElement | null>;
+  onToggle: () => void;
+  onChange: (value: AiReasoningEffort) => void;
+}) {
+  const currentLabel = reasoningEffortLabel(value);
+  const options = ["", ...efforts] as AiReasoningEffort[];
+
+  return (
+    <div className="relative" ref={pickerRef}>
+      <button
+        type="button"
+        aria-label="Set reasoning effort"
+        aria-expanded={open}
+        onClick={onToggle}
+        className={`flex h-[26px] items-center gap-1 rounded-full border px-2 text-[11px] transition-colors ${
+          open
+            ? "border-[rgb(var(--color-accent))]/45 bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
+            : "border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/35 text-[rgb(var(--color-text-secondary))] hover:border-[rgb(var(--color-accent))]/45 hover:text-[rgb(var(--color-text))]"
+        }`}
+        title="Set reasoning effort"
+      >
+        <Brain className="h-3.5 w-3.5" />
+        <span className="max-w-[82px] truncate">{currentLabel}</span>
+        <IconChevronDown size={10} />
+      </button>
+      {open && (
+        <div className="absolute bottom-full right-0 z-[100] mb-1 w-44 overflow-hidden rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] py-1 shadow-xl">
+          <div className="border-b border-[rgb(var(--color-border-subtle))] px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/80">
+            Reasoning
+          </div>
+          {options.map((option) => {
+            const selected = option === value;
+            return (
+              <button
+                key={option || "default"}
+                type="button"
+                onClick={() => onChange(option)}
+                className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-[11px] transition-colors ${
+                  selected
+                    ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text))]"
+                    : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+                }`}
+              >
+                <span>{reasoningEffortLabel(option)}</span>
+                {selected && <IconCheck size={11} />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 

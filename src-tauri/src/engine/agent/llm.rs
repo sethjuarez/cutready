@@ -52,6 +52,20 @@ pub fn supports_vision(model: &str) -> bool {
         || model.starts_with("o4")
 }
 
+pub fn supported_reasoning_efforts(model: &str) -> Vec<&'static str> {
+    let model = model.to_ascii_lowercase();
+    if model.contains("gpt-6") {
+        return vec!["low", "medium", "high", "xhigh", "max"];
+    }
+    if model.contains("gpt-5") {
+        return vec!["low", "medium", "high", "xhigh"];
+    }
+    if model.starts_with("o1") || model.starts_with("o3") || model.starts_with("o4") {
+        return vec!["low", "medium", "high"];
+    }
+    Vec::new()
+}
+
 
 // ---------------------------------------------------------------------------
 // CutReady-specific provider configuration
@@ -195,6 +209,13 @@ fn normalize_model_info(mut model: ModelInfo) -> ModelInfo {
         .or_insert_with(|| "true".into());
     caps.entry("tool_calling".into())
         .or_insert_with(|| "true".into());
+    let reasoning_efforts = supported_reasoning_efforts(&model_name);
+    caps.entry("reasoning_effort".into())
+        .or_insert_with(|| (!reasoning_efforts.is_empty()).to_string());
+    if !reasoning_efforts.is_empty() {
+        caps.entry("reasoning_efforts".into())
+            .or_insert_with(|| reasoning_efforts.join(","));
+    }
 
     if model.context_length.is_none() {
         model.context_length = Some(context_budget(&model_name, None));
@@ -214,6 +235,7 @@ mod tests {
             api_key: "test-key".into(),
             model: "gpt-4o".into(),
             bearer_token: bearer.map(String::from),
+            reasoning_effort: None,
         }
     }
 
@@ -227,6 +249,7 @@ mod tests {
             api_key: String::new(),
             model: "gpt-4o".into(),
             bearer_token: Some("entra-token".into()),
+            reasoning_effort: None,
         };
         let connection = discovery_connection(&config).unwrap();
         assert_eq!(connection["kind"], "foundry");
@@ -245,6 +268,7 @@ mod tests {
             api_key: String::new(),
             model: "gpt-4o".into(),
             bearer_token: Some("entra-token".into()),
+            reasoning_effort: None,
         };
 
         let error = discovery_connection(&config).unwrap_err();
@@ -268,6 +292,7 @@ mod tests {
             api_key: "sk-test".into(),
             model: "gpt-4o".into(),
             bearer_token: None,
+            reasoning_effort: None,
         };
         let connection = discovery_connection(&config).unwrap();
         assert_eq!(connection["kind"], "key");
@@ -299,6 +324,7 @@ mod tests {
             api_key: "sk-ant-test".into(),
             model: "claude-sonnet-4-6".into(),
             bearer_token: None,
+            reasoning_effort: None,
         };
         assert_eq!(effective_endpoint(&config), "https://api.anthropic.com");
     }

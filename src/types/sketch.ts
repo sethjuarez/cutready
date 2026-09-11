@@ -301,6 +301,7 @@ export interface ChatRunDetails {
   agent_id: string;
   run_id?: string;
   elapsed_ms?: number;
+  reasoning_effort?: string | null;
   tool_calls?: number;
   usage?: ChatRunUsage;
 }
