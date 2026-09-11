@@ -10,6 +10,13 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.36.0](https://github.com/sethjuarez/cutready/compare/v1.35.0...v1.36.0) (2026-09-11)
+
+
+### Features
+
+* **agent:** promote prompty runtime ([#286](https://github.com/sethjuarez/cutready/issues/286)) ([f0b687a](https://github.com/sethjuarez/cutready/commit/f0b687ac53d8b8f32d961f610f94c3bbbb37e710))
+
 ## [1.35.0](https://github.com/sethjuarez/cutready/compare/v1.34.0...v1.35.0) (2026-09-11)
 
 
