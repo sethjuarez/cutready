@@ -213,7 +213,7 @@ function MediaActions({
   if (actions.length === 0) return null;
 
   return (
-    <div className="pointer-events-none absolute right-2 top-2 z-20 flex flex-wrap justify-end gap-1 opacity-0 transition-opacity group-hover/media:opacity-100 group-focus-within/media:opacity-100">
+    <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center gap-1.5 bg-[rgb(var(--color-media-control-bg)/0.48)] opacity-0 transition-opacity group-hover/media:opacity-100 group-focus-within/media:opacity-100">
       {actions.map((item) => {
         if (!item) return null;
         const Icon = item.icon;
@@ -225,7 +225,7 @@ function MediaActions({
               onClickCapture(event);
               item.action(rowIndex);
             }}
-            className="pointer-events-auto grid h-8 w-8 place-items-center rounded-full bg-[rgb(var(--color-media-control-bg)/0.72)] text-[rgb(var(--color-media-control-fg))] shadow-sm ring-1 ring-[rgb(var(--color-media-control-fg)/0.16)] backdrop-blur transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-accent))]"
+            className="pointer-events-auto grid h-8 w-8 place-items-center rounded-full bg-[rgb(var(--color-media-control-bg)/0.22)] text-[rgb(var(--color-media-control-fg))] shadow-sm ring-1 ring-[rgb(var(--color-media-control-fg)/0.16)] backdrop-blur transition-colors hover:bg-[rgb(var(--color-accent))]/80 hover:text-[rgb(var(--color-media-control-fg))]"
             aria-label={item.label}
             title={item.label}
           >
