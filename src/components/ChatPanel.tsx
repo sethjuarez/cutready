@@ -160,6 +160,21 @@ export function buildChatWorkingNotes(input: { drafts: string[]; thinking: strin
   };
 }
 
+export function buildLiveChatWorkingNotes(input: { drafts: string[]; thinking: string; streamingText: string }): ChatWorkingNotes | undefined {
+  const liveDrafts = input.streamingText.trim()
+    ? [...input.drafts, input.streamingText]
+    : input.drafts;
+  return buildChatWorkingNotes({ drafts: liveDrafts, thinking: input.thinking });
+}
+
+export function workingNotesPreview(notes: ChatWorkingNotes, maxLength = 120): string {
+  const drafts = notes.drafts ?? [];
+  const raw = notes.thinking?.trim() || drafts[drafts.length - 1]?.trim() || "";
+  const normalized = raw.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
 export function extractInlineToolActivity(message: ChatMessage, followingMessages: ChatMessage[]): ChatToolActivity[] {
   const toolCalls = message.tool_calls ?? [];
   if (toolCalls.length === 0) return [];
@@ -644,6 +659,14 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     thinkingRef.current = streamingThinking;
     workingDraftsRef.current = streamingDrafts;
   }, [streamingDrafts, streamingText, streamingThinking]);
+  const liveWorkingNotes = useMemo(
+    () => buildLiveChatWorkingNotes({
+      drafts: streamingDrafts,
+      thinking: streamingThinking,
+      streamingText,
+    }),
+    [streamingDrafts, streamingText, streamingThinking],
+  );
   const refreshSketchAfterMutation = useCallback((mutation: { path: string | null; rows: number[]; toolName: string }) => {
     const mutationPath = normalizeMutationPath(mutation.path);
     const fallbackPath = normalizeMutationPath(useAppStore.getState().activeSketchPath);
@@ -751,6 +774,19 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           break;
         }
         case "tool_call":
+          if (streamingRef.current.trim()) {
+            const resetState = applyStreamingDeltaReset({
+              buffer: streamingRef.current,
+              visible: "",
+              drafts: workingDraftsRef.current,
+            });
+            streamingRef.current = resetState.buffer;
+            workingDraftsRef.current = resetState.drafts;
+            setChatStreamingState({
+              chatStreamingText: resetState.buffer,
+              chatStreamingDrafts: resetState.drafts,
+            });
+          }
           // Stash args so tool_result can use them (e.g. to extract path)
           if (ev.name) {
             const queue = pendingToolArgsRef.current[ev.name] ?? [];
@@ -1715,30 +1751,15 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
 
         {loading && (
           <div className={chatFocusMode ? "mx-auto w-full max-w-5xl px-3.5 py-2" : "px-3.5 py-2"}>
-            {streamingText ? (
-              <div className="w-full max-w-[70ch] min-w-0 rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/80 shadow-sm">
-                <div className="flex items-center gap-2 border-b border-[rgb(var(--color-border-subtle))] px-4 py-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
-                    <IconSparkles size={11} />
-                  </span>
-                  {selectedAgent.name} is writing
-                </div>
-                <div className="px-5 py-4 text-[14px] leading-[1.78] text-[rgb(var(--color-text)/0.92)]">
-                  <MarkdownContent content={streamingText} projectRoot={currentProject?.root} />
-                  <span className="inline-block w-1.5 h-4 bg-[rgb(var(--color-accent))] animate-pulse ml-0.5 align-text-bottom rounded-sm" />
-                </div>
-              </div>
-            ) : (
-              <span className="text-xs text-[rgb(var(--color-text-secondary))] italic">{streamingStatus || "Thinking…"}</span>
-            )}
-            {buildChatWorkingNotes({ drafts: streamingDrafts, thinking: streamingThinking }) && (
-              <div className="mt-2 w-full max-w-[70ch]">
+            {liveWorkingNotes ? (
+              <div className="w-full max-w-[70ch]">
                 <WorkingNotesInline
-                  notes={buildChatWorkingNotes({ drafts: streamingDrafts, thinking: streamingThinking })!}
-                  defaultOpen
+                  notes={liveWorkingNotes}
                   live
                 />
               </div>
+            ) : (
+              <span className="text-xs text-[rgb(var(--color-text-secondary))] italic">{streamingStatus || "Thinking…"}</span>
             )}
           </div>
         )}
@@ -2340,6 +2361,7 @@ function WorkingNotesInline({ notes, defaultOpen = false, live = false }: { note
   const [expanded, setExpanded] = useState(defaultOpen);
   const drafts = notes.drafts ?? [];
   const itemCount = drafts.length + (notes.thinking ? 1 : 0);
+  const preview = workingNotesPreview(notes);
   if (itemCount === 0) return null;
 
   return (
@@ -2359,6 +2381,11 @@ function WorkingNotesInline({ notes, defaultOpen = false, live = false }: { note
         <span className="rounded-full border border-[rgb(var(--color-border-subtle))] px-1.5 py-0.5 text-[10px] tabular-nums text-[rgb(var(--color-text-secondary))]/80">
           {itemCount}
         </span>
+        {preview && (
+          <span className="min-w-0 flex-1 truncate text-[11px] text-[rgb(var(--color-text-secondary))]/75">
+            {preview}
+          </span>
+        )}
         <ChevronDown className={`ml-auto h-3 w-3 transition-transform ${expanded ? "rotate-180" : ""}`} />
       </button>
       {expanded && <div className="space-y-3 px-4 pb-4">
