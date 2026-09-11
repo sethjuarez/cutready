@@ -1070,66 +1070,68 @@ export function SketchBalancedView({
         {rows.map((row, index) => (
           <article
             key={index}
-            className="grid gap-3 rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/45 p-3 shadow-sm md:grid-cols-[minmax(220px,0.92fr)_minmax(0,1fr)]"
+            className="flex flex-col gap-3 rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/45 p-3 shadow-sm"
           >
-            <RowMediaStack
+            <VisualRowHeader
               row={row}
               rowIndex={index}
-              projectRoot={projectRoot}
+              rows={rows}
               readOnly={readOnly}
-              frameClassName="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]"
-              mediaClassName="!h-auto aspect-video !min-h-0 rounded-t-xl rounded-b-none border-0"
-              imageClassName="h-full w-full object-contain"
-              narrationPaddingClassName="border-t border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/75 px-2 py-1.5"
-              onOpenPreview={setPreview}
-              onCaptureScreenshot={onCaptureScreenshot}
-              onPasteImage={onPasteImage}
-              onPickImage={onPickImage}
-              onBrowseImage={onBrowseImage}
-              onGenerateVisual={onGenerateVisual}
-              onRemoveMedia={onRemoveMedia}
-              onStartNarrationRecording={onStartNarrationRecording}
-              onGenerateNarration={onGenerateNarration}
-              onPickNarration={onPickNarration}
-              onStopNarrationRecording={onStopNarrationRecording}
-              narrationRecordingRow={narrationRecordingRow}
-              narrationSavingRows={narrationSavingRows}
-              onRemoveNarration={onRemoveNarration}
+              onChange={onChange}
+              onTimeChange={(value) => updateField(index, "time", value)}
             />
-            <div className="flex min-w-0 flex-col gap-3">
-              <VisualRowHeader
+            <div className="grid gap-3 md:grid-cols-[minmax(220px,0.92fr)_minmax(0,1fr)]">
+              <RowMediaStack
                 row={row}
                 rowIndex={index}
-                rows={rows}
+                projectRoot={projectRoot}
                 readOnly={readOnly}
-                onChange={onChange}
-                onTimeChange={(value) => updateField(index, "time", value)}
+                frameClassName="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]"
+                mediaClassName="!h-auto aspect-video !min-h-0 rounded-t-xl rounded-b-none border-0"
+                imageClassName="h-full w-full object-contain"
+                narrationPaddingClassName="border-t border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/75 px-2 py-1.5"
+                onOpenPreview={setPreview}
+                onCaptureScreenshot={onCaptureScreenshot}
+                onPasteImage={onPasteImage}
+                onPickImage={onPickImage}
+                onBrowseImage={onBrowseImage}
+                onGenerateVisual={onGenerateVisual}
+                onRemoveMedia={onRemoveMedia}
+                onStartNarrationRecording={onStartNarrationRecording}
+                onGenerateNarration={onGenerateNarration}
+                onPickNarration={onPickNarration}
+                onStopNarrationRecording={onStopNarrationRecording}
+                narrationRecordingRow={narrationRecordingRow}
+                narrationSavingRows={narrationSavingRows}
+                onRemoveNarration={onRemoveNarration}
               />
-              <div>
-                <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
-                  Narrative
-                </h3>
-                <EditableText
-                  value={row.narrative}
-                  placeholder="No narrative yet."
-                  readOnly={readOnly || isCellLocked(row, "narrative")}
-                  className="whitespace-pre-wrap text-sm leading-6 text-[rgb(var(--color-text))]"
-                  onChange={(value) => updateField(index, "narrative", value)}
-                />
+              <div className="flex min-w-0 flex-col gap-3">
+                <div>
+                  <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
+                    Narrative
+                  </h3>
+                  <EditableText
+                    value={row.narrative}
+                    placeholder="No narrative yet."
+                    readOnly={readOnly || isCellLocked(row, "narrative")}
+                    className="whitespace-pre-wrap text-sm leading-6 text-[rgb(var(--color-text))]"
+                    onChange={(value) => updateField(index, "narrative", value)}
+                  />
+                </div>
+                <div>
+                  <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
+                    Actions
+                  </h3>
+                  <EditableText
+                    value={row.demo_actions}
+                    placeholder="No actions yet."
+                    readOnly={readOnly || isCellLocked(row, "demo_actions")}
+                    className="whitespace-pre-wrap text-sm leading-6 text-[rgb(var(--color-text-secondary))]"
+                    onChange={(value) => updateField(index, "demo_actions", value)}
+                  />
+                </div>
+                <RowChips row={row} />
               </div>
-              <div>
-                <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
-                  Actions
-                </h3>
-                <EditableText
-                  value={row.demo_actions}
-                  placeholder="No actions yet."
-                  readOnly={readOnly || isCellLocked(row, "demo_actions")}
-                  className="whitespace-pre-wrap text-sm leading-6 text-[rgb(var(--color-text-secondary))]"
-                  onChange={(value) => updateField(index, "demo_actions", value)}
-                />
-              </div>
-              <RowChips row={row} />
             </div>
           </article>
         ))}
@@ -1172,33 +1174,9 @@ export function SketchScreenView({
         {rows.map((row, index) => (
           <article
             key={index}
-            className="grid overflow-hidden rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/45 shadow-sm md:grid-cols-[minmax(320px,1.15fr)_minmax(0,0.9fr)]"
+            className="flex flex-col overflow-hidden rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/45 shadow-sm"
           >
-            <RowMediaStack
-              row={row}
-              rowIndex={index}
-              projectRoot={projectRoot}
-              readOnly={readOnly}
-              frameClassName="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]"
-              mediaClassName="!h-auto aspect-video !min-h-0 rounded-t-xl rounded-b-none border-0 md:!min-h-[280px]"
-              imageClassName="h-full w-full object-contain"
-              narrationPaddingClassName="border-t border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/75 px-2 py-1.5"
-              onOpenPreview={setPreview}
-              onCaptureScreenshot={onCaptureScreenshot}
-              onPasteImage={onPasteImage}
-              onPickImage={onPickImage}
-              onBrowseImage={onBrowseImage}
-              onGenerateVisual={onGenerateVisual}
-              onRemoveMedia={onRemoveMedia}
-              onStartNarrationRecording={onStartNarrationRecording}
-              onGenerateNarration={onGenerateNarration}
-              onPickNarration={onPickNarration}
-              onStopNarrationRecording={onStopNarrationRecording}
-              narrationRecordingRow={narrationRecordingRow}
-              narrationSavingRows={narrationSavingRows}
-              onRemoveNarration={onRemoveNarration}
-            />
-            <div className="space-y-3 p-4">
+            <div className="px-3 py-3">
               <VisualRowHeader
                 row={row}
                 rowIndex={index}
@@ -1207,32 +1185,60 @@ export function SketchScreenView({
                 onChange={onChange}
                 onTimeChange={(value) => updateField(index, "time", value)}
               />
-              <div>
-                <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
-                  Narrative
-                  {row.visual && <Sparkles className="h-3.5 w-3.5 text-[rgb(var(--color-accent))]" />}
+            </div>
+            <div className="grid md:grid-cols-[minmax(320px,1.15fr)_minmax(0,0.9fr)]">
+              <RowMediaStack
+                row={row}
+                rowIndex={index}
+                projectRoot={projectRoot}
+                readOnly={readOnly}
+                frameClassName="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]"
+                mediaClassName="!h-auto aspect-video !min-h-0 rounded-t-xl rounded-b-none border-0 md:!min-h-[280px]"
+                imageClassName="h-full w-full object-contain"
+                narrationPaddingClassName="border-t border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/75 px-2 py-1.5"
+                onOpenPreview={setPreview}
+                onCaptureScreenshot={onCaptureScreenshot}
+                onPasteImage={onPasteImage}
+                onPickImage={onPickImage}
+                onBrowseImage={onBrowseImage}
+                onGenerateVisual={onGenerateVisual}
+                onRemoveMedia={onRemoveMedia}
+                onStartNarrationRecording={onStartNarrationRecording}
+                onGenerateNarration={onGenerateNarration}
+                onPickNarration={onPickNarration}
+                onStopNarrationRecording={onStopNarrationRecording}
+                narrationRecordingRow={narrationRecordingRow}
+                narrationSavingRows={narrationSavingRows}
+                onRemoveNarration={onRemoveNarration}
+              />
+              <div className="space-y-3 p-4 pt-0 md:pt-4">
+                <div>
+                  <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
+                    Narrative
+                    {row.visual && <Sparkles className="h-3.5 w-3.5 text-[rgb(var(--color-accent))]" />}
+                  </div>
+                  <EditableText
+                    value={row.narrative}
+                    placeholder="No narrative yet."
+                    readOnly={readOnly || isCellLocked(row, "narrative")}
+                    className="text-sm leading-6 text-[rgb(var(--color-text))]"
+                    onChange={(value) => updateField(index, "narrative", value)}
+                  />
                 </div>
-                <EditableText
-                  value={row.narrative}
-                  placeholder="No narrative yet."
-                  readOnly={readOnly || isCellLocked(row, "narrative")}
-                  className="text-sm leading-6 text-[rgb(var(--color-text))]"
-                  onChange={(value) => updateField(index, "narrative", value)}
-                />
+                <div>
+                  <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
+                    Actions
+                  </h3>
+                  <EditableText
+                    value={row.demo_actions}
+                    placeholder="No actions yet."
+                    readOnly={readOnly || isCellLocked(row, "demo_actions")}
+                    className="text-xs leading-5 text-[rgb(var(--color-text-secondary))]"
+                    onChange={(value) => updateField(index, "demo_actions", value)}
+                  />
+                </div>
+                <RowChips row={row} />
               </div>
-              <div>
-                <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
-                  Actions
-                </h3>
-                <EditableText
-                  value={row.demo_actions}
-                  placeholder="No actions yet."
-                  readOnly={readOnly || isCellLocked(row, "demo_actions")}
-                  className="text-xs leading-5 text-[rgb(var(--color-text-secondary))]"
-                  onChange={(value) => updateField(index, "demo_actions", value)}
-                />
-              </div>
-              <RowChips row={row} />
             </div>
           </article>
         ))}
