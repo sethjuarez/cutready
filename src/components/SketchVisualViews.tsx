@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent } from "react";
 import { Camera, FolderOpen, Image as ImageIcon, Loader2, Mic2, Pause, Play, Plus, Sparkles, Square, Trash2, Upload, X } from "lucide-react";
+import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
 import type { PlanningCellField, PlanningRow } from "../types/sketch";
 import VisualCell from "./VisualCell";
 import { useProjectImage } from "../hooks/useProjectImage";
 import { parseDurationSeconds } from "../utils/documentMetadata";
 import { invoke } from "../services/tauri";
+import { SafeMarkdown } from "./SafeMarkdown";
+import { continueMarkdownList } from "../utils/markdownList";
 
 interface SketchVisualViewProps {
   rows: PlanningRow[];
@@ -818,7 +822,17 @@ function EditableText({
   className: string;
   onChange: (value: string) => void;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [localValue, setLocalValue] = useState(value);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const cursorRef = useRef<number | null>(null);
+  const isEditingRef = useRef(false);
+  isEditingRef.current = isEditing;
+
+  useEffect(() => {
+    if (!isEditingRef.current) setLocalValue(value);
+  }, [value]);
 
   const resizeTextarea = useCallback(() => {
     const textarea = textareaRef.current;
@@ -828,12 +842,12 @@ function EditableText({
   }, []);
 
   useLayoutEffect(() => {
-    if (readOnly || !multiline || !textareaRef.current) return;
+    if (readOnly || !isEditing || !multiline || !textareaRef.current) return;
     resizeTextarea();
-  }, [multiline, readOnly, resizeTextarea, value]);
+  }, [isEditing, localValue, multiline, readOnly, resizeTextarea]);
 
   useEffect(() => {
-    if (readOnly || !multiline || !textareaRef.current) return;
+    if (readOnly || !isEditing || !multiline || !textareaRef.current) return;
     if (typeof ResizeObserver === "undefined") {
       window.addEventListener("resize", resizeTextarea);
       return () => window.removeEventListener("resize", resizeTextarea);
@@ -841,21 +855,85 @@ function EditableText({
     const observer = new ResizeObserver(resizeTextarea);
     observer.observe(textareaRef.current);
     return () => observer.disconnect();
-  }, [multiline, readOnly, resizeTextarea]);
+  }, [isEditing, multiline, readOnly, resizeTextarea]);
 
-  if (readOnly) {
+  useEffect(() => {
+    if (!isEditing) return;
+    const editor = multiline ? textareaRef.current : inputRef.current;
+    if (!editor) return;
+    editor.focus();
+    const length = editor.value.length;
+    editor.selectionStart = editor.selectionEnd = length;
+  }, [isEditing, multiline]);
+
+  useEffect(() => {
+    if (cursorRef.current !== null && textareaRef.current) {
+      textareaRef.current.selectionStart = textareaRef.current.selectionEnd = cursorRef.current;
+      cursorRef.current = null;
+    }
+  }, [localValue]);
+
+  const handleChange = (newValue: string) => {
+    setLocalValue(newValue);
+    onChange(newValue);
+  };
+
+  const beginEditing = () => {
+    if (!readOnly) setIsEditing(true);
+  };
+
+  if (readOnly || !isEditing) {
+    if (!multiline) {
+      return (
+        <button
+          type="button"
+          disabled={readOnly}
+          onClick={beginEditing}
+          className={`${className} min-h-[1.75rem] w-full rounded-lg border border-transparent bg-transparent px-2 py-1 text-left outline-none transition-colors ${readOnly ? "" : "cursor-text hover:border-[rgb(var(--color-border))] focus:border-[rgb(var(--color-accent))]/45 focus:bg-[rgb(var(--color-surface))] focus:ring-1 focus:ring-[rgb(var(--color-accent))]/25"}`}
+        >
+          {localValue || <span className="text-[rgb(var(--color-text-secondary))]/45">{placeholder}</span>}
+        </button>
+      );
+    }
+
     return (
-      <p className={className}>
-        {value || placeholder}
-      </p>
+      <div
+        className={`md-cell-preview min-h-[2rem] rounded-lg border border-transparent px-2 py-1 outline-none transition-colors ${className} ${readOnly ? "" : "cursor-text hover:border-[rgb(var(--color-border))] focus:border-[rgb(var(--color-accent))]/45 focus:bg-[rgb(var(--color-surface))] focus:ring-1 focus:ring-[rgb(var(--color-accent))]/25"}`}
+        tabIndex={readOnly ? undefined : 0}
+        onClick={beginEditing}
+        onFocus={beginEditing}
+        onKeyDown={(event) => {
+          if (readOnly) return;
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setIsEditing(true);
+          }
+        }}
+      >
+        <SafeMarkdown
+          placeholder={placeholder}
+          placeholderClassName="text-[rgb(var(--color-text-secondary))]/45"
+          remarkPlugins={[remarkGfm, remarkBreaks]}
+        >
+          {localValue}
+        </SafeMarkdown>
+      </div>
     );
   }
 
   if (!multiline) {
     return (
       <input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
+        ref={inputRef}
+        value={localValue}
+        onChange={(event) => handleChange(event.target.value)}
+        onBlur={() => setIsEditing(false)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" || event.key === "Enter") {
+            event.preventDefault();
+            setIsEditing(false);
+          }
+        }}
         placeholder={placeholder}
         className={`${className} w-full rounded-lg border border-transparent bg-transparent px-2 py-1 outline-none transition-colors placeholder:text-[rgb(var(--color-text-secondary))]/45 hover:border-[rgb(var(--color-border))] focus:border-[rgb(var(--color-accent))]/45 focus:bg-[rgb(var(--color-surface))] focus:ring-1 focus:ring-[rgb(var(--color-accent))]/25`}
       />
@@ -865,11 +943,34 @@ function EditableText({
   return (
     <textarea
       ref={textareaRef}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
+      value={localValue}
+      onChange={(event) => handleChange(event.target.value)}
+      onBlur={() => setIsEditing(false)}
       placeholder={placeholder}
       rows={1}
       className={`${className} w-full resize-none overflow-hidden rounded-lg border border-transparent bg-transparent px-2 py-1 outline-none transition-colors placeholder:text-[rgb(var(--color-text-secondary))]/45 hover:border-[rgb(var(--color-border))] focus:border-[rgb(var(--color-accent))]/45 focus:bg-[rgb(var(--color-surface))] focus:ring-1 focus:ring-[rgb(var(--color-accent))]/25`}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setIsEditing(false);
+          return;
+        }
+        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          setIsEditing(false);
+          return;
+        }
+        if (event.key !== "Enter") return;
+        if (continueMarkdownList({
+          value: localValue,
+          selectionStart: event.currentTarget.selectionStart,
+          selectionEnd: event.currentTarget.selectionEnd,
+          onChange: handleChange,
+          setCursor: (position) => { cursorRef.current = position; },
+        })) {
+          event.preventDefault();
+        }
+      }}
     />
   );
 }
