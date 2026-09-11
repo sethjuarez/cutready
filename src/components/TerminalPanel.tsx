@@ -36,6 +36,7 @@ type RuntimeTerminal = {
   helperFallbackTimer: number | null;
   hasInputSinceSubmit: boolean;
   dataSeq: number;
+  closeExited: (id: string, runtime: RuntimeTerminal) => Promise<void>;
   disposed: boolean;
 };
 
@@ -102,10 +103,12 @@ async function closeRuntime(id: string) {
 
 export function TerminalPanel({
   active,
+  onAllTerminalsExited,
   onRequestActivate,
   toolbarHost,
 }: {
   active: boolean;
+  onAllTerminalsExited?: () => void;
   onRequestActivate?: () => void;
   toolbarHost?: HTMLElement | null;
 }) {
@@ -113,6 +116,7 @@ export function TerminalPanel({
   const { settings } = useSettings();
   const containerRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const onAllTerminalsExitedRef = useRef(onAllTerminalsExited);
   const projectRootRef = useRef<string | null>(null);
   const autoOpenedRootRef = useRef<string | null>(null);
   const openingTerminalIdsRef = useRef(new Set<string>());
@@ -151,6 +155,10 @@ export function TerminalPanel({
   const activeRecord =
     terminals.find((terminal) => terminal.id === activeTerminalId) ?? null;
 
+  useEffect(() => {
+    onAllTerminalsExitedRef.current = onAllTerminalsExited;
+  }, [onAllTerminalsExited]);
+
   const focusTerminal = useCallback(
     (id = activeTerminalId) => {
       const runtime = id ? terminalRuntimes.get(id) : null;
@@ -186,6 +194,25 @@ export function TerminalPanel({
     },
     [activeTerminalId, updateTerminal],
   );
+
+  const closeExitedTerminal = useCallback(
+    async (id: string, runtime: RuntimeTerminal) => {
+      if (runtime.disposed) return;
+      runtime.sessionId = null;
+      useTerminalStore.getState().closeTerminalRecord(id);
+      await closeRuntime(id);
+      if (useTerminalStore.getState().terminals.length === 0) {
+        onAllTerminalsExitedRef.current?.();
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    for (const runtime of terminalRuntimes.values()) {
+      runtime.closeExited = closeExitedTerminal;
+    }
+  }, [closeExitedTerminal]);
 
   const openTerminal = useCallback(
     async (restartId?: string) => {
@@ -245,6 +272,7 @@ export function TerminalPanel({
         helperFallbackTimer: null,
         hasInputSinceSubmit: false,
         dataSeq: 0,
+        closeExited: closeExitedTerminal,
         disposed: false,
       };
       terminalRuntimes.set(id, runtime);
@@ -387,6 +415,7 @@ export function TerminalPanel({
       focusTerminal,
       hasProject,
       projectRoot,
+      closeExitedTerminal,
       setActiveTerminal,
       terminalFontFamily,
       terminalFontSize,
@@ -478,7 +507,7 @@ export function TerminalPanel({
       for (const [id, runtime] of terminalRuntimes) {
         if (runtime.sessionId !== sessionId) continue;
         runtime.sessionId = null;
-        updateTerminal(id, { status: "exited", sessionId: null, error: null });
+        void closeExitedTerminal(id, runtime);
         break;
       }
     }).then((dispose) => {
@@ -492,7 +521,7 @@ export function TerminalPanel({
       cancelled = true;
       unlisten?.();
     };
-  }, [updateTerminal]);
+  }, [closeExitedTerminal]);
 
   const closeTerminal = useCallback(
     async (id: string) => {
@@ -615,10 +644,7 @@ async function reconcileTerminalRuntime(
     if (!sessionId) return;
     const alive = await invoke<boolean>("terminal_is_alive", { sessionId });
     if (runtime.disposed || runtime.sessionId !== sessionId || alive) return;
-    runtime.sessionId = null;
-    useTerminalStore
-      .getState()
-      .updateTerminal(id, { status: "exited", sessionId: null, error: null });
+    await runtime.closeExited(id, runtime);
   } catch {
     // Keep terminal input responsive; normal command errors are surfaced by writes.
   }

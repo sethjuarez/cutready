@@ -1,4 +1,11 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const tauriMocks = vi.hoisted(() => ({
@@ -121,7 +128,8 @@ describe("TerminalPanel", () => {
     vi.unstubAllGlobals();
   });
 
-  it("marks the active terminal exited when the backend session exits", async () => {
+  it("closes the active terminal when the backend session exits", async () => {
+    const onAllTerminalsExited = vi.fn();
     tauriMocks.listen.mockResolvedValue(() => undefined);
     tauriMocks.invoke.mockImplementation((command: string) => {
       if (command === "terminal_open") {
@@ -145,7 +153,12 @@ describe("TerminalPanel", () => {
       });
     });
 
-    render(<TerminalPanel active />);
+    render(
+      <TerminalPanel
+        active
+        onAllTerminalsExited={onAllTerminalsExited}
+      />,
+    );
 
     await waitFor(() =>
       expect(useTerminalStore.getState().terminals[0]).toMatchObject({
@@ -162,15 +175,10 @@ describe("TerminalPanel", () => {
     });
 
     await waitFor(() =>
-      expect(useTerminalStore.getState().terminals[0]).toMatchObject({
-        sessionId: null,
-        status: "exited",
-      }),
+      expect(useTerminalStore.getState().terminals).toEqual([]),
     );
-    expect(screen.getByText("Terminal exited")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /restart terminal/i }),
-    ).toBeInTheDocument();
+    expect(onAllTerminalsExited).toHaveBeenCalledOnce();
+    expect(screen.queryByText("Terminal exited")).not.toBeInTheDocument();
   });
 
   it("renders terminal tabs in a provided toolbar host", async () => {
@@ -209,6 +217,74 @@ describe("TerminalPanel", () => {
     );
     expect(toolbarHost).toHaveTextContent(/Terminal \d+/);
     expect(toolbarHost.querySelector("[title='New terminal']")).toBeTruthy();
+  });
+
+  it("keeps the previous terminal active when an active terminal exits", async () => {
+    const onAllTerminalsExited = vi.fn();
+    let sessionIndex = 0;
+    tauriMocks.listen.mockResolvedValue(() => undefined);
+    tauriMocks.invoke.mockImplementation((command: string) => {
+      if (command === "terminal_open") {
+        sessionIndex += 1;
+        return Promise.resolve({
+          session_id: `terminal-session-${sessionIndex}`,
+          cwd: "C:\\demo",
+          shell: "pwsh",
+        });
+      }
+      if (command === "terminal_is_alive") return Promise.resolve(true);
+      return Promise.resolve();
+    });
+
+    await act(async () => {
+      useAppStore.setState({
+        currentProject: {
+          root: "C:\\demo",
+          repo_root: "C:\\demo",
+          name: "Demo",
+        },
+      });
+    });
+
+    render(
+      <TerminalPanel
+        active
+        onAllTerminalsExited={onAllTerminalsExited}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(useTerminalStore.getState().terminals[0]).toMatchObject({
+        sessionId: "terminal-session-1",
+        status: "open",
+      }),
+    );
+
+    fireEvent.click(screen.getByTitle("New terminal"));
+
+    await waitFor(() =>
+      expect(useTerminalStore.getState().terminals).toHaveLength(2),
+    );
+    expect(useTerminalStore.getState().activeTerminalId).toBe(
+      useTerminalStore.getState().terminals[1].id,
+    );
+
+    await act(async () => {
+      tauriMocks.terminalExitedHandler?.({
+        payload: { session_id: "terminal-session-2" },
+      });
+    });
+
+    await waitFor(() =>
+      expect(useTerminalStore.getState().terminals).toHaveLength(1),
+    );
+    const state = useTerminalStore.getState();
+    expect(state.terminals[0]).toMatchObject({
+      sessionId: "terminal-session-1",
+      status: "open",
+    });
+    expect(state.activeTerminalId).toBe(state.terminals[0].id);
+    expect(onAllTerminalsExited).not.toHaveBeenCalled();
   });
 
   it("submits pending helper text on Enter when xterm leaves it stuck", async () => {
@@ -392,7 +468,8 @@ describe("TerminalPanel", () => {
     });
   });
 
-  it("marks the terminal exited when the backend status check reports exit", async () => {
+  it("closes the terminal when the backend status check reports exit", async () => {
+    const onAllTerminalsExited = vi.fn();
     tauriMocks.emitXtermDataOnInput = true;
     tauriMocks.listen.mockResolvedValue(() => undefined);
     tauriMocks.invoke.mockImplementation((command: string) => {
@@ -417,7 +494,12 @@ describe("TerminalPanel", () => {
       });
     });
 
-    render(<TerminalPanel active />);
+    render(
+      <TerminalPanel
+        active
+        onAllTerminalsExited={onAllTerminalsExited}
+      />,
+    );
 
     await waitFor(() =>
       expect(useTerminalStore.getState().terminals[0]).toMatchObject({
@@ -441,13 +523,9 @@ describe("TerminalPanel", () => {
     });
 
     await waitFor(() =>
-      expect(useTerminalStore.getState().terminals[0]).toMatchObject({
-        sessionId: null,
-        status: "exited",
-      }),
+      expect(useTerminalStore.getState().terminals).toEqual([]),
     );
-    expect(
-      screen.getByRole("button", { name: /restart terminal/i }),
-    ).toBeInTheDocument();
+    expect(onAllTerminalsExited).toHaveBeenCalledOnce();
+    expect(screen.queryByText("Terminal exited")).not.toBeInTheDocument();
   });
 });

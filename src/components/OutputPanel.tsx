@@ -475,6 +475,9 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
           >
             <TerminalPanel
               active={activeTab === "terminal"}
+              onAllTerminalsExited={() => {
+                if (activeTab === "terminal") setActiveTab("debug");
+              }}
               onRequestActivate={() => setActiveTab("terminal")}
               toolbarHost={terminalToolbarHost}
             />

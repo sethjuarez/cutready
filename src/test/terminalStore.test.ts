@@ -47,6 +47,23 @@ describe("terminalStore", () => {
     expect(state.activeTerminalId).toBe("terminal-1");
   });
 
+  it("selects the previous neighbor when closing an active middle terminal", () => {
+    const store = useTerminalStore.getState();
+    store.createTerminalRecord(terminal("terminal-1"));
+    store.createTerminalRecord(terminal("terminal-2"));
+    store.createTerminalRecord(terminal("terminal-3"));
+    store.setActiveTerminal("terminal-2");
+
+    store.closeTerminalRecord("terminal-2");
+
+    const state = useTerminalStore.getState();
+    expect(state.terminals.map((item) => item.id)).toEqual([
+      "terminal-1",
+      "terminal-3",
+    ]);
+    expect(state.activeTerminalId).toBe("terminal-1");
+  });
+
   it("allows the last terminal to close", () => {
     const store = useTerminalStore.getState();
     store.createTerminalRecord(terminal("terminal-1"));

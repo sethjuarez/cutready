@@ -38,6 +38,9 @@ export const useTerminalStore = create<TerminalState>((set) => ({
     })),
   closeTerminalRecord: (id) =>
     set((state) => {
+      const closedIndex = state.terminals.findIndex(
+        (terminal) => terminal.id === id,
+      );
       const terminals = state.terminals.filter(
         (terminal) => terminal.id !== id,
       );
@@ -45,7 +48,9 @@ export const useTerminalStore = create<TerminalState>((set) => ({
       return {
         terminals,
         activeTerminalId: closingActive
-          ? (terminals[terminals.length - 1]?.id ?? null)
+          ? (terminals[Math.max(0, closedIndex - 1)]?.id ??
+            terminals[terminals.length - 1]?.id ??
+            null)
           : state.activeTerminalId,
       };
     }),
