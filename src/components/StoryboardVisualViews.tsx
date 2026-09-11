@@ -1,149 +1,61 @@
-import { FileText, Image as ImageIcon, Mic2, Plus, Trash2 } from "lucide-react";
+import { type Dispatch, type SetStateAction } from "react";
+import { ChevronRight, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import type { Sketch, SketchSummary, StoryboardItem } from "../types/sketch";
-import { ProjectImage } from "./ProjectImage";
-import VisualCell from "./VisualCell";
 import { formatDurationSummary, summarizeSketchDuration, summarizeSketchPathsDuration, type DurationDisplayMode } from "../utils/documentMetadata";
+import { SafeMarkdown } from "./SafeMarkdown";
+import { SketchBalancedView, SketchScreenView } from "./SketchVisualViews";
 
-function firstSketchMedia(sketch?: Sketch) {
-  return sketch?.rows.find((row) => row.visual || row.screenshot) ?? null;
-}
+type StoryboardVisualMode = "balanced" | "screen";
 
-function StoryboardMedia({
-  sketch,
-  projectRoot,
-  className = "",
-  imageClassName = "h-full w-full object-contain",
-}: {
-  sketch?: Sketch;
-  projectRoot?: string | null;
-  className?: string;
-  imageClassName?: string;
-}) {
-  const media = firstSketchMedia(sketch);
-  const mediaClass = `min-h-[150px] overflow-hidden rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] ${className}`;
-
-  if (media?.visual) {
-    return (
-      <div className={mediaClass}>
-        <VisualCell visualPath={media.visual} mode="thumbnail" className="!h-full !w-full !rounded-none !border-0" />
-      </div>
-    );
-  }
-
-  if (media?.screenshot) {
-    return (
-      <div className={mediaClass}>
-        <ProjectImage
-          relativePath={media.screenshot}
-          projectRoot={projectRoot}
-          alt=""
-          className={imageClassName}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className={`${mediaClass} flex flex-col items-center justify-center gap-2 text-[rgb(var(--color-text-secondary))]`}>
-      <ImageIcon className="h-5 w-5" />
-      <span className="text-xs">No media yet</span>
-    </div>
-  );
-}
-
-function sketchTitle(path: string, sketchMap: Map<string, SketchSummary>): string {
-  return sketchMap.get(path)?.title ?? path;
-}
-
-function narrationCount(sketch?: Sketch): number {
-  return sketch?.rows.filter((row) => row.narration?.path).length ?? 0;
-}
-
-function SketchSummaryCard({
-  path,
-  sketchMap,
-  sketchCache,
-  projectRoot,
-  durationDisplayMode,
-  onOpen,
-  compact = false,
-  locked = false,
-  onRemove,
-}: {
-  path: string;
+interface StoryboardVisualViewProps {
+  items: StoryboardItem[];
   sketchMap: Map<string, SketchSummary>;
   sketchCache: Map<string, Sketch>;
   projectRoot?: string | null;
   durationDisplayMode: DurationDisplayMode;
-  onOpen: (path: string) => void;
-  compact?: boolean;
+  onOpenSketch: (path: string) => void;
   locked?: boolean;
-  onRemove?: () => void;
-}) {
-  const summary = sketchMap.get(path);
-  const fullSketch = sketchCache.get(path);
-  const duration = fullSketch ? formatDurationSummary(summarizeSketchDuration(fullSketch.rows), durationDisplayMode) : null;
-  const firstText = fullSketch?.rows.find((row) => row.narrative.trim() || row.demo_actions.trim());
-  const narratedRows = narrationCount(fullSketch);
+  collapsedItems: Set<string>;
+  setCollapsedItems: Dispatch<SetStateAction<Set<string>>>;
+  onAddNewSketch?: () => void;
+  onPickExisting?: () => void;
+  onAddSection?: () => void;
+  onAddNewSketchToSection?: (sectionIndex: number) => void;
+  onPickExistingForSection?: (sectionIndex: number) => void;
+  onRemoveTopLevelSketch?: (index: number) => void;
+  onRemoveSectionSketch?: (sectionIndex: number, sketchIndex: number) => void;
+  onRemoveSection?: (sectionIndex: number) => void;
+}
 
-  return (
-    <div
-      className={`group block w-full overflow-hidden rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/45 text-left shadow-sm transition-colors hover:border-[rgb(var(--color-accent))]/45 ${
-        compact ? "" : "md:grid md:grid-cols-[minmax(220px,0.9fr)_minmax(0,1fr)]"
-      }`}
-    >
-      <StoryboardMedia
-        sketch={fullSketch}
-        projectRoot={projectRoot}
-        className={compact ? "aspect-video min-h-0 rounded-none border-0 md:min-h-[260px]" : "m-3"}
-        imageClassName="h-full w-full object-contain"
-      />
-      <div className="space-y-2 p-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-[rgb(var(--color-text-secondary))]/70">
-              <FileText className="h-3 w-3" />
-              {summary?.row_count ?? fullSketch?.rows.length ?? 0} rows
-            </span>
-            {narratedRows > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">
-                <Mic2 className="h-3 w-3 text-[rgb(var(--color-accent))]" />
-                {narratedRows} narrated
-              </span>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            {duration && (
-              <span className="rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">
-                {duration}
-              </span>
-            )}
-            {!locked && onRemove && (
-              <button
-                type="button"
-                onClick={onRemove}
-                className="rounded-full p-1 text-[rgb(var(--color-text-secondary))] opacity-0 transition-all hover:bg-error/10 hover:text-error group-hover:opacity-100 focus-visible:opacity-100"
-                title="Remove from storyboard"
-                aria-label={`Remove ${summary?.title ?? path} from storyboard`}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => onOpen(path)}
-          className="text-left text-base font-semibold text-[rgb(var(--color-text))] transition-colors hover:text-[rgb(var(--color-accent))]"
-        >
-          {summary?.title ?? path}
-        </button>
-        <p className="line-clamp-3 text-sm leading-6 text-[rgb(var(--color-text-secondary))]">
-          {firstText?.narrative || firstText?.demo_actions || "Open this sketch to add narrative, actions, screenshots, and visuals."}
-        </p>
-      </div>
-    </div>
-  );
+function getTopLevelCollapseKey(index: number): string {
+  return `storyboard-item:${index}`;
+}
+
+function getNestedSketchCollapseKey(sectionIndex: number, sketchIndex: number): string {
+  return `storyboard-item:${sectionIndex}:sketch:${sketchIndex}`;
+}
+
+function makePlaceholder(path: string): SketchSummary {
+  return {
+    path,
+    title: "(Missing sketch)",
+    state: "draft",
+    row_count: 0,
+    created_at: "",
+    updated_at: "",
+  };
+}
+
+function toggleCollapse(
+  setCollapsedItems: Dispatch<SetStateAction<Set<string>>>,
+  key: string,
+) {
+  setCollapsedItems((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
 }
 
 function StoryboardActionBar({
@@ -157,7 +69,7 @@ function StoryboardActionBar({
   onPickExisting?: () => void;
   onAddSection?: () => void;
 }) {
-  if (locked) return null;
+  if (locked || (!onAddNewSketch && !onPickExisting && !onAddSection)) return null;
 
   return (
     <div className="flex flex-wrap gap-2 rounded-2xl border border-dashed border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/35 p-3">
@@ -195,6 +107,14 @@ function StoryboardActionBar({
   );
 }
 
+function DurationPill({ label }: { label: string }) {
+  return (
+    <span className="shrink-0 rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">
+      {label}
+    </span>
+  );
+}
+
 function EmptyStoryboardVisual({
   locked,
   onAddNewSketch,
@@ -224,39 +144,318 @@ function EmptyStoryboardVisual({
   );
 }
 
-export function StoryboardBalancedView({
-  items,
+function ReadOnlySketchRows({
+  mode,
+  sketch,
+  projectRoot,
+}: {
+  mode: StoryboardVisualMode;
+  sketch: Sketch;
+  projectRoot?: string | null;
+}) {
+  if (sketch.rows.length === 0) {
+    return <p className="py-2 text-xs text-[rgb(var(--color-text-secondary))]">No rows yet</p>;
+  }
+
+  const View = mode === "balanced" ? SketchBalancedView : SketchScreenView;
+  return (
+    <View
+      rows={sketch.rows}
+      onChange={() => {}}
+      projectRoot={projectRoot}
+      readOnly
+    />
+  );
+}
+
+function ContainedSketch({
+  mode,
+  path,
   sketchMap,
   sketchCache,
   projectRoot,
   durationDisplayMode,
-  onOpenSketch,
+  collapsed,
+  onToggleCollapse,
+  onOpen,
   locked,
-  onAddNewSketch,
-  onPickExisting,
-  onAddSection,
-  onAddNewSketchToSection,
-  onPickExistingForSection,
-  onRemoveTopLevelSketch,
-  onRemoveSectionSketch,
-  onRemoveSection,
+  onRemove,
+  outlineLevel = "top",
 }: {
-  items: StoryboardItem[];
+  mode: StoryboardVisualMode;
+  path: string;
   sketchMap: Map<string, SketchSummary>;
   sketchCache: Map<string, Sketch>;
   projectRoot?: string | null;
   durationDisplayMode: DurationDisplayMode;
-  onOpenSketch: (path: string) => void;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+  onOpen: () => void;
   locked?: boolean;
+  onRemove?: () => void;
+  outlineLevel?: "top" | "nested";
+}) {
+  const summary = sketchMap.get(path) ?? makePlaceholder(path);
+  const fullSketch = sketchCache.get(path);
+  const isTopLevel = outlineLevel === "top";
+  const duration = fullSketch ? formatDurationSummary(summarizeSketchDuration(fullSketch.rows), durationDisplayMode) : null;
+
+  return (
+    <div className={`group/sketch ${isTopLevel ? "rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/25 px-3 py-2.5" : "rounded-lg bg-[rgb(var(--color-surface))]/25 px-3 py-1.5"}`}>
+      <div className={`flex items-start gap-3 ${isTopLevel ? "" : "py-1"}`}>
+        <div className="min-w-0 flex-1">
+          {isTopLevel && (
+            <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[rgb(var(--color-text-secondary))]/60">
+              <span>Sketch</span>
+              <span className="h-px w-5 bg-[rgb(var(--color-border))]" />
+              <span className="tracking-[0.14em]">
+                {summary.row_count} {summary.row_count === 1 ? "row" : "rows"}
+              </span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="shrink-0 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+              title={collapsed ? "Show sketch" : "Hide sketch"}
+              aria-label={collapsed ? `Expand ${summary.title}` : `Collapse ${summary.title}`}
+            >
+              <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed ? "" : "rotate-90"}`} />
+            </button>
+
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className={`min-w-0 truncate text-left font-semibold text-[rgb(var(--color-text))] transition-colors hover:text-[rgb(var(--color-text-secondary))] ${isTopLevel ? "text-[15px]" : "text-[13px]"}`}
+              title={collapsed ? `Expand ${summary.title}` : `Collapse ${summary.title}`}
+            >
+              {summary.title}
+            </button>
+
+            <span className={`shrink-0 text-[10px] text-[rgb(var(--color-text-secondary))]/85 ${isTopLevel ? "hidden" : ""}`}>
+              {summary.row_count} {summary.row_count === 1 ? "row" : "rows"}
+            </span>
+
+            {duration && <DurationPill label={duration} />}
+
+            <button
+              type="button"
+              onClick={onOpen}
+              className="shrink-0 rounded p-1 text-[rgb(var(--color-text-secondary))] opacity-0 transition-all hover:text-[rgb(var(--color-text))] group-hover/sketch:opacity-100 focus-visible:opacity-100"
+              title="Open in editor"
+              aria-label={`Open ${summary.title} in editor`}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+
+            {!locked && onRemove && (
+              <button
+                type="button"
+                onClick={onRemove}
+                className="shrink-0 rounded p-1 text-[rgb(var(--color-text-secondary))] opacity-0 transition-all hover:text-error group-hover/sketch:opacity-100 focus-visible:opacity-100"
+                title="Remove from storyboard"
+                aria-label={`Remove ${summary.title} from storyboard`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          {fullSketch && typeof fullSketch.description === "string" && fullSketch.description.trim() && (
+            <div className="prose-desc mb-2 text-sm leading-relaxed text-[rgb(var(--color-text-secondary))]">
+              <SafeMarkdown>{fullSketch.description}</SafeMarkdown>
+            </div>
+          )}
+
+          {!collapsed && (fullSketch ? (
+            <div className="mt-2">
+              <ReadOnlySketchRows mode={mode} sketch={fullSketch} projectRoot={projectRoot} />
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 py-3">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-[rgb(var(--color-accent))]" />
+              <span className="text-xs text-[rgb(var(--color-text-secondary))]">Loading sketch...</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SectionBlock({
+  mode,
+  item,
+  index,
+  sketchMap,
+  sketchCache,
+  projectRoot,
+  durationDisplayMode,
+  locked,
+  collapsed,
+  onToggleCollapse,
+  collapsedItems,
+  setCollapsedItems,
+  onOpenSketch,
+  onAddNewSketch,
+  onPickExisting,
+  onRemoveSketch,
+  onRemoveSection,
+}: {
+  mode: StoryboardVisualMode;
+  item: Extract<StoryboardItem, { type: "section" }>;
+  index: number;
+  sketchMap: Map<string, SketchSummary>;
+  sketchCache: Map<string, Sketch>;
+  projectRoot?: string | null;
+  durationDisplayMode: DurationDisplayMode;
+  locked?: boolean;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+  collapsedItems: Set<string>;
+  setCollapsedItems: Dispatch<SetStateAction<Set<string>>>;
+  onOpenSketch: (path: string) => void;
   onAddNewSketch?: () => void;
   onPickExisting?: () => void;
-  onAddSection?: () => void;
-  onAddNewSketchToSection?: (sectionIndex: number) => void;
-  onPickExistingForSection?: (sectionIndex: number) => void;
-  onRemoveTopLevelSketch?: (index: number) => void;
-  onRemoveSectionSketch?: (sectionIndex: number, sketchIndex: number) => void;
-  onRemoveSection?: (sectionIndex: number) => void;
+  onRemoveSketch?: (sketchIndex: number) => void;
+  onRemoveSection?: () => void;
 }) {
+  const duration = item.sketches.length > 0
+    ? formatDurationSummary(summarizeSketchPathsDuration(item.sketches, sketchCache), durationDisplayMode)
+    : null;
+
+  return (
+    <section className="group/section rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/25 px-3 py-2.5">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[rgb(var(--color-text-secondary))]/60">
+            <span>Section</span>
+            <span className="h-px w-5 bg-[rgb(var(--color-border))]" />
+            <span className="tracking-[0.14em]">
+              {item.sketches.length} {item.sketches.length === 1 ? "sketch" : "sketches"}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="shrink-0 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+              title={collapsed ? "Show sketches" : "Hide sketches"}
+              aria-label={collapsed ? `Expand ${item.title}` : `Collapse ${item.title}`}
+            >
+              <ChevronRight className={`h-3.5 w-3.5 transition-transform ${collapsed ? "" : "rotate-90"}`} />
+            </button>
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="min-w-0 truncate text-left text-base font-semibold leading-tight text-[rgb(var(--color-text))] transition-colors hover:text-[rgb(var(--color-text-secondary))]"
+              title={collapsed ? `Expand ${item.title}` : `Collapse ${item.title}`}
+            >
+              {item.title}
+            </button>
+            {duration && <DurationPill label={duration} />}
+            {!locked && onRemoveSection && (
+              <button
+                type="button"
+                onClick={onRemoveSection}
+                className="shrink-0 rounded p-1 text-[rgb(var(--color-text-secondary))] opacity-0 transition-all hover:text-error group-hover/section:opacity-100 focus-visible:opacity-100"
+                title="Remove section"
+                aria-label={`Remove section ${item.title}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          {item.description && (
+            <div className="prose-desc mt-2 text-sm leading-relaxed text-[rgb(var(--color-text-secondary))]">
+              <SafeMarkdown>{item.description}</SafeMarkdown>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {!collapsed && (
+        <div className="mt-2 space-y-2 pl-6">
+          {item.sketches.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/35 px-4 py-4 text-center text-xs text-[rgb(var(--color-text-secondary))]">
+              No sketches in this section yet.
+            </p>
+          ) : (
+            item.sketches.map((path, sketchIndex) => {
+              const collapseKey = getNestedSketchCollapseKey(index, sketchIndex);
+              return (
+                <ContainedSketch
+                  key={`${path}-${sketchIndex}`}
+                  mode={mode}
+                  path={path}
+                  sketchMap={sketchMap}
+                  sketchCache={sketchCache}
+                  projectRoot={projectRoot}
+                  durationDisplayMode={durationDisplayMode}
+                  collapsed={collapsedItems.has(collapseKey)}
+                  onToggleCollapse={() => toggleCollapse(setCollapsedItems, collapseKey)}
+                  onOpen={() => onOpenSketch(path)}
+                  locked={locked}
+                  onRemove={onRemoveSketch ? () => onRemoveSketch(sketchIndex) : undefined}
+                  outlineLevel="nested"
+                />
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {!collapsed && !locked && (
+        <div className="mt-2 flex gap-2 pl-6">
+          {onAddNewSketch && (
+            <button
+              type="button"
+              onClick={onAddNewSketch}
+              className="rounded-full border border-[rgb(var(--color-border-subtle))] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-accent))]/45 hover:text-[rgb(var(--color-accent))]"
+            >
+              New sketch
+            </button>
+          )}
+          {onPickExisting && (
+            <button
+              type="button"
+              onClick={onPickExisting}
+              className="rounded-full border border-transparent px-3 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))]"
+            >
+              Add existing sketch
+            </button>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function StoryboardVisualView({ mode, ...props }: StoryboardVisualViewProps & { mode: StoryboardVisualMode }) {
+  const {
+    items,
+    sketchMap,
+    sketchCache,
+    projectRoot,
+    durationDisplayMode,
+    onOpenSketch,
+    locked,
+    collapsedItems,
+    setCollapsedItems,
+    onAddNewSketch,
+    onPickExisting,
+    onAddSection,
+    onAddNewSketchToSection,
+    onPickExistingForSection,
+    onRemoveTopLevelSketch,
+    onRemoveSectionSketch,
+    onRemoveSection,
+  } = props;
+
   if (items.length === 0) {
     return (
       <EmptyStoryboardVisual
@@ -277,158 +476,57 @@ export function StoryboardBalancedView({
         onAddSection={onAddSection}
       />
       {items.map((item, index) => {
+        const collapseKey = getTopLevelCollapseKey(index);
         if (item.type === "sketch_ref") {
           return (
-            <SketchSummaryCard
+            <ContainedSketch
               key={`${item.path}-${index}`}
+              mode={mode}
               path={item.path}
               sketchMap={sketchMap}
               sketchCache={sketchCache}
               projectRoot={projectRoot}
               durationDisplayMode={durationDisplayMode}
-              onOpen={onOpenSketch}
+              collapsed={collapsedItems.has(collapseKey)}
+              onToggleCollapse={() => toggleCollapse(setCollapsedItems, collapseKey)}
+              onOpen={() => onOpenSketch(item.path)}
               locked={locked}
-              onRemove={() => onRemoveTopLevelSketch?.(index)}
+              onRemove={onRemoveTopLevelSketch ? () => onRemoveTopLevelSketch(index) : undefined}
             />
           );
         }
 
-        const duration = formatDurationSummary(summarizeSketchPathsDuration(item.sketches, sketchCache), durationDisplayMode);
         return (
-          <section key={`${item.title}-${index}`} className="rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/25 p-3">
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[rgb(var(--color-text-secondary))]/70">
-                  Section · {item.sketches.length} {item.sketches.length === 1 ? "sketch" : "sketches"}
-                </div>
-                <h3 className="mt-1 text-lg font-semibold text-[rgb(var(--color-text))]">{item.title}</h3>
-                {item.description && <p className="mt-1 text-sm text-[rgb(var(--color-text-secondary))]">{item.description}</p>}
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                {item.sketches.length > 0 && (
-                  <span className="rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">
-                    {duration}
-                  </span>
-                )}
-                {!locked && onRemoveSection && (
-                  <button
-                    type="button"
-                    onClick={() => onRemoveSection(index)}
-                    className="rounded-full p-1 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-error/10 hover:text-error"
-                    title="Remove section"
-                    aria-label={`Remove section ${item.title}`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-            <StoryboardActionBar
-              locked={locked}
-              onAddNewSketch={onAddNewSketchToSection ? () => onAddNewSketchToSection(index) : undefined}
-              onPickExisting={onPickExistingForSection ? () => onPickExistingForSection(index) : undefined}
-            />
-            <div className="space-y-3">
-              {item.sketches.map((path, sketchIndex) => (
-                <SketchSummaryCard
-                  key={`${path}-${sketchIndex}`}
-                  path={path}
-                  sketchMap={sketchMap}
-                  sketchCache={sketchCache}
-                  projectRoot={projectRoot}
-                  durationDisplayMode={durationDisplayMode}
-                  onOpen={onOpenSketch}
-                  locked={locked}
-                  onRemove={() => onRemoveSectionSketch?.(index, sketchIndex)}
-                />
-              ))}
-            </div>
-          </section>
+          <SectionBlock
+            key={`${item.title}-${index}`}
+            mode={mode}
+            item={item}
+            index={index}
+            sketchMap={sketchMap}
+            sketchCache={sketchCache}
+            projectRoot={projectRoot}
+            durationDisplayMode={durationDisplayMode}
+            locked={locked}
+            collapsed={collapsedItems.has(collapseKey)}
+            onToggleCollapse={() => toggleCollapse(setCollapsedItems, collapseKey)}
+            collapsedItems={collapsedItems}
+            setCollapsedItems={setCollapsedItems}
+            onOpenSketch={onOpenSketch}
+            onAddNewSketch={onAddNewSketchToSection ? () => onAddNewSketchToSection(index) : undefined}
+            onPickExisting={onPickExistingForSection ? () => onPickExistingForSection(index) : undefined}
+            onRemoveSketch={onRemoveSectionSketch ? (sketchIndex) => onRemoveSectionSketch(index, sketchIndex) : undefined}
+            onRemoveSection={onRemoveSection ? () => onRemoveSection(index) : undefined}
+          />
         );
       })}
     </div>
   );
 }
 
-export function StoryboardScreenView({
-  items,
-  sketchMap,
-  sketchCache,
-  projectRoot,
-  durationDisplayMode,
-  onOpenSketch,
-  locked,
-  onAddNewSketch,
-  onPickExisting,
-  onAddSection,
-  onRemoveTopLevelSketch,
-  onRemoveSectionSketch,
-}: {
-  items: StoryboardItem[];
-  sketchMap: Map<string, SketchSummary>;
-  sketchCache: Map<string, Sketch>;
-  projectRoot?: string | null;
-  durationDisplayMode: DurationDisplayMode;
-  onOpenSketch: (path: string) => void;
-  locked?: boolean;
-  onAddNewSketch?: () => void;
-  onPickExisting?: () => void;
-  onAddSection?: () => void;
-  onRemoveTopLevelSketch?: (index: number) => void;
-  onRemoveSectionSketch?: (sectionIndex: number, sketchIndex: number) => void;
-}) {
-  const entries = items.flatMap((item, itemIndex) => item.type === "sketch_ref"
-    ? [{ path: item.path, section: null as string | null, itemIndex, sketchIndex: null as number | null }]
-    : item.sketches.map((path, sketchIndex) => ({ path, section: item.title, itemIndex, sketchIndex })));
+export function StoryboardBalancedView(props: StoryboardVisualViewProps) {
+  return <StoryboardVisualView {...props} mode="balanced" />;
+}
 
-  if (entries.length === 0) {
-    return (
-      <EmptyStoryboardVisual
-        locked={locked}
-        onAddNewSketch={onAddNewSketch}
-        onPickExisting={onPickExisting}
-        onAddSection={onAddSection}
-      />
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      <StoryboardActionBar
-        locked={locked}
-        onAddNewSketch={onAddNewSketch}
-        onPickExisting={onPickExisting}
-        onAddSection={onAddSection}
-      />
-      {entries.map((entry, index) => (
-        <div key={`${entry.path}-${index}`} className="space-y-2">
-          {entry.section && (index === 0 || entries[index - 1]?.itemIndex !== entry.itemIndex) && (
-            <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[rgb(var(--color-text-secondary))]/70">
-              {entry.section}
-            </div>
-          )}
-          <SketchSummaryCard
-            path={entry.path}
-            sketchMap={sketchMap}
-            sketchCache={sketchCache}
-            projectRoot={projectRoot}
-            durationDisplayMode={durationDisplayMode}
-            onOpen={onOpenSketch}
-            locked={locked}
-            onRemove={() => {
-              if (entry.sketchIndex === null) {
-                onRemoveTopLevelSketch?.(entry.itemIndex);
-              } else {
-                onRemoveSectionSketch?.(entry.itemIndex, entry.sketchIndex);
-              }
-            }}
-            compact
-          />
-          <div className="px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]/70">
-            Shot {index + 1} · {sketchTitle(entry.path, sketchMap)}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+export function StoryboardScreenView(props: StoryboardVisualViewProps) {
+  return <StoryboardVisualView {...props} mode="screen" />;
 }

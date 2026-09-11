@@ -9,6 +9,7 @@ import { parseDurationSeconds } from "../utils/documentMetadata";
 import { invoke } from "../services/tauri";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { continueMarkdownList } from "../utils/markdownList";
+import { useConfirmDialog } from "./ConfirmDialog";
 
 interface SketchVisualViewProps {
   rows: PlanningRow[];
@@ -360,7 +361,10 @@ function RowNarration({
         ref={audioRef}
         src={src || undefined}
         preload="metadata"
-        onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || duration)}
+        onLoadedMetadata={(event) => {
+          const loadedDuration = event.currentTarget.duration;
+          if (Number.isFinite(loadedDuration) && loadedDuration > 0) setDuration(loadedDuration);
+        }}
         onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
@@ -394,7 +398,7 @@ function RowNarration({
           step={0.1}
           value={Math.min(currentTime, duration || 0)}
           onChange={(event) => seek(event.target.value)}
-          disabled={!duration}
+          disabled={!src || !duration}
           className="block w-full min-w-0 accent-[rgb(var(--color-accent))] disabled:opacity-50"
           aria-label="Scrub narration"
         />
@@ -652,11 +656,13 @@ function RowEditActions({
   rows,
   readOnly,
   onChange,
+  onRemoveRow,
 }: {
   rowIndex: number;
   rows: PlanningRow[];
   readOnly: boolean;
   onChange: (rows: PlanningRow[]) => void;
+  onRemoveRow: (rowIndex: number) => void;
 }) {
   if (readOnly || hasAnyLock(rows[rowIndex])) return null;
 
@@ -677,13 +683,7 @@ function RowEditActions({
       </button>
       <button
         type="button"
-        onClick={() => {
-          if (rows.length <= 1) {
-            onChange([createEmptyRow()]);
-            return;
-          }
-          onChange(rows.filter((_, index) => index !== rowIndex));
-        }}
+        onClick={() => onRemoveRow(rowIndex)}
         className="rounded-full p-1 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-error/10 hover:text-error"
         title="Remove row"
         aria-label={`Remove row ${rowIndex + 1}`}
@@ -701,6 +701,7 @@ function VisualRowHeader({
   readOnly,
   onChange,
   onTimeChange,
+  onRemoveRow,
 }: {
   row: PlanningRow;
   rowIndex: number;
@@ -708,6 +709,7 @@ function VisualRowHeader({
   readOnly: boolean;
   onChange: (rows: PlanningRow[]) => void;
   onTimeChange: (value: string) => void;
+  onRemoveRow: (rowIndex: number) => void;
 }) {
   return (
     <div className="flex min-w-0 items-center gap-3">
@@ -730,7 +732,7 @@ function VisualRowHeader({
           </div>
         </div>
       </div>
-      <RowEditActions rowIndex={rowIndex} rows={rows} readOnly={readOnly} onChange={onChange} />
+      <RowEditActions rowIndex={rowIndex} rows={rows} readOnly={readOnly} onChange={onChange} onRemoveRow={onRemoveRow} />
     </div>
   );
 }
@@ -744,7 +746,7 @@ function AddRowButton({
   readOnly: boolean;
   onChange: (rows: PlanningRow[]) => void;
 }) {
-  if (readOnly || (rows.length > 0 && hasAnyLock(rows[rows.length - 1]))) return null;
+  if (readOnly) return null;
 
   return (
     <button
@@ -764,6 +766,7 @@ function EditableText({
   readOnly,
   multiline = true,
   className,
+  ariaLabel,
   onChange,
 }: {
   value: string;
@@ -771,6 +774,7 @@ function EditableText({
   readOnly: boolean;
   multiline?: boolean;
   className: string;
+  ariaLabel?: string;
   onChange: (value: string) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -840,6 +844,7 @@ function EditableText({
           type="button"
           disabled={readOnly}
           onClick={beginEditing}
+          aria-label={ariaLabel}
           className={`${className} min-h-[1.75rem] w-full rounded-lg border border-transparent bg-transparent px-2 py-1 text-left outline-none transition-colors ${readOnly ? "" : "cursor-text hover:border-[rgb(var(--color-border))] focus:border-[rgb(var(--color-accent))]/45 focus:bg-[rgb(var(--color-surface))] focus:ring-1 focus:ring-[rgb(var(--color-accent))]/25"}`}
         >
           {localValue || <span className="text-[rgb(var(--color-text-secondary))]/45">{placeholder}</span>}
@@ -851,6 +856,8 @@ function EditableText({
       <div
         className={`md-cell-preview visual-md-preview min-h-[2rem] rounded-lg border border-transparent px-2 py-1 outline-none transition-colors ${className} ${readOnly ? "" : "cursor-text hover:border-[rgb(var(--color-border))] focus:border-[rgb(var(--color-accent))]/45 focus:bg-[rgb(var(--color-surface))] focus:ring-1 focus:ring-[rgb(var(--color-accent))]/25"}`}
         tabIndex={readOnly ? undefined : 0}
+        role={readOnly ? undefined : "button"}
+        aria-label={ariaLabel}
         onClick={beginEditing}
         onFocus={beginEditing}
         onKeyDown={(event) => {
@@ -927,6 +934,8 @@ function EditableText({
 }
 
 function MediaPreviewLightbox({ preview, onClose }: { preview: MediaPreview | null; onClose: () => void }) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
     if (!preview) return;
     const handleKey = (event: globalThis.KeyboardEvent) => {
@@ -936,12 +945,20 @@ function MediaPreviewLightbox({ preview, onClose }: { preview: MediaPreview | nu
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose, preview]);
 
+  useEffect(() => {
+    if (!preview) return;
+    requestAnimationFrame(() => closeButtonRef.current?.focus());
+  }, [preview]);
+
   if (!preview) return null;
 
   return (
     <div
       className="fixed inset-0 z-modal flex items-center justify-center bg-[rgb(var(--color-overlay-strong)/0.82)] p-5"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Media preview"
     >
       <div
         className="relative flex h-[calc(100vh-40px)] w-[calc(100vw-40px)] max-w-[1280px] items-center justify-center overflow-hidden rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] p-5 shadow-2xl"
@@ -956,6 +973,7 @@ function MediaPreviewLightbox({ preview, onClose }: { preview: MediaPreview | nu
           Row {preview.rowIndex + 1}
         </div>
         <button
+          ref={closeButtonRef}
           type="button"
           onClick={onClose}
           className="absolute right-4 top-4 rounded-full bg-[rgb(var(--color-media-control-bg)/0.55)] p-2 text-[rgb(var(--color-media-control-fg)/0.8)] transition-colors hover:text-[rgb(var(--color-media-control-fg))]"
@@ -989,6 +1007,67 @@ function EmptyRows({ readOnly, onAddRow }: { readOnly: boolean; onAddRow: () => 
   );
 }
 
+function useVisualRowConfirmations({
+  rows,
+  onChange,
+  onRemoveMedia,
+  onRemoveNarration,
+}: {
+  rows: PlanningRow[];
+  onChange: (rows: PlanningRow[]) => void;
+  onRemoveMedia?: (rowIndex: number) => void;
+  onRemoveNarration?: (rowIndex: number) => void;
+}) {
+  const { confirm, confirmationDialog } = useConfirmDialog();
+
+  const confirmRemoveRow = useCallback(async (rowIndex: number) => {
+    const confirmed = await confirm({
+      title: rows.length <= 1 ? "Clear row?" : "Remove row?",
+      message: rows.length <= 1
+        ? "Clear the last planning row?\n\nThis removes its narrative, actions, media, and narration from the sketch."
+        : "Remove this planning row?\n\nThis removes its narrative, actions, media, and narration from the sketch.",
+      confirmLabel: rows.length <= 1 ? "Clear row" : "Remove row",
+      variant: "error",
+    });
+    if (!confirmed) return;
+    if (rows.length <= 1) {
+      onChange([createEmptyRow()]);
+      return;
+    }
+    onChange(rows.filter((_, index) => index !== rowIndex));
+  }, [confirm, onChange, rows]);
+
+  const confirmRemoveMedia = useCallback(async (rowIndex: number) => {
+    const row = rows[rowIndex];
+    const confirmed = await confirm({
+      title: row?.visual ? "Remove visual?" : "Remove screenshot?",
+      message: row?.visual
+        ? "Remove this visual from the row?\n\nThe visual file stays in the workspace, but this row will no longer reference it."
+        : "Remove this screenshot from the row?\n\nThe image file stays in the workspace, but this row will no longer reference it.",
+      confirmLabel: row?.visual ? "Remove visual" : "Remove screenshot",
+      variant: "error",
+    });
+    if (confirmed) onRemoveMedia?.(rowIndex);
+  }, [confirm, onRemoveMedia, rows]);
+
+  const confirmRemoveNarration = useCallback(async (rowIndex: number) => {
+    const confirmed = await confirm({
+      title: "Remove narration?",
+      message: "Remove this narration take from the row?\n\nThe audio file stays in the workspace, but this row will no longer reference it.",
+      confirmLabel: "Remove narration",
+      variant: "error",
+    });
+    if (confirmed) onRemoveNarration?.(rowIndex);
+  }, [confirm, onRemoveNarration]);
+
+  return {
+    confirmationDialog,
+    confirmRemoveRow,
+    confirmRemoveMedia: onRemoveMedia ? confirmRemoveMedia : undefined,
+    confirmRemoveNarration: onRemoveNarration ? confirmRemoveNarration : undefined,
+  };
+}
+
 export function SketchBalancedView({
   rows,
   onChange,
@@ -1009,6 +1088,12 @@ export function SketchBalancedView({
   onRemoveNarration,
 }: SketchVisualViewProps) {
   const [preview, setPreview] = useState<MediaPreview | null>(null);
+  const {
+    confirmationDialog,
+    confirmRemoveRow,
+    confirmRemoveMedia,
+    confirmRemoveNarration,
+  } = useVisualRowConfirmations({ rows, onChange, onRemoveMedia, onRemoveNarration });
   const updateField = (rowIndex: number, field: "time" | "narrative" | "demo_actions", value: string) => {
     if (readOnly || isCellLocked(rows[rowIndex], field)) return;
     onChange(updateRowField(rows, rowIndex, field, value));
@@ -1030,6 +1115,7 @@ export function SketchBalancedView({
               readOnly={readOnly}
               onChange={onChange}
               onTimeChange={(value) => updateField(index, "time", value)}
+              onRemoveRow={(rowIndex) => void confirmRemoveRow(rowIndex)}
             />
             <div className="grid gap-2 md:grid-cols-[minmax(220px,0.92fr)_minmax(0,1fr)]">
               <RowMediaStack
@@ -1047,14 +1133,14 @@ export function SketchBalancedView({
                 onPickImage={onPickImage}
                 onBrowseImage={onBrowseImage}
                 onGenerateVisual={onGenerateVisual}
-                onRemoveMedia={onRemoveMedia}
+                onRemoveMedia={confirmRemoveMedia}
                 onStartNarrationRecording={onStartNarrationRecording}
                 onGenerateNarration={onGenerateNarration}
                 onPickNarration={onPickNarration}
                 onStopNarrationRecording={onStopNarrationRecording}
                 narrationRecordingRow={narrationRecordingRow}
                 narrationSavingRows={narrationSavingRows}
-                onRemoveNarration={onRemoveNarration}
+                onRemoveNarration={confirmRemoveNarration}
               />
               <div className="flex min-w-0 flex-col gap-2">
                 <div>
@@ -1066,6 +1152,7 @@ export function SketchBalancedView({
                     placeholder="No narrative yet."
                     readOnly={readOnly || isCellLocked(row, "narrative")}
                     className="whitespace-pre-wrap text-sm leading-6 text-[rgb(var(--color-text))]"
+                    ariaLabel={`Edit narrative for row ${index + 1}`}
                     onChange={(value) => updateField(index, "narrative", value)}
                   />
                 </div>
@@ -1078,6 +1165,7 @@ export function SketchBalancedView({
                     placeholder="No actions yet."
                     readOnly={readOnly || isCellLocked(row, "demo_actions")}
                     className="whitespace-pre-wrap text-sm leading-6 text-[rgb(var(--color-text-secondary))]"
+                    ariaLabel={`Edit actions for row ${index + 1}`}
                     onChange={(value) => updateField(index, "demo_actions", value)}
                   />
                 </div>
@@ -1089,6 +1177,7 @@ export function SketchBalancedView({
       </div>
       <AddRowButton rows={rows} readOnly={readOnly} onChange={onChange} />
       <MediaPreviewLightbox preview={preview} onClose={() => setPreview(null)} />
+      {confirmationDialog}
     </>
   );
 }
@@ -1113,6 +1202,12 @@ export function SketchScreenView({
   onRemoveNarration,
 }: SketchVisualViewProps) {
   const [preview, setPreview] = useState<MediaPreview | null>(null);
+  const {
+    confirmationDialog,
+    confirmRemoveRow,
+    confirmRemoveMedia,
+    confirmRemoveNarration,
+  } = useVisualRowConfirmations({ rows, onChange, onRemoveMedia, onRemoveNarration });
   const updateField = (rowIndex: number, field: "time" | "narrative" | "demo_actions", value: string) => {
     if (readOnly || isCellLocked(rows[rowIndex], field)) return;
     onChange(updateRowField(rows, rowIndex, field, value));
@@ -1135,6 +1230,7 @@ export function SketchScreenView({
                 readOnly={readOnly}
                 onChange={onChange}
                 onTimeChange={(value) => updateField(index, "time", value)}
+                onRemoveRow={(rowIndex) => void confirmRemoveRow(rowIndex)}
               />
             </div>
             <div className="flex flex-col">
@@ -1153,14 +1249,14 @@ export function SketchScreenView({
                 onPickImage={onPickImage}
                 onBrowseImage={onBrowseImage}
                 onGenerateVisual={onGenerateVisual}
-                onRemoveMedia={onRemoveMedia}
+                onRemoveMedia={confirmRemoveMedia}
                 onStartNarrationRecording={onStartNarrationRecording}
                 onGenerateNarration={onGenerateNarration}
                 onPickNarration={onPickNarration}
                 onStopNarrationRecording={onStopNarrationRecording}
                 narrationRecordingRow={narrationRecordingRow}
                 narrationSavingRows={narrationSavingRows}
-                onRemoveNarration={onRemoveNarration}
+                onRemoveNarration={confirmRemoveNarration}
               />
               <div className="grid gap-3 p-4 pt-3 md:grid-cols-2">
                 <div>
@@ -1173,6 +1269,7 @@ export function SketchScreenView({
                     placeholder="No narrative yet."
                     readOnly={readOnly || isCellLocked(row, "narrative")}
                     className="text-sm leading-6 text-[rgb(var(--color-text))]"
+                    ariaLabel={`Edit narrative for row ${index + 1}`}
                     onChange={(value) => updateField(index, "narrative", value)}
                   />
                 </div>
@@ -1185,6 +1282,7 @@ export function SketchScreenView({
                     placeholder="No actions yet."
                     readOnly={readOnly || isCellLocked(row, "demo_actions")}
                     className="text-xs leading-5 text-[rgb(var(--color-text-secondary))]"
+                    ariaLabel={`Edit actions for row ${index + 1}`}
                     onChange={(value) => updateField(index, "demo_actions", value)}
                   />
                 </div>
@@ -1198,6 +1296,7 @@ export function SketchScreenView({
       </div>
       <AddRowButton rows={rows} readOnly={readOnly} onChange={onChange} />
       <MediaPreviewLightbox preview={preview} onClose={() => setPreview(null)} />
+      {confirmationDialog}
     </>
   );
 }

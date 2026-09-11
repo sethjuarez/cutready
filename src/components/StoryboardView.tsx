@@ -685,36 +685,35 @@ export function StoryboardView() {
         </div>
 
         <div className="mb-4">
-          <DocumentViewModeToggle value={viewMode} onChange={setViewMode} />
+          <DocumentViewModeToggle
+            value={viewMode}
+            onChange={setViewMode}
+            actions={hasStoryboardItems ? (
+              <>
+                <button
+                  type="button"
+                  onClick={expandOutlineLevel}
+                  disabled={!canExpandOutline}
+                  title="Expand one outline level"
+                  aria-label="Expand one outline level"
+                  className="rounded-md px-2.5 py-1 text-[11px] font-semibold text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))] disabled:cursor-default disabled:opacity-35 disabled:hover:text-[rgb(var(--color-text-secondary))]"
+                >
+                  Expand
+                </button>
+                <button
+                  type="button"
+                  onClick={collapseOutlineLevel}
+                  disabled={!canCollapseOutline}
+                  title="Collapse one outline level"
+                  aria-label="Collapse one outline level"
+                  className="rounded-md px-2.5 py-1 text-[11px] font-semibold text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))] disabled:cursor-default disabled:opacity-35 disabled:hover:text-[rgb(var(--color-text-secondary))]"
+                >
+                  Collapse
+                </button>
+              </>
+            ) : undefined}
+          />
         </div>
-
-        {hasStoryboardItems && viewMode === "text" && (
-          <div className="mb-4 flex items-center justify-between border-y border-[rgb(var(--color-border-subtle))] py-2">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[rgb(var(--color-text-secondary))]/60">
-              Outline
-            </span>
-            <div className="flex gap-1">
-              <button
-                onClick={expandOutlineLevel}
-                disabled={!canExpandOutline}
-                title="Expand one outline level"
-                aria-label="Expand one outline level"
-                className="rounded-full px-3 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-[rgb(var(--color-text-secondary))]"
-              >
-                Expand level
-              </button>
-              <button
-                onClick={collapseOutlineLevel}
-                disabled={!canCollapseOutline}
-                title="Collapse one outline level"
-                aria-label="Collapse one outline level"
-                className="rounded-full px-3 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-[rgb(var(--color-text-secondary))]"
-              >
-                Collapse level
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Items */}
         {viewMode === "balanced" ? (
@@ -726,6 +725,8 @@ export function StoryboardView() {
             durationDisplayMode={durationDisplayMode}
             onOpenSketch={openSketch}
             locked={storyboardLocked}
+            collapsedItems={collapsedItems}
+            setCollapsedItems={setCollapsedItems}
             onAddNewSketch={() => void handleAddNewSketch()}
             onPickExisting={() => setPickerTarget({ type: "top" })}
             onAddSection={() => handleAddSection()}
@@ -744,11 +745,16 @@ export function StoryboardView() {
             durationDisplayMode={durationDisplayMode}
             onOpenSketch={openSketch}
             locked={storyboardLocked}
+            collapsedItems={collapsedItems}
+            setCollapsedItems={setCollapsedItems}
             onAddNewSketch={() => void handleAddNewSketch()}
             onPickExisting={() => setPickerTarget({ type: "top" })}
             onAddSection={() => handleAddSection()}
+            onAddNewSketchToSection={(sectionIndex) => void handleAddNewSketch({ type: "section", sectionIndex })}
+            onPickExistingForSection={(sectionIndex) => setPickerTarget({ type: "section", sectionIndex })}
             onRemoveTopLevelSketch={(index) => void confirmRemoveFromStoryboard(index)}
             onRemoveSectionSketch={(sectionIndex, sketchIndex) => void confirmRemoveFromSection(sectionIndex, sketchIndex)}
+            onRemoveSection={(sectionIndex) => void confirmRemoveSection(sectionIndex)}
           />
         ) : activeStoryboard.items.length === 0 ? (
           <EmptyState
