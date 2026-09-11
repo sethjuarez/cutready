@@ -10,6 +10,46 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.33.0](https://github.com/sethjuarez/cutready/compare/v1.32.0...v1.33.0) (2026-09-11)
+
+
+### Features
+
+* **agent:** adopt Prompty memory, auth, and arm_discovery slices ([b985d99](https://github.com/sethjuarez/cutready/commit/b985d994f834be1e39c6696ac6253bf8d80a582d))
+* **agent:** adopt Prompty run-identity slice on generated durable types ([2961571](https://github.com/sethjuarez/cutready/commit/296157116ec9538e80c120060f7492b24110d01a))
+* **agent:** adopt Prompty Slice A generated turn-engine types ([a21a906](https://github.com/sethjuarez/cutready/commit/a21a90681180dee1308fd23c08f228abd719b35f))
+* **agent:** harness ownership contract + shared provider pool + Copilot personas ([#252](https://github.com/sethjuarez/cutready/issues/252)) ([d42def0](https://github.com/sethjuarez/cutready/commit/d42def0436784c7ae6a531599db8ffc468735b8b))
+* **agent:** pluggable agent harness abstraction with agentive + copilot-sdk ([#248](https://github.com/sethjuarez/cutready/issues/248)) ([44842f4](https://github.com/sethjuarez/cutready/commit/44842f48438857d0a67d70453be266a6533d0f18))
+* **agent:** prove agentive/copilot-sdk harnesses run distinct turns ([60e60ea](https://github.com/sethjuarez/cutready/commit/60e60eaccbd7986b0ab71b5d9c2b1d8a2c5ac009))
+* **editor:** improve narration and screenshot imports ([#221](https://github.com/sethjuarez/cutready/issues/221)) ([54875d5](https://github.com/sethjuarez/cutready/commit/54875d5d3351e0216e59fa770126ce7182f70c7c))
+* extract SpeechSynthesizer (TTS) capability provider into the Rust backend ([#257](https://github.com/sethjuarez/cutready/issues/257)) ([319d802](https://github.com/sethjuarez/cutready/commit/319d8023daf97250761dfe1f78a5672cf1567811))
+* **harness:** distributable harness-contract workspace + capability-provider seam ([3787f4a](https://github.com/sethjuarez/cutready/commit/3787f4a519c00344eb5c7cd260dbfb81ce28f60d))
+* **harness:** feature-gate agentive and copilot-sdk adapters in app crate ([9734416](https://github.com/sethjuarez/cutready/commit/9734416688a0ac17a53c140bca570123d07b3286))
+* **harness:** label maturing harnesses experimental in settings ([33711cf](https://github.com/sethjuarez/cutready/commit/33711cfd561be59e127cf5d7d9bf49e9bb50ee93))
+* **harness:** route tool and persona provisioning through the ownership contract ([c630615](https://github.com/sethjuarez/cutready/commit/c6306158fdc92f0db5041ecd131d4d9525f42d45))
+* **settings:** consolidate Azure providers into one Foundry family ([cb4c286](https://github.com/sethjuarez/cutready/commit/cb4c2862deaf83001faae11a958d9193a423a13d))
+* **settings:** default to Prompty engine and render an honest engine readout ([4620556](https://github.com/sethjuarez/cutready/commit/46205565e2047dea5b7e03a9aef5c4a3329cf753))
+* **settings:** group AI settings under one section with capability inner tabs ([#258](https://github.com/sethjuarez/cutready/issues/258)) ([f99f924](https://github.com/sethjuarez/cutready/commit/f99f924b292be643f62e7cf3cf699208eef73664)), closes [#250](https://github.com/sethjuarez/cutready/issues/250)
+* **settings:** in-app GitHub Copilot connect status + guided sign-in ([#253](https://github.com/sethjuarez/cutready/issues/253)) ([63368dd](https://github.com/sethjuarez/cutready/commit/63368ddd1c58ac87ed6ca7eae87ab1d253e01335))
+* **theme:** derive content-type colours from each palette accent ([7f9ccf2](https://github.com/sethjuarez/cutready/commit/7f9ccf29d3a5d1e097b026cda5f1ce90a74465f3))
+
+
+### Bug Fixes
+
+* **agent:** guide OAuth users to re-sign-in on expired Azure token ([db4f364](https://github.com/sethjuarez/cutready/commit/db4f364760df4c2c7fde8ce9571919b285f4395f))
+* **agent:** match nested trace payloads by execution_engine in drills ([9df699e](https://github.com/sethjuarez/cutready/commit/9df699e47fce16c5667366ddc6f4b5a96a70effe))
+* **agent:** serialize Azure/Foundry OAuth payloads as camelCase over IPC ([52f1e0f](https://github.com/sethjuarez/cutready/commit/52f1e0ff5f849b57c1d2b29d81ae77f6dd862863))
+* architecture burndown — workspace-scoped runtime state, recording lifecycle, and settings hardening ([#278](https://github.com/sethjuarez/cutready/issues/278)) ([a2cc216](https://github.com/sethjuarez/cutready/commit/a2cc216a8a998d0543f27e1ef2aef19a8effadd3))
+* **chat:** stop the AI provider banner from flashing during startup OAuth refresh ([ff278ca](https://github.com/sethjuarez/cutready/commit/ff278ca093ceb2f9a3107febfe7668525a75a033))
+* **export:** support FFmpeg 9 filtergraph file syntax ([e6c7a08](https://github.com/sethjuarez/cutready/commit/e6c7a0807643d5d7219e0fc69999666d6cf448b6))
+* **harness:** route provider provisioning through the ownership contract ([1cfb239](https://github.com/sethjuarez/cutready/commit/1cfb239ff5a3c7f28a60fe97dff061c54e41b4bf))
+* **harness:** target Foundry inference on the openai.azure.com host for agentive ([f1900cd](https://github.com/sethjuarez/cutready/commit/f1900cd7b9512d9823cd213bf87c9c87980cf9e9))
+* **settings:** make unavailable harness selection explicit and actionable ([7ae5c7e](https://github.com/sethjuarez/cutready/commit/7ae5c7e753c2dd1e61b7208ee45461676cee3fbe))
+* **settings:** preserve Foundry model across unchanged sign-in cascade ([#224](https://github.com/sethjuarez/cutready/issues/224)) ([2e3f822](https://github.com/sethjuarez/cutready/commit/2e3f82222b9127b58e9f396a5e6902be702254b4))
+* **ui:** drop orphaned titlebar divider after panel toggles ([f7f33ea](https://github.com/sethjuarez/cutready/commit/f7f33eae2f651e01a1f252335230d20f6f1f8d00))
+* **ui:** route content-type and brand colors through single sources ([e2ae305](https://github.com/sethjuarez/cutready/commit/e2ae30530ebdb44d245dec306523f57c10d48d28))
+* **ui:** stop malformed debug timestamps from crashing the tab ([2488684](https://github.com/sethjuarez/cutready/commit/24886845e39bc895f89d1937a699fee6def7c991))
+
 ## [1.32.0](https://github.com/sethjuarez/cutready/compare/v1.31.0...v1.32.0) (2026-07-19)
 
 
