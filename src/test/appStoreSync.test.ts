@@ -534,4 +534,36 @@ describe("appStore remote sync status", () => {
 
     expect(useAppStore.getState().syncStatus).toEqual({ ahead: 9, behind: 9 });
   });
+
+  it("coalesces concurrent refreshes into one round-trip plus a single trailing rerun (#277)", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    const resolvers: Array<(status: { ahead: number; behind: number }) => void> = [];
+    mockGetDraftlineSyncStatus.mockImplementation(
+      () => new Promise<{ ahead: number; behind: number }>((resolve) => resolvers.push(resolve)),
+    );
+    useAppStore.setState({
+      currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
+      syncStatus: null,
+    });
+
+    // Three handlers fire in the same tick — the in-flight guard is set
+    // synchronously, so the latter two must join the first, not start their own.
+    const refresh = useAppStore.getState();
+    const p1 = refresh.refreshSyncStatus();
+    const p2 = refresh.refreshSyncStatus();
+    const p3 = refresh.refreshSyncStatus();
+
+    // Only one round-trip is in flight for all three callers.
+    await vi.waitFor(() => expect(mockGetDraftlineSyncStatus).toHaveBeenCalledTimes(1));
+    resolvers[0]({ ahead: 0, behind: 0 });
+
+    // Because callers arrived mid-flight, exactly one trailing rerun follows.
+    await vi.waitFor(() => expect(mockGetDraftlineSyncStatus).toHaveBeenCalledTimes(2));
+    resolvers[1]({ ahead: 0, behind: 0 });
+
+    await Promise.all([p1, p2, p3]);
+
+    // 3 concurrent callers collapsed to 2 remote round-trips, not 3.
+    expect(mockGetDraftlineSyncStatus).toHaveBeenCalledTimes(2);
+  });
 });

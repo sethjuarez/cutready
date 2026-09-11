@@ -132,6 +132,19 @@ let remoteDetectionGeneration = 0;
  */
 let workspaceGeneration = 0;
 
+/**
+ * Coalesces `refreshSyncStatus`. Its remote preflight round-trip is fired
+ * (often un-awaited) from ~a dozen handlers, so bursts around a save/fetch used
+ * to stack up several concurrent round-trips. Concurrent callers now join one
+ * in-flight refresh; any request that arrives during a pass schedules one more
+ * pass after it, so the loop reruns until a pass completes with no new request
+ * queued. In practice triggers are discrete (a save fans out a short burst), so
+ * this settles in one or two passes while collapsing the burst to a single
+ * trailing round-trip instead of one per caller.
+ */
+let syncStatusInFlight: Promise<void> | null = null;
+let syncStatusRerunQueued = false;
+
 function beginWorkspaceGeneration(path: string | null): void {
   workspaceGeneration += 1;
   setDraftlineWorkspacePath(path);
@@ -3507,19 +3520,38 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   refreshSyncStatus: async () => {
-    const generation = workspaceGeneration;
-    const { currentRemote } = get();
-    if (!currentRemote) return;
-    if (!await ensureGitHubRemoteCredential(currentRemote)) return;
-    try {
-      const status = await getDraftlineSyncStatus(currentRemote.name);
-      if (generation !== workspaceGeneration) return;
-      set({ syncStatus: status, syncError: null });
-      await get().loadPendingHistoryCleanup();
-    } catch {
-      if (generation !== workspaceGeneration) return;
-      set({ syncStatus: null });
+    // Join an in-flight refresh; flag that state may have changed so another
+    // pass follows the current round-trip once it completes.
+    if (syncStatusInFlight) {
+      syncStatusRerunQueued = true;
+      return syncStatusInFlight;
     }
+    const runOnce = async () => {
+      const generation = workspaceGeneration;
+      const { currentRemote } = get();
+      if (!currentRemote) return;
+      if (!await ensureGitHubRemoteCredential(currentRemote)) return;
+      try {
+        const status = await getDraftlineSyncStatus(currentRemote.name);
+        if (generation !== workspaceGeneration) return;
+        set({ syncStatus: status, syncError: null });
+        await get().loadPendingHistoryCleanup();
+      } catch {
+        if (generation !== workspaceGeneration) return;
+        set({ syncStatus: null });
+      }
+    };
+    syncStatusInFlight = (async () => {
+      try {
+        do {
+          syncStatusRerunQueued = false;
+          await runOnce();
+        } while (syncStatusRerunQueued);
+      } finally {
+        syncStatusInFlight = null;
+      }
+    })();
+    return syncStatusInFlight;
   },
 
   refreshIncomingCommits: async () => {
