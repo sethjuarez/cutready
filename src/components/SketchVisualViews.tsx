@@ -622,7 +622,7 @@ function RowMediaStack({
   const mediaLocked = isCellLocked(row, "screenshot") || isCellLocked(row, "visual");
 
   return (
-    <div className={`min-w-0 overflow-hidden md:self-center ${frameClassName ? frameClassName : "space-y-2"}`}>
+    <div className={`w-full min-w-0 overflow-hidden md:self-center ${frameClassName ? frameClassName : "space-y-2"}`}>
       <RowMedia
         row={row}
         rowIndex={rowIndex}
@@ -1066,11 +1066,11 @@ export function SketchBalancedView({
 
   return (
     <>
-      <div className="space-y-3">
+      <div className="space-y-2">
         {rows.map((row, index) => (
           <article
             key={index}
-            className="flex flex-col gap-3 rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/45 p-3 shadow-sm"
+            className="flex flex-col gap-2 rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/45 p-2 shadow-sm"
           >
             <VisualRowHeader
               row={row}
@@ -1080,7 +1080,7 @@ export function SketchBalancedView({
               onChange={onChange}
               onTimeChange={(value) => updateField(index, "time", value)}
             />
-            <div className="grid gap-3 md:grid-cols-[minmax(220px,0.92fr)_minmax(0,1fr)]">
+            <div className="grid gap-2 md:grid-cols-[minmax(220px,0.92fr)_minmax(0,1fr)]">
               <RowMediaStack
                 row={row}
                 rowIndex={index}
@@ -1089,7 +1089,7 @@ export function SketchBalancedView({
                 frameClassName="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]"
                 mediaClassName="!h-auto aspect-video !min-h-0 rounded-t-xl rounded-b-none border-0"
                 imageClassName="h-full w-full object-contain"
-                narrationPaddingClassName="border-t border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/75 px-2 py-1.5"
+                narrationPaddingClassName="border-t border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/75 px-2 py-1"
                 onOpenPreview={setPreview}
                 onCaptureScreenshot={onCaptureScreenshot}
                 onPasteImage={onPasteImage}
@@ -1105,9 +1105,9 @@ export function SketchBalancedView({
                 narrationSavingRows={narrationSavingRows}
                 onRemoveNarration={onRemoveNarration}
               />
-              <div className="flex min-w-0 flex-col gap-3">
+              <div className="flex min-w-0 flex-col gap-2">
                 <div>
-                  <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
+                  <h3 className="mb-0.5 text-xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
                     Narrative
                   </h3>
                   <EditableText
@@ -1119,7 +1119,7 @@ export function SketchBalancedView({
                   />
                 </div>
                 <div>
-                  <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
+                  <h3 className="mb-0.5 text-xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
                     Actions
                   </h3>
                   <EditableText
@@ -1186,14 +1186,14 @@ export function SketchScreenView({
                 onTimeChange={(value) => updateField(index, "time", value)}
               />
             </div>
-            <div className="grid md:grid-cols-[minmax(320px,1.15fr)_minmax(0,0.9fr)]">
+            <div className="flex flex-col">
               <RowMediaStack
                 row={row}
                 rowIndex={index}
                 projectRoot={projectRoot}
                 readOnly={readOnly}
                 frameClassName="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]"
-                mediaClassName="!h-auto aspect-video !min-h-0 rounded-t-xl rounded-b-none border-0 md:!min-h-[280px]"
+                mediaClassName="!h-auto aspect-video !min-h-0 rounded-t-xl rounded-b-none border-0"
                 imageClassName="h-full w-full object-contain"
                 narrationPaddingClassName="border-t border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/75 px-2 py-1.5"
                 onOpenPreview={setPreview}
@@ -1211,7 +1211,7 @@ export function SketchScreenView({
                 narrationSavingRows={narrationSavingRows}
                 onRemoveNarration={onRemoveNarration}
               />
-              <div className="space-y-3 p-4 pt-0 md:pt-4">
+              <div className="grid gap-3 p-4 pt-3 md:grid-cols-2">
                 <div>
                   <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
                     Narrative
@@ -1237,6 +1237,8 @@ export function SketchScreenView({
                     onChange={(value) => updateField(index, "demo_actions", value)}
                   />
                 </div>
+              </div>
+              <div className="px-4 pb-4">
                 <RowChips row={row} />
               </div>
             </div>
