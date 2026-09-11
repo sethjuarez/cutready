@@ -48,34 +48,19 @@ function RowMedia({
   row,
   rowIndex,
   projectRoot,
-  readOnly = false,
   className = "",
   imageClassName = "h-full w-full object-contain",
   onOpenPreview,
-  onCaptureScreenshot,
-  onPasteImage,
-  onPickImage,
-  onBrowseImage,
-  onGenerateVisual,
-  onRemoveMedia,
 }: {
   row: PlanningRow;
   rowIndex: number;
   projectRoot?: string | null;
-  readOnly?: boolean;
   className?: string;
   imageClassName?: string;
   onOpenPreview: (preview: MediaPreview) => void;
-  onCaptureScreenshot?: (rowIndex: number) => void;
-  onPasteImage?: (rowIndex: number) => void;
-  onPickImage?: (rowIndex: number) => void;
-  onBrowseImage?: (rowIndex: number) => void;
-  onGenerateVisual?: (rowIndex: number) => void;
-  onRemoveMedia?: (rowIndex: number) => void;
 }) {
   const screenshotSrc = useProjectImage(projectRoot ?? null, row.screenshot);
   const hasMedia = Boolean(row.visual || row.screenshot);
-  const mediaLocked = readOnly || isCellLocked(row, "screenshot") || isCellLocked(row, "visual");
   const mediaClass = `group/media relative h-full min-h-[150px] w-full overflow-hidden rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] ${className}`;
   const openMedia = () => {
     if (row.visual) {
@@ -84,8 +69,6 @@ function RowMedia({
       onOpenPreview({ kind: "screenshot", src: screenshotSrc, rowIndex });
     }
   };
-  const stop = (event: MouseEvent) => event.stopPropagation();
-  const imageVerb = hasMedia ? "Replace" : "Add";
   const interactiveProps = hasMedia
     ? {
         role: "button",
@@ -104,20 +87,6 @@ function RowMedia({
     return (
       <div className={`${mediaClass} text-left cursor-zoom-in`} title="Open visual full screen" {...interactiveProps}>
         <VisualCell visualPath={row.visual} mode="thumbnail" className="!h-full !w-full !rounded-none !border-0" />
-        <MediaActions
-          readOnly={mediaLocked}
-          imageVerb={imageVerb}
-          removeLabel="Remove visual"
-          hasMedia={hasMedia}
-          rowIndex={rowIndex}
-          onCaptureScreenshot={onCaptureScreenshot}
-          onPasteImage={onPasteImage}
-          onPickImage={onPickImage}
-          onBrowseImage={onBrowseImage}
-          onGenerateVisual={onGenerateVisual}
-          onRemoveMedia={onRemoveMedia}
-          onClickCapture={stop}
-        />
       </div>
     );
   }
@@ -136,20 +105,6 @@ function RowMedia({
             Loading screenshot...
           </div>
         )}
-        <MediaActions
-          readOnly={mediaLocked}
-          imageVerb={imageVerb}
-          removeLabel="Remove screenshot"
-          hasMedia={hasMedia}
-          rowIndex={rowIndex}
-          onCaptureScreenshot={onCaptureScreenshot}
-          onPasteImage={onPasteImage}
-          onPickImage={onPickImage}
-          onBrowseImage={onBrowseImage}
-          onGenerateVisual={onGenerateVisual}
-          onRemoveMedia={onRemoveMedia}
-          onClickCapture={stop}
-        />
       </div>
     );
   }
@@ -158,20 +113,6 @@ function RowMedia({
     <div className={`${mediaClass} flex flex-col items-center justify-center gap-2 text-[rgb(var(--color-text-secondary))]`}>
       <ImageIcon className="h-5 w-5" />
       <span className="text-xs">Add screenshot or visual</span>
-      <MediaActions
-        readOnly={mediaLocked}
-        imageVerb={imageVerb}
-        removeLabel="Remove media"
-        hasMedia={hasMedia}
-        rowIndex={rowIndex}
-        onCaptureScreenshot={onCaptureScreenshot}
-        onPasteImage={onPasteImage}
-        onPickImage={onPickImage}
-        onBrowseImage={onBrowseImage}
-        onGenerateVisual={onGenerateVisual}
-        onRemoveMedia={onRemoveMedia}
-        onClickCapture={stop}
-      />
     </div>
   );
 }
@@ -217,7 +158,7 @@ function MediaActions({
   if (actions.length === 0) return null;
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center gap-1.5 bg-[rgb(var(--color-media-control-bg)/0.48)] opacity-0 transition-opacity group-hover/media:opacity-100 group-focus-within/media:opacity-100">
+    <div className="flex min-w-0 items-center justify-end gap-1 px-1 pb-1">
       {actions.map((item) => {
         if (!item) return null;
         const Icon = item.icon;
@@ -229,7 +170,7 @@ function MediaActions({
               onClickCapture(event);
               item.action(rowIndex);
             }}
-            className="pointer-events-auto grid h-8 w-8 place-items-center rounded-full bg-[rgb(var(--color-media-control-bg)/0.22)] text-[rgb(var(--color-media-control-fg))] shadow-sm ring-1 ring-[rgb(var(--color-media-control-fg)/0.16)] backdrop-blur transition-colors hover:bg-[rgb(var(--color-accent))]/80 hover:text-[rgb(var(--color-media-control-fg))]"
+            className="grid h-7 w-7 place-items-center rounded-full text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))]"
             aria-label={item.label}
             title={item.label}
           >
@@ -619,23 +560,34 @@ function RowMediaStack({
   onRemoveNarration?: (rowIndex: number) => void;
 }) {
   const mediaLocked = isCellLocked(row, "screenshot") || isCellLocked(row, "visual");
+  const hasMedia = Boolean(row.visual || row.screenshot);
+  const imageVerb = hasMedia ? "Replace" : "Add";
+  const removeLabel = row.visual ? "Remove visual" : row.screenshot ? "Remove screenshot" : "Remove media";
+  const stop = (event: MouseEvent) => event.stopPropagation();
 
   return (
     <div className={`w-full min-w-0 overflow-hidden md:self-center ${frameClassName ? frameClassName : "space-y-2"}`}>
-      <RowMedia
-        row={row}
+      <MediaActions
+        readOnly={readOnly || mediaLocked}
+        imageVerb={imageVerb}
+        removeLabel={removeLabel}
+        hasMedia={hasMedia}
         rowIndex={rowIndex}
-        projectRoot={projectRoot}
-        readOnly={readOnly}
-        className={mediaClassName}
-        imageClassName={imageClassName}
-        onOpenPreview={onOpenPreview}
         onCaptureScreenshot={onCaptureScreenshot}
         onPasteImage={onPasteImage}
         onPickImage={onPickImage}
         onBrowseImage={onBrowseImage}
         onGenerateVisual={onGenerateVisual}
         onRemoveMedia={onRemoveMedia}
+        onClickCapture={stop}
+      />
+      <RowMedia
+        row={row}
+        rowIndex={rowIndex}
+        projectRoot={projectRoot}
+        className={mediaClassName}
+        imageClassName={imageClassName}
+        onOpenPreview={onOpenPreview}
       />
       <div className={`min-w-0 overflow-hidden ${narrationPaddingClassName}`}>
         {row.narration ? (
