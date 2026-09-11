@@ -971,6 +971,19 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     [selectedAgent, settings.aiAgentModelOverrides],
   );
   const effectiveModel = selectedAgentModelOverride || effectiveProvider?.model || settings.aiModel || "";
+  const latestRunDetails = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const runDetails = messages[i].cutready?.runDetails;
+      if (runDetails) return runDetails;
+    }
+    return null;
+  }, [messages]);
+  const visibleRunDetails = useMemo<ChatRunDetails>(() => latestRunDetails ?? {
+    provider: effectiveProvider?.provider ?? "",
+    model: effectiveModel,
+    execution_engine: settings.aiAgentExecutionEngine || "prompty",
+    agent_id: selectedAgent.id,
+  }, [effectiveModel, effectiveProvider?.provider, latestRunDetails, selectedAgent.id, settings.aiAgentExecutionEngine]);
   const [providerConfigured, setProviderConfigured] = useState<boolean | null>(null);
 
   const handleMessagesScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
@@ -2117,7 +2130,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           </div>
 
           {/* Model picker */}
-          <div className="relative" ref={modelPickerRef}>
+          <div className="relative flex items-center gap-1" ref={modelPickerRef}>
             <button
               className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
                 showModelPicker
@@ -2130,6 +2143,10 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
               <span className="max-w-[100px] truncate">{effectiveModel || "Model"}</span>
               <IconChevronDown size={10} />
             </button>
+            <RunDetailsPopover
+              details={visibleRunDetails}
+              status={latestRunDetails ? "Completed" : "Configured"}
+            />
             {showModelPicker && (
               <ModelPickerDropdown
                 currentModel={effectiveModel}
@@ -2403,7 +2420,6 @@ function MessageRow({
   if (message.role === "assistant") {
     const assistantText = textContent(message.content).trim();
     const workingNotes = message.cutready?.workingNotes;
-    const runDetails = message.cutready?.runDetails;
     if (!assistantText && inlineToolActivity.length === 0 && !workingNotes) return null;
 
     return (
@@ -2421,12 +2437,6 @@ function MessageRow({
                   <IconSparkles size={11} />
                 </span>
                 {agentName}
-                {runDetails && (
-                  <RunDetailsPopover
-                    details={runDetails}
-                    toolCount={inlineToolActivity.length}
-                  />
-                )}
               </div>
               <div className="rounded-2xl rounded-tl-sm border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/80 shadow-sm">
                 <div className="px-5 py-[1.125rem] text-[14px] leading-[1.78] text-[rgb(var(--color-text)_/_0.92)]">
@@ -2448,7 +2458,15 @@ function MessageRow({
   return null;
 }
 
-function RunDetailsPopover({ details, toolCount }: { details: ChatRunDetails; toolCount: number }) {
+function RunDetailsPopover({
+  details,
+  toolCount = 0,
+  status = "Completed",
+}: {
+  details: ChatRunDetails;
+  toolCount?: number;
+  status?: "Completed" | "Configured";
+}) {
   const [open, setOpen] = useState(false);
   const usage = details.usage;
   const effectiveToolCount = details.tool_calls ?? toolCount;
@@ -2491,7 +2509,7 @@ function RunDetailsPopover({ details, toolCount }: { details: ChatRunDetails; to
               Run details
             </span>
             <span className="rounded-full bg-[rgb(var(--color-accent))]/10 px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--color-accent))]">
-              Completed
+              {status}
             </span>
           </span>
           <span className="grid grid-cols-[5.75rem_minmax(0,1fr)] gap-x-3 gap-y-1.5">
