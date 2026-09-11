@@ -622,7 +622,7 @@ function RowMediaStack({
   const mediaLocked = isCellLocked(row, "screenshot") || isCellLocked(row, "visual");
 
   return (
-    <div className={`min-w-0 overflow-hidden ${frameClassName ? frameClassName : "space-y-2"}`}>
+    <div className={`min-w-0 overflow-hidden md:self-center ${frameClassName ? frameClassName : "space-y-2"}`}>
       <RowMedia
         row={row}
         rowIndex={rowIndex}
