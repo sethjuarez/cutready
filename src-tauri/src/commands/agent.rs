@@ -1021,12 +1021,11 @@ pub async fn agent_chat_with_tools(
                 // adapts the resulting contract into its native runtime.
                 let project_workspace_tools_enabled =
                     agent_id.eq_ignore_ascii_case("writer") && mutation_tools_enabled;
-                let mut tool_definitions = crate::engine::agent::tools::all_tools(
+                let tool_definitions = crate::engine::agent::tools::all_tools(
                     web_access.search_enabled,
                     project_workspace_tools_enabled,
                     mutation_tools_enabled,
                 );
-                tool_definitions.retain(|tool| tool.function.name != "delegate_to_agent");
                 // Respect the harness ownership contract for the provider
                 // concern. A harness that *Provides* its own model provider
                 // (e.g. copilot-sdk, authenticated through the signed-in Copilot
