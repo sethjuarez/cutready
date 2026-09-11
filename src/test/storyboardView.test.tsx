@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StoryboardView } from "../components/StoryboardView";
 import { useAppStore } from "../stores/appStore";
-import type { SketchSummary, Storyboard, StoryboardItem } from "../types/sketch";
+import type { Sketch, SketchSummary, Storyboard, StoryboardItem } from "../types/sketch";
 
 const mockInvoke = vi.fn();
 const mockRunBackgroundAgentAction = vi.fn();
@@ -44,6 +44,22 @@ function sketchSummary(title: string, path: string, row_count = 0): SketchSummar
     path,
     row_count,
     state: "draft",
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+  };
+}
+
+function fullSketch(title: string): Sketch {
+  return {
+    title,
+    description: "Sketch description",
+    state: "draft",
+    rows: [{
+      time: "~0:20",
+      narrative: "Contained narrative",
+      demo_actions: "Contained action",
+      screenshot: null,
+    }],
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   };
@@ -291,6 +307,89 @@ describe("StoryboardView", () => {
       storyboardPath: "demo.sb",
       items: [{ type: "sketch_ref", path: "intro.sk" }],
     });
+  });
+
+  it("keeps empty sections manageable in screen view", async () => {
+    const section: StoryboardItem = {
+      type: "section",
+      title: "Build",
+      description: "Original section framing",
+      sketches: [],
+    };
+    useAppStore.setState({
+      activeStoryboard: activeStoryboard("Original description", false, [section]),
+    });
+
+    render(<StoryboardView />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Screen" }));
+
+    expect(screen.getByText("Build")).toBeInTheDocument();
+    expect(screen.getByText("No sketches in this section yet.")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTitle("Remove section"));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("dialog")).toHaveTextContent("Remove section?");
+  });
+
+  it("renders screen view as read-only contained sketches", async () => {
+    const items: StoryboardItem[] = [{ type: "sketch_ref", path: "intro.sk" }];
+    useAppStore.setState({
+      activeStoryboard: activeStoryboard("Original description", false, items),
+      sketches: [sketchSummary("Intro", "intro.sk", 1)],
+    });
+    mockInvoke.mockImplementation((command: string) => {
+      if (command === "get_sketch") return Promise.resolve(fullSketch("Intro"));
+      if (command === "update_storyboard") return Promise.resolve();
+      if (command === "get_storyboard") return Promise.resolve(activeStoryboard("Updated description"));
+      if (command === "set_storyboard_lock") return Promise.resolve(activeStoryboard("Original description", true));
+      if (command === "list_storyboards") return Promise.resolve([]);
+      return Promise.resolve([]);
+    });
+
+    render(<StoryboardView />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Screen" }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("button", { name: "Collapse Intro" })).toBeInTheDocument();
+    expect(screen.getByText("Contained narrative")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add Row" })).not.toBeInTheDocument();
+  });
+
+  it("keeps visual storyboard modes focused on contained items", () => {
+    const items: StoryboardItem[] = [
+      { type: "sketch_ref", path: "intro.sk" },
+      {
+        type: "section",
+        title: "Build",
+        description: "Original section framing",
+        sketches: ["prototype.sk"],
+      },
+    ];
+    useAppStore.setState({
+      activeStoryboard: activeStoryboard("Original description", false, items),
+      sketches: [
+        sketchSummary("Intro", "intro.sk", 1),
+        sketchSummary("Prototype", "prototype.sk", 1),
+      ],
+    });
+
+    render(<StoryboardView />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Balanced" }));
+
+    expect(screen.queryByRole("button", { name: "New Sketch" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Existing Sketch" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Section" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Drag to reorder sketch")).toBeInTheDocument();
+    expect(screen.getByLabelText("Drag to reorder section")).toBeInTheDocument();
   });
 
   it("offers AI improvement for section descriptions", async () => {

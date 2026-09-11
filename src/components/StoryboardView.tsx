@@ -41,6 +41,8 @@ import { LockedDocumentBanner } from "./LockedDocumentBanner";
 import { DurationBadge, MetadataEditor } from "./MetadataEditor";
 import { InlineDescriptionEditor } from "./InlineDescriptionEditor";
 import { StoryboardIcon } from "./Icons";
+import { DocumentViewModeToggle, type DocumentViewMode } from "./DocumentViewModeToggle";
+import { StoryboardBalancedView, StoryboardScreenView } from "./StoryboardVisualViews";
 import { plainTextFromRichValue } from "../utils/richText";
 import type { Sketch, SketchSummary, StoryboardItem } from "../types/sketch";
 import type { RecordingTake } from "../types/recording";
@@ -122,6 +124,7 @@ export function StoryboardView() {
   const [previewSlides, setPreviewSlides] = useState<PreviewSlide[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [previewMode, setPreviewMode] = useState<PresentationMode>("slides");
+  const [viewMode, setViewMode] = useState<DocumentViewMode>("text");
 
   const sketchMap = new Map(sketches.map((s) => [s.path, s]));
   const storyboardLocked = activeStoryboard?.locked ?? false;
@@ -681,36 +684,89 @@ export function StoryboardView() {
           />
         </div>
 
-        {hasStoryboardItems && (
-          <div className="mb-4 flex items-center justify-between border-y border-[rgb(var(--color-border-subtle))] py-2">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[rgb(var(--color-text-secondary))]/60">
-              Outline
-            </span>
-            <div className="flex gap-1">
-              <button
-                onClick={expandOutlineLevel}
-                disabled={!canExpandOutline}
-                title="Expand one outline level"
-                aria-label="Expand one outline level"
-                className="rounded-full px-3 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-[rgb(var(--color-text-secondary))]"
-              >
-                Expand level
-              </button>
-              <button
-                onClick={collapseOutlineLevel}
-                disabled={!canCollapseOutline}
-                title="Collapse one outline level"
-                aria-label="Collapse one outline level"
-                className="rounded-full px-3 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-[rgb(var(--color-text-secondary))]"
-              >
-                Collapse level
-              </button>
-            </div>
-          </div>
-        )}
+        <div className="mb-4">
+          <DocumentViewModeToggle
+            value={viewMode}
+            onChange={setViewMode}
+            actions={hasStoryboardItems ? (
+              <>
+                <button
+                  type="button"
+                  onClick={expandOutlineLevel}
+                  disabled={!canExpandOutline}
+                  title="Expand one outline level"
+                  aria-label="Expand one outline level"
+                  className="rounded-md px-2.5 py-1 text-[11px] font-semibold text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))] disabled:cursor-default disabled:opacity-35 disabled:hover:text-[rgb(var(--color-text-secondary))]"
+                >
+                  Expand
+                </button>
+                <button
+                  type="button"
+                  onClick={collapseOutlineLevel}
+                  disabled={!canCollapseOutline}
+                  title="Collapse one outline level"
+                  aria-label="Collapse one outline level"
+                  className="rounded-md px-2.5 py-1 text-[11px] font-semibold text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))] disabled:cursor-default disabled:opacity-35 disabled:hover:text-[rgb(var(--color-text-secondary))]"
+                >
+                  Collapse
+                </button>
+              </>
+            ) : undefined}
+          />
+        </div>
 
         {/* Items */}
-        {activeStoryboard.items.length === 0 ? (
+        {viewMode === "balanced" ? (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={activeStoryboard.items.map((_, i) => i)} strategy={verticalListSortingStrategy}>
+              <StoryboardBalancedView
+                items={activeStoryboard.items}
+                sketchMap={sketchMap}
+                sketchCache={sketchCache}
+                projectRoot={currentProject?.root}
+                durationDisplayMode={durationDisplayMode}
+                onOpenSketch={openSketch}
+                locked={storyboardLocked}
+                sortable
+                collapsedItems={collapsedItems}
+                setCollapsedItems={setCollapsedItems}
+                onAddNewSketch={() => void handleAddNewSketch()}
+                onPickExisting={() => setPickerTarget({ type: "top" })}
+                onAddSection={() => handleAddSection()}
+                onAddNewSketchToSection={(sectionIndex) => void handleAddNewSketch({ type: "section", sectionIndex })}
+                onPickExistingForSection={(sectionIndex) => setPickerTarget({ type: "section", sectionIndex })}
+                onRemoveTopLevelSketch={(index) => void confirmRemoveFromStoryboard(index)}
+                onRemoveSectionSketch={(sectionIndex, sketchIndex) => void confirmRemoveFromSection(sectionIndex, sketchIndex)}
+                onRemoveSection={(sectionIndex) => void confirmRemoveSection(sectionIndex)}
+              />
+            </SortableContext>
+          </DndContext>
+        ) : viewMode === "screen" ? (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={activeStoryboard.items.map((_, i) => i)} strategy={verticalListSortingStrategy}>
+              <StoryboardScreenView
+                items={activeStoryboard.items}
+                sketchMap={sketchMap}
+                sketchCache={sketchCache}
+                projectRoot={currentProject?.root}
+                durationDisplayMode={durationDisplayMode}
+                onOpenSketch={openSketch}
+                locked={storyboardLocked}
+                sortable
+                collapsedItems={collapsedItems}
+                setCollapsedItems={setCollapsedItems}
+                onAddNewSketch={() => void handleAddNewSketch()}
+                onPickExisting={() => setPickerTarget({ type: "top" })}
+                onAddSection={() => handleAddSection()}
+                onAddNewSketchToSection={(sectionIndex) => void handleAddNewSketch({ type: "section", sectionIndex })}
+                onPickExistingForSection={(sectionIndex) => setPickerTarget({ type: "section", sectionIndex })}
+                onRemoveTopLevelSketch={(index) => void confirmRemoveFromStoryboard(index)}
+                onRemoveSectionSketch={(sectionIndex, sketchIndex) => void confirmRemoveFromSection(sectionIndex, sketchIndex)}
+                onRemoveSection={(sectionIndex) => void confirmRemoveSection(sectionIndex)}
+              />
+            </SortableContext>
+          </DndContext>
+        ) : activeStoryboard.items.length === 0 ? (
           <EmptyState
             onAddNew={() => handleAddNewSketch()}
             onPickExisting={() => setPickerTarget({ type: "top", position: 0 })}
@@ -832,7 +888,7 @@ export function StoryboardView() {
         )}
 
         {/* Picker overlay (when shown at a position) */}
-        {pickerTarget !== null && activeStoryboard.items.length === 0 && !storyboardLocked && (
+        {pickerTarget !== null && (viewMode !== "text" || activeStoryboard.items.length === 0) && !storyboardLocked && (
           <SketchPicker
             sketches={filteredSketches}
             search={pickerSearch}
