@@ -112,8 +112,8 @@ fn final_response(text: &str) -> ModelInvocationResponse {
     ModelInvocationResponse {
         output: Some(Value::String(text.into())),
         usage: None,
-        assistant_messages: vec![Message::with_text(Role::Assistant, text)],
-        tool_requests: Vec::new(),
+        assistant_messages: Some(vec![Message::with_text(Role::Assistant, text)]),
+        tool_requests: Some(Vec::new()),
         next_context_state: None,
         metadata: Value::Null,
     }
@@ -149,12 +149,12 @@ fn tool_response(requests: Vec<EngineToolRequest>) -> ModelInvocationResponse {
     ModelInvocationResponse {
         output: None,
         usage: None,
-        assistant_messages: vec![Message {
+        assistant_messages: Some(vec![Message {
             role: Role::Assistant,
             parts: Vec::new(),
             metadata: json!({ "tool_calls": tool_calls }),
-        }],
-        tool_requests: requests,
+        }]),
+        tool_requests: Some(requests),
         next_context_state: None,
         metadata: Value::Null,
     }
@@ -548,7 +548,10 @@ async fn prompty_persistence_failures_resume_without_duplicate_model_or_tool_eff
     };
     assert_eq!(checkpoint.session_id, "resume-session");
     assert_eq!(checkpoint.turn_id, "resume-turn");
-    assert_eq!(checkpoint.completed_tool_results.len(), 1);
+    assert_eq!(
+        checkpoint.completed_tool_results.as_deref().unwrap_or(&[]).len(),
+        1
+    );
     assert!(checkpoint.pending_model_response.is_some());
     assert_eq!(initial_model.calls.load(Ordering::SeqCst), 1);
     assert_eq!(tools.calls.lock().unwrap().len(), 1);

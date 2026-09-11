@@ -7,15 +7,13 @@
 //! policy all live on this side of the seam and never change when the harness
 //! implementation changes.
 //!
-//! Harness-native types (for example `prompty::*`, and — in later PRs —
-//! `agentive::*` or the Copilot SDK types) must stay inside the concrete
-//! adapter for that harness. Nothing harness-specific may appear in this
-//! module or leak past [`AgentHarness::run`].
+//! Harness-native types (for example `prompty::*`, `agentive::*`, or Copilot
+//! SDK types) must stay inside the concrete adapter for that harness. Nothing
+//! harness-specific may appear in this module or leak past [`AgentHarness::run`].
 //!
-//! This PR ships a single active implementation, [`prompty::PromptyHarness`],
-//! selected through [`HarnessRegistry`]. Reintroducing agentive (issue #246)
-//! and the Copilot SDK spike (issue #247) each add a new adapter module and a
-//! new registry arm without touching this boundary.
+//! Prompty is the stable default implementation, selected through
+//! [`HarnessRegistry`]. Agentive and the Copilot SDK remain distinct optional
+//! adapters rather than aliases onto Prompty.
 
 #[cfg(feature = "harness-agentive")]
 pub use harness_agentive as agentive;
@@ -304,9 +302,10 @@ impl HarnessRegistry {
             capabilities: PromptyHarness::static_capabilities(),
             contract: PromptyHarness::static_contract(),
             available: true,
-            // The always-linked backbone, but still maturing — advertised as
-            // experimental until its full capability breadth is proven.
-            stability: HarnessStability::Experimental,
+            // The recommended default runtime. It is always linked and has
+            // passed end-to-end provider drills across Foundry, OpenAI, and
+            // Anthropic.
+            stability: HarnessStability::Stable,
         }];
         #[cfg(feature = "harness-agentive")]
         harnesses.push(HarnessDescriptor {
@@ -548,6 +547,7 @@ mod tests {
             api_key: "shared-narration-key".to_string(),
             model: "gpt-5.6-terra".to_string(),
             bearer_token: Some("shared-bearer".to_string()),
+            reasoning_effort: None,
         }
     }
 
@@ -690,25 +690,24 @@ mod tests {
         // copilot-sdk is the primary shipping path.
         assert_eq!(value["stability"], "stable");
 
-        // Prompty requires its provider.
+        // Prompty requires its provider and is the stable default runtime.
         let prompty = HarnessRegistry::available_harnesses()
             .into_iter()
             .find(|descriptor| descriptor.capabilities.id == "prompty")
             .expect("prompty descriptor");
         let prompty_value = serde_json::to_value(&prompty).unwrap();
         assert_eq!(prompty_value["contract"]["provider"], "requires");
-        assert_eq!(prompty_value["stability"], "experimental");
+        assert_eq!(prompty_value["stability"], "stable");
     }
 
     #[test]
-    fn prompty_backbone_is_advertised_experimental() {
-        // The default backbone stays selectable but is honestly labeled
-        // experimental until its full capability breadth is proven end-to-end.
+    fn prompty_backbone_is_advertised_stable() {
+        // The default backbone is the recommended stable runtime.
         let prompty = HarnessRegistry::available_harnesses()
             .into_iter()
             .find(|descriptor| descriptor.capabilities.id == "prompty")
             .expect("prompty descriptor");
-        assert_eq!(prompty.stability, HarnessStability::Experimental);
+        assert_eq!(prompty.stability, HarnessStability::Stable);
         assert!(prompty.available);
     }
 

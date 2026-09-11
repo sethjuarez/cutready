@@ -54,6 +54,7 @@ fn production_tool_wire_preserves_cutready_nullable_union_schemas() {
         api_key: "test-key".into(),
         model: "gpt-4o".into(),
         bearer_token: None,
+        reasoning_effort: None,
     };
     let production =
         build_production_model(&config, Some(10_000), all_tools(true, true, true)).unwrap();
@@ -149,11 +150,11 @@ impl ModelPort for ScriptedModelPort {
                 }
                 Ok(ModelInvocationResponse {
                     output: Some(Value::String(text.clone())),
-                    assistant_messages: vec![native_to_prompty_message(
+                    assistant_messages: Some(vec![native_to_prompty_message(
                         &ChatMessage::assistant(&text),
                     )
-                    .map_err(PortError::configuration)?],
-                    tool_requests: Vec::new(),
+                    .map_err(PortError::configuration)?]),
+                    tool_requests: Some(Vec::new()),
                     next_context_state: None,
                     usage: Some(InvocationUsage {
                         input_tokens: 3,
@@ -174,9 +175,9 @@ impl ModelPort for ScriptedModelPort {
                 let assistant = ChatMessage::assistant_with_tool_calls(vec![tool_call.clone()]);
                 Ok(ModelInvocationResponse {
                     output: None,
-                    assistant_messages: vec![native_to_prompty_message(&assistant)
-                        .map_err(PortError::configuration)?],
-                    tool_requests: vec![EngineToolRequest {
+                    assistant_messages: Some(vec![native_to_prompty_message(&assistant)
+                        .map_err(PortError::configuration)?]),
+                    tool_requests: Some(vec![EngineToolRequest {
                         id: tool_call.id,
                         name: tool_call.function.name,
                         arguments: Some(
@@ -188,7 +189,7 @@ impl ModelPort for ScriptedModelPort {
                             "arguments_json": tool_call.function.arguments,
                             "call_type": tool_call.call_type,
                         }),
-                    }],
+                    }]),
                     next_context_state: None,
                     usage: Some(InvocationUsage {
                         input_tokens: 4,
@@ -450,7 +451,8 @@ async fn delegate_to_agent_runs_nested_child_and_persists_run_identity() {
     assert!(!parent_events.is_empty());
     for event in &parent_events {
         assert_eq!(event.event["runId"].as_str(), Some("prompty-deleg"));
-        assert!(event.event.get("delegationDepth").is_none());
+        assert_eq!(event.event["delegationDepth"].as_i64(), Some(0));
+        assert!(event.event.get("delegation_depth").is_none());
     }
 }
 
@@ -923,7 +925,8 @@ async fn canonical_events_and_checkpoints_persist_as_json() {
         .expect("checkpoint carries a runId");
     assert!(!run_id.is_empty());
     assert!(checkpoint.get("parentRunId").is_none());
-    assert!(checkpoint.get("delegationDepth").is_none());
+    assert_eq!(checkpoint["delegationDepth"].as_i64(), Some(0));
+    assert!(checkpoint.get("delegation_depth").is_none());
     for record in &detail.trajectory_events {
         assert_eq!(
             record.event["runId"]
@@ -933,7 +936,8 @@ async fn canonical_events_and_checkpoints_persist_as_json() {
             "every persisted event shares the top-level run identity"
         );
         assert!(record.event.get("parentRunId").is_none());
-        assert!(record.event.get("delegationDepth").is_none());
+        assert_eq!(record.event["delegationDepth"].as_i64(), Some(0));
+        assert!(record.event.get("delegation_depth").is_none());
     }
 
     // A delegated child run must round-trip all three identity fields in
@@ -1050,10 +1054,7 @@ async fn canonical_events_and_checkpoints_persist_as_json() {
         .last()
         .expect("zero-tail resume context persisted")
         .context;
-    assert!(
-        zero_ctx.get("lastJournalSequence").is_none(),
-        "a zero journal tail is omitted from the canonical projection"
-    );
+    assert_eq!(zero_ctx["lastJournalSequence"].as_i64(), Some(0));
 }
 
 /// A reconciliation-required checkpoint must survive CutReady's durable round-trip
@@ -1098,14 +1099,14 @@ async fn reconciliation_required_checkpoint_round_trips_into_a_resumable_context
     recon.id = "checkpoint-recon".into();
     recon.reconciliation_required = true;
     recon.model_reconciliation = None;
-    recon.completed_tool_results = vec![EngineToolResult {
+    recon.completed_tool_results = Some(vec![EngineToolResult {
         request_id: REQUEST_ID.into(),
         name: "capture_screenshot".into(),
         outcome: ToolOutcome::Indeterminate,
         output: None,
         error_kind: Some("indeterminate".into()),
         metadata: Value::Null,
-    }];
+    }]);
     recon.messages.push(Message::tool_result(
         REQUEST_ID,
         "awaiting host confirmation",
@@ -1142,9 +1143,9 @@ async fn reconciliation_required_checkpoint_round_trips_into_a_resumable_context
         .checkpoint
         .clone();
     assert_eq!(stored_cp["reconciliationRequired"], true);
-    // The generated projection stores completed results object-keyed by tool name
-    // (default SaveContext collection_format), each element in canonical camelCase.
-    let stored_result = &stored_cp["completedToolResults"]["capture_screenshot"];
+    // The generated projection stores completed results as canonical camelCase
+    // array elements in Prompty v2.
+    let stored_result = &stored_cp["completedToolResults"][0];
     assert_eq!(stored_result["requestId"], REQUEST_ID);
     assert_eq!(stored_result["outcome"], "indeterminate");
     assert!(stored_cp.get("completed_tool_results").is_none());
@@ -1154,7 +1155,7 @@ async fn reconciliation_required_checkpoint_round_trips_into_a_resumable_context
         .expect("reconciliation checkpoint round-trips into the generated type");
     assert!(restored_cp.reconciliation_required);
     assert_eq!(
-        restored_cp.completed_tool_results[0].outcome,
+        restored_cp.completed_tool_results.as_deref().unwrap_or(&[])[0].outcome,
         ToolOutcome::Indeterminate
     );
     assert!(restored_cp.model_reconciliation.is_none());

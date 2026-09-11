@@ -126,29 +126,29 @@ describe("HarnessPicker unavailable-selection handling", () => {
 
   it("badges an experimental harness and shows a caveat when it's active", async () => {
     mockHarnesses([
-      descriptor("prompty", { stability: "experimental" }),
-      descriptor("copilot-sdk", { stability: "stable", display_name: "GitHub Copilot" }),
+      descriptor("prompty", { stability: "stable" }),
+      descriptor("other-engine", { stability: "experimental", display_name: "Other Engine" }),
     ]);
-    const { container } = render(<HarnessPicker value="prompty" onChange={vi.fn()} />);
+    const { container } = render(<HarnessPicker value="other-engine" onChange={vi.fn()} />);
 
     await screen.findByTestId("harness-option-prompty");
-    // The maturing harness carries an Experimental badge; the stable one does not.
-    expect(container.querySelector('[data-testid="harness-experimental-prompty"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="harness-experimental-copilot-sdk"]')).toBeNull();
+    // An experimental adapter carries the badge; the stable default does not.
+    expect(container.querySelector('[data-testid="harness-experimental-other-engine"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="harness-experimental-prompty"]')).toBeNull();
     // Because it's the active selection, the inline caveat is shown.
-    expect(container.querySelector('[data-testid="harness-experimental-note-prompty"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="harness-experimental-note-other-engine"]')).not.toBeNull();
   });
 
   it("hides the experimental caveat when the experimental harness isn't active", async () => {
     mockHarnesses([
-      descriptor("copilot-sdk", { stability: "stable", display_name: "GitHub Copilot" }),
-      descriptor("prompty", { stability: "experimental" }),
+      descriptor("prompty", { stability: "stable" }),
+      descriptor("other-engine", { stability: "experimental", display_name: "Other Engine" }),
     ]);
-    const { container } = render(<HarnessPicker value="copilot-sdk" onChange={vi.fn()} />);
+    const { container } = render(<HarnessPicker value="prompty" onChange={vi.fn()} />);
 
-    await screen.findByTestId("harness-option-prompty");
+    await screen.findByTestId("harness-option-other-engine");
     // Badge still shows on the card, but the active-only caveat does not.
-    expect(container.querySelector('[data-testid="harness-experimental-prompty"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="harness-experimental-note-prompty"]')).toBeNull();
+    expect(container.querySelector('[data-testid="harness-experimental-other-engine"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="harness-experimental-note-other-engine"]')).toBeNull();
   });
 });

@@ -29,6 +29,7 @@ export interface AgentPreset {
 export type AiProviderKind = "microsoft_foundry" | "azure_openai" | "openai" | "anthropic";
 export type AiAuthMode = "api_key" | "azure_oauth";
 export type AiApplyMode = "ask" | "auto";
+export type AiReasoningEffort = "" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 /**
  * Identifier of the agent harness (runtime) that executes agent turns. Known
  * built-ins are `"prompty"`, `"agentive"`, and `"copilot-sdk"`, but this is a
@@ -141,10 +142,14 @@ export interface GlobalSettings {
   aiVisionMode: "off" | "notes" | "notes_and_sketches";
   /** Whether the selected model supports vision (set when model is picked). */
   aiModelSupportsVision: string;
+  /** Comma-separated reasoning efforts reported for the selected model. */
+  aiModelReasoningEfforts: string;
   /** Web search access for chat agents: "disabled" or "enabled". */
   aiWebAccess: "disabled" | "enabled";
   /** Maximum agent tool-call rounds before stopping a run. */
   aiMaxToolRounds: number;
+  /** Optional reasoning effort for models that support it. Empty means provider default. */
+  aiReasoningEffort: AiReasoningEffort;
   /** Agent orchestration engine (harness) id, resolved per run by the backend
    * HarnessRegistry. "prompty" (default, durable TurnEngine), "agentive"
    * (issue #246), and "copilot-sdk" (issue #247) are real, distinct runtimes.
@@ -339,8 +344,10 @@ const defaultGlobalSettings: GlobalSettings = {
   aiContextLength: 0,
   aiVisionMode: "notes_and_sketches",
   aiModelSupportsVision: "",
+  aiModelReasoningEfforts: "",
   aiWebAccess: "disabled",
   aiMaxToolRounds: 50,
+  aiReasoningEffort: "",
   aiAgentExecutionEngine: "prompty",
   aiApplyMode: "ask",
   aiProviders: [],

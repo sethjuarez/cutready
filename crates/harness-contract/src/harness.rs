@@ -187,6 +187,7 @@ impl HarnessContract {
                 api_key: String::new(),
                 model: String::new(),
                 bearer_token: None,
+                reasoning_effort: None,
             },
             Ownership::Requires | Ownership::Augments => llm,
         }
@@ -321,6 +322,7 @@ mod tests {
             api_key: "secret-key".to_string(),
             model: "gpt-5.6-terra".to_string(),
             bearer_token: Some("entra-token".to_string()),
+            reasoning_effort: None,
         }
     }
 

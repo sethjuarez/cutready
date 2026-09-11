@@ -1,9 +1,9 @@
-import { useState } from "react";
-import { RefreshCw, X } from "lucide-react";
-import { useSettings } from "../../hooks/useSettings";
+import { useMemo, useState } from "react";
+import { Brain, RefreshCw, X } from "lucide-react";
+import { useSettings, type AiReasoningEffort } from "../../hooks/useSettings";
 import { inputClass } from "../../styles";
 import { FoundryResourcePicker } from "../FoundryResourcePicker";
-import { activeProvider, createAiProviderConfig } from "../../utils/providerConfig";
+import { activeProvider, createAiProviderConfig, normalizeReasoningEffort, supportedReasoningEfforts } from "../../utils/providerConfig";
 import type { ModelInfo } from "./types";
 
 export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropic, isOAuth, hasToken, canFetchModels, models, setModels, loadingModels, modelFilter, setModelFilter, modelError, fetchModels, oauthStatus, oauthError, startOAuthFlow, signOut }: {
@@ -30,6 +30,17 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
   const providers = settings.aiProviders?.length ? settings.aiProviders : [];
   const selectedProvider = activeProvider(settings);
   const defaultProvider = providers.find((provider) => provider.id === settings.aiDefaultProviderId) ?? selectedProvider;
+  const activeModel = selectedProvider?.model || settings.aiModel || "";
+  const reasoningEfforts = useMemo(
+    () => supportedReasoningEfforts(selectedProvider?.provider, activeModel, settings.aiModelReasoningEfforts),
+    [activeModel, selectedProvider?.provider, settings.aiModelReasoningEfforts],
+  );
+  const effectiveReasoningEffort = normalizeReasoningEffort(
+    settings.aiReasoningEffort,
+    selectedProvider?.provider,
+    activeModel,
+    settings.aiModelReasoningEfforts,
+  );
   // Persisted per-connection "kind" values are unchanged wire values. The two
   // Azure kinds (microsoft_foundry, azure_openai) are surfaced as one "Microsoft
   // Foundry (Azure)" family in the UI; a connection-method toggle picks between
@@ -490,6 +501,7 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
                 setModelFilter(e.target.value);
               } else {
                 updateSetting("aiModel", e.target.value);
+                updateSetting("aiModelReasoningEfforts", "");
               }
             }}
             placeholder={models.length > 0 ? "Filter models…" : (isAnthropic ? "claude-sonnet-4-6" : "gpt-4o")}
@@ -535,6 +547,7 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
                     }
                     // Track vision capability for the selected model
                     updateSetting("aiModelSupportsVision", m.capabilities?.vision === "true" ? "true" : "false");
+                    updateSetting("aiModelReasoningEfforts", m.capabilities?.reasoning_efforts ?? "");
                     setModels([]);
                     setModelFilter("");
                   }}
@@ -549,6 +562,7 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
                     {m.context_length ? `${Math.round(m.context_length / 1000)}k ctx` : "ctx ?"}
                     {m.capabilities?.vision === "true" ? " · vision" : ""}
                     {m.capabilities?.responses_api === "true" ? " · responses" : ""}
+                    {m.capabilities?.reasoning_effort === "true" ? " · reasoning" : ""}
                   </span>
                 </button>
               ))}
@@ -563,6 +577,30 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
           <p className="text-xs text-error">{modelError}</p>
         )}
       </fieldset>
+
+      {reasoningEfforts.length > 0 && (
+        <fieldset className="flex flex-col gap-2">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <Brain className="h-4 w-4 text-[rgb(var(--color-accent))]" />
+            Reasoning effort
+          </label>
+          <select
+            value={effectiveReasoningEffort}
+            onChange={(event) => updateSetting("aiReasoningEffort", event.target.value as AiReasoningEffort)}
+            className="bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded px-3 py-1.5 text-sm"
+          >
+            <option value="">Default — let the model decide</option>
+            {reasoningEfforts.map((effort) => (
+              <option key={effort} value={effort}>
+                {effort === "xhigh" ? "X-high" : effort[0].toUpperCase() + effort.slice(1)}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-[rgb(var(--color-text-secondary))]">
+            Applies to reasoning-capable OpenAI-compatible models. Higher effort can improve hard planning but may take longer.
+          </p>
+        </fieldset>
+      )}
 
       {/* Vision Mode */}
       <fieldset className="flex flex-col gap-2">

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use prompty::interfaces::{Executor, InvokerError, Processor};
-use prompty::model::{context::LoadContext, Prompty};
+use prompty::model::{context::LoadContext, Agent as Prompty};
 use prompty::model::{
     InvocationContextPortability, InvocationContextState, InvocationUsage, ModelToolRequest,
 };
@@ -43,6 +43,7 @@ pub fn build_production_model(
         LlmProvider::Openai => (
             "openai".into(),
             json!({
+                "kind": "key",
                 "endpoint": effective_endpoint(config),
                 "apiKey": config.api_key,
             }),
@@ -52,6 +53,7 @@ pub fn build_production_model(
         LlmProvider::Anthropic => (
             "anthropic".into(),
             json!({
+                "kind": "key",
                 "endpoint": "https://api.anthropic.com",
                 "apiKey": config.api_key,
             }),
@@ -63,6 +65,7 @@ pub fn build_production_model(
             (
                 "openai".into(),
                 json!({
+                    "kind": "key",
                     "endpoint": foundry_openai_v1_endpoint(&config.endpoint)?,
                     "apiKey": token,
                 }),
@@ -92,6 +95,7 @@ pub fn build_production_model(
         LlmProvider::AzureOpenai if responses => (
             "openai".into(),
             json!({
+                "kind": "key",
                 "endpoint": azure_openai_v1_endpoint(&config.endpoint)?,
                 "apiKey": required_bearer_token(config)?,
             }),
@@ -107,6 +111,7 @@ pub fn build_production_model(
             (
                 "openai".into(),
                 json!({
+                    "kind": "key",
                     "endpoint": azure_openai_v1_endpoint(&config.endpoint)?,
                     "apiKey": required_bearer_token(config)?,
                 }),
@@ -117,6 +122,7 @@ pub fn build_production_model(
         LlmProvider::AzureOpenai => (
             "foundry".into(),
             json!({
+                "kind": "key",
                 "endpoint": config.endpoint,
                 "apiKey": config.api_key,
             }),
@@ -129,6 +135,15 @@ pub fn build_production_model(
         .iter()
         .map(tool_definition_to_prompty_value)
         .collect::<Result<Vec<_>, _>>()?;
+    let mut options = json!({ "stream": true });
+    if let Some(reasoning_effort) = config
+        .reasoning_effort
+        .as_deref()
+        .map(str::trim)
+        .filter(|effort| !effort.is_empty())
+    {
+        options["reasoningEffort"] = Value::String(reasoning_effort.to_string());
+    }
     let agent = Prompty::load_from_value(
         &json!({
             "name": "CutReady",
@@ -137,7 +152,7 @@ pub fn build_production_model(
                 "provider": provider_name,
                 "apiType": api_type,
                 "connection": connection,
-                "options": { "stream": true },
+                "options": options,
             },
             "tools": tool_values,
         }),
@@ -429,8 +444,17 @@ impl ModelPort for PromptyExecutorModelPort {
                 .process_with_context(&self.agent, completed_response.clone(), request)
                 .await
                 .map_err(invoker_error_to_port)?;
-            if !response.tool_requests.is_empty() && response.assistant_messages.is_empty() {
-                response.assistant_messages = responses_function_call_messages(&completed_response);
+            if response
+                .tool_requests
+                .as_ref()
+                .is_some_and(|requests| !requests.is_empty())
+                && response
+                    .assistant_messages
+                    .as_ref()
+                    .is_none_or(|messages| messages.is_empty())
+            {
+                response.assistant_messages =
+                    Some(responses_function_call_messages(&completed_response));
             }
             return Ok(response);
         }
@@ -477,11 +501,11 @@ impl ModelPort for PromptyExecutorModelPort {
             .then(|| Value::String(text.clone()));
         Ok(ModelInvocationResponse {
             output,
-            assistant_messages: vec![assistant],
-            tool_requests,
+            assistant_messages: Some(vec![assistant]),
+            tool_requests: Some(tool_requests),
             next_context_state: Some(InvocationContextState {
                 portability: InvocationContextPortability::Portable,
-                delegated_state: Vec::new(),
+                delegated_state: Some(Vec::new()),
             }),
             usage: usage
                 .map(|usage| {
@@ -533,11 +557,11 @@ pub async fn one_shot_chat(
             invocation_id: "one-shot".into(),
             iteration: 0,
             messages: prompty_messages,
-            decisions: Vec::new(),
+            decisions: Some(Vec::new()),
             stable_prefix_messages: 0,
             context_state: InvocationContextState {
                 portability: InvocationContextPortability::Portable,
-                delegated_state: Vec::new(),
+                delegated_state: Some(Vec::new()),
             },
             metadata: Value::Null,
         },
@@ -549,7 +573,8 @@ pub async fn one_shot_chat(
         .map_err(|error| error.to_string())?;
     let assistant = response
         .assistant_messages
-        .first()
+        .as_deref()
+        .and_then(|messages| messages.first())
         .ok_or_else(|| "Model returned no assistant message".to_string())?;
     crate::runner::prompty_to_native_message(assistant)
 }
@@ -739,11 +764,11 @@ mod tests {
                 invocation_id: "invocation-1".into(),
                 iteration: 0,
                 messages: vec![Message::with_text(Role::User, "Inspect the project.")],
-                decisions: Vec::new(),
+                decisions: Some(Vec::new()),
                 stable_prefix_messages: 0,
                 context_state: InvocationContextState {
                     portability: ContextPortability::Portable,
-                    delegated_state: Vec::new(),
+                    delegated_state: Some(Vec::new()),
                 },
                 metadata: Value::Null,
             },
@@ -827,11 +852,11 @@ mod tests {
                 invocation_id: "invocation-continuation".into(),
                 iteration: 1,
                 messages,
-                decisions: Vec::new(),
+                decisions: Some(Vec::new()),
                 stable_prefix_messages: 2,
                 context_state: InvocationContextState {
                     portability: ContextPortability::Delegated,
-                    delegated_state: vec![DelegatedStateReference {
+                    delegated_state: Some(vec![DelegatedStateReference {
                         provider: "openai".into(),
                         kind: "response".into(),
                         id: "resp-prior".into(),
@@ -840,7 +865,7 @@ mod tests {
                                 "inputMessages": boundary_prefix,
                             },
                         }),
-                    }],
+                    }]),
                 },
                 metadata: Value::Null,
             },
@@ -886,19 +911,20 @@ mod tests {
             ] if first == "Inspecting " && second == "now."
         ));
         assert_eq!(
-            response.assistant_messages[0].text_content(),
+            response.assistant_messages.as_deref().unwrap_or(&[])[0].text_content(),
             "Inspecting now."
         );
-        assert_eq!(response.tool_requests.len(), 1);
-        assert_eq!(response.tool_requests[0].id, "call-list");
-        assert_eq!(response.tool_requests[0].name, "list_project_files");
+        let tool_requests = response.tool_requests.as_deref().unwrap_or(&[]);
+        assert_eq!(tool_requests.len(), 1);
+        assert_eq!(tool_requests[0].id, "call-list");
+        assert_eq!(tool_requests[0].name, "list_project_files");
         assert_eq!(
-            response.tool_requests[0].metadata["arguments_json"],
+            tool_requests[0].metadata["arguments_json"],
             "{\"include_images\":false}"
         );
         let native_calls =
             serde_json::from_value::<Vec<harness_contract::execution::ToolCall>>(
-                response.assistant_messages[0].metadata["tool_calls"].clone(),
+                response.assistant_messages.as_deref().unwrap_or(&[])[0].metadata["tool_calls"].clone(),
             )
             .unwrap();
         assert_eq!(native_calls[0].id, "call-list");
@@ -931,7 +957,7 @@ mod tests {
             .invoke(&request(), &CancellationToken::new(), &NoopModelStreamPort)
             .await
             .unwrap();
-        assert!(response.assistant_messages[0].parts.is_empty());
+        assert!(response.assistant_messages.as_deref().unwrap_or(&[])[0].parts.is_empty());
     }
 
     #[tokio::test]
@@ -1057,6 +1083,7 @@ mod tests {
                 api_key: "test-key".into(),
                 model: "gpt-5.1-codex".into(),
                 bearer_token: None,
+                reasoning_effort: None,
             },
             None,
             Vec::new(),
@@ -1077,7 +1104,10 @@ mod tests {
         assert_eq!(response.output, Some(Value::String("continued".into())));
         let next_state = response.next_context_state.as_ref().unwrap();
         assert_eq!(next_state.portability, ContextPortability::Delegated);
-        assert_eq!(next_state.delegated_state[0].id, "resp-next");
+        assert_eq!(
+            next_state.delegated_state.as_deref().unwrap_or(&[])[0].id,
+            "resp-next"
+        );
     }
 
     #[tokio::test]
@@ -1100,6 +1130,7 @@ mod tests {
                 api_key: "test-key".into(),
                 model: "gpt-5.1-codex".into(),
                 bearer_token: None,
+                reasoning_effort: None,
             },
             None,
             Vec::new(),
@@ -1117,14 +1148,21 @@ mod tests {
         provider.assert();
         let next_state = response.next_context_state.as_ref().unwrap();
         assert_eq!(next_state.portability, ContextPortability::Delegated);
-        assert_eq!(next_state.delegated_state[0].id, "resp-tool");
-        assert_eq!(response.tool_requests[0].id, "call-list");
         assert_eq!(
-            response.assistant_messages[0].metadata["responses_function_call"]["call_id"],
+            next_state.delegated_state.as_deref().unwrap_or(&[])[0].id,
+            "resp-tool"
+        );
+        assert_eq!(
+            response.tool_requests.as_deref().unwrap_or(&[])[0].id,
             "call-list"
         );
         assert_eq!(
-            response.assistant_messages[0].metadata["tool_calls"][0]["id"],
+            response.assistant_messages.as_deref().unwrap_or(&[])[0].metadata
+                ["responses_function_call"]["call_id"],
+            "call-list"
+        );
+        assert_eq!(
+            response.assistant_messages.as_deref().unwrap_or(&[])[0].metadata["tool_calls"][0]["id"],
             "call-list"
         );
     }
@@ -1164,6 +1202,7 @@ mod tests {
                 api_key: "test-key".into(),
                 model: "gpt-5.1-codex".into(),
                 bearer_token: None,
+                reasoning_effort: None,
             },
             None,
             Vec::new(),
@@ -1292,6 +1331,7 @@ mod tests {
             api_key: "test-key".into(),
             model: "gpt-5.1-codex".into(),
             bearer_token: None,
+            reasoning_effort: None,
         };
 
         let production = build_production_model(&config, Some(10_000), Vec::new()).unwrap();
@@ -1300,17 +1340,36 @@ mod tests {
         assert_eq!(production.model_name, "gpt-5.1-codex");
         assert_eq!(production.context_budget_chars, 30_000);
         assert_eq!(
-            production.port.agent.model.provider.as_deref(),
+            production.port.agent.model["provider"].as_str(),
             Some("openai")
         );
-        assert_eq!(production.port.agent.model.id, "gpt-5.1-codex");
+        assert_eq!(production.port.agent.model["id"], "gpt-5.1-codex");
+    }
+
+    #[test]
+    fn production_factory_maps_reasoning_effort_to_prompty_options() {
+        let config = LlmConfig {
+            provider: LlmProvider::Openai,
+            endpoint: String::new(),
+            api_key: "test-key".into(),
+            model: "gpt-5.1-codex".into(),
+            bearer_token: None,
+            reasoning_effort: Some("high".into()),
+        };
+
+        let production = build_production_model(&config, Some(10_000), Vec::new()).unwrap();
+
+        assert_eq!(
+            production.port.agent.model["options"]["reasoningEffort"],
+            "high"
+        );
     }
 
     #[test]
     fn prompty_production_dependencies_remain_pinned_to_a_single_revision() {
         // Production Prompty crates are pinned to one immutable crates.io release.
         // Bump this constant whenever the pin moves.
-        const VERSION: &str = "2.0.0-beta.4";
+        const VERSION: &str = "2.0.0";
         let manifest = include_str!("../Cargo.toml");
         // The lockfile lives at the workspace root, three directories above
         // this crate source file (crates/harness-prompty/src/model.rs).
@@ -1334,6 +1393,7 @@ mod tests {
             api_key: String::new(),
             model: "gpt-4o".into(),
             bearer_token: None,
+            reasoning_effort: None,
         };
 
         let error = build_production_model(&config, None, Vec::new())
@@ -1351,6 +1411,7 @@ mod tests {
             api_key: "legacy-key".into(),
             model: "gpt-4o".into(),
             bearer_token: Some("entra-token".into()),
+            reasoning_effort: None,
         };
 
         let production = build_production_model(&config, None, Vec::new()).unwrap();

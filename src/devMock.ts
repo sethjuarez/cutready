@@ -941,7 +941,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         { id: "gpt-4o", owned_by: "openai", capabilities: { vision: "true", chat_completion: "true", responses_api: "false" }, context_length: 128000 },
         { id: "gpt-4o-mini", owned_by: "openai", capabilities: { vision: "true", chat_completion: "true", responses_api: "false" }, context_length: 128000 },
         { id: "gpt-4-turbo", owned_by: "openai", capabilities: { vision: "true", chat_completion: "true", responses_api: "false" }, context_length: 128000 },
-        { id: "gpt-5-codex", owned_by: "openai", capabilities: { vision: "false", chat_completion: "false", responses_api: "true" }, context_length: 272000 },
+        { id: "gpt-5-codex", owned_by: "openai", capabilities: { vision: "false", chat_completion: "false", responses_api: "true", reasoning_effort: "true", reasoning_efforts: "low,medium,high,xhigh" }, context_length: 272000 },
       ];
     case "list_azure_subscriptions":
       return [

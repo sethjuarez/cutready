@@ -31,6 +31,9 @@ pub struct LlmConfig {
     /// ****** (Entra OAuth for Azure/Foundry).
     #[serde(default)]
     pub bearer_token: Option<String>,
+    /// Optional model reasoning effort. None means provider/model default.
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
 }
 
 /// Whether a model must be driven through the Responses API rather than

@@ -4,18 +4,25 @@ import {
   askModeApprovedSystemInstruction,
   askModeCancelledMessage,
   buildChatWorkingNotes,
+  buildLiveChatWorkingNotes,
   canUseChatMutationTools,
   cancelAgentChatRun,
   chatSessionTitle,
   classifyError,
   describeToolCall,
   fetchWebReferenceContent,
+  formatRunDuration,
+  formatRunTokens,
+  harnessRunLabel,
   resolveWebReferenceContent,
   extractInlineToolActivity,
   isChatScrolledNearBottom,
+  providerRunLabel,
   reconcileMessagesForDisplay,
   scrollChatContainerToBottom,
   shouldRequestChatMutationApproval,
+  toolResultActivityLevel,
+  workingNotesPreview,
 } from "../components/ChatPanel";
 import type { ChatMessage } from "../types/sketch";
 import {
@@ -32,6 +39,20 @@ describe("classifyError", () => {
     const { title, suggestion } = classifyError(err);
     expect(title).toBe("Azure sign-in expired");
     expect(suggestion).toContain("Settings → AI → Connections");
+  });
+
+  describe("toolResultActivityLevel", () => {
+    it("keeps successful tool results as success", () => {
+      expect(toolResultActivityLevel("success", "Read note")).toBe("success");
+    });
+
+    it("treats explicit tool failures as warnings because the turn can recover", () => {
+      expect(toolResultActivityLevel("failure", "Error reading note: missing.md")).toBe("warn");
+    });
+
+    it("treats legacy error-looking tool results as warnings", () => {
+      expect(toolResultActivityLevel(undefined, "Error reading note: missing.md")).toBe("warn");
+    });
   });
 
   it("recognizes AADSTS token-expiry errors as an expired Azure sign-in", () => {
@@ -287,6 +308,18 @@ describe("applyStreamingDeltaReset", () => {
       drafts: ["I will check the sketches"],
     });
   });
+
+  it("can capture pre-tool prose without keeping it in the visible answer", () => {
+    expect(applyStreamingDeltaReset({
+      buffer: "I will inspect before answering.",
+      visible: "",
+      drafts: [],
+    })).toEqual({
+      buffer: "",
+      visible: "",
+      drafts: ["I will inspect before answering."],
+    });
+  });
 });
 
 describe("buildChatWorkingNotes", () => {
@@ -304,6 +337,61 @@ describe("buildChatWorkingNotes", () => {
     });
   });
 
+});
+
+describe("buildLiveChatWorkingNotes", () => {
+  it("treats live streamed answer text as provisional working-note draft", () => {
+    expect(buildLiveChatWorkingNotes({
+      drafts: ["Earlier draft."],
+      thinking: "",
+      streamingText: "I am checking the sketch before answering.",
+    })).toEqual({
+      drafts: ["Earlier draft.", "I am checking the sketch before answering."],
+    });
+  });
+
+  it("keeps typed thinking alongside provisional draft text", () => {
+    expect(buildLiveChatWorkingNotes({
+      drafts: [],
+      thinking: "Considering tool choice.",
+      streamingText: "I will inspect first.",
+    })).toEqual({
+      drafts: ["I will inspect first."],
+      thinking: "Considering tool choice.",
+    });
+  });
+});
+
+describe("workingNotesPreview", () => {
+  it("prefers the current thinking stream over draft text", () => {
+    expect(workingNotesPreview({
+      drafts: ["Draft before tools."],
+      thinking: "  Considering the next tool.  ",
+    })).toBe("Considering the next tool.");
+  });
+
+  it("falls back to the latest draft and truncates long text", () => {
+    expect(workingNotesPreview({
+      drafts: ["First draft.", "Second draft has a lot more detail."],
+    }, 18)).toBe("Second draft has…");
+  });
+});
+
+describe("run details formatting", () => {
+  it("formats provider and harness labels for the run details popover", () => {
+    expect(providerRunLabel("microsoft_foundry")).toBe("Microsoft Foundry");
+    expect(providerRunLabel("openai")).toBe("OpenAI");
+    expect(harnessRunLabel("prompty")).toBe("Prompty");
+    expect(harnessRunLabel("copilot-sdk")).toBe("GitHub Copilot");
+  });
+
+  it("formats run duration and token counts without implying unknown precision", () => {
+    expect(formatRunDuration(850)).toBe("850ms");
+    expect(formatRunDuration(12_400)).toBe("12s");
+    expect(formatRunDuration(undefined)).toBe("—");
+    expect(formatRunTokens(8142)).toBe("8,142");
+    expect(formatRunTokens(undefined)).toBe("—");
+  });
 });
 
 describe("Ask Mode chat mutation gating", () => {

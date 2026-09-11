@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 
-const command = process.platform === "win32" ? "npm.cmd" : "npm";
-const child = spawn(command, ["run", "debug"], {
+const command = process.platform === "win32" ? "cmd" : "npm";
+const args = process.platform === "win32" ? ["/c", "npm", "run", "debug"] : ["run", "debug"];
+const child = spawn(command, args, {
   stdio: "inherit",
   shell: false,
 });

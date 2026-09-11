@@ -1,4 +1,4 @@
-import type { AiProviderConfig, AiProviderKind, AiAuthMode } from "../hooks/useSettings";
+import type { AiProviderConfig, AiProviderKind, AiAuthMode, AiReasoningEffort } from "../hooks/useSettings";
 
 /**
  * Identifier of the agent harness (runtime). Known built-ins are `"prompty"`,
@@ -17,8 +17,10 @@ export interface ProviderSettings {
   aiContextLength?: number;
   aiVisionMode?: "off" | "notes" | "notes_and_sketches";
   aiModelSupportsVision?: string;
+  aiModelReasoningEfforts?: string;
   aiWebAccess?: "disabled" | "enabled";
   aiMaxToolRounds?: number;
+  aiReasoningEffort?: AiReasoningEffort;
   aiProviders?: AiProviderConfig[];
   aiActiveProviderId?: string;
   aiDefaultProviderId?: string;
@@ -38,11 +40,13 @@ export interface ProviderConfigInput {
   accessToken: string;
   contextLength?: number;
   modelSupportsVision?: string;
+  modelReasoningEfforts?: string;
   providerId?: string;
   providerName?: string;
   aiVisionMode?: "off" | "notes" | "notes_and_sketches";
   aiWebAccess?: "disabled" | "enabled";
   aiMaxToolRounds?: number;
+  aiReasoningEffort?: AiReasoningEffort;
 }
 
 function providerLabel(provider: AiProviderKind): string {
@@ -72,9 +76,48 @@ export function createAiProviderConfig(provider: AiProviderKind = "azure_openai"
   };
 }
 
+export const REASONING_EFFORT_OPTIONS: AiReasoningEffort[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
+
+function parseReasoningEfforts(value: string | undefined): AiReasoningEffort[] {
+  const valid = new Set(REASONING_EFFORT_OPTIONS);
+  return (value ?? "")
+    .split(",")
+    .map((item) => item.trim().toLowerCase() as AiReasoningEffort)
+    .filter((item) => valid.has(item));
+}
+
+export function supportedReasoningEfforts(
+  provider: string | undefined,
+  model: string | undefined,
+  discoveredEfforts?: string,
+): AiReasoningEffort[] {
+  const discovered = parseReasoningEfforts(discoveredEfforts);
+  if (discovered.length > 0) return discovered;
+  const providerKey = (provider ?? "").toLowerCase();
+  const modelKey = (model ?? "").toLowerCase();
+  if (!modelKey) return [];
+  const isOpenAiWireProvider = providerKey === "openai" || providerKey === "azure_openai" || providerKey === "microsoft_foundry";
+  if (!isOpenAiWireProvider) return [];
+  if (modelKey.includes("gpt-6")) return ["low", "medium", "high", "xhigh", "max"];
+  if (modelKey.includes("gpt-5")) return ["low", "medium", "high", "xhigh"];
+  if (modelKey.startsWith("o1") || modelKey.startsWith("o3") || modelKey.startsWith("o4")) return ["low", "medium", "high"];
+  return [];
+}
+
+export function normalizeReasoningEffort(
+  effort: string | undefined,
+  provider: string | undefined,
+  model: string | undefined,
+  discoveredEfforts?: string,
+): AiReasoningEffort {
+  const value = (effort ?? "").trim().toLowerCase() as AiReasoningEffort;
+  if (!value) return "";
+  return supportedReasoningEfforts(provider, model, discoveredEfforts).includes(value) ? value : "";
+}
+
 export function providerToConfigInput(
   provider: AiProviderConfig,
-  settings: Pick<ProviderSettings, "aiVisionMode" | "aiWebAccess" | "aiMaxToolRounds">,
+  settings: Pick<ProviderSettings, "aiVisionMode" | "aiWebAccess" | "aiMaxToolRounds" | "aiReasoningEffort" | "aiModelReasoningEfforts">,
   secrets: ProviderSecrets = {},
 ): ProviderConfigInput {
   return {
@@ -86,6 +129,7 @@ export function providerToConfigInput(
     accessToken: secrets.accessToken ?? "",
     contextLength: provider.contextLength,
     modelSupportsVision: provider.modelSupportsVision,
+    modelReasoningEfforts: settings.aiModelReasoningEfforts,
     providerId: provider.id,
     providerName: provider.name,
     ...settings,
@@ -151,6 +195,8 @@ export function flatProviderInput(settings: ProviderSettings): ProviderConfigInp
     accessToken: settings.aiAccessToken,
     contextLength: settings.aiContextLength,
     modelSupportsVision: settings.aiModelSupportsVision,
+    modelReasoningEfforts: settings.aiModelReasoningEfforts,
+    aiReasoningEffort: settings.aiReasoningEffort,
   };
 }
 
@@ -171,11 +217,15 @@ export function buildProviderConfig(
   const requestInput = "provider" in settings;
   const contextLength = requestInput ? settings.contextLength : settings.aiContextLength;
   const modelSupportsVision = requestInput ? settings.modelSupportsVision : settings.aiModelSupportsVision;
+  const modelReasoningEfforts = requestInput ? settings.modelReasoningEfforts : settings.aiModelReasoningEfforts;
+  const provider = requestInput ? settings.provider : settings.aiProvider;
+  const model = (requestInput ? settings.model : settings.aiModel) || "unused";
+  const reasoningEffort = normalizeReasoningEffort(settings.aiReasoningEffort, provider, model, modelReasoningEfforts);
   return {
-    provider: requestInput ? settings.provider : settings.aiProvider,
+    provider,
     endpoint: requestInput ? settings.endpoint : settings.aiEndpoint,
     api_key: requestInput ? settings.apiKey : settings.aiApiKey,
-    model: (requestInput ? settings.model : settings.aiModel) || "unused",
+    model,
     bearer_token:
       (requestInput ? settings.authMode : settings.aiAuthMode) === "azure_oauth"
         ? (requestInput ? settings.accessToken : settings.aiAccessToken)
@@ -188,6 +238,8 @@ export function buildProviderConfig(
         : modelSupportsVision === "true",
     web_access: settings.aiWebAccess || "disabled",
     max_tool_rounds: Math.max(1, Math.min(200, Number(settings.aiMaxToolRounds || 50))),
+    reasoning_effort: reasoningEffort || null,
+    model_reasoning_efforts: modelReasoningEfforts || null,
     provider_id: requestInput ? settings.providerId : undefined,
     provider_name: requestInput ? settings.providerName : undefined,
     execution_engine: executionEngine,

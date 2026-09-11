@@ -1,4 +1,4 @@
-import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from "react";
+import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject, type UIEvent } from "react";
 import { invoke, listen } from "../services/tauri";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { AgentRunInspector } from "./AgentRunInspector";
@@ -10,23 +10,30 @@ import { contentTypeTone } from "../utils/contentTypeTheme";
 
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useAiApplyGateStore } from "../stores/aiApplyGateStore";
-import { useSettings, type AgentPreset } from "../hooks/useSettings";
+import { loadProviderSecrets } from "../hooks/useSecretStore";
+import { useSettings, type AgentPreset, type AiReasoningEffort } from "../hooks/useSettings";
 import { BUILT_IN_AGENTS, resolveAgentPrompt } from "../agents/builtInAgents";
 import {
   activeProviderInput,
   buildProviderConfig,
   isAiProviderConfigured,
   isProviderInputConfigured,
+  providerById,
+  providerToConfigInput,
+  supportedReasoningEfforts,
+  normalizeReasoningEffort,
 } from "../utils/providerConfig";
 import {
   buildEffectiveProviderInput as buildEffectiveProviderInputShared,
   buildRefreshedProviderInput,
+  resolveEffectiveProvider,
   resolveAgentModelOverride,
 } from "../utils/agentProvider";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
-import type { ChatMessage, ChatToolActivity, ChatWorkingNotes } from "../types/sketch";
+import type { ChatMessage, ChatRunDetails, ChatToolActivity, ChatWorkingNotes } from "../types/sketch";
 import {
   Sparkles,
+  Brain,
   Clock,
   Send,
   FileText,
@@ -41,6 +48,7 @@ import {
   Menu,
   Square,
   Activity,
+  CircleHelp,
   Database,
   Maximize2,
   Minimize2,
@@ -68,6 +76,14 @@ interface AgentContextItem {
 function boundedToolActivityResult(content: string): string {
   if (content.length <= TOOL_ACTIVITY_PREVIEW_MAX_CHARS) return content;
   return `${content.slice(0, TOOL_ACTIVITY_PREVIEW_MAX_CHARS).trimEnd()}\n\n[Tool result preview truncated]`;
+}
+
+export function toolResultActivityLevel(
+  status: string | undefined,
+  resultText: string,
+): "success" | "warn" {
+  if (status) return status === "success" ? "success" : "warn";
+  return resultText.trimStart().startsWith("Error") ? "warn" : "success";
 }
 
 function formatContextBytes(bytes: number): string {
@@ -148,6 +164,21 @@ export function buildChatWorkingNotes(input: { drafts: string[]; thinking: strin
   };
 }
 
+export function buildLiveChatWorkingNotes(input: { drafts: string[]; thinking: string; streamingText: string }): ChatWorkingNotes | undefined {
+  const liveDrafts = input.streamingText.trim()
+    ? [...input.drafts, input.streamingText]
+    : input.drafts;
+  return buildChatWorkingNotes({ drafts: liveDrafts, thinking: input.thinking });
+}
+
+export function workingNotesPreview(notes: ChatWorkingNotes, maxLength = 120): string {
+  const drafts = notes.drafts ?? [];
+  const raw = notes.thinking?.trim() || drafts[drafts.length - 1]?.trim() || "";
+  const normalized = raw.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
 export function extractInlineToolActivity(message: ChatMessage, followingMessages: ChatMessage[]): ChatToolActivity[] {
   const toolCalls = message.tool_calls ?? [];
   if (toolCalls.length === 0) return [];
@@ -222,6 +253,63 @@ function textContent(content: ChatMessage["content"]): string {
 interface AgentChatResult {
   messages: ChatMessage[];
   response: string;
+  provider: string;
+  model: string;
+  execution_engine: string;
+  agent_id: string;
+  run_id: string;
+  elapsed_ms: number;
+  reasoning_effort?: string | null;
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+}
+
+export function providerRunLabel(provider: string | undefined): string {
+  switch ((provider ?? "").toLowerCase()) {
+    case "microsoft_foundry":
+      return "Microsoft Foundry";
+    case "azure_openai":
+      return "Azure OpenAI";
+    case "openai":
+      return "OpenAI";
+    case "anthropic":
+      return "Anthropic";
+    case "copilot-sdk":
+      return "GitHub Copilot";
+    default:
+      return provider?.trim() || "—";
+  }
+}
+
+export function harnessRunLabel(harness: string | undefined): string {
+  switch ((harness ?? "").toLowerCase()) {
+    case "prompty":
+      return "Prompty";
+    case "agentive":
+      return "Agentive";
+    case "copilot-sdk":
+      return "GitHub Copilot";
+    default:
+      return harness?.trim() || "—";
+  }
+}
+
+export function formatRunDuration(ms: number | undefined): string {
+  if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) return "—";
+  if (ms < 1_000) return `${Math.round(ms)}ms`;
+  const seconds = ms / 1_000;
+  if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  return `${minutes}m ${remainingSeconds}s`;
+}
+
+export function formatRunTokens(tokens: number | undefined): string {
+  if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens < 0) return "—";
+  return Math.round(tokens).toLocaleString();
 }
 
 const ROW_TARGETED_SKETCH_MUTATION_TOOLS = new Set([
@@ -607,6 +695,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const [showContextPicker, setShowContextPicker] = useState(false);
   const [contextFilter, setContextFilter] = useState("");
   const [showModelPicker, setShowModelPicker] = useState(false);
+  const [showReasoningPicker, setShowReasoningPicker] = useState(false);
   const [showAgentPicker, setShowAgentPicker] = useState(false);
   const [expandedWebRef, setExpandedWebRef] = useState<string | null>(null);
   const streamingText = useAppStore((s) => s.chatStreamingText);
@@ -632,6 +721,14 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     thinkingRef.current = streamingThinking;
     workingDraftsRef.current = streamingDrafts;
   }, [streamingDrafts, streamingText, streamingThinking]);
+  const liveWorkingNotes = useMemo(
+    () => buildLiveChatWorkingNotes({
+      drafts: streamingDrafts,
+      thinking: streamingThinking,
+      streamingText,
+    }),
+    [streamingDrafts, streamingText, streamingThinking],
+  );
   const refreshSketchAfterMutation = useCallback((mutation: { path: string | null; rows: number[]; toolName: string }) => {
     const mutationPath = normalizeMutationPath(mutation.path);
     const fallbackPath = normalizeMutationPath(useAppStore.getState().activeSketchPath);
@@ -739,6 +836,19 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           break;
         }
         case "tool_call":
+          if (streamingRef.current.trim()) {
+            const resetState = applyStreamingDeltaReset({
+              buffer: streamingRef.current,
+              visible: "",
+              drafts: workingDraftsRef.current,
+            });
+            streamingRef.current = resetState.buffer;
+            workingDraftsRef.current = resetState.drafts;
+            setChatStreamingState({
+              chatStreamingText: resetState.buffer,
+              chatStreamingDrafts: resetState.drafts,
+            });
+          }
           // Stash args so tool_result can use them (e.g. to extract path)
           if (ev.name) {
             const queue = pendingToolArgsRef.current[ev.name] ?? [];
@@ -758,15 +868,14 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           const resultText = ev.result ?? "";
           // Prefer the explicit host-owned outcome; fall back to text inspection
           // only for historical events that predate the status field.
-          const isSuccess = ev.status
-            ? ev.status === "success"
-            : !resultText.startsWith("Error");
+          const level = toolResultActivityLevel(ev.status, resultText);
+          const isSuccess = level === "success";
           addActivityEntries([{
             id: crypto.randomUUID(),
             timestamp: new Date(),
             source: `result ${ev.name ?? ""}`.trim(),
             content: boundedToolActivityResult(resultText),
-            level: isSuccess ? "success" : "error",
+            level,
           }]);
           // Auto-refresh sidebar and open sketches after tool mutations
           if (isSuccess && SKETCH_MUTATION_TOOLS.has(toolName)) {
@@ -840,7 +949,8 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const autocompleteRef = useRef<HTMLDivElement>(null);
   const contextPickerRef = useRef<HTMLDivElement>(null);
   const modelPickerRef = useRef<HTMLDivElement>(null);
-  const agentPickerRef= useRef<HTMLDivElement>(null);
+  const reasoningPickerRef = useRef<HTMLDivElement>(null);
+  const agentPickerRef = useRef<HTMLDivElement>(null);
 
   // Constrain dropdown heights to available viewport space
   const acMaxH = useDropdownMaxHeight(autocompleteRef, showAutocomplete);
@@ -858,6 +968,38 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     const id = settings.aiSelectedAgent || "planner";
     return allAgents.find((a) => a.id === id) ?? BUILT_IN_AGENTS[0];
   }, [settings.aiSelectedAgent, allAgents]);
+  const effectiveProvider = useMemo(
+    () => resolveEffectiveProvider(settings, selectedAgent),
+    [settings, selectedAgent],
+  );
+  const selectedAgentModelOverride = useMemo(
+    () => resolveAgentModelOverride(selectedAgent, settings.aiAgentModelOverrides),
+    [selectedAgent, settings.aiAgentModelOverrides],
+  );
+  const effectiveModel = selectedAgentModelOverride || effectiveProvider?.model || settings.aiModel || "";
+  const effectiveModelReasoningEfforts = selectedAgentModelOverride ? "" : settings.aiModelReasoningEfforts;
+  const reasoningEfforts = useMemo(
+    () => supportedReasoningEfforts(effectiveProvider?.provider, effectiveModel, effectiveModelReasoningEfforts),
+    [effectiveModel, effectiveModelReasoningEfforts, effectiveProvider?.provider],
+  );
+  const effectiveReasoningEffort = useMemo(
+    () => normalizeReasoningEffort(settings.aiReasoningEffort, effectiveProvider?.provider, effectiveModel, effectiveModelReasoningEfforts),
+    [effectiveModel, effectiveModelReasoningEfforts, effectiveProvider?.provider, settings.aiReasoningEffort],
+  );
+  const latestRunDetails = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const runDetails = messages[i].cutready?.runDetails;
+      if (runDetails) return runDetails;
+    }
+    return null;
+  }, [messages]);
+  const visibleRunDetails = useMemo<ChatRunDetails>(() => latestRunDetails ?? {
+    provider: effectiveProvider?.provider ?? "",
+    model: effectiveModel,
+    execution_engine: settings.aiAgentExecutionEngine || "prompty",
+    agent_id: selectedAgent.id,
+    reasoning_effort: effectiveReasoningEffort || null,
+  }, [effectiveModel, effectiveProvider?.provider, effectiveReasoningEffort, latestRunDetails, selectedAgent.id, settings.aiAgentExecutionEngine]);
   const [providerConfigured, setProviderConfigured] = useState<boolean | null>(null);
 
   const handleMessagesScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
@@ -887,15 +1029,16 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
 
   // Click-outside to close pickers
   useEffect(() => {
-    if (!showContextPicker && !showModelPicker && !showAgentPicker) return;
+    if (!showContextPicker && !showModelPicker && !showReasoningPicker && !showAgentPicker) return;
     const handle = (e: MouseEvent) => {
       if (showContextPicker && contextPickerRef.current && !contextPickerRef.current.contains(e.target as Node)) setShowContextPicker(false);
       if (showModelPicker && modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) setShowModelPicker(false);
+      if (showReasoningPicker && reasoningPickerRef.current && !reasoningPickerRef.current.contains(e.target as Node)) setShowReasoningPicker(false);
       if (showAgentPicker && agentPickerRef.current && !agentPickerRef.current.contains(e.target as Node)) setShowAgentPicker(false);
     };
     window.addEventListener("mousedown", handle);
     return () => window.removeEventListener("mousedown", handle);
-  }, [showContextPicker, showModelPicker, showAgentPicker]);
+  }, [showContextPicker, showModelPicker, showReasoningPicker, showAgentPicker]);
 
   // All referenceable files
   const allFiles = useMemo<FileReference[]>(() => {
@@ -1225,6 +1368,12 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
         // Apply per-agent model override when configured; otherwise use the provider model.
         ...(modelOverride ? { model: modelOverride } : {}),
       };
+      config.reasoning_effort = normalizeReasoningEffort(
+        settings.aiReasoningEffort,
+        config.provider,
+        config.model,
+        modelOverride ? "" : effectiveProviderInput.modelReasoningEfforts,
+      ) || null;
 
       // Build agent prompts map for sub-agent delegation
       const agentPrompts: Record<string, string> = {};
@@ -1259,6 +1408,9 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
         assistantResponse: result.response,
         logger: (message, details) => console.warn(`[chat] ${message}`, details),
       });
+      const toolCallCount = backendMessages.filter(
+        (m) => m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0,
+      ).reduce((n, m) => n + (m.tool_calls?.length ?? 0), 0);
       const workingNotes = buildChatWorkingNotes({
         drafts: workingDraftsRef.current,
         thinking: thinkingRef.current,
@@ -1283,11 +1435,36 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           };
         }
       }
+      const finalAssistantIndex = (() => {
+        for (let i = backendMessages.length - 1; i >= 0; i -= 1) {
+          if (backendMessages[i].role === "assistant" && textContent(backendMessages[i].content).trim() === result.response.trim()) {
+            return i;
+          }
+        }
+        return -1;
+      })();
+      if (finalAssistantIndex >= 0) {
+        const finalAssistant = backendMessages[finalAssistantIndex];
+        backendMessages[finalAssistantIndex] = {
+          ...finalAssistant,
+          cutready: {
+            ...finalAssistant.cutready,
+            runDetails: {
+              provider: result.provider,
+              model: result.model,
+              execution_engine: result.execution_engine,
+              agent_id: result.agent_id,
+              run_id: result.run_id,
+              elapsed_ms: result.elapsed_ms,
+              reasoning_effort: result.reasoning_effort,
+              tool_calls: toolCallCount,
+              usage: result.usage,
+            },
+          },
+        };
+      }
 
       // Log response to activity
-      const toolCallCount = backendMessages.filter(
-        (m) => m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0,
-      ).reduce((n, m) => n + (m.tool_calls?.length ?? 0), 0);
       addActivityEntries([{
         id: crypto.randomUUID(),
         timestamp: new Date(),
@@ -1695,30 +1872,15 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
 
         {loading && (
           <div className={chatFocusMode ? "mx-auto w-full max-w-5xl px-3.5 py-2" : "px-3.5 py-2"}>
-            {streamingText ? (
-              <div className="w-full max-w-[70ch] min-w-0 rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/80 shadow-sm">
-                <div className="flex items-center gap-2 border-b border-[rgb(var(--color-border-subtle))] px-4 py-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
-                    <IconSparkles size={11} />
-                  </span>
-                  {selectedAgent.name} is writing
-                </div>
-                <div className="px-5 py-4 text-[14px] leading-[1.78] text-[rgb(var(--color-text)/0.92)]">
-                  <MarkdownContent content={streamingText} projectRoot={currentProject?.root} />
-                  <span className="inline-block w-1.5 h-4 bg-[rgb(var(--color-accent))] animate-pulse ml-0.5 align-text-bottom rounded-sm" />
-                </div>
-              </div>
-            ) : (
-              <span className="text-xs text-[rgb(var(--color-text-secondary))] italic">{streamingStatus || "Thinking…"}</span>
-            )}
-            {buildChatWorkingNotes({ drafts: streamingDrafts, thinking: streamingThinking }) && (
-              <div className="mt-2 w-full max-w-[70ch]">
+            {liveWorkingNotes ? (
+              <div className="w-full max-w-[70ch]">
                 <WorkingNotesInline
-                  notes={buildChatWorkingNotes({ drafts: streamingDrafts, thinking: streamingThinking })!}
-                  defaultOpen
+                  notes={liveWorkingNotes}
                   live
                 />
               </div>
+            ) : (
+              <span className="text-xs text-[rgb(var(--color-text-secondary))] italic">{streamingStatus || "Thinking…"}</span>
             )}
           </div>
         )}
@@ -1992,7 +2154,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           </div>
 
           {/* Model picker */}
-          <div className="relative" ref={modelPickerRef}>
+          <div className="relative flex items-center gap-1" ref={modelPickerRef}>
             <button
               className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
                 showModelPicker
@@ -2000,14 +2162,32 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                   : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))]"
               }`}
               onClick={() => setShowModelPicker(!showModelPicker)}
-              title="Select Model"
+              title={effectiveProvider?.name ? `Select Model (${effectiveProvider.name})` : "Select Model"}
             >
-              <span className="max-w-[100px] truncate">{settings.aiModel || "Model"}</span>
+              <span className="max-w-[100px] truncate">{effectiveModel || "Model"}</span>
               <IconChevronDown size={10} />
             </button>
+            <RunDetailsPopover
+              details={visibleRunDetails}
+              status={latestRunDetails ? "Completed" : "Configured"}
+            />
+            {reasoningEfforts.length > 0 && (
+              <ReasoningEffortPicker
+                value={effectiveReasoningEffort}
+                efforts={reasoningEfforts}
+                open={showReasoningPicker}
+                pickerRef={reasoningPickerRef}
+                onToggle={() => setShowReasoningPicker((value) => !value)}
+                onChange={(next) => {
+                  void updateSetting("aiReasoningEffort", next);
+                  setShowReasoningPicker(false);
+                }}
+              />
+            )}
             {showModelPicker && (
               <ModelPickerDropdown
-                currentModel={settings.aiModel}
+                currentModel={effectiveModel}
+                providerId={effectiveProvider?.id}
                 onClose={() => setShowModelPicker(false)}
                 maxHeight={modelMaxH}
               />
@@ -2315,10 +2495,159 @@ function MessageRow({
   return null;
 }
 
+function RunDetailsPopover({
+  details,
+  toolCount = 0,
+  status = "Completed",
+}: {
+  details: ChatRunDetails;
+  toolCount?: number;
+  status?: "Completed" | "Configured";
+}) {
+  const [open, setOpen] = useState(false);
+  const usage = details.usage;
+  const effectiveToolCount = details.tool_calls ?? toolCount;
+  const rows = [
+    ["Harness", harnessRunLabel(details.execution_engine)],
+    ["Provider", providerRunLabel(details.provider)],
+    ["Model", details.model || "—"],
+    ["Reasoning", reasoningEffortLabel(details.reasoning_effort ?? "")],
+    ["Agent", details.agent_id || "—"],
+    ["Duration", formatRunDuration(details.elapsed_ms)],
+    ["Tools", `${effectiveToolCount} call${effectiveToolCount === 1 ? "" : "s"}`],
+    ["Tokens", usage ? `${formatRunTokens(usage.prompt_tokens)} in / ${formatRunTokens(usage.completion_tokens)} out` : "—"],
+  ];
+
+  return (
+    <span className="relative inline-flex items-center">
+      <button
+        type="button"
+        aria-label="Show run details"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setOpen(false);
+            event.currentTarget.blur();
+          }
+        }}
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/50 text-[rgb(var(--color-text-secondary))]/70 transition-colors hover:border-[rgb(var(--color-accent))]/45 hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]/35"
+        title="Show run details"
+      >
+        <CircleHelp className="h-3.5 w-3.5" />
+      </button>
+      {open && (
+        <span
+          role="dialog"
+          aria-label="Run details"
+          className="absolute bottom-7 right-0 z-[100] block w-72 rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] p-3 text-left normal-case tracking-normal text-[rgb(var(--color-text))] shadow-xl"
+        >
+          <span className="mb-2 flex items-center justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
+              Run details
+            </span>
+            <span className="rounded-full bg-[rgb(var(--color-accent))]/10 px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--color-accent))]">
+              {status}
+            </span>
+          </span>
+          <span className="grid grid-cols-[5.75rem_minmax(0,1fr)] gap-x-3 gap-y-1.5">
+            {rows.map(([label, value]) => (
+              <span key={label} className="contents">
+                <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))]/75">
+                  {label}
+                </span>
+                <span className="truncate font-mono text-[11px] normal-case tracking-normal text-[rgb(var(--color-text))]/90">
+                  {value}
+                </span>
+              </span>
+            ))}
+          </span>
+          {details.run_id && (
+            <span className="mt-2 block truncate border-t border-[rgb(var(--color-border-subtle))] pt-2 font-mono text-[10px] normal-case tracking-normal text-[rgb(var(--color-text-secondary))]/70">
+              {details.run_id}
+            </span>
+          )}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function reasoningEffortLabel(effort: string | undefined): string {
+  if (!effort) return "Default";
+  return effort === "xhigh" ? "X-high" : effort[0].toUpperCase() + effort.slice(1);
+}
+
+function ReasoningEffortPicker({
+  value,
+  efforts,
+  open,
+  pickerRef,
+  onToggle,
+  onChange,
+}: {
+  value: string;
+  efforts: string[];
+  open: boolean;
+  pickerRef: RefObject<HTMLDivElement | null>;
+  onToggle: () => void;
+  onChange: (value: AiReasoningEffort) => void;
+}) {
+  const currentLabel = reasoningEffortLabel(value);
+  const options = ["", ...efforts] as AiReasoningEffort[];
+
+  return (
+    <div className="relative" ref={pickerRef}>
+      <button
+        type="button"
+        aria-label="Set reasoning effort"
+        aria-expanded={open}
+        onClick={onToggle}
+        className={`flex h-[26px] items-center gap-1 rounded-full border px-2 text-[11px] transition-colors ${
+          open
+            ? "border-[rgb(var(--color-accent))]/45 bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
+            : "border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/35 text-[rgb(var(--color-text-secondary))] hover:border-[rgb(var(--color-accent))]/45 hover:text-[rgb(var(--color-text))]"
+        }`}
+        title="Set reasoning effort"
+      >
+        <Brain className="h-3.5 w-3.5" />
+        <span className="max-w-[82px] truncate">{currentLabel}</span>
+        <IconChevronDown size={10} />
+      </button>
+      {open && (
+        <div className="absolute bottom-full right-0 z-[100] mb-1 w-44 overflow-hidden rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] py-1 shadow-xl">
+          <div className="border-b border-[rgb(var(--color-border-subtle))] px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/80">
+            Reasoning
+          </div>
+          {options.map((option) => {
+            const selected = option === value;
+            return (
+              <button
+                key={option || "default"}
+                type="button"
+                onClick={() => onChange(option)}
+                className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-[11px] transition-colors ${
+                  selected
+                    ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text))]"
+                    : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+                }`}
+              >
+                <span>{reasoningEffortLabel(option)}</span>
+                {selected && <IconCheck size={11} />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WorkingNotesInline({ notes, defaultOpen = false, live = false }: { notes: ChatWorkingNotes; defaultOpen?: boolean; live?: boolean }) {
   const [expanded, setExpanded] = useState(defaultOpen);
   const drafts = notes.drafts ?? [];
   const itemCount = drafts.length + (notes.thinking ? 1 : 0);
+  const preview = workingNotesPreview(notes);
   if (itemCount === 0) return null;
 
   return (
@@ -2338,6 +2667,11 @@ function WorkingNotesInline({ notes, defaultOpen = false, live = false }: { note
         <span className="rounded-full border border-[rgb(var(--color-border-subtle))] px-1.5 py-0.5 text-[10px] tabular-nums text-[rgb(var(--color-text-secondary))]/80">
           {itemCount}
         </span>
+        {preview && (
+          <span className="min-w-0 flex-1 truncate text-[11px] text-[rgb(var(--color-text-secondary))]/75">
+            {preview}
+          </span>
+        )}
         <ChevronDown className={`ml-auto h-3 w-3 transition-transform ${expanded ? "rotate-180" : ""}`} />
       </button>
       {expanded && <div className="space-y-3 px-4 pb-4">
@@ -2700,20 +3034,25 @@ const MODEL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 function ModelPickerDropdown({
   currentModel,
+  providerId,
   onClose,
   maxHeight,
 }: {
   currentModel: string;
+  providerId?: string;
   onClose: () => void;
   maxHeight: number;
 }) {
   const { settings, updateSetting } = useSettings();
   const [models, setModels] = useState<string[]>(modelCache.models);
   const [loadingModels, setLoadingModels] = useState(false);
+  const provider = providerId ? providerById(settings, providerId) : null;
 
   useEffect(() => {
     let cancelled = false;
-    const cacheKey = `${settings.aiProvider}|${settings.aiEndpoint}|${settings.aiAuthMode}`;
+    const cacheKey = provider
+      ? `${provider.id}|${provider.provider}|${provider.endpoint}|${provider.authMode}`
+      : `${settings.aiProvider}|${settings.aiEndpoint}|${settings.aiAuthMode}`;
 
     // Use cache if key matches and not expired
     if (modelCache.key === cacheKey && modelCache.models.length > 0 && Date.now() - modelCache.ts < MODEL_CACHE_TTL) {
@@ -2724,13 +3063,19 @@ function ModelPickerDropdown({
     async function load() {
       setLoadingModels(true);
       try {
-        const config = {
-          provider: settings.aiProvider,
-          endpoint: settings.aiEndpoint,
-          api_key: settings.aiApiKey,
-          model: settings.aiModel || "unused",
-          bearer_token: settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null,
-        };
+        const secrets = provider && provider.id !== settings.aiActiveProviderId
+          ? await loadProviderSecrets(provider.id)
+          : { apiKey: settings.aiApiKey, accessToken: settings.aiAccessToken };
+        const providerInput = provider
+          ? providerToConfigInput(provider, settings, {
+              apiKey: secrets.apiKey,
+              accessToken: secrets.accessToken,
+            })
+          : activeProviderInput(settings);
+        const config = buildProviderConfig(
+          providerInput,
+          settings.aiAgentExecutionEngine || "prompty",
+        );
         const result = await invoke<{ id: string; name: string; capabilities?: Record<string, string> }[]>("list_models", { config });
         if (!cancelled) {
           // Show chat-capable models AND Responses API models (codex/pro)
@@ -2755,7 +3100,7 @@ function ModelPickerDropdown({
     }
     load();
     return () => { cancelled = true; };
-  }, [settings, currentModel]);
+  }, [settings, currentModel, provider]);
 
   return (
     <div className="absolute bottom-full left-0 mb-1 w-[200px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight }}>
@@ -2775,7 +3120,13 @@ function ModelPickerDropdown({
                   : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
               }`}
               onClick={() => {
-                updateSetting("aiModel", model);
+                if (provider?.id && settings.aiProviders?.some((candidate) => candidate.id === provider.id)) {
+                  updateSetting("aiProviders", settings.aiProviders.map((candidate) =>
+                    candidate.id === provider.id ? { ...candidate, model } : candidate,
+                  ));
+                } else {
+                  updateSetting("aiModel", model);
+                }
                 onClose();
               }}
             >

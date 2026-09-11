@@ -506,7 +506,7 @@ async fn run_turn(turn: PromptyTurn) -> Result<RunResult, String> {
         emit_host_event(
             &emit,
             AgentEvent::Status {
-                message: "Running with experimental Prompty TurnEngine".into(),
+                message: "Running with Prompty TurnEngine".into(),
             },
         );
     }
@@ -658,6 +658,8 @@ impl ModelPort for TrackingModelPort {
         }
         let assistant_messages = response
             .assistant_messages
+            .as_deref()
+            .unwrap_or(&[])
             .iter()
             .map(prompty_to_native_message)
             .collect::<Result<Vec<_>, _>>()
@@ -889,12 +891,16 @@ impl ConversationPort for CutReadyConversationPort {
     ) -> Result<Vec<Message>, PortError> {
         let assistant_call_ids = response
             .assistant_messages
+            .as_deref()
+            .unwrap_or(&[])
             .iter()
             .flat_map(prompty_message_tool_calls)
             .map(|tool_call| tool_call.id)
             .collect::<Vec<_>>();
         let request_ids = response
             .tool_requests
+            .as_deref()
+            .unwrap_or(&[])
             .iter()
             .map(|request| request.id.clone())
             .collect::<Vec<_>>();
@@ -904,9 +910,9 @@ impl ConversationPort for CutReadyConversationPort {
             ));
         }
 
-        let mut messages = response.assistant_messages.clone();
+        let mut messages = response.assistant_messages.clone().unwrap_or_default();
         let mut generated_messages = Vec::new();
-        for request in &response.tool_requests {
+        for request in response.tool_requests.as_deref().unwrap_or(&[]) {
             let result = results
                 .iter()
                 .find(|result| result.request_id == request.id)
@@ -1692,7 +1698,7 @@ impl ContextPackingStrategy for CutReadyContextPacking {
             invocation_id: request.invocation_id.clone(),
             iteration: request.iteration,
             messages,
-            decisions,
+            decisions: Some(decisions),
             stable_prefix_messages,
             context_state: InvocationContextState {
                 portability: request.context_state.portability,

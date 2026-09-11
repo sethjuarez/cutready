@@ -16,6 +16,8 @@
     "test:e2e:settings": "node scripts/auditaur-feature-drill.mjs",
     "test:e2e:harness-agentive": "node scripts/auditaur-feature-drill.mjs scripts/auditaur-harness-agentive-drill.json",
     "test:e2e:harness-copilot-sdk": "node scripts/auditaur-feature-drill.mjs scripts/auditaur-harness-copilot-sdk-drill.json",
+    "test:e2e:harness-prompty-anthropic": "node scripts/auditaur-prompty-anthropic-drill.mjs",
+    "test:e2e:harness-prompty-openai": "node scripts/auditaur-prompty-openai-drill.mjs",
     "test:e2e:github:manual": "node scripts/auditaur-github-human-drill.mjs",
     "test:watch": "vitest",
     "tauri": "tauri",

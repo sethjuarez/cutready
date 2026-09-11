@@ -285,6 +285,25 @@ export interface ChatMessage {
 
 export interface ChatMessageMetadata {
   workingNotes?: ChatWorkingNotes;
+  runDetails?: ChatRunDetails;
+}
+
+export interface ChatRunUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
+export interface ChatRunDetails {
+  provider: string;
+  model: string;
+  execution_engine: string;
+  agent_id: string;
+  run_id?: string;
+  elapsed_ms?: number;
+  reasoning_effort?: string | null;
+  tool_calls?: number;
+  usage?: ChatRunUsage;
 }
 
 export interface ChatWorkingNotes {

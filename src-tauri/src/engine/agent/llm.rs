@@ -52,6 +52,20 @@ pub fn supports_vision(model: &str) -> bool {
         || model.starts_with("o4")
 }
 
+pub fn supported_reasoning_efforts(model: &str) -> Vec<&'static str> {
+    let model = model.to_ascii_lowercase();
+    if model.contains("gpt-6") {
+        return vec!["low", "medium", "high", "xhigh", "max"];
+    }
+    if model.contains("gpt-5") {
+        return vec!["low", "medium", "high", "xhigh"];
+    }
+    if model.starts_with("o1") || model.starts_with("o3") || model.starts_with("o4") {
+        return vec!["low", "medium", "high"];
+    }
+    Vec::new()
+}
+
 
 // ---------------------------------------------------------------------------
 // CutReady-specific provider configuration
@@ -72,7 +86,7 @@ pub use harness_contract::llm::{
 /// List available models for the configured provider via Prompty's per-provider
 /// discovery, mapped into CutReady's frontend [`ModelInfo`] DTO.
 pub async fn list_models(config: &LlmConfig) -> Result<Vec<ModelInfo>, String> {
-    let connection = discovery_connection(config);
+    let connection = discovery_connection(config)?;
     let raw = match config.provider {
         LlmProvider::Openai => prompty_openai::list_models_async(&connection).await,
         LlmProvider::Anthropic => prompty_anthropic::list_models_async(&connection).await,
@@ -91,7 +105,7 @@ pub async fn list_models(config: &LlmConfig) -> Result<Vec<ModelInfo>, String> {
 /// Build the Prompty connection JSON for model discovery.  The Foundry lister
 /// prefers a caller-supplied bearer token (connection `apiKey`); Azure catalog
 /// and OpenAI/Anthropic listers use their respective keys.
-fn discovery_connection(config: &LlmConfig) -> Value {
+fn discovery_connection(config: &LlmConfig) -> Result<Value, String> {
     let discovery_token = || {
         config
             .bearer_token
@@ -101,26 +115,34 @@ fn discovery_connection(config: &LlmConfig) -> Value {
             .to_string()
     };
     match config.provider {
-        LlmProvider::Openai => json!({
+        LlmProvider::Openai => Ok(json!({
             "kind": "key",
             "endpoint": effective_endpoint(config),
             "apiKey": config.api_key,
-        }),
-        LlmProvider::Anthropic => json!({
+        })),
+        LlmProvider::Anthropic => Ok(json!({
             "kind": "key",
             "endpoint": "https://api.anthropic.com",
             "apiKey": config.api_key,
-        }),
-        LlmProvider::MicrosoftFoundry => json!({
-            "kind": "foundry",
-            "endpoint": effective_endpoint(config),
-            "apiKey": discovery_token(),
-        }),
-        LlmProvider::AzureOpenai => json!({
+        })),
+        LlmProvider::MicrosoftFoundry => {
+            let endpoint = effective_endpoint(config);
+            if endpoint.contains(".openai.azure.com") {
+                return Err(
+                    "Microsoft Foundry model discovery requires a Foundry project endpoint like https://<resource>.services.ai.azure.com/api/projects/<project>; the saved endpoint is an Azure OpenAI inference endpoint.".into(),
+                );
+            }
+            Ok(json!({
+                "kind": "foundry",
+                "endpoint": endpoint,
+                "apiKey": discovery_token(),
+            }))
+        }
+        LlmProvider::AzureOpenai => Ok(json!({
             "kind": "key",
             "endpoint": effective_endpoint(config),
             "apiKey": discovery_token(),
-        }),
+        })),
     }
 }
 
@@ -187,6 +209,13 @@ fn normalize_model_info(mut model: ModelInfo) -> ModelInfo {
         .or_insert_with(|| "true".into());
     caps.entry("tool_calling".into())
         .or_insert_with(|| "true".into());
+    let reasoning_efforts = supported_reasoning_efforts(&model_name);
+    caps.entry("reasoning_effort".into())
+        .or_insert_with(|| (!reasoning_efforts.is_empty()).to_string());
+    if !reasoning_efforts.is_empty() {
+        caps.entry("reasoning_efforts".into())
+            .or_insert_with(|| reasoning_efforts.join(","));
+    }
 
     if model.context_length.is_none() {
         model.context_length = Some(context_budget(&model_name, None));
@@ -206,6 +235,7 @@ mod tests {
             api_key: "test-key".into(),
             model: "gpt-4o".into(),
             bearer_token: bearer.map(String::from),
+            reasoning_effort: None,
         }
     }
 
@@ -219,8 +249,9 @@ mod tests {
             api_key: String::new(),
             model: "gpt-4o".into(),
             bearer_token: Some("entra-token".into()),
+            reasoning_effort: None,
         };
-        let connection = discovery_connection(&config);
+        let connection = discovery_connection(&config).unwrap();
         assert_eq!(connection["kind"], "foundry");
         assert_eq!(connection["apiKey"], "entra-token");
         assert_eq!(
@@ -230,9 +261,25 @@ mod tests {
     }
 
     #[test]
+    fn discovery_connection_foundry_rejects_inference_endpoint() {
+        let config = LlmConfig {
+            provider: LlmProvider::MicrosoftFoundry,
+            endpoint: "https://my-ai.openai.azure.com".into(),
+            api_key: String::new(),
+            model: "gpt-4o".into(),
+            bearer_token: Some("entra-token".into()),
+            reasoning_effort: None,
+        };
+
+        let error = discovery_connection(&config).unwrap_err();
+
+        assert!(error.contains("requires a Foundry project endpoint"));
+    }
+
+    #[test]
     fn discovery_connection_azure_uses_key_kind() {
         let config = azure_config(None);
-        let connection = discovery_connection(&config);
+        let connection = discovery_connection(&config).unwrap();
         assert_eq!(connection["kind"], "key");
         assert_eq!(connection["apiKey"], "test-key");
     }
@@ -245,8 +292,9 @@ mod tests {
             api_key: "sk-test".into(),
             model: "gpt-4o".into(),
             bearer_token: None,
+            reasoning_effort: None,
         };
-        let connection = discovery_connection(&config);
+        let connection = discovery_connection(&config).unwrap();
         assert_eq!(connection["kind"], "key");
         assert_eq!(connection["endpoint"], "https://api.openai.com");
         assert_eq!(connection["apiKey"], "sk-test");
@@ -276,6 +324,7 @@ mod tests {
             api_key: "sk-ant-test".into(),
             model: "claude-sonnet-4-6".into(),
             bearer_token: None,
+            reasoning_effort: None,
         };
         assert_eq!(effective_endpoint(&config), "https://api.anthropic.com");
     }
