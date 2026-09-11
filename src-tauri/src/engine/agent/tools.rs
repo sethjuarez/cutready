@@ -12,11 +12,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::engine::agent::execution::{
-    parse_tool_arguments, ContentPart, ImageUrl, ResourceOperation, ToolCall, ToolOutput,
-    TouchedResource, VerificationResult, VerificationStatus,
+    parse_tool_arguments, ContentPart, ImageUrl, ResourceOperation, ToolCall, ToolExecutionStatus,
+    ToolOutput, TouchedResource, VerificationResult, VerificationStatus,
 };
 use crate::engine::draftline_adapter::CutReadyDraftlineAdapter;
 use crate::engine::project;
+use crate::engine::visual_document::{
+    normalize_visual_document_for_save, normalize_visual_to_v2, validate_agentic_visual,
+    validate_dsl_doc, visual_to_renderable_v1,
+};
 use crate::models::sketch::{MotionPlan, MotionPoint, PlanningRow, Sketch};
 
 // `ToolDefinition` / `ToolFunctionDefinition` (the wire shape of the tool
@@ -805,15 +809,15 @@ fn run_elucim_bridge(payload: &Value) -> Result<Value, String> {
     Ok(response)
 }
 
-fn exec_elucim_agent_operation(args: &Value) -> String {
+fn exec_elucim_agent_operation(args: &Value) -> ToolOutput {
     if !elucim_bridge_enabled() {
-        return "Elucim agent bridge is disabled. Set CUTREADY_ELUCIM_BRIDGE=1 to enable local authoring helpers.".into();
+        return ToolOutput::failed("Elucim agent bridge is disabled. Set CUTREADY_ELUCIM_BRIDGE=1 to enable local authoring helpers.");
     }
     match run_elucim_bridge(args) {
-        Ok(response) => {
-            serde_json::to_string_pretty(&response).unwrap_or_else(|_| response.to_string())
-        }
-        Err(e) => format!("Elucim bridge error: {e}"),
+        Ok(response) => ToolOutput::from(
+            serde_json::to_string_pretty(&response).unwrap_or_else(|_| response.to_string()),
+        ),
+        Err(e) => ToolOutput::failed(format!("Elucim bridge error: {e}")),
     }
 }
 
@@ -886,7 +890,7 @@ pub fn execute_tool(
     );
 
     if !mutation_tools_enabled && !is_read_only_tool(&call.function.name) {
-        return ToolOutput::from(format!(
+        return ToolOutput::failed(format!(
             "Error: {} is disabled by the current AI mutation guard. In Ask Mode, approve the permission prompt before applying changes or switch Settings > AI apply behavior to Auto-apply AI changes.",
             call.function.name
         ));
@@ -899,36 +903,30 @@ pub fn execute_tool(
                 ToolOutput::from(exec_create_project(project_root, &args))
             }
             "create_project" => {
-                ToolOutput::from("Error: create_project is only available to the Writer agent")
+                ToolOutput::failed("Error: create_project is only available to the Writer agent")
             }
             "add_items_to_project" => {
                 if project_workspace_tools_enabled {
                     ToolOutput::from(exec_add_items_to_project(project_root, &args))
                 } else {
-                    ToolOutput::from(
+                    ToolOutput::failed(
                         "Error: add_items_to_project is only available to the Writer agent",
                     )
                 }
             }
             "read_note" => exec_read_note(project_root, &args, vision_enabled),
-            "write_note" => ToolOutput::from(exec_write_note(project_root, &args)),
+            "write_note" => exec_write_note(project_root, &args),
             "read_sketch" => exec_read_sketch(project_root, &args, vision_enabled),
-            "write_sketch" => ToolOutput::from(exec_write_sketch(project_root, &args)),
-            "update_planning_row" => {
-                ToolOutput::from(exec_update_planning_row(project_root, &args))
-            }
-            "set_row_visual" => ToolOutput::from(exec_set_row_visual(project_root, &args)),
-            "review_row_visual" => ToolOutput::from(exec_review_row_visual(project_root, &args)),
-            "apply_row_visual_nudge" => {
-                ToolOutput::from(exec_apply_row_visual_nudge(project_root, &args))
-            }
-            "apply_row_visual_command" => {
-                ToolOutput::from(exec_apply_row_visual_command(project_root, &args))
-            }
+            "write_sketch" => exec_write_sketch(project_root, &args),
+            "update_planning_row" => exec_update_planning_row(project_root, &args),
+            "set_row_visual" => exec_set_row_visual(project_root, &args),
+            "review_row_visual" => exec_review_row_visual(project_root, &args),
+            "apply_row_visual_nudge" => exec_apply_row_visual_nudge(project_root, &args),
+            "apply_row_visual_command" => exec_apply_row_visual_command(project_root, &args),
             "design_plan" => ToolOutput::from(exec_design_plan(project_root, &args)),
-            "elucim_agent_operation" => ToolOutput::from(exec_elucim_agent_operation(&args)),
-            "read_storyboard" => ToolOutput::from(exec_read_storyboard(project_root, &args)),
-            "write_storyboard" => ToolOutput::from(exec_write_storyboard(project_root, &args)),
+            "elucim_agent_operation" => exec_elucim_agent_operation(&args),
+            "read_storyboard" => exec_read_storyboard(project_root, &args),
+            "write_storyboard" => exec_write_storyboard(project_root, &args),
             "recall_memory" => ToolOutput::from(exec_recall_memory(repo_root, project_root, &args)),
             "save_memory" => ToolOutput::from(exec_save_memory(repo_root, project_root, &args)),
             "fetch_url" => {
@@ -978,7 +976,7 @@ pub fn execute_tool(
                     })
                 }))
             }
-            other => ToolOutput::from(format!("Unknown tool: {other}")),
+            other => ToolOutput::failed(format!("Unknown tool: {other}")),
         }
     }));
 
@@ -1001,11 +999,21 @@ pub fn execute_tool(
                     "panic": msg,
                 }),
             );
-            ToolOutput::from(format!("Error: internal tool panic: {msg}"))
+            ToolOutput::failed(format!("Error: internal tool panic: {msg}"))
         }
     };
 
     let elapsed = start.elapsed();
+
+    // Resolve the explicit, host-owned outcome once. A producer that set an
+    // explicit status (write/read failures, permission denials, validation) is
+    // authoritative; only when a producer left it unknown do we fall back to the
+    // legacy text classifier. Every returned output then carries an explicit
+    // status, so downstream consumers never have to re-derive it from text.
+    let status = output
+        .status()
+        .unwrap_or_else(|| classify_tool_text(output.text()));
+    let output = output.with_status(status);
     let result_text = output.text();
     log::debug!(
         "[tool] {} → {}chars in {:?}",
@@ -1014,8 +1022,7 @@ pub fn execute_tool(
         elapsed
     );
 
-    let is_error =
-        result_text.starts_with("Error:") || result_text.starts_with("Validation failed");
+    let is_error = matches!(status, ToolExecutionStatus::Failure);
     // Privacy: tool results can contain user document content (note/sketch bodies,
     // web page text). Telemetry stays metadata-only — emit the result length and an
     // error flag, never the result content itself. See the chat acceptance drill's
@@ -1036,7 +1043,12 @@ pub fn execute_tool(
 
 pub fn decorate_tool_output(tool_name: &str, args: &Value, output: ToolOutput) -> ToolOutput {
     let mut resources = touched_resources_for_tool(tool_name, args);
-    let success = !is_tool_error(output.text());
+    // Prefer the explicit host-owned outcome; only classify text when a producer
+    // left the status unknown (legacy paths and historical outputs).
+    let success = match output.status() {
+        Some(status) => matches!(status, ToolExecutionStatus::Success),
+        None => !is_tool_error(output.text()),
+    };
     let verification = VerificationResult::new(
         format!("Tool {tool_name} completed"),
         if success {
@@ -1062,8 +1074,21 @@ pub fn decorate_tool_output(tool_name: &str, args: &Value, output: ToolOutput) -
     output.with_metadata(resources, vec![verification], Vec::new())
 }
 
+/// Map an already-produced tool result string to an explicit outcome. This is
+/// the legacy fallback used only when a producer did not set an explicit status
+/// (older tools and historical sessions). It is intentionally broad so it does
+/// not silently misclassify producer errors such as `Error writing sketch: ...`
+/// or `Error reading storyboard: ...` as success.
+pub(super) fn classify_tool_text(result_text: &str) -> ToolExecutionStatus {
+    if is_tool_error(result_text) {
+        ToolExecutionStatus::Failure
+    } else {
+        ToolExecutionStatus::Success
+    }
+}
+
 pub(super) fn is_tool_error(result_text: &str) -> bool {
-    result_text.starts_with("Error:") || result_text.starts_with("Validation failed")
+    crate::engine::agent::execution::text_indicates_tool_error(result_text)
 }
 
 fn touched_resources_for_tool(tool_name: &str, args: &Value) -> Vec<TouchedResource> {
@@ -2136,7 +2161,7 @@ fn exec_list_project_files(root: &Path, args: &Value) -> String {
 fn exec_read_note(root: &Path, args: &Value, vision_enabled: bool) -> ToolOutput {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
-        None => return ToolOutput::from("Error: missing 'path' argument"),
+        None => return ToolOutput::failed("Error: missing 'path' argument"),
     };
     match project::read_note(&path) {
         Ok(content) => {
@@ -2152,7 +2177,7 @@ fn exec_read_note(root: &Path, args: &Value, vision_enabled: bool) -> ToolOutput
                 ToolOutput::from(content)
             }
         }
-        Err(e) => ToolOutput::from(format!("Error reading note: {e}")),
+        Err(e) => ToolOutput::failed(format!("Error reading note: {e}")),
     }
 }
 
@@ -2161,7 +2186,7 @@ fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> ToolOutp
         Some(p) => resolve_path(root, p),
         None => {
             let listing = exec_list_project_files(root, &Value::Null);
-            return ToolOutput::from(format!(
+            return ToolOutput::failed(format!(
                 "Error: missing 'path' argument. Call read_sketch with a path from the list below.\n\n{listing}"
             ));
         }
@@ -2232,18 +2257,18 @@ fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> ToolOutp
                 ToolOutput::from(out)
             }
         }
-        Err(e) => ToolOutput::from(format!("Error reading sketch: {e}")),
+        Err(e) => ToolOutput::failed(format!("Error reading sketch: {e}")),
     }
 }
 
-fn exec_write_sketch(root: &Path, args: &Value) -> String {
+fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
-        None => return "Error: missing 'path' argument".into(),
+        None => return ToolOutput::failed("Error: missing 'path' argument"),
     };
     let rows_val = match args.get("rows") {
         Some(v) => v,
-        None => return "Error: missing 'rows' argument".into(),
+        None => return ToolOutput::failed("Error: missing 'rows' argument"),
     };
 
     let mut new_rows: Vec<PlanningRow> = match rows_val.as_array() {
@@ -2296,7 +2321,7 @@ fn exec_write_sketch(root: &Path, args: &Value) -> String {
                 narration_plan: None,
             })
             .collect(),
-        None => return "Error: 'rows' must be an array".into(),
+        None => return ToolOutput::failed("Error: 'rows' must be an array"),
     };
 
     // Load existing sketch or create a new one
@@ -2327,7 +2352,9 @@ fn exec_write_sketch(root: &Path, args: &Value) -> String {
     };
 
     if sketch.locked {
-        return "Error: This sketch is locked. Unlock it before editing with AI.".into();
+        return ToolOutput::failed(
+            "Error: This sketch is locked. Unlock it before editing with AI.",
+        );
     }
 
     // Apply optional title/description updates (works for both new and existing sketches)
@@ -2339,53 +2366,55 @@ fn exec_write_sketch(root: &Path, args: &Value) -> String {
     }
 
     if let Err(e) = project::validate_rows_update_allowed(&sketch.rows, &new_rows) {
-        return format!("Error: {e}");
+        return ToolOutput::failed(format!("Error: {e}"));
     }
     project::apply_locked_row_metadata(&sketch.rows, &mut new_rows);
     let count = new_rows.len();
     sketch.rows = new_rows;
 
     match project::write_sketch(&sketch, &path, root) {
-        Ok(()) => format!("Set {count} planning rows in {}", path.display()),
-        Err(e) => format!("Error writing sketch: {e}"),
+        Ok(()) => ToolOutput::from(format!("Set {count} planning rows in {}", path.display())),
+        Err(e) => ToolOutput::failed(format!("Error writing sketch: {e}")),
     }
 }
 
-fn exec_update_planning_row(root: &Path, args: &Value) -> String {
+fn exec_update_planning_row(root: &Path, args: &Value) -> ToolOutput {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
         None => {
             let listing = exec_list_project_files(root, &Value::Null);
-            return format!(
+            return ToolOutput::failed(format!(
                 "Error: missing 'path' argument. Call update_planning_row with a path from the list below.\n\n{listing}"
-            );
+            ));
         }
     };
     let mut sketch = match project::read_sketch(&path) {
         Ok(s) => s,
-        Err(e) => return format!("Error reading sketch: {e}"),
+        Err(e) => return ToolOutput::failed(format!("Error reading sketch: {e}")),
     };
     let index = match parse_row_target(args, sketch.rows.len()) {
         Ok(index) => index,
-        Err(e) => return e,
+        Err(e) => return ToolOutput::failed(e),
     };
 
     if sketch.locked {
-        return "Error: This sketch is locked. Unlock it before editing with AI.".into();
+        return ToolOutput::failed(
+            "Error: This sketch is locked. Unlock it before editing with AI.",
+        );
     }
     if sketch.rows[index].locked {
-        return format!(
+        return ToolOutput::failed(format!(
             "Error: Planning row {} is locked. Unlock it before editing with AI.",
             index + 1
-        );
+        ));
     }
     for field in ["time", "narrative", "demo_actions", "screenshot"] {
         if args.get(field).is_some() && sketch.rows[index].locks.is_locked(field) {
-            return format!(
+            return ToolOutput::failed(format!(
                 "Error: Planning row {} {} cell is locked. Unlock it before editing with AI.",
                 index + 1,
                 field.replace('_', " ")
-            );
+            ));
         }
     }
 
@@ -2406,7 +2435,7 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> String {
         ),
     ] {
         if let Err(e) = verify_expected_row_value(args, key, actual, label, row_number) {
-            return e;
+            return ToolOutput::failed(e);
         }
     }
 
@@ -2425,8 +2454,8 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> String {
     }
 
     match project::write_sketch(&sketch, &path, root) {
-        Ok(()) => format!("Updated row {} in {}", index + 1, path.display()),
-        Err(e) => format!("Error writing sketch: {e}"),
+        Ok(()) => ToolOutput::from(format!("Updated row {} in {}", index + 1, path.display())),
+        Err(e) => ToolOutput::failed(format!("Error writing sketch: {e}")),
     }
 }
 
@@ -2472,41 +2501,41 @@ fn format_visual_row_context(sketch: &Sketch, index: usize) -> String {
     )
 }
 
-fn exec_set_row_visual(root: &Path, args: &Value) -> String {
+fn exec_set_row_visual(root: &Path, args: &Value) -> ToolOutput {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => resolve_path(root, p),
         None => {
             let listing = exec_list_project_files(root, &Value::Null);
-            return format!(
+            return ToolOutput::failed(format!(
                 "Error: missing 'path' argument. Call set_row_visual with a path from the list below.\n\n{listing}"
-            );
+            ));
         }
     };
     let mut sketch = match project::read_sketch(&path) {
         Ok(s) => s,
-        Err(e) => return format!("Error reading sketch: {e}"),
+        Err(e) => return ToolOutput::failed(format!("Error reading sketch: {e}")),
     };
     let index = match parse_row_target(args, sketch.rows.len()) {
         Ok(index) => index,
-        Err(e) => return e,
+        Err(e) => return ToolOutput::failed(e),
     };
 
     if sketch.locked {
-        return "Error: This sketch is locked. Unlock it before editing with AI.".into();
+        return ToolOutput::failed("Error: This sketch is locked. Unlock it before editing with AI.");
     }
     if sketch.rows[index].locked {
-        return format!(
+        return ToolOutput::failed(format!(
             "Error: Planning row {} is locked. Unlock it before editing with AI.",
             index + 1
-        );
+        ));
     }
     if sketch.rows[index].locks.is_locked("visual")
         || sketch.rows[index].locks.is_locked("screenshot")
     {
-        return format!(
+        return ToolOutput::failed(format!(
             "Error: Planning row {} media cell is locked. Unlock it before editing with AI.",
             index + 1
-        );
+        ));
     }
 
     let row_context = format_visual_row_context(&sketch, index);
@@ -2521,23 +2550,23 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
         _ => {
             let visual = match extract_json_object(args, "visual") {
                 Ok(v) => v,
-                Err(e) => return e,
+                Err(e) => return ToolOutput::failed(e),
             };
             // Auto-normalize to v2 and validate before writing. CutReady stores
             // Elucim visuals canonically, while critique still runs through the
             // renderable v1 compatibility shape used by the current renderer.
             let visual = match normalize_visual_document_for_save(&visual) {
                 Ok(v) => v,
-                Err(e) => return format!("Validation failed (1 error) — fix this and call set_row_visual again:\n  • {e}\n\n{row_context}"),
+                Err(e) => return ToolOutput::failed(format!("Validation failed (1 error) — fix this and call set_row_visual again:\n  • {e}\n\n{row_context}")),
             };
             let renderable_visual = match visual_to_renderable_v1(&visual) {
                 Ok(v) => v,
-                Err(e) => return format!("Validation failed (1 error) — visual could not be made renderable:\n  • {e}\n\n{row_context}"),
+                Err(e) => return ToolOutput::failed(format!("Validation failed (1 error) — visual could not be made renderable:\n  • {e}\n\n{row_context}")),
             };
             let mut errors = Vec::new();
             validate_dsl_doc(&visual, &mut errors);
             if !errors.is_empty() {
-                return format!(
+                return ToolOutput::failed(format!(
                     "Validation failed ({} error{}) — fix these and call set_row_visual again:\n{}\n\n{}",
                     errors.len(),
                     if errors.len() == 1 { "" } else { "s" },
@@ -2547,12 +2576,12 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
                         .collect::<Vec<_>>()
                         .join("\n"),
                     row_context
-                );
+                ));
             }
             let mut render_errors = Vec::new();
             validate_dsl_doc(&renderable_visual, &mut render_errors);
             if !render_errors.is_empty() {
-                return format!(
+                return ToolOutput::failed(format!(
                     "Validation failed ({} renderability error{}) — fix these and call set_row_visual again:\n{}\n\n{}",
                     render_errors.len(),
                     if render_errors.len() == 1 { "" } else { "s" },
@@ -2562,12 +2591,12 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
                         .collect::<Vec<_>>()
                         .join("\n"),
                     row_context
-                );
+                ));
             }
             // Auto-critique for layout/readability issues
             if let Ok((issues, suggestions)) = critique_visual_doc(&renderable_visual) {
                 if !issues.is_empty() {
-                    return format!(
+                    return ToolOutput::failed(format!(
                         "Critique failed ({} issue{}) — fix these and call set_row_visual again:\n{}\n\n{}",
                         issues.len(),
                         if issues.len() == 1 { "" } else { "s" },
@@ -2575,7 +2604,7 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
                             .map(|(i, e)| format!("  ISSUE {}: {e}", i + 1))
                             .collect::<Vec<_>>().join("\n"),
                         row_context
-                    );
+                    ));
                 }
                 if !suggestions.is_empty() {
                     critique_note = format!(
@@ -2594,7 +2623,7 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
                 Ok(rel_path) => {
                     row.visual = Some(serde_json::Value::String(rel_path));
                 }
-                Err(e) => return format!("Error writing visual file: {e}"),
+                Err(e) => return ToolOutput::failed(format!("Error writing visual file: {e}")),
             }
             let nudges = suggest_visual_nudges(&visual);
             if !nudges.is_empty() {
@@ -2615,40 +2644,40 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> String {
     match project::write_sketch(&sketch, &path, root) {
         Ok(()) => {
             if sketch.rows[index].visual.is_some() {
-                format!(
+                ToolOutput::from(format!(
                     "✓ Visual saved on row {} in {}\n\n{}{}",
                     index + 1,
                     path.display(),
                     row_context,
                     critique_note
-                )
+                ))
             } else {
-                format!(
+                ToolOutput::from(format!(
                     "Removed visual from row {} in {}",
                     index + 1,
                     path.display()
-                )
+                ))
             }
         }
-        Err(e) => format!("Error writing sketch: {e}"),
+        Err(e) => ToolOutput::failed(format!("Error writing sketch: {e}")),
     }
 }
 
-fn exec_review_row_visual(root: &Path, args: &Value) -> String {
+fn exec_review_row_visual(root: &Path, args: &Value) -> ToolOutput {
     let (_path, sketch, index, visual) = match load_row_visual(root, args) {
         Ok(loaded) => loaded,
-        Err(e) => return e,
+        Err(e) => return ToolOutput::failed(e),
     };
 
     let normalized = match normalize_visual_to_v2(&visual) {
         Ok(v) => v,
-        Err(e) => return format!("Visual validation failed:\n  • {e}"),
+        Err(e) => return ToolOutput::failed(format!("Visual validation failed:\n  • {e}")),
     };
     let mut errors = Vec::new();
     validate_dsl_doc(&normalized, &mut errors);
     let renderable = match visual_to_renderable_v1(&normalized) {
         Ok(v) => v,
-        Err(e) => return format!("Visual renderability failed:\n  • {e}"),
+        Err(e) => return ToolOutput::failed(format!("Visual renderability failed:\n  • {e}")),
     };
     let (issues, suggestions) = critique_visual_doc(&renderable).unwrap_or_default();
     let summary = summarize_v2_visual(&normalized);
@@ -2720,80 +2749,80 @@ fn exec_review_row_visual(root: &Path, args: &Value) -> String {
         }
     }
     parts.push(format!("\n{row_context}"));
-    parts.join("\n")
+    ToolOutput::from(parts.join("\n"))
 }
 
-fn exec_apply_row_visual_nudge(root: &Path, args: &Value) -> String {
+fn exec_apply_row_visual_nudge(root: &Path, args: &Value) -> ToolOutput {
     let nudge_id = match args.get("nudge_id").and_then(|v| v.as_str()) {
         Some(id) if !id.trim().is_empty() => id.trim(),
-        _ => return "Error: missing 'nudge_id' argument".into(),
+        _ => return ToolOutput::failed("Error: missing 'nudge_id' argument"),
     };
     let (path, mut sketch, index, visual) = match load_row_visual(root, args) {
         Ok(loaded) => loaded,
-        Err(e) => return e,
+        Err(e) => return ToolOutput::failed(e),
     };
     if let Err(e) = ensure_row_visual_editable(&sketch, index) {
-        return e;
+        return ToolOutput::failed(e);
     }
 
     let normalized = match normalize_visual_to_v2(&visual) {
         Ok(v) => v,
-        Err(e) => return format!("Visual validation failed:\n  • {e}"),
+        Err(e) => return ToolOutput::failed(format!("Visual validation failed:\n  • {e}")),
     };
     let before = normalized.clone();
     let updated = match apply_visual_nudge(&normalized, nudge_id) {
         Ok(v) => v,
-        Err(e) => return e,
+        Err(e) => return ToolOutput::failed(e),
     };
     let changed = count_changed_paths(&before, &updated);
     if let Err(e) = validate_agentic_visual(&updated) {
-        return format!("Nudge produced an invalid visual; nothing saved:\n  • {e}");
+        return ToolOutput::failed(format!("Nudge produced an invalid visual; nothing saved:\n  • {e}"));
     }
     match save_row_visual(root, &path, &mut sketch, index, &updated) {
-        Ok(rel_path) => format!(
+        Ok(rel_path) => ToolOutput::from(format!(
             "Applied visual nudge '{nudge_id}' to row {}. Changed paths: {changed}. Saved: {rel_path}",
             index + 1
-        ),
-        Err(e) => e,
+        )),
+        Err(e) => ToolOutput::failed(e),
     }
 }
 
-fn exec_apply_row_visual_command(root: &Path, args: &Value) -> String {
+fn exec_apply_row_visual_command(root: &Path, args: &Value) -> ToolOutput {
     let command = match args.get("command") {
         Some(v) if v.is_object() => v,
-        _ => return "Error: missing 'command' object".into(),
+        _ => return ToolOutput::failed("Error: missing 'command' object"),
     };
     let (path, mut sketch, index, visual) = match load_row_visual(root, args) {
         Ok(loaded) => loaded,
-        Err(e) => return e,
+        Err(e) => return ToolOutput::failed(e),
     };
     if let Err(e) = ensure_row_visual_editable(&sketch, index) {
-        return e;
+        return ToolOutput::failed(e);
     }
 
     let normalized = match normalize_visual_to_v2(&visual) {
         Ok(v) => v,
-        Err(e) => return format!("Visual validation failed:\n  • {e}"),
+        Err(e) => return ToolOutput::failed(format!("Visual validation failed:\n  • {e}")),
     };
     let before = normalized.clone();
     let updated = match apply_visual_command(&normalized, command) {
         Ok(v) => v,
-        Err(e) => return e,
+        Err(e) => return ToolOutput::failed(e),
     };
     let changed = count_changed_paths(&before, &updated);
     if let Err(e) = validate_agentic_visual(&updated) {
-        return format!("Command produced an invalid visual; nothing saved:\n  • {e}");
+        return ToolOutput::failed(format!("Command produced an invalid visual; nothing saved:\n  • {e}"));
     }
     let op = command
         .get("op")
         .and_then(|v| v.as_str())
         .unwrap_or("unknown");
     match save_row_visual(root, &path, &mut sketch, index, &updated) {
-        Ok(rel_path) => format!(
+        Ok(rel_path) => ToolOutput::from(format!(
             "Applied visual command '{op}' to row {}. Changed paths: {changed}. Saved: {rel_path}",
             index + 1
-        ),
-        Err(e) => e,
+        )),
+        Err(e) => ToolOutput::failed(e),
     }
 }
 
@@ -2849,934 +2878,6 @@ fn exec_design_plan(root: &Path, args: &Value) -> String {
         }
         Err(e) => format!("Error writing sketch: {e}"),
     }
-}
-
-// Valid elucim DSL root node types
-const VALID_ROOT_TYPES: &[&str] = &["scene", "player", "presentation"];
-
-// Valid elucim DSL child node types
-const VALID_NODE_TYPES: &[&str] = &[
-    "circle",
-    "rect",
-    "line",
-    "arrow",
-    "text",
-    "group",
-    "polygon",
-    "image",
-    "axes",
-    "latex",
-    "graph",
-    "matrix",
-    "barChart",
-    "slide",
-    "bezierCurve",
-    "codeBlock",
-];
-
-const V2_LAYOUT_KEYS: &[&str] = &[
-    "x",
-    "y",
-    "width",
-    "height",
-    "cx",
-    "cy",
-    "r",
-    "x1",
-    "y1",
-    "x2",
-    "y2",
-    "rotation",
-    "rotationOrigin",
-    "scale",
-    "translate",
-    "zIndex",
-];
-
-pub(crate) fn normalize_visual_document_for_save(visual: &Value) -> Result<Value, String> {
-    let mut normalized = normalize_visual_to_v2(visual)?;
-    ensure_default_state_machine_for_timelines(&mut normalized)?;
-    validate_agentic_visual(&normalized)?;
-    Ok(normalized)
-}
-
-fn normalize_visual_to_v2(visual: &Value) -> Result<Value, String> {
-    match visual.get("version") {
-        Some(Value::String(version)) if version == "2.0" => {
-            let mut normalized = visual.clone();
-            sanitize_v2_scene_duration(&mut normalized);
-            validate_v2_doc(&normalized)?;
-            Ok(normalized)
-        }
-        Some(Value::String(version)) if version == "1.0" => migrate_v1_visual_to_v2(visual),
-        Some(Value::Number(version))
-            if version.as_i64() == Some(1) && visual.get("root").is_some() =>
-        {
-            let mut coerced = visual.clone();
-            if let Some(obj) = coerced.as_object_mut() {
-                obj.insert("version".into(), Value::String("1.0".into()));
-            }
-            migrate_v1_visual_to_v2(&coerced)
-        }
-        Some(Value::String(version)) if version == "1" && visual.get("root").is_some() => {
-            let mut coerced = visual.clone();
-            if let Some(obj) = coerced.as_object_mut() {
-                obj.insert("version".into(), Value::String("1.0".into()));
-            }
-            migrate_v1_visual_to_v2(&coerced)
-        }
-        Some(Value::Number(version)) if version.as_i64() == Some(1) => {
-            migrate_legacy_rootless_to_v2(visual)
-        }
-        Some(Value::String(version)) if version == "1" => migrate_legacy_rootless_to_v2(visual),
-        Some(v) => Err(format!("version: expected \"2.0\" or \"1.0\", got {v}")),
-        None if visual.get("root").is_some() => {
-            let mut coerced = visual.clone();
-            if let Some(obj) = coerced.as_object_mut() {
-                obj.insert("version".into(), Value::String("1.0".into()));
-            }
-            migrate_v1_visual_to_v2(&coerced)
-        }
-        None if visual.get("scene").is_some() && visual.get("elements").is_some() => {
-            let mut coerced = visual.clone();
-            if let Some(obj) = coerced.as_object_mut() {
-                obj.insert("version".into(), Value::String("2.0".into()));
-            }
-            validate_v2_doc(&coerced)?;
-            Ok(coerced)
-        }
-        None => Err("missing required field \"version\"".into()),
-    }
-}
-
-fn sanitize_v2_scene_duration(visual: &mut Value) {
-    if let Some(scene) = visual.get_mut("scene").and_then(|v| v.as_object_mut()) {
-        scene.remove("durationInFrames");
-    }
-}
-
-fn ensure_default_state_machine_for_timelines(visual: &mut Value) -> Result<(), String> {
-    let mut timeline_ids = visual
-        .get("timelines")
-        .and_then(|v| v.as_object())
-        .map(|timelines| timelines.keys().cloned().collect::<Vec<_>>())
-        .unwrap_or_default();
-    timeline_ids.sort();
-    if timeline_ids.is_empty() {
-        return Ok(());
-    }
-
-    let doc = visual
-        .as_object_mut()
-        .ok_or_else(|| "document: must be an object".to_string())?;
-    let default_is_valid = doc
-        .get("defaultStateMachine")
-        .and_then(|v| v.as_str())
-        .is_some_and(|id| {
-            doc.get("stateMachines")
-                .and_then(|v| v.as_object())
-                .is_some_and(|machines| machines.contains_key(id))
-        });
-    if default_is_valid {
-        return Ok(());
-    }
-
-    let existing_machine_ids = doc
-        .get("stateMachines")
-        .and_then(|v| v.as_object())
-        .map(|machines| {
-            machines
-                .keys()
-                .cloned()
-                .collect::<std::collections::HashSet<_>>()
-        })
-        .unwrap_or_default();
-    let machine_id = reserve_unique_id("main", &existing_machine_ids);
-    let machines = doc
-        .entry("stateMachines")
-        .or_insert_with(|| Value::Object(serde_json::Map::new()))
-        .as_object_mut()
-        .ok_or_else(|| "stateMachines: must be an object".to_string())?;
-    let mut states = serde_json::Map::new();
-    let mut transitions = Vec::new();
-    let mut state_ids = Vec::new();
-    for timeline_id in timeline_ids {
-        let state_id = reserve_unique_id(
-            &reserve_state_id(&timeline_id),
-            &state_ids.iter().cloned().collect(),
-        );
-        states.insert(state_id.clone(), json!({ "timeline": timeline_id }));
-        state_ids.push(state_id);
-    }
-    let entry_state_id = state_ids
-        .first()
-        .cloned()
-        .ok_or_else(|| "timelines: missing timeline ids".to_string())?;
-    transitions.push(json!({
-        "id": "entry-start",
-        "from": "entry",
-        "to": entry_state_id,
-        "trigger": "onStart"
-    }));
-    for pair in state_ids.windows(2) {
-        transitions.push(json!({
-            "id": format!("{}-next", pair[0]),
-            "from": pair[0],
-            "to": pair[1],
-            "exitTime": 1
-        }));
-    }
-    machines.insert(
-        machine_id.clone(),
-        json!({
-            "id": machine_id,
-            "entry": entry_state_id,
-            "states": states,
-            "transitions": transitions
-        }),
-    );
-    doc.insert("defaultStateMachine".into(), Value::String(machine_id));
-    Ok(())
-}
-
-fn reserve_state_id(timeline_id: &str) -> String {
-    let id = timeline_id
-        .trim()
-        .to_ascii_lowercase()
-        .replace(
-            |ch: char| !ch.is_ascii_alphanumeric() && ch != '-' && ch != '_',
-            "-",
-        )
-        .trim_matches('-')
-        .to_string();
-    match id.as_str() {
-        "" | "entry" | "any" | "exit" => "idle".into(),
-        _ => id,
-    }
-}
-
-fn reserve_unique_id(base: &str, existing: &std::collections::HashSet<String>) -> String {
-    if !existing.contains(base) {
-        return base.to_string();
-    }
-    let mut index = 2;
-    loop {
-        let candidate = format!("{base}-{index}");
-        if !existing.contains(&candidate) {
-            return candidate;
-        }
-        index += 1;
-    }
-}
-
-fn visual_to_renderable_v1(visual: &Value) -> Result<Value, String> {
-    match visual.get("version").and_then(|v| v.as_str()) {
-        Some("1.0") => Ok(visual.clone()),
-        Some("2.0") => migrate_v2_visual_to_v1(visual),
-        _ => {
-            let normalized = normalize_visual_to_v2(visual)?;
-            migrate_v2_visual_to_v1(&normalized)
-        }
-    }
-}
-
-fn migrate_v1_visual_to_v2(visual: &Value) -> Result<Value, String> {
-    let root = visual
-        .get("root")
-        .and_then(|v| v.as_object())
-        .ok_or_else(|| "root: missing or invalid object".to_string())?;
-    if root.get("type").and_then(|v| v.as_str()) == Some("presentation") {
-        return Err("v1 presentation migration to v2 is not supported for row visuals".into());
-    }
-    let children = root
-        .get("children")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| "root.children: missing array".to_string())?;
-
-    let mut used_ids = std::collections::HashSet::new();
-    let mut elements = serde_json::Map::new();
-    let child_ids = children
-        .iter()
-        .enumerate()
-        .map(|(index, child)| {
-            migrate_v1_element_to_v2(
-                child,
-                &format!(
-                    "root.{}[{index}]",
-                    child
-                        .get("type")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("element")
-                ),
-                None,
-                &mut used_ids,
-                &mut elements,
-            )
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-
-    let mut scene = serde_json::Map::new();
-    for key in [
-        "type",
-        "preset",
-        "width",
-        "height",
-        "fps",
-        "background",
-        "controls",
-        "loop",
-        "autoPlay",
-    ] {
-        if let Some(value) = root.get(key) {
-            scene.insert(key.into(), value.clone());
-        }
-    }
-    scene.insert(
-        "children".into(),
-        Value::Array(child_ids.into_iter().map(Value::String).collect()),
-    );
-
-    let mut doc = serde_json::Map::new();
-    doc.insert("version".into(), Value::String("2.0".into()));
-    doc.insert("scene".into(), Value::Object(scene));
-    doc.insert("elements".into(), Value::Object(elements));
-    doc.insert(
-        "metadata".into(),
-        json!({
-            "polishLevel": "draft",
-            "notes": ["Migrated from Elucim v1 by CutReady."]
-        }),
-    );
-    let doc = Value::Object(doc);
-    validate_v2_doc(&doc)?;
-    Ok(doc)
-}
-
-fn migrate_v1_element_to_v2(
-    element: &Value,
-    fallback_id: &str,
-    parent_id: Option<&str>,
-    used_ids: &mut std::collections::HashSet<String>,
-    elements: &mut serde_json::Map<String, Value>,
-) -> Result<String, String> {
-    let obj = element
-        .as_object()
-        .ok_or_else(|| format!("{fallback_id}: element must be an object"))?;
-    let element_type = obj
-        .get("type")
-        .and_then(|v| v.as_str())
-        .unwrap_or("group")
-        .to_string();
-    let base_id = obj
-        .get("id")
-        .and_then(|v| v.as_str())
-        .filter(|id| !id.trim().is_empty())
-        .unwrap_or(fallback_id);
-    let id = reserve_v2_id(base_id, used_ids);
-
-    let child_ids = obj
-        .get("children")
-        .and_then(|v| v.as_array())
-        .map(|children| {
-            children
-                .iter()
-                .enumerate()
-                .map(|(index, child)| {
-                    migrate_v1_element_to_v2(
-                        child,
-                        &format!(
-                            "{id}.{}[{index}]",
-                            child
-                                .get("type")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("element")
-                        ),
-                        Some(&id),
-                        used_ids,
-                        elements,
-                    )
-                })
-                .collect::<Result<Vec<_>, _>>()
-        })
-        .transpose()?;
-
-    let mut props = serde_json::Map::new();
-    let mut layout = serde_json::Map::new();
-    for (key, value) in obj {
-        if key == "id" || key == "children" {
-            continue;
-        }
-        props.insert(key.clone(), value.clone());
-        if V2_LAYOUT_KEYS.contains(&key.as_str()) {
-            layout.insert(key.clone(), value.clone());
-        }
-    }
-
-    let mut v2 = serde_json::Map::new();
-    v2.insert("id".into(), Value::String(id.clone()));
-    v2.insert("type".into(), Value::String(element_type));
-    if let Some(parent_id) = parent_id {
-        v2.insert("parentId".into(), Value::String(parent_id.to_string()));
-    }
-    if let Some(child_ids) = child_ids {
-        v2.insert(
-            "children".into(),
-            Value::Array(child_ids.into_iter().map(Value::String).collect()),
-        );
-    }
-    if !layout.is_empty() {
-        v2.insert("layout".into(), Value::Object(layout));
-    }
-    v2.insert("props".into(), Value::Object(props));
-    elements.insert(id.clone(), Value::Object(v2));
-    Ok(id)
-}
-
-fn reserve_v2_id(base_id: &str, used_ids: &mut std::collections::HashSet<String>) -> String {
-    let mut id = base_id.trim().replace([' ', '/', '\\'], "-");
-    if id.is_empty() {
-        id = "element".into();
-    }
-    let original = id.clone();
-    let mut suffix = 2;
-    while used_ids.contains(&id) {
-        id = format!("{original}-{suffix}");
-        suffix += 1;
-    }
-    used_ids.insert(id.clone());
-    id
-}
-
-fn migrate_legacy_rootless_to_v2(visual: &Value) -> Result<Value, String> {
-    let elements = visual
-        .get("elements")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| "legacy rootless visual: expected elements array".to_string())?;
-    let mut children = Vec::new();
-    if let Some(title) = visual.get("title").and_then(|v| v.as_str()) {
-        children.push(json!({
-            "type": "text",
-            "id": "title",
-            "content": title,
-            "x": 96,
-            "y": 96,
-            "fontSize": 48,
-            "fill": "$title"
-        }));
-    }
-    children.extend(elements.iter().cloned());
-    let v1 = json!({
-        "version": "1.0",
-        "root": {
-            "type": "player",
-            "width": visual.get("width").and_then(|v| v.as_u64()).unwrap_or(1920),
-            "height": visual.get("height").and_then(|v| v.as_u64()).unwrap_or(1080),
-            "fps": visual.get("fps").and_then(|v| v.as_u64()).unwrap_or(30),
-            "durationInFrames": visual.get("durationInFrames").and_then(|v| v.as_u64()).or_else(|| visual.get("duration").and_then(|v| v.as_u64())).unwrap_or(120),
-            "background": visual.get("background").cloned().unwrap_or_else(|| Value::String("$background".into())),
-            "children": children
-        }
-    });
-    migrate_v1_visual_to_v2(&v1)
-}
-
-fn migrate_v2_visual_to_v1(visual: &Value) -> Result<Value, String> {
-    validate_v2_doc(visual)?;
-    let scene = visual
-        .get("scene")
-        .and_then(|v| v.as_object())
-        .ok_or_else(|| "scene: missing or invalid object".to_string())?;
-    let children = scene
-        .get("children")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| "scene.children: missing array".to_string())?;
-    let restored_children = children
-        .iter()
-        .map(|id| {
-            id.as_str()
-                .ok_or_else(|| "scene.children: child IDs must be strings".to_string())
-                .and_then(|id| restore_v2_element_to_v1(visual, id))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-
-    let mut root = serde_json::Map::new();
-    for key in [
-        "type",
-        "preset",
-        "width",
-        "height",
-        "fps",
-        "background",
-        "controls",
-        "loop",
-        "autoPlay",
-    ] {
-        if let Some(value) = scene.get(key) {
-            root.insert(key.into(), value.clone());
-        }
-    }
-    root.insert(
-        "durationInFrames".into(),
-        Value::Number(v2_visual_duration_in_frames(visual).into()),
-    );
-    root.insert("children".into(), Value::Array(restored_children));
-    Ok(json!({ "version": "1.0", "root": Value::Object(root) }))
-}
-
-fn v2_visual_duration_in_frames(visual: &Value) -> i64 {
-    let timeline_max = visual
-        .get("timelines")
-        .and_then(|v| v.as_object())
-        .and_then(|timelines| {
-            timelines
-                .values()
-                .filter_map(|timeline| timeline.get("duration").and_then(|v| v.as_i64()))
-                .filter(|duration| *duration > 0)
-                .max()
-        });
-    timeline_max
-        .or_else(|| {
-            visual
-                .pointer("/scene/durationInFrames")
-                .and_then(|v| v.as_i64())
-                .filter(|duration| *duration > 0)
-        })
-        .unwrap_or(120)
-}
-
-fn restore_v2_element_to_v1(visual: &Value, id: &str) -> Result<Value, String> {
-    let elements = visual
-        .get("elements")
-        .and_then(|v| v.as_object())
-        .ok_or_else(|| "elements: missing or invalid object".to_string())?;
-    let element = elements
-        .get(id)
-        .and_then(|v| v.as_object())
-        .ok_or_else(|| format!("elements.{id}: missing element"))?;
-    let mut restored = element
-        .get("layout")
-        .and_then(|v| v.as_object())
-        .cloned()
-        .unwrap_or_default();
-    let props = element
-        .get("props")
-        .and_then(|v| v.as_object())
-        .cloned()
-        .ok_or_else(|| format!("elements.{id}.props: missing object"))?;
-    for (key, value) in props {
-        restored.insert(key, value);
-    }
-    restored.insert("id".into(), Value::String(id.to_string()));
-    restored.insert(
-        "type".into(),
-        Value::String(
-            element
-                .get("type")
-                .and_then(|v| v.as_str())
-                .unwrap_or("group")
-                .to_string(),
-        ),
-    );
-    if let Some(children) = element.get("children").and_then(|v| v.as_array()) {
-        let restored_children = children
-            .iter()
-            .map(|child| {
-                child
-                    .as_str()
-                    .ok_or_else(|| format!("elements.{id}.children: child IDs must be strings"))
-                    .and_then(|child_id| restore_v2_element_to_v1(visual, child_id))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        restored.insert("children".into(), Value::Array(restored_children));
-    }
-    Ok(Value::Object(restored))
-}
-
-fn validate_v2_doc(visual: &Value) -> Result<(), String> {
-    let obj = visual
-        .as_object()
-        .ok_or_else(|| "document: must be an object".to_string())?;
-    if obj.get("version").and_then(|v| v.as_str()) != Some("2.0") {
-        return Err("version: expected \"2.0\"".into());
-    }
-    let scene = obj
-        .get("scene")
-        .and_then(|v| v.as_object())
-        .ok_or_else(|| "scene: missing or invalid object".to_string())?;
-    match scene.get("type").and_then(|v| v.as_str()) {
-        Some("scene" | "player") => {}
-        Some(t) => {
-            return Err(format!(
-                "scene.type: expected \"scene\" or \"player\", got \"{t}\""
-            ))
-        }
-        None => return Err("scene.type: missing".into()),
-    }
-    let scene_children = scene
-        .get("children")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| "scene.children: must be an array of element IDs".to_string())?;
-    let elements = obj
-        .get("elements")
-        .and_then(|v| v.as_object())
-        .ok_or_else(|| "elements: missing or invalid object".to_string())?;
-
-    for (index, child) in scene_children.iter().enumerate() {
-        let id = child
-            .as_str()
-            .ok_or_else(|| format!("scene.children[{index}]: must be an element ID string"))?;
-        if !elements.contains_key(id) {
-            return Err(format!(
-                "scene.children[{index}]: unknown element ID \"{id}\""
-            ));
-        }
-    }
-    for (id, element) in elements {
-        let element = element
-            .as_object()
-            .ok_or_else(|| format!("elements.{id}: must be an object"))?;
-        if element.get("id").and_then(|v| v.as_str()) != Some(id.as_str()) {
-            return Err(format!("elements.{id}.id: must match map key \"{id}\""));
-        }
-        if element.get("type").and_then(|v| v.as_str()).is_none() {
-            return Err(format!("elements.{id}.type: missing"));
-        }
-        if !element.get("props").is_some_and(|v| v.is_object()) {
-            return Err(format!("elements.{id}.props: must be an object"));
-        }
-        if let Some(parent_id) = element.get("parentId").and_then(|v| v.as_str()) {
-            if !elements.contains_key(parent_id) {
-                return Err(format!(
-                    "elements.{id}.parentId: unknown parent ID \"{parent_id}\""
-                ));
-            }
-        }
-        if let Some(children) = element.get("children").and_then(|v| v.as_array()) {
-            for (index, child) in children.iter().enumerate() {
-                let child_id = child.as_str().ok_or_else(|| {
-                    format!("elements.{id}.children[{index}]: must be an element ID string")
-                })?;
-                if !elements.contains_key(child_id) {
-                    return Err(format!(
-                        "elements.{id}.children[{index}]: unknown element ID \"{child_id}\""
-                    ));
-                }
-                if elements
-                    .get(child_id)
-                    .and_then(|v| v.get("parentId"))
-                    .and_then(|v| v.as_str())
-                    != Some(id.as_str())
-                {
-                    return Err(format!("elements.{id}.children[{index}]: child \"{child_id}\" must have parentId \"{id}\""));
-                }
-            }
-        }
-    }
-    validate_v2_timelines(obj, elements)?;
-    validate_v2_state_machines(obj)?;
-    Ok(())
-}
-
-fn validate_v2_timelines(
-    doc: &serde_json::Map<String, Value>,
-    elements: &serde_json::Map<String, Value>,
-) -> Result<(), String> {
-    let Some(timelines) = doc.get("timelines") else {
-        return Ok(());
-    };
-    let timelines = timelines
-        .as_object()
-        .ok_or_else(|| "timelines: must be an object".to_string())?;
-    const VALID_PROPERTIES: &[&str] =
-        &["opacity", "translate", "scale", "rotate", "fill", "stroke"];
-    for (timeline_id, timeline) in timelines {
-        let timeline = timeline
-            .as_object()
-            .ok_or_else(|| format!("timelines.{timeline_id}: must be an object"))?;
-        if timeline.get("id").and_then(|v| v.as_str()) != Some(timeline_id.as_str()) {
-            return Err(format!(
-                "timelines.{timeline_id}.id: must match key \"{timeline_id}\""
-            ));
-        }
-        let duration = timeline
-            .get("duration")
-            .and_then(|v| v.as_f64())
-            .ok_or_else(|| format!("timelines.{timeline_id}.duration: must be positive"))?;
-        if duration <= 0.0 || !duration.is_finite() {
-            return Err(format!(
-                "timelines.{timeline_id}.duration: must be positive"
-            ));
-        }
-        let Some(tracks) = timeline.get("tracks") else {
-            continue;
-        };
-        let tracks = tracks
-            .as_array()
-            .ok_or_else(|| format!("timelines.{timeline_id}.tracks: must be an array"))?;
-        for (track_index, track) in tracks.iter().enumerate() {
-            let track = track.as_object().ok_or_else(|| {
-                format!("timelines.{timeline_id}.tracks[{track_index}]: must be an object")
-            })?;
-            let target = track
-                .get("target")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| {
-                    format!("timelines.{timeline_id}.tracks[{track_index}].target: missing")
-                })?;
-            if !elements.contains_key(target) {
-                return Err(format!(
-                    "timelines.{timeline_id}.tracks[{track_index}].target: unknown target \"{target}\""
-                ));
-            }
-            let property = track
-                .get("property")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| {
-                    format!("timelines.{timeline_id}.tracks[{track_index}].property: missing")
-                })?;
-            if !VALID_PROPERTIES.contains(&property) {
-                return Err(format!(
-                    "timelines.{timeline_id}.tracks[{track_index}].property: unsupported animatable property \"{property}\""
-                ));
-            }
-            let keyframes = track
-                .get("keyframes")
-                .and_then(|v| v.as_array())
-                .ok_or_else(|| {
-                    format!("timelines.{timeline_id}.tracks[{track_index}].keyframes: must be a non-empty array")
-                })?;
-            if keyframes.is_empty() {
-                return Err(format!(
-                    "timelines.{timeline_id}.tracks[{track_index}].keyframes: must be a non-empty array"
-                ));
-            }
-            let mut previous_frame = -1_i64;
-            for (keyframe_index, keyframe) in keyframes.iter().enumerate() {
-                let keyframe = keyframe.as_object().ok_or_else(|| {
-                    format!("timelines.{timeline_id}.tracks[{track_index}].keyframes[{keyframe_index}]: must be an object")
-                })?;
-                let frame = keyframe
-                    .get("frame")
-                    .and_then(|v| v.as_i64())
-                    .ok_or_else(|| {
-                        format!("timelines.{timeline_id}.tracks[{track_index}].keyframes[{keyframe_index}].frame: must be a non-negative integer")
-                    })?;
-                if frame < 0 {
-                    return Err(format!("timelines.{timeline_id}.tracks[{track_index}].keyframes[{keyframe_index}].frame: must be a non-negative integer"));
-                }
-                if frame as f64 > duration {
-                    return Err(format!("timelines.{timeline_id}.tracks[{track_index}].keyframes[{keyframe_index}].frame: cannot exceed timeline duration"));
-                }
-                if frame <= previous_frame {
-                    return Err(format!("timelines.{timeline_id}.tracks[{track_index}].keyframes[{keyframe_index}].frame: frames must be strictly increasing"));
-                }
-                previous_frame = frame;
-                if !keyframe.contains_key("value") {
-                    return Err(format!("timelines.{timeline_id}.tracks[{track_index}].keyframes[{keyframe_index}].value: required"));
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-fn validate_v2_state_machines(doc: &serde_json::Map<String, Value>) -> Result<(), String> {
-    let timeline_ids = doc
-        .get("timelines")
-        .and_then(|v| v.as_object())
-        .map(|timelines| {
-            timelines
-                .keys()
-                .cloned()
-                .collect::<std::collections::HashSet<_>>()
-        })
-        .unwrap_or_default();
-    let Some(state_machines) = doc.get("stateMachines") else {
-        return Ok(());
-    };
-    let state_machines = state_machines
-        .as_object()
-        .ok_or_else(|| "stateMachines: must be an object".to_string())?;
-    for (machine_id, machine) in state_machines {
-        let machine = machine
-            .as_object()
-            .ok_or_else(|| format!("stateMachines.{machine_id}: must be an object"))?;
-        if machine.get("id").and_then(|v| v.as_str()) != Some(machine_id.as_str()) {
-            return Err(format!(
-                "stateMachines.{machine_id}.id: must match key \"{machine_id}\""
-            ));
-        }
-        let entry = machine
-            .get("entry")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| format!("stateMachines.{machine_id}.entry: missing"))?;
-        let states = machine
-            .get("states")
-            .and_then(|v| v.as_object())
-            .ok_or_else(|| format!("stateMachines.{machine_id}.states: must be an object"))?;
-        if !states.contains_key(entry) {
-            return Err(format!(
-                "stateMachines.{machine_id}.entry: entry state \"{entry}\" does not exist"
-            ));
-        }
-        let transitions = machine
-            .get("transitions")
-            .and_then(|v| v.as_array())
-            .ok_or_else(|| format!("stateMachines.{machine_id}.transitions: must be an array"))?;
-        for (state_id, state) in states {
-            let state = state.as_object().ok_or_else(|| {
-                format!("stateMachines.{machine_id}.states.{state_id}: must be an object")
-            })?;
-            if let Some(timeline) = state.get("timeline").and_then(|v| v.as_str()) {
-                if !timeline_ids.contains(timeline) {
-                    return Err(format!(
-                        "stateMachines.{machine_id}.states.{state_id}.timeline: unknown timeline \"{timeline}\""
-                    ));
-                }
-            }
-        }
-        let entry_transitions = transitions
-            .iter()
-            .filter(|transition| transition.get("from").and_then(|v| v.as_str()) == Some("entry"))
-            .collect::<Vec<_>>();
-        if entry_transitions.len() != 1 {
-            return Err(format!(
-                "stateMachines.{machine_id}.transitions: Entry must have exactly one outgoing transition"
-            ));
-        }
-        if entry_transitions[0].get("to").and_then(|v| v.as_str()) != Some(entry) {
-            return Err(format!(
-                "stateMachines.{machine_id}.entry: Machine entry must match the explicit Entry transition target"
-            ));
-        }
-
-        let mut next_sources = std::collections::HashSet::new();
-        let mut event_sources = std::collections::HashSet::new();
-        for (index, transition) in transitions.iter().enumerate() {
-            validate_v2_transition(machine_id, index, transition, states)?;
-            let path = format!("stateMachines.{machine_id}.transitions[{index}]");
-            let transition = transition
-                .as_object()
-                .ok_or_else(|| format!("{path}: must be an object"))?;
-            let from = transition
-                .get("from")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            let to = transition.get("to").and_then(|v| v.as_str()).unwrap_or("");
-            let trigger = transition.get("trigger").and_then(|v| v.as_str());
-            let exit_time = transition.get("exitTime");
-
-            if from == "entry" {
-                if to == "entry" || to == "exit" {
-                    return Err(format!(
-                        "{path}.to: Entry transition must target a real state"
-                    ));
-                }
-                if exit_time.is_some() {
-                    return Err(format!(
-                        "{path}.exitTime: Entry transitions cannot be Next transitions"
-                    ));
-                }
-                match trigger {
-                    Some("onStart" | "onClick" | "onKey") => {}
-                    Some(value) => {
-                        return Err(format!("{path}.trigger: unsupported entry trigger \"{value}\""))
-                    }
-                    None => {
-                        return Err(format!(
-                            "{path}.trigger: Entry transitions require a start event such as onStart or onClick"
-                        ))
-                    }
-                }
-                if trigger == Some("onKey")
-                    && transition
-                        .get("key")
-                        .and_then(|v| v.as_str())
-                        .is_none_or(|key| key.trim().is_empty())
-                {
-                    return Err(format!("{path}.key: onKey transitions require a key"));
-                }
-                continue;
-            }
-
-            if exit_time.is_some() {
-                if trigger.is_some() {
-                    return Err(format!(
-                        "{path}.trigger: Next transitions must not have event names"
-                    ));
-                }
-                if !next_sources.insert(from.to_string()) {
-                    return Err(format!(
-                        "{path}.from: State \"{from}\" can only have one Next transition"
-                    ));
-                }
-                continue;
-            }
-
-            let trigger = trigger.ok_or_else(|| {
-                format!("{path}.trigger: Event transitions require an event name")
-            })?;
-            let scoped_event_key = if trigger == "onKey" {
-                let key = transition
-                    .get("key")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| format!("{path}.key: onKey transitions require a key"))?;
-                format!("{from}:{trigger}:{}", key.to_ascii_lowercase())
-            } else {
-                format!("{from}:{trigger}")
-            };
-            if !event_sources.insert(scoped_event_key) {
-                return Err(format!(
-                    "{path}.trigger: Duplicate event \"{trigger}\" from \"{from}\""
-                ));
-            }
-        }
-    }
-    Ok(())
-}
-
-fn validate_v2_transition(
-    machine_id: &str,
-    transition_index: usize,
-    transition: &Value,
-    states: &serde_json::Map<String, Value>,
-) -> Result<(), String> {
-    let path = format!("stateMachines.{machine_id}.transitions[{transition_index}]");
-    let transition = transition
-        .as_object()
-        .ok_or_else(|| format!("{path}: must be an object"))?;
-    if transition
-        .get("id")
-        .and_then(|v| v.as_str())
-        .is_none_or(|id| id.trim().is_empty())
-    {
-        return Err(format!("{path}.id: Transition id is required"));
-    }
-    let source = transition
-        .get("from")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| format!("{path}.from: missing"))?;
-    if source != "entry" && source != "any" && !states.contains_key(source) {
-        return Err(format!("{path}.from: unknown source state \"{source}\""));
-    }
-    let target = transition
-        .get("to")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| format!("{path}.to: missing"))?;
-    if target != "entry" && target != "exit" && !states.contains_key(target) {
-        return Err(format!("{path}.to: unknown target state \"{target}\""));
-    }
-    if let Some(exit_time) = transition.get("exitTime") {
-        if !exit_time
-            .as_f64()
-            .is_some_and(|value| value.is_finite() && value >= 0.0)
-        {
-            return Err(format!(
-                "{path}.exitTime: Exit time must be a non-negative number"
-            ));
-        }
-    }
-    Ok(())
 }
 
 struct VisualSummary {
@@ -3857,15 +2958,6 @@ fn save_row_visual(
     sketch.rows[index].screenshot = None;
     project::write_sketch(sketch, path, root).map_err(|e| format!("Error writing sketch: {e}"))?;
     Ok(rel_path)
-}
-
-fn validate_agentic_visual(visual: &Value) -> Result<(), String> {
-    let mut errors = Vec::new();
-    validate_dsl_doc(visual, &mut errors);
-    if !errors.is_empty() {
-        return Err(errors.join("; "));
-    }
-    visual_to_renderable_v1(visual).map(|_| ())
 }
 
 fn summarize_v2_visual(visual: &Value) -> VisualSummary {
@@ -4241,203 +3333,10 @@ fn count_changed_paths(before: &Value, after: &Value) -> usize {
     }
 }
 
-fn validate_dsl_node(node: &Value, path: &str, errors: &mut Vec<String>) {
-    let obj = match node.as_object() {
-        Some(o) => o,
-        None => {
-            errors.push(format!(
-                "{path}: expected object, got {}",
-                node_type_name(node)
-            ));
-            return;
-        }
-    };
-
-    if let Some(t) = obj.get("type").and_then(|v| v.as_str()) {
-        if !VALID_ROOT_TYPES.contains(&t) && !VALID_NODE_TYPES.contains(&t) {
-            errors.push(format!(
-                "{path}.type: unknown node type \"{t}\". Valid types: {}",
-                VALID_NODE_TYPES.join(", ")
-            ));
-        }
-        // scene/player require width, height
-        if (t == "scene" || t == "player")
-            && path == "root"
-            && (!obj.contains_key("width") || !obj.contains_key("height"))
-        {
-            errors.push(format!("{path}: {t} requires width and height"));
-        }
-        // player requires fps and durationInFrames
-        if t == "player" && path == "root" {
-            if !obj.contains_key("fps") {
-                errors.push(format!("{path}: player requires fps"));
-            }
-            if !obj.contains_key("durationInFrames") {
-                errors.push(format!("{path}: player requires durationInFrames"));
-            }
-        }
-        // text nodes require the "content" property (NOT "text")
-        if t == "text" && !obj.contains_key("content") {
-            if obj.contains_key("text") {
-                errors.push(format!(
-                    "{path}: text node uses \"content\" not \"text\" for the string value"
-                ));
-            } else {
-                errors.push(format!("{path}: text node requires a \"content\" string"));
-            }
-        }
-        // polygon requires points array with ≥ 3 entries, each [number, number]
-        if t == "polygon" {
-            match obj.get("points").and_then(|v| v.as_array()) {
-                Some(pts) => {
-                    if pts.len() < 3 {
-                        errors.push(format!(
-                            "{path}.points: polygon requires at least 3 points (got {})",
-                            pts.len()
-                        ));
-                    }
-                    for (i, pt) in pts.iter().enumerate() {
-                        if let Some(arr) = pt.as_array() {
-                            if arr.len() != 2 || !arr[0].is_number() || !arr[1].is_number() {
-                                errors.push(format!(
-                                    "{path}.points[{i}]: each point must be [number, number]"
-                                ));
-                            }
-                        } else {
-                            errors.push(format!(
-                                "{path}.points[{i}]: each point must be [number, number], got {}",
-                                node_type_name(pt)
-                            ));
-                        }
-                    }
-                }
-                None => {
-                    if obj.contains_key("points") {
-                        errors.push(format!(
-                            "{path}.points: must be an array of [number, number] pairs"
-                        ));
-                    } else {
-                        errors.push(format!("{path}: polygon requires a \"points\" array"));
-                    }
-                }
-            }
-        }
-        // line requires x1, y1, x2, y2 as numbers
-        if t == "line" || t == "arrow" {
-            for coord in &["x1", "y1", "x2", "y2"] {
-                match obj.get(*coord) {
-                    Some(v) if v.is_number() => {}
-                    Some(_) => errors.push(format!("{path}.{coord}: must be a number")),
-                    None => errors.push(format!("{path}: {t} requires \"{coord}\"")),
-                }
-            }
-        }
-        // bezierCurve requires points array, each [number, number]
-        if t == "bezierCurve" {
-            if let Some(pts) = obj.get("points").and_then(|v| v.as_array()) {
-                for (i, pt) in pts.iter().enumerate() {
-                    if let Some(arr) = pt.as_array() {
-                        if arr.len() != 2 || !arr[0].is_number() || !arr[1].is_number() {
-                            errors.push(format!(
-                                "{path}.points[{i}]: each point must be [number, number]"
-                            ));
-                        }
-                    } else {
-                        errors.push(format!(
-                            "{path}.points[{i}]: each point must be [number, number], got {}",
-                            node_type_name(pt)
-                        ));
-                    }
-                }
-            }
-        }
-        // fadeIn/fadeOut/draw must be positive (≥ 1), not zero
-        for anim_prop in &["fadeIn", "fadeOut", "draw"] {
-            if let Some(v) = obj.get(*anim_prop) {
-                if let Some(n) = v.as_f64() {
-                    if n < 1.0 {
-                        errors.push(format!("{path}.{anim_prop}: must be ≥ 1 (got {n}). Omit the property for instant visibility at frame 0."));
-                    }
-                } else if !v.is_number() {
-                    errors.push(format!("{path}.{anim_prop}: must be a positive number"));
-                }
-            }
-        }
-    } else if path != "root" {
-        // Non-root nodes must have a type
-        errors.push(format!("{path}: missing \"type\" property"));
-    }
-
-    // Recursively validate children
-    if let Some(children) = obj.get("children").and_then(|v| v.as_array()) {
-        for (i, child) in children.iter().enumerate() {
-            validate_dsl_node(child, &format!("{path}.children[{i}]"), errors);
-        }
-    }
-}
-
-fn node_type_name(v: &Value) -> &'static str {
-    match v {
-        Value::Null => "null",
-        Value::Bool(_) => "boolean",
-        Value::Number(_) => "number",
-        Value::String(_) => "string",
-        Value::Array(_) => "array",
-        Value::Object(_) => "object",
-    }
-}
-
-/// Validate a DSL document object, collecting errors into the provided Vec.
-fn validate_dsl_doc(visual: &Value, errors: &mut Vec<String>) {
-    if visual.get("version").and_then(|v| v.as_str()) == Some("2.0") {
-        if let Err(e) = validate_v2_doc(visual) {
-            errors.push(e);
-            return;
-        }
-        match visual_to_renderable_v1(visual) {
-            Ok(renderable) => validate_dsl_doc(&renderable, errors),
-            Err(e) => errors.push(e),
-        }
-        return;
-    }
-
-    // Check version
-    match visual.get("version") {
-        Some(v) if v.as_str() == Some("1.0") => {}
-        Some(v) => errors.push(format!("version: expected \"1.0\", got {v}")),
-        None => errors.push("missing required field \"version\" (must be \"1.0\")".into()),
-    }
-
-    // Check root
-    match visual.get("root") {
-        Some(root) if root.is_object() => {
-            // Check root type
-            match root.get("type").and_then(|v| v.as_str()) {
-                Some(t) if VALID_ROOT_TYPES.contains(&t) => {}
-                Some(t) => errors.push(format!(
-                    "root.type: \"{t}\" is not a valid root type. Must be one of: {}",
-                    VALID_ROOT_TYPES.join(", ")
-                )),
-                None => errors.push("root: missing \"type\" property".into()),
-            }
-            // Validate children recursively
-            if let Some(children) = root.get("children").and_then(|v| v.as_array()) {
-                for (i, child) in children.iter().enumerate() {
-                    validate_dsl_node(child, &format!("root.children[{i}]"), &mut *errors);
-                }
-            }
-            // Validate root-level requirements
-            validate_dsl_node(root, "root", &mut *errors);
-        }
-        Some(_) => errors.push("root: must be an object".into()),
-        None => errors.push("missing required field \"root\"".into()),
-    }
-}
-
-fn exec_write_note(root: &Path, args: &Value) -> String {
+fn exec_write_note(root: &Path, args: &Value) -> ToolOutput {
     let rel = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => p,
-        None => return "Error: missing 'path' argument (e.g. 'my-note.md')".into(),
+        None => return ToolOutput::failed("Error: missing 'path' argument (e.g. 'my-note.md')"),
     };
     // Enforce .md extension and safe path
     let safe_rel = {
@@ -4450,20 +3349,24 @@ fn exec_write_note(root: &Path, args: &Value) -> String {
     };
     let path = match project::safe_resolve(root, &safe_rel) {
         Ok(p) => p,
-        Err(_) => return format!("Error: invalid path '{safe_rel}' — path traversal not allowed"),
+        Err(_) => {
+            return ToolOutput::failed(format!(
+                "Error: invalid path '{safe_rel}' — path traversal not allowed"
+            ))
+        }
     };
     let content = match args.get("content").and_then(|v| v.as_str()) {
         Some(c) => c,
-        None => return "Error: missing 'content' argument".into(),
+        None => return ToolOutput::failed("Error: missing 'content' argument"),
     };
     if let Err(e) = project::ensure_note_unlocked(root, &safe_rel) {
-        return format!("Error: {e}");
+        return ToolOutput::failed(format!("Error: {e}"));
     }
 
     if let Some(parent) = path.parent() {
         if !parent.exists() {
             if let Err(e) = std::fs::create_dir_all(parent) {
-                return format!("Error creating directories: {e}");
+                return ToolOutput::failed(format!("Error creating directories: {e}"));
             }
         }
     }
@@ -4472,31 +3375,31 @@ fn exec_write_note(root: &Path, args: &Value) -> String {
     match project::write_note(&path, content) {
         Ok(()) => {
             if created {
-                format!("Created note '{safe_rel}'")
+                ToolOutput::from(format!("Created note '{safe_rel}'"))
             } else {
-                format!("Updated note '{safe_rel}'")
+                ToolOutput::from(format!("Updated note '{safe_rel}'"))
             }
         }
-        Err(e) => format!("Error writing note: {e}"),
+        Err(e) => ToolOutput::failed(format!("Error writing note: {e}")),
     }
 }
 
-fn exec_read_storyboard(root: &Path, args: &Value) -> String {
+fn exec_read_storyboard(root: &Path, args: &Value) -> ToolOutput {
     let rel = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => p,
-        None => return "Error: missing 'path' argument".into(),
+        None => return ToolOutput::failed("Error: missing 'path' argument"),
     };
     let path = resolve_path(root, rel);
     match project::read_storyboard(&path) {
-        Ok(sb) => format_storyboard_for_agent(root, &sb),
-        Err(e) => format!("Error reading storyboard: {e}"),
+        Ok(sb) => ToolOutput::from(format_storyboard_for_agent(root, &sb)),
+        Err(e) => ToolOutput::failed(format!("Error reading storyboard: {e}")),
     }
 }
 
-fn exec_write_storyboard(root: &Path, args: &Value) -> String {
+fn exec_write_storyboard(root: &Path, args: &Value) -> ToolOutput {
     let rel = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => p,
-        None => return "Error: missing 'path' argument".into(),
+        None => return ToolOutput::failed("Error: missing 'path' argument"),
     };
     let safe_rel = {
         let trimmed = rel.trim().replace(['\\'], "/");
@@ -4508,14 +3411,18 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
     };
     let path = match project::safe_resolve(root, &safe_rel) {
         Ok(p) => p,
-        Err(_) => return format!("Error: invalid path '{safe_rel}' — path traversal not allowed"),
+        Err(_) => {
+            return ToolOutput::failed(format!(
+                "Error: invalid path '{safe_rel}' — path traversal not allowed"
+            ))
+        }
     };
 
     // Load existing or create new
     let mut sb = match project::read_storyboard(&path) {
         Ok(existing) => {
             if let Err(e) = project::ensure_storyboard_unlocked(&existing) {
-                return format!("Error writing storyboard: {e}");
+                return ToolOutput::failed(format!("Error writing storyboard: {e}"));
             }
             existing
         }
@@ -4542,10 +3449,14 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
                 "sketch_ref" => {
                     let sketch_path = match item.get("path").and_then(|v| v.as_str()) {
                         Some(p) => p.to_string(),
-                        None => return format!("Error: items[{i}] sketch_ref is missing 'path'"),
+                        None => {
+                            return ToolOutput::failed(format!(
+                                "Error: items[{i}] sketch_ref is missing 'path'"
+                            ))
+                        }
                     };
                     if !sketch_path.ends_with(".sk") {
-                        return format!("Error: items[{i}] sketch_ref path must end with .sk (got '{sketch_path}')");
+                        return ToolOutput::failed(format!("Error: items[{i}] sketch_ref path must end with .sk (got '{sketch_path}')"));
                     }
                     new_items.push(crate::models::sketch::StoryboardItem::SketchRef {
                         path: sketch_path,
@@ -4554,7 +3465,11 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
                 "section" => {
                     let title = match item.get("title").and_then(|v| v.as_str()) {
                         Some(t) if !t.trim().is_empty() => t.to_string(),
-                        _ => return format!("Error: items[{i}] section is missing 'title'"),
+                        _ => {
+                            return ToolOutput::failed(format!(
+                                "Error: items[{i}] section is missing 'title'"
+                            ))
+                        }
                     };
                     let description = item
                         .get("description")
@@ -4568,14 +3483,14 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
                                 .filter_map(|v| v.as_str().map(|s| s.to_string()))
                                 .collect(),
                             None => {
-                                return format!(
+                                return ToolOutput::failed(format!(
                                 "Error: items[{i}] section '{title}' is missing 'sketches' array"
-                            )
+                            ))
                             }
                         };
                     for sp in &sketches {
                         if !sp.ends_with(".sk") {
-                            return format!("Error: items[{i}] section sketch path must end with .sk (got '{sp}')");
+                            return ToolOutput::failed(format!("Error: items[{i}] section sketch path must end with .sk (got '{sp}')"));
                         }
                     }
                     new_items.push(crate::models::sketch::StoryboardItem::Section {
@@ -4585,9 +3500,9 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
                     });
                 }
                 other => {
-                    return format!(
+                    return ToolOutput::failed(format!(
                     "Error: items[{i}] unknown type '{other}' — must be 'sketch_ref' or 'section'"
-                )
+                ))
                 }
             }
         }
@@ -4597,12 +3512,12 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> String {
     sb.updated_at = chrono::Utc::now();
 
     match project::write_storyboard(&sb, &path, root) {
-        Ok(()) => format!(
+        Ok(()) => ToolOutput::from(format!(
             "Saved storyboard \"{}\" at '{safe_rel}' ({} items)",
             sb.title,
             sb.items.len()
-        ),
-        Err(e) => format!("Error writing storyboard: {e}"),
+        )),
+        Err(e) => ToolOutput::failed(format!("Error writing storyboard: {e}")),
     }
 }
 
@@ -5250,7 +4165,9 @@ mod tests {
         match output {
             ToolOutput::Text(text) => text,
             ToolOutput::WithImages { text, .. } => text,
-            ToolOutput::WithMetadata { output, .. } => tool_output_text(*output),
+            ToolOutput::WithMetadata { output, .. } | ToolOutput::WithStatus { output, .. } => {
+                tool_output_text(*output)
+            }
         }
     }
 
@@ -5465,6 +4382,180 @@ mod tests {
             .text()
             .contains("disabled by the current AI mutation guard"));
         assert!(!tmp.path().join("draft.md").exists());
+    }
+
+    #[test]
+    fn explicit_failure_status_survives_benign_wording() {
+        // Acceptance #1: an explicit failure cannot be flipped to success by
+        // changing the error wording. "Sketch not found: ..." does not match the
+        // text fallback, yet the outcome is authoritative and stays Failure.
+        let output = ToolOutput::failed("Sketch not found: intro.sk");
+        assert_eq!(output.status(), Some(ToolExecutionStatus::Failure));
+        assert!(
+            !is_tool_error(output.text()),
+            "text fallback alone would misjudge this as success"
+        );
+        // The end-of-execute_tool resolution keeps the explicit status.
+        let resolved = output
+            .status()
+            .unwrap_or_else(|| classify_tool_text(output.text()));
+        assert_eq!(resolved, ToolExecutionStatus::Failure);
+    }
+
+    #[test]
+    fn historical_output_without_status_falls_back_to_text() {
+        // Acceptance #5: outputs that predate explicit status (no WithStatus)
+        // remain classifiable via the hardened text fallback.
+        let legacy_failure = ToolOutput::from("Error reading storyboard: demo.sb");
+        assert_eq!(legacy_failure.status(), None);
+        assert_eq!(
+            classify_tool_text(legacy_failure.text()),
+            ToolExecutionStatus::Failure
+        );
+
+        let legacy_success = ToolOutput::from("Wrote note draft.md");
+        assert_eq!(legacy_success.status(), None);
+        assert_eq!(
+            classify_tool_text(legacy_success.text()),
+            ToolExecutionStatus::Success
+        );
+    }
+
+    fn tool_call(name: &str, args: Value) -> ToolCall {
+        ToolCall {
+            id: "call-1".into(),
+            call_type: "function".into(),
+            function: crate::engine::agent::execution::FunctionCall {
+                name: name.into(),
+                arguments: args.to_string(),
+            },
+        }
+    }
+
+    #[test]
+    fn execute_tool_always_supplies_explicit_status() {
+        // Acceptance #2 and #5: every execution path — success, missing-file,
+        // permission rejection, and mutation-guard rejection — carries an
+        // explicit host-owned status rather than leaving it to be inferred.
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+
+        // Success: write a note with mutations enabled.
+        let ok = execute_tool(
+            &tool_call("write_note", json!({ "path": "notes/a.md", "content": "hi" })),
+            root,
+            root,
+            false,
+            true,
+            true,
+        );
+        assert_eq!(ok.status(), Some(ToolExecutionStatus::Success));
+
+        // Missing-file read.
+        let missing = execute_tool(
+            &tool_call("read_sketch", json!({ "path": "does-not-exist.sk" })),
+            root,
+            root,
+            false,
+            false,
+            true,
+        );
+        assert_eq!(missing.status(), Some(ToolExecutionStatus::Failure));
+
+        // Early permission rejection: create_project offered only to the Writer.
+        let permission = execute_tool(
+            &tool_call("create_project", json!({ "name": "Nope" })),
+            root,
+            root,
+            false,
+            false,
+            true,
+        );
+        assert_eq!(permission.status(), Some(ToolExecutionStatus::Failure));
+
+        // Mutation-guard rejection: a write tool with mutations disabled.
+        let guarded = execute_tool(
+            &tool_call("write_note", json!({ "path": "b.md", "content": "x" })),
+            root,
+            root,
+            false,
+            true,
+            false,
+        );
+        assert_eq!(guarded.status(), Some(ToolExecutionStatus::Failure));
+
+        // Unknown tool.
+        let unknown = execute_tool(
+            &tool_call("no_such_tool", json!({})),
+            root,
+            root,
+            false,
+            false,
+            true,
+        );
+        assert_eq!(unknown.status(), Some(ToolExecutionStatus::Failure));
+    }
+
+    #[test]
+    fn visual_producers_carry_explicit_failure_status() {
+        // Acceptance #1: visual-family producers return an explicit host-owned
+        // outcome, so a real failure can never reach end-of-execute_tool without a
+        // status and be inferred as success — even when the wording ("Validation
+        // failed", "no visual") is benign or unusual.
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        write_test_sketch(root, "demo.sk", PlanningRow::new());
+
+        // set_row_visual with a structurally invalid visual document fails.
+        let bad_set = execute_tool(
+            &tool_call(
+                "set_row_visual",
+                json!({ "path": "demo.sk", "row_number": 1, "visual": { "not_a_real_field": true } }),
+            ),
+            root,
+            root,
+            false,
+            true,
+            true,
+        );
+        assert_eq!(
+            bad_set.status(),
+            Some(ToolExecutionStatus::Failure),
+            "an invalid visual must be an explicit failure, not an inferred success"
+        );
+
+        // review_row_visual on a row that has no visual fails via load_row_visual.
+        let bad_review = execute_tool(
+            &tool_call("review_row_visual", json!({ "path": "demo.sk", "row_number": 1 })),
+            root,
+            root,
+            false,
+            true,
+            true,
+        );
+        assert_eq!(
+            bad_review.status(),
+            Some(ToolExecutionStatus::Failure),
+            "reviewing a row with no visual must carry an explicit failure status"
+        );
+
+        // apply_row_visual_nudge on a row that has no visual fails likewise.
+        let bad_nudge = execute_tool(
+            &tool_call(
+                "apply_row_visual_nudge",
+                json!({ "path": "demo.sk", "row_number": 1, "nudge_id": "whatever" }),
+            ),
+            root,
+            root,
+            false,
+            true,
+            true,
+        );
+        assert_eq!(
+            bad_nudge.status(),
+            Some(ToolExecutionStatus::Failure),
+            "nudging a row with no visual must carry an explicit failure status"
+        );
     }
 
     #[test]
@@ -5685,6 +4776,7 @@ mod tests {
                 "description": "AI rewrite"
             }),
         );
+        let result = result.text();
 
         assert!(result.starts_with("Error writing storyboard:"), "{result}");
         assert!(result.contains("storyboard is locked"), "{result}");
@@ -5714,6 +4806,7 @@ mod tests {
                 }]
             }),
         );
+        let result = result.text();
 
         assert!(
             result.starts_with("Error:"),
@@ -5746,6 +4839,7 @@ mod tests {
                 "time": "0:20"
             }),
         );
+        let result = result.text();
 
         assert!(result.starts_with("Error:"), "{result}");
         assert!(result.contains("time cell is locked"), "{result}");
@@ -5775,6 +4869,7 @@ mod tests {
                 "narrative": "Updated first row"
             }),
         );
+        let result = result.text();
 
         assert!(result.contains("Updated row 1"), "{result}");
         let saved = project::read_sketch(&root.join(rel)).unwrap();
@@ -5799,6 +4894,7 @@ mod tests {
                 "narrative": "Legacy update"
             }),
         );
+        let result = result.text();
 
         assert!(result.contains("Updated row 1"), "{result}");
         let saved = project::read_sketch(&root.join(rel)).unwrap();
@@ -5820,6 +4916,7 @@ mod tests {
                 "narrative": "Should not save"
             }),
         );
+        let zero_result = zero_result.text();
         assert!(
             zero_result.contains("row_number is 1-based"),
             "{zero_result}"
@@ -5834,6 +4931,7 @@ mod tests {
                 "narrative": "Should not save"
             }),
         );
+        let conflict_result = conflict_result.text();
         assert!(
             conflict_result.contains("conflicts with legacy index"),
             "{conflict_result}"
@@ -5858,6 +4956,7 @@ mod tests {
                 "narrative": "Should not save"
             }),
         );
+        let result = result.text();
 
         assert!(result.contains("no longer matches"), "{result}");
         let saved = project::read_sketch(&root.join(rel)).unwrap();
@@ -5897,7 +4996,9 @@ mod tests {
                 "index": 0,
                 "visual": null
             }),
-        );
+        )
+        .text()
+        .to_string();
 
         assert!(result.starts_with("Error:"), "{result}");
         assert!(result.contains("media cell is locked"), "{result}");
@@ -5943,7 +5044,9 @@ mod tests {
                     }
                 }
             }),
-        );
+        )
+        .text()
+        .to_string();
 
         assert!(result.contains("Visual saved"), "{result}");
         let saved = project::read_sketch(&root.join(rel)).unwrap();
@@ -6011,7 +5114,9 @@ mod tests {
                     }
                 }
             }),
-        );
+        )
+        .text()
+        .to_string();
 
         assert!(result.contains("Visual saved"), "{result}");
         let saved = project::read_sketch(&root.join(rel)).unwrap();
@@ -6068,7 +5173,9 @@ mod tests {
                     }
                 }
             }),
-        );
+        )
+        .text()
+        .to_string();
 
         assert!(result.contains("Visual saved"), "{result}");
         let saved = project::read_sketch(&root.join(rel)).unwrap();
@@ -6088,7 +5195,9 @@ mod tests {
         row.visual = Some(Value::String(visual_path));
         write_test_sketch(root, "demo.sk", row);
 
-        let result = exec_review_row_visual(root, &json!({ "path": "demo.sk", "index": 0 }));
+        let result = exec_review_row_visual(root, &json!({ "path": "demo.sk", "index": 0 }))
+            .text()
+            .to_string();
 
         assert!(result.contains("Elucim visual review"), "{result}");
         assert!(result.contains("Valid: yes"), "{result}");
@@ -6115,7 +5224,9 @@ mod tests {
                 "index": 0,
                 "nudge_id": "mark-refined"
             }),
-        );
+        )
+        .text()
+        .to_string();
 
         assert!(result.contains("Applied visual nudge"), "{result}");
         let saved = project::read_sketch(&root.join("demo.sk")).unwrap();
@@ -6151,7 +5262,9 @@ mod tests {
                     "durationFrames": 20
                 }
             }),
-        );
+        )
+        .text()
+        .to_string();
 
         assert!(result.contains("Applied visual command"), "{result}");
         let saved = project::read_sketch(&root.join("demo.sk")).unwrap();
@@ -6279,7 +5392,9 @@ mod tests {
                 "index": 0,
                 "nudge_id": "annotate-element-intent"
             }),
-        );
+        )
+        .text()
+        .to_string();
 
         assert!(result.contains("Applied visual nudge"), "{result}");
         let saved = project::read_sketch(&root.join("demo.sk")).unwrap();
@@ -6497,6 +5612,7 @@ mod tests {
                 "content": "AI rewrite"
             }),
         );
+        let result = result.text();
 
         assert!(result.starts_with("Error:"), "{result}");
         assert!(result.contains("This note is locked"), "{result}");

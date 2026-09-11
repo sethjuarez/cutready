@@ -673,48 +673,107 @@ pub fn migrate_to_multi_project(
 
     let target = repo_root.join(&path);
 
-    // Create the target subdirectory
-    std::fs::create_dir_all(&target).map_err(|e| ProjectError::Io(e.to_string()))?;
-
-    // Move all project files (not .git, not .cutready, not the target dir) into the subdirectory
-    let skip = [".git", ".cutready", &path as &str];
-    for entry in std::fs::read_dir(repo_root).map_err(|e| ProjectError::Io(e.to_string()))? {
-        let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
-        let name = entry.file_name();
-        let name_str = name.to_string_lossy();
-        if skip.iter().any(|s| *s == name_str.as_ref()) {
-            continue;
-        }
-        let dest = target.join(&name);
-        std::fs::rename(entry.path(), &dest).map_err(|e| ProjectError::Io(e.to_string()))?;
+    // A fresh conversion must not adopt a stale runtime-state namespace left by an
+    // aborted prior attempt; merging unknown leftovers into the new project is
+    // unsafe. Require the destination state dir to be absent or empty up front.
+    let target_state = git_state_dir(repo_root, &target);
+    if target_state.exists()
+        && std::fs::read_dir(&target_state)
+            .map(|mut it| it.next().is_some())
+            .unwrap_or(true)
+    {
+        return Err(ProjectError::Io(format!(
+            "Refusing to convert to multi-project: stale runtime state exists at {}",
+            target_state.display()
+        )));
     }
 
-    // Move asset directories (.cutready/screenshots, .cutready/visuals) into the project.
-    // The repo-level .cutready/ is kept for the manifest; only asset subdirs move.
-    let cutready_dir = repo_root.join(".cutready");
-    for subdir in &["screenshots", "visuals"] {
-        let src = cutready_dir.join(subdir);
-        if src.exists() {
-            let dest_cutready = target.join(".cutready");
-            std::fs::create_dir_all(&dest_cutready).map_err(|e| ProjectError::Io(e.to_string()))?;
-            let dest = dest_cutready.join(subdir);
+    // Relocate local runtime state (agent DB, memory, workspace/sidebar state)
+    // into the project's new namespace first. Doing this before any content moves
+    // means a live database (active run holding a lock) rejects the conversion
+    // up front, leaving the working tree untouched.
+    relocate_project_state(repo_root, repo_root, &target)?;
+
+    // Everything below mutates the working tree. Track content moves so any later
+    // failure rewinds the tree and returns the runtime state to the single-project
+    // namespace, leaving the original project fully recoverable.
+    let mut moved_content: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::new();
+    let build = (|| -> Result<ProjectEntry, ProjectError> {
+        // Create the target subdirectory
+        std::fs::create_dir_all(&target).map_err(|e| ProjectError::Io(e.to_string()))?;
+
+        // Move all project files (not .git, not .cutready, not the target dir) into the subdirectory
+        let skip = [".git", ".cutready", &path as &str];
+        for entry in std::fs::read_dir(repo_root).map_err(|e| ProjectError::Io(e.to_string()))? {
+            let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            if skip.iter().any(|s| *s == name_str.as_ref()) {
+                continue;
+            }
+            let src = entry.path();
+            let dest = target.join(&name);
             std::fs::rename(&src, &dest).map_err(|e| ProjectError::Io(e.to_string()))?;
+            moved_content.push((src, dest));
+        }
+
+        // Move asset directories (.cutready/screenshots, .cutready/visuals) into the project.
+        // The repo-level .cutready/ is kept for the manifest; only asset subdirs move.
+        let cutready_dir = repo_root.join(".cutready");
+        for subdir in &["screenshots", "visuals"] {
+            let src = cutready_dir.join(subdir);
+            if src.exists() {
+                let dest_cutready = target.join(".cutready");
+                std::fs::create_dir_all(&dest_cutready)
+                    .map_err(|e| ProjectError::Io(e.to_string()))?;
+                let dest = dest_cutready.join(subdir);
+                std::fs::rename(&src, &dest).map_err(|e| ProjectError::Io(e.to_string()))?;
+                moved_content.push((src, dest));
+            }
+        }
+
+        let entry = ProjectEntry {
+            path: path.clone(),
+            name: existing_project_name.to_string(),
+            description: None,
+        };
+
+        // Create manifest with the single migrated project
+        let manifest = ProjectManifest {
+            projects: vec![entry.clone()],
+        };
+        write_manifest(repo_root, &manifest)?;
+
+        Ok(entry)
+    })();
+
+    match build {
+        Ok(entry) => Ok(entry),
+        Err(err) => {
+            // Rewind content moves (reverse order), return runtime state to the
+            // single-project namespace, and drop the freshly written manifest so
+            // `is_multi_project` cannot misclassify the rolled-back checkout.
+            let mut stranded: Vec<String> = Vec::new();
+            for (src, dest) in moved_content.iter().rev() {
+                if std::fs::rename(dest, src).is_err() {
+                    stranded.push(dest.display().to_string());
+                }
+            }
+            if let Err(state_err) = relocate_project_state(repo_root, &target, repo_root) {
+                stranded.push(format!("runtime state ({state_err})"));
+            }
+            let _ = std::fs::remove_file(repo_root.join(MANIFEST_PATH));
+            let _ = std::fs::remove_dir(&target);
+            if stranded.is_empty() {
+                Err(err)
+            } else {
+                Err(ProjectError::Io(format!(
+                    "Failed to convert to multi-project ({err}); rollback incomplete, artifacts stranded at: {}",
+                    stranded.join(", ")
+                )))
+            }
         }
     }
-
-    let entry = ProjectEntry {
-        path: path.clone(),
-        name: existing_project_name.to_string(),
-        description: None,
-    };
-
-    // Create manifest with the single migrated project
-    let manifest = ProjectManifest {
-        projects: vec![entry.clone()],
-    };
-    write_manifest(repo_root, &manifest)?;
-
-    Ok(entry)
 }
 
 // ── Sketch file I/O (.sk) ─────────────────────────────────────────
@@ -2446,6 +2505,120 @@ pub fn git_state_dir(repo_root: &Path, project_root: &Path) -> std::path::PathBu
     }
 }
 
+/// Relocate a project's local runtime state when its path-based identity changes
+/// via rename or single→multi conversion.
+///
+/// The per-project state directory (`git_state_dir`) doubles as the project's
+/// identity and holds untracked runtime state: the agent-state SQLite database
+/// (runs, chat history), the memory store, workspace tabs (`workspace.json`),
+/// sidebar ordering (`order.json`), and imported legacy chats. A path change
+/// moves the working-tree content but, without this, orphans that runtime state
+/// under the old path so the reopened project silently loses its history.
+///
+/// Safety:
+/// - No-op when the resolved directories are equal or the source is missing.
+/// - Refuses to overwrite any colliding destination artifact, so a collision can
+///   never destroy either side's data (the caller can surface the error and the
+///   original remains intact).
+/// - Moves entries with `rename` (atomic within a single `.git` volume), keeping
+///   the SQLite database together with any journal/WAL sidecars — the database is
+///   moved, never copied away from its journal. A run writing mid-relocation
+///   holds an OS lock on the database, so the rename fails and relocation is
+///   rejected rather than corrupting a live database.
+/// - On partial failure, entries already moved are rolled back to the source
+///   before the error is returned.
+///
+/// When the destination is nested inside the source (single→multi conversion),
+/// the destination subdirectory is skipped and the source directory is retained;
+/// otherwise the emptied source directory is removed.
+///
+/// Known limitation: this does not take a process-wide lock shared with the
+/// agent-state, workspace, and sidebar readers/writers. It relies on runtime
+/// stores using short-lived per-operation connections plus the OS refusing to
+/// rename a database a live run holds open. A concurrent old-path writer racing
+/// the relocation is therefore still possible; callers should quiesce active
+/// runs first. A shared project-state lock is tracked as follow-up work.
+pub fn relocate_project_state(
+    repo_root: &Path,
+    old_project_root: &Path,
+    new_project_root: &Path,
+) -> Result<(), ProjectError> {
+    let old_dir = git_state_dir(repo_root, old_project_root);
+    let new_dir = git_state_dir(repo_root, new_project_root);
+    if old_dir == new_dir || !old_dir.exists() {
+        return Ok(());
+    }
+
+    // Everything under the old state dir except the destination itself (which is
+    // nested inside the source during single→multi conversion). Directory-entry
+    // read errors are propagated rather than silently skipped, so a partially
+    // readable source is never mistaken for a fully relocated one.
+    let mut entries: Vec<std::path::PathBuf> = Vec::new();
+    for entry in std::fs::read_dir(&old_dir).map_err(|e| ProjectError::Io(e.to_string()))? {
+        let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
+        let path = entry.path();
+        if path != new_dir {
+            entries.push(path);
+        }
+    }
+
+    // Collision guard: never overwrite an existing destination artifact.
+    if new_dir.exists() {
+        for src in &entries {
+            if let Some(name) = src.file_name() {
+                let dest = new_dir.join(name);
+                if dest.exists() {
+                    return Err(ProjectError::Io(format!(
+                        "Refusing to relocate project state: destination already contains {}",
+                        dest.display()
+                    )));
+                }
+            }
+        }
+    }
+
+    std::fs::create_dir_all(&new_dir).map_err(|e| ProjectError::Io(e.to_string()))?;
+
+    let mut moved: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::new();
+    for src in entries {
+        let Some(name) = src.file_name() else {
+            continue;
+        };
+        let dest = new_dir.join(name);
+        if let Err(err) = std::fs::rename(&src, &dest) {
+            // Roll back every entry moved so far so the original stays recoverable.
+            // Any reverse move that itself fails is reported so a layout split
+            // across both paths is never silently left behind.
+            let mut stranded: Vec<String> = Vec::new();
+            for (orig, moved_dest) in moved.iter().rev() {
+                if std::fs::rename(moved_dest, orig).is_err() {
+                    stranded.push(moved_dest.display().to_string());
+                }
+            }
+            if stranded.is_empty() {
+                return Err(ProjectError::Io(format!(
+                    "Could not relocate project state entry {}: {err}",
+                    src.display()
+                )));
+            }
+            return Err(ProjectError::Io(format!(
+                "Could not relocate project state entry {} ({err}); rollback incomplete, artifacts stranded at: {}",
+                src.display(),
+                stranded.join(", ")
+            )));
+        }
+        moved.push((src, dest));
+    }
+
+    // Disjoint move: drop the now-empty source directory. Nested move: keep it,
+    // since the destination lives inside it.
+    if !new_dir.starts_with(&old_dir) {
+        let _ = std::fs::remove_dir(&old_dir);
+    }
+
+    Ok(())
+}
+
 /// Workspace state persisted across app restarts.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct WorkspaceState {
@@ -3836,6 +4009,205 @@ Some text
             dir.to_string_lossy().contains("demo"),
             "Should contain project name for multi-project: {:?}",
             dir
+        );
+    }
+
+    fn seed_chat_session(repo_root: &Path, project_root: &Path, session_id: &str, title: &str) {
+        // The working directory must exist: save_chat_session runs legacy chat
+        // migration, which canonicalizes the project root.
+        std::fs::create_dir_all(project_root).unwrap();
+        crate::engine::agent_state::AgentStateStore::save_chat_session(
+            repo_root,
+            project_root,
+            session_id,
+            title,
+            &[serde_json::json!({ "role": "user", "content": "remember me" })],
+            serde_json::json!({}),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn relocate_project_state_carries_runtime_state_across_a_rename() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir(root.join(".git")).unwrap();
+        let alpha = root.join("alpha");
+        let beta = root.join("beta");
+
+        // Seed agent history, workspace tabs, sidebar order, and an imported chat
+        // subdirectory under the original project's state namespace.
+        seed_chat_session(root, &alpha, "s1", "Seeded run");
+        let ws = WorkspaceState {
+            open_tabs: vec![WorkspaceTab {
+                id: "tab-1".into(),
+                tab_type: "sketch".into(),
+                path: "intro.sk".into(),
+                title: "Intro".into(),
+            }],
+            active_tab_id: Some("tab-1".into()),
+            chat_session_path: None,
+        };
+        write_workspace_state(root, &alpha, &ws).unwrap();
+        let order = SidebarOrder {
+            storyboards: vec![],
+            sketches: vec!["b.sk".into(), "a.sk".into()],
+            notes: vec![],
+        };
+        write_sidebar_order(root, &alpha, &order).unwrap();
+        let legacy_chats = git_state_dir(root, &alpha).join("legacy-chats");
+        std::fs::create_dir_all(&legacy_chats).unwrap();
+        std::fs::write(legacy_chats.join("old.chat"), "{}").unwrap();
+
+        relocate_project_state(root, &alpha, &beta).unwrap();
+
+        // The caller also renames the working tree; mirror that so reopening the
+        // relocated state resolves against a real project directory.
+        std::fs::create_dir_all(&beta).unwrap();
+
+        // Old namespace is gone; the new one carries every artifact.
+        assert!(!git_state_dir(root, &alpha).exists());
+        let beta_state = git_state_dir(root, &beta);
+        assert!(beta_state.join("agent-state.db").exists());
+        assert!(beta_state.join("legacy-chats/old.chat").exists());
+
+        // Records reopen intact under the new path.
+        let sessions =
+            crate::engine::agent_state::AgentStateStore::list_chat_sessions(root, &beta, 10, 0)
+                .unwrap();
+        assert_eq!(sessions.sessions.len(), 1);
+        assert_eq!(sessions.sessions[0].session_id, "s1");
+        assert_eq!(
+            read_workspace_state(root, &beta).active_tab_id.as_deref(),
+            Some("tab-1")
+        );
+        assert_eq!(read_sidebar_order(root, &beta).sketches, vec!["b.sk", "a.sk"]);
+    }
+
+    #[test]
+    fn relocate_project_state_refuses_to_overwrite_a_colliding_destination() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir(root.join(".git")).unwrap();
+        let alpha = root.join("alpha");
+        let beta = root.join("beta");
+
+        seed_chat_session(root, &alpha, "s1", "Original");
+        // A pre-existing artifact in the destination must not be clobbered.
+        let beta_state = git_state_dir(root, &beta);
+        std::fs::create_dir_all(&beta_state).unwrap();
+        std::fs::write(beta_state.join("agent-state.db"), "pre-existing").unwrap();
+
+        let err = relocate_project_state(root, &alpha, &beta).unwrap_err();
+        assert!(matches!(err, ProjectError::Io(_)));
+        // Source data survives the refusal, fully recoverable.
+        assert!(git_state_dir(root, &alpha).join("agent-state.db").exists());
+        assert_eq!(
+            std::fs::read_to_string(beta_state.join("agent-state.db")).unwrap(),
+            "pre-existing"
+        );
+    }
+
+    #[test]
+    fn relocate_project_state_leaves_unrelated_projects_untouched() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir(root.join(".git")).unwrap();
+        let alpha = root.join("alpha");
+        let beta = root.join("beta");
+        let gamma = root.join("gamma");
+
+        seed_chat_session(root, &alpha, "s-alpha", "Alpha");
+        seed_chat_session(root, &gamma, "s-gamma", "Gamma");
+
+        relocate_project_state(root, &alpha, &beta).unwrap();
+
+        // The unrelated project keeps its own state and records.
+        assert!(git_state_dir(root, &gamma).join("agent-state.db").exists());
+        let gamma_sessions =
+            crate::engine::agent_state::AgentStateStore::list_chat_sessions(root, &gamma, 10, 0)
+                .unwrap();
+        assert_eq!(gamma_sessions.sessions.len(), 1);
+        assert_eq!(gamma_sessions.sessions[0].session_id, "s-gamma");
+    }
+
+    #[test]
+    fn migrate_to_multi_project_refuses_to_adopt_a_stale_runtime_namespace() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir(root.join(".git")).unwrap();
+        std::fs::write(root.join("intro.sk"), "{}").unwrap();
+
+        // Seed live single-project runtime state.
+        seed_chat_session(root, root, "s1", "Live run");
+        // A stale namespace from an aborted prior conversion sits at the target.
+        let stale = git_state_dir(root, &root.join("demo"));
+        std::fs::create_dir_all(&stale).unwrap();
+        std::fs::write(stale.join("agent-state.db"), "stale").unwrap();
+
+        let err = migrate_to_multi_project(root, "Demo").unwrap_err();
+        assert!(matches!(err, ProjectError::Io(_)));
+
+        // Nothing moved: live state stays put, content untouched, stale left as-is.
+        assert!(root.join(".git/cutready/agent-state.db").exists());
+        assert!(root.join("intro.sk").exists());
+        assert!(!is_multi_project(root));
+        assert_eq!(
+            std::fs::read_to_string(stale.join("agent-state.db")).unwrap(),
+            "stale"
+        );
+    }
+
+    #[test]
+    fn migrate_to_multi_project_relocates_runtime_state_into_the_namespace() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir(root.join(".git")).unwrap();
+        // Working-tree content lives at the single-project root.
+        std::fs::write(root.join("intro.sk"), "{}").unwrap();
+
+        // Seed runtime state in the single-project namespace (.git/cutready/).
+        seed_chat_session(root, root, "s1", "Pre-conversion run");
+        let ws = WorkspaceState {
+            open_tabs: vec![WorkspaceTab {
+                id: "tab-1".into(),
+                tab_type: "sketch".into(),
+                path: "intro.sk".into(),
+                title: "Intro".into(),
+            }],
+            active_tab_id: Some("tab-1".into()),
+            chat_session_path: None,
+        };
+        write_workspace_state(root, root, &ws).unwrap();
+
+        let entry = migrate_to_multi_project(root, "My Demo").unwrap();
+        let project_root = root.join(&entry.path);
+
+        // Content moved into the subproject.
+        assert!(project_root.join("intro.sk").exists());
+        assert!(!root.join("intro.sk").exists());
+
+        // Runtime state moved into the project's new namespace, not left behind.
+        assert!(git_state_dir(root, &project_root)
+            .join("agent-state.db")
+            .exists());
+        assert!(!root.join(".git/cutready/agent-state.db").exists());
+
+        // Records reopen intact under the converted path.
+        let sessions = crate::engine::agent_state::AgentStateStore::list_chat_sessions(
+            root,
+            &project_root,
+            10,
+            0,
+        )
+        .unwrap();
+        assert_eq!(sessions.sessions.len(), 1);
+        assert_eq!(sessions.sessions[0].session_id, "s1");
+        assert_eq!(
+            read_workspace_state(root, &project_root)
+                .active_tab_id
+                .as_deref(),
+            Some("tab-1")
         );
     }
 

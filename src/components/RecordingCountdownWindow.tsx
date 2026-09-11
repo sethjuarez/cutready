@@ -10,6 +10,7 @@ interface RecordingCountdownParams {
   monitor_y: number;
   countdown_seconds: number;
   document_title: string;
+  attempt_id: number;
 }
 
 export function RecordingCountdownWindow() {
@@ -20,9 +21,9 @@ export function RecordingCountdownWindow() {
   const cancel = useCallback(async () => {
     if (cancelled) return;
     setCancelled(true);
-    await emit("recording-countdown-cancel", {});
+    await emit("recording-countdown-cancel", { attemptId: params?.attempt_id });
     await invoke("close_recording_countdown_window");
-  }, [cancelled]);
+  }, [cancelled, params]);
 
   useEffect(() => {
     (async () => {
@@ -32,6 +33,8 @@ export function RecordingCountdownWindow() {
         setRemaining(Math.max(next.countdown_seconds, 1));
       } catch (err) {
         console.error("[RecordingCountdownWindow] Failed to get params:", err);
+        // Params never loaded, so we cannot attribute this cancel to a specific
+        // attempt; the control window falls back to its parked-countdown gate.
         await emit("recording-countdown-cancel", {});
         await invoke("close_recording_countdown_window");
       }

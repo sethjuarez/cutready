@@ -8,6 +8,7 @@ pub mod harness;
 pub mod llm;
 pub mod reference_context;
 pub mod sanitize;
+pub mod steering;
 pub mod tools;
 pub mod web;
 

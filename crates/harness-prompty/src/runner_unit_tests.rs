@@ -393,6 +393,11 @@ async fn delegation_depth_cap_blocks_further_delegation() {
 
     let output = run_delegated_agent(&ctx, &delegate_call("writer", "Go deeper")).await;
     assert!(output.text().contains("maximum delegation depth"));
+    assert_eq!(
+        output.status(),
+        Some(ToolExecutionStatus::Failure),
+        "a Prompty-native delegation failure must carry an explicit failure status"
+    );
 }
 
 #[tokio::test]
@@ -435,6 +440,11 @@ async fn delegation_missing_arguments_is_a_tool_error() {
     };
     let output = run_delegated_agent(&ctx, &missing_message).await;
     assert!(output.text().contains("requires a 'message' argument"));
+    assert_eq!(
+        output.status(),
+        Some(ToolExecutionStatus::Failure),
+        "a Prompty-native argument-validation failure must be an explicit failure"
+    );
 }
 
 #[tokio::test]
@@ -474,6 +484,24 @@ async fn delegation_propagates_parent_cancellation_to_child() {
 
     let output = run_delegated_agent(&ctx, &delegate_call("writer", "Draft it")).await;
     assert!(output.text().contains(CANCELLED_ERROR));
+}
+
+#[test]
+fn read_context_asset_native_errors_are_explicit_failures() {
+    // Mirrors the run_turn wrap: read_context_asset_output(..).unwrap_or_else(failed).
+    // A missing durable store and a missing asset_id are Prompty-native failures
+    // that must carry an explicit failure status rather than committing as success.
+    let no_store = ToolCall {
+        id: "call".into(),
+        call_type: "function".into(),
+        function: FunctionCall {
+            name: "read_context_asset".into(),
+            arguments: json!({ "asset_id": "abc" }).to_string(),
+        },
+    };
+    let out = read_context_asset_output(None, &no_store).unwrap_or_else(ToolOutput::failed);
+    assert!(out.text().contains("No local context store"));
+    assert_eq!(out.status(), Some(ToolExecutionStatus::Failure));
 }
 
 #[tokio::test]
@@ -796,7 +824,7 @@ async fn prompty_host_maps_visible_tool_result_only_after_commit_event() {
     let visible = visible.lock().unwrap();
     assert!(matches!(
         visible.as_slice(),
-        [AgentEvent::ToolResult { name, result }]
+        [AgentEvent::ToolResult { name, result, .. }]
             if name == "inspect" && result == "visible only when committed"
     ));
 }

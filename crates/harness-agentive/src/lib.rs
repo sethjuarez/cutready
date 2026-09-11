@@ -10,7 +10,8 @@
 //! adapter can execute a run end-to-end.
 
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::collections::{HashMap, VecDeque};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -18,7 +19,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use harness_contract::execution::{
-    AgentEvent, ChatMessage, ContextItem, ToolCall, ToolOutput, Usage,
+    AgentEvent, ChatMessage, ContextItem, ToolCall, ToolExecutionStatus, ToolOutput, Usage,
 };
 use harness_contract::llm::{LlmConfig, LlmProvider};
 use harness_contract::tools::{HostToolExecutor, ToolDefinition, ToolExecutionContext};
@@ -182,13 +183,37 @@ impl AgentHarness for AgentiveHarness {
             mutation_tools_enabled,
         };
         let host_executor = self.tool_executor.clone();
+        // agentive's `RunnerEvent::ToolResult` carries no execution outcome, so the
+        // host records each explicit status keyed by tool_call_id here and the event
+        // mapper reads it back. Each call reserves a slot in a per-id queue *before*
+        // its first await and fills that slot on completion. agentive polls parallel
+        // tool futures in argument order and emits their `ToolResult` events in that
+        // same order, while guaranteeing every parallel executor finishes before any
+        // event is emitted. Reserving in argument order and consuming front-first
+        // therefore correlates by request order, so two parallel calls that share a
+        // model-supplied tool_call_id keep their own outcomes even when they complete
+        // out of order (spawn_blocking makes completion order nondeterministic). An
+        // empty slot or missing entry maps to failure, so guardrail denials and
+        // status-less outputs never inherit a blanket success.
+        let tool_status: Arc<Mutex<HashMap<String, VecDeque<Option<ToolExecutionStatus>>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        let executor_status = tool_status.clone();
         let tool_executor = move |call: agentive::ToolCall| {
             let ctx = exec_ctx.clone();
             let host_executor = host_executor.clone();
+            let executor_status = executor_status.clone();
             async move {
+                let call_id = call.id.clone();
+                // Reserve this call's request-order slot before any await.
+                let slot_index = executor_status.lock().ok().map(|mut map| {
+                    let slots = map.entry(call_id.clone()).or_default();
+                    slots.push_back(None);
+                    slots.len() - 1
+                });
                 let host_call: ToolCall = match reserialize(&call) {
                     Ok(call) => call,
                     Err(error) => {
+                        // Leave the reserved slot empty; the mapper resolves it to failure.
                         return Ok(agentive::ToolOutput::from(format!(
                             "Error decoding tool call: {error}"
                         )));
@@ -201,7 +226,21 @@ impl AgentHarness for AgentiveHarness {
                 })
                 .await;
                 match output {
-                    Ok(output) => Ok(to_agentive_tool_output(&output)),
+                    Ok(output) => {
+                        // Fill our reserved slot with the explicit outcome, if any.
+                        // A status-less output leaves the slot empty so the mapper
+                        // falls back to failure rather than a blanket success.
+                        if let (Some(index), Some(status)) = (slot_index, output.status()) {
+                            if let Ok(mut map) = executor_status.lock() {
+                                if let Some(slot) =
+                                    map.get_mut(&call_id).and_then(|slots| slots.get_mut(index))
+                                {
+                                    *slot = Some(status);
+                                }
+                            }
+                        }
+                        Ok(to_agentive_tool_output(&output))
+                    }
                     Err(join_error) => Ok(agentive::ToolOutput::from(format!(
                         "Tool execution failed: {join_error}"
                     ))),
@@ -212,8 +251,9 @@ impl AgentHarness for AgentiveHarness {
         // Forward runner events through the host emitter, mapping agentive's
         // native event enum onto CutReady's stable frontend event shape.
         let emit_events = emit.clone();
+        let event_status = tool_status.clone();
         let on_event = move |event: agentive::RunnerEvent| {
-            if let Some(mapped) = map_runner_event(event) {
+            if let Some(mapped) = map_runner_event(event, &event_status) {
                 (*emit_events)(mapped);
             }
         };
@@ -463,7 +503,10 @@ fn to_host_usage(usage: &agentive::Usage) -> Usage {
 /// from `run()`'s returned result so completion is signaled exactly once.
 /// Telemetry-only events (usage, model-call timing, context packing, delegation
 /// metadata, ...) have no frontend representation and are ignored.
-fn map_runner_event(event: agentive::RunnerEvent) -> Option<AgentEvent> {
+fn map_runner_event(
+    event: agentive::RunnerEvent,
+    tool_status: &Arc<Mutex<HashMap<String, VecDeque<Option<ToolExecutionStatus>>>>>,
+) -> Option<AgentEvent> {
     use agentive::RunnerEvent as Runner;
     match event {
         Runner::Token { token } => Some(AgentEvent::Delta { content: token }),
@@ -472,8 +515,33 @@ fn map_runner_event(event: agentive::RunnerEvent) -> Option<AgentEvent> {
         Runner::ToolCallStart {
             name, arguments, ..
         } => Some(AgentEvent::ToolCall { name, arguments }),
-        Runner::ToolResult { name, result, .. } => {
-            Some(AgentEvent::ToolResult { name, result })
+        Runner::ToolResult {
+            name,
+            result,
+            tool_call_id,
+            ..
+        } => {
+            // The host reserved one request-order slot per call keyed by tool_call_id.
+            // Pop the front slot as we consume it so a reused or parallel tool_call_id
+            // cannot inherit a stale outcome, and drop the key once its queue drains.
+            // A missing entry, a drained queue, or an unfilled slot (None) means no
+            // explicit status was recorded (e.g. a guardrail denial), which is a failure.
+            let status = tool_status
+                .lock()
+                .ok()
+                .and_then(|mut map| {
+                    let queued = map.get_mut(&tool_call_id).and_then(VecDeque::pop_front);
+                    if map.get(&tool_call_id).is_some_and(VecDeque::is_empty) {
+                        map.remove(&tool_call_id);
+                    }
+                    queued.flatten()
+                })
+                .unwrap_or(ToolExecutionStatus::Failure);
+            Some(AgentEvent::ToolResult {
+                name,
+                result,
+                status,
+            })
         }
         _ => None,
     }
@@ -573,6 +641,227 @@ mod tests {
     }
 
     #[test]
+    fn tool_result_status_is_resolved_from_the_recorded_outcome() {
+        // The adapter records each explicit outcome by tool_call_id; the event
+        // mapper must surface exactly that on AgentEvent::ToolResult.
+        let status_map: Arc<Mutex<HashMap<String, VecDeque<Option<ToolExecutionStatus>>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        status_map
+            .lock()
+            .unwrap()
+            .insert("call-ok".to_string(), VecDeque::from([Some(ToolExecutionStatus::Success)]));
+        status_map
+            .lock()
+            .unwrap()
+            .insert("call-bad".to_string(), VecDeque::from([Some(ToolExecutionStatus::Failure)]));
+
+        let ok = map_runner_event(
+            agentive::RunnerEvent::ToolResult {
+                run_id: "run".into(),
+                name: "write_note".into(),
+                result: "Wrote note".into(),
+                tool_call_id: "call-ok".into(),
+                elapsed_ms: 1,
+                iteration: 0,
+            },
+            &status_map,
+        );
+        assert!(matches!(
+            ok,
+            Some(AgentEvent::ToolResult {
+                status: ToolExecutionStatus::Success,
+                ..
+            })
+        ));
+
+        let bad = map_runner_event(
+            agentive::RunnerEvent::ToolResult {
+                run_id: "run".into(),
+                name: "write_note".into(),
+                result: "Sketch not found".into(),
+                tool_call_id: "call-bad".into(),
+                elapsed_ms: 1,
+                iteration: 0,
+            },
+            &status_map,
+        );
+        assert!(matches!(
+            bad,
+            Some(AgentEvent::ToolResult {
+                status: ToolExecutionStatus::Failure,
+                ..
+            })
+        ));
+
+        // A tool_call_id the executor never recorded (e.g. a guardrail denial that
+        // never reached the host) resolves to failure, never a false success.
+        let denied = map_runner_event(
+            agentive::RunnerEvent::ToolResult {
+                run_id: "run".into(),
+                name: "write_note".into(),
+                result: "Tool denied by guardrail".into(),
+                tool_call_id: "never-ran".into(),
+                elapsed_ms: 0,
+                iteration: 0,
+            },
+            &status_map,
+        );
+        assert!(matches!(
+            denied,
+            Some(AgentEvent::ToolResult {
+                status: ToolExecutionStatus::Failure,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn recorded_outcome_is_consumed_once_so_a_reused_id_cannot_inherit_it() {
+        // The mapper pops one queued entry and drops the key once drained. A second
+        // ToolResult carrying the same tool_call_id (reuse across calls) must not
+        // inherit the prior success — it resolves to failure like any unrecorded call.
+        let status_map: Arc<Mutex<HashMap<String, VecDeque<Option<ToolExecutionStatus>>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        status_map
+            .lock()
+            .unwrap()
+            .insert("call-1".to_string(), VecDeque::from([Some(ToolExecutionStatus::Success)]));
+
+        let make_event = || agentive::RunnerEvent::ToolResult {
+            run_id: "run".into(),
+            name: "write_note".into(),
+            result: "Wrote note".into(),
+            tool_call_id: "call-1".into(),
+            elapsed_ms: 1,
+            iteration: 0,
+        };
+
+        let first = map_runner_event(make_event(), &status_map);
+        assert!(matches!(
+            first,
+            Some(AgentEvent::ToolResult {
+                status: ToolExecutionStatus::Success,
+                ..
+            })
+        ));
+        assert!(
+            status_map.lock().unwrap().is_empty(),
+            "reading an outcome must consume it and drop the drained key"
+        );
+
+        let second = map_runner_event(make_event(), &status_map);
+        assert!(matches!(
+            second,
+            Some(AgentEvent::ToolResult {
+                status: ToolExecutionStatus::Failure,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn parallel_calls_sharing_an_id_are_correlated_by_request_order_not_completion() {
+        // Two concurrent executions can share a model-supplied tool_call_id. Each
+        // reserves a request-order slot before running, then fills it on completion.
+        // Even when they finish out of order, the two result events (which agentive
+        // emits in request order) each pop the front slot and recover their own
+        // outcome — no overwrite, no completion-order dependence.
+        let status_map: Arc<Mutex<HashMap<String, VecDeque<Option<ToolExecutionStatus>>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+
+        // Reserve two slots in request order: call #0 then call #1 (both unfilled).
+        status_map
+            .lock()
+            .unwrap()
+            .insert("dup".to_string(), VecDeque::from([None, None]));
+        {
+            // Completion order is reversed: call #1 finishes first (Failure), then
+            // call #0 (Success). Each fills its own reserved slot by index.
+            let mut map = status_map.lock().unwrap();
+            let slots = map.get_mut("dup").unwrap();
+            slots[1] = Some(ToolExecutionStatus::Failure);
+            slots[0] = Some(ToolExecutionStatus::Success);
+        }
+
+        let make_event = || agentive::RunnerEvent::ToolResult {
+            run_id: "run".into(),
+            name: "write_note".into(),
+            result: "result".into(),
+            tool_call_id: "dup".into(),
+            elapsed_ms: 1,
+            iteration: 0,
+        };
+
+        // First event (request order call #0) pops the front slot → Success.
+        let first = map_runner_event(make_event(), &status_map);
+        assert!(matches!(
+            first,
+            Some(AgentEvent::ToolResult {
+                status: ToolExecutionStatus::Success,
+                ..
+            })
+        ));
+        // Second event (call #1) pops the next slot → Failure, and the drained key
+        // is dropped.
+        let second = map_runner_event(make_event(), &status_map);
+        assert!(matches!(
+            second,
+            Some(AgentEvent::ToolResult {
+                status: ToolExecutionStatus::Failure,
+                ..
+            })
+        ));
+        assert!(status_map.lock().unwrap().is_empty());
+
+        // A third event with the same id has no recorded outcome left → failure.
+        let third = map_runner_event(make_event(), &status_map);
+        assert!(matches!(
+            third,
+            Some(AgentEvent::ToolResult {
+                status: ToolExecutionStatus::Failure,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn reserved_but_unfilled_slot_resolves_to_failure() {
+        // A slot reserved before execution but never filled — e.g. a status-less
+        // host output, a decode failure, or a spawn_blocking join error — must
+        // resolve to failure, never a blanket success.
+        let status_map: Arc<Mutex<HashMap<String, VecDeque<Option<ToolExecutionStatus>>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        status_map
+            .lock()
+            .unwrap()
+            .insert("call-1".to_string(), VecDeque::from([None]));
+
+        let mapped = map_runner_event(
+            agentive::RunnerEvent::ToolResult {
+                run_id: "run".into(),
+                name: "write_note".into(),
+                result: "no explicit status".into(),
+                tool_call_id: "call-1".into(),
+                elapsed_ms: 1,
+                iteration: 0,
+            },
+            &status_map,
+        );
+        assert!(matches!(
+            mapped,
+            Some(AgentEvent::ToolResult {
+                status: ToolExecutionStatus::Failure,
+                ..
+            })
+        ));
+        assert!(
+            status_map.lock().unwrap().is_empty(),
+            "consuming the unfilled slot must still drop the drained key"
+        );
+    }
+
+
+    #[test]
     fn foundry_project_endpoint_rewrites_to_openai_v1_host() {
         let url = foundry_openai_v1_chat_url(
             "https://seth-foundry-dev.services.ai.azure.com/api/projects/dev-models",
@@ -619,3 +908,4 @@ fn fail(emit: &HarnessEventEmitter, message: String) -> Result<AgentRunResult, S
     });
     Err(message)
 }
+

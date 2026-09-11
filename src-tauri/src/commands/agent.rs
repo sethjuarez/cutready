@@ -595,14 +595,24 @@ pub async fn agent_chat(
     }
 }
 
-/// Push a message onto the pending stack while the agent loop is running.
+/// Push a message onto an in-flight run's steering queue.
+///
+/// `run_id` is the frontend client run id of the run the message is meant for,
+/// so steering reaches only that run. Returns whether the message was actually
+/// delivered: `false` when no active run matches the key (unknown, ended, or
+/// missing id), so the frontend can avoid falsely showing it as queued. A
+/// missing/unmatched key drops the message rather than risk steering the wrong
+/// run.
 #[auditaur_command(skip_all, err)]
 pub async fn push_pending_chat_message(
     state: tauri::State<'_, AppState>,
     message: String,
-) -> Result<(), String> {
-    state.prompty_steering.send(&message);
-    Ok(())
+    run_id: Option<String>,
+) -> Result<bool, String> {
+    let Some(run_key) = run_id.as_deref().map(str::trim).filter(|id| !id.is_empty()) else {
+        return Ok(false);
+    };
+    Ok(state.prompty_steering.send(run_key, &message))
 }
 
 #[auditaur_command(skip_all, err)]
@@ -975,6 +985,13 @@ pub async fn agent_chat_with_tools(
         }),
     );
 
+    // Route composer steering to *this* run only. Key by the frontend's client
+    // run id (the same identity used to cancel the run); fall back to the
+    // backend run id when the client supplied none. The guard deregisters the
+    // per-run queue when this run returns, so a later reused id can't inherit it.
+    let steering_key = client_run_id.clone().unwrap_or_else(|| run_id.clone());
+    let (run_steering, _steering_guard) = state.prompty_steering.register(steering_key);
+
     let should_emit_events = emit_events.unwrap_or(true);
     let emit_handle = app.clone();
     let emit: crate::engine::agent::harness::HarnessEventEmitter =
@@ -996,7 +1013,7 @@ pub async fn agent_chat_with_tools(
         // leaking a `running` row. (The id was already validated by
         // `canonical_id` above, so this cannot fail today, but keeping it on the
         // finalized path stays correct if a harness gains a fallible builder.)
-        match HarnessRegistry::new(state.prompty_steering.clone())
+        match HarnessRegistry::new(run_steering.clone())
             .resolve(Some(&harness_id), agent_state.clone())
         {
             Ok(harness) => {
@@ -1262,25 +1279,69 @@ pub async fn archive_chat_session(
     summary: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
-        let view = guard.as_ref().ok_or("No project open")?;
-        (view.repo_root.clone(), view.root.clone())
+    // Prefer the originating project recorded with the pending summary, so a
+    // project switch before archival can't reattribute the session; fall back to
+    // the active project when no matching pending origin exists. Only consume the
+    // pending summary when it belongs to this session.
+    let matched = {
+        let mut guard = state.last_chat_summary.lock().unwrap();
+        match guard.as_ref() {
+            Some(p) if p.session_id == session_id => {
+                guard.take().map(|p| (p.repo_root, p.root))
+            }
+            _ => None,
+        }
     };
-    // Clear the pending summary since we're archiving now
-    *state.last_chat_summary.lock().unwrap() = None;
+    let (repo_root, root) = match matched {
+        Some(roots) => roots,
+        None => {
+            let guard = state.current_project.lock().unwrap();
+            let view = guard.as_ref().ok_or("No project open")?;
+            (view.repo_root.clone(), view.root.clone())
+        }
+    };
     crate::engine::memory::archive_session(&repo_root, &root, &summary, &session_id)
 }
 
 /// Update the current chat summary (called periodically by frontend).
-/// Stored in AppState so the Rust-side window close handler can archive it.
+/// Stored in AppState so the Rust-side window close handler can archive it,
+/// tagged with the originating project. The frontend captures the originating
+/// project synchronously with the summary and passes it here, so a project
+/// switch that races this async command can never rebind the summary to the
+/// wrong project.
 #[auditaur_command(skip_all, err)]
 pub async fn update_chat_summary(
     session_id: String,
     summary: String,
+    origin_repo_root: Option<String>,
+    origin_root: Option<String>,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    *state.last_chat_summary.lock().unwrap() = Some((session_id, summary));
+    // Prefer the frontend-supplied origin (captured with the summary). Fall back
+    // to the active project only for older callers that supply no origin.
+    let origin = match (origin_repo_root, origin_root) {
+        (Some(repo_root), Some(root)) if !repo_root.is_empty() && !root.is_empty() => {
+            Some((std::path::PathBuf::from(repo_root), std::path::PathBuf::from(root)))
+        }
+        _ => {
+            let guard = state.current_project.lock().unwrap();
+            guard.as_ref().map(|v| (v.repo_root.clone(), v.root.clone()))
+        }
+    };
+    let mut pending = state.last_chat_summary.lock().unwrap();
+    match origin {
+        Some((repo_root, root)) => {
+            *pending = Some(crate::PendingChatSummary {
+                session_id,
+                summary,
+                repo_root,
+                root,
+            });
+        }
+        // No attributable origin for this update; leave any previously captured
+        // (already project-tagged) summary intact rather than dropping a valid one.
+        None => {}
+    }
     Ok(())
 }
 

@@ -33,8 +33,8 @@ use crate::{DurableRunStore, PromptyHost, ResolvedProjectReference};
 
 use harness_contract::execution::{
     estimate_message_chars, parse_tool_arguments, AgentEvent, ChatMessage, ContentPart,
-    ContextItem, MessageContent, RunCancellation, RunResult, ToolCall, ToolOutput, Usage,
-    VisionConfig, WebAccessConfig,
+    ContextItem, MessageContent, RunCancellation, RunResult, ToolCall, ToolExecutionStatus,
+    ToolOutput, Usage, VisionConfig, WebAccessConfig,
 };
 
 const CANCELLED_ERROR: &str = "Agent run cancelled";
@@ -105,7 +105,11 @@ impl PromptySteering {
             .unwrap_or(false)
     }
 
-    fn subscribe(&self) -> PromptySteeringSubscription {
+    /// Subscribe a fresh drain cursor to this queue.
+    ///
+    /// Public so the host can route and observe steering (e.g. per-run
+    /// registries and their tests); the runner subscribes here at run start.
+    pub fn subscribe(&self) -> PromptySteeringSubscription {
         let id = uuid::Uuid::new_v4().to_string();
         if let Ok(mut state) = self.state.lock() {
             let next_sequence = state.next_sequence;
@@ -118,13 +122,13 @@ impl PromptySteering {
     }
 }
 
-struct PromptySteeringSubscription {
+pub struct PromptySteeringSubscription {
     id: String,
     state: Arc<Mutex<PromptySteeringState>>,
 }
 
 impl PromptySteeringSubscription {
-    fn drain(&self) -> Vec<String> {
+    pub fn drain(&self) -> Vec<String> {
         let Ok(mut state) = self.state.lock() else {
             return Vec::new();
         };
@@ -1053,11 +1057,11 @@ impl ToolPort for CutReadyToolPort {
         let output = if request.name == "delegate_to_agent" {
             match self.delegation.as_ref() {
                 Some(delegation) => run_delegated_agent(delegation, &tool_call).await,
-                None => ToolOutput::from(UNSUPPORTED_DELEGATION_MESSAGE),
+                None => ToolOutput::failed(UNSUPPORTED_DELEGATION_MESSAGE),
             }
         } else if request.name == "read_context_asset" {
             read_context_asset_output(self.durable.as_ref(), &tool_call)
-                .unwrap_or_else(ToolOutput::from)
+                .unwrap_or_else(ToolOutput::failed)
         } else {
             self.host.execute_tool(
                 &tool_call,
@@ -1071,7 +1075,10 @@ impl ToolPort for CutReadyToolPort {
             )
         };
         let text = tool_output_text_for_model(&output);
-        let failed = self.host.is_tool_error(text.trim_start());
+        let failed = match output.status() {
+            Some(status) => matches!(status, ToolExecutionStatus::Failure),
+            None => self.host.is_tool_error(text.trim_start()),
+        };
         // Cap the model-facing result so an oversized tool output cannot blow the
         // context budget on the Prompty path (Agentive budgets this inside its loop).
         let budgeted_text = budget_tool_result_for_model(&text);
@@ -1118,16 +1125,16 @@ impl ToolPort for CutReadyToolPort {
 ///   `delegationDepth = this depth + 1` on its durable event/checkpoint journal.
 async fn run_delegated_agent(delegation: &DelegationContext, call: &ToolCall) -> ToolOutput {
     if delegation.depth >= MAX_DELEGATION_DEPTH {
-        return ToolOutput::from(format!(
+        return ToolOutput::failed(format!(
             "Error: maximum delegation depth ({MAX_DELEGATION_DEPTH}) reached; cannot delegate further"
         ));
     }
     let args = parse_tool_arguments(&call.function.arguments).unwrap_or_else(|_| json!({}));
     let Some(agent_id) = args.get("agent_id").and_then(Value::as_str) else {
-        return ToolOutput::from("Error: delegate_to_agent requires an 'agent_id' argument");
+        return ToolOutput::failed("Error: delegate_to_agent requires an 'agent_id' argument");
     };
     let Some(message) = args.get("message").and_then(Value::as_str) else {
-        return ToolOutput::from("Error: delegate_to_agent requires a 'message' argument");
+        return ToolOutput::failed("Error: delegate_to_agent requires a 'message' argument");
     };
     let Some(prompt) = delegation.agent_prompts.get(agent_id) else {
         let mut available = delegation
@@ -1136,7 +1143,7 @@ async fn run_delegated_agent(delegation: &DelegationContext, call: &ToolCall) ->
             .map(String::as_str)
             .collect::<Vec<_>>();
         available.sort_unstable();
-        return ToolOutput::from(format!(
+        return ToolOutput::failed(format!(
             "Error: unknown agent '{agent_id}'. Available agents: {}",
             available.join(", ")
         ));
@@ -1190,7 +1197,7 @@ async fn run_delegated_agent(delegation: &DelegationContext, call: &ToolCall) ->
 
     match result {
         Ok(run) => ToolOutput::from(run.response),
-        Err(error) => ToolOutput::from(format!(
+        Err(error) => ToolOutput::failed(format!(
             "Error: delegated agent '{agent_id}' did not complete successfully: {error}"
         )),
     }
@@ -1466,21 +1473,38 @@ impl CutReadyDurabilityPort {
             }
             EngineEventKind::Tool_result_committed => {
                 if let Some(result) = payload.get("toolResult") {
+                    let name = result
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .unwrap_or("tool")
+                        .to_string();
+                    let result_text = result
+                        .get("output")
+                        .map(|value| match value {
+                            Value::String(value) => value.clone(),
+                            value => value.to_string(),
+                        })
+                        .unwrap_or_default();
+                    // Prefer the host-owned outcome carried on the committed result;
+                    // fall back to text classification only for indeterminate/historical
+                    // results that predate explicit outcomes.
+                    let status = match result.get("outcome").and_then(Value::as_str) {
+                        Some("success") => ToolExecutionStatus::Success,
+                        Some("failed") => ToolExecutionStatus::Failure,
+                        _ if harness_contract::execution::text_indicates_tool_error(
+                            result_text.trim_start(),
+                        ) =>
+                        {
+                            ToolExecutionStatus::Failure
+                        }
+                        _ => ToolExecutionStatus::Success,
+                    };
                     emit_host_event(
                         &self.emit,
                         AgentEvent::ToolResult {
-                            name: result
-                                .get("name")
-                                .and_then(Value::as_str)
-                                .unwrap_or("tool")
-                                .to_string(),
-                            result: result
-                                .get("output")
-                                .map(|value| match value {
-                                    Value::String(value) => value.clone(),
-                                    value => value.to_string(),
-                                })
-                                .unwrap_or_default(),
+                            name,
+                            result: result_text,
+                            status,
                         },
                     );
                 }

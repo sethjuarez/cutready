@@ -989,7 +989,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         await new Promise(r => setTimeout(r, 300));
         if (!emit({ type: "tool_call", name: "list_project_files", arguments: "{}" })) return;
         await new Promise(r => setTimeout(r, 200));
-        if (!emit({ type: "tool_result", name: "list_project_files", result: "sketches/intro.sk, notes/outline.md" })) return;
+        if (!emit({ type: "tool_result", name: "list_project_files", result: "sketches/intro.sk, notes/outline.md", status: "success" })) return;
         await new Promise(r => setTimeout(r, 200));
         if (!emit({ type: "status", message: "Thinking… (round 2)" })) return;
         await new Promise(r => setTimeout(r, 200));
@@ -1039,7 +1039,9 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return true;
     }
     case "push_pending_chat_message":
-      return null;
+      // The web shim has no real run to steer; report delivery so browser dev
+      // still shows the queued-message bubble.
+      return true;
     case "fetch_url_content":
       return `Mock web content for: ${args?.url ?? "unknown"}\n\nAzure Functions is a serverless compute service that lets you run event-triggered code without having to explicitly provision or manage infrastructure. You can write just the code you need for the problem at hand, without worrying about a whole application or the infrastructure to run it.\n\nKey Features:\n- Simplified programming model\n- Flexible hosting options\n- Built-in triggers and bindings\n- Pay-per-execution pricing\n- Integrated security\n\nAzure Functions supports triggers from HTTP requests, timers, Azure Storage, Azure Service Bus, and many more event sources. You can write functions in C#, JavaScript, Python, Java, and PowerShell.\n\nGetting Started:\n1. Create a function app in the Azure portal\n2. Choose your development environment\n3. Create your first function\n4. Test locally and deploy to Azure`;
     case "check_for_update":

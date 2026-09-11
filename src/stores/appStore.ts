@@ -123,6 +123,33 @@ export type PrePushMilestoneDecision =
 let prePushMilestoneResolve: ((decision: PrePushMilestoneDecision) => void) | null = null;
 let remoteDetectionGeneration = 0;
 
+/**
+ * Monotonic counter bumped whenever the active Draftline workspace changes
+ * (open, create, switch, or close). Asynchronous loaders capture the value at
+ * their start and reject stale continuations before applying results, so a
+ * late history/dirty/sync response cannot repopulate a closed or replaced
+ * workspace (issue #263).
+ */
+let workspaceGeneration = 0;
+
+/**
+ * Coalesces `refreshSyncStatus`. Its remote preflight round-trip is fired
+ * (often un-awaited) from ~a dozen handlers, so bursts around a save/fetch used
+ * to stack up several concurrent round-trips. Concurrent callers now join one
+ * in-flight refresh; any request that arrives during a pass schedules one more
+ * pass after it, so the loop reruns until a pass completes with no new request
+ * queued. In practice triggers are discrete (a save fans out a short burst), so
+ * this settles in one or two passes while collapsing the burst to a single
+ * trailing round-trip instead of one per caller.
+ */
+let syncStatusInFlight: Promise<void> | null = null;
+let syncStatusRerunQueued = false;
+
+function beginWorkspaceGeneration(path: string | null): void {
+  workspaceGeneration += 1;
+  setDraftlineWorkspacePath(path);
+}
+
 function isGeneratedSnapshotLabel(label: string): boolean {
   return /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) (morning|afternoon|evening) \d{1,2}:\d{2}$/.test(label.trim());
 }
@@ -1660,7 +1687,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     set({ loading: true });
     try {
       const project = await invoke<ProjectView>("create_project_folder", { path });
-      setDraftlineWorkspacePath(project.repo_root);
+      beginWorkspaceGeneration(project.repo_root);
       set({
         ...resetPersistenceState(),
         currentProject: project,
@@ -1706,7 +1733,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     set({ loading: true });
     try {
       const project = await invoke<ProjectView>("open_project_folder", { path });
-      setDraftlineWorkspacePath(project.repo_root);
+      beginWorkspaceGeneration(project.repo_root);
       set({
         ...resetPersistenceState(),
         currentProject: project,
@@ -1762,7 +1789,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   closeProject: () => {
     remoteDetectionGeneration += 1;
     invoke("close_project").catch(console.error);
-    setDraftlineWorkspacePath(null);
+    beginWorkspaceGeneration(null);
     localStorage.removeItem("cutready:lastProject");
     // Clear workspace settings
     import("../hooks/useSettings").then(({ useSettingsStore }) => {
@@ -1836,7 +1863,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
       const project = await invoke<ProjectView>("switch_project", { projectPath });
       const preservesDraftlineWorkspace = currentProject?.repo_root === project.repo_root;
-      setDraftlineWorkspacePath(project.repo_root);
+      beginWorkspaceGeneration(project.repo_root);
       set({
         ...resetPersistenceState(),
         startedBranchFromSnapshot: preservesDraftlineWorkspace ? startedBranchFromSnapshot : null,
@@ -2512,8 +2539,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   // ── Versioning actions ───────────────────────────────────
 
   loadVersions: async () => {
+    const generation = workspaceGeneration;
     try {
       const versions = await listDraftlineVersions();
+      if (generation !== workspaceGeneration) return;
       set({ versions });
       await get().checkDirty();
     } catch (err) {
@@ -2522,8 +2551,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   checkDirty: async () => {
+    const generation = workspaceGeneration;
     try {
       const isDirty = await hasDraftlineChanges();
+      if (generation !== workspaceGeneration) return;
       set({ isDirty });
       // Also refresh the changed files list
       get().refreshChangedFiles();
@@ -2534,10 +2565,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   refreshChangedFiles: async () => {
+    const generation = workspaceGeneration;
     try {
       const files = await listDraftlineChangedFiles();
+      if (generation !== workspaceGeneration) return;
       set({ changedFiles: files });
     } catch {
+      if (generation !== workspaceGeneration) return;
       set({ changedFiles: [] });
     }
   },
@@ -2741,8 +2775,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   checkStash: async () => {
+    const generation = workspaceGeneration;
     try {
       const hasStash = await hasDraftlineShelf();
+      if (generation !== workspaceGeneration) return;
       set({ hasStash });
     } catch (err) {
       console.error("Failed to check stash:", err);
@@ -2846,8 +2882,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   loadTimelines: async () => {
+    const generation = workspaceGeneration;
     try {
       const timelines = await listDraftlineTimelines();
+      if (generation !== workspaceGeneration) return;
       set({ timelines });
       await get().loadPendingHistoryCleanup();
     } catch (err) {
@@ -2963,8 +3001,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   loadGraphData: async () => {
+    const generation = workspaceGeneration;
     try {
       const graphNodes = await listDraftlineGraphNodes();
+      if (generation !== workspaceGeneration) return;
       set({ graphNodes });
     } catch (err) {
       console.error("Failed to load graph data:", err);
@@ -3075,17 +3115,18 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   loadPendingHistoryCleanup: async () => {
+    const generation = workspaceGeneration;
     const targetVariation = get().timelines.find((timeline) => timeline.is_active)?.name ?? null;
     try {
       const pending = await listDraftlinePendingSnapshotCleanups(targetVariation);
       const activePending = pending[0] ?? null;
-      set({ pendingHistoryCleanup: activePending });
+      if (generation === workspaceGeneration) set({ pendingHistoryCleanup: activePending });
       return activePending;
     } catch (err) {
       if (!errorMessage(err).toLowerCase().includes("no draftline workspace")) {
         console.error("Failed to load pending history cleanup:", err);
       }
-      set({ pendingHistoryCleanup: null });
+      if (generation === workspaceGeneration) set({ pendingHistoryCleanup: null });
       return null;
     }
   },
@@ -3435,6 +3476,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   loadRemoteBranches: async () => {
+    const generation = workspaceGeneration;
     const { currentRemote, timelines } = get();
     if (!currentRemote) {
       set({ remoteBranches: [], remoteBranchesLoading: false });
@@ -3444,19 +3486,21 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       set({ remoteBranches: [], remoteBranchesLoading: false });
       return [];
     }
+    if (generation !== workspaceGeneration) return [];
     set({ remoteBranchesLoading: true, syncError: null });
     try {
       const localNames = new Set(timelines.map((timeline) => timeline.name));
       const branches = (await listDraftlineRemoteBranches(currentRemote.name))
         .filter((branch) => !localNames.has(branch.id) && !localNames.has(branch.name));
+      if (generation !== workspaceGeneration) return [];
       set({ remoteBranches: branches });
       return branches;
     } catch (err) {
       const message = errorMessage(err);
-      set({ remoteBranches: [], syncError: message });
+      if (generation === workspaceGeneration) set({ remoteBranches: [], syncError: message });
       return [];
     } finally {
-      set({ remoteBranchesLoading: false });
+      if (generation === workspaceGeneration) set({ remoteBranchesLoading: false });
     }
   },
 
@@ -3504,19 +3548,42 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   refreshSyncStatus: async () => {
-    const { currentRemote } = get();
-    if (!currentRemote) return;
-    if (!await ensureGitHubRemoteCredential(currentRemote)) return;
-    try {
-      const status = await getDraftlineSyncStatus(currentRemote.name);
-      set({ syncStatus: status, syncError: null });
-      await get().loadPendingHistoryCleanup();
-    } catch {
-      set({ syncStatus: null });
+    // Join an in-flight refresh; flag that state may have changed so another
+    // pass follows the current round-trip once it completes.
+    if (syncStatusInFlight) {
+      syncStatusRerunQueued = true;
+      return syncStatusInFlight;
     }
+    const runOnce = async () => {
+      const generation = workspaceGeneration;
+      const { currentRemote } = get();
+      if (!currentRemote) return;
+      if (!await ensureGitHubRemoteCredential(currentRemote)) return;
+      try {
+        const status = await getDraftlineSyncStatus(currentRemote.name);
+        if (generation !== workspaceGeneration) return;
+        set({ syncStatus: status, syncError: null });
+        await get().loadPendingHistoryCleanup();
+      } catch {
+        if (generation !== workspaceGeneration) return;
+        set({ syncStatus: null });
+      }
+    };
+    syncStatusInFlight = (async () => {
+      try {
+        do {
+          syncStatusRerunQueued = false;
+          await runOnce();
+        } while (syncStatusRerunQueued);
+      } finally {
+        syncStatusInFlight = null;
+      }
+    })();
+    return syncStatusInFlight;
   },
 
   refreshIncomingCommits: async () => {
+    const generation = workspaceGeneration;
     const { currentRemote, syncStatus } = get();
     if (!currentRemote || !syncStatus || syncStatus.behind === 0) {
       set({ incomingCommits: [] });
@@ -3525,8 +3592,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!await ensureGitHubRemoteCredential(currentRemote)) return;
     try {
       const incoming = await listDraftlineIncomingCommits(currentRemote.name);
+      if (generation !== workspaceGeneration) return;
       set({ incomingCommits: incoming });
     } catch {
+      if (generation !== workspaceGeneration) return;
       set({ incomingCommits: [] });
     }
   },
@@ -3534,21 +3603,25 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   // ── Diff & bookmarks ──────────────────────────────────────
 
   diffSnapshots: async (fromCommit, toCommit) => {
+    const generation = workspaceGeneration;
     try {
       const entries = await diffDraftlineVersions(fromCommit, toCommit);
+      if (generation !== workspaceGeneration) return entries;
       set({ diffResult: entries, diffSelection: { from: fromCommit, to: toCommit } });
       return entries;
     } catch (err) {
       console.error("Failed to diff snapshots:", err);
-      set({ diffResult: null, diffSelection: null });
+      if (generation === workspaceGeneration) set({ diffResult: null, diffSelection: null });
       useToastStore.getState().show(`Could not compare snapshots: ${err}`, 5000, "error");
       return [];
     }
   },
 
   diffWorkingTree: async () => {
+    const generation = workspaceGeneration;
     try {
       const entries = await listDraftlineChangedFiles();
+      if (generation !== workspaceGeneration) return entries;
       set({ diffResult: entries, diffSelection: { from: "HEAD", to: "working" } });
       return entries;
     } catch (err) {

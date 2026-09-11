@@ -493,7 +493,7 @@ async fn delegate_to_unknown_agent_is_a_recoverable_tool_error() {
     let tool_result = events
         .iter()
         .find_map(|event| match event {
-            AgentEvent::ToolResult { name, result } if name == "delegate_to_agent" => {
+            AgentEvent::ToolResult { name, result, .. } if name == "delegate_to_agent" => {
                 Some(result.clone())
             }
             _ => None,
@@ -630,7 +630,7 @@ async fn tool_round_reuses_cutready_executor_and_preserves_call_id() {
             AgentEvent::ToolCall { name, arguments } => {
                 Some((index, "call", name.as_str(), arguments.as_str()))
             }
-            AgentEvent::ToolResult { name, result } => {
+            AgentEvent::ToolResult { name, result, .. } => {
                 Some((index, "result", name.as_str(), result.as_str()))
             }
             _ => None,

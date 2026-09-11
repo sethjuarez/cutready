@@ -11,17 +11,18 @@ import { contentTypeTone } from "../utils/contentTypeTheme";
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useAiApplyGateStore } from "../stores/aiApplyGateStore";
 import { useSettings, type AgentPreset } from "../hooks/useSettings";
-import { loadProviderSecrets } from "../hooks/useSecretStore";
 import { BUILT_IN_AGENTS, resolveAgentPrompt } from "../agents/builtInAgents";
 import {
   activeProviderInput,
   buildProviderConfig,
-  defaultProvider,
   isAiProviderConfigured,
   isProviderInputConfigured,
-  providerById,
-  providerToConfigInput,
 } from "../utils/providerConfig";
+import {
+  buildEffectiveProviderInput as buildEffectiveProviderInputShared,
+  buildRefreshedProviderInput,
+  resolveAgentModelOverride,
+} from "../utils/agentProvider";
 import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import type { ChatMessage, ChatToolActivity, ChatWorkingNotes } from "../types/sketch";
 import {
@@ -189,7 +190,7 @@ export function askModeCancelledMessage(): string {
 }
 
 export async function cancelAgentChatRun(
-  clientRunId: number,
+  clientRunId: string | number,
   cancel: (clientRunId: string) => Promise<unknown> = (id) =>
     invoke("cancel_agent_chat_run", { clientRunId: id }),
 ): Promise<void> {
@@ -434,20 +435,6 @@ interface FileReference {
 
 type SecondaryTab = "chat" | "sessions" | "runs" | "database";
 
-function resolveAgentModelOverride(
-  agent: AgentPreset,
-  overrides: Record<string, string> | undefined,
-): string {
-  return (overrides?.[agent.id] || agent.modelOverride || "").trim();
-}
-
-function resolveAgentProviderOverride(
-  agent: AgentPreset,
-  overrides: Record<string, string> | undefined,
-): string {
-  return (overrides?.[agent.id] || agent.providerOverride || "").trim();
-}
-
 // ── SVG Icons (using Heroicons) ──────────────────────────────────
 
 function IconSparkles({ size = 14 }: { size?: number }) {
@@ -634,8 +621,9 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const thinkingRef = useRef("");
   const workingDraftsRef = useRef<string[]>([]);
   const abortedRef = useRef(false);
-  const nextSendIdRef = useRef(0);
-  const activePreflightSendIdRef = useRef<number | null>(null);
+  // Globally-unique run id (UUID) rather than a component-local counter, so
+  // concurrent chat panels can't mint colliding ids and steer each other's runs.
+  const activePreflightSendIdRef = useRef<string | null>(null);
   const pendingToolArgsRef = useRef<Record<string, string[]>>({});
   const handledSketchMutationsRef = useRef<Map<string, number>>(new Map());
 
@@ -678,7 +666,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     const shouldListen = focusMode || !chatFocusMode;
     if (!shouldListen) return;
 
-    const unlisten = listen<{ type: string; content?: string; message?: string; name?: string; arguments?: string; result?: string; response?: string; agent_id?: string; task?: string; selected_count?: number; dropped_count?: number; total_bytes?: number; budget_bytes?: number; iteration?: number; attempt?: number; client_run_id?: string }>("agent-event", (event) => {
+    const unlisten = listen<{ type: string; content?: string; message?: string; name?: string; arguments?: string; result?: string; status?: "success" | "failure"; response?: string; agent_id?: string; task?: string; selected_count?: number; dropped_count?: number; total_bytes?: number; budget_bytes?: number; iteration?: number; attempt?: number; client_run_id?: string }>("agent-event", (event) => {
       const ev = event.payload;
       if (
         ev.client_run_id
@@ -766,17 +754,21 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           }]);
           break;
         case "tool_result": {
+          const toolName = ev.name ?? "";
+          const resultText = ev.result ?? "";
+          // Prefer the explicit host-owned outcome; fall back to text inspection
+          // only for historical events that predate the status field.
+          const isSuccess = ev.status
+            ? ev.status === "success"
+            : !resultText.startsWith("Error");
           addActivityEntries([{
             id: crypto.randomUUID(),
             timestamp: new Date(),
             source: `result ${ev.name ?? ""}`.trim(),
-            content: boundedToolActivityResult(ev.result ?? ""),
-            level: "success",
+            content: boundedToolActivityResult(resultText),
+            level: isSuccess ? "success" : "error",
           }]);
           // Auto-refresh sidebar and open sketches after tool mutations
-          const toolName = ev.name ?? "";
-          const resultText = ev.result ?? "";
-          const isSuccess = !resultText.startsWith("Error");
           if (isSuccess && SKETCH_MUTATION_TOOLS.has(toolName)) {
             const argsJson = consumeQueuedToolArgs(pendingToolArgsRef.current, toolName);
             const mutation = sketchMutationInfo(toolName, argsJson, useAppStore.getState().activeSketchPath);
@@ -934,20 +926,10 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       .slice(0, 10);
   }, [showContextPicker, contextFilter, allFiles, references]);
 
-  const buildEffectiveProviderInput = useCallback(async (agent: AgentPreset) => {
-    const providerOverride = resolveAgentProviderOverride(agent, settings.aiAgentProviderOverrides);
-    const overrideProvider = providerById(settings, providerOverride);
-    const selectedProvider = overrideProvider ?? defaultProvider(settings);
-    if (!selectedProvider) return activeProviderInput(settings);
-
-    const secrets = selectedProvider.id === settings.aiActiveProviderId
-      ? { apiKey: settings.aiApiKey, accessToken: settings.aiAccessToken }
-      : await loadProviderSecrets(selectedProvider.id);
-    return providerToConfigInput(selectedProvider, settings, {
-      apiKey: secrets.apiKey,
-      accessToken: secrets.accessToken,
-    });
-  }, [settings]);
+  const buildEffectiveProviderInput = useCallback(
+    (agent: AgentPreset) => buildEffectiveProviderInputShared(settings, agent),
+    [settings],
+  );
 
   useEffect(() => {
     if (!settingsLoaded) {
@@ -999,7 +981,10 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   }, [currentProject]);
 
   // Keep Rust-side chat summary in sync so window close can archive reliably.
-  // Updates whenever messages change (debounced by React's batching).
+  // Updates whenever messages change (debounced by React's batching). The
+  // originating project is captured synchronously here (from the same committed
+  // render as the messages) and passed to Rust, so a project switch that races
+  // this async invoke cannot rebind the summary to the wrong project.
   useEffect(() => {
     if (messages.length > 1 && chatSessionPath) {
       const userMsgs = messages.filter((m) => m.role === "user");
@@ -1008,10 +993,12 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
         invoke("update_chat_summary", {
           sessionId: chatSessionPath,
           summary: `Topics discussed: ${summary}`,
+          originRepoRoot: currentProject?.repo_root,
+          originRoot: currentProject?.root,
         }).catch(() => {});
       }
     }
-  }, [messages, chatSessionPath]);
+  }, [messages, chatSessionPath, currentProject]);
 
   const systemPrompt = useMemo(() => {
     const agentId = settings.aiSelectedAgent || "planner";
@@ -1045,22 +1032,33 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     setShowAutocomplete(false);
     setShowContextPicker(false);
 
-    // If agent is already running, push to pending stack
+    // If agent is already running, push to the run's steering queue.
     if (loading) {
       try {
-        await invoke("push_pending_chat_message", { message: text });
-        // Show pending message with a queued marker (rendered specially by MessageRow)
-        const pendingMsg: ChatMessage = { role: "user", content: text, pending: true };
-        setChatMessages([...messages, pendingMsg]);
-        requestAnimationFrame(() => scrollMessagesToBottom());
+        const delivered = await invoke<boolean>("push_pending_chat_message", {
+          message: text,
+          runId: activePreflightSendIdRef.current ?? undefined,
+        });
+        if (delivered) {
+          // Show pending message with a queued marker (rendered specially by MessageRow)
+          const pendingMsg: ChatMessage = { role: "user", content: text, pending: true };
+          setChatMessages([...messages, pendingMsg]);
+          requestAnimationFrame(() => scrollMessagesToBottom());
+        } else {
+          // No active run received the message — it targets a run owned by
+          // another panel, or the run just ended. Don't show a misleading
+          // "queued" bubble; restore the text so it isn't silently lost.
+          setInput(text);
+        }
       } catch (err) {
         console.error("Failed to push pending message:", err);
+        setInput(text);
       }
       return;
     }
 
     setChatError(null);
-    const sendId = ++nextSendIdRef.current;
+    const sendId = crypto.randomUUID();
     activePreflightSendIdRef.current = sendId;
     abortedRef.current = false;
 
@@ -1211,43 +1209,17 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       level: "info",
     }]);
     try {
-      // Auto-refresh OAuth token if we have a refresh token
-      let freshBearerToken = settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null;
-      if (settings.aiAuthMode === "azure_oauth" && settings.aiRefreshToken) {
-        try {
-          const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>(
-            "azure_token_refresh",
-            {
-              tenantId: settings.aiTenantId || "",
-              refreshToken: settings.aiRefreshToken,
-              clientId: settings.aiClientId || null,
-            },
-          );
-          if (tokenResult.access_token) {
-            freshBearerToken = tokenResult.access_token;
-            await updateSetting("aiAccessToken", tokenResult.access_token);
-            if (tokenResult.refresh_token) {
-              await updateSetting("aiRefreshToken", tokenResult.refresh_token);
-            }
-          }
-        } catch {
-          // Refresh failed — will try with existing token
-        }
-      }
-
       // Resolve the effective agent — override agent (from ✨ buttons) takes priority
       const effectiveAgent = agentOverride
         ? [...BUILT_IN_AGENTS, ...(settings.aiAgents || [])].find(a => a.id === agentOverride) ?? selectedAgent
         : selectedAgent;
       const modelOverride = resolveAgentModelOverride(effectiveAgent, settings.aiAgentModelOverrides);
-      const effectiveProviderInput = await buildEffectiveProviderInput(effectiveAgent);
+      // Resolve the effective connection first, then refresh ITS credentials (#262).
+      const effectiveProviderInput = await buildRefreshedProviderInput(settings, effectiveAgent, updateSetting);
       const providerConfig = buildProviderConfig(
         effectiveProviderInput,
         settings.aiAgentExecutionEngine || "prompty",
       );
-      if (!resolveAgentProviderOverride(effectiveAgent, settings.aiAgentProviderOverrides) && freshBearerToken) {
-        providerConfig.bearer_token = freshBearerToken;
-      }
       const config = {
         ...providerConfig,
         // Apply per-agent model override when configured; otherwise use the provider model.
@@ -1272,7 +1244,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
             agentPrompts,
             agentId: effectiveAgent.id,
             allowMutationTools,
-            clientRunId: sendId.toString(),
+            clientRunId: sendId,
           });
 
       // Activity logging now handled by real-time agent-event listener

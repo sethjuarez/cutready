@@ -194,4 +194,9 @@ export interface RecordingTake {
   metadata_path: string;
   assets: RecordingAssetRef[];
   markers: RecordingMarker[];
+  /**
+   * Human-readable diagnostic recorded when a take stopped with teardown errors
+   * (e.g. a capture process that failed to stop cleanly). Absent on clean stops.
+   */
+  stop_diagnostic?: string;
 }

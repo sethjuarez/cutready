@@ -503,4 +503,67 @@ describe("appStore remote sync status", () => {
     expect(requestPrePushMilestone).not.toHaveBeenCalled();
     expect(mockPublishDraftlineChanges).toHaveBeenCalledWith("origin");
   });
+
+  it("does not repopulate sync status for a workspace that closed mid-refresh (#263)", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    let resolveStatus!: (status: { ahead: number; behind: number }) => void;
+    mockGetDraftlineSyncStatus.mockReturnValueOnce(
+      new Promise<{ ahead: number; behind: number }>((resolve) => {
+        resolveStatus = resolve;
+      }),
+    );
+    useAppStore.setState({
+      currentProject: { root: "D:\\ws\\alpha", repo_root: "D:\\ws\\alpha", name: "Alpha" },
+      currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
+      syncStatus: null,
+      loadTimelines: async () => {},
+      loadGraphData: async () => {},
+      loadVersions: async () => {},
+    });
+
+    const refresh = useAppStore.getState().refreshSyncStatus();
+
+    // The workspace closes while the sync request is still in flight.
+    useAppStore.getState().closeProject();
+    // A sentinel a subsequent (empty-workspace) refresh would own; the stale
+    // continuation must not clobber it.
+    useAppStore.setState({ syncStatus: { ahead: 9, behind: 9 } });
+
+    resolveStatus({ ahead: 1, behind: 2 });
+    await refresh;
+
+    expect(useAppStore.getState().syncStatus).toEqual({ ahead: 9, behind: 9 });
+  });
+
+  it("coalesces concurrent refreshes into one round-trip plus a single trailing rerun (#277)", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    const resolvers: Array<(status: { ahead: number; behind: number }) => void> = [];
+    mockGetDraftlineSyncStatus.mockImplementation(
+      () => new Promise<{ ahead: number; behind: number }>((resolve) => resolvers.push(resolve)),
+    );
+    useAppStore.setState({
+      currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
+      syncStatus: null,
+    });
+
+    // Three handlers fire in the same tick — the in-flight guard is set
+    // synchronously, so the latter two must join the first, not start their own.
+    const refresh = useAppStore.getState();
+    const p1 = refresh.refreshSyncStatus();
+    const p2 = refresh.refreshSyncStatus();
+    const p3 = refresh.refreshSyncStatus();
+
+    // Only one round-trip is in flight for all three callers.
+    await vi.waitFor(() => expect(mockGetDraftlineSyncStatus).toHaveBeenCalledTimes(1));
+    resolvers[0]({ ahead: 0, behind: 0 });
+
+    // Because callers arrived mid-flight, exactly one trailing rerun follows.
+    await vi.waitFor(() => expect(mockGetDraftlineSyncStatus).toHaveBeenCalledTimes(2));
+    resolvers[1]({ ahead: 0, behind: 0 });
+
+    await Promise.all([p1, p2, p3]);
+
+    // 3 concurrent callers collapsed to 2 remote round-trips, not 3.
+    expect(mockGetDraftlineSyncStatus).toHaveBeenCalledTimes(2);
+  });
 });

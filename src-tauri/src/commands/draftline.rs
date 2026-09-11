@@ -100,7 +100,7 @@ fn resolve_remote_credential(
 ) -> draftline::Result<RemoteCredential> {
     if request.allows_username_password && is_github_remote_url(request.url) {
         if let Some(credential) = github_credential_token() {
-            tracing::debug!(
+            tracing::trace!(
                 source = credential.source,
                 "Using GitHub token credential for Draftline remote operation"
             );

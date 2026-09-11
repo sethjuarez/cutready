@@ -43,6 +43,11 @@ pub struct RecordingCountdownParams {
     pub monitor_y: i32,
     pub countdown_seconds: u8,
     pub document_title: String,
+    // Identifies the control-window start attempt that opened this countdown so
+    // a stale cancel from a superseded countdown can be told apart from the
+    // current one. Echoed back in the recording-countdown-cancel event.
+    #[serde(default)]
+    pub attempt_id: u32,
 }
 
 pub struct RecordingCountdownState(pub Mutex<Option<RecordingCountdownParams>>);
@@ -269,15 +274,17 @@ pub async fn open_recording_countdown_window(
     phys_h: u32,
     countdown_seconds: u8,
     document_title: String,
+    attempt_id: u32,
 ) -> Result<(), String> {
     log::info!(
-        "[recording] open countdown window: monitor={} pos=({},{}) size={}x{} countdown={}",
+        "[recording] open countdown window: monitor={} pos=({},{}) size={}x{} countdown={} attempt={}",
         monitor_id,
         phys_x,
         phys_y,
         phys_w,
         phys_h,
-        countdown_seconds
+        countdown_seconds,
+        attempt_id
     );
 
     {
@@ -291,6 +298,7 @@ pub async fn open_recording_countdown_window(
             monitor_y: phys_y,
             countdown_seconds,
             document_title,
+            attempt_id,
         });
     }
 

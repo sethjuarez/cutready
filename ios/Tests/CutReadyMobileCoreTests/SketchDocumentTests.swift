@@ -103,4 +103,43 @@ final class SketchDocumentTests: XCTestCase {
         XCTAssertEqual(object["created_at"] as? String, "2026-07-08T17:00:00.000Z")
         XCTAssertEqual(object["updated_at"] as? String, "2026-07-08T17:01:00.000Z")
     }
+
+    func testPreservesDesktopOnlyRowFieldsThroughReencode() throws {
+        // The mobile model does not have fields for motion_points etc.; they must
+        // survive a decode -> encode round trip verbatim (issue #272).
+        let data = Data("""
+        {
+          "title": "Round trip",
+          "description": "",
+          "rows": [
+            {
+              "time": "0:20",
+              "narrative": "Welcome",
+              "demo_actions": "",
+              "screenshot": "screenshots/intro.png",
+              "motion_points": [
+                { "rank": 1, "x": 0.5, "y": 0.5, "label": null }
+              ],
+              "motion_plan": { "keyframes": [] }
+            }
+          ],
+          "state": "draft",
+          "created_at": "2026-06-28T20:00:00Z",
+          "updated_at": "2026-06-28T20:20:00Z"
+        }
+        """.utf8)
+
+        let sketch = try JSONDecoder().decode(Sketch.self, from: data)
+        let encoded = try JSONEncoder().encode(sketch)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        let rows = try XCTUnwrap(object["rows"] as? [[String: Any]])
+        let firstRow = try XCTUnwrap(rows.first)
+
+        XCTAssertNotNil(firstRow["motion_points"], "motion_points must survive re-encode")
+        XCTAssertNotNil(firstRow["motion_plan"], "motion_plan must survive re-encode")
+        let points = try XCTUnwrap(firstRow["motion_points"] as? [[String: Any]])
+        XCTAssertEqual(points.count, 1)
+        XCTAssertEqual(points[0]["x"] as? Double, 0.5)
+        XCTAssertTrue(points[0]["label"] is NSNull, "null label must be preserved")
+    }
 }

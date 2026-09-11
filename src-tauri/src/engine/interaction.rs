@@ -239,7 +239,7 @@ pub async fn prepare_browser(
     options: PrepareBrowserOptions,
 ) -> anyhow::Result<(
     SidecarManager,
-    tokio::sync::mpsc::UnboundedReceiver<crate::models::session::CapturedAction>,
+    tokio::sync::mpsc::UnboundedReceiver<crate::util::sidecar::SidecarStreamEvent>,
     String,
 )> {
     let (sidecar, event_rx) = SidecarManager::spawn(sidecar_dir).await?;

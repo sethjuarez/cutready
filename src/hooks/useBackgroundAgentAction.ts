@@ -4,16 +4,13 @@ import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "..
 import { useToastStore } from "../stores/toastStore";
 import { useAiApplyGateStore } from "../stores/aiApplyGateStore";
 import { useSettings, type AgentPreset } from "./useSettings";
-import { loadProviderSecrets } from "./useSecretStore";
 import { invoke } from "../services/tauri";
 import type { ChatMessage } from "../types/sketch";
+import { buildProviderConfig } from "../utils/providerConfig";
 import {
-  activeProviderInput,
-  buildProviderConfig,
-  defaultProvider,
-  providerById,
-  providerToConfigInput,
-} from "../utils/providerConfig";
+  buildRefreshedProviderInput,
+  resolveAgentModelOverride,
+} from "../utils/agentProvider";
 
 interface AgentChatResult {
   messages: ChatMessage[];
@@ -33,14 +30,6 @@ const ROW_TARGETED_SKETCH_MUTATION_TOOLS = new Set([
   "apply_row_visual_command",
 ]);
 const SKETCH_MUTATION_TOOLS = new Set(["write_sketch", ...ROW_TARGETED_SKETCH_MUTATION_TOOLS]);
-
-function resolveAgentModelOverride(agent: AgentPreset, overrides: Record<string, string> | undefined): string {
-  return (overrides?.[agent.id] || agent.modelOverride || "").trim();
-}
-
-function resolveAgentProviderOverride(agent: AgentPreset, overrides: Record<string, string> | undefined): string {
-  return (overrides?.[agent.id] || agent.providerOverride || "").trim();
-}
 
 function normalizeMutationPath(path: string | null | undefined): string | null {
   const normalized = path?.trim().replace(/\\/g, "/");
@@ -122,21 +111,6 @@ export function useBackgroundAgentAction() {
   const addActivityEntries = useAppStore((s) => s.addActivityEntries);
 
   const agents = useMemo(() => [...BUILT_IN_AGENTS, ...(settings.aiAgents || [])], [settings.aiAgents]);
-
-  const buildEffectiveProviderInput = useCallback(async (agent: AgentPreset) => {
-    const providerOverride = resolveAgentProviderOverride(agent, settings.aiAgentProviderOverrides);
-    const overrideProvider = providerById(settings, providerOverride);
-    const selectedProvider = overrideProvider ?? defaultProvider(settings);
-    if (!selectedProvider) return activeProviderInput(settings);
-
-    const secrets = selectedProvider.id === settings.aiActiveProviderId
-      ? { apiKey: settings.aiApiKey, accessToken: settings.aiAccessToken }
-      : await loadProviderSecrets(selectedProvider.id);
-    return providerToConfigInput(selectedProvider, settings, {
-      apiKey: secrets.apiKey,
-      accessToken: secrets.accessToken,
-    });
-  }, [settings]);
 
   const buildSystemPrompt = useCallback((agentId: string) => {
     let prompt = resolveAgentPrompt(agentId, settings.aiAgents || []);
@@ -229,34 +203,12 @@ export function useBackgroundAgentAction() {
     showToast(`${label} started in Runs`, 3000, "info");
 
     try {
-      let freshBearerToken = settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null;
-      if (settings.aiAuthMode === "azure_oauth" && settings.aiRefreshToken) {
-        try {
-          const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>("azure_token_refresh", {
-            tenantId: settings.aiTenantId || "",
-            refreshToken: settings.aiRefreshToken,
-            clientId: settings.aiClientId || null,
-          });
-          if (tokenResult.access_token) {
-            freshBearerToken = tokenResult.access_token;
-            await updateSetting("aiAccessToken", tokenResult.access_token);
-            if (tokenResult.refresh_token) {
-              await updateSetting("aiRefreshToken", tokenResult.refresh_token);
-            }
-          }
-        } catch {
-          // The provider request below will surface any auth failure with the current token.
-        }
-      }
-
       const modelOverride = resolveAgentModelOverride(effectiveAgent, settings.aiAgentModelOverrides);
+      // Resolve the effective connection first, then refresh ITS credentials (#262).
       const providerConfig = buildProviderConfig(
-        await buildEffectiveProviderInput(effectiveAgent),
+        await buildRefreshedProviderInput(settings, effectiveAgent, updateSetting),
         settings.aiAgentExecutionEngine || "prompty",
       );
-      if (!resolveAgentProviderOverride(effectiveAgent, settings.aiAgentProviderOverrides) && freshBearerToken) {
-        providerConfig.bearer_token = freshBearerToken;
-      }
       const result = await invoke<AgentChatResult>("agent_chat_with_tools", {
         config: {
           ...providerConfig,
@@ -295,5 +247,5 @@ export function useBackgroundAgentAction() {
       globalThis.clearTimeout(runningRefreshTimer);
       window.dispatchEvent(new CustomEvent("cutready:agent-runs-updated"));
     }
-  }, [addActivityEntries, agents, buildEffectiveProviderInput, buildSystemPrompt, refreshAfterResult, settings, showToast, updateSetting]);
+  }, [addActivityEntries, agents, buildSystemPrompt, refreshAfterResult, settings, showToast, updateSetting]);
 }

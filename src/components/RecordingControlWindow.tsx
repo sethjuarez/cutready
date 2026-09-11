@@ -92,6 +92,29 @@ export function RecordingControlWindow() {
   const { confirm, confirmationDialog } = useConfirmDialog();
   const countdownTimerRef = useRef<number | null>(null);
   const settingsHydratedRef = useRef(false);
+  // Native start attempt lifecycle. `startInFlightRef` is a synchronous
+  // single-flight guard that spans the whole attempt (pre-start awaits,
+  // countdown, and the native start), so overlapping starts cannot race.
+  // `startCanceledRef` records that a close/cancel arrived during the attempt.
+  // `nativeStartPendingRef` is true only while the `start_recording_take`
+  // invoke is in flight — the one window where a late success would own an
+  // active capture — and decides whether requestClose defers the window close
+  // to the attempt (native pending) or closes it directly (nothing to orphan).
+  const startInFlightRef = useRef(false);
+  const startCanceledRef = useRef(false);
+  const nativeStartPendingRef = useRef(false);
+  // Set synchronously the instant a native start succeeds — before the
+  // setPhase("recording") state update is committed and the close listener is
+  // re-registered — so a close that races the phase transition still discards
+  // the live capture instead of closing over it.
+  const activeCaptureRef = useRef<RecordingTake | null>(null);
+  // Monotonic id identifying the current start attempt's countdown. It is
+  // stamped into the countdown window's params and echoed back in the
+  // recording-countdown-cancel event, so a stale/duplicate cancel from a
+  // superseded countdown can be told apart from the current one. Null when no
+  // countdown is owned by the current attempt.
+  const attemptSeqRef = useRef(0);
+  const countdownAttemptRef = useRef<number | null>(null);
 
   const selectedMonitor = monitors.find((monitor) => monitor.id === selectedMonitorId) ?? null;
   const selectedMicrophone = microphones.find((microphone) => microphone.id === micDeviceId) ?? null;
@@ -119,6 +142,7 @@ export function RecordingControlWindow() {
 
   const stopRecording = useCallback(async () => {
     if (phase === "stopping" || phase === "discarding") return;
+    activeCaptureRef.current = null;
     setPhase("stopping");
     setError(null);
     clearCountdownTimer();
@@ -151,6 +175,7 @@ export function RecordingControlWindow() {
     }
     setPhase("discarding");
     setError(null);
+    activeCaptureRef.current = null;
     clearCountdownTimer();
     await invoke("close_recording_countdown_window").catch(() => undefined);
     await closePrompter();
@@ -168,11 +193,42 @@ export function RecordingControlWindow() {
   }, [clearCountdownTimer, closePrompter, confirm, phase]);
 
   const requestClose = useCallback(async () => {
+    if (activeCaptureRef.current) {
+      // A native capture is installed. Its owning phase may not have been
+      // committed/re-rendered yet (the success path sets this ref before
+      // setPhase("recording")), so discard on the ref rather than the rendered
+      // phase to avoid closing over a live capture.
+      await discardRecording(false);
+      return;
+    }
     if (phase === "recording") {
       await discardRecording(false);
       return;
     }
-    if (phase === "countdown" || phase === "starting") {
+    if (nativeStartPendingRef.current) {
+      // A native start invoke is in flight and will own the capture the instant
+      // it resolves. Mark it canceled and defer the window close to startTake so
+      // the cleanup runs in a live context: it discards the just-started capture
+      // and closes, instead of orphaning active capture behind a closed surface.
+      startCanceledRef.current = true;
+      clearCountdownTimer();
+      await invoke("close_recording_countdown_window").catch(() => undefined);
+      await closePrompter();
+      return;
+    }
+    if (startInFlightRef.current) {
+      // An attempt is mid pre-start or countdown, before any native capture
+      // exists. Mark it canceled so it aborts at its next checkpoint, tear down
+      // the auxiliary windows, and close the control window now — there is
+      // nothing to orphan.
+      startCanceledRef.current = true;
+      clearCountdownTimer();
+      await invoke("close_recording_countdown_window").catch(() => undefined);
+      await closePrompter();
+      await invoke("close_recording_control_window").catch(() => undefined);
+      return;
+    }
+    if (phase === "countdown") {
       clearCountdownTimer();
       await invoke("close_recording_countdown_window").catch(() => undefined);
     }
@@ -216,6 +272,17 @@ export function RecordingControlWindow() {
     await stopSourcePreview();
     await invoke("close_recording_countdown_window").catch(() => undefined);
 
+    // Abort before the native start if a cancel arrived during the awaits
+    // above; no capture exists yet, so just close the deferred window.
+    const abortBeforeNativeStart = async (): Promise<boolean> => {
+      if (!startCanceledRef.current) return false;
+      startCanceledRef.current = false;
+      startInFlightRef.current = false;
+      await invoke("close_recording_control_window").catch(() => undefined);
+      return true;
+    };
+    if (await abortBeforeNativeStart()) return;
+
     const recorderSettings: RecorderSettings = {
       capture_source: "full_screen",
       capture_area: monitorToCaptureArea(selectedMonitor, monitors.indexOf(selectedMonitor)),
@@ -245,20 +312,64 @@ export function RecordingControlWindow() {
         updateSetting("recorderCountdownSeconds", countdownSeconds),
         updateSetting("recorderIncludeCursor", includeCursor),
       ]);
-      const take = await invoke<RecordingTake>("start_recording_take", {
-        scope,
-        settings: recorderSettings,
-      });
+      if (await abortBeforeNativeStart()) return;
+      // Mark the native start pending and invoke with no await in between, so a
+      // concurrent requestClose (which can only run at an await boundary) always
+      // observes nativeStartPendingRef and defers the window close to us.
+      nativeStartPendingRef.current = true;
+      let take: RecordingTake;
+      try {
+        take = await invoke<RecordingTake>("start_recording_take", {
+          scope,
+          settings: recorderSettings,
+        });
+      } finally {
+        nativeStartPendingRef.current = false;
+      }
+      if (startCanceledRef.current) {
+        // Close/cancel arrived while this start was in flight. The backend now
+        // owns an active capture with no control surface, so discard it and
+        // close rather than publishing a headless recording.
+        startCanceledRef.current = false;
+        startInFlightRef.current = false;
+        await invoke("discard_recording_take").catch((err) => {
+          console.warn("Failed to discard capture canceled during startup:", err);
+        });
+        await invoke("close_recording_control_window").catch(() => undefined);
+        return;
+      }
+      startInFlightRef.current = false;
+      // Install the capture identity synchronously, before the state update
+      // below, so a close racing the phase transition discards it.
+      activeCaptureRef.current = take;
       setRecordingTake(take);
       setPhase("recording");
       await currentWindow.setSize(HUD_SIZE).catch(() => undefined);
+      if (activeCaptureRef.current !== take) {
+        // A close during the resize above already discarded this capture via
+        // requestClose. Do not announce it as started or drive the prompter.
+        return;
+      }
       if (prompterEnabled && prompterAvailable && supportsPrompterClickThrough) {
         await emit("recording-prompter-read", {}).catch(() => undefined);
+      }
+      if (activeCaptureRef.current !== take) {
+        // A close during the prompter-read emit above already discarded this
+        // capture via requestClose. Do not announce it as started.
+        return;
       }
       await emit("recording-control-started", take).catch((err) => {
         console.warn("Failed to notify main window that recording started:", err);
       });
     } catch (err) {
+      startInFlightRef.current = false;
+      if (startCanceledRef.current) {
+        // Start failed after a cancel request: nothing was installed, so just
+        // honor the deferred close instead of returning to the setup screen.
+        startCanceledRef.current = false;
+        await invoke("close_recording_control_window").catch(() => undefined);
+        return;
+      }
       setError(err instanceof Error ? err.message : String(err));
       setPhase("setup");
     }
@@ -287,17 +398,42 @@ export function RecordingControlWindow() {
 
   const startRecording = useCallback(async () => {
     if (!selectedMonitor || !canStart) return;
+    // Establish the attempt synchronously before any await so a concurrent
+    // close is attributed to it and a second click cannot start a parallel run.
+    if (startInFlightRef.current) return;
+    startInFlightRef.current = true;
+    startCanceledRef.current = false;
+    // Invalidate any prior countdown's identity: a late cancel from a previous
+    // attempt's countdown must not match this one (which may not use a
+    // countdown at all).
+    countdownAttemptRef.current = null;
+
+    // Cancel arrived during a pre-start await: no native capture exists yet, so
+    // close the deferred window and end the attempt.
+    const abortIfCanceled = async (): Promise<boolean> => {
+      if (!startCanceledRef.current) return false;
+      startCanceledRef.current = false;
+      startInFlightRef.current = false;
+      clearCountdownTimer();
+      await invoke("close_recording_countdown_window").catch(() => undefined);
+      await invoke("close_recording_control_window").catch(() => undefined);
+      return true;
+    };
+
     await stopSourcePreview();
+    if (await abortIfCanceled()) return;
     if (prompterEnabled && prompterAvailable) {
       try {
         await openPrompter(supportsPrompterClickThrough);
       } catch (err) {
+        startInFlightRef.current = false;
         setError(err instanceof Error ? err.message : String(err));
         return;
       }
     } else {
       await closePrompter();
     }
+    if (await abortIfCanceled()) return;
     if (countdownSeconds <= 0) {
       await startTake();
       return;
@@ -306,6 +442,7 @@ export function RecordingControlWindow() {
     setPhase("countdown");
     setError(null);
     try {
+      const attemptId = ++attemptSeqRef.current;
       await invoke("open_recording_countdown_window", {
         monitorId: selectedMonitor.id,
         physX: selectedMonitor.x,
@@ -314,13 +451,26 @@ export function RecordingControlWindow() {
         physH: selectedMonitor.height,
         countdownSeconds,
         documentTitle,
+        attemptId,
       });
+      if (await abortIfCanceled()) return;
       clearCountdownTimer();
+      // Claim the countdown identity only once the window is open and we are
+      // about to park on the timer, so the cancel listener can match it.
+      countdownAttemptRef.current = attemptId;
       countdownTimerRef.current = window.setTimeout(() => {
         countdownTimerRef.current = null;
+        // A cancel during the countdown ends the attempt without ever starting
+        // native capture; the close was already handled by requestClose.
+        if (startCanceledRef.current) {
+          startCanceledRef.current = false;
+          startInFlightRef.current = false;
+          return;
+        }
         void startTake();
       }, countdownSeconds * 1000);
     } catch (err) {
+      startInFlightRef.current = false;
       setError(err instanceof Error ? err.message : String(err));
       setPhase("setup");
     }
@@ -532,9 +682,34 @@ export function RecordingControlWindow() {
   }, [cameraDeviceId, cameraFormatsById]);
 
   useEffect(() => {
-    const unlistenCancel = listen("recording-countdown-cancel", () => {
-      clearCountdownTimer();
-      setPhase("setup");
+    const unlistenCancel = listen<{ attemptId?: number } | null>("recording-countdown-cancel", (event) => {
+      const payloadId = event?.payload?.attemptId;
+      // A cancel that names a specific attempt must match the countdown the
+      // current attempt owns; a stale/duplicate cancel from a superseded
+      // countdown carries a different id and is ignored. An id-less cancel
+      // (params never loaded in the countdown window) is treated as a wildcard
+      // and falls back to the parked-countdown gate below.
+      if (typeof payloadId === "number" && payloadId !== countdownAttemptRef.current) return;
+      // Only the current attempt can own a scheduled countdown timer, so its
+      // presence is an attempt-safe, synchronous signal that we are genuinely
+      // parked in the countdown (the timer callback has not yet fired).
+      if (countdownTimerRef.current !== null) {
+        // Abandon the countdown and return to setup. No startTake continuation
+        // exists yet, so releasing the single-flight guard here is safe.
+        clearCountdownTimer();
+        countdownAttemptRef.current = null;
+        startCanceledRef.current = false;
+        startInFlightRef.current = false;
+        setPhase("setup");
+        return;
+      }
+      // The timer already fired (startTake is in flight) or nothing is parked
+      // (a stale/late event). Never clear the guard here — that would corrupt
+      // an in-flight native start. If a start is under way, signal it to abort
+      // so the capture the user tried to cancel is discarded, not orphaned.
+      if (startInFlightRef.current) {
+        startCanceledRef.current = true;
+      }
     });
     const unlistenToggle = listen("toggle-recording", () => {
       if (phase === "recording") void stopRecording();
@@ -548,10 +723,10 @@ export function RecordingControlWindow() {
 
   useEffect(() => {
     const unlisten = currentWindow.onCloseRequested((event) => {
-      if (phase === "recording") {
-        event.preventDefault();
-        void requestClose();
-      } else if (phase === "countdown" || phase === "starting") {
+      if (phase === "recording" || phase === "countdown" || phase === "starting" || startInFlightRef.current) {
+        // Intercept the close while a take is active or a start is anywhere in
+        // flight (including pre-start awaits, when phase is still "setup") so
+        // requestClose can cancel/discard rather than orphaning capture.
         event.preventDefault();
         void requestClose();
       } else if (phase === "stopping" || phase === "discarding") {

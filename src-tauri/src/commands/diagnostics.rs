@@ -10,9 +10,9 @@ use tauri::State;
 use tauri_plugin_auditaur::auditaur_command;
 
 use crate::engine::{
-    agent::tools::normalize_visual_document_for_save,
     diagnostics_sanitizer::{sanitize_diagnostic_optional_text, sanitize_diagnostic_text},
     project,
+    visual_document::normalize_visual_document_for_save,
 };
 use crate::{AppState, AuditaurDiagnosticsPolicy};
 

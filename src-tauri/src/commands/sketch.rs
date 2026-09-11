@@ -5,7 +5,7 @@
 use tauri::State;
 use tauri_plugin_auditaur::auditaur_command;
 
-use crate::engine::{agent::tools::normalize_visual_document_for_save, project};
+use crate::engine::{project, visual_document::normalize_visual_document_for_save};
 use crate::models::script::ProjectView;
 use crate::models::sketch::{DocumentMetadata, PlanningCellLocks, Sketch, SketchSummary};
 use crate::AppState;
