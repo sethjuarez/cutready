@@ -23,33 +23,31 @@ export default defineConfig({
         },
         {
           label: "Getting Started",
-          autogenerate: { directory: "getting-started" },
+          items: [{ autogenerate: { directory: "getting-started" } }],
         },
         {
           label: "Features",
-          autogenerate: { directory: "features" },
+          items: [{ autogenerate: { directory: "features" } }],
         },
         {
           label: "Collaboration",
-          autogenerate: { directory: "collaboration" },
-          badge: { text: "New", variant: "success" },
+          items: [{ autogenerate: { directory: "collaboration" } }],
         },
         {
           label: "Workflow",
-          autogenerate: { directory: "workflow" },
+          items: [{ autogenerate: { directory: "workflow" } }],
         },
         {
           label: "Architecture",
-          autogenerate: { directory: "architecture" },
+          items: [{ autogenerate: { directory: "architecture" } }],
         },
         {
           label: "Settings",
-          autogenerate: { directory: "settings" },
+          items: [{ autogenerate: { directory: "settings" } }],
         },
         {
           label: "Roadmap",
-          autogenerate: { directory: "roadmap" },
-          badge: { text: "Preview", variant: "caution" },
+          items: [{ autogenerate: { directory: "roadmap" } }],
         },
       ],
     }),
