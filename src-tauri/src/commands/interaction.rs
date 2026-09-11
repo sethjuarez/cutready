@@ -6,6 +6,7 @@
 //!      Can be called multiple times (multiple takes) without relaunching.
 //!   3. `disconnect_browser` — Close the browser when done.
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use chrono::Utc;
@@ -13,7 +14,23 @@ use tauri::State;
 
 use crate::engine::interaction;
 use crate::models::session::{CapturedAction, RecordedSession, RecordingMode};
+use crate::util::sidecar::{SidecarStreamEvent, SidecarTermination};
 use crate::{AppState, BrowserConnection, RecordingInner};
+
+/// Monotonic source of per-connection identities. Lets a connection's
+/// terminal-event handler prove it is still the current connection before
+/// clearing readiness, so a stale event cannot clear its replacement.
+static NEXT_CONNECTION_ID: AtomicU64 = AtomicU64::new(1);
+
+/// Decide whether a terminal event originating from connection `event_id`
+/// should clear the currently-stored connection `current_id`.
+///
+/// A terminal event only clears the connection it belongs to; an event from a
+/// superseded connection must never clear the connection that replaced it, and
+/// an already-empty slot is left untouched.
+fn terminal_should_clear(current_id: Option<u64>, event_id: u64) -> bool {
+    current_id == Some(event_id)
+}
 
 /// Detect browser profiles available on the system.
 ///
@@ -70,33 +87,71 @@ pub async fn prepare_browser(
         session: None,
     }));
 
-    // Spawn a long-lived forwarding task that reads sidecar events.
-    // Only forwards to the frontend when a recording is active.
+    let connection_id = NEXT_CONNECTION_ID.fetch_add(1, Ordering::Relaxed);
+
+    // Spawn a long-lived forwarding task that reads the sidecar event stream.
+    // Actions are forwarded to the frontend only while a recording is active; a
+    // terminal event (browser closed or sidecar EOF) clears readiness so a new
+    // prepare is possible — but only if this connection is still the current
+    // one, so a superseded connection cannot clear its replacement.
     let fwd_recording = recording.clone();
+    let fwd_browser = state.browser.clone();
+
+    // Hold the browser lock across task spawn AND storage so a terminal event
+    // racing ahead of storage blocks on the lock until the connection is
+    // installed, then observes it and clears readiness correctly. The task is
+    // spawned inside the locked region: if it receives a terminal event before
+    // storage, its `fwd_browser.lock()` blocks until the connection is stored
+    // below and the guard is dropped.
+    let mut browser = state.browser.lock().await;
     let fwd_handle = tokio::spawn(async move {
         let mut rx = event_rx;
-        while let Some(captured) = rx.recv().await {
-            let mut inner = fwd_recording.lock().await;
-            if inner.active {
-                inner.actions.push(captured.clone());
-                if let Some(ch) = &inner.channel {
-                    let _ = ch.send(captured);
+        while let Some(event) = rx.recv().await {
+            match event {
+                SidecarStreamEvent::Action(captured) => {
+                    let mut inner = fwd_recording.lock().await;
+                    if inner.active {
+                        inner.actions.push(captured.clone());
+                        if let Some(ch) = &inner.channel {
+                            let _ = ch.send(captured);
+                        }
+                    }
+                }
+                SidecarStreamEvent::Terminated(reason) => {
+                    if reason == SidecarTermination::BrowserDisconnected {
+                        // The browser is gone; a lingering active recording must
+                        // not keep reporting itself as running.
+                        let mut inner = fwd_recording.lock().await;
+                        inner.active = false;
+                        inner.channel = None;
+                    }
+                    let mut guard = fwd_browser.lock().await;
+                    let current_id = guard.as_ref().map(|c| c.id);
+                    if terminal_should_clear(current_id, connection_id) {
+                        let taken = guard.take();
+                        // Release the lock before dropping the connection: the
+                        // drop kills the sidecar and aborts this very task's
+                        // handle, so it must not happen while holding the lock.
+                        drop(guard);
+                        drop(taken);
+                    }
+                    break;
                 }
             }
         }
     });
 
-    let connection = BrowserConnection {
+    // Store the connection while still holding the lock acquired above, then
+    // release it so any terminal event blocked in the forwarding task can now
+    // observe the installed connection.
+    *browser = Some(BrowserConnection {
+        id: connection_id,
         sidecar,
         browser_channel: resolved_channel.clone(),
         recording,
         _forwarding_handle: fwd_handle,
-    };
-
-    {
-        let mut browser = state.browser.lock().await;
-        *browser = Some(connection);
-    }
+    });
+    drop(browser);
 
     Ok(resolved_channel)
 }
@@ -230,4 +285,34 @@ pub async fn get_session_actions(
     let browser = browser_guard.as_ref().ok_or("No browser prepared")?;
     let inner = browser.recording.lock().await;
     Ok(inner.actions.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn terminal_event_clears_only_its_own_connection() {
+        // The current connection's own terminal event clears readiness.
+        assert!(terminal_should_clear(Some(7), 7));
+    }
+
+    #[test]
+    fn stale_terminal_event_cannot_clear_replacement() {
+        // A terminal event from a superseded connection (id 1) must not clear
+        // the connection that replaced it (id 2).
+        assert!(!terminal_should_clear(Some(2), 1));
+    }
+
+    #[test]
+    fn terminal_event_on_empty_slot_is_noop() {
+        assert!(!terminal_should_clear(None, 1));
+    }
+
+    #[test]
+    fn connection_ids_are_unique_and_monotonic() {
+        let a = NEXT_CONNECTION_ID.fetch_add(1, Ordering::Relaxed);
+        let b = NEXT_CONNECTION_ID.fetch_add(1, Ordering::Relaxed);
+        assert!(b > a);
+    }
 }

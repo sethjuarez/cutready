@@ -116,6 +116,9 @@ pub struct RecordingInner {
 /// The browser stays open across multiple recording takes.
 /// Dropped when the user disconnects.
 pub struct BrowserConnection {
+    /// Process-unique id, used to ensure a superseded connection's terminal
+    /// event cannot clear the connection that replaced it.
+    pub id: u64,
     /// The Playwright sidecar managing the browser.
     pub sidecar: SidecarManager,
     /// Which browser channel was used ("chrome", "msedge", "chromium").

@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
-use tokio::process::{Child, ChildStdin, ChildStdout, Command};
+use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
 
@@ -52,6 +52,38 @@ struct SidecarErrorDetail {
 /// Map of pending request IDs to their response channels.
 type PendingMap = HashMap<u64, oneshot::Sender<Result<serde_json::Value, String>>>;
 
+/// Why a sidecar connection terminated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SidecarTermination {
+    /// The observed browser was closed or disconnected. The sidecar process may
+    /// still be alive, but the connection is no longer usable for recording.
+    BrowserDisconnected,
+    /// The sidecar's stdout reached EOF — the transport itself is gone.
+    TransportClosed,
+}
+
+/// An item yielded by the sidecar event stream.
+///
+/// The stream multiplexes captured browser actions with a terminal signal so
+/// the connection owner can react to disconnects and sidecar exit instead of
+/// silently leaking a dead connection.
+#[derive(Debug)]
+pub enum SidecarStreamEvent {
+    /// A user action captured by the browser observer.
+    Action(CapturedAction),
+    /// The connection has terminated; no further actions will arrive.
+    Terminated(SidecarTermination),
+}
+
+/// Fail every pending request with a terminal-transport error so callers return
+/// immediately instead of waiting out their per-request timeout.
+async fn fail_all_pending(pending: &Arc<Mutex<PendingMap>>, reason: &str) {
+    let mut map = pending.lock().await;
+    for (_, tx) in map.drain() {
+        let _ = tx.send(Err(reason.to_string()));
+    }
+}
+
 // ── SidecarManager ──────────────────────────────────────────────────────────
 
 /// Manages the Playwright Node.js sidecar process.
@@ -74,7 +106,7 @@ impl SidecarManager {
     /// with the browser.
     pub async fn spawn(
         sidecar_dir: &Path,
-    ) -> anyhow::Result<(Self, mpsc::UnboundedReceiver<CapturedAction>)> {
+    ) -> anyhow::Result<(Self, mpsc::UnboundedReceiver<SidecarStreamEvent>)> {
         let mut cmd = Command::new("node");
         cmd.arg("index.js")
             .current_dir(sidecar_dir)
@@ -111,12 +143,21 @@ impl SidecarManager {
     /// Background task that reads the sidecar's stdout and routes messages.
     ///
     /// Responses (with `id`) are dispatched to pending request channels.
-    /// Events (with `event`) are forwarded to the event sender.
-    async fn reader_loop(
-        stdout: ChildStdout,
+    /// `action_captured` events are forwarded as [`SidecarStreamEvent::Action`].
+    /// A `browser_disconnected` event is forwarded as a terminal
+    /// [`SidecarStreamEvent::Terminated`]. When stdout reaches EOF the loop
+    /// fails every still-pending request (so callers do not wait out their
+    /// timeout) and emits a final terminal event.
+    ///
+    /// Generic over the reader so it can be driven from a finite in-memory
+    /// stream in tests.
+    async fn reader_loop<R>(
+        stdout: R,
         pending: Arc<Mutex<PendingMap>>,
-        event_tx: mpsc::UnboundedSender<CapturedAction>,
-    ) {
+        event_tx: mpsc::UnboundedSender<SidecarStreamEvent>,
+    ) where
+        R: tokio::io::AsyncRead + Unpin,
+    {
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();
 
@@ -141,12 +182,18 @@ impl SidecarManager {
                     Ok(evt) if evt.event == "action_captured" => {
                         match serde_json::from_value::<CapturedAction>(evt.data) {
                             Ok(action) => {
-                                let _ = event_tx.send(action);
+                                let _ = event_tx.send(SidecarStreamEvent::Action(action));
                             }
                             Err(e) => {
                                 tracing::warn!("Failed to parse CapturedAction: {e}");
                             }
                         }
+                    }
+                    Ok(evt) if evt.event == "browser_disconnected" => {
+                        tracing::info!("Sidecar reported browser disconnect");
+                        let _ = event_tx.send(SidecarStreamEvent::Terminated(
+                            SidecarTermination::BrowserDisconnected,
+                        ));
                     }
                     Ok(evt) => {
                         tracing::debug!("Unknown sidecar event: {}", evt.event);
@@ -180,7 +227,13 @@ impl SidecarManager {
             }
         }
 
+        // stdout reached EOF: the transport is gone. Settle any in-flight
+        // requests immediately and signal terminal state to the connection owner.
         tracing::info!("Sidecar stdout reader ended");
+        fail_all_pending(&pending, "Sidecar transport closed").await;
+        let _ = event_tx.send(SidecarStreamEvent::Terminated(
+            SidecarTermination::TransportClosed,
+        ));
     }
 
     /// Send a request to the sidecar and wait for the response.
@@ -318,5 +371,67 @@ mod tests {
         let event_json = r#"{"event":"action_captured","data":{}}"#;
         let val: serde_json::Value = serde_json::from_str(event_json).unwrap();
         assert!(val.get("event").is_some());
+    }
+
+    const ACTION_LINE: &str = r##"{"event":"action_captured","data":{"action":{"type":"BrowserClick","selectors":[{"strategy":"CssSelector","value":"#btn"}]},"metadata":{"captured_screenshot":null,"selector_strategies":[],"timestamp_ms":1000,"confidence":0.85,"context_snapshot":null},"raw_event":null}}"##;
+
+    #[tokio::test]
+    async fn reader_loop_forwards_actions_then_terminal_on_eof() {
+        let input = format!("{ACTION_LINE}\n");
+        let pending: Arc<Mutex<PendingMap>> = Arc::new(Mutex::new(HashMap::new()));
+        let (tx, mut rx) = mpsc::unbounded_channel();
+
+        SidecarManager::reader_loop(input.as_bytes(), pending, tx).await;
+
+        assert!(matches!(
+            rx.recv().await,
+            Some(SidecarStreamEvent::Action(_))
+        ));
+        // EOF after the single action yields a transport-closed terminal event.
+        assert!(matches!(
+            rx.recv().await,
+            Some(SidecarStreamEvent::Terminated(SidecarTermination::TransportClosed))
+        ));
+        assert!(rx.recv().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn reader_loop_forwards_browser_disconnect_as_terminal() {
+        let input = "{\"event\":\"browser_disconnected\",\"data\":{}}\n";
+        let pending: Arc<Mutex<PendingMap>> = Arc::new(Mutex::new(HashMap::new()));
+        let (tx, mut rx) = mpsc::unbounded_channel();
+
+        SidecarManager::reader_loop(input.as_bytes(), pending, tx).await;
+
+        assert!(matches!(
+            rx.recv().await,
+            Some(SidecarStreamEvent::Terminated(SidecarTermination::BrowserDisconnected))
+        ));
+        // The trailing EOF still emits a transport-closed terminal event.
+        assert!(matches!(
+            rx.recv().await,
+            Some(SidecarStreamEvent::Terminated(SidecarTermination::TransportClosed))
+        ));
+    }
+
+    #[tokio::test]
+    async fn reader_loop_fails_pending_requests_on_eof() {
+        // No trailing newline, no data: the reader hits EOF immediately.
+        let pending: Arc<Mutex<PendingMap>> = Arc::new(Mutex::new(HashMap::new()));
+        let (resp_tx, resp_rx) = oneshot::channel();
+        pending.lock().await.insert(42, resp_tx);
+
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        SidecarManager::reader_loop(&b""[..], pending.clone(), tx).await;
+
+        // The pending request is settled immediately with a terminal error
+        // rather than being left to time out.
+        let settled = resp_rx.await.expect("pending sender was dropped");
+        assert_eq!(settled, Err("Sidecar transport closed".to_string()));
+        assert!(pending.lock().await.is_empty());
+        assert!(matches!(
+            rx.recv().await,
+            Some(SidecarStreamEvent::Terminated(SidecarTermination::TransportClosed))
+        ));
     }
 }
