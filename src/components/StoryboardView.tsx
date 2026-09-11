@@ -41,6 +41,8 @@ import { LockedDocumentBanner } from "./LockedDocumentBanner";
 import { DurationBadge, MetadataEditor } from "./MetadataEditor";
 import { InlineDescriptionEditor } from "./InlineDescriptionEditor";
 import { StoryboardIcon } from "./Icons";
+import { DocumentViewModeToggle, type DocumentViewMode } from "./DocumentViewModeToggle";
+import { StoryboardBalancedView, StoryboardScreenView } from "./StoryboardVisualViews";
 import { plainTextFromRichValue } from "../utils/richText";
 import type { Sketch, SketchSummary, StoryboardItem } from "../types/sketch";
 import type { RecordingTake } from "../types/recording";
@@ -122,6 +124,7 @@ export function StoryboardView() {
   const [previewSlides, setPreviewSlides] = useState<PreviewSlide[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [previewMode, setPreviewMode] = useState<PresentationMode>("slides");
+  const [viewMode, setViewMode] = useState<DocumentViewMode>("text");
 
   const sketchMap = new Map(sketches.map((s) => [s.path, s]));
   const storyboardLocked = activeStoryboard?.locked ?? false;
@@ -681,7 +684,11 @@ export function StoryboardView() {
           />
         </div>
 
-        {hasStoryboardItems && (
+        <div className="mb-4">
+          <DocumentViewModeToggle value={viewMode} onChange={setViewMode} />
+        </div>
+
+        {hasStoryboardItems && viewMode === "text" && (
           <div className="mb-4 flex items-center justify-between border-y border-[rgb(var(--color-border-subtle))] py-2">
             <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[rgb(var(--color-text-secondary))]/60">
               Outline
@@ -710,7 +717,40 @@ export function StoryboardView() {
         )}
 
         {/* Items */}
-        {activeStoryboard.items.length === 0 ? (
+        {viewMode === "balanced" ? (
+          <StoryboardBalancedView
+            items={activeStoryboard.items}
+            sketchMap={sketchMap}
+            sketchCache={sketchCache}
+            projectRoot={currentProject?.root}
+            durationDisplayMode={durationDisplayMode}
+            onOpenSketch={openSketch}
+            locked={storyboardLocked}
+            onAddNewSketch={() => void handleAddNewSketch()}
+            onPickExisting={() => setPickerTarget({ type: "top" })}
+            onAddSection={() => handleAddSection()}
+            onAddNewSketchToSection={(sectionIndex) => void handleAddNewSketch({ type: "section", sectionIndex })}
+            onPickExistingForSection={(sectionIndex) => setPickerTarget({ type: "section", sectionIndex })}
+            onRemoveTopLevelSketch={(index) => void confirmRemoveFromStoryboard(index)}
+            onRemoveSectionSketch={(sectionIndex, sketchIndex) => void confirmRemoveFromSection(sectionIndex, sketchIndex)}
+            onRemoveSection={(sectionIndex) => void confirmRemoveSection(sectionIndex)}
+          />
+        ) : viewMode === "screen" ? (
+          <StoryboardScreenView
+            items={activeStoryboard.items}
+            sketchMap={sketchMap}
+            sketchCache={sketchCache}
+            projectRoot={currentProject?.root}
+            durationDisplayMode={durationDisplayMode}
+            onOpenSketch={openSketch}
+            locked={storyboardLocked}
+            onAddNewSketch={() => void handleAddNewSketch()}
+            onPickExisting={() => setPickerTarget({ type: "top" })}
+            onAddSection={() => handleAddSection()}
+            onRemoveTopLevelSketch={(index) => void confirmRemoveFromStoryboard(index)}
+            onRemoveSectionSketch={(sectionIndex, sketchIndex) => void confirmRemoveFromSection(sectionIndex, sketchIndex)}
+          />
+        ) : activeStoryboard.items.length === 0 ? (
           <EmptyState
             onAddNew={() => handleAddNewSketch()}
             onPickExisting={() => setPickerTarget({ type: "top", position: 0 })}
@@ -832,7 +872,7 @@ export function StoryboardView() {
         )}
 
         {/* Picker overlay (when shown at a position) */}
-        {pickerTarget !== null && activeStoryboard.items.length === 0 && !storyboardLocked && (
+        {pickerTarget !== null && (viewMode !== "text" || activeStoryboard.items.length === 0) && !storyboardLocked && (
           <SketchPicker
             sketches={filteredSketches}
             search={pickerSearch}

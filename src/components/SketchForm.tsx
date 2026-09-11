@@ -34,6 +34,8 @@ import type {
 import { diffRow, type RowDiff } from "../utils/textDiff";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
 import { SketchIcon } from "./Icons";
+import { DocumentViewModeToggle, type DocumentViewMode } from "./DocumentViewModeToggle";
+import { SketchBalancedView, SketchScreenView } from "./SketchVisualViews";
 import type { RecordingTake } from "../types/recording";
 import { parseDurationSeconds, summarizeSketchDuration, type DurationDisplayMode } from "../utils/documentMetadata";
 import { preferredNarrationMimeType } from "../utils/narrationAudio";
@@ -1025,6 +1027,7 @@ export function SketchForm() {
   const [previewMode, setPreviewMode] = useState<PresentationMode>("slides");
   const [showMonitorPicker, setShowMonitorPicker] = useState(false);
   const [durationDisplayMode, setDurationDisplayMode] = useState<DurationDisplayMode>("minutes");
+  const [viewMode, setViewMode] = useState<DocumentViewMode>("text");
   const [availableMonitors, setAvailableMonitors] = useState<MonitorInfo[]>([]);
   const [aiUpdatedFlash, setAiUpdatedFlash] = useState(false);
   const [highlightedRows, setHighlightedRows] = useState<Set<number>>(new Set());
@@ -1445,6 +1448,37 @@ The Actions describe what happens on screen — use them as visual design hints.
       console.error("Failed to import image:", err);
     }
   }, [localRows, handleRowsChange]);
+
+  const handleRemoveMedia = useCallback((rowIndex: number) => {
+    if (sketchLocked) return;
+    const row = localRows[rowIndex];
+    if (!row || row.locked || row.locks?.screenshot || row.locks?.visual) return;
+    const updated = [...localRows];
+    updated[rowIndex] = row.visual
+      ? { ...row, visual: null }
+      : {
+          ...row,
+          screenshot: null,
+          motion_points: null,
+          typing_spots: null,
+          motion_plan: null,
+        };
+    handleRowsChange(updated);
+  }, [handleRowsChange, localRows, sketchLocked]);
+
+  const handleRemoveNarration = useCallback((rowIndex: number) => {
+    if (sketchLocked) return;
+    const row = localRows[rowIndex];
+    if (!row || row.locked || row.locks?.screenshot || row.locks?.visual) return;
+    const updated = [...localRows];
+    updated[rowIndex] = {
+      ...row,
+      narration: null,
+      narration_plan: null,
+      motion_plan: null,
+    };
+    handleRowsChange(updated);
+  }, [handleRowsChange, localRows, sketchLocked]);
 
   const handlePickNarration = useCallback(async (rowIndex: number) => {
     setNarrationPickerRowIdx(rowIndex);
@@ -2565,26 +2599,32 @@ Rules:
           />
         </div>
 
-        {/* Planning Table */}
+        <div className="mb-4">
+          <DocumentViewModeToggle value={viewMode} onChange={setViewMode} />
+        </div>
+
+        {/* Planning rows */}
         <div>
-          <div className="mb-3" />
-          <ScriptTable
-            rows={localRows}
-            onChange={handleRowsChange}
-            readOnly={sketchLocked}
-            onCaptureScreenshot={handleCaptureScreenshot}
-            onPasteImage={handlePasteImage}
-            onPickImage={handlePickImage}
-            onBrowseImage={handleBrowseImage}
-            onSparkle={(prompt) => void runBackgroundAgentAction(prompt, { label: "Improve row" })}
-            onGenerateVisual={(rowIndex) => {
-              setVisualPromptRow(rowIndex);
-              setVisualInstructions("");
-            }}
-            onNudgeVisual={(rowIndex, instruction) => {
-              const row = localRows[rowIndex];
-              const rowNumber = rowIndex + 1;
-              const prompt = `Modify the existing visual ONLY for sketch "${activeSketchPath ?? "current"}", row ${rowNumber}.
+          {viewMode === "text" ? (
+            <>
+              <div className="mb-3" />
+              <ScriptTable
+                rows={localRows}
+                onChange={handleRowsChange}
+                readOnly={sketchLocked}
+                onCaptureScreenshot={handleCaptureScreenshot}
+                onPasteImage={handlePasteImage}
+                onPickImage={handlePickImage}
+                onBrowseImage={handleBrowseImage}
+                onSparkle={(prompt) => void runBackgroundAgentAction(prompt, { label: "Improve row" })}
+                onGenerateVisual={(rowIndex) => {
+                  setVisualPromptRow(rowIndex);
+                  setVisualInstructions("");
+                }}
+                onNudgeVisual={(rowIndex, instruction) => {
+                  const row = localRows[rowIndex];
+                  const rowNumber = rowIndex + 1;
+                  const prompt = `Modify the existing visual ONLY for sketch "${activeSketchPath ?? "current"}", row ${rowNumber}.
 
 **USER INSTRUCTIONS (HIGHEST PRIORITY):**
 ${instruction}
@@ -2594,57 +2634,99 @@ Row context:
 - **Actions:** ${row?.demo_actions || "(empty)"}
 
 The row already has a visual and design_plan. You may read the sketch for context, but the only persistent edit allowed is set_row_visual with row_number ${rowNumber}. Do not call write_sketch, update_planning_row, write_storyboard, or set_row_visual for any other row. Do not create, remove, reorder, or rewrite rows. Keep the existing design but apply the requested changes. Do NOT redesign from scratch.`;
-              void runBackgroundAgentAction(prompt, { agent: "designer", label: "Modify visual" });
-            }}
-            projectRoot={projectRoot}
-            sketchPath={activeSketchPath ?? undefined}
-            onRowLockChange={handleRowLockChange}
-            onCellLockChange={handleCellLockChange}
-            onStartNarrationRecording={handleStartNarrationRecording}
-            onGenerateNarration={handleGenerateNarration}
-            onPickNarration={handlePickNarration}
-            onStopNarrationRecording={handleStopNarrationRecording}
-            narrationRecordingRow={narrationRecordingRow}
-            narrationSavingRows={narrationSavingRows}
-            typingOverlayDefaults={{
-              fontFamily: settings.typingOverlayOverrideEnabled
-                ? settings.workspaceTypingOverlayFontFamily
-                : settings.typingOverlayFontFamily,
-              fontScale: settings.typingOverlayOverrideEnabled
-                ? settings.workspaceTypingOverlayFontScale
-                : settings.typingOverlayFontScale,
-            }}
-            highlightedRows={highlightedRows}
-            rowDiffs={rowDiffs}
-            aiSnapshotRows={aiSnapshotRef.current?.rows ?? null}
-            onDismissHighlights={() => { setHighlightedRows(new Set()); setRowDiffs([]); }}
-            hasLastAiDiffs={highlightedRows.size === 0 && lastAiDiffs.current !== null}
-            onReShowHighlights={() => {
-              const saved = lastAiDiffs.current;
-              if (!saved) return;
-              setHighlightedRows(new Set(saved.rows));
-              setRowDiffs([...saved.diffs]);
-              // Auto-clear again after 10s
-              setTimeout(() => { setHighlightedRows(new Set()); setRowDiffs([]); }, 10_000);
-            }}
-          />
-          {!sketchLocked && (
-            <button
-              onClick={() => {
-                const newRow: PlanningRow = {
-                  time: "",
-                  narrative: "",
-                  demo_actions: "",
-                  screenshot: null,
-                };
-                const updated = [...localRows, newRow];
-                handleRowsChange(updated);
+                  void runBackgroundAgentAction(prompt, { agent: "designer", label: "Modify visual" });
+                }}
+                projectRoot={projectRoot}
+                sketchPath={activeSketchPath ?? undefined}
+                onRowLockChange={handleRowLockChange}
+                onCellLockChange={handleCellLockChange}
+                onStartNarrationRecording={handleStartNarrationRecording}
+                onGenerateNarration={handleGenerateNarration}
+                onPickNarration={handlePickNarration}
+                onStopNarrationRecording={handleStopNarrationRecording}
+                narrationRecordingRow={narrationRecordingRow}
+                narrationSavingRows={narrationSavingRows}
+                typingOverlayDefaults={{
+                  fontFamily: settings.typingOverlayOverrideEnabled
+                    ? settings.workspaceTypingOverlayFontFamily
+                    : settings.typingOverlayFontFamily,
+                  fontScale: settings.typingOverlayOverrideEnabled
+                    ? settings.workspaceTypingOverlayFontScale
+                    : settings.typingOverlayFontScale,
+                }}
+                highlightedRows={highlightedRows}
+                rowDiffs={rowDiffs}
+                aiSnapshotRows={aiSnapshotRef.current?.rows ?? null}
+                onDismissHighlights={() => { setHighlightedRows(new Set()); setRowDiffs([]); }}
+                hasLastAiDiffs={highlightedRows.size === 0 && lastAiDiffs.current !== null}
+                onReShowHighlights={() => {
+                  const saved = lastAiDiffs.current;
+                  if (!saved) return;
+                  setHighlightedRows(new Set(saved.rows));
+                  setRowDiffs([...saved.diffs]);
+                  // Auto-clear again after 10s
+                  setTimeout(() => { setHighlightedRows(new Set()); setRowDiffs([]); }, 10_000);
+                }}
+              />
+              {!sketchLocked && (
+                <button
+                  onClick={() => {
+                    const newRow: PlanningRow = {
+                      time: "",
+                      narrative: "",
+                      demo_actions: "",
+                      screenshot: null,
+                    };
+                    const updated = [...localRows, newRow];
+                    handleRowsChange(updated);
+                  }}
+                  className="flex items-center gap-1.5 mt-3 px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] border border-dashed border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))]/40 rounded-lg transition-colors w-full justify-center"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Row
+                </button>
+              )}
+            </>
+          ) : viewMode === "balanced" ? (
+            <SketchBalancedView
+              rows={localRows}
+              onChange={handleRowsChange}
+              projectRoot={projectRoot}
+              readOnly={sketchLocked}
+              onCaptureScreenshot={handleCaptureScreenshot}
+              onPasteImage={handlePasteImage}
+              onPickImage={handlePickImage}
+              onBrowseImage={handleBrowseImage}
+              onGenerateVisual={(rowIndex) => {
+                setVisualPromptRow(rowIndex);
+                setVisualInstructions("");
               }}
-              className="flex items-center gap-1.5 mt-3 px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] border border-dashed border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))]/40 rounded-lg transition-colors w-full justify-center"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add Row
-            </button>
+              onRemoveMedia={handleRemoveMedia}
+              onStartNarrationRecording={handleStartNarrationRecording}
+              onGenerateNarration={handleGenerateNarration}
+              onPickNarration={handlePickNarration}
+              onRemoveNarration={handleRemoveNarration}
+            />
+          ) : (
+            <SketchScreenView
+              rows={localRows}
+              onChange={handleRowsChange}
+              projectRoot={projectRoot}
+              readOnly={sketchLocked}
+              onCaptureScreenshot={handleCaptureScreenshot}
+              onPasteImage={handlePasteImage}
+              onPickImage={handlePickImage}
+              onBrowseImage={handleBrowseImage}
+              onGenerateVisual={(rowIndex) => {
+                setVisualPromptRow(rowIndex);
+                setVisualInstructions("");
+              }}
+              onRemoveMedia={handleRemoveMedia}
+              onStartNarrationRecording={handleStartNarrationRecording}
+              onGenerateNarration={handleGenerateNarration}
+              onPickNarration={handlePickNarration}
+              onRemoveNarration={handleRemoveNarration}
+            />
           )}
         </div>
       </div>
