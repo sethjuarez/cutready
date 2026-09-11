@@ -2502,7 +2502,7 @@ function RunDetailsPopover({
         <span
           role="dialog"
           aria-label="Run details"
-          className="absolute left-0 top-6 z-30 block w-72 rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] p-3 text-left normal-case tracking-normal text-[rgb(var(--color-text))] shadow-xl"
+          className="absolute bottom-7 right-0 z-[100] block w-72 rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] p-3 text-left normal-case tracking-normal text-[rgb(var(--color-text))] shadow-xl"
         >
           <span className="mb-2 flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
