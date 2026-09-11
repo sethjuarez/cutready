@@ -413,7 +413,7 @@ function RowNarration({
   const canEditNarration = !readOnly && !mediaLocked;
 
   return (
-    <div className={`w-full min-w-0 overflow-hidden rounded-lg border px-2 py-1.5 ${
+    <div className={`w-full min-w-0 overflow-hidden rounded-md border px-2 py-1 ${
       isStale
         ? "border-[rgb(var(--color-warning))]/30 bg-[rgb(var(--color-warning))]/8"
         : "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/55"
@@ -428,12 +428,12 @@ function RowNarration({
         onPause={() => setPlaying(false)}
         onEnded={() => setPlaying(false)}
       />
-      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2">
+      <div className="grid min-w-0 grid-cols-[auto_minmax(64px,1fr)_auto] items-center gap-1.5 xl:grid-cols-[auto_auto_minmax(80px,1fr)_auto]">
         <button
           type="button"
           onClick={togglePlayback}
           disabled={loading}
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] text-[rgb(var(--color-accent))] transition-colors hover:border-[rgb(var(--color-accent))]/35 hover:bg-[rgb(var(--color-accent))]/8 disabled:opacity-50"
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] text-[rgb(var(--color-accent))] transition-colors hover:border-[rgb(var(--color-accent))]/35 hover:bg-[rgb(var(--color-accent))]/8 disabled:opacity-50"
           aria-label={playing ? "Pause narration" : loading ? "Loading narration" : "Play narration"}
           title={playing ? "Pause narration" : loading ? "Loading narration" : "Play narration"}
         >
@@ -445,30 +445,28 @@ function RowNarration({
             <Play className="h-3.5 w-3.5 fill-current" />
           )}
         </button>
-        <div className="min-w-0">
-          <div className="mb-0.5 flex items-center gap-1 text-[10px] tabular-nums text-[rgb(var(--color-text-secondary))]">
-            <Mic2 className="h-3 w-3 shrink-0 text-[rgb(var(--color-accent))]" />
-            <span className="truncate">{formatPlaybackTime(currentTime)} / {formatPlaybackTime(duration)}</span>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={duration || 0}
-            step={0.1}
-            value={Math.min(currentTime, duration || 0)}
-            onChange={(event) => seek(event.target.value)}
-            disabled={!duration}
-            className="block w-full min-w-0 accent-[rgb(var(--color-accent))] disabled:opacity-50"
-            aria-label="Scrub narration"
-          />
-        </div>
+        <span className="hidden items-center gap-1 whitespace-nowrap text-[10px] tabular-nums text-[rgb(var(--color-text-secondary))] xl:inline-flex">
+          <Mic2 className="h-3 w-3 shrink-0 text-[rgb(var(--color-accent))]" />
+          {formatPlaybackTime(currentTime)} / {formatPlaybackTime(duration)}
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={duration || 0}
+          step={0.1}
+          value={Math.min(currentTime, duration || 0)}
+          onChange={(event) => seek(event.target.value)}
+          disabled={!duration}
+          className="block w-full min-w-0 accent-[rgb(var(--color-accent))] disabled:opacity-50"
+          aria-label="Scrub narration"
+        />
         <div className="flex items-center gap-1">
           {canEditNarration && onRemoveNarration && (
             <button
               type="button"
               onClick={() => onRemoveNarration(rowIndex)}
               disabled={saving || recording}
-              className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-error))]/10 hover:text-[rgb(var(--color-error))] disabled:cursor-not-allowed disabled:opacity-40"
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-error))]/10 hover:text-[rgb(var(--color-error))] disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Remove narration"
               title="Remove narration"
             >
@@ -480,7 +478,7 @@ function RowNarration({
               type="button"
               onClick={() => recording ? onStopNarrationRecording?.() : onStartNarrationRecording(rowIndex)}
               disabled={saving || recordDisabled}
-              className={`grid h-7 w-7 shrink-0 place-items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+              className={`grid h-6 w-6 shrink-0 place-items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                 recording
                   ? "bg-[rgb(var(--color-error))]/10 text-[rgb(var(--color-error))]"
                   : "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))]"
@@ -922,6 +920,10 @@ export function SketchBalancedView({
               rowIndex={index}
               projectRoot={projectRoot}
               readOnly={readOnly}
+              frameClassName="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]"
+              mediaClassName="!h-auto aspect-video !min-h-0 rounded-t-xl rounded-b-none border-0"
+              imageClassName="h-full w-full object-contain"
+              narrationPaddingClassName="border-t border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/75 px-2 py-1.5"
               onOpenPreview={setPreview}
               onCaptureScreenshot={onCaptureScreenshot}
               onPasteImage={onPasteImage}
@@ -1024,7 +1026,7 @@ export function SketchScreenView({
         {rows.map((row, index) => (
           <article
             key={index}
-            className="grid overflow-hidden rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/45 shadow-sm md:grid-cols-[minmax(360px,1.45fr)_minmax(0,0.75fr)]"
+            className="grid overflow-hidden rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/45 shadow-sm md:grid-cols-[minmax(320px,1.15fr)_minmax(0,0.9fr)]"
           >
             <RowMediaStack
               row={row}
@@ -1032,9 +1034,9 @@ export function SketchScreenView({
               projectRoot={projectRoot}
               readOnly={readOnly}
               frameClassName="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]"
-              mediaClassName="!h-auto aspect-video min-h-0 rounded-t-xl rounded-b-none border-0 md:min-h-[280px]"
+              mediaClassName="!h-auto aspect-video !min-h-0 rounded-t-xl rounded-b-none border-0 md:!min-h-[280px]"
               imageClassName="h-full w-full object-contain"
-              narrationPaddingClassName="border-t border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/75 px-3 py-2"
+              narrationPaddingClassName="border-t border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/75 px-2 py-1.5"
               onOpenPreview={setPreview}
               onCaptureScreenshot={onCaptureScreenshot}
               onPasteImage={onPasteImage}
@@ -1050,7 +1052,7 @@ export function SketchScreenView({
               narrationSavingRows={narrationSavingRows}
               onRemoveNarration={onRemoveNarration}
             />
-            <div className="space-y-2.5 p-3">
+            <div className="space-y-3 p-4">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
                   <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[rgb(var(--color-text-secondary))]/70">
