@@ -2,6 +2,13 @@ name: Auditaur scorers
 
 on:
   pull_request:
+    paths-ignore:
+      - .release-please-manifest.json
+      - CHANGELOG.md
+      - package-lock.json
+      - package.json
+      - src-tauri/Cargo.toml
+      - src-tauri/tauri.conf.json
   push:
     branches: [main]
 
