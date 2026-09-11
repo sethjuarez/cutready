@@ -23,6 +23,7 @@
     "visual:eval": "node scripts/visual-eval/run-eval.mjs",
     "visual:smoke-v2": "node scripts/visual-eval/smoke-v2.mjs",
     "visual:bridge": "node scripts/elucim-agent-bridge.mjs",
+    "auditaur:score": "node scripts/auditaur-score-drills.mjs",
     "agent:score-copy": "node scripts/agent-eval/score-copy.mjs",
     "agent:score-instructions": "node scripts/agent-eval/score-instructions.mjs"
   },

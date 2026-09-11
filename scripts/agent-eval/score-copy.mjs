@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
 
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const REPORT_DIR = path.join(process.cwd(), "scripts", "agent-eval", "reports");
-const DEFAULT_TARGET = "D:\\cutready";
+const DEFAULT_TARGET = path.join(REPO_ROOT, "docs", "examples", "cutready-demo-project");
 
 const ARTIFACT_PATTERNS = [
   { code: "DASH_ARTIFACT", points: 10, pattern: /[—–]/g, message: "uses em/en dash; use plain punctuation" },
@@ -219,6 +220,9 @@ function formatConsoleReport(results, target) {
 function main() {
   const options = parseArgs(process.argv.slice(2));
   const files = collectSketchFiles(options.target).slice(0, options.limit);
+  if (files.length === 0) {
+    throw new Error(`No sketch files found in target: ${options.target}`);
+  }
   const results = files.map(scoreSketch);
   const report = {
     generatedAt: new Date().toISOString(),

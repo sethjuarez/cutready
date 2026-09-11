@@ -10,7 +10,7 @@ use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtyPair,
 use serde::Serialize;
 use tauri::{
     ipc::{Channel, InvokeResponseBody},
-    State,
+    Emitter, State,
 };
 use tauri_plugin_auditaur::auditaur_command;
 use uuid::Uuid;
@@ -36,11 +36,17 @@ pub struct TerminalOpenResult {
     shell: String,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct TerminalExitedEvent {
+    session_id: String,
+}
+
 #[auditaur_command(skip_all, err)]
 pub async fn terminal_open(
     cols: u16,
     rows: u16,
     on_output: Channel,
+    app_handle: tauri::AppHandle,
     app_state: State<'_, AppState>,
     terminal_state: State<'_, TerminalState>,
 ) -> Result<TerminalOpenResult, String> {
@@ -72,6 +78,7 @@ pub async fn terminal_open(
     let session_id = Uuid::new_v4().to_string();
     let reader_session_id = session_id.clone();
     let sessions = Arc::clone(&terminal_state.sessions);
+    let emit_handle = app_handle.clone();
     let mut reader = master
         .try_clone_reader()
         .map_err(|error| format!("Failed to attach terminal output: {error}"))?;
@@ -103,6 +110,12 @@ pub async fn terminal_open(
                 }
             }
 
+            let _ = emit_handle.emit(
+                "terminal-exited",
+                TerminalExitedEvent {
+                    session_id: reader_session_id.clone(),
+                },
+            );
             remove_reader_session(&sessions, &reader_session_id);
         })
         .map_err(|error| format!("Failed to start terminal reader: {error}"))?;
@@ -154,6 +167,34 @@ pub async fn terminal_write(
         .flush()
         .map_err(|error| format!("Failed to flush terminal input: {error}"))?;
     Ok(())
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn terminal_is_alive(
+    session_id: String,
+    terminal_state: State<'_, TerminalState>,
+) -> Result<bool, String> {
+    let exited_session = {
+        let mut sessions = terminal_state
+            .sessions
+            .lock()
+            .map_err(|error| error.to_string())?;
+        let Some(session) = sessions.get_mut(&session_id) else {
+            return Ok(false);
+        };
+        match session.child.try_wait() {
+            Ok(Some(_status)) => sessions.remove(&session_id),
+            Ok(None) => return Ok(true),
+            Err(error) => {
+                return Err(format!("Failed to check terminal process: {error}"));
+            }
+        }
+    };
+
+    if let Some(session) = exited_session {
+        release_exited_session(session);
+    }
+    Ok(false)
 }
 
 #[auditaur_command(skip_all, err)]
@@ -223,6 +264,13 @@ fn close_session(mut session: TerminalSession) {
     if let Some(reader) = session.reader.take() {
         let _ = reader.join();
     }
+}
+
+fn release_exited_session(mut session: TerminalSession) {
+    let _ = session.writer.flush();
+    drop(session.writer);
+    drop(session.master);
+    let _ = session.reader.take();
 }
 
 fn remove_reader_session(

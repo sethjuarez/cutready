@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ArrowLeftRight,
   ArrowRight,
@@ -16,7 +23,10 @@ import {
 import type { GraphNode } from "../types/sketch";
 import { useAppStore } from "../stores/appStore";
 import { useConfirmDialog } from "./ConfirmDialog";
-import { FullHistoryGraph, type HistoryGraphNodeType } from "./FullHistoryGraph";
+import {
+  FullHistoryGraph,
+  type HistoryGraphNodeType,
+} from "./FullHistoryGraph";
 import { TimelineSelector } from "./TimelineSelector";
 import { UnsavedWorkspaceDialog } from "./UnsavedWorkspaceDialog";
 import type {
@@ -46,7 +56,9 @@ export function HistoryGraphTab() {
   const discardChanges = useAppStore((s) => s.discardChanges);
   const deleteTimeline = useAppStore((s) => s.deleteTimeline);
   const previewSnapshotCleanup = useAppStore((s) => s.previewSnapshotCleanup);
-  const findSnapshotCleanupCandidates = useAppStore((s) => s.findSnapshotCleanupCandidates);
+  const findSnapshotCleanupCandidates = useAppStore(
+    (s) => s.findSnapshotCleanupCandidates,
+  );
   const applySnapshotCleanup = useAppStore((s) => s.applySnapshotCleanup);
   const undoSnapshotCleanup = useAppStore((s) => s.undoSnapshotCleanup);
   const lastHistoryCleanup = useAppStore((s) => s.lastHistoryCleanup);
@@ -54,7 +66,9 @@ export function HistoryGraphTab() {
   const currentRemote = useAppStore((s) => s.currentRemote);
   const syncStatus = useAppStore((s) => s.syncStatus);
   const currentProject = useAppStore((s) => s.currentProject);
-  const startedBranchFromSnapshot = useAppStore((s) => s.startedBranchFromSnapshot);
+  const startedBranchFromSnapshot = useAppStore(
+    (s) => s.startedBranchFromSnapshot,
+  );
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [pendingSwitch, setPendingSwitch] = useState<string | null>(null);
@@ -62,13 +76,19 @@ export function HistoryGraphTab() {
   const [authorFilter, setAuthorFilter] = useState("all");
   const [cleanupMode, setCleanupMode] = useState(false);
   const [cleanupPointIds, setCleanupPointIds] = useState<string[]>([]);
-  const [selectedForCleanup, setSelectedForCleanup] = useState<Set<string>>(new Set());
+  const [selectedForCleanup, setSelectedForCleanup] = useState<Set<string>>(
+    new Set(),
+  );
   const [cleanupLabel, setCleanupLabel] = useState("");
   const [cleanupError, setCleanupError] = useState<string | null>(null);
-  const [cleanupPreview, setCleanupPreview] = useState<DraftlineHistoryCleanupPreview | null>(null);
-  const [cleanupCandidates, setCleanupCandidates] = useState<DraftlineHistoryCompactionCandidates | null>(null);
-  const [cleanupCandidateFallback, setCleanupCandidateFallback] = useState(false);
-  const [loadingCleanupCandidates, setLoadingCleanupCandidates] = useState(false);
+  const [cleanupPreview, setCleanupPreview] =
+    useState<DraftlineHistoryCleanupPreview | null>(null);
+  const [cleanupCandidates, setCleanupCandidates] =
+    useState<DraftlineHistoryCompactionCandidates | null>(null);
+  const [cleanupCandidateFallback, setCleanupCandidateFallback] =
+    useState(false);
+  const [loadingCleanupCandidates, setLoadingCleanupCandidates] =
+    useState(false);
   const [previewingCleanup, setPreviewingCleanup] = useState(false);
   const [applyingCleanup, setApplyingCleanup] = useState(false);
   const [undoingCleanup, setUndoingCleanup] = useState(false);
@@ -89,16 +109,21 @@ export function HistoryGraphTab() {
 
   const activeTimeline = timelines.find((timeline) => timeline.is_active);
   const head = graphNodes.find((node) => node.is_head);
-  const workspaceName = currentProject ? getPathBasename(currentProject.repo_root) : "workspace";
-  const emptyStartedBranch = startedBranchFromSnapshot
-    && activeTimeline?.name === startedBranchFromSnapshot.branchName
-    && head?.id === startedBranchFromSnapshot.snapshotId
-    ? startedBranchFromSnapshot
-    : null;
+  const workspaceName = currentProject
+    ? getPathBasename(currentProject.repo_root)
+    : "workspace";
+  const emptyStartedBranch =
+    startedBranchFromSnapshot &&
+    activeTimeline?.name === startedBranchFromSnapshot.branchName &&
+    head?.id === startedBranchFromSnapshot.snapshotId
+      ? startedBranchFromSnapshot
+      : null;
 
   const fullAncestryNodes = useMemo(() => {
     if (!activeTimeline) return graphNodes;
-    const branchNodes = graphNodes.filter((node) => node.timeline === activeTimeline.name);
+    const branchNodes = graphNodes.filter(
+      (node) => node.timeline === activeTimeline.name,
+    );
     const nodeMap = new Map(graphNodes.map((node) => [node.id, node]));
     const branchIds = new Set(branchNodes.map((node) => node.id));
     const ancestorIds = new Set<string>();
@@ -106,7 +131,8 @@ export function HistoryGraphTab() {
 
     for (const node of branchNodes) {
       for (const parentId of node.parents) {
-        if (!branchIds.has(parentId) && nodeMap.has(parentId)) frontier.push(parentId);
+        if (!branchIds.has(parentId) && nodeMap.has(parentId))
+          frontier.push(parentId);
       }
     }
 
@@ -117,25 +143,42 @@ export function HistoryGraphTab() {
       const node = nodeMap.get(id);
       if (!node) continue;
       for (const parentId of node.parents) {
-        if (!ancestorIds.has(parentId) && nodeMap.has(parentId)) frontier.push(parentId);
+        if (!ancestorIds.has(parentId) && nodeMap.has(parentId))
+          frontier.push(parentId);
       }
     }
 
     const ancestors = graphNodes.filter((node) => ancestorIds.has(node.id));
     return [...branchNodes, ...ancestors];
   }, [activeTimeline, graphNodes]);
-  const firstParentNodes = useMemo(() => firstParentTimelineNodes(graphNodes), [graphNodes]);
+  const firstParentNodes = useMemo(
+    () => firstParentTimelineNodes(graphNodes),
+    [graphNodes],
+  );
   const allGraphNodeTypes = useMemo(
-    () => classifyGraphNodes(uniqueGraphNodes(fullAncestryNodes), firstParentNodes),
+    () =>
+      classifyGraphNodes(uniqueGraphNodes(fullAncestryNodes), firstParentNodes),
     [firstParentNodes, fullAncestryNodes],
   );
-  const visibleGraphNodes = useMemo(() => uniqueGraphNodes(fullAncestryNodes).filter((node) => {
-    const nodeType = allGraphNodeTypes.get(node.id) ?? "first-parent";
-    return nodeType === "first-parent"
-      || (nodeType === "side-ancestry" && showSideAncestry)
-      || (nodeType === "remote-only" && showRemoteOnly)
-      || (nodeType === "support-ref" && showRecoveryRefs);
-  }), [allGraphNodeTypes, fullAncestryNodes, showRecoveryRefs, showRemoteOnly, showSideAncestry]);
+  const visibleGraphNodes = useMemo(
+    () =>
+      uniqueGraphNodes(fullAncestryNodes).filter((node) => {
+        const nodeType = allGraphNodeTypes.get(node.id) ?? "first-parent";
+        return (
+          nodeType === "first-parent" ||
+          (nodeType === "side-ancestry" && showSideAncestry) ||
+          (nodeType === "remote-only" && showRemoteOnly) ||
+          (nodeType === "support-ref" && showRecoveryRefs)
+        );
+      }),
+    [
+      allGraphNodeTypes,
+      fullAncestryNodes,
+      showRecoveryRefs,
+      showRemoteOnly,
+      showSideAncestry,
+    ],
+  );
   const activeCleanupNodes = firstParentNodes;
 
   const snapshotCount = useMemo(
@@ -143,7 +186,13 @@ export function HistoryGraphTab() {
     [visibleGraphNodes],
   );
   const graphNodeTypes = useMemo(
-    () => new Map(visibleGraphNodes.map((node) => [node.id, allGraphNodeTypes.get(node.id) ?? "first-parent"])),
+    () =>
+      new Map(
+        visibleGraphNodes.map((node) => [
+          node.id,
+          allGraphNodeTypes.get(node.id) ?? "first-parent",
+        ]),
+      ),
     [allGraphNodeTypes, visibleGraphNodes],
   );
   const graphNodeTypeCounts = useMemo(() => {
@@ -159,63 +208,108 @@ export function HistoryGraphTab() {
     return counts;
   }, [allGraphNodeTypes]);
   const hiddenGraphLayerCount =
-    (showSideAncestry ? 0 : graphNodeTypeCounts["side-ancestry"])
-    + (showRemoteOnly ? 0 : graphNodeTypeCounts["remote-only"])
-    + (showRecoveryRefs ? 0 : graphNodeTypeCounts["support-ref"]);
+    (showSideAncestry ? 0 : graphNodeTypeCounts["side-ancestry"]) +
+    (showRemoteOnly ? 0 : graphNodeTypeCounts["remote-only"]) +
+    (showRecoveryRefs ? 0 : graphNodeTypeCounts["support-ref"]);
   const remoteTipCount = graphNodes.filter((node) => node.is_remote_tip).length;
 
   const timelineMap = useMemo(
-    () => new Map(
-      timelines.map((timeline) => [
-        timeline.name,
-        { label: timeline.label, colorIndex: timeline.color_index },
-      ]),
-    ),
+    () =>
+      new Map(
+        timelines.map((timeline) => [
+          timeline.name,
+          { label: timeline.label, colorIndex: timeline.color_index },
+        ]),
+      ),
     [timelines],
   );
 
   const authorOptions = useMemo(
-    () => Array.from(new Set(graphNodes.map((node) => node.author).filter((author): author is string => !!author)))
-      .sort((a, b) => a.localeCompare(b)),
+    () =>
+      Array.from(
+        new Set(
+          graphNodes
+            .map((node) => node.author)
+            .filter((author): author is string => !!author),
+        ),
+      ).sort((a, b) => a.localeCompare(b)),
     [graphNodes],
   );
 
   const authorHighlightedIds = useMemo(() => {
     if (authorFilter === "all") return new Set<string>();
-    return new Set(graphNodes.filter((node) => node.author === authorFilter).map((node) => node.id));
+    return new Set(
+      graphNodes
+        .filter((node) => node.author === authorFilter)
+        .map((node) => node.id),
+    );
   }, [authorFilter, graphNodes]);
 
   const selectedNodes = useMemo(
-    () => activeCleanupNodes
-      .filter((node) => selectedForCleanup.has(node.id)),
+    () => activeCleanupNodes.filter((node) => selectedForCleanup.has(node.id)),
     [activeCleanupNodes, selectedForCleanup],
   );
   const selectedNewest = selectedNodes[0];
   const selectedOldest = selectedNodes[selectedNodes.length - 1];
-  const hasContiguousCleanupSelection = isExactCleanupSelection(activeCleanupNodes, selectedForCleanup);
-  const firstParentCleanupIds = useMemo(() => firstParentTimelineIds(activeCleanupNodes), [activeCleanupNodes]);
+  const hasContiguousCleanupSelection = isExactCleanupSelection(
+    activeCleanupNodes,
+    selectedForCleanup,
+  );
+  const firstParentCleanupIds = useMemo(
+    () => firstParentTimelineIds(activeCleanupNodes),
+    [activeCleanupNodes],
+  );
   const cleanupCandidateByEndpoint = useMemo(() => {
-    if (!cleanupCandidates || cleanupPointIds.length !== 1) return new Map<string, DraftlineHistoryCompactionCandidate>();
-    return new Map(cleanupCandidates.candidates.map((candidate) => [cleanupCandidateEndpointId(candidate), candidate]));
+    if (!cleanupCandidates || cleanupPointIds.length !== 1)
+      return new Map<string, DraftlineHistoryCompactionCandidate>();
+    return new Map(
+      cleanupCandidates.candidates.map((candidate) => [
+        cleanupCandidateEndpointId(candidate),
+        candidate,
+      ]),
+    );
   }, [cleanupCandidates, cleanupPointIds.length]);
   const validCleanupCandidateCount = useMemo(
-    () => Array.from(cleanupCandidateByEndpoint.values()).filter((candidate) => candidate.can_compact).length,
+    () =>
+      Array.from(cleanupCandidateByEndpoint.values()).filter(
+        (candidate) => candidate.can_compact,
+      ).length,
     [cleanupCandidateByEndpoint],
   );
   const sharedHistoryCandidateCount = useMemo(
-    () => Array.from(cleanupCandidateByEndpoint.values())
-      .filter((candidate) => candidate.can_compact && candidate.remote_impact?.publish_status === "shared_history_rewrite_required")
-      .length,
+    () =>
+      Array.from(cleanupCandidateByEndpoint.values()).filter(
+        (candidate) =>
+          candidate.can_compact &&
+          candidate.remote_impact?.publish_status ===
+            "shared_history_rewrite_required",
+      ).length,
     [cleanupCandidateByEndpoint],
   );
   const cleanupSelectableIds = useMemo(() => {
     if (!cleanupMode) return new Set<string>();
     if (cleanupPointIds.length !== 1) return firstParentCleanupIds;
-    if (cleanupCandidateFallback) return firstParentCleanupIds;
-    return new Set(Array.from(cleanupCandidateByEndpoint.entries())
-      .filter(([, candidate]) => candidate.can_compact)
-      .map(([endpointId]) => endpointId));
-  }, [cleanupCandidateByEndpoint, cleanupCandidateFallback, cleanupMode, cleanupPointIds.length, firstParentCleanupIds]);
+    const ids = new Set(cleanupPointIds);
+    if (
+      cleanupCandidateFallback ||
+      loadingCleanupCandidates ||
+      !cleanupCandidates
+    ) {
+      for (const id of firstParentCleanupIds) ids.add(id);
+      return ids;
+    }
+    for (const endpointId of cleanupCandidateByEndpoint.keys())
+      ids.add(endpointId);
+    return ids;
+  }, [
+    cleanupCandidateByEndpoint,
+    cleanupCandidateFallback,
+    cleanupCandidates,
+    cleanupMode,
+    cleanupPointIds,
+    firstParentCleanupIds,
+    loadingCleanupCandidates,
+  ]);
   const effectiveCleanupLabel = useMemo(() => {
     const explicit = cleanupLabel.trim();
     if (explicit) return explicit;
@@ -224,25 +318,29 @@ export function HistoryGraphTab() {
     }
     return "Compacted history";
   }, [cleanupLabel, selectedNewest, selectedOldest]);
-  const canPreviewCleanup = cleanupMode
-    && hasContiguousCleanupSelection
-    && !isDirty
-    && !isRewound
-    && cleanupPointIds.length === 2
-    && !previewingCleanup;
+  const canPreviewCleanup =
+    cleanupMode &&
+    hasContiguousCleanupSelection &&
+    !isDirty &&
+    !isRewound &&
+    cleanupPointIds.length === 2 &&
+    !previewingCleanup;
 
   const filteredGraphNodes = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return visibleGraphNodes;
-    return visibleGraphNodes.filter((node) =>
-      node.message.toLowerCase().includes(query)
-      || node.timeline.toLowerCase().includes(query)
-      || (node.author?.toLowerCase().includes(query) ?? false)
+    return visibleGraphNodes.filter(
+      (node) =>
+        node.message.toLowerCase().includes(query) ||
+        node.timeline.toLowerCase().includes(query) ||
+        (node.author?.toLowerCase().includes(query) ?? false),
     );
   }, [searchQuery, visibleGraphNodes]);
 
   const focusCurrentSnapshot = useCallback(() => {
-    const current = scrollRef.current?.querySelector<HTMLElement>('[data-snapshot-head="true"]');
+    const current = scrollRef.current?.querySelector<HTMLElement>(
+      '[data-snapshot-head="true"]',
+    );
     current?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, []);
 
@@ -252,90 +350,126 @@ export function HistoryGraphTab() {
     return () => cancelAnimationFrame(frame);
   }, [focusCurrentSnapshot, graphNodes.length]);
 
-  const handleNodeClick = useCallback(async (commitId: string, isHead: boolean) => {
-    if (isHead) return;
-    await navigateToSnapshot(commitId);
-    await loadGraphData();
-    await loadTimelines();
-  }, [loadGraphData, loadTimelines, navigateToSnapshot]);
+  const handleNodeClick = useCallback(
+    async (commitId: string, isHead: boolean) => {
+      if (isHead) return;
+      await navigateToSnapshot(commitId);
+      await loadGraphData();
+      await loadTimelines();
+    },
+    [loadGraphData, loadTimelines, navigateToSnapshot],
+  );
 
-  const loadCleanupCandidates = useCallback(async (commitId: string) => {
-    const requestId = cleanupCandidateRequestRef.current + 1;
-    cleanupCandidateRequestRef.current = requestId;
-    setLoadingCleanupCandidates(true);
-    setCleanupCandidates(null);
-    setCleanupCandidateFallback(false);
-    try {
-      const candidates = await findSnapshotCleanupCandidates(commitId);
-      if (cleanupCandidateRequestRef.current !== requestId) return;
-      setCleanupCandidates(candidates);
-      const validCount = candidates.candidates.filter((candidate) => candidate.can_compact).length;
-      if (validCount === 0) {
-        setCleanupError("Draftline could not find a valid compaction range endpoint for that snapshot.");
-      } else {
-        setCleanupError(null);
-      }
-    } catch (err) {
-      if (cleanupCandidateRequestRef.current !== requestId) return;
-      setCleanupCandidateFallback(true);
-      setCleanupError(null);
-    } finally {
-      if (cleanupCandidateRequestRef.current === requestId) setLoadingCleanupCandidates(false);
-    }
-  }, [findSnapshotCleanupCandidates]);
-
-  const toggleCleanupSelection = useCallback((commitId: string) => {
-    if (cleanupPointIds.length === 0 || cleanupPointIds.length === 2) {
-      setCleanupPointIds([commitId]);
-      setSelectedForCleanup(new Set([commitId]));
-      setCleanupPreview(null);
-      setCleanupError(null);
-      void loadCleanupCandidates(commitId);
-      return;
-    }
-
-    if (cleanupPointIds.includes(commitId)) {
-      setCleanupPointIds([]);
-      setSelectedForCleanup(new Set());
-      setCleanupPreview(null);
-      setCleanupError(null);
+  const loadCleanupCandidates = useCallback(
+    async (commitId: string) => {
+      const requestId = cleanupCandidateRequestRef.current + 1;
+      cleanupCandidateRequestRef.current = requestId;
+      setLoadingCleanupCandidates(true);
       setCleanupCandidates(null);
       setCleanupCandidateFallback(false);
-      cleanupCandidateRequestRef.current += 1;
-      setLoadingCleanupCandidates(false);
-      return;
-    }
+      try {
+        const candidates = await findSnapshotCleanupCandidates(commitId);
+        if (cleanupCandidateRequestRef.current !== requestId) return;
+        setCleanupCandidates(candidates);
+        const validCount = candidates.candidates.filter(
+          (candidate) => candidate.can_compact,
+        ).length;
+        if (validCount === 0) {
+          setCleanupError(
+            "Draftline could not find a valid compaction range endpoint for that snapshot.",
+          );
+        } else {
+          setCleanupError(null);
+        }
+      } catch (err) {
+        if (cleanupCandidateRequestRef.current !== requestId) return;
+        setCleanupCandidateFallback(true);
+        setCleanupError(null);
+      } finally {
+        if (cleanupCandidateRequestRef.current === requestId)
+          setLoadingCleanupCandidates(false);
+      }
+    },
+    [findSnapshotCleanupCandidates],
+  );
 
-    if (loadingCleanupCandidates) {
-      setCleanupError("Still finding valid compaction range targets. Try again in a moment.");
-      return;
-    }
-
-    if (!cleanupCandidates && !cleanupCandidateFallback) {
-      setCleanupError("Draftline compaction range targets are not ready. Pick the first point again to retry.");
-      return;
-    }
-
-    if (!cleanupCandidateFallback) {
-      const candidate = cleanupCandidateByEndpoint.get(commitId);
-      if (!candidate) {
-        setCleanupError("Choose one of the Draftline-approved compaction range targets.");
+  const toggleCleanupSelection = useCallback(
+    (commitId: string) => {
+      if (cleanupPointIds.length === 0 || cleanupPointIds.length === 2) {
+        setCleanupPointIds([commitId]);
+        setSelectedForCleanup(new Set([commitId]));
+        setCleanupPreview(null);
+        setCleanupError(null);
+        void loadCleanupCandidates(commitId);
         return;
       }
 
-      if (!candidate.can_compact) {
-        setCleanupError(cleanupCandidateBlockerMessage(candidate));
+      if (cleanupPointIds.includes(commitId)) {
+        setCleanupPointIds([]);
+        setSelectedForCleanup(new Set());
+        setCleanupPreview(null);
+        setCleanupError(null);
+        setCleanupCandidates(null);
+        setCleanupCandidateFallback(false);
+        cleanupCandidateRequestRef.current += 1;
+        setLoadingCleanupCandidates(false);
         return;
       }
-    }
 
-    const anchorId = cleanupPointIds[cleanupPointIds.length - 1];
-    const selection = twoPointCleanupSelection(activeCleanupNodes, anchorId, commitId);
-    setCleanupPointIds([anchorId, commitId]);
-    setSelectedForCleanup(selection);
-    setCleanupPreview(null);
-    setCleanupError(selection.size > 1 ? null : "Choose two snapshots on the active timeline to compact.");
-  }, [activeCleanupNodes, cleanupCandidateByEndpoint, cleanupCandidateFallback, cleanupCandidates, cleanupPointIds, loadCleanupCandidates, loadingCleanupCandidates]);
+      if (loadingCleanupCandidates) {
+        setCleanupError(
+          "Still finding valid compaction range targets. Try again in a moment.",
+        );
+        return;
+      }
+
+      if (!cleanupCandidates && !cleanupCandidateFallback) {
+        setCleanupError(
+          "Draftline compaction range targets are not ready. Pick the first point again to retry.",
+        );
+        return;
+      }
+
+      if (!cleanupCandidateFallback) {
+        const candidate = cleanupCandidateByEndpoint.get(commitId);
+        if (!candidate) {
+          setCleanupError(
+            "Choose one of the Draftline-approved compaction range targets.",
+          );
+          return;
+        }
+
+        if (!candidate.can_compact) {
+          setCleanupError(cleanupCandidateBlockerMessage(candidate));
+          return;
+        }
+      }
+
+      const anchorId = cleanupPointIds[cleanupPointIds.length - 1];
+      const selection = twoPointCleanupSelection(
+        activeCleanupNodes,
+        anchorId,
+        commitId,
+      );
+      setCleanupPointIds([anchorId, commitId]);
+      setSelectedForCleanup(selection);
+      setCleanupPreview(null);
+      setCleanupError(
+        selection.size > 1
+          ? null
+          : "Choose two snapshots on the active timeline to compact.",
+      );
+    },
+    [
+      activeCleanupNodes,
+      cleanupCandidateByEndpoint,
+      cleanupCandidateFallback,
+      cleanupCandidates,
+      cleanupPointIds,
+      loadCleanupCandidates,
+      loadingCleanupCandidates,
+    ],
+  );
 
   const cancelCleanup = useCallback(() => {
     setCleanupMode(false);
@@ -369,14 +503,23 @@ export function HistoryGraphTab() {
     } finally {
       setPreviewingCleanup(false);
     }
-  }, [effectiveCleanupLabel, previewSnapshotCleanup, selectedNewest, selectedNodes, selectedOldest]);
+  }, [
+    effectiveCleanupLabel,
+    previewSnapshotCleanup,
+    selectedNewest,
+    selectedNodes,
+    selectedOldest,
+  ]);
 
   const handleApplyCleanup = useCallback(async () => {
     if (!cleanupPreview) return;
-    const warnings = cleanupPreview.warnings.map((warning) => cleanupWarningMessage(warning.message));
-    const warningText = cleanupPreview.warnings.length > 0
-      ? `\n\nWarnings:\n${warnings.map((warning) => `- ${warning}`).join("\n")}`
-      : "";
+    const warnings = cleanupPreview.warnings.map((warning) =>
+      cleanupWarningMessage(warning.message),
+    );
+    const warningText =
+      cleanupPreview.warnings.length > 0
+        ? `\n\nWarnings:\n${warnings.map((warning) => `- ${warning}`).join("\n")}`
+        : "";
     const remoteText = currentRemote
       ? "\n\nThis creates a local compaction first. Use Sync/Push afterward to publish compacted history through Draftline's guarded remote update."
       : "";
@@ -398,14 +541,22 @@ export function HistoryGraphTab() {
     } finally {
       setApplyingCleanup(false);
     }
-  }, [applySnapshotCleanup, cancelCleanup, cleanupPreview, confirm, currentRemote]);
+  }, [
+    applySnapshotCleanup,
+    cancelCleanup,
+    cleanupPreview,
+    confirm,
+    currentRemote,
+  ]);
 
   const handleUndoCleanup = useCallback(async () => {
-    const cleanupPlanId = pendingHistoryCleanup?.plan_id ?? lastHistoryCleanup?.plan_id;
+    const cleanupPlanId =
+      pendingHistoryCleanup?.plan_id ?? lastHistoryCleanup?.plan_id;
     if (!cleanupPlanId || undoingCleanup) return;
     const confirmed = await confirm({
       title: "Undo history compaction?",
-      message: "Draftline will restore the branch head from the backup ref created before the last compaction rewrite.",
+      message:
+        "Draftline will restore the branch head from the backup ref created before the last compaction rewrite.",
       confirmLabel: "Undo compaction",
       cancelLabel: "Cancel",
       variant: "warning",
@@ -425,14 +576,26 @@ export function HistoryGraphTab() {
     } finally {
       setUndoingCleanup(false);
     }
-  }, [checkDirty, checkRewound, confirm, lastHistoryCleanup, loadGraphData, loadTimelines, pendingHistoryCleanup, undoingCleanup, undoSnapshotCleanup]);
+  }, [
+    checkDirty,
+    checkRewound,
+    confirm,
+    lastHistoryCleanup,
+    loadGraphData,
+    loadTimelines,
+    pendingHistoryCleanup,
+    undoingCleanup,
+    undoSnapshotCleanup,
+  ]);
 
   if (graphNodes.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-[rgb(var(--color-text-secondary))]">
         <ArrowLeftRight className="mb-3 h-12 w-12 opacity-30" />
         <p className="text-xs">No snapshots yet</p>
-        <p className="mt-1 text-[10px] opacity-60">Save your first snapshot to see the history graph</p>
+        <p className="mt-1 text-[10px] opacity-60">
+          Save your first snapshot to see the history graph
+        </p>
       </div>
     );
   }
@@ -445,11 +608,19 @@ export function HistoryGraphTab() {
             <GitBranch className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-[rgb(var(--color-text))]">{workspaceName} workspace history graph</div>
+            <div className="truncate text-sm font-semibold text-[rgb(var(--color-text))]">
+              {workspaceName} workspace history graph
+            </div>
             <div className="history-graph-subtitle truncate text-[10px] text-[rgb(var(--color-text-secondary))]">
-              {snapshotCount} visible snapshot{snapshotCount !== 1 ? "s" : ""} across {timelines.length} branch{timelines.length !== 1 ? "es" : ""}
-              {hiddenGraphLayerCount > 0 ? ` - ${hiddenGraphLayerCount} hidden` : ""}
-              {remoteTipCount > 0 ? ` - ${remoteTipCount} remote tip${remoteTipCount !== 1 ? "s" : ""}` : ""}
+              {snapshotCount} visible snapshot{snapshotCount !== 1 ? "s" : ""}{" "}
+              across {timelines.length} branch
+              {timelines.length !== 1 ? "es" : ""}
+              {hiddenGraphLayerCount > 0
+                ? ` - ${hiddenGraphLayerCount} hidden`
+                : ""}
+              {remoteTipCount > 0
+                ? ` - ${remoteTipCount} remote tip${remoteTipCount !== 1 ? "s" : ""}`
+                : ""}
             </div>
           </div>
         </div>
@@ -518,7 +689,9 @@ export function HistoryGraphTab() {
                 >
                   <option value="all">Everyone</option>
                   {authorOptions.map((author) => (
-                    <option key={author} value={author}>{author}</option>
+                    <option key={author} value={author}>
+                      {author}
+                    </option>
                   ))}
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-1 h-2 w-2 opacity-50" />
@@ -527,7 +700,11 @@ export function HistoryGraphTab() {
             <div className="mx-0.5 h-4 w-px bg-[rgb(var(--color-border-subtle))]" />
             <button
               type="button"
-              onClick={() => setGraphZoom((value) => Math.max(0.7, +(value - 0.1).toFixed(2)))}
+              onClick={() =>
+                setGraphZoom((value) =>
+                  Math.max(0.7, +(value - 0.1).toFixed(2)),
+                )
+              }
               className="inline-flex h-6 items-center gap-1.5 rounded-md px-1.5 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
               title="Zoom out"
             >
@@ -543,7 +720,11 @@ export function HistoryGraphTab() {
             </button>
             <button
               type="button"
-              onClick={() => setGraphZoom((value) => Math.min(1.6, +(value + 0.1).toFixed(2)))}
+              onClick={() =>
+                setGraphZoom((value) =>
+                  Math.min(1.6, +(value + 0.1).toFixed(2)),
+                )
+              }
               className="inline-flex h-6 items-center gap-1.5 rounded-md px-1.5 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
               title="Zoom in"
             >
@@ -562,10 +743,12 @@ export function HistoryGraphTab() {
             <div className="mx-0.5 h-4 w-px bg-[rgb(var(--color-border-subtle))]" />
             <button
               type="button"
-              onClick={() => setCleanupMode((value) => {
-                if (value) cancelCleanup();
-                return !value;
-              })}
+              onClick={() =>
+                setCleanupMode((value) => {
+                  if (value) cancelCleanup();
+                  return !value;
+                })
+              }
               className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
                 cleanupMode
                   ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
@@ -587,7 +770,9 @@ export function HistoryGraphTab() {
                 title="Undo the last history compaction"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                <span className="history-graph-toolbar-label">{undoingCleanup ? "Undoing" : "Undo compaction"}</span>
+                <span className="history-graph-toolbar-label">
+                  {undoingCleanup ? "Undoing" : "Undo compaction"}
+                </span>
               </button>
             )}
             <button
@@ -627,12 +812,14 @@ export function HistoryGraphTab() {
         {currentRemote && (
           <div className="hidden rounded-lg border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))] px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] md:block">
             Remote: {currentRemote.name}
-            {syncStatus ? ` - ahead ${syncStatus.ahead} / behind ${syncStatus.behind}` : ""}
+            {syncStatus
+              ? ` - ahead ${syncStatus.ahead} / behind ${syncStatus.behind}`
+              : ""}
           </div>
         )}
       </div>
 
-      <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-hidden">
+      <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-auto">
         {cleanupMode && (
           <FloatingCleanupPanel
             label={cleanupLabel}
@@ -666,9 +853,13 @@ export function HistoryGraphTab() {
           {authorFilter !== "all" && (
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] px-3 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] shadow-sm">
               <Users className="h-3.5 w-3.5 text-[rgb(var(--color-accent))]" />
-              Highlighting <span className="font-medium text-[rgb(var(--color-text))]">{authorFilter}</span>
+              Highlighting{" "}
+              <span className="font-medium text-[rgb(var(--color-text))]">
+                {authorFilter}
+              </span>
               <span className="text-[rgb(var(--color-text-secondary))]/70">
-                {authorHighlightedIds.size} snapshot{authorHighlightedIds.size === 1 ? "" : "s"}
+                {authorHighlightedIds.size} snapshot
+                {authorHighlightedIds.size === 1 ? "" : "s"}
               </span>
             </div>
           )}
@@ -689,18 +880,28 @@ export function HistoryGraphTab() {
             onNodeClick={handleNodeClick}
           />
           <p className="mt-3 text-[11px] text-[rgb(var(--color-text-secondary))]">
-            The graph starts on the first-parent timeline. Use View to reveal merged, remote, and recovery history; compaction selection stays on the first-parent path.
+            The graph starts on the first-parent timeline. Use View to reveal
+            merged, remote, and recovery history; compaction selection stays on
+            the first-parent path.
           </p>
         </div>
       </div>
 
       <UnsavedWorkspaceDialog
         open={!!pendingSwitch}
-        targetLabel={timelines.find((timeline) => timeline.name === pendingSwitch)?.label ?? pendingSwitch ?? "that branch"}
+        targetLabel={
+          timelines.find((timeline) => timeline.name === pendingSwitch)
+            ?.label ??
+          pendingSwitch ??
+          "that branch"
+        }
         onCancel={() => setPendingSwitch(null)}
         onSaveFirst={() => {
           if (!pendingSwitch) return;
-          useAppStore.setState({ pendingTimelineAfterSave: pendingSwitch, snapshotPromptOpen: true });
+          useAppStore.setState({
+            pendingTimelineAfterSave: pendingSwitch,
+            snapshotPromptOpen: true,
+          });
           setPendingSwitch(null);
         }}
         onDiscardAndContinue={async () => {
@@ -803,8 +1004,14 @@ function FloatingCleanupPanel({
     const width = panelRef.current?.offsetWidth ?? 560;
     const height = panelRef.current?.offsetHeight ?? 280;
     setPosition({
-      x: Math.min(Math.max(8, event.clientX - dragOffsetRef.current.x), Math.max(8, window.innerWidth - width - 8)),
-      y: Math.min(Math.max(8, event.clientY - dragOffsetRef.current.y), Math.max(8, window.innerHeight - height - 8)),
+      x: Math.min(
+        Math.max(8, event.clientX - dragOffsetRef.current.x),
+        Math.max(8, window.innerWidth - width - 8),
+      ),
+      y: Math.min(
+        Math.max(8, event.clientY - dragOffsetRef.current.y),
+        Math.max(8, window.innerHeight - height - 8),
+      ),
     });
   };
 
@@ -830,9 +1037,12 @@ function FloatingCleanupPanel({
         title="Drag to move compaction panel"
       >
         <div>
-          <div className="text-xs font-semibold text-[rgb(var(--color-accent))]">History compaction</div>
+          <div className="text-xs font-semibold text-[rgb(var(--color-accent))]">
+            History compaction
+          </div>
           <p className="mt-0.5 text-[11px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
-            Pick two snapshots to compact the contiguous range between them. Draftline will preview the rewrite before anything is applied.
+            Pick two snapshots to compact the contiguous range between them.
+            Draftline will preview the rewrite before anything is applied.
           </p>
         </div>
         <button
@@ -907,9 +1117,13 @@ function GraphLayerCheckbox({
   onChange?: (checked: boolean) => void;
 }) {
   return (
-    <label className={`flex items-start gap-2 rounded-lg px-2 py-1.5 transition-colors ${
-      disabled ? "opacity-45" : "cursor-pointer hover:bg-[rgb(var(--color-surface-alt))]"
-    }`}>
+    <label
+      className={`flex items-start gap-2 rounded-lg px-2 py-1.5 transition-colors ${
+        disabled
+          ? "opacity-45"
+          : "cursor-pointer hover:bg-[rgb(var(--color-surface-alt))]"
+      }`}
+    >
       <input
         type="checkbox"
         checked={checked}
@@ -918,8 +1132,12 @@ function GraphLayerCheckbox({
         className="mt-0.5 h-3.5 w-3.5 accent-[rgb(var(--color-accent))]"
       />
       <span className="min-w-0">
-        <span className="block text-[11px] font-medium text-[rgb(var(--color-text))]">{label}</span>
-        <span className="block text-[10px] leading-snug text-[rgb(var(--color-text-secondary))]">{description}</span>
+        <span className="block text-[11px] font-medium text-[rgb(var(--color-text))]">
+          {label}
+        </span>
+        <span className="block text-[10px] leading-snug text-[rgb(var(--color-text-secondary))]">
+          {description}
+        </span>
       </span>
     </label>
   );
@@ -948,11 +1166,13 @@ function CleanupStatus({
   isDirty: boolean;
   isRewound: boolean;
 }) {
-  let message = "Pick two graph nodes to compact the contiguous range between them.";
+  let message =
+    "Pick two graph nodes to compact the contiguous range between them.";
   let className = "text-[rgb(var(--color-text-secondary))]";
 
   if (isDirty) {
-    message = "Save or discard unsaved workspace changes before compacting history.";
+    message =
+      "Save or discard unsaved workspace changes before compacting history.";
     className = "text-warning";
   } else if (isRewound) {
     message = "Return to the current timeline tip before compacting history.";
@@ -960,19 +1180,27 @@ function CleanupStatus({
   } else if (cleanupPointCount === 1 && loadingCandidates) {
     message = "First point selected. Finding valid Draftline range targets...";
   } else if (cleanupPointCount === 1 && candidateFallback) {
-    message = "First point selected. Draftline suggestions are unavailable, so choose another point on the active timeline; Preview will validate the range.";
-  } else if (cleanupPointCount === 1 && validCandidateCount > 0 && currentRemote && sharedHistoryCandidateCount > 0) {
+    message =
+      "First point selected. Draftline suggestions are unavailable, so choose another point on the active timeline; Preview will validate the range.";
+  } else if (
+    cleanupPointCount === 1 &&
+    validCandidateCount > 0 &&
+    currentRemote &&
+    sharedHistoryCandidateCount > 0
+  ) {
     message = `${validCandidateCount} valid target${validCandidateCount === 1 ? "" : "s"} found; ${sharedHistoryCandidateCount} touch published history and can be shared afterward with guarded publish.`;
   } else if (cleanupPointCount === 1 && validCandidateCount > 0) {
     message = `First point selected. Choose one of ${validCandidateCount} valid Draftline range target${validCandidateCount === 1 ? "" : "s"}.`;
   } else if (cleanupPointCount === 1) {
-    message = "First point selected, but Draftline did not find a valid compaction range target.";
+    message =
+      "First point selected, but Draftline did not find a valid compaction range target.";
     className = "text-warning";
   } else if (cleanupPointCount === 2 && !hasContiguousSelection) {
     message = "Choose two points that form a contiguous active-timeline range.";
     className = "text-warning";
   } else if (currentRemote) {
-    message = "Compaction is local-first. Sync/Push will publish rewritten history with Draftline's guarded remote update.";
+    message =
+      "Compaction is local-first. Sync/Push will publish rewritten history with Draftline's guarded remote update.";
   }
 
   if (cleanupError) {
@@ -980,7 +1208,11 @@ function CleanupStatus({
     className = "text-[rgb(var(--color-error))]";
   }
 
-  return <div className={`mb-2 min-h-4 text-[11px] leading-relaxed ${className}`}>{message}</div>;
+  return (
+    <div className={`mb-2 min-h-4 text-[11px] leading-relaxed ${className}`}>
+      {message}
+    </div>
+  );
 }
 
 function CleanupPreviewPanel({
@@ -1001,7 +1233,9 @@ function CleanupPreviewPanel({
   return (
     <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/70 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgb(var(--color-text-secondary))]">Preview</div>
+        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgb(var(--color-text-secondary))]">
+          Preview
+        </div>
         {preview && (
           <button
             type="button"
@@ -1015,13 +1249,18 @@ function CleanupPreviewPanel({
       </div>
       <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-2">
         <div className="min-w-0 rounded-lg bg-[rgb(var(--color-surface-alt))] p-2">
-          <div className="mb-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">Before</div>
+          <div className="mb-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">
+            Before
+          </div>
           {selectedNodes.length < 2 ? (
-            <p className="text-[11px] text-[rgb(var(--color-text-secondary))]">Pick two points to define a compaction range.</p>
+            <p className="text-[11px] text-[rgb(var(--color-text-secondary))]">
+              Pick two points to define a compaction range.
+            </p>
           ) : (
             <div className="space-y-1">
               <div className="mb-1 rounded border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-text))]">
-                {endpointIds.size} picked points define {selectedNodes.length} included snapshots
+                {endpointIds.size} picked points define {selectedNodes.length}{" "}
+                included snapshots
               </div>
               {selectedNodes.slice(0, 5).map((node) => (
                 <div
@@ -1033,11 +1272,14 @@ function CleanupPreviewPanel({
                   }`}
                   title={node.message}
                 >
-                  {endpointIds.has(node.id) ? "Picked point: " : "Included: "}{node.message}
+                  {endpointIds.has(node.id) ? "Picked point: " : "Included: "}
+                  {node.message}
                 </div>
               ))}
               {selectedNodes.length > 5 && (
-                <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">+{selectedNodes.length - 5} more included snapshots</div>
+                <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
+                  +{selectedNodes.length - 5} more included snapshots
+                </div>
               )}
             </div>
           )}
@@ -1046,8 +1288,13 @@ function CleanupPreviewPanel({
           <ArrowRight className="h-3.5 w-3.5" />
         </div>
         <div className="min-w-0 rounded-lg bg-[rgb(var(--color-surface-alt))] p-2">
-          <div className="mb-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">After</div>
-          <div className="truncate rounded border border-[rgb(var(--color-accent))]/30 bg-[rgb(var(--color-accent))]/10 px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-accent))]" title={label || "Compacted snapshot"}>
+          <div className="mb-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">
+            After
+          </div>
+          <div
+            className="truncate rounded border border-[rgb(var(--color-accent))]/30 bg-[rgb(var(--color-accent))]/10 px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-accent))]"
+            title={label || "Compacted snapshot"}
+          >
             {label || "Compacted snapshot"}
           </div>
           <div className="mt-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
@@ -1059,7 +1306,9 @@ function CleanupPreviewPanel({
       </div>
       {preview?.warnings.length ? (
         <div className="mt-2 rounded-lg border border-warning/25 bg-warning/5 px-2 py-1.5 text-[10px] text-warning">
-          {preview.warnings.map((warning) => cleanupWarningMessage(warning.message)).join(" ")}
+          {preview.warnings
+            .map((warning) => cleanupWarningMessage(warning.message))
+            .join(" ")}
         </div>
       ) : null}
     </div>
@@ -1081,14 +1330,23 @@ function uniqueGraphNodes(nodes: GraphNode[]): GraphNode[] {
   return unique;
 }
 
-function classifyGraphNodes(nodes: GraphNode[], firstParentNodes: GraphNode[]): Map<string, HistoryGraphNodeType> {
+function classifyGraphNodes(
+  nodes: GraphNode[],
+  firstParentNodes: GraphNode[],
+): Map<string, HistoryGraphNodeType> {
   const firstParentIds = new Set(firstParentNodes.map((node) => node.id));
   const types = new Map<string, HistoryGraphNodeType>();
 
   for (const node of nodes) {
-    if (node.reachable_from_support_ref && !node.reachable_from_local_variation) {
+    if (
+      node.reachable_from_support_ref &&
+      !node.reachable_from_local_variation
+    ) {
       types.set(node.id, "support-ref");
-    } else if (node.reachable_from_remote_variation && !node.reachable_from_local_variation) {
+    } else if (
+      node.reachable_from_remote_variation &&
+      !node.reachable_from_local_variation
+    ) {
       types.set(node.id, "remote-only");
     } else if (!firstParentIds.has(node.id)) {
       types.set(node.id, "side-ancestry");
@@ -1100,21 +1358,28 @@ function classifyGraphNodes(nodes: GraphNode[], firstParentNodes: GraphNode[]): 
   return types;
 }
 
-function cleanupCandidateEndpointId(candidate: DraftlineHistoryCompactionCandidate): string {
+function cleanupCandidateEndpointId(
+  candidate: DraftlineHistoryCompactionCandidate,
+): string {
   return candidate.selected_role === "range_start"
     ? candidate.include_range.end
     : candidate.include_range.start;
 }
 
-function cleanupCandidateBlockerMessage(candidate: DraftlineHistoryCompactionCandidate): string {
+function cleanupCandidateBlockerMessage(
+  candidate: DraftlineHistoryCompactionCandidate,
+): string {
   const blocker = candidate.blockers[0] ?? candidate.warnings[0];
-  return blocker?.message ?? "Draftline marked that compaction range target as unavailable.";
+  return (
+    blocker?.message ??
+    "Draftline marked that compaction range target as unavailable."
+  );
 }
 
 function cleanupWarningMessage(message: string): string {
   if (
-    message.includes("apply_history_cleanup is local-first")
-    || message.includes("preflight_replace_remote_history")
+    message.includes("apply_history_cleanup is local-first") ||
+    message.includes("preflight_replace_remote_history")
   ) {
     return "Compaction is applied locally first. Use Sync/Push afterward to safely publish the rewritten history to the remote.";
   }

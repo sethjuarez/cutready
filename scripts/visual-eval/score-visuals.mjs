@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
 import { toRenderableDocument } from "@elucim/dsl";
 
-const DEFAULT_TARGET = "D:\\cutready\\ndc-toronto-26\\session\\.cutready\\visuals";
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const DEFAULT_TARGET = path.join(REPO_ROOT, "docs", "examples", "cutready-demo-project", ".cutready", "visuals");
 const REPORT_DIR = path.join(process.cwd(), "scripts", "visual-eval", "reports");
 const CANVAS_WIDTH = 960;
 const CANVAS_HEIGHT = 540;
@@ -386,6 +387,9 @@ export function formatConsoleReport(results, target) {
 function main() {
   const options = parseArgs(process.argv.slice(2));
   const files = collectVisualFiles(options.target).slice(0, options.limit);
+  if (files.length === 0) {
+    throw new Error(`No visual JSON files found in target: ${options.target}`);
+  }
   const results = files.map(scoreVisual).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
   const report = {
     generatedAt: new Date().toISOString(),

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
 
-const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, "$1");
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CASES = path.join(SCRIPT_DIR, "instruction-cases.json");
 const DEFAULT_OUT = path.join(SCRIPT_DIR, "reports", "instruction-report.json");
 

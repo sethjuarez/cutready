@@ -3,28 +3,39 @@ import type { GraphNode } from "../types/sketch";
 import { useAppStore } from "../stores/appStore";
 
 /* ── Layout constants ─────────────────────────────────────────────── */
-const ROW_H = 48;         // px per commit row
-const DIRTY_ROW_H = 32;   // px for dirty/ghost/alias indicator rows
-const LANE_W = 16;        // px between lane centers
-const GRAPH_PAD = 14;     // left padding to first lane center
-const NODE_R = 5;         // regular dot radius
-const HEAD_R = 6.5;       // HEAD dot radius
-const STROKE_W = 2;       // rail line width
+const ROW_H = 48; // px per commit row
+const DIRTY_ROW_H = 32; // px for dirty/ghost/alias indicator rows
+const LANE_W = 16; // px between lane centers
+const GRAPH_PAD = 14; // left padding to first lane center
+const NODE_R = 5; // regular dot radius
+const HEAD_R = 6.5; // HEAD dot radius
+const STROKE_W = 2; // rail line width
 
 const LANE_COLORS = [
-  "rgb(var(--color-accent))",      // purple — main / active
-  "#10b981",                  // emerald
-  "#f59e0b",                  // amber
-  "#ef4444",                  // red
-  "#3b82f6",                  // blue
-  "#ec4899",                  // pink
-  "#14b8a6",                  // teal
-  "#8b5cf6",                  // violet
+  "rgb(var(--color-accent))", // purple — main / active
+  "#10b981", // emerald
+  "#f59e0b", // amber
+  "#ef4444", // red
+  "#3b82f6", // blue
+  "#ec4899", // pink
+  "#14b8a6", // teal
+  "#8b5cf6", // violet
 ];
-function lc(i: number) { return LANE_COLORS[i % LANE_COLORS.length]; }
+const EMPTY_SELECTED_IDS = new Set<string>();
+const EMPTY_ENDPOINT_IDS = new Set<string>();
+const EMPTY_HIGHLIGHTED_IDS = new Set<string>();
+const EMPTY_SELECTABLE_IDS = new Set<string>();
+const EMPTY_NODE_TYPES = new Map<string, HistoryGraphNodeType>();
+function lc(i: number) {
+  return LANE_COLORS[i % LANE_COLORS.length];
+}
 
 function remoteBadges(node: GraphNode): string[] {
-  return node.remote_labels?.length ? node.remote_labels : node.is_remote_tip ? ["remote"] : [];
+  return node.remote_labels?.length
+    ? node.remote_labels
+    : node.is_remote_tip
+      ? ["remote"]
+      : [];
 }
 
 function remoteTitle(node: GraphNode): string {
@@ -32,14 +43,20 @@ function remoteTitle(node: GraphNode): string {
 }
 
 /* ── Types ────────────────────────────────────────────────────────── */
-interface TimelineInfo { label: string; colorIndex: number }
+interface TimelineInfo {
+  label: string;
+  colorIndex: number;
+}
+
+export type HistoryGraphNodeType =
+  "first-parent" | "side-ancestry" | "remote-only" | "support-ref";
 
 type RowKind = "node" | "dirty" | "ghost";
 interface DisplayRow {
   kind: RowKind;
-  node?: GraphNode;           // for "node" rows
-  laneIdx: number;            // which lane this row's dot is on
-  h: number;                  // row height
+  node?: GraphNode; // for "node" rows
+  laneIdx: number; // which lane this row's dot is on
+  h: number; // row height
 }
 
 /* ── Compute per-node display lanes ────────────────────────────── */
@@ -49,6 +66,7 @@ interface DisplayRow {
 function computeDisplayLanes(
   nodes: GraphNode[],
   headNode: GraphNode | undefined,
+  nodeTypes: Map<string, HistoryGraphNodeType> = new Map(),
 ): { displayLane: Map<string, number>; numLanes: number } {
   const displayLane = new Map<string, number>();
   if (!headNode || nodes.length === 0) {
@@ -67,33 +85,55 @@ function computeDisplayLanes(
     if (trunkIds.has(id)) continue;
     trunkIds.add(id);
     const node = byId.get(id);
-    if (node) for (const pid of node.parents) if (byId.has(pid)) queue.push(pid);
+    if (node)
+      for (const pid of node.parents) if (byId.has(pid)) queue.push(pid);
   }
   // Also include nodes ahead of HEAD on the same backend lane
   for (const n of nodes) if (n.lane === headNode.lane) trunkIds.add(n.id);
 
-  // Trunk → display lane 0
-  for (const id of trunkIds) displayLane.set(id, 0);
+  // Trunk → display lane 0. Expanded full-history views keep merged,
+  // remote-only, and recovery refs off the first-parent rail.
+  for (const id of trunkIds) {
+    if ((nodeTypes.get(id) ?? "first-parent") === "first-parent") {
+      displayLane.set(id, 0);
+    }
+  }
 
   // Non-trunk grouped by backend lane → display lanes 1, 2, …
-  const branchLaneMap = new Map<number, number>();
+  const branchLaneMap = new Map<string, number>();
   let nextLane = 1;
-  for (const n of nodes) {
-    if (trunkIds.has(n.id)) continue;
-    if (!branchLaneMap.has(n.lane)) branchLaneMap.set(n.lane, nextLane++);
-    displayLane.set(n.id, branchLaneMap.get(n.lane)!);
+  const branchCandidates = nodes
+    .filter((node) => !displayLane.has(node.id))
+    .sort((a, b) => {
+      const aType = nodeTypes.get(a.id) ?? "first-parent";
+      const bType = nodeTypes.get(b.id) ?? "first-parent";
+      return (
+        historyNodeTypeRank(aType) - historyNodeTypeRank(bType) ||
+        a.lane - b.lane
+      );
+    });
+  for (const n of branchCandidates) {
+    const laneKey = renderHistoryLaneKey(
+      n,
+      nodeTypes.get(n.id) ?? "first-parent",
+    );
+    if (!branchLaneMap.has(laneKey)) branchLaneMap.set(laneKey, nextLane++);
+    displayLane.set(n.id, branchLaneMap.get(laneKey)!);
   }
 
   return { displayLane, numLanes: Math.max(nextLane, 1) };
 }
 
 /* ── Sort nodes for display (trunk first, branches at fork points) ── */
-function sortForDisplay(nodes: GraphNode[], displayLane: Map<string, number>): GraphNode[] {
+function sortForDisplay(
+  nodes: GraphNode[],
+  displayLane: Map<string, number>,
+): GraphNode[] {
   if (nodes.length === 0) return [];
 
   // Trunk = display lane 0
   const trunk = nodes
-    .filter(n => displayLane.get(n.id) === 0)
+    .filter((n) => displayLane.get(n.id) === 0)
     .sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
 
   // Branches = non-trunk, grouped by display lane
@@ -125,8 +165,7 @@ function sortForDisplay(nodes: GraphNode[], displayLane: Map<string, number>): G
     if (placed.has(n.id)) return;
     const forks = forkMap.get(n.id);
     if (forks) {
-      for (const br of forks)
-        for (const bn of br) insertNode(bn);
+      for (const br of forks) for (const bn of br) insertNode(bn);
     }
     result.push(n);
     placed.add(n.id);
@@ -134,6 +173,23 @@ function sortForDisplay(nodes: GraphNode[], displayLane: Map<string, number>): G
   for (const tn of trunk) insertNode(tn);
   for (const n of nodes) if (!placed.has(n.id)) result.push(n);
   return result;
+}
+
+function renderHistoryLaneKey(node: GraphNode, nodeType: HistoryGraphNodeType) {
+  return `${historyNodeTypeRank(nodeType)}:${node.lane}`;
+}
+
+function historyNodeTypeRank(nodeType: HistoryGraphNodeType) {
+  switch (nodeType) {
+    case "first-parent":
+      return 0;
+    case "side-ancestry":
+      return 1;
+    case "remote-only":
+      return 2;
+    case "support-ref":
+      return 3;
+  }
 }
 
 /* ── Props ────────────────────────────────────────────────────────── */
@@ -148,13 +204,32 @@ interface Props {
   showRemoteBadges?: boolean;
   selectionMode?: boolean;
   selectedIds?: Set<string>;
+  endpointIds?: Set<string>;
+  highlightedIds?: Set<string>;
+  selectableIds?: Set<string>;
+  nodeTypes?: Map<string, HistoryGraphNodeType>;
   onToggleSelect?: (commitId: string) => void;
   onNodeClick: (commitId: string, isHead: boolean) => void;
 }
 
 /* ── Component ────────────────────────────────────────────────────── */
 export function SnapshotGraph({
-  nodes: rawNodes, isDirty, isRewound, timelineMap, hasMultipleTimelines, variant = "compact", zoom = 1, showRemoteBadges = false, selectionMode = false, selectedIds = new Set(), onToggleSelect, onNodeClick,
+  nodes: rawNodes,
+  isDirty,
+  isRewound,
+  timelineMap,
+  hasMultipleTimelines,
+  variant = "compact",
+  zoom = 1,
+  showRemoteBadges = false,
+  selectionMode = false,
+  selectedIds = EMPTY_SELECTED_IDS,
+  endpointIds = EMPTY_ENDPOINT_IDS,
+  highlightedIds = EMPTY_HIGHLIGHTED_IDS,
+  selectableIds = EMPTY_SELECTABLE_IDS,
+  nodeTypes = EMPTY_NODE_TYPES,
+  onToggleSelect,
+  onNodeClick,
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
   const currentRemote = useAppStore((s) => s.currentRemote);
@@ -164,7 +239,11 @@ export function SnapshotGraph({
   const rowH = expanded ? Math.round(54 * z) : ROW_H;
   const dirtyRowH = expanded ? Math.round(36 * z) : DIRTY_ROW_H;
   const laneW = expanded ? Math.round(34 * z) : LANE_W;
-  const graphPad = expanded ? Math.round((showRemoteBadges ? 92 : 48) * z) : showRemoteBadges ? 52 : GRAPH_PAD;
+  const graphPad = expanded
+    ? Math.round((showRemoteBadges ? 92 : 48) * z)
+    : showRemoteBadges
+      ? 52
+      : GRAPH_PAD;
   const nodeR = expanded ? 5.5 * z : NODE_R;
   const headR = expanded ? 7 * z : HEAD_R;
   const strokeW = expanded ? 2.5 : STROKE_W;
@@ -188,13 +267,16 @@ export function SnapshotGraph({
     return { primaryNodes: primary, aliases: aliasMap };
   }, [rawNodes]);
 
-  const headNode = primaryNodes.find(n => n.is_head);
+  const headNode = primaryNodes.find((n) => n.is_head);
 
   const { displayLane, numLanes } = useMemo(
-    () => computeDisplayLanes(primaryNodes, headNode),
-    [primaryNodes, headNode],
+    () => computeDisplayLanes(primaryNodes, headNode, nodeTypes),
+    [primaryNodes, headNode, nodeTypes],
   );
-  const sorted = useMemo(() => sortForDisplay(primaryNodes, displayLane), [primaryNodes, displayLane]);
+  const sorted = useMemo(
+    () => sortForDisplay(primaryNodes, displayLane),
+    [primaryNodes, displayLane],
+  );
 
   /* ── Build display rows ─────────────────────────── */
   const rows: DisplayRow[] = useMemo(() => {
@@ -215,7 +297,16 @@ export function SnapshotGraph({
       result.push({ kind: "node", node: n, laneIdx: dl, h: rowH });
     }
     return result;
-  }, [dirtyRowH, sorted, displayLane, numLanes, isDirty, isRewound, aliases, rowH]);
+  }, [
+    dirtyRowH,
+    sorted,
+    displayLane,
+    numLanes,
+    isDirty,
+    isRewound,
+    aliases,
+    rowH,
+  ]);
 
   const graphW = graphPad + (numLanes || 1) * laneW + (expanded ? 18 : 4);
 
@@ -223,7 +314,9 @@ export function SnapshotGraph({
   if (sorted.length === 0 && !isDirty) {
     return (
       <div className="px-3 py-8 text-center">
-        <div className="text-[rgb(var(--color-text-secondary))] text-xs">No snapshots yet</div>
+        <div className="text-[rgb(var(--color-text-secondary))] text-xs">
+          No snapshots yet
+        </div>
         <div className="text-[rgb(var(--color-text-secondary))]/60 text-[10px] mt-1">
           Save a snapshot of the entire project
         </div>
@@ -238,8 +331,12 @@ export function SnapshotGraph({
     rowTops.push(totalH);
     totalH += r.h;
   }
-  function rowCy(i: number) { return rowTops[i] + rows[i].h / 2; }
-  function laneX(l: number) { return graphPad + l * laneW; }
+  function rowCy(i: number) {
+    return rowTops[i] + rows[i].h / 2;
+  }
+  function laneX(l: number) {
+    return graphPad + l * laneW;
+  }
 
   /* ── Build SVG paths: rails + connectors ──────── */
   // For each node row, we need:
@@ -252,7 +349,12 @@ export function SnapshotGraph({
     }
   }
 
-  type SvgPath = { d: string; color: string; opacity: number; dashed?: boolean };
+  type SvgPath = {
+    d: string;
+    color: string;
+    opacity: number;
+    dashed?: boolean;
+  };
   const paths: SvgPath[] = [];
 
   // Draw vertical rail segments + branch connectors
@@ -277,32 +379,38 @@ export function SnapshotGraph({
       if (childLane === parentLane) {
         // Same lane: straight vertical line
         paths.push({
-         d: `M ${cx} ${cy + nodeR} L ${px} ${py - nodeR}`,
-          color, opacity: 0.7,
+          d: `M ${cx} ${cy + nodeR} L ${px} ${py - nodeR}`,
+          color,
+          opacity: 0.7,
         });
       } else {
         // Different lanes: smooth S-curve bezier (like git log --graph)
         paths.push({
-         d: `M ${cx} ${cy + nodeR} C ${cx} ${(cy + py) / 2}, ${px} ${(cy + py) / 2}, ${px} ${py - nodeR}`,
-          color, opacity: 0.6,
+          d: `M ${cx} ${cy + nodeR} C ${cx} ${(cy + py) / 2}, ${px} ${(cy + py) / 2}, ${px} ${py - nodeR}`,
+          color,
+          opacity: 0.6,
         });
       }
     }
   }
 
   // Dirty → HEAD connector
-  const dirtyRowIdx = rows.findIndex(r => r.kind === "dirty");
-  const headRowIdx = rows.findIndex(r => r.kind === "node" && r.node?.is_head);
+  const dirtyRowIdx = rows.findIndex((r) => r.kind === "dirty");
+  const headRowIdx = rows.findIndex(
+    (r) => r.kind === "node" && r.node?.is_head,
+  );
   if (dirtyRowIdx >= 0 && headRowIdx >= 0) {
     const dx = laneX(rows[dirtyRowIdx].laneIdx);
     paths.push({
       d: `M ${dx} ${rowCy(dirtyRowIdx) + 4} L ${dx} ${rowCy(headRowIdx) - headR}`,
-      color: "rgb(var(--color-text-secondary))", opacity: 0.4, dashed: true,
+      color: "rgb(var(--color-text-secondary))",
+      opacity: 0.4,
+      dashed: true,
     });
   }
 
   // Ghost → HEAD connector (curved, branching off)
-  const ghostRowIdx = rows.findIndex(r => r.kind === "ghost");
+  const ghostRowIdx = rows.findIndex((r) => r.kind === "ghost");
   if (ghostRowIdx >= 0 && headRowIdx >= 0) {
     const gx = laneX(rows[ghostRowIdx].laneIdx);
     const hx = laneX(rows[headRowIdx].laneIdx);
@@ -310,7 +418,9 @@ export function SnapshotGraph({
     const hy = rowCy(headRowIdx);
     paths.push({
       d: `M ${hx + headR} ${hy} Q ${gx} ${hy}, ${gx} ${gy + 4}`,
-      color: lc(rows[headRowIdx].laneIdx), opacity: 0.5, dashed: true,
+      color: lc(rows[headRowIdx].laneIdx),
+      opacity: 0.5,
+      dashed: true,
     });
   }
 
@@ -318,298 +428,508 @@ export function SnapshotGraph({
   return (
     <div>
       <div className="relative" style={{ minHeight: totalH }}>
-      {/* SVG graph layer */}
-      <svg
-        className="absolute top-0 left-0"
-        width={graphW}
-        height={totalH}
-        style={{ pointerEvents: "none", zIndex: 1 }}
-      >
-        {paths.map((p, i) => (
-          <path key={i} d={p.d} stroke={p.color} strokeWidth={strokeW}
-            strokeOpacity={p.opacity} fill="none"
-            strokeDasharray={p.dashed ? "3 2" : undefined}
-            strokeLinecap="round" />
-        ))}
-      </svg>
+        {/* SVG graph layer */}
+        <svg
+          className="absolute top-0 left-0"
+          width={graphW}
+          height={totalH}
+          style={{ pointerEvents: "none", zIndex: 1 }}
+        >
+          {paths.map((p, i) => (
+            <path
+              key={i}
+              d={p.d}
+              stroke={p.color}
+              strokeWidth={strokeW}
+              strokeOpacity={p.opacity}
+              fill="none"
+              strokeDasharray={p.dashed ? "3 2" : undefined}
+              strokeLinecap="round"
+            />
+          ))}
+        </svg>
 
-      {/* Row content */}
-      {rows.map((row) => {
-        if (row.kind === "dirty") {
-          const x = laneX(row.laneIdx);
+        {/* Row content */}
+        {rows.map((row) => {
+          if (row.kind === "dirty") {
+            const x = laneX(row.laneIdx);
+            return (
+              <div
+                key="dirty"
+                className="flex items-center overflow-hidden cursor-pointer hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
+                style={{ height: row.h }}
+                onClick={() => diffWorkingTree()}
+                title="View unsaved changes"
+              >
+                <div
+                  className="shrink-0 relative"
+                  style={{ width: graphW, height: row.h }}
+                >
+                  <div
+                    className="absolute rounded-full border-[1.5px] border-dashed"
+                    style={{
+                      left: x - 4,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      width: 8,
+                      height: 8,
+                      borderColor: "rgb(var(--color-text-secondary))",
+                      opacity: 0.5,
+                      backgroundColor: "rgb(var(--color-surface))",
+                      zIndex: 2,
+                    }}
+                  />
+                </div>
+                <div className="flex-1 min-w-0 pr-2">
+                  <span className="text-[10px] italic text-[rgb(var(--color-text-secondary))]/70">
+                    Unsaved changes
+                  </span>
+                </div>
+              </div>
+            );
+          }
+
+          if (row.kind === "ghost") {
+            const x = laneX(row.laneIdx);
+            const headColor = lc(0); // trunk is always lane 0
+            return (
+              <div
+                key="ghost"
+                className="flex items-center overflow-hidden cursor-pointer hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
+                style={{ height: row.h }}
+                onClick={() => diffWorkingTree()}
+                title="View unsaved changes"
+              >
+                <div
+                  className="shrink-0 relative"
+                  style={{ width: graphW, height: row.h }}
+                >
+                  <div
+                    className="absolute rounded-full border-[1.5px] border-dashed"
+                    style={{
+                      left: x - 3.5,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      width: 7,
+                      height: 7,
+                      borderColor: headColor,
+                      opacity: 0.5,
+                      backgroundColor: "rgb(var(--color-surface))",
+                      zIndex: 2,
+                    }}
+                  />
+                </div>
+                <div className="flex-1 min-w-0 pr-2 flex items-center gap-1">
+                  <span className="text-[10px] italic text-[rgb(var(--color-text-secondary))]/70">
+                    New direction
+                  </span>
+                  <span className="text-[9px] px-1 py-px rounded-sm bg-warning/10 text-warning">
+                    branching
+                  </span>
+                </div>
+              </div>
+            );
+          }
+
+          // ── Node row ──
+          const node = row.node!;
+          const dl = row.laneIdx;
+          const x = laneX(dl);
+          const tlInfo = timelineMap.get(node.timeline);
+          const color = lc(tlInfo?.colorIndex ?? dl);
+          const r = node.is_head ? headR : nodeR;
+          const isHov = hovered === node.id;
+          const selected = selectedIds.has(node.id);
+          const endpoint = endpointIds.has(node.id);
+          const highlighted = highlightedIds.has(node.id);
+          const selectable = !selectionMode || selectableIds.has(node.id);
+          const nodeType = nodeTypes.get(node.id) ?? "first-parent";
+          const tlLabel = tlInfo?.label ?? node.timeline;
+          const nodeAliases = aliases.get(node.id);
+          const isMutedNode = expanded && nodeType !== "first-parent";
+          const nodeOpacity =
+            selectionMode && !selected && !selectable
+              ? 0.42
+              : isMutedNode
+                ? 0.68
+                : 1;
+          const handleSelectOrNavigate = () => {
+            if (selectionMode) {
+              if (!selectable) return;
+              onToggleSelect?.(node.id);
+              return;
+            }
+            if (!node.is_head) onNodeClick(node.id, node.is_head);
+          };
+
           return (
-            <div key="dirty"
-              className="flex items-center overflow-hidden cursor-pointer hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
+            <div
+              key={node.id}
+              className={`flex items-center group ${expanded ? "overflow-visible" : "overflow-hidden"}`}
               style={{ height: row.h }}
-              onClick={() => diffWorkingTree()}
-              title="View unsaved changes"
+              onMouseEnter={() => !node.is_head && setHovered(node.id)}
+              onMouseLeave={() => setHovered(null)}
             >
-              <div className="shrink-0 relative" style={{ width: graphW, height: row.h }}>
-                <div className="absolute rounded-full border-[1.5px] border-dashed"
+              {/* Graph column: dot */}
+              <div
+                className="shrink-0 relative"
+                style={{ width: graphW, height: row.h }}
+              >
+                {/* HEAD ring */}
+                {node.is_head && (
+                  <div
+                    className="absolute rounded-full"
+                    style={{
+                      left: x - r - 3,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      width: (r + 3) * 2,
+                      height: (r + 3) * 2,
+                      border: `1px solid ${color}`,
+                      opacity: 0.3,
+                      zIndex: 2,
+                    }}
+                  />
+                )}
+                {/* Dot */}
+                <button
+                  className="absolute rounded-full transition-colors"
+                  data-testid="snapshot-graph-node"
+                  data-snapshot-id={node.id}
+                  data-snapshot-head={node.is_head ? "true" : "false"}
                   style={{
-                    left: x - 4, top: "50%", transform: "translateY(-50%)",
-                    width: 8, height: 8, borderColor: "rgb(var(--color-text-secondary))", opacity: 0.5,
-                    backgroundColor: "rgb(var(--color-surface))", zIndex: 2,
-                  }} />
+                    left: x - r,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    width: r * 2,
+                    height: r * 2,
+                    backgroundColor:
+                      node.is_head || isHov || selected
+                        ? color
+                        : "rgb(var(--color-surface))",
+                    border: `2px solid ${selected ? "rgb(var(--color-warning))" : color}`,
+                    boxShadow: selected
+                      ? `0 0 0 4px ${color}25`
+                      : highlighted
+                        ? `0 0 0 4px ${color}18`
+                        : "0 0 0 2px rgb(var(--color-surface))",
+                    cursor: selectionMode
+                      ? selectable
+                        ? "pointer"
+                        : "not-allowed"
+                      : node.is_head
+                        ? "default"
+                        : "pointer",
+                    opacity: nodeOpacity,
+                    zIndex: 3,
+                    padding: 0,
+                  }}
+                  onClick={handleSelectOrNavigate}
+                  title={
+                    selectionMode
+                      ? selectable
+                        ? `Select ${node.message}`
+                        : "This snapshot is not selectable for cleanup"
+                      : node.is_head
+                        ? "Current snapshot (HEAD)"
+                        : `Preview snapshot: ${node.message}`
+                  }
+                />
+                {/* Remote badge — left of the dot with connector line, mirroring branch labels */}
+                {showRemoteBadges &&
+                  remoteBadges(node).length > 0 &&
+                  (() => {
+                    const remoteLabels = remoteBadges(node);
+                    const badges = remoteLabels.slice(0, 2);
+                    const overflowCount = remoteLabels.length - badges.length;
+                    const badgeLeft = 2;
+                    const badgeW = expanded ? 72 : 46;
+                    const lineLeft = badgeLeft + badgeW;
+                    const lineRight = x - r - 2;
+                    if (!expanded) {
+                      return (
+                        <>
+                          {lineRight > lineLeft && (
+                            <div
+                              className="absolute"
+                              style={{
+                                left: lineLeft,
+                                top: "50%",
+                                width: lineRight - lineLeft,
+                                height: 0,
+                                borderTop: "1px solid #10b981",
+                                opacity: 0.25,
+                                zIndex: 1,
+                              }}
+                            />
+                          )}
+                          <div
+                            className="absolute rounded-sm px-1.5 py-px font-mono text-[9px] font-semibold leading-tight"
+                            style={{
+                              left: badgeLeft,
+                              top: "50%",
+                              transform: "translateY(-50%)",
+                              zIndex: 2,
+                              color: "#10b981",
+                              backgroundColor: "rgba(16,185,129,0.15)",
+                            }}
+                            title={remoteTitle(node)}
+                          >
+                            remote
+                          </div>
+                        </>
+                      );
+                    }
+                    return (
+                      <>
+                        {lineRight > lineLeft && (
+                          <div
+                            className="absolute"
+                            style={{
+                              left: lineLeft,
+                              top: "50%",
+                              width: lineRight - lineLeft,
+                              height: 0,
+                              borderTop: "1px solid #10b981",
+                              opacity: 0.25,
+                              zIndex: 1,
+                            }}
+                          />
+                        )}
+                        <div
+                          className="absolute flex max-w-[5.25rem] flex-col gap-0.5"
+                          style={{
+                            left: badgeLeft,
+                            top: "50%",
+                            transform: "translateY(-50%)",
+                            zIndex: 2,
+                          }}
+                          title={remoteTitle(node)}
+                        >
+                          {badges.map((label) => (
+                            <div
+                              key={label}
+                              className="truncate rounded-sm px-1.5 py-px font-mono text-[9px] font-semibold leading-tight"
+                              style={{
+                                color: "#10b981",
+                                backgroundColor: "rgba(16,185,129,0.15)",
+                              }}
+                            >
+                              {label}
+                            </div>
+                          ))}
+                          {overflowCount > 0 && (
+                            <div
+                              className="rounded-sm px-1.5 py-px font-mono text-[9px] font-semibold leading-tight"
+                              style={{
+                                color: "#10b981",
+                                backgroundColor: "rgba(16,185,129,0.15)",
+                              }}
+                            >
+                              +{overflowCount}
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
               </div>
-              <div className="flex-1 min-w-0 pr-2">
-                <span className="text-[10px] italic text-[rgb(var(--color-text-secondary))]/70">Unsaved changes</span>
-              </div>
-            </div>
-          );
-        }
-
-        if (row.kind === "ghost") {
-          const x = laneX(row.laneIdx);
-          const headColor = lc(0); // trunk is always lane 0
-          return (
-            <div key="ghost"
-              className="flex items-center overflow-hidden cursor-pointer hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
-              style={{ height: row.h }}
-              onClick={() => diffWorkingTree()}
-              title="View unsaved changes"
-            >
-              <div className="shrink-0 relative" style={{ width: graphW, height: row.h }}>
-                <div className="absolute rounded-full border-[1.5px] border-dashed"
-                  style={{
-                    left: x - 3.5, top: "50%", transform: "translateY(-50%)",
-                    width: 7, height: 7, borderColor: headColor, opacity: 0.5,
-                    backgroundColor: "rgb(var(--color-surface))", zIndex: 2,
-                  }} />
-              </div>
-              <div className="flex-1 min-w-0 pr-2 flex items-center gap-1">
-                <span className="text-[10px] italic text-[rgb(var(--color-text-secondary))]/70">New direction</span>
-                <span className="text-[9px] px-1 py-px rounded-sm bg-warning/10 text-warning">branching</span>
-              </div>
-            </div>
-          );
-        }
-
-        // ── Node row ──
-        const node = row.node!;
-        const dl = row.laneIdx;
-        const x = laneX(dl);
-        const tlInfo = timelineMap.get(node.timeline);
-        const color = lc(tlInfo?.colorIndex ?? dl);
-        const r = node.is_head ? headR : nodeR;
-        const isHov = hovered === node.id;
-        const selected = selectedIds.has(node.id);
-        const tlLabel = tlInfo?.label ?? node.timeline;
-        const nodeAliases = aliases.get(node.id);
-
-        return (
-          <div key={node.id}
-          className={`flex items-center group ${expanded ? "overflow-visible" : "overflow-hidden"}`}
-            style={{ height: row.h }}
-            onMouseEnter={() => !node.is_head && setHovered(node.id)}
-            onMouseLeave={() => setHovered(null)}
-          >
-            {/* Graph column: dot */}
-            <div className="shrink-0 relative" style={{ width: graphW, height: row.h }}>
-              {/* HEAD ring */}
-              {node.is_head && (
-                <div className="absolute rounded-full"
-                  style={{
-                    left: x - r - 3, top: "50%", transform: "translateY(-50%)",
-                    width: (r + 3) * 2, height: (r + 3) * 2,
-                    border: `1px solid ${color}`, opacity: 0.3, zIndex: 2,
-                  }} />
-              )}
-              {/* Dot */}
-              <button className="absolute rounded-full transition-colors"
-                data-testid="snapshot-graph-node"
-                data-snapshot-id={node.id}
-                data-snapshot-head={node.is_head ? "true" : "false"}
-                style={{
-                  left: x - r, top: "50%", transform: "translateY(-50%)",
-                  width: r * 2, height: r * 2,
-                  backgroundColor: node.is_head || isHov || selected ? color : "rgb(var(--color-surface))",
-                  border: `2px solid ${color}`,
-                  boxShadow: selected ? `0 0 0 4px ${color}25` : "0 0 0 2px rgb(var(--color-surface))",
-                  cursor: selectionMode || !node.is_head ? "pointer" : "default",
-                  zIndex: 3, padding: 0,
-                }}
-                onClick={() => selectionMode ? onToggleSelect?.(node.id) : onNodeClick(node.id, node.is_head)}
-                title={selectionMode ? `Select ${node.message}` : node.is_head ? "Current snapshot (HEAD)" : `Preview snapshot: ${node.message}`}
-              />
-              {/* Remote badge — left of the dot with connector line, mirroring branch labels */}
-              {showRemoteBadges && remoteBadges(node).length > 0 && (() => {
-                const remoteLabels = remoteBadges(node);
-                const badges = remoteLabels.slice(0, 2);
-                const overflowCount = remoteLabels.length - badges.length;
-                const badgeLeft = 2;
-                const badgeW = expanded ? 72 : 46;
-                const lineLeft = badgeLeft + badgeW;
-                const lineRight = x - r - 2;
-                if (!expanded) {
-                  return (
-                    <>
-                      {lineRight > lineLeft && (
-                        <div className="absolute" style={{
-                          left: lineLeft, top: "50%",
-                          width: lineRight - lineLeft, height: 0,
-                          borderTop: "1px solid #10b981", opacity: 0.25,
-                          zIndex: 1,
-                        }} />
-                      )}
-                      <div
-                        className="absolute rounded-sm px-1.5 py-px font-mono text-[9px] font-semibold leading-tight"
-                        style={{ left: badgeLeft, top: "50%", transform: "translateY(-50%)", zIndex: 2, color: "#10b981", backgroundColor: "rgba(16,185,129,0.15)" }}
-                        title={remoteTitle(node)}
-                      >
-                        remote
+              {/* Label column — indented to match lane */}
+              <div
+                className={`flex-1 min-w-0 pr-2 flex flex-col justify-center ${
+                  selectionMode
+                    ? selectable
+                      ? "cursor-pointer"
+                      : "cursor-not-allowed"
+                    : !node.is_head
+                      ? "cursor-pointer"
+                      : ""
+                }`}
+                style={{ paddingLeft: expanded ? 0 : dl * laneW }}
+                onClick={handleSelectOrNavigate}
+              >
+                {expanded ? (
+                  <div
+                    className={`border-l-2 px-3 py-1.5 transition-colors ${
+                      selected
+                        ? "border-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning))]/10"
+                        : highlighted
+                          ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10"
+                          : isHov
+                            ? "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]"
+                            : "border-transparent bg-transparent"
+                    }`}
+                    style={{
+                      borderLeftColor: selected
+                        ? "rgb(var(--color-warning))"
+                        : highlighted || isHov
+                          ? color
+                          : "transparent",
+                      opacity: nodeOpacity,
+                    }}
+                  >
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div
+                          className={`truncate text-sm leading-tight transition-colors ${
+                            node.is_head
+                              ? "font-semibold text-[rgb(var(--color-text))]"
+                              : isHov
+                                ? "text-[rgb(var(--color-text))]"
+                                : "text-[rgb(var(--color-text))]"
+                          }`}
+                          style={{ fontSize: messageFontSize }}
+                        >
+                          {node.message}
+                        </div>
+                        <div
+                          className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] text-[rgb(var(--color-text-secondary))]"
+                          style={{ fontSize: metaFontSize }}
+                        >
+                          <span title={fmtExactDate(node.timestamp)}>
+                            {fmtDate(node.timestamp)}
+                          </span>
+                          <span className="text-[rgb(var(--color-text-secondary))]/35">
+                            -
+                          </span>
+                          <span className="font-mono">
+                            {node.id.slice(0, 7)}
+                          </span>
+                          {node.author && (
+                            <>
+                              <span className="text-[rgb(var(--color-text-secondary))]/35">
+                                -
+                              </span>
+                              <span
+                                className="truncate"
+                                title={`by ${node.author}`}
+                              >
+                                {node.author}
+                              </span>
+                            </>
+                          )}
+                          {node.parents.length > 1 && (
+                            <>
+                              <span className="text-[rgb(var(--color-text-secondary))]/35">
+                                -
+                              </span>
+                              <span
+                                title={`Merge snapshot with ${node.parents.length} parent snapshots`}
+                              >
+                                merge
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </>
-                  );
-                }
-                return (
-                  <>
-                    {lineRight > lineLeft && (
-                      <div className="absolute" style={{
-                        left: lineLeft, top: "50%",
-                        width: lineRight - lineLeft, height: 0,
-                        borderTop: "1px solid #10b981", opacity: 0.25,
-                        zIndex: 1,
-                      }} />
+                      <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                        {node.is_head && (
+                          <SnapshotBadge label="HEAD" tone="accent" />
+                        )}
+                        {node.is_branch_tip && (
+                          <SnapshotBadge label="tip" tone="neutral" />
+                        )}
+                        {selectionMode && selected && (
+                          <SnapshotBadge
+                            label={endpoint ? "picked" : "milestone"}
+                            tone="warning"
+                          />
+                        )}
+                        {nodeType !== "first-parent" && (
+                          <SnapshotBadge
+                            label={nodeTypeLabel(nodeType)}
+                            tone="neutral"
+                          />
+                        )}
+                        {remoteBadges(node).length > 0 && (
+                          <SnapshotBadge
+                            label={remoteBadges(node)[0]}
+                            tone="success"
+                          />
+                        )}
+                        {hasMultipleTimelines && (
+                          <span
+                            className="max-w-[10rem] truncate rounded-full px-2 py-0.5 text-[10px] font-medium"
+                            title={tlLabel}
+                            style={{ color, backgroundColor: `${color}18` }}
+                          >
+                            {tlLabel}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {nodeAliases && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {nodeAliases.map((a) => {
+                          const aInfo = timelineMap.get(a.timeline);
+                          const aLabel = aInfo?.label ?? a.timeline;
+                          return (
+                            <span
+                              key={a.timeline}
+                              className="max-w-[10rem] truncate rounded-full bg-[rgb(var(--color-surface))] px-2 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))]"
+                              title={aLabel}
+                            >
+                              also on {aLabel}
+                            </span>
+                          );
+                        })}
+                      </div>
                     )}
+                  </div>
+                ) : (
+                  <>
                     <div
-                      className="absolute flex max-w-[5.25rem] flex-col gap-0.5"
-                      style={{ left: badgeLeft, top: "50%", transform: "translateY(-50%)", zIndex: 2 }}
-                      title={remoteTitle(node)}
+                      className={`text-xs truncate leading-tight transition-colors ${
+                        node.is_head
+                          ? "font-medium text-[rgb(var(--color-text))]"
+                          : isHov
+                            ? "text-[rgb(var(--color-text))]"
+                            : "text-[rgb(var(--color-text-secondary))]"
+                      }`}
                     >
-                      {badges.map((label) => (
-                        <div
-                          key={label}
-                          className="truncate rounded-sm px-1.5 py-px font-mono text-[9px] font-semibold leading-tight"
-                          style={{ color: "#10b981", backgroundColor: "rgba(16,185,129,0.15)" }}
+                      {node.message}
+                    </div>
+                    <div className="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap">
+                      <span className="shrink-0 text-[10px] text-[rgb(var(--color-text-secondary))]/50">
+                        {fmtDate(node.timestamp)}
+                      </span>
+                      {/* Author — only show when remote is configured (collaborator context) */}
+                      {currentRemote && node.author && (
+                        <span
+                          className="min-w-0 max-w-[4.5rem] truncate text-[9px] text-[rgb(var(--color-text-secondary))]/40"
+                          title={`by ${node.author}`}
                         >
-                          {label}
-                        </div>
-                      ))}
-                      {overflowCount > 0 && (
-                        <div
-                          className="rounded-sm px-1.5 py-px font-mono text-[9px] font-semibold leading-tight"
-                          style={{ color: "#10b981", backgroundColor: "rgba(16,185,129,0.15)" }}
+                          {node.author}
+                        </span>
+                      )}
+                      {hasMultipleTimelines && (
+                        <span
+                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                          title={`Timeline: ${tlLabel}`}
+                          style={{ backgroundColor: color }}
+                        />
+                      )}
+                      {nodeAliases && (
+                        <span
+                          className="shrink-0 rounded-sm bg-[rgb(var(--color-surface-alt))] px-1 py-px text-[9px] leading-tight text-[rgb(var(--color-text-secondary))]/50"
+                          title={`Also on ${nodeAliases
+                            .map(
+                              (a) =>
+                                timelineMap.get(a.timeline)?.label ??
+                                a.timeline,
+                            )
+                            .join(", ")}`}
                         >
-                          +{overflowCount}
-                        </div>
+                          +{nodeAliases.length}
+                        </span>
                       )}
                     </div>
                   </>
-                );
-              })()}
+                )}
+              </div>
             </div>
-            {/* Label column — indented to match lane */}
-            <div
-              className={`flex-1 min-w-0 pr-2 flex flex-col justify-center ${!node.is_head ? "cursor-pointer" : ""}`}
-              style={{ paddingLeft: expanded ? 0 : dl * laneW }}
-              onClick={() => selectionMode ? onToggleSelect?.(node.id) : !node.is_head && onNodeClick(node.id, node.is_head)}
-            >
-              {expanded ? (
-               <div className={`border-l-2 px-3 py-1.5 transition-colors ${
-                 selected
-                   ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10"
-                   : isHov
-                    ? "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]"
-                    : "border-transparent bg-transparent"
-               }`} style={{ borderLeftColor: selected || isHov ? color : "transparent" }}>
-                 <div className="flex min-w-0 items-start justify-between gap-3">
-                   <div className="min-w-0">
-                    <div className={`truncate text-sm leading-tight transition-colors ${
-                       node.is_head ? "font-semibold text-[rgb(var(--color-text))]"
-                         : isHov ? "text-[rgb(var(--color-text))]"
-                         : "text-[rgb(var(--color-text))]"
-                    }`} style={{ fontSize: messageFontSize }}>{node.message}</div>
-                    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] text-[rgb(var(--color-text-secondary))]" style={{ fontSize: metaFontSize }}>
-                       <span title={fmtExactDate(node.timestamp)}>{fmtDate(node.timestamp)}</span>
-                       <span className="text-[rgb(var(--color-text-secondary))]/35">-</span>
-                       <span className="font-mono">{node.id.slice(0, 7)}</span>
-                       {node.author && (
-                         <>
-                           <span className="text-[rgb(var(--color-text-secondary))]/35">-</span>
-                           <span className="truncate" title={`by ${node.author}`}>{node.author}</span>
-                         </>
-                       )}
-                       {node.parents.length > 1 && (
-                         <>
-                           <span className="text-[rgb(var(--color-text-secondary))]/35">-</span>
-                           <span title={`Merge snapshot with ${node.parents.length} parent snapshots`}>merge</span>
-                         </>
-                       )}
-                    </div>
-                   </div>
-                   <div className="flex shrink-0 flex-wrap justify-end gap-1">
-                    {node.is_head && <SnapshotBadge label="HEAD" tone="accent" />}
-                    {node.is_branch_tip && <SnapshotBadge label="tip" tone="neutral" />}
-                    {remoteBadges(node).length > 0 && <SnapshotBadge label={remoteBadges(node)[0]} tone="success" />}
-                    {hasMultipleTimelines && (
-                       <span
-                         className="max-w-[10rem] truncate rounded-full px-2 py-0.5 text-[10px] font-medium"
-                         title={tlLabel}
-                         style={{ color, backgroundColor: `${color}18` }}
-                       >
-                         {tlLabel}
-                       </span>
-                    )}
-                   </div>
-                 </div>
-                 {nodeAliases && (
-                   <div className="mt-2 flex flex-wrap gap-1">
-                    {nodeAliases.map(a => {
-                       const aInfo = timelineMap.get(a.timeline);
-                       const aLabel = aInfo?.label ?? a.timeline;
-                       return (
-                         <span
-                           key={a.timeline}
-                           className="max-w-[10rem] truncate rounded-full bg-[rgb(var(--color-surface))] px-2 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))]"
-                           title={aLabel}
-                         >
-                           also on {aLabel}
-                         </span>
-                       );
-                    })}
-                   </div>
-                 )}
-               </div>
-              ) : (
-               <>
-                 <div className={`text-xs truncate leading-tight transition-colors ${
-                   node.is_head ? "font-medium text-[rgb(var(--color-text))]"
-                    : isHov ? "text-[rgb(var(--color-text))]"
-                    : "text-[rgb(var(--color-text-secondary))]"
-                 }`}>{node.message}</div>
-                 <div className="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap">
-                   <span className="shrink-0 text-[10px] text-[rgb(var(--color-text-secondary))]/50">{fmtDate(node.timestamp)}</span>
-                   {/* Author — only show when remote is configured (collaborator context) */}
-                   {currentRemote && node.author && (
-                    <span className="min-w-0 max-w-[4.5rem] truncate text-[9px] text-[rgb(var(--color-text-secondary))]/40" title={`by ${node.author}`}>
-                       {node.author}
-                    </span>
-                   )}
-                   {hasMultipleTimelines && (
-                    <span
-                       className="h-1.5 w-1.5 shrink-0 rounded-full"
-                       title={`Timeline: ${tlLabel}`}
-                       style={{ backgroundColor: color }}
-                     />
-                   )}
-                   {nodeAliases && (
-                     <span
-                       className="shrink-0 rounded-sm bg-[rgb(var(--color-surface-alt))] px-1 py-px text-[9px] leading-tight text-[rgb(var(--color-text-secondary))]/50"
-                       title={`Also on ${nodeAliases
-                         .map(a => timelineMap.get(a.timeline)?.label ?? a.timeline)
-                         .join(", ")}`}
-                     >
-                       +{nodeAliases.length}
-                     </span>
-                   )}
-                 </div>
-               </>
-              )}
-            </div>
-          </div>
-        );
-      })}
+          );
+        })}
       </div>
     </div>
   );
@@ -633,16 +953,40 @@ function fmtExactDate(iso: string): string {
   return new Date(iso).toLocaleString();
 }
 
-function SnapshotBadge({ label, tone }: { label: string; tone: "accent" | "neutral" | "success" }) {
-  const className = tone === "accent"
-    ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
-    : tone === "success"
-      ? "bg-success/10 text-success"
-      : "bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))]";
+function SnapshotBadge({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: "accent" | "neutral" | "success" | "warning";
+}) {
+  const className =
+    tone === "accent"
+      ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
+      : tone === "success"
+        ? "bg-success/10 text-success"
+        : tone === "warning"
+          ? "bg-warning/10 text-warning"
+          : "bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))]";
 
   return (
-    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${className}`}>
+    <span
+      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${className}`}
+    >
       {label}
     </span>
   );
+}
+
+function nodeTypeLabel(nodeType: HistoryGraphNodeType) {
+  switch (nodeType) {
+    case "side-ancestry":
+      return "merged history";
+    case "remote-only":
+      return "remote history";
+    case "support-ref":
+      return "recovery history";
+    case "first-parent":
+      return "timeline";
+  }
 }
