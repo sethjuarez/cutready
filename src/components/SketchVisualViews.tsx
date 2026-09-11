@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent } from "react";
 import { Camera, FolderOpen, Image as ImageIcon, Loader2, Mic2, Pause, Play, Plus, Sparkles, Square, Trash2, Upload, X } from "lucide-react";
 import type { PlanningCellField, PlanningRow } from "../types/sketch";
 import VisualCell from "./VisualCell";
@@ -31,12 +31,6 @@ type MediaPreview =
   | { kind: "visual"; visualPath: string; rowIndex: number };
 
 type NarrationAssetData = { data: number[]; mimeType: string };
-
-function rowMediaLabel(row: PlanningRow): string {
-  if (row.visual) return "Elucim visual";
-  if (row.screenshot) return "Screenshot";
-  return "No media";
-}
 
 function isCellLocked(row: PlanningRow, field: PlanningCellField): boolean {
   return row.locked === true || row.locks?.[field] === true;
@@ -745,6 +739,47 @@ function RowEditActions({
   );
 }
 
+function VisualRowHeader({
+  row,
+  rowIndex,
+  rows,
+  readOnly,
+  onChange,
+  onTimeChange,
+}: {
+  row: PlanningRow;
+  rowIndex: number;
+  rows: PlanningRow[];
+  readOnly: boolean;
+  onChange: (rows: PlanningRow[]) => void;
+  onTimeChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-[rgb(var(--color-accent))]/30 bg-[rgb(var(--color-accent))]/10 text-xs font-semibold tabular-nums text-[rgb(var(--color-accent))]">
+          <span className="sr-only">Row </span>
+          {rowIndex + 1}
+        </span>
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">Time</span>
+          <div className="min-w-[4.5rem] max-w-[8rem] flex-1">
+            <EditableText
+              value={row.time}
+              placeholder="~30s"
+              readOnly={readOnly || isCellLocked(row, "time")}
+              multiline={false}
+              className="truncate whitespace-nowrap text-xs font-medium tabular-nums text-[rgb(var(--color-text))]"
+              onChange={onTimeChange}
+            />
+          </div>
+        </div>
+      </div>
+      <RowEditActions rowIndex={rowIndex} rows={rows} readOnly={readOnly} onChange={onChange} />
+    </div>
+  );
+}
+
 function AddRowButton({
   rows,
   readOnly,
@@ -783,6 +818,31 @@ function EditableText({
   className: string;
   onChange: (value: string) => void;
 }) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const resizeTextarea = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, []);
+
+  useLayoutEffect(() => {
+    if (readOnly || !multiline || !textareaRef.current) return;
+    resizeTextarea();
+  }, [multiline, readOnly, resizeTextarea, value]);
+
+  useEffect(() => {
+    if (readOnly || !multiline || !textareaRef.current) return;
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", resizeTextarea);
+      return () => window.removeEventListener("resize", resizeTextarea);
+    }
+    const observer = new ResizeObserver(resizeTextarea);
+    observer.observe(textareaRef.current);
+    return () => observer.disconnect();
+  }, [multiline, readOnly, resizeTextarea]);
+
   if (readOnly) {
     return (
       <p className={className}>
@@ -804,18 +864,14 @@ function EditableText({
 
   return (
     <textarea
+      ref={textareaRef}
       value={value}
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
-      rows={compactTextRows(value)}
-      className={`${className} w-full resize-none rounded-lg border border-transparent bg-transparent px-2 py-1 outline-none transition-colors placeholder:text-[rgb(var(--color-text-secondary))]/45 hover:border-[rgb(var(--color-border))] focus:border-[rgb(var(--color-accent))]/45 focus:bg-[rgb(var(--color-surface))] focus:ring-1 focus:ring-[rgb(var(--color-accent))]/25`}
+      rows={1}
+      className={`${className} w-full resize-none overflow-hidden rounded-lg border border-transparent bg-transparent px-2 py-1 outline-none transition-colors placeholder:text-[rgb(var(--color-text-secondary))]/45 hover:border-[rgb(var(--color-border))] focus:border-[rgb(var(--color-accent))]/45 focus:bg-[rgb(var(--color-surface))] focus:ring-1 focus:ring-[rgb(var(--color-accent))]/25`}
     />
   );
-}
-
-function compactTextRows(value: string): number {
-  const lineCount = value.split(/\r?\n/).length;
-  return Math.min(5, Math.max(2, lineCount));
 }
 
 function MediaPreviewLightbox({ preview, onClose }: { preview: MediaPreview | null; onClose: () => void }) {
@@ -940,25 +996,14 @@ export function SketchBalancedView({
               onRemoveNarration={onRemoveNarration}
             />
             <div className="flex min-w-0 flex-col gap-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[rgb(var(--color-text-secondary))]/70">
-                    Row {index + 1} · {rowMediaLabel(row)}
-                  </div>
-                  <RowEditActions rowIndex={index} rows={rows} readOnly={readOnly} onChange={onChange} />
-                </div>
-                <div className="flex min-w-[8rem] items-center gap-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">Time</span>
-                  <EditableText
-                    value={row.time}
-                    placeholder="~30s"
-                    readOnly={readOnly || isCellLocked(row, "time")}
-                    multiline={false}
-                    className="text-xs font-medium text-[rgb(var(--color-text))]"
-                    onChange={(value) => updateField(index, "time", value)}
-                  />
-                </div>
-              </div>
+              <VisualRowHeader
+                row={row}
+                rowIndex={index}
+                rows={rows}
+                readOnly={readOnly}
+                onChange={onChange}
+                onTimeChange={(value) => updateField(index, "time", value)}
+              />
               <div>
                 <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
                   Narrative
@@ -1053,25 +1098,14 @@ export function SketchScreenView({
               onRemoveNarration={onRemoveNarration}
             />
             <div className="space-y-3 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[rgb(var(--color-text-secondary))]/70">
-                    Beat {index + 1}
-                  </span>
-                  <RowEditActions rowIndex={index} rows={rows} readOnly={readOnly} onChange={onChange} />
-                </div>
-                <div className="flex min-w-[7rem] items-center gap-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">Time</span>
-                  <EditableText
-                    value={row.time}
-                    placeholder="~30s"
-                    readOnly={readOnly || isCellLocked(row, "time")}
-                    multiline={false}
-                    className="text-xs font-medium text-[rgb(var(--color-text))]"
-                    onChange={(value) => updateField(index, "time", value)}
-                  />
-                </div>
-              </div>
+              <VisualRowHeader
+                row={row}
+                rowIndex={index}
+                rows={rows}
+                readOnly={readOnly}
+                onChange={onChange}
+                onTimeChange={(value) => updateField(index, "time", value)}
+              />
               <div>
                 <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
                   Narrative
