@@ -508,6 +508,20 @@ function VideoExportOptionsDialog({
   const resolvedMediaRows = coverage.filter((row) => row.usesResolvedDemoMedia).length;
   const resolvedTimingRows = coverage.filter((row) => row.timingSource === "resolved-demo").length;
   const [resolvedDemoInspection, setResolvedDemoInspection] = useState<ResolvedDemoInspectionState | null>(null);
+  const activeResolvedDemoInspection = resolvedDemoInspection?.path === normalizedOptions.resolvedDemoPath
+    ? resolvedDemoInspection
+    : null;
+  const resolvedDemoExportBlock = normalizedOptions.resolvedDemoPath
+    ? !isSafeProjectRelativePath(normalizedOptions.resolvedDemoPath)
+      ? "Choose a project-relative Scenecast resolved demo path before exporting."
+      : !activeResolvedDemoInspection || activeResolvedDemoInspection.loading
+        ? "Wait for resolved demo inspection to finish before exporting."
+        : activeResolvedDemoInspection.error
+          ? `Resolve the Scenecast inspection error before exporting: ${activeResolvedDemoInspection.error}`
+          : activeResolvedDemoInspection.inspection && !activeResolvedDemoInspection.inspection.canExport
+            ? activeResolvedDemoInspection.inspection.blockingError ?? "Resolve blocking Scenecast diagnostics before exporting."
+            : null
+    : null;
 
   useEffect(() => {
     if (isOpen) {
@@ -681,15 +695,13 @@ function VideoExportOptionsDialog({
                   <ResolvedDemoCoverageRow
                     key={rowCoverage.rowNumber}
                     coverage={rowCoverage}
-                    inspection={resolvedDemoInspection?.path === normalizedOptions.resolvedDemoPath
-                      ? resolvedDemoInspection.inspection?.rows.find((row) => row.rowNumber === rowCoverage.rowNumber) ?? null
-                      : null}
+                    inspection={activeResolvedDemoInspection?.inspection?.rows.find((row) => row.rowNumber === rowCoverage.rowNumber) ?? null}
                   />
                 ))}
               </div>
               {normalizedOptions.resolvedDemoPath && (
                 <ResolvedDemoInspectionPanel
-                  state={resolvedDemoInspection?.path === normalizedOptions.resolvedDemoPath ? resolvedDemoInspection : null}
+                  state={activeResolvedDemoInspection}
                 />
               )}
             </div>
@@ -739,6 +751,15 @@ function VideoExportOptionsDialog({
               {pathError}
             </div>
           )}
+          {resolvedDemoExportBlock && (
+            <div
+              id="video-export-resolved-demo-block"
+              aria-live="polite"
+              className="rounded-xl border border-[rgb(var(--color-warning))]/30 bg-[rgb(var(--color-warning))]/10 px-3 py-2 text-xs text-[rgb(var(--color-text))]"
+            >
+              {resolvedDemoExportBlock}
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 border-t border-[rgb(var(--color-border))] px-5 py-4">
@@ -751,8 +772,13 @@ function VideoExportOptionsDialog({
           </button>
           <button
             type="button"
-            onClick={() => onExport(normalizeVideoExportOptions(options, rows.length))}
-            className="rounded-lg bg-[rgb(var(--color-accent))] px-3 py-2 text-xs font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))]"
+            disabled={Boolean(resolvedDemoExportBlock)}
+            aria-describedby={resolvedDemoExportBlock ? "video-export-resolved-demo-block" : undefined}
+            onClick={() => {
+              if (resolvedDemoExportBlock) return;
+              onExport(normalizeVideoExportOptions(options, rows.length));
+            }}
+            className="rounded-lg bg-[rgb(var(--color-accent))] px-3 py-2 text-xs font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:cursor-not-allowed disabled:opacity-50"
             data-testid="video-export-options-submit"
           >
             Export video
