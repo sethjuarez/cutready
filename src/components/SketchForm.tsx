@@ -394,7 +394,7 @@ function VideoExportReadinessDialog({
               Video export needs a complete sketch
             </h2>
             <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
-              CutReady can render a sketch video when every row has narration and either a screenshot or an Elucim frame manifest. Add the missing pieces below, then export again.
+              CutReady can render a sketch video when every row has narration and a screenshot, visual, or Elucim frame manifest. Add the missing pieces below, then export again.
             </p>
           </div>
           <button
@@ -410,7 +410,7 @@ function VideoExportReadinessDialog({
         <div className="max-h-[45vh] overflow-y-auto px-5 py-4">
           {missingSketchRows ? (
             <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))]">
-              Add at least one planning row with narration and a screenshot or frame manifest.
+              Add at least one planning row with narration and a screenshot, visual, or frame manifest.
             </div>
           ) : (
             <div className="space-y-2">
@@ -579,7 +579,7 @@ function VideoExportOptionsDialog({
           <div>
             <div className="text-xs font-semibold text-[rgb(var(--color-text))]">Elucim frame manifests</div>
             <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
-              Optional project-relative JSON manifests per row. A row with a frame manifest does not need a screenshot.
+              Optional project-relative JSON manifests per row. Rows with attached visuals generate these automatically during export.
             </p>
             <div className="mt-2 space-y-2">
               {rows.map((row, index) => (

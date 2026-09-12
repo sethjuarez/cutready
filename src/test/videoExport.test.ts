@@ -40,6 +40,33 @@ describe("video export utilities", () => {
     expect(issues).toEqual([]);
   });
 
+  it("accepts an attached visual without a pre-rendered frame manifest", () => {
+    const issues = getVideoExportIssues(
+      [row({ screenshot: null, visual: ".cutready/visuals/intro.json" })],
+      { resolvedDemoPath: null, generateResolvedDemo: false, visualFrameManifestPaths: [] },
+    );
+
+    expect(issues).toEqual([]);
+  });
+
+  it("rejects unsafe or blank attached visual paths", () => {
+    expect(getVideoExportIssues(
+      [row({ screenshot: null, visual: "C:\\outside\\visual.json" })],
+      { resolvedDemoPath: null, generateResolvedDemo: false, visualFrameManifestPaths: [] },
+    )).toEqual([{
+      rowNumber: 1,
+      missing: ["project-relative visual path"],
+    }]);
+
+    expect(getVideoExportIssues(
+      [row({ screenshot: null, visual: "   " })],
+      { resolvedDemoPath: null, generateResolvedDemo: false, visualFrameManifestPaths: [] },
+    )).toEqual([{
+      rowNumber: 1,
+      missing: ["screenshot, visual, or visual frame manifest"],
+    }]);
+  });
+
   it("still requires narration when a row uses a visual frame manifest", () => {
     const issues = getVideoExportIssues(
       [row({ screenshot: null, narration: null })],
@@ -73,6 +100,20 @@ describe("video export utilities", () => {
     )).toEqual([{
       rowNumber: 1,
       missing: ["row without typing spots or motion plan when using a visual frame manifest"],
+    }]);
+  });
+
+  it("rejects automatically rendered visual rows with screenshot motion overlays", () => {
+    expect(getVideoExportIssues(
+      [row({
+        screenshot: null,
+        visual: ".cutready/visuals/intro.json",
+        motion_plan: { kind: "subtle_push", keyframes: [] },
+      })],
+      { resolvedDemoPath: null, generateResolvedDemo: false, visualFrameManifestPaths: [] },
+    )).toEqual([{
+      rowNumber: 1,
+      missing: ["visual row without typing spots or motion plan"],
     }]);
   });
 

@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     engine::{
-        ffmpeg,
+        animation, ffmpeg,
         frame_sequence::{
             plan_frame_sequence, FrameManifestEntry, FrameSequenceFit, FrameSequencePlan,
         },
@@ -461,23 +461,28 @@ where
         .ok_or_else(|| anyhow::anyhow!("Export output path has no parent directory"))?;
     fs::create_dir_all(output_dir)?;
 
-    let segments =
-        collect_row_segments(project_root, app_data_dir, sketch_path, &sketch, &settings)?;
-
-    ensure_ffmpeg_available()?;
-    let gap_count = segments.len().saturating_sub(1);
-    let title_step_count = usize::from(settings.include_title_card);
-    let background_music_step_count = usize::from(settings.background_music_path.is_some());
-    let total_steps =
-        title_step_count + 1 + segments.len() + gap_count + 1 + 1 + background_music_step_count;
-    let timeline_timing = export_timeline_timing(&segments, &settings);
-    let duration_seconds = timeline_timing.total_seconds();
-
     let work_relative = format!("{TEMP_DIR}/{}", Utc::now().format("%Y%m%d-%H%M%S-%3f"));
     let work_dir = project::safe_resolve(project_root, &work_relative)?;
     fs::create_dir_all(&work_dir)?;
 
     let result = (|| {
+        ensure_ffmpeg_available()?;
+        let segments = collect_row_segments(
+            project_root,
+            app_data_dir,
+            &work_dir,
+            sketch_path,
+            &sketch,
+            &settings,
+        )?;
+
+        let gap_count = segments.len().saturating_sub(1);
+        let title_step_count = usize::from(settings.include_title_card);
+        let background_music_step_count = usize::from(settings.background_music_path.is_some());
+        let total_steps =
+            title_step_count + 1 + segments.len() + gap_count + 1 + 1 + background_music_step_count;
+        let timeline_timing = export_timeline_timing(&segments, &settings);
+        let duration_seconds = timeline_timing.total_seconds();
         let mut segment_files = Vec::with_capacity(segments.len() + (gap_count * 2) + 3);
         let mut current_step = 0;
         if settings.include_title_card {
@@ -627,7 +632,7 @@ where
                 "Mixing background music",
             );
         }
-        Ok::<_, anyhow::Error>(())
+        Ok::<_, anyhow::Error>((segments.len(), duration_seconds, total_steps))
     })();
 
     if let Err(cleanup_error) = fs::remove_dir_all(&work_dir) {
@@ -639,7 +644,7 @@ where
         );
     }
 
-    result?;
+    let (row_count, duration_seconds, total_steps) = result?;
 
     emit_progress(
         &mut on_progress,
@@ -651,8 +656,8 @@ where
     tracing::info!(
         target: "cutready::export",
         sketch_path = %sketch_path,
-    output_path = %output_path.display(),
-        row_count = segments.len(),
+        output_path = %output_path.display(),
+        row_count,
         duration_seconds,
         "exported sketch video"
     );
@@ -660,7 +665,7 @@ where
     Ok(SketchVideoExport {
         path: output_path.to_string_lossy().to_string(),
         duration_seconds,
-        row_count: segments.len(),
+        row_count,
     })
 }
 
@@ -765,6 +770,7 @@ fn render_title_card(
 fn collect_row_segments(
     project_root: &Path,
     app_data_dir: &Path,
+    work_dir: &Path,
     sketch_path: &str,
     sketch: &Sketch,
     settings: &SketchVideoExportSettings,
@@ -829,6 +835,19 @@ fn collect_row_segments(
                 resolved_demo_seconds,
                 settings,
             );
+            let visual_path = row
+                .visual
+                .as_ref()
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty());
+            if visual_path.is_some() && (!row.typing_spots.is_empty() || row.motion_plan.is_some())
+            {
+                anyhow::bail!(
+                    "Row {} cannot combine visual frame rendering with typing spots or a motion plan",
+                    index + 1
+                );
+            }
             let frame_sequence = settings
                 .visual_frame_manifest_paths
                 .get(index)
@@ -842,9 +861,38 @@ fn collect_row_segments(
                     )
                 })
                 .transpose()?;
+            let frame_sequence = if frame_sequence.is_none() {
+                visual_path
+                    .map(|visual_path| {
+                        let output_dir =
+                            work_dir.join(format!("row-{:03}-elucim-frames", index + 1));
+                        let manifest = animation::render_visual_frame_manifest(
+                            project_root,
+                            visual_path,
+                            &output_dir,
+                            settings.video_fps,
+                        )?;
+                        tracing::info!(
+                            target: "cutready::export",
+                            row = index + 1,
+                            visual = %visual_path,
+                            frame_count = manifest.frame_count,
+                            "generated Elucim frame manifest"
+                        );
+                        load_visual_frame_sequence_from_manifest(
+                            &manifest.manifest_path,
+                            output_dir.as_path(),
+                            duration_seconds,
+                            settings.video_fps,
+                        )
+                    })
+                    .transpose()?
+            } else {
+                frame_sequence
+            };
             if frame_sequence.is_some() && (!row.typing_spots.is_empty() || row.motion_plan.is_some()) {
                 anyhow::bail!(
-                    "Row {} cannot combine a visual frame manifest with typing spots or a motion plan",
+                    "Row {} cannot combine visual frame rendering with typing spots or a motion plan",
                     index + 1
                 );
             }
@@ -911,23 +959,46 @@ fn load_visual_frame_sequence(
     if !manifest_path.is_file() {
         anyhow::bail!("Visual frame manifest does not exist: {manifest_relative_path}");
     }
+    let manifest_parent = Path::new(manifest_relative_path)
+        .parent()
+        .and_then(Path::to_str)
+        .filter(|path| !path.is_empty());
+    let entries = load_visual_frame_manifest_entries(&manifest_path, |frame_path| {
+        resolve_visual_frame_path(project_root, manifest_parent, frame_path)
+    })?;
 
-    let manifest: VisualFrameManifestFile =
-        serde_json::from_reader(fs::File::open(&manifest_path)?)
-            .map_err(|error| anyhow::anyhow!("Could not parse visual frame manifest: {error}"))?;
+    plan_frame_sequence(&entries, row_duration_seconds, fps)
+}
+
+fn load_visual_frame_sequence_from_manifest(
+    manifest_path: &Path,
+    manifest_dir: &Path,
+    row_duration_seconds: f64,
+    fps: u32,
+) -> anyhow::Result<FrameSequencePlan> {
+    let entries = load_visual_frame_manifest_entries(manifest_path, |frame_path| {
+        resolve_generated_visual_frame_path(manifest_dir, frame_path)
+    })?;
+
+    plan_frame_sequence(&entries, row_duration_seconds, fps)
+}
+
+fn load_visual_frame_manifest_entries(
+    manifest_path: &Path,
+    resolve_path: impl Fn(&str) -> anyhow::Result<PathBuf>,
+) -> anyhow::Result<Vec<FrameManifestEntry>> {
+    let manifest: VisualFrameManifestFile = serde_json::from_reader(fs::File::open(manifest_path)?)
+        .map_err(|error| anyhow::anyhow!("Could not parse visual frame manifest: {error}"))?;
     let entries = match manifest {
         VisualFrameManifestFile::Wrapped { frames } | VisualFrameManifestFile::Entries(frames) => {
             frames
         }
     };
-    let manifest_parent = Path::new(manifest_relative_path)
-        .parent()
-        .and_then(Path::to_str)
-        .filter(|path| !path.is_empty());
-    let entries = entries
+
+    entries
         .into_iter()
         .map(|entry| {
-            let path = resolve_visual_frame_path(project_root, manifest_parent, &entry.path)?;
+            let path = resolve_path(&entry.path)?;
             if !path.is_file() {
                 anyhow::bail!("Visual frame image does not exist: {}", entry.path);
             }
@@ -937,9 +1008,7 @@ fn load_visual_frame_sequence(
                 terminal: entry.terminal,
             })
         })
-        .collect::<anyhow::Result<Vec<_>>>()?;
-
-    plan_frame_sequence(&entries, row_duration_seconds, fps)
+        .collect()
 }
 
 fn resolve_visual_frame_path(
@@ -960,6 +1029,28 @@ fn resolve_visual_frame_path(
         }
     }
     project::safe_resolve(project_root, trimmed).map_err(Into::into)
+}
+
+fn resolve_generated_visual_frame_path(
+    manifest_dir: &Path,
+    frame_path: &str,
+) -> anyhow::Result<PathBuf> {
+    let trimmed = frame_path.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!("Visual frame path must not be empty");
+    }
+    let path = Path::new(trimmed);
+    if path.is_absolute()
+        || path.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir | std::path::Component::Prefix(_)
+            )
+        })
+    {
+        anyhow::bail!("Generated visual frame path must be relative: {trimmed}");
+    }
+    Ok(manifest_dir.join(path))
 }
 
 fn row_content_duration_seconds(
@@ -4330,6 +4421,128 @@ mod tests {
             (actual_duration - 0.3).abs() < 0.08,
             "expected rendered duration near 0.3s, got {actual_duration}s"
         );
+    }
+
+    #[test]
+    fn export_sketch_video_generates_elucim_frame_manifest_for_visual_row() {
+        if ensure_ffmpeg_available().is_err() {
+            eprintln!("Skipping Elucim visual export test because FFmpeg is unavailable");
+            return;
+        }
+
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+        fs::create_dir_all(root.join(".cutready/visuals")).unwrap();
+        fs::write(
+            root.join(".cutready/visuals/intro.json"),
+            serde_json::json!({
+                "version": "2.0",
+                "scene": {
+                    "type": "player",
+                    "fps": 30,
+                    "width": 160,
+                    "height": 90,
+                    "background": "transparent",
+                    "children": ["title"]
+                },
+                "elements": {
+                    "title": {
+                        "id": "title",
+                        "type": "text",
+                        "props": {
+                            "type": "text",
+                            "x": 24,
+                            "y": 48,
+                            "content": "CutReady",
+                            "fill": "$foreground",
+                            "fontSize": 18
+                        }
+                    }
+                },
+                "timelines": {
+                    "intro": {
+                        "id": "intro",
+                        "duration": 3,
+                        "tracks": []
+                    }
+                },
+                "stateMachines": {
+                    "main": {
+                        "id": "main",
+                        "entry": "play",
+                        "states": { "play": { "timeline": "intro" } },
+                        "transitions": [
+                            { "id": "entry-play", "from": "entry", "to": "play", "trigger": "onStart" }
+                        ]
+                    }
+                },
+                "defaultStateMachine": "main"
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let narration_path = root.join("row-1.wav");
+        run_ffmpeg(vec![
+            "-y".to_string(),
+            "-hide_banner".to_string(),
+            "-loglevel".to_string(),
+            "error".to_string(),
+            "-f".to_string(),
+            "lavfi".to_string(),
+            "-i".to_string(),
+            "sine=frequency=440:duration=0.1".to_string(),
+            "-c:a".to_string(),
+            "pcm_s16le".to_string(),
+            narration_path.to_string_lossy().to_string(),
+        ])
+        .unwrap();
+
+        let mut sketch = Sketch::new("Elucim Visual Export");
+        let mut row = PlanningRow::new();
+        row.screenshot = None;
+        row.visual = Some(serde_json::Value::String(
+            ".cutready/visuals/intro.json".to_string(),
+        ));
+        row.narration = Some(NarrationAsset {
+            path: "row-1.wav".to_string(),
+            source_text: "Hello".to_string(),
+            source_text_hash: "hash".to_string(),
+            mime_type: "audio/wav".to_string(),
+            duration_ms: Some(100),
+            leading_silence_ms: None,
+            trailing_silence_ms: None,
+            silence_threshold_db: None,
+            byte_size: narration_path.metadata().unwrap().len(),
+            recorded_at: Utc::now(),
+        });
+        sketch.rows = vec![row];
+        project::write_sketch(&sketch, &root.join("elucim-visual.sk"), root).unwrap();
+
+        let output = root.join("elucim-visual.mp4");
+        let settings = SketchVideoExportSettings {
+            include_title_card: false,
+            title_to_first_row_hold_seconds: 0.0,
+            final_hold_seconds: 0.0,
+            narration_tail_hold_seconds: 0.0,
+            video_width: 160,
+            video_height: 90,
+            video_fps: 30,
+            ..SketchVideoExportSettings::default()
+        };
+        let export = export_sketch_video_with_progress(
+            root,
+            root,
+            "elucim-visual.sk",
+            Some(&output),
+            settings,
+            |_| {},
+        )
+        .unwrap();
+
+        assert_eq!(export.row_count, 1);
+        assert!(output.is_file());
+        assert!(output.metadata().unwrap().len() > 0);
     }
 
     #[test]
