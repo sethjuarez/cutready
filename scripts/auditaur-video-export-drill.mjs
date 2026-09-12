@@ -62,9 +62,9 @@ const checks = [
   },
   {
     id: "narration-freshness",
-    description: "Narration source text and fingerprints must match current row narrative before export",
-    args: ["test", "-p", "cutready", "stale_narration", "--lib", "--quiet"],
-    expectedMinTests: 2,
+    description: "Narration source snapshots and fingerprints must match current row narrative before export",
+    args: ["test", "-p", "cutready", "narration_freshness", "--lib", "--quiet"],
+    expectedMinTests: 3,
   },
   {
     id: "elucim-frame-renderer",

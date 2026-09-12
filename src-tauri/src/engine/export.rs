@@ -4097,7 +4097,7 @@ mod tests {
     }
 
     #[test]
-    fn stale_narration_source_text_blocks_export_before_media_probe() {
+    fn narration_freshness_source_snapshot_blocks_export_before_media_probe() {
         let mut row = PlanningRow::new();
         row.narrative = "Updated narration".to_string();
         row.narration = Some(NarrationAsset {
@@ -4123,7 +4123,7 @@ mod tests {
     }
 
     #[test]
-    fn stale_narration_fingerprint_blocks_export_before_media_probe() {
+    fn narration_freshness_fingerprint_blocks_export_before_media_probe() {
         let mut row = PlanningRow::new();
         row.narrative = "Current narration".to_string();
         row.narration = Some(NarrationAsset {
@@ -4151,7 +4151,7 @@ mod tests {
     }
 
     #[test]
-    fn rewritten_spoken_narration_passes_with_fresh_narrative_fingerprint() {
+    fn narration_freshness_allows_rewritten_spoken_text_with_fresh_snapshot() {
         let mut row = PlanningRow::new();
         row.narrative = "Show the project dashboard.".to_string();
         row.narration = Some(NarrationAsset {
