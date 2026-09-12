@@ -3574,63 +3574,15 @@ mod tests {
         std::fs::create_dir_all(&schema_dir).unwrap();
         std::fs::write(
             schema_dir.join("resolved-demo.json"),
-            serde_json::json!({
-                "schemaVersion": "scenecast.resolved-demo.v1",
-                "title": "Demo",
-                "startSceneId": "start",
-                "capturePolicy": {
-                    "kind": "reference-existing-assets",
-                    "assetBase": "bundle-relative",
-                    "missingCaptureBehavior": "diagnostic"
-                },
-                "steps": [{
-                    "id": "step-start",
-                    "order": 0,
-                    "sceneId": "start",
-                    "title": "Start",
-                    "description": null,
-                    "notes": null,
-                    "screenshot": { "path": "captures/start.png" },
-                    "video": null,
-                    "guideMarks": [],
-                    "targets": []
-                }],
-                "segments": [
-                    {
-                        "id": "segment-start-scene",
-                        "kind": "scene",
-                        "stepId": "step-start",
-                        "startMs": 0,
-                        "durationMs": 1000,
-                        "endMs": 1000,
-                        "capture": { "path": "captures/start.png" },
-                        "interaction": null,
-                        "frames": [],
-                        "waitMs": 0
-                    },
-                    {
-                        "id": "segment-start-wait",
-                        "kind": "wait",
-                        "stepId": "step-start",
-                        "startMs": 1000,
-                        "durationMs": 250,
-                        "endMs": 1250,
-                        "capture": null,
-                        "interaction": null,
-                        "frames": [],
-                        "waitMs": 250
-                    }
-                ],
-                "diagnostics": []
-            })
-            .to_string(),
+            include_str!("../../fixtures/scenecast/resolved-demo.json"),
         )
         .unwrap();
 
-        let demo = load_resolved_demo(root, ".cutready/scenecast/resolved-demo.json", 1).unwrap();
+        let demo = load_resolved_demo(root, ".cutready/scenecast/resolved-demo.json", 2).unwrap();
 
         assert_eq!(demo.schema_version, "scenecast.resolved-demo.v1");
         assert_eq!(demo.row_playback_duration_seconds(1), Some(1.25));
+        assert_eq!(demo.row_playback_duration_seconds(2), Some(1.0));
         assert!(load_resolved_demo(root, "../resolved-demo.json", 1).is_err());
     }
 

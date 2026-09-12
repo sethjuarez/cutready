@@ -310,119 +310,51 @@ fn is_path_prefix(_component: Component<'_>) -> bool {
 mod tests {
     use super::*;
 
-    fn minimal_resolved_demo() -> serde_json::Value {
-        serde_json::json!({
-            "schemaVersion": "scenecast.resolved-demo.v1",
-            "title": "Demo",
-            "startSceneId": "start",
-            "capturePolicy": {
-                "kind": "reference-existing-assets",
-                "assetBase": "bundle-relative",
-                "missingCaptureBehavior": "diagnostic"
-            },
-            "steps": [
-                {
-                    "id": "step-start",
-                    "order": 0,
-                    "sceneId": "start",
-                    "title": "Start",
-                    "description": "Opening screen.",
-                    "notes": "Starter scene for Demo",
-                    "screenshot": { "path": "captures/start.png" },
-                    "video": null,
-                    "guideMarks": [
-                        {
-                            "id": "cta-guide",
-                            "label": "Primary call to action",
-                            "bounds": { "x": 8.0, "y": 9.0, "width": 10.0, "height": 11.0 },
-                            "style": "highlight"
-                        }
-                    ],
-                    "targets": [
-                        {
-                            "id": "pricing-link",
-                            "label": "View pricing",
-                            "targetSceneId": "pricing",
-                            "trigger": "click",
-                            "scrollDirection": "any",
-                            "bounds": { "x": 1.0, "y": 2.0, "width": 3.0, "height": 4.0 },
-                            "selectors": []
-                        }
-                    ]
-                },
-                {
-                    "id": "step-pricing",
-                    "order": 1,
-                    "sceneId": "pricing",
-                    "title": "Pricing",
-                    "description": null,
-                    "notes": null,
-                    "screenshot": { "path": "captures/pricing.png" },
-                    "video": null,
-                    "guideMarks": [],
-                    "targets": []
-                }
-            ],
-            "segments": [
-                {
-                    "id": "segment-start-scene",
-                    "kind": "scene",
-                    "stepId": "step-start",
-                    "startMs": 0,
-                    "durationMs": 1000,
-                    "endMs": 1000,
-                    "capture": { "path": "captures/start.png" },
-                    "interaction": null,
-                    "frames": [],
-                    "waitMs": 0
-                },
-                {
-                    "id": "segment-start-pricing-link",
-                    "kind": "wait",
-                    "stepId": "step-start",
-                    "startMs": 1000,
-                    "durationMs": 250,
-                    "endMs": 1250,
-                    "capture": null,
-                    "interaction": {
-                        "id": "pricing-link",
-                        "label": "View pricing",
-                        "targetSceneId": "pricing",
-                        "trigger": "click",
-                        "scrollDirection": "any",
-                        "bounds": { "x": 1.0, "y": 2.0, "width": 3.0, "height": 4.0 },
-                        "selectors": []
-                    },
-                    "frames": [],
-                    "waitMs": 250
-                },
-                {
-                    "id": "segment-pricing-scene",
-                    "kind": "scene",
-                    "stepId": "step-pricing",
-                    "startMs": 1250,
-                    "durationMs": 1000,
-                    "endMs": 2250,
-                    "capture": { "path": "captures/pricing.png" },
-                    "interaction": null,
-                    "frames": [],
-                    "waitMs": 0
-                }
-            ],
-            "diagnostics": []
-        })
+    fn scenecast_fixture() -> serde_json::Value {
+        serde_json::from_str(include_str!("../../fixtures/scenecast/resolved-demo.json")).unwrap()
+    }
+
+    fn value_with_id_mut<'a>(
+        value: &'a mut serde_json::Value,
+        collection: &str,
+        id: &str,
+    ) -> &'a mut serde_json::Value {
+        value[collection]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|entry| entry["id"] == id)
+            .unwrap_or_else(|| panic!("fixture missing {collection} entry `{id}`"))
     }
 
     #[test]
     fn resolved_demo_matches_scenecast_wire_shape() {
-        let demo: ResolvedDemo = serde_json::from_value(minimal_resolved_demo()).unwrap();
+        let fixture = scenecast_fixture();
+        let demo: ResolvedDemo = serde_json::from_value(fixture.clone()).unwrap();
 
         demo.validate_for_row_count(2).unwrap();
         assert_eq!(demo.schema_version, RESOLVED_DEMO_SCHEMA_VERSION);
         assert_eq!(demo.steps[0].scene_id, "start");
+        assert_eq!(
+            demo.steps[0]
+                .screenshot
+                .as_ref()
+                .map(|asset| asset.path.as_str()),
+            Some("captures/start.png")
+        );
+        assert_eq!(demo.steps[0].guide_marks[0].style, "highlight");
+        assert_eq!(demo.steps[0].targets[0].id, "pricing-link");
         assert_eq!(demo.segments[1].step_id, "step-start");
+        assert_eq!(
+            demo.segments[1]
+                .interaction
+                .as_ref()
+                .map(|interaction| interaction.id.as_str()),
+            Some("pricing-link")
+        );
         assert_eq!(demo.row_playback_duration_seconds(1), Some(1.25));
         assert_eq!(demo.row_playback_duration_seconds(2), Some(1.0));
+        assert_eq!(serde_json::to_value(&demo).unwrap(), fixture);
     }
 
     #[test]
@@ -484,7 +416,7 @@ mod tests {
 
     #[test]
     fn resolved_demo_rejects_blocking_diagnostics() {
-        let mut value = minimal_resolved_demo();
+        let mut value = scenecast_fixture();
         value["diagnostics"] = serde_json::json!([{
             "severity": "error",
             "code": "missing-referenced-file",
@@ -504,8 +436,9 @@ mod tests {
 
     #[test]
     fn resolved_demo_rejects_inconsistent_segment_duration() {
-        let mut value = minimal_resolved_demo();
-        value["segments"][0]["durationMs"] = serde_json::json!(999);
+        let mut value = scenecast_fixture();
+        value_with_id_mut(&mut value, "segments", "segment-start-scene")["durationMs"] =
+            serde_json::json!(999);
         let demo: ResolvedDemo = serde_json::from_value(value).unwrap();
 
         assert!(demo
@@ -517,8 +450,8 @@ mod tests {
 
     #[test]
     fn resolved_demo_rejects_duplicate_or_out_of_range_steps() {
-        let mut duplicate = minimal_resolved_demo();
-        duplicate["steps"][1]["order"] = serde_json::json!(0);
+        let mut duplicate = scenecast_fixture();
+        value_with_id_mut(&mut duplicate, "steps", "step-pricing")["order"] = serde_json::json!(0);
         let demo: ResolvedDemo = serde_json::from_value(duplicate).unwrap();
         assert!(demo
             .validate_for_row_count(2)
@@ -526,8 +459,9 @@ mod tests {
             .to_string()
             .contains("duplicate step order"));
 
-        let mut out_of_range = minimal_resolved_demo();
-        out_of_range["steps"][1]["order"] = serde_json::json!(2);
+        let mut out_of_range = scenecast_fixture();
+        value_with_id_mut(&mut out_of_range, "steps", "step-pricing")["order"] =
+            serde_json::json!(2);
         let demo: ResolvedDemo = serde_json::from_value(out_of_range).unwrap();
         assert!(demo
             .validate_for_row_count(2)
@@ -538,8 +472,9 @@ mod tests {
 
     #[test]
     fn resolved_demo_rejects_unknown_step_segments_and_unsafe_paths() {
-        let mut unknown_step = minimal_resolved_demo();
-        unknown_step["segments"][0]["stepId"] = serde_json::json!("missing-step");
+        let mut unknown_step = scenecast_fixture();
+        value_with_id_mut(&mut unknown_step, "segments", "segment-start-scene")["stepId"] =
+            serde_json::json!("missing-step");
         let demo: ResolvedDemo = serde_json::from_value(unknown_step).unwrap();
         assert!(demo
             .validate_for_row_count(2)
@@ -547,8 +482,9 @@ mod tests {
             .to_string()
             .contains("references unknown stepId"));
 
-        let mut unsafe_path = minimal_resolved_demo();
-        unsafe_path["steps"][0]["screenshot"]["path"] = serde_json::json!("../leak.png");
+        let mut unsafe_path = scenecast_fixture();
+        value_with_id_mut(&mut unsafe_path, "steps", "step-start")["screenshot"]["path"] =
+            serde_json::json!("../leak.png");
         let demo: ResolvedDemo = serde_json::from_value(unsafe_path).unwrap();
         assert!(demo
             .validate_for_row_count(2)
