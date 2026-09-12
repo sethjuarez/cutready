@@ -1,7 +1,21 @@
 import { spawn } from "node:child_process";
 
-const command = process.platform === "win32" ? "cmd" : "npm";
-const args = process.platform === "win32" ? ["/c", "npm", "run", "debug"] : ["run", "debug"];
+const port = Number.parseInt(process.env.CUTREADY_AUDITAUR_DEV_PORT ?? "1432", 10);
+if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  console.error(`[auditaur-start-debug] Invalid CUTREADY_AUDITAUR_DEV_PORT: ${process.env.CUTREADY_AUDITAUR_DEV_PORT}`);
+  process.exit(1);
+}
+
+const config = JSON.stringify({
+  build: {
+    beforeDevCommand: `npm run dev -- --host 127.0.0.1 --port ${port} --strictPort`,
+    devUrl: `http://localhost:${port}`,
+  },
+});
+const command = process.platform === "win32" ? "cmd" : "npx";
+const args = process.platform === "win32"
+  ? ["/c", "npx", "tauri", "dev", "--config", config]
+  : ["tauri", "dev", "--config", config];
 const child = spawn(command, args, {
   stdio: "inherit",
   shell: false,
@@ -25,6 +39,6 @@ child.on("exit", (code, signal) => {
 });
 
 child.on("error", (error) => {
-  console.error(`[auditaur-start-debug] Failed to start npm run debug: ${error.message}`);
+  console.error(`[auditaur-start-debug] Failed to start Auditaur debug app on port ${port}: ${error.message}`);
   process.exit(1);
 });
