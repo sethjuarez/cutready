@@ -14,7 +14,10 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     engine::{ffmpeg, narration_preview, project},
-    models::sketch::{MotionPlan, MotionPlanKeyframe, Sketch, TypingSpot},
+    models::{
+        resolved_demo::{ResolvedDemo, RESOLVED_DEMO_SCHEMA_VERSION},
+        sketch::{MotionPlan, MotionPlanKeyframe, Sketch, TypingSpot},
+    },
 };
 
 const EXPORTS_DIR: &str = "exports";
@@ -105,6 +108,8 @@ pub struct SketchVideoExportSettings {
     pub row_transition_dip_seconds: f64,
     #[serde(default = "default_narration_tail_hold_seconds")]
     pub narration_tail_hold_seconds: f64,
+    #[serde(default)]
+    pub resolved_demo_path: Option<String>,
     #[serde(default = "default_motion_max_scale")]
     pub motion_max_scale: f64,
     #[serde(default = "default_video_width")]
@@ -139,6 +144,7 @@ impl Default for SketchVideoExportSettings {
             final_hold_seconds: DEFAULT_FINAL_HOLD_DURATION_SECONDS,
             row_transition_dip_seconds: DEFAULT_ROW_TRANSITION_DIP_SECONDS,
             narration_tail_hold_seconds: DEFAULT_NARRATION_TAIL_HOLD_SECONDS,
+            resolved_demo_path: None,
             motion_max_scale: DEFAULT_MOTION_MAX_SCALE,
             video_width: DEFAULT_VIDEO_WIDTH,
             video_height: DEFAULT_VIDEO_HEIGHT,
@@ -182,6 +188,11 @@ impl SketchVideoExportSettings {
                 self.narration_tail_hold_seconds,
                 DEFAULT_NARRATION_TAIL_HOLD_SECONDS,
             ),
+            resolved_demo_path: self
+                .resolved_demo_path
+                .as_ref()
+                .map(|path| path.trim().to_string())
+                .filter(|path| !path.is_empty()),
             motion_max_scale: sanitize_motion_max_scale(self.motion_max_scale),
             video_width: sanitize_video_dimension(self.video_width, DEFAULT_VIDEO_WIDTH),
             video_height: sanitize_video_dimension(self.video_height, DEFAULT_VIDEO_HEIGHT),
@@ -736,6 +747,12 @@ fn collect_row_segments(
         anyhow::bail!("Sketch has no rows to export");
     }
 
+    let resolved_demo = settings
+        .resolved_demo_path
+        .as_deref()
+        .map(|path| load_resolved_demo(project_root, path, sketch.rows.len()))
+        .transpose()?;
+
     sketch
         .rows
         .iter()
@@ -791,7 +808,15 @@ fn collect_row_segments(
                 narration.leading_silence_ms,
                 narration.trailing_silence_ms,
             );
-            let duration_seconds = row_content_duration_seconds(audio_duration_seconds, settings);
+            let resolved_demo_seconds = resolved_demo
+                .as_ref()
+                .and_then(|demo| demo.row_playback_duration_seconds(index + 1))
+                .unwrap_or(0.0);
+            let duration_seconds = row_content_duration_seconds(
+                audio_duration_seconds,
+                resolved_demo_seconds,
+                settings,
+            );
 
             Ok(RowSegment {
                 row_number: index + 1,
@@ -809,9 +834,36 @@ fn collect_row_segments(
 
 fn row_content_duration_seconds(
     audio_duration_seconds: f64,
+    resolved_demo_seconds: f64,
     settings: &SketchVideoExportSettings,
 ) -> f64 {
-    audio_duration_seconds + settings.narration_tail_hold_seconds
+    audio_duration_seconds.max(resolved_demo_seconds) + settings.narration_tail_hold_seconds
+}
+
+fn load_resolved_demo(
+    project_root: &Path,
+    relative_path: &str,
+    row_count: usize,
+) -> anyhow::Result<ResolvedDemo> {
+    let path = project::safe_resolve(project_root, relative_path)?;
+    if !path.is_file() {
+        anyhow::bail!("Resolved demo schema file does not exist: {relative_path}");
+    }
+    let value: serde_json::Value = serde_json::from_reader(fs::File::open(&path)?)
+        .map_err(|error| anyhow::anyhow!("Could not parse resolved demo schema: {error}"))?;
+    let schema_version = value
+        .get("schemaVersion")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("Resolved demo schema is missing schemaVersion"))?;
+    if schema_version != RESOLVED_DEMO_SCHEMA_VERSION {
+        anyhow::bail!(
+            "Unsupported resolved demo schemaVersion `{schema_version}`; expected `{RESOLVED_DEMO_SCHEMA_VERSION}`"
+        );
+    }
+    let demo: ResolvedDemo = serde_json::from_value(value)
+        .map_err(|error| anyhow::anyhow!("Could not parse resolved demo schema: {error}"))?;
+    demo.validate_for_row_count(row_count)?;
+    Ok(demo)
 }
 
 fn export_timeline_timing(
@@ -3126,7 +3178,7 @@ mod tests {
 
         let timing = export_timeline_timing(&segments, &settings);
 
-        assert_seconds(row_content_duration_seconds(2.0, &settings), 2.4);
+        assert_seconds(row_content_duration_seconds(2.0, 0.0, &settings), 2.4);
         assert_seconds(segments[0].duration_seconds, 2.4);
         assert_seconds(timing.title_card_seconds, 0.0);
         assert_seconds(timing.lead_in_seconds, 0.5);
@@ -3134,6 +3186,105 @@ mod tests {
         assert_seconds(timing.interior_transition_seconds, 0.0);
         assert_seconds(timing.final_hold_seconds, 3.0);
         assert_seconds(timing.total_seconds(), 5.9);
+    }
+
+    #[test]
+    fn row_content_duration_extends_to_resolved_demo_playback() {
+        let settings = SketchVideoExportSettings {
+            narration_tail_hold_seconds: 0.4,
+            ..SketchVideoExportSettings::default()
+        };
+
+        assert_seconds(row_content_duration_seconds(2.0, 5.0, &settings), 5.4);
+        assert_seconds(row_content_duration_seconds(5.0, 2.0, &settings), 5.4);
+    }
+
+    #[test]
+    fn load_resolved_demo_reads_project_relative_schema() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+        let schema_dir = root.join(".cutready").join("scenecast");
+        std::fs::create_dir_all(&schema_dir).unwrap();
+        std::fs::write(
+            schema_dir.join("resolved-demo.json"),
+            serde_json::json!({
+                "schemaVersion": "scenecast.resolved-demo.v1",
+                "title": "Demo",
+                "startSceneId": "start",
+                "capturePolicy": {
+                    "kind": "reference-existing-assets",
+                    "assetBase": "bundle-relative",
+                    "missingCaptureBehavior": "diagnostic"
+                },
+                "steps": [{
+                    "id": "step-start",
+                    "order": 0,
+                    "sceneId": "start",
+                    "title": "Start",
+                    "description": null,
+                    "notes": null,
+                    "screenshot": { "path": "captures/start.png" },
+                    "video": null,
+                    "guideMarks": [],
+                    "targets": []
+                }],
+                "segments": [
+                    {
+                        "id": "segment-start-scene",
+                        "kind": "scene",
+                        "stepId": "step-start",
+                        "startMs": 0,
+                        "durationMs": 1000,
+                        "endMs": 1000,
+                        "capture": { "path": "captures/start.png" },
+                        "interaction": null,
+                        "frames": [],
+                        "waitMs": 0
+                    },
+                    {
+                        "id": "segment-start-wait",
+                        "kind": "wait",
+                        "stepId": "step-start",
+                        "startMs": 1000,
+                        "durationMs": 250,
+                        "endMs": 1250,
+                        "capture": null,
+                        "interaction": null,
+                        "frames": [],
+                        "waitMs": 250
+                    }
+                ],
+                "diagnostics": []
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let demo = load_resolved_demo(root, ".cutready/scenecast/resolved-demo.json", 1).unwrap();
+
+        assert_eq!(demo.schema_version, "scenecast.resolved-demo.v1");
+        assert_eq!(demo.row_playback_duration_seconds(1), Some(1.25));
+        assert!(load_resolved_demo(root, "../resolved-demo.json", 1).is_err());
+    }
+
+    #[test]
+    fn load_resolved_demo_rejects_unsupported_schema_version_before_typed_parse() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+        std::fs::write(
+            root.join("resolved-demo.json"),
+            serde_json::json!({
+                "schemaVersion": "scenecast.resolved-demo.v2",
+                "title": "Future shape"
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        assert!(load_resolved_demo(root, "resolved-demo.json", 1)
+            .unwrap_err()
+            .to_string()
+            .contains("Unsupported resolved demo schemaVersion"));
     }
 
     #[test]
@@ -3651,7 +3802,7 @@ fn test_row_segment(
         narration_path: PathBuf::from(format!("row-{row_number}.wav")),
         audio_start_seconds: 0.0,
         audio_duration_seconds,
-        duration_seconds: row_content_duration_seconds(audio_duration_seconds, &settings),
+        duration_seconds: row_content_duration_seconds(audio_duration_seconds, 0.0, &settings),
         motion_plan: None,
         typing_spots: Vec::new(),
     }
