@@ -19,6 +19,7 @@
     "test:e2e:harness-prompty-anthropic": "node scripts/auditaur-prompty-anthropic-drill.mjs",
     "test:e2e:harness-prompty-openai": "node scripts/auditaur-prompty-openai-drill.mjs",
     "test:e2e:github:manual": "node scripts/auditaur-github-human-drill.mjs",
+    "test:e2e:video-export": "node scripts/auditaur-video-export-drill.mjs",
     "test:watch": "vitest",
     "tauri": "tauri",
     "visual:score": "node scripts/visual-eval/score-visuals.mjs",
