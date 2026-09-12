@@ -44,6 +44,14 @@ import { getProviderSecret, setProviderSecret } from "../hooks/useSecretStore";
 import { buildPlainSsml, inferSpeechEndpoint, SPEECH_TOKEN_SCOPE } from "../services/narrationSpeech";
 import { validateGeneratedSsml } from "../services/narrationSsml";
 import { readClipboardImage } from "../utils/clipboardImage";
+import {
+  emptyVideoExportOptions,
+  getVideoExportIssues,
+  normalizeVideoExportOptions,
+  selectedFileToProjectRelativePath,
+  type VideoExportIssue,
+  type VideoExportOptions,
+} from "../utils/videoExport";
 
 interface MonitorInfo {
   id: number;
@@ -86,7 +94,6 @@ type SketchVideoExportSettings = {
   backgroundMusicDuckNarration: boolean;
   backgroundMusicFadeSeconds: number;
 };
-type VideoExportIssue = { rowNumber: number; missing: string[] };
 type AgentChatResult = { response: string };
 type NarrationSsmlRow = {
   row_number: number;
@@ -324,19 +331,6 @@ function drawDecodedWaveform(canvas: HTMLCanvasElement, audioBuffer: AudioBuffer
   context.stroke();
 }
 
-function getVideoExportIssues(rows: PlanningRow[]): VideoExportIssue[] {
-  if (rows.length === 0) {
-    return [{ rowNumber: 0, missing: ["at least one row"] }];
-  }
-
-  return rows.flatMap((row, index) => {
-    const missing: string[] = [];
-    if (!row.screenshot?.trim()) missing.push("screenshot");
-    if (!row.narration?.path?.trim()) missing.push("narration");
-    return missing.length > 0 ? [{ rowNumber: index + 1, missing }] : [];
-  });
-}
-
 function slugifyExportName(value: string): string {
   const slug = value
     .toLowerCase()
@@ -376,7 +370,9 @@ function VideoExportReadinessDialog({
 }) {
   if (!issues) return null;
 
-  const hasRows = !(issues.length === 1 && issues[0].rowNumber === 0);
+  const missingSketchRows = issues.some((issue) => (
+    issue.rowNumber === 0 && issue.missing.includes("at least one row")
+  ));
 
   return (
     <Dialog
@@ -397,7 +393,7 @@ function VideoExportReadinessDialog({
               Video export needs a complete sketch
             </h2>
             <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
-              CutReady can render a sketch video when every row has a screenshot and narration. Add the missing pieces below, then export again.
+              CutReady can render a sketch video when every row has narration and either a screenshot or an Elucim frame manifest. Add the missing pieces below, then export again.
             </p>
           </div>
           <button
@@ -411,9 +407,9 @@ function VideoExportReadinessDialog({
         </div>
 
         <div className="max-h-[45vh] overflow-y-auto px-5 py-4">
-          {!hasRows ? (
+          {missingSketchRows ? (
             <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))]">
-              Add at least one planning row with a screenshot and narration.
+              Add at least one planning row with narration and a screenshot or frame manifest.
             </div>
           ) : (
             <div className="space-y-2">
@@ -422,7 +418,9 @@ function VideoExportReadinessDialog({
                   key={issue.rowNumber}
                   className="flex items-center justify-between gap-3 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2"
                 >
-                  <span className="text-xs font-medium text-[rgb(var(--color-text))]">Row {issue.rowNumber}</span>
+                  <span className="text-xs font-medium text-[rgb(var(--color-text))]">
+                    {issue.rowNumber === 0 ? "Export inputs" : `Row ${issue.rowNumber}`}
+                  </span>
                   <span className="text-xs text-[rgb(var(--color-text-secondary))]">
                     Missing {issue.missing.join(" and ")}
                   </span>
@@ -439,6 +437,184 @@ function VideoExportReadinessDialog({
             className="rounded-lg bg-[rgb(var(--color-accent))] px-3 py-2 text-xs font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))]"
           >
             Got it
+          </button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+function VideoExportOptionsDialog({
+  isOpen,
+  rows,
+  projectRoot,
+  onClose,
+  onExport,
+}: {
+  isOpen: boolean;
+  rows: PlanningRow[];
+  projectRoot: string;
+  onClose: () => void;
+  onExport: (options: VideoExportOptions) => void;
+}) {
+  const [options, setOptions] = useState<VideoExportOptions>(() => emptyVideoExportOptions(rows.length));
+  const [pathError, setPathError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setOptions(emptyVideoExportOptions(rows.length));
+      setPathError(null);
+    }
+  }, [isOpen, rows.length]);
+
+  const chooseJsonPath = useCallback(async (onSelected: (relativePath: string) => void) => {
+    setPathError(null);
+    const selected = await open({
+      multiple: false,
+      directory: false,
+      defaultPath: projectRoot,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (!selected || Array.isArray(selected)) return;
+    const relativePath = selectedFileToProjectRelativePath(projectRoot, selected);
+    if (!relativePath) {
+      setPathError("Choose a JSON file inside this CutReady project folder.");
+      return;
+    }
+    onSelected(relativePath);
+  }, [projectRoot]);
+
+  const updateManifestPath = useCallback((index: number, value: string | null) => {
+    setOptions((current) => ({
+      ...current,
+      visualFrameManifestPaths: Array.from({ length: rows.length }, (_, rowIndex) => (
+        rowIndex === index ? value : current.visualFrameManifestPaths[rowIndex] ?? null
+      )),
+    }));
+  }, [rows.length]);
+
+  if (!isOpen) return null;
+
+  return (
+    <Dialog
+      isOpen={isOpen}
+      onClose={onClose}
+      align="top"
+      topOffset="10vh"
+      width="w-full max-w-2xl mx-4"
+      labelledBy="video-export-options-title"
+    >
+      <div className="cr-modal-surface overflow-hidden rounded-2xl">
+        <div className="flex items-start gap-3 border-b border-[rgb(var(--color-border))] px-5 py-4">
+          <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+            <Film className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 id="video-export-options-title" className="text-sm font-semibold text-[rgb(var(--color-text))]">
+              Video export inputs
+            </h2>
+            <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
+              Optional pipeline artifacts for the current export. Leave them blank for the screenshot-and-narration path.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+            aria-label="Close video export inputs"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="max-h-[62vh] space-y-4 overflow-y-auto px-5 py-4">
+          <label className="block">
+            <span className="text-xs font-semibold text-[rgb(var(--color-text))]">Scenecast resolved demo</span>
+            <span className="mt-1 block text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
+              Project-relative path to a resolved-demo JSON file. It can extend row timing from Scenecast playback spans.
+            </span>
+            <div className="mt-2 flex gap-2">
+              <input
+                value={options.resolvedDemoPath ?? ""}
+                onChange={(event) => setOptions((current) => ({ ...current, resolvedDemoPath: event.target.value }))}
+                placeholder=".cutready/scenecast/resolved-demo.json"
+                className="min-w-0 flex-1 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2 text-xs text-[rgb(var(--color-text))] outline-none transition-colors placeholder:text-[rgb(var(--color-text-secondary))] focus:border-[rgb(var(--color-accent))]"
+                data-testid="video-export-resolved-demo-path"
+              />
+              <button
+                type="button"
+                onClick={() => void chooseJsonPath((relativePath) => {
+                  setOptions((current) => ({ ...current, resolvedDemoPath: relativePath }));
+                })}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text))] transition-colors hover:bg-[rgb(var(--color-surface-alt))]"
+              >
+                <Folder className="h-3.5 w-3.5" />
+                Browse
+              </button>
+            </div>
+          </label>
+
+          <div>
+            <div className="text-xs font-semibold text-[rgb(var(--color-text))]">Elucim frame manifests</div>
+            <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
+              Optional project-relative JSON manifests per row. A row with a frame manifest does not need a screenshot.
+            </p>
+            <div className="mt-2 space-y-2">
+              {rows.map((row, index) => (
+                <div
+                  key={index}
+                  className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/50 px-3 py-2"
+                >
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <span className="text-xs font-medium text-[rgb(var(--color-text))]">Row {index + 1}</span>
+                    <span className="truncate text-[11px] text-[rgb(var(--color-text-secondary))]">
+                      {row.time || row.narrative || "Untitled beat"}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      value={options.visualFrameManifestPaths[index] ?? ""}
+                      onChange={(event) => updateManifestPath(index, event.target.value)}
+                      placeholder={`.cutready/visuals/row-${index + 1}/frames.json`}
+                      className="min-w-0 flex-1 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2 text-xs text-[rgb(var(--color-text))] outline-none transition-colors placeholder:text-[rgb(var(--color-text-secondary))] focus:border-[rgb(var(--color-accent))]"
+                      data-testid={`video-export-frame-manifest-${index + 1}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void chooseJsonPath((relativePath) => updateManifestPath(index, relativePath))}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text))] transition-colors hover:bg-[rgb(var(--color-surface-alt))]"
+                    >
+                      <Folder className="h-3.5 w-3.5" />
+                      Browse
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {pathError && (
+            <div className="rounded-xl border border-[rgb(var(--color-warning))]/30 bg-[rgb(var(--color-warning))]/10 px-3 py-2 text-xs text-[rgb(var(--color-text))]">
+              {pathError}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-[rgb(var(--color-border))] px-5 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text))] transition-colors hover:bg-[rgb(var(--color-surface-alt))]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => onExport(normalizeVideoExportOptions(options, rows.length))}
+            className="rounded-lg bg-[rgb(var(--color-accent))] px-3 py-2 text-xs font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))]"
+            data-testid="video-export-options-submit"
+          >
+            Export video
           </button>
         </div>
       </div>
@@ -1040,6 +1216,7 @@ export function SketchForm() {
   const [videoExportProgress, setVideoExportProgress] = useState<SketchVideoExportProgress | null>(null);
   const [narrationGenerationProgress, setNarrationGenerationProgress] = useState<NarrationGenerationProgress | null>(null);
   const [videoExportIssues, setVideoExportIssues] = useState<VideoExportIssue[] | null>(null);
+  const [videoExportOptionsOpen, setVideoExportOptionsOpen] = useState(false);
   const [showNarrationSetupPrompt, setShowNarrationSetupPrompt] = useState(false);
   // Last AI diffs are preserved so the user can re-show them after auto-fade
   const lastAiDiffs = useRef<{ rows: Set<number>; diffs: RowDiff[] } | null>(null);
@@ -2157,10 +2334,18 @@ Rules:
     return selectedPath ? ensureMp4Extension(selectedPath) : null;
   }, [activeSketch, localTitle]);
 
-  const handleExportVideo = useCallback(async (rowsOverride?: PlanningRow[], outputPathOverride?: string) => {
+  const handleExportVideo = useCallback(async (
+    rowsOverride?: PlanningRow[],
+    outputPathOverride?: string,
+    exportOptionsOverride?: VideoExportOptions,
+  ) => {
     if (!activeSketchPath || !activeSketch || !projectRoot || exportingVideo) return;
     const rowsForExport = rowsOverride ?? localRows;
-    const issues = getVideoExportIssues(rowsForExport);
+    const exportOptions = normalizeVideoExportOptions(
+      exportOptionsOverride ?? emptyVideoExportOptions(rowsForExport.length),
+      rowsForExport.length,
+    );
+    const issues = getVideoExportIssues(rowsForExport, exportOptions);
     if (issues.length > 0) {
       setVideoExportIssues(issues);
       return;
@@ -2209,8 +2394,8 @@ Rules:
         narrationTailHoldSeconds: settings.videoExportOverrideEnabled
           ? settings.workspaceVideoExportNarrationTailHoldSeconds
           : settings.videoExportNarrationTailHoldSeconds,
-        resolvedDemoPath: null,
-        visualFrameManifestPaths: [],
+        resolvedDemoPath: exportOptions.resolvedDemoPath,
+        visualFrameManifestPaths: exportOptions.visualFrameManifestPaths,
         motionMaxScale: settings.videoExportOverrideEnabled
           ? settings.workspaceVideoExportMotionMaxScale
           : settings.videoExportMotionMaxScale,
@@ -2316,6 +2501,16 @@ Rules:
     settings.workspaceVideoExportCrf,
   ]);
 
+  const openVideoExportOptions = useCallback(() => {
+    if (localRows.length === 0 || exportingVideo) return;
+    setVideoExportOptionsOpen(true);
+  }, [exportingVideo, localRows.length]);
+
+  const handleExportVideoWithOptions = useCallback((options: VideoExportOptions) => {
+    setVideoExportOptionsOpen(false);
+    void handleExportVideo(undefined, undefined, options);
+  }, [handleExportVideo]);
+
   const handleGenerateVideo = useCallback(async () => {
     if (!activeSketchPath || sketchLocked || exportingVideo) return;
     try {
@@ -2326,7 +2521,7 @@ Rules:
         setVideoExportProgress(null);
         return;
       }
-      await handleExportVideo(rowsForExport, outputPath);
+      await handleExportVideo(rowsForExport, outputPath, emptyVideoExportOptions(rowsForExport.length));
     } catch (err) {
       console.warn("[SketchForm] Failed to generate video:", err);
       useToastStore.getState().show(`Could not generate video: ${err}`, 7000, "error");
@@ -2456,7 +2651,7 @@ Rules:
       id: "video",
       label: exportingVideo ? "Rendering video..." : "Video",
       icon: documentToolbarIcons.video,
-      onSelect: () => void handleExportVideo(),
+      onSelect: openVideoExportOptions,
       disabled: exportingVideo,
     },
   ] : [];
@@ -2809,6 +3004,13 @@ The row already has a visual and design_plan. You may read the sketch for contex
         />
       )}
 
+      <VideoExportOptionsDialog
+        isOpen={videoExportOptionsOpen}
+        rows={localRows}
+        projectRoot={projectRoot}
+        onClose={() => setVideoExportOptionsOpen(false)}
+        onExport={handleExportVideoWithOptions}
+      />
       <VideoExportReadinessDialog
         issues={videoExportIssues}
         onClose={() => setVideoExportIssues(null)}
