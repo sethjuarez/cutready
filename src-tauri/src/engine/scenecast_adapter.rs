@@ -655,6 +655,36 @@ mod tests {
     }
 
     #[test]
+    fn pinned_minimal_bundle_fixture_matches_scenecast_manifest_shape() {
+        let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures")
+            .join("scenecast")
+            .join("minimal.scenecast");
+        let manifest_path = fixture_dir.join("manifest.json");
+        let manifest: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(manifest_path).unwrap()).unwrap();
+
+        assert_eq!(manifest["schema_version"], SCENECAST_BUNDLE_SCHEMA_VERSION);
+        assert!(manifest.get("schemaVersion").is_none());
+        assert_eq!(manifest["graph"]["start_scene"], "start");
+        assert!(manifest["graph"].get("startScene").is_none());
+        assert_eq!(
+            manifest["sections"][0]["scenes"],
+            serde_json::json!(["start", "pricing"])
+        );
+        assert_eq!(
+            manifest["graph"]["scenes"][0]["assets"]["screenshot"],
+            "captures/start.png"
+        );
+        assert_eq!(
+            manifest["graph"]["scenes"][0]["hotspots"][0]["target"],
+            "pricing"
+        );
+        assert!(fixture_dir.join("captures").join("start.png").is_file());
+        assert!(fixture_dir.join("captures").join("pricing.png").is_file());
+    }
+
+    #[test]
     fn writer_rejects_unsafe_or_missing_source_assets() {
         let project = tempfile::tempdir().unwrap();
         let bundle_dir = project.path().join("demo.scenecast");
