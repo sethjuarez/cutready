@@ -48,6 +48,12 @@ const checks = [
     expectedMinTests: 1,
   },
   {
+    id: "elucim-frame-renderer",
+    description: "Elucim visuals rasterize to themed PNG frames and a terminal frame manifest",
+    args: ["test", "-p", "cutready", "animation", "--lib", "--quiet"],
+    expectedMinTests: 2,
+  },
+  {
     id: "rendered-video-duration",
     description: "FFmpeg export renders a visual-only frame manifest to expected duration",
     args: [
@@ -60,6 +66,20 @@ const checks = [
     ],
     expectedMinTests: 1,
     forbiddenOutput: ["Skipping visual frame manifest export test"],
+  },
+  {
+    id: "automatic-elucim-visual-export",
+    description: "FFmpeg export auto-generates frame manifests for attached Elucim visual rows",
+    args: [
+      "test",
+      "-p",
+      "cutready",
+      "export_sketch_video_generates_elucim_frame_manifest_for_visual_row",
+      "--lib",
+      "--quiet",
+    ],
+    expectedMinTests: 1,
+    forbiddenOutput: ["Skipping Elucim visual export test"],
   },
 ];
 
