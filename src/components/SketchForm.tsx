@@ -46,11 +46,14 @@ import { validateGeneratedSsml } from "../services/narrationSsml";
 import { readClipboardImage } from "../utils/clipboardImage";
 import {
   emptyVideoExportOptions,
+  getVideoExportCoverage,
   getVideoExportIssues,
   normalizeVideoExportOptions,
   selectedFileToProjectRelativePath,
   type VideoExportIssue,
+  type VideoExportMediaSource,
   type VideoExportOptions,
+  type VideoExportTimingSource,
 } from "../utils/videoExport";
 
 interface MonitorInfo {
@@ -460,6 +463,10 @@ function VideoExportOptionsDialog({
 }) {
   const [options, setOptions] = useState<VideoExportOptions>(() => emptyVideoExportOptions(rows.length));
   const [pathError, setPathError] = useState<string | null>(null);
+  const normalizedOptions = normalizeVideoExportOptions(options, rows.length);
+  const coverage = getVideoExportCoverage(rows, normalizedOptions);
+  const resolvedMediaRows = coverage.filter((row) => row.usesResolvedDemoMedia).length;
+  const resolvedTimingRows = coverage.filter((row) => row.timingSource === "resolved-demo").length;
 
   useEffect(() => {
     if (isOpen) {
@@ -576,6 +583,38 @@ function VideoExportOptionsDialog({
             </span>
           </label>
 
+          {(normalizedOptions.resolvedDemoPath || normalizedOptions.generateResolvedDemo) && (
+            <div className="rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/40 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-xs font-semibold text-[rgb(var(--color-text))]">Export source map</div>
+                  <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
+                    Scenecast timing will be tried for {resolvedTimingRows} row{resolvedTimingRows === 1 ? "" : "s"}
+                    {normalizedOptions.resolvedDemoPath
+                      ? `; resolved-demo media is eligible for ${resolvedMediaRows} row${resolvedMediaRows === 1 ? "" : "s"} after frame manifests and visuals, replacing screenshots unless overlays need them.`
+                      : ". Generated demos reuse row screenshots for media."}
+                  </p>
+                </div>
+                <span className="rounded-full border border-[rgb(var(--color-accent))]/30 bg-[rgb(var(--color-accent))]/10 px-2 py-1 text-[11px] font-medium text-[rgb(var(--color-accent))]">
+                  {resolvedMediaRows} media / {resolvedTimingRows} timing
+                </span>
+              </div>
+              <div className="mt-3 grid gap-1.5">
+                {coverage.map((rowCoverage) => (
+                  <div
+                    key={rowCoverage.rowNumber}
+                    className="grid grid-cols-[3rem_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-xl border border-[rgb(var(--color-border))]/70 bg-[rgb(var(--color-surface))]/70 px-2.5 py-2 text-[11px]"
+                  >
+                    <span className="font-medium text-[rgb(var(--color-text-secondary))]">Row {rowCoverage.rowNumber}</span>
+                    <span className="truncate text-[rgb(var(--color-text))]">{rowCoverage.label}</span>
+                    <SourceBadge source={rowCoverage.mediaSource} />
+                    <TimingBadge source={rowCoverage.timingSource} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
             <div className="text-xs font-semibold text-[rgb(var(--color-text))]">Elucim frame manifests</div>
             <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
@@ -641,6 +680,31 @@ function VideoExportOptionsDialog({
         </div>
       </div>
     </Dialog>
+  );
+}
+
+function SourceBadge({ source }: { source: VideoExportMediaSource }) {
+  const label = {
+    "frame-manifest": "frames",
+    visual: "visual",
+    "resolved-demo": "Scenecast media",
+    screenshot: "screenshot",
+    missing: "missing media",
+  }[source];
+  const tone = source === "missing"
+    ? "border-[rgb(var(--color-warning))]/30 bg-[rgb(var(--color-warning))]/10 text-[rgb(var(--color-warning))]"
+    : source === "resolved-demo"
+      ? "border-[rgb(var(--color-accent))]/30 bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
+      : "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))]";
+
+  return <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 font-medium ${tone}`}>{label}</span>;
+}
+
+function TimingBadge({ source }: { source: VideoExportTimingSource }) {
+  return (
+    <span className="whitespace-nowrap rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 font-medium text-[rgb(var(--color-text-secondary))]">
+      {source === "resolved-demo" ? "Scenecast timing" : "sketch timing"}
+    </span>
   );
 }
 

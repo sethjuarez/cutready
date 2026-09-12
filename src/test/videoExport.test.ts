@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PlanningRow } from "../types/sketch";
 import {
   emptyVideoExportOptions,
+  getVideoExportCoverage,
   getVideoExportIssues,
   normalizeVideoExportOptions,
   selectedFileToProjectRelativePath,
@@ -180,6 +181,55 @@ describe("video export utilities", () => {
       resolvedDemoPath: null,
       generateResolvedDemo: false,
       visualFrameManifestPaths: [null, null],
+    });
+  });
+
+  it("summarizes row media and timing coverage", () => {
+    const coverage = getVideoExportCoverage([
+      row({ time: "0:01", screenshot: null, visual: null }),
+      row({ time: "0:02", screenshot: null, visual: ".cutready/visuals/intro.json" }),
+      row({ time: "0:03", screenshot: "screenshots/overlay.png", typing_spots: [{
+        x: 0.2,
+        y: 0.2,
+        width: 0.4,
+        height: 0.1,
+        text: "Overlay",
+      }] }),
+      row({ time: "0:04", screenshot: "screenshots/fallback.png" }),
+    ], {
+      resolvedDemoPath: ".cutready/scenecast/resolved-demo.json",
+      generateResolvedDemo: false,
+      visualFrameManifestPaths: [null, null, null, ".cutready/visuals/row-4/frames.json"],
+    });
+
+    expect(coverage.map((rowCoverage) => ({
+      rowNumber: rowCoverage.rowNumber,
+      mediaSource: rowCoverage.mediaSource,
+      timingSource: rowCoverage.timingSource,
+      usesResolvedDemoMedia: rowCoverage.usesResolvedDemoMedia,
+      hasOverlay: rowCoverage.hasOverlay,
+    }))).toEqual([
+      { rowNumber: 1, mediaSource: "resolved-demo", timingSource: "resolved-demo", usesResolvedDemoMedia: true, hasOverlay: false },
+      { rowNumber: 2, mediaSource: "visual", timingSource: "resolved-demo", usesResolvedDemoMedia: false, hasOverlay: false },
+      { rowNumber: 3, mediaSource: "screenshot", timingSource: "resolved-demo", usesResolvedDemoMedia: false, hasOverlay: true },
+      { rowNumber: 4, mediaSource: "frame-manifest", timingSource: "resolved-demo", usesResolvedDemoMedia: false, hasOverlay: false },
+    ]);
+  });
+
+  it("shows provided resolved demo media as overriding plain screenshots", () => {
+    expect(getVideoExportCoverage(
+      [row({ screenshot: "screenshots/plain.png" })],
+      {
+        resolvedDemoPath: ".cutready/scenecast/resolved-demo.json",
+        generateResolvedDemo: false,
+        visualFrameManifestPaths: [],
+      },
+    )[0]).toMatchObject({
+      rowNumber: 1,
+      mediaSource: "resolved-demo",
+      timingSource: "resolved-demo",
+      usesResolvedDemoMedia: true,
+      hasOverlay: false,
     });
   });
 

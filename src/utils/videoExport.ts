@@ -1,6 +1,17 @@
 import type { PlanningRow } from "../types/sketch";
 
 export type VideoExportIssue = { rowNumber: number; missing: string[] };
+export type VideoExportMediaSource = "frame-manifest" | "visual" | "resolved-demo" | "screenshot" | "missing";
+export type VideoExportTimingSource = "resolved-demo" | "sketch";
+
+export type VideoExportRowCoverage = {
+  rowNumber: number;
+  label: string;
+  mediaSource: VideoExportMediaSource;
+  timingSource: VideoExportTimingSource;
+  usesResolvedDemoMedia: boolean;
+  hasOverlay: boolean;
+};
 
 export type VideoExportOptions = {
   resolvedDemoPath: string | null;
@@ -75,6 +86,34 @@ export function getVideoExportIssues(rows: PlanningRow[], options?: VideoExportO
   });
 
   return [...exportIssues, ...rowIssues];
+}
+
+export function getVideoExportCoverage(rows: PlanningRow[], options?: VideoExportOptions): VideoExportRowCoverage[] {
+  const normalizedOptions = normalizeVideoExportOptions(options ?? emptyVideoExportOptions(rows.length), rows.length);
+  return rows.map((row, index) => {
+    const visualFrameManifestPath = normalizedOptions.visualFrameManifestPaths[index];
+    const visualPath = row.visual?.trim() || null;
+    const hasOverlay = Boolean(row.typing_spots?.length || row.motion_plan);
+    const usesResolvedDemoMedia = Boolean(normalizedOptions.resolvedDemoPath) && !hasOverlay;
+    const mediaSource: VideoExportMediaSource = visualFrameManifestPath
+      ? "frame-manifest"
+      : visualPath
+        ? "visual"
+        : usesResolvedDemoMedia
+          ? "resolved-demo"
+          : row.screenshot?.trim()
+            ? "screenshot"
+            : "missing";
+
+    return {
+      rowNumber: index + 1,
+      label: row.time || row.narrative || "Untitled beat",
+      mediaSource,
+      timingSource: (normalizedOptions.resolvedDemoPath || normalizedOptions.generateResolvedDemo) ? "resolved-demo" : "sketch",
+      usesResolvedDemoMedia: mediaSource === "resolved-demo",
+      hasOverlay,
+    };
+  });
 }
 
 export function isSafeProjectRelativePath(path: string): boolean {
