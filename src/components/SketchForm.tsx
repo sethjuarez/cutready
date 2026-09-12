@@ -73,6 +73,7 @@ type SketchVideoExportSettings = {
   rowTransitionDipSeconds: number;
   narrationTailHoldSeconds: number;
   resolvedDemoPath?: string | null;
+  visualFrameManifestPaths?: Array<string | null>;
   motionMaxScale: number;
   videoWidth: number;
   videoHeight: number;
@@ -2209,6 +2210,7 @@ Rules:
           ? settings.workspaceVideoExportNarrationTailHoldSeconds
           : settings.videoExportNarrationTailHoldSeconds,
         resolvedDemoPath: null,
+        visualFrameManifestPaths: [],
         motionMaxScale: settings.videoExportOverrideEnabled
           ? settings.workspaceVideoExportMotionMaxScale
           : settings.videoExportMotionMaxScale,

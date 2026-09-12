@@ -13,7 +13,13 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    engine::{ffmpeg, narration_preview, project},
+    engine::{
+        ffmpeg,
+        frame_sequence::{
+            plan_frame_sequence, FrameManifestEntry, FrameSequenceFit, FrameSequencePlan,
+        },
+        narration_preview, project,
+    },
     models::{
         resolved_demo::{ResolvedDemo, RESOLVED_DEMO_SCHEMA_VERSION},
         sketch::{MotionPlan, MotionPlanKeyframe, Sketch, TypingSpot},
@@ -110,6 +116,8 @@ pub struct SketchVideoExportSettings {
     pub narration_tail_hold_seconds: f64,
     #[serde(default)]
     pub resolved_demo_path: Option<String>,
+    #[serde(default)]
+    pub visual_frame_manifest_paths: Vec<Option<String>>,
     #[serde(default = "default_motion_max_scale")]
     pub motion_max_scale: f64,
     #[serde(default = "default_video_width")]
@@ -145,6 +153,7 @@ impl Default for SketchVideoExportSettings {
             row_transition_dip_seconds: DEFAULT_ROW_TRANSITION_DIP_SECONDS,
             narration_tail_hold_seconds: DEFAULT_NARRATION_TAIL_HOLD_SECONDS,
             resolved_demo_path: None,
+            visual_frame_manifest_paths: Vec::new(),
             motion_max_scale: DEFAULT_MOTION_MAX_SCALE,
             video_width: DEFAULT_VIDEO_WIDTH,
             video_height: DEFAULT_VIDEO_HEIGHT,
@@ -193,6 +202,15 @@ impl SketchVideoExportSettings {
                 .as_ref()
                 .map(|path| path.trim().to_string())
                 .filter(|path| !path.is_empty()),
+            visual_frame_manifest_paths: self
+                .visual_frame_manifest_paths
+                .iter()
+                .map(|path| {
+                    path.as_ref()
+                        .map(|path| path.trim().to_string())
+                        .filter(|path| !path.is_empty())
+                })
+                .collect(),
             motion_max_scale: sanitize_motion_max_scale(self.motion_max_scale),
             video_width: sanitize_video_dimension(self.video_width, DEFAULT_VIDEO_WIDTH),
             video_height: sanitize_video_dimension(self.video_height, DEFAULT_VIDEO_HEIGHT),
@@ -227,6 +245,7 @@ struct RowSegment {
     audio_start_seconds: f64,
     audio_duration_seconds: f64,
     duration_seconds: f64,
+    frame_sequence: Option<FrameSequencePlan>,
     motion_plan: Option<MotionPlan>,
     typing_spots: Vec<TypingSpot>,
 }
@@ -507,7 +526,7 @@ where
                 format!("Rendering row {} of {}", segment.row_number, segments.len()),
             );
             let segment_output = work_dir.join(format!("row-{:03}.mp4", segment.row_number));
-            render_segment(segment, &segment_output, &settings)?;
+            render_segment(segment, &segment_output, &work_dir, &settings)?;
             segment_files.push(segment_output);
             if index + 1 < segments.len() {
                 let next_segment = &segments[index + 1];
@@ -758,17 +777,6 @@ fn collect_row_segments(
         .iter()
         .enumerate()
         .map(|(index, row)| {
-            let screenshot = row
-                .screenshot
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .ok_or_else(|| anyhow::anyhow!("Row {} has no screenshot", index + 1))?;
-            let image_path = project::safe_resolve(project_root, screenshot)?;
-            if !image_path.is_file() {
-                anyhow::bail!("Row {} screenshot does not exist: {screenshot}", index + 1);
-            }
-
             let narration = row
                 .narration
                 .as_ref()
@@ -817,6 +825,43 @@ fn collect_row_segments(
                 resolved_demo_seconds,
                 settings,
             );
+            let frame_sequence = settings
+                .visual_frame_manifest_paths
+                .get(index)
+                .and_then(Option::as_deref)
+                .map(|path| {
+                    load_visual_frame_sequence(
+                        project_root,
+                        path,
+                        duration_seconds,
+                        settings.video_fps,
+                    )
+                })
+                .transpose()?;
+            if frame_sequence.is_some() && (!row.typing_spots.is_empty() || row.motion_plan.is_some()) {
+                anyhow::bail!(
+                    "Row {} cannot combine a visual frame manifest with typing spots or a motion plan",
+                    index + 1
+                );
+            }
+            let image_path = if let Some(frame) = frame_sequence
+                .as_ref()
+                .and_then(|sequence| sequence.frames.first())
+            {
+                frame.path.clone()
+            } else {
+                let screenshot = row
+                    .screenshot
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(|| anyhow::anyhow!("Row {} has no screenshot", index + 1))?;
+                let image_path = project::safe_resolve(project_root, screenshot)?;
+                if !image_path.is_file() {
+                    anyhow::bail!("Row {} screenshot does not exist: {screenshot}", index + 1);
+                }
+                image_path
+            };
 
             Ok(RowSegment {
                 row_number: index + 1,
@@ -825,11 +870,92 @@ fn collect_row_segments(
                 audio_start_seconds,
                 audio_duration_seconds,
                 duration_seconds,
+                frame_sequence,
                 motion_plan: row.motion_plan.clone(),
                 typing_spots: row.typing_spots.clone(),
             })
         })
         .collect()
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum VisualFrameManifestFile {
+    Wrapped {
+        frames: Vec<VisualFrameManifestEntry>,
+    },
+    Entries(Vec<VisualFrameManifestEntry>),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct VisualFrameManifestEntry {
+    path: String,
+    #[serde(alias = "duration_ms")]
+    duration_ms: i64,
+    #[serde(default)]
+    terminal: bool,
+}
+
+fn load_visual_frame_sequence(
+    project_root: &Path,
+    manifest_relative_path: &str,
+    row_duration_seconds: f64,
+    fps: u32,
+) -> anyhow::Result<FrameSequencePlan> {
+    let manifest_path = project::safe_resolve(project_root, manifest_relative_path)?;
+    if !manifest_path.is_file() {
+        anyhow::bail!("Visual frame manifest does not exist: {manifest_relative_path}");
+    }
+
+    let manifest: VisualFrameManifestFile =
+        serde_json::from_reader(fs::File::open(&manifest_path)?)
+            .map_err(|error| anyhow::anyhow!("Could not parse visual frame manifest: {error}"))?;
+    let entries = match manifest {
+        VisualFrameManifestFile::Wrapped { frames } | VisualFrameManifestFile::Entries(frames) => {
+            frames
+        }
+    };
+    let manifest_parent = Path::new(manifest_relative_path)
+        .parent()
+        .and_then(Path::to_str)
+        .filter(|path| !path.is_empty());
+    let entries = entries
+        .into_iter()
+        .map(|entry| {
+            let path = resolve_visual_frame_path(project_root, manifest_parent, &entry.path)?;
+            if !path.is_file() {
+                anyhow::bail!("Visual frame image does not exist: {}", entry.path);
+            }
+            Ok(FrameManifestEntry {
+                path,
+                duration_ms: entry.duration_ms,
+                terminal: entry.terminal,
+            })
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+
+    plan_frame_sequence(&entries, row_duration_seconds, fps)
+}
+
+fn resolve_visual_frame_path(
+    project_root: &Path,
+    manifest_parent: Option<&str>,
+    frame_path: &str,
+) -> anyhow::Result<PathBuf> {
+    let trimmed = frame_path.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!("Visual frame path must not be empty");
+    }
+    if let Some(manifest_parent) = manifest_parent {
+        let manifest_relative = Path::new(manifest_parent).join(trimmed);
+        let manifest_relative =
+            project::safe_resolve(project_root, manifest_relative.to_string_lossy().as_ref())?;
+        if manifest_relative.is_file() {
+            return Ok(manifest_relative);
+        }
+    }
+    project::safe_resolve(project_root, trimmed).map_err(Into::into)
 }
 
 fn row_content_duration_seconds(
@@ -890,8 +1016,13 @@ fn export_timeline_timing(
 fn render_segment(
     segment: &RowSegment,
     output_path: &Path,
+    work_dir: &Path,
     settings: &SketchVideoExportSettings,
 ) -> anyhow::Result<()> {
+    if segment.frame_sequence.is_some() {
+        return render_frame_sequence_segment(segment, output_path, work_dir, settings);
+    }
+
     let duration = format_duration(segment.duration_seconds);
     let audio_duration = format_duration(segment.audio_duration_seconds);
     let audio_start = format_seconds(segment.audio_start_seconds);
@@ -923,6 +1054,7 @@ fn render_segment(
             duration.clone(),
         ]);
     }
+
     args.extend([
         "-i".to_string(),
         segment.image_path.to_string_lossy().to_string(),
@@ -963,6 +1095,172 @@ fn render_segment(
         output_path.to_string_lossy().to_string(),
     ]);
     run_ffmpeg(args)
+}
+
+fn render_frame_sequence_segment(
+    segment: &RowSegment,
+    output_path: &Path,
+    work_dir: &Path,
+    settings: &SketchVideoExportSettings,
+) -> anyhow::Result<()> {
+    let sequence = segment
+        .frame_sequence
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Row {} has no frame sequence", segment.row_number))?;
+    if let FrameSequenceFit::Truncated {
+        dropped_frames,
+        lost_seconds,
+    } = sequence.fit
+    {
+        tracing::warn!(
+            row = segment.row_number,
+            dropped_frames,
+            lost_seconds,
+            "Elucim frame sequence is longer than the row and will be truncated"
+        );
+    }
+
+    let frame_dir = work_dir.join(format!("row-{:03}-frames", segment.row_number));
+    fs::create_dir_all(&frame_dir)?;
+    let frame_counts = planned_frame_counts(sequence, settings.video_fps)?;
+    let mut frame_segments = Vec::with_capacity(frame_counts.len());
+    for (index, (frame, frame_count)) in sequence.frames.iter().zip(frame_counts).enumerate() {
+        if frame_count == 0 {
+            continue;
+        }
+        let frame_output = frame_dir.join(format!("frame-{index:04}.mp4"));
+        render_frame_image_segment(&frame.path, frame_count, &frame_output, settings)?;
+        frame_segments.push(frame_output);
+    }
+
+    let visual_output = work_dir.join(format!("row-{:03}-visual.mp4", segment.row_number));
+    concatenate_plain_segments(&frame_dir, &frame_segments, &visual_output, settings)?;
+
+    let duration = format_duration(segment.duration_seconds);
+    let audio_duration = format_duration(segment.audio_duration_seconds);
+    let audio_start = format_seconds(segment.audio_start_seconds);
+    let af = narration_audio_filter(&audio_start, &audio_duration, &duration);
+    run_ffmpeg(vec![
+        "-y".to_string(),
+        "-hide_banner".to_string(),
+        "-loglevel".to_string(),
+        "warning".to_string(),
+        "-i".to_string(),
+        visual_output.to_string_lossy().to_string(),
+        "-i".to_string(),
+        segment.narration_path.to_string_lossy().to_string(),
+        "-t".to_string(),
+        duration,
+        "-map".to_string(),
+        "0:v:0".to_string(),
+        "-map".to_string(),
+        "1:a:0".to_string(),
+        "-af".to_string(),
+        af,
+        "-c:v".to_string(),
+        "copy".to_string(),
+        "-c:a".to_string(),
+        "aac".to_string(),
+        "-b:a".to_string(),
+        "160k".to_string(),
+        "-movflags".to_string(),
+        "+faststart".to_string(),
+        output_path.to_string_lossy().to_string(),
+    ])
+}
+
+fn planned_frame_counts(sequence: &FrameSequencePlan, fps: u32) -> anyhow::Result<Vec<u32>> {
+    if fps == 0 {
+        anyhow::bail!("Video FPS must be greater than zero");
+    }
+    let total_frames = ((sequence.total_seconds * f64::from(fps)).round() as i64).max(1);
+    let positive_indices = sequence
+        .frames
+        .iter()
+        .enumerate()
+        .filter(|(_, frame)| frame.duration_seconds > f64::EPSILON)
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    if positive_indices.is_empty() {
+        anyhow::bail!("Frame sequence has no positive-duration frames");
+    }
+
+    let mut counts = vec![0; sequence.frames.len()];
+    let mut allocated = 0i64;
+    for (ordinal, index) in positive_indices.iter().enumerate() {
+        let remaining_positive = positive_indices.len() - ordinal - 1;
+        let frame = &sequence.frames[*index];
+        let count = if remaining_positive == 0 {
+            total_frames - allocated
+        } else {
+            let remaining_floor = remaining_positive as i64;
+            let rounded = (frame.duration_seconds * f64::from(fps)).round() as i64;
+            rounded
+                .max(1)
+                .min((total_frames - allocated - remaining_floor).max(1))
+        };
+        counts[*index] = count.max(0) as u32;
+        allocated += count.max(0);
+    }
+    Ok(counts)
+}
+
+fn render_frame_image_segment(
+    image_path: &Path,
+    frame_count: u32,
+    output_path: &Path,
+    settings: &SketchVideoExportSettings,
+) -> anyhow::Result<()> {
+    if frame_count == 0 {
+        anyhow::bail!("Frame segment must contain at least one frame");
+    }
+    let duration = format_seconds(f64::from(frame_count) / f64::from(settings.video_fps));
+    run_ffmpeg(vec![
+        "-y".to_string(),
+        "-hide_banner".to_string(),
+        "-loglevel".to_string(),
+        "warning".to_string(),
+        "-loop".to_string(),
+        "1".to_string(),
+        "-framerate".to_string(),
+        settings.video_fps.to_string(),
+        "-i".to_string(),
+        image_path.to_string_lossy().to_string(),
+        "-f".to_string(),
+        "lavfi".to_string(),
+        "-t".to_string(),
+        duration,
+        "-i".to_string(),
+        FfmpegFilterGraph::chain([FfmpegFilter::new("anullsrc")
+            .named("channel_layout", "stereo")
+            .named("sample_rate", "48000")])
+        .render(),
+        "-map".to_string(),
+        "0:v:0".to_string(),
+        "-map".to_string(),
+        "1:a:0".to_string(),
+        "-frames:v".to_string(),
+        frame_count.to_string(),
+        "-vf".to_string(),
+        FfmpegFilterGraph::chain(still_image_video_filters(&[], 0.0, true, settings)?).render(),
+        "-c:v".to_string(),
+        settings.video_encoder.clone(),
+        "-preset".to_string(),
+        "medium".to_string(),
+        "-tune".to_string(),
+        "stillimage".to_string(),
+        "-crf".to_string(),
+        settings.video_crf.clone(),
+        "-pix_fmt".to_string(),
+        settings.video_pixel_format.clone(),
+        "-c:a".to_string(),
+        "aac".to_string(),
+        "-b:a".to_string(),
+        "160k".to_string(),
+        "-movflags".to_string(),
+        "+faststart".to_string(),
+        output_path.to_string_lossy().to_string(),
+    ])
 }
 
 fn still_image_video_filter(
@@ -1681,8 +1979,11 @@ fn render_segment_hold(
     transition: HoldTransition,
     settings: &SketchVideoExportSettings,
 ) -> anyhow::Result<()> {
+    let image_path = segment_hold_image_path(segment);
     let base_filters = if hold_final_motion_frame {
-        if let Some(plan) = segment.motion_plan.as_ref() {
+        if segment.frame_sequence.is_some() {
+            still_image_video_filters(&[], duration_seconds, true, settings)?
+        } else if let Some(plan) = segment.motion_plan.as_ref() {
             motion_final_frame_video_filters(plan, &segment.typing_spots, settings)?
         } else {
             still_image_video_filters(&segment.typing_spots, duration_seconds, true, settings)?
@@ -1692,12 +1993,21 @@ fn render_segment_hold(
     };
     let filters = hold_video_filters(base_filters, duration_seconds, transition, settings);
     render_image_hold_segment_with_filter(
-        &segment.image_path,
+        image_path,
         duration_seconds,
         output_path,
         filters,
         settings,
     )
+}
+
+fn segment_hold_image_path(segment: &RowSegment) -> &Path {
+    segment
+        .frame_sequence
+        .as_ref()
+        .and_then(|sequence| sequence.frames.last())
+        .map(|frame| frame.path.as_path())
+        .unwrap_or(segment.image_path.as_path())
 }
 
 #[derive(Clone, Copy)]
@@ -1876,6 +2186,63 @@ fn concatenate_segments(
     }
 
     Ok(())
+}
+
+fn concatenate_plain_segments(
+    work_dir: &Path,
+    segment_files: &[PathBuf],
+    output_path: &Path,
+    settings: &SketchVideoExportSettings,
+) -> anyhow::Result<()> {
+    let list_path = work_dir.join("concat.txt");
+    let list = segment_files
+        .iter()
+        .map(|path| {
+            let name = path
+                .file_name()
+                .and_then(OsStr::to_str)
+                .ok_or_else(|| anyhow::anyhow!("Segment path has no valid file name"))?;
+            Ok(format!("file '{}'\n", name.replace('\'', "'\\''")))
+        })
+        .collect::<anyhow::Result<String>>()?;
+    fs::write(&list_path, list)?;
+
+    run_ffmpeg(vec![
+        "-y".to_string(),
+        "-hide_banner".to_string(),
+        "-loglevel".to_string(),
+        "warning".to_string(),
+        "-fflags".to_string(),
+        "+genpts".to_string(),
+        "-f".to_string(),
+        "concat".to_string(),
+        "-safe".to_string(),
+        "0".to_string(),
+        "-i".to_string(),
+        list_path.to_string_lossy().to_string(),
+        "-c:v".to_string(),
+        settings.video_encoder.clone(),
+        "-preset".to_string(),
+        "medium".to_string(),
+        "-crf".to_string(),
+        settings.video_crf.clone(),
+        "-pix_fmt".to_string(),
+        settings.video_pixel_format.clone(),
+        "-c:a".to_string(),
+        "aac".to_string(),
+        "-b:a".to_string(),
+        "160k".to_string(),
+        "-ar".to_string(),
+        "48000".to_string(),
+        "-af".to_string(),
+        FfmpegFilterGraph::chain([FfmpegFilter::new("aresample")
+            .named("async", "1")
+            .named("first_pts", "0")])
+        .render(),
+        "-movflags".to_string(),
+        "+faststart".to_string(),
+        output_path.to_string_lossy().to_string(),
+    ])
 }
 
 fn mix_background_music(
@@ -3288,6 +3655,71 @@ mod tests {
     }
 
     #[test]
+    fn load_visual_frame_sequence_accepts_manifest_relative_sparse_paths() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+        let export_dir = root.join(".cutready").join("visuals").join("hero-export");
+        let frames_dir = export_dir.join("frames");
+        std::fs::create_dir_all(&frames_dir).unwrap();
+        std::fs::write(frames_dir.join("open-state.png"), b"not decoded by loader").unwrap();
+        std::fs::write(frames_dir.join("zoomed-end.png"), b"not decoded by loader").unwrap();
+        std::fs::write(
+            export_dir.join("manifest.json"),
+            serde_json::json!({
+                "frames": [
+                    { "path": "frames/open-state.png", "duration_ms": 100, "terminal": false },
+                    { "path": "frames/zoomed-end.png", "duration_ms": 0, "terminal": true }
+                ]
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let plan = load_visual_frame_sequence(
+            root,
+            ".cutready/visuals/hero-export/manifest.json",
+            0.3,
+            10,
+        )
+        .unwrap();
+
+        assert_eq!(plan.frames.len(), 2);
+        assert_seconds(plan.frames[0].duration_seconds, 0.1);
+        assert_seconds(plan.frames[1].duration_seconds, 0.2);
+        assert!(plan.frames[0].path.ends_with("frames/open-state.png"));
+        assert!(load_visual_frame_sequence(root, "../manifest.json", 0.3, 10).is_err());
+    }
+
+    #[test]
+    fn planned_frame_counts_preserve_total_for_sub_100ms_frames() {
+        let plan = FrameSequencePlan {
+            frames: vec![
+                crate::engine::frame_sequence::PlannedFrame {
+                    path: PathBuf::from("intro.png"),
+                    duration_seconds: 0.017,
+                },
+                crate::engine::frame_sequence::PlannedFrame {
+                    path: PathBuf::from("open.png"),
+                    duration_seconds: 0.017,
+                },
+                crate::engine::frame_sequence::PlannedFrame {
+                    path: PathBuf::from("rest.png"),
+                    duration_seconds: 0.066,
+                },
+            ],
+            total_seconds: 0.1,
+            fit: FrameSequenceFit::Held {
+                hold_seconds: 0.066,
+            },
+        };
+
+        let counts = planned_frame_counts(&plan, 60).unwrap();
+
+        assert_eq!(counts, vec![1, 1, 4]);
+        assert_eq!(counts.iter().sum::<u32>(), 6);
+    }
+
+    #[test]
     fn hold_video_filter_adds_dip_to_black_for_row_transitions() {
         let settings = SketchVideoExportSettings::default();
         let fade_out = FfmpegFilterGraph::chain(hold_video_filters(
@@ -3759,6 +4191,106 @@ mod tests {
     }
 
     #[test]
+    fn export_sketch_video_renders_visual_frame_manifest_duration() {
+        if ensure_ffmpeg_available().is_err() {
+            eprintln!("Skipping visual frame manifest export test because FFmpeg is unavailable");
+            return;
+        }
+
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+        let frame_dir = root.join(".cutready").join("visuals").join("hero-export");
+        fs::create_dir_all(&frame_dir).unwrap();
+        let frames = [
+            ("intro-frame.png", Rgb([200, 60, 60])),
+            ("dropdown-open-frame.png", Rgb([60, 200, 60])),
+            ("zoomed-rest-frame.png", Rgb([60, 60, 200])),
+        ];
+        for (name, color) in frames {
+            RgbImage::from_pixel(32, 18, color)
+                .save(frame_dir.join(name))
+                .unwrap();
+        }
+        fs::write(
+            frame_dir.join("manifest.json"),
+            serde_json::json!({
+                "frames": [
+                    { "path": "intro-frame.png", "duration_ms": 17, "terminal": false },
+                    { "path": "dropdown-open-frame.png", "duration_ms": 17, "terminal": false },
+                    { "path": "zoomed-rest-frame.png", "duration_ms": 0, "terminal": true }
+                ]
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let narration_path = root.join("row-1.wav");
+        run_ffmpeg(vec![
+            "-y".to_string(),
+            "-hide_banner".to_string(),
+            "-loglevel".to_string(),
+            "error".to_string(),
+            "-f".to_string(),
+            "lavfi".to_string(),
+            "-i".to_string(),
+            "sine=frequency=440:duration=0.1".to_string(),
+            "-c:a".to_string(),
+            "pcm_s16le".to_string(),
+            narration_path.to_string_lossy().to_string(),
+        ])
+        .unwrap();
+
+        let mut sketch = Sketch::new("Frame Manifest Export");
+        let mut row = PlanningRow::new();
+        row.screenshot = None;
+        row.narration = Some(NarrationAsset {
+            path: "row-1.wav".to_string(),
+            source_text: "Hello".to_string(),
+            source_text_hash: "hash".to_string(),
+            mime_type: "audio/wav".to_string(),
+            duration_ms: Some(100),
+            leading_silence_ms: None,
+            trailing_silence_ms: None,
+            silence_threshold_db: None,
+            byte_size: narration_path.metadata().unwrap().len(),
+            recorded_at: Utc::now(),
+        });
+        sketch.rows = vec![row];
+        project::write_sketch(&sketch, &root.join("frame-manifest.sk"), root).unwrap();
+
+        let output = root.join("frame-manifest.mp4");
+        let settings = SketchVideoExportSettings {
+            include_title_card: false,
+            title_to_first_row_hold_seconds: 0.0,
+            final_hold_seconds: 0.0,
+            narration_tail_hold_seconds: 0.0,
+            video_width: 32,
+            video_height: 18,
+            video_fps: 60,
+            visual_frame_manifest_paths: vec![Some(
+                ".cutready/visuals/hero-export/manifest.json".to_string(),
+            )],
+            ..SketchVideoExportSettings::default()
+        };
+        let export = export_sketch_video_with_progress(
+            root,
+            root,
+            "frame-manifest.sk",
+            Some(&output),
+            settings,
+            |_| {},
+        )
+        .unwrap();
+
+        assert_seconds(export.duration_seconds, 0.3);
+        let actual_duration = probe_media_duration_seconds(&output).unwrap();
+        assert!(
+            (actual_duration - 0.3).abs() < 0.08,
+            "expected rendered duration near 0.3s, got {actual_duration}s"
+        );
+    }
+
+    #[test]
     fn export_sketch_video_rejects_relative_output_path() {
         let temp_dir = TempDir::new().unwrap();
         let root = temp_dir.path();
@@ -3803,6 +4335,7 @@ fn test_row_segment(
         audio_start_seconds: 0.0,
         audio_duration_seconds,
         duration_seconds: row_content_duration_seconds(audio_duration_seconds, 0.0, &settings),
+        frame_sequence: None,
         motion_plan: None,
         typing_spots: Vec::new(),
     }
