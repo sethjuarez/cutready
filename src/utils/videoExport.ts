@@ -42,6 +42,9 @@ export function getVideoExportIssues(rows: PlanningRow[], options?: VideoExportO
     const missing: string[] = [];
     const visualFrameManifestPath = normalizedOptions.visualFrameManifestPaths[index];
     const visualPath = row.visual?.trim() || null;
+    const mayUseResolvedDemoMedia = Boolean(normalizedOptions.resolvedDemoPath)
+      && !(row.typing_spots?.length)
+      && !row.motion_plan;
     if (visualFrameManifestPath && !isSafeProjectRelativePath(visualFrameManifestPath)) {
       missing.push("project-relative visual frame manifest path");
     }
@@ -57,8 +60,8 @@ export function getVideoExportIssues(rows: PlanningRow[], options?: VideoExportO
     if (visualPath && (row.typing_spots?.length || row.motion_plan) && !visualFrameManifestPath) {
       missing.push("visual row without typing spots or motion plan");
     }
-    if (!row.screenshot?.trim() && !visualPath && !visualFrameManifestPath) {
-      missing.push("screenshot, visual, or visual frame manifest");
+    if (!row.screenshot?.trim() && !visualPath && !visualFrameManifestPath && !mayUseResolvedDemoMedia) {
+      missing.push("screenshot, visual, visual frame manifest, or resolved demo media");
     }
     if (
       normalizedOptions.generateResolvedDemo

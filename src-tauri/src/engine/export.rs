@@ -1,6 +1,7 @@
 //! Export engine — rendered media and output folder assembly.
 
 use std::{
+    collections::HashSet,
     ffi::OsStr,
     fs,
     io::{Read, Write},
@@ -254,6 +255,12 @@ struct RowSegment {
     typing_spots: Vec<TypingSpot>,
 }
 
+#[derive(Debug)]
+struct LoadedResolvedDemo {
+    demo: ResolvedDemo,
+    asset_base_dir: PathBuf,
+}
+
 /// Planned timeline buckets before ffmpeg frame quantization and media probing.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct ExportTimelineTiming {
@@ -467,14 +474,8 @@ where
 
     let result = (|| {
         ensure_ffmpeg_available()?;
-        let segments = collect_row_segments(
-            project_root,
-            app_data_dir,
-            &work_dir,
-            sketch_path,
-            &sketch,
-            &settings,
-        )?;
+        let segments =
+            collect_row_segments(project_root, &work_dir, sketch_path, &sketch, &settings)?;
 
         let gap_count = segments.len().saturating_sub(1);
         let title_step_count = usize::from(settings.include_title_card);
@@ -769,7 +770,6 @@ fn render_title_card(
 
 fn collect_row_segments(
     project_root: &Path,
-    app_data_dir: &Path,
     work_dir: &Path,
     sketch_path: &str,
     sketch: &Sketch,
@@ -780,7 +780,7 @@ fn collect_row_segments(
     }
 
     let resolved_demo =
-        load_or_generate_resolved_demo(project_root, app_data_dir, sketch_path, sketch, settings)?;
+        load_or_generate_resolved_demo(project_root, work_dir, sketch_path, sketch, settings)?;
 
     sketch
         .rows
@@ -826,9 +826,10 @@ fn collect_row_segments(
                 narration.leading_silence_ms,
                 narration.trailing_silence_ms,
             );
+            let row_number = index + 1;
             let resolved_demo_seconds = resolved_demo
                 .as_ref()
-                .and_then(|demo| demo.row_playback_duration_seconds(index + 1))
+                .and_then(|loaded| loaded.demo.row_playback_duration_seconds(row_number))
                 .unwrap_or(0.0);
             let duration_seconds = row_content_duration_seconds(
                 audio_duration_seconds,
@@ -845,7 +846,7 @@ fn collect_row_segments(
             {
                 anyhow::bail!(
                     "Row {} cannot combine visual frame rendering with typing spots or a motion plan",
-                    index + 1
+                    row_number
                 );
             }
             let frame_sequence = settings
@@ -865,7 +866,7 @@ fn collect_row_segments(
                 visual_path
                     .map(|visual_path| {
                         let output_dir =
-                            work_dir.join(format!("row-{:03}-elucim-frames", index + 1));
+                            work_dir.join(format!("row-{row_number:03}-elucim-frames"));
                         let manifest = animation::render_visual_frame_manifest(
                             project_root,
                             visual_path,
@@ -874,7 +875,7 @@ fn collect_row_segments(
                         )?;
                         tracing::info!(
                             target: "cutready::export",
-                            row = index + 1,
+                            row = row_number,
                             visual = %visual_path,
                             frame_count = manifest.frame_count,
                             "generated Elucim frame manifest"
@@ -890,10 +891,45 @@ fn collect_row_segments(
             } else {
                 frame_sequence
             };
+            let has_screenshot = row
+                .screenshot
+                .as_deref()
+                .is_some_and(|path| !path.trim().is_empty());
+            let frame_sequence = if frame_sequence.is_none() {
+                if row.typing_spots.is_empty() && row.motion_plan.is_none() {
+                    match resolved_demo.as_ref().map(|loaded| {
+                        resolved_demo_frame_sequence_for_row(
+                            loaded,
+                            row_number,
+                            duration_seconds,
+                            settings.video_fps,
+                        )
+                    }) {
+                        Some(Ok(sequence)) => sequence,
+                        Some(Err(error))
+                            if has_screenshot && is_missing_resolved_demo_asset_error(&error) =>
+                        {
+                            tracing::warn!(
+                                target: "cutready::export",
+                                row = row_number,
+                                error = %error,
+                                "could not load resolved-demo media; falling back to row screenshot"
+                            );
+                            None
+                        }
+                        Some(Err(error)) => return Err(error),
+                        None => None,
+                    }
+                } else {
+                    None
+                }
+            } else {
+                frame_sequence
+            };
             if frame_sequence.is_some() && (!row.typing_spots.is_empty() || row.motion_plan.is_some()) {
                 anyhow::bail!(
                     "Row {} cannot combine visual frame rendering with typing spots or a motion plan",
-                    index + 1
+                    row_number
                 );
             }
             let image_path = if let Some(frame) = frame_sequence
@@ -916,7 +952,7 @@ fn collect_row_segments(
             };
 
             Ok(RowSegment {
-                row_number: index + 1,
+                row_number,
                 image_path,
                 narration_path,
                 audio_start_seconds,
@@ -1065,21 +1101,26 @@ fn load_resolved_demo(
     project_root: &Path,
     relative_path: &str,
     row_count: usize,
-) -> anyhow::Result<ResolvedDemo> {
+) -> anyhow::Result<LoadedResolvedDemo> {
     let path = project::safe_resolve(project_root, relative_path)?;
     if !path.is_file() {
         anyhow::bail!("Resolved demo schema file does not exist: {relative_path}");
     }
-    load_resolved_demo_file(&path, row_count)
+    let asset_base_dir = path.parent().unwrap_or(project_root).to_path_buf();
+    let demo = load_resolved_demo_file(&path, row_count)?;
+    Ok(LoadedResolvedDemo {
+        demo,
+        asset_base_dir,
+    })
 }
 
 fn load_or_generate_resolved_demo(
     project_root: &Path,
-    app_data_dir: &Path,
+    export_work_dir: &Path,
     sketch_path: &str,
     sketch: &Sketch,
     settings: &SketchVideoExportSettings,
-) -> anyhow::Result<Option<ResolvedDemo>> {
+) -> anyhow::Result<Option<LoadedResolvedDemo>> {
     if let Some(path) = settings.resolved_demo_path.as_deref() {
         return load_resolved_demo(project_root, path, sketch.rows.len()).map(Some);
     }
@@ -1103,7 +1144,7 @@ fn load_or_generate_resolved_demo(
         .and_then(OsStr::to_str)
         .map(slugify)
         .unwrap_or_else(|| "sketch".to_string());
-    let work_dir = app_data_dir.join(TEMP_DIR).join(format!(
+    let work_dir = export_work_dir.join(format!(
         "scenecast-{}-{}",
         sketch_stem,
         Utc::now().format("%Y%m%d-%H%M%S-%3f")
@@ -1111,22 +1152,15 @@ fn load_or_generate_resolved_demo(
     let bundle_dir = work_dir.join("bundle.scenecast");
     let output_dir = work_dir.join("resolved");
 
-    let result = (|| {
-        scenecast_adapter::write_scenecast_bundle(project_root, sketch, &bundle_dir)?;
-        let resolved_demo_path =
-            scenecast_adapter::export_resolved_demo_with_scenecast_cli(&bundle_dir, &output_dir)?;
-        load_resolved_demo_file(&resolved_demo_path, sketch.rows.len()).map(Some)
-    })();
-    if work_dir.exists() {
-        if let Err(error) = fs::remove_dir_all(&work_dir) {
-            tracing::warn!(
-                path = %work_dir.display(),
-                error = %error,
-                "Failed to clean up temporary Scenecast export directory"
-            );
-        }
-    }
-    result
+    scenecast_adapter::write_scenecast_bundle(project_root, sketch, &bundle_dir)?;
+    let resolved_demo_path =
+        scenecast_adapter::export_resolved_demo_with_scenecast_cli(&bundle_dir, &output_dir)?;
+    load_resolved_demo_file(&resolved_demo_path, sketch.rows.len()).map(|demo| {
+        Some(LoadedResolvedDemo {
+            demo,
+            asset_base_dir: bundle_dir,
+        })
+    })
 }
 
 fn rows_missing_screenshots(sketch: &Sketch) -> Vec<usize> {
@@ -1159,6 +1193,112 @@ fn load_resolved_demo_file(path: &Path, row_count: usize) -> anyhow::Result<Reso
         .map_err(|error| anyhow::anyhow!("Could not parse resolved demo schema: {error}"))?;
     demo.validate_for_row_count(row_count)?;
     Ok(demo)
+}
+
+fn is_missing_resolved_demo_asset_error(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        cause
+            .to_string()
+            .contains("Resolved demo asset does not exist")
+    })
+}
+
+fn resolved_demo_frame_sequence_for_row(
+    loaded: &LoadedResolvedDemo,
+    row_number: usize,
+    row_duration_seconds: f64,
+    fps: u32,
+) -> anyhow::Result<Option<FrameSequencePlan>> {
+    let row_order = match row_number.checked_sub(1) {
+        Some(value) => value as u32,
+        None => return Ok(None),
+    };
+    let row_step_ids = loaded
+        .demo
+        .steps
+        .iter()
+        .filter(|step| step.order == row_order)
+        .map(|step| step.id.as_str())
+        .collect::<HashSet<_>>();
+    if row_step_ids.is_empty() {
+        return Ok(None);
+    }
+
+    let mut row_segments = loaded
+        .demo
+        .segments
+        .iter()
+        .filter(|segment| row_step_ids.contains(segment.step_id.as_str()))
+        .collect::<Vec<_>>();
+    row_segments.sort_by_key(|segment| segment.start_ms);
+
+    let mut entries = Vec::new();
+    for segment in row_segments {
+        if segment.frames.is_empty() {
+            if let Some(capture) = &segment.capture {
+                entries.push(FrameManifestEntry {
+                    path: resolve_resolved_demo_asset_path(
+                        &loaded.asset_base_dir,
+                        capture.path.as_str(),
+                    )?,
+                    duration_ms: segment.duration_ms as i64,
+                    terminal: false,
+                });
+            }
+            continue;
+        }
+
+        for frame in &segment.frames {
+            entries.push(FrameManifestEntry {
+                path: resolve_resolved_demo_asset_path(
+                    &loaded.asset_base_dir,
+                    frame.path.as_str(),
+                )?,
+                duration_ms: i64::from(frame.duration_ms),
+                terminal: false,
+            });
+        }
+    }
+
+    if entries.is_empty() {
+        return Ok(None);
+    }
+    if let Some(last) = entries.last_mut() {
+        last.terminal = true;
+    }
+    Ok(Some(plan_frame_sequence(
+        &entries,
+        row_duration_seconds,
+        fps,
+    )?))
+}
+
+fn resolve_resolved_demo_asset_path(
+    asset_base_dir: &Path,
+    asset_path: &str,
+) -> anyhow::Result<PathBuf> {
+    let trimmed = asset_path.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!("Resolved demo asset path must not be empty");
+    }
+    let relative = Path::new(trimmed);
+    if relative.is_absolute()
+        || relative.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
+        })
+    {
+        anyhow::bail!("Resolved demo asset path must be bundle-relative: {trimmed}");
+    }
+    let resolved = asset_base_dir.join(relative);
+    if !resolved.is_file() {
+        anyhow::bail!("Resolved demo asset does not exist: {trimmed}");
+    }
+    Ok(resolved)
 }
 
 fn export_timeline_timing(
@@ -3761,9 +3901,10 @@ mod tests {
 
         let demo = load_resolved_demo(root, ".cutready/scenecast/resolved-demo.json", 2).unwrap();
 
-        assert_eq!(demo.schema_version, "scenecast.resolved-demo.v1");
-        assert_eq!(demo.row_playback_duration_seconds(1), Some(1.25));
-        assert_eq!(demo.row_playback_duration_seconds(2), Some(1.0));
+        assert_eq!(demo.demo.schema_version, "scenecast.resolved-demo.v1");
+        assert_eq!(demo.demo.row_playback_duration_seconds(1), Some(1.25));
+        assert_eq!(demo.demo.row_playback_duration_seconds(2), Some(1.0));
+        assert_eq!(demo.asset_base_dir, schema_dir);
         assert!(load_resolved_demo(root, "../resolved-demo.json", 1).is_err());
     }
 
@@ -3785,6 +3926,140 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("Unsupported resolved demo schemaVersion"));
+    }
+
+    #[test]
+    fn resolved_demo_media_becomes_manifest_relative_frame_sequence() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+        let schema_dir = root.join(".cutready").join("scenecast");
+        let frames_dir = schema_dir.join("frames");
+        let captures_dir = schema_dir.join("captures");
+        fs::create_dir_all(&frames_dir).unwrap();
+        fs::create_dir_all(&captures_dir).unwrap();
+        fs::write(frames_dir.join("open.png"), b"frame").unwrap();
+        fs::write(frames_dir.join("settled.png"), b"frame").unwrap();
+        fs::write(captures_dir.join("terminal.png"), b"frame").unwrap();
+        fs::write(
+            schema_dir.join("resolved-demo.json"),
+            serde_json::json!({
+                "schemaVersion": "scenecast.resolved-demo.v1",
+                "title": "Demo",
+                "startSceneId": "start",
+                "capturePolicy": {
+                    "kind": "reference-existing-assets",
+                    "assetBase": "bundle-relative",
+                    "missingCaptureBehavior": "diagnostic"
+                },
+                "steps": [{
+                    "id": "step-start",
+                    "order": 0,
+                    "sceneId": "start",
+                    "title": "Start",
+                    "targets": [],
+                    "guideMarks": []
+                }],
+                "segments": [
+                    {
+                        "id": "segment-open",
+                        "kind": "scene",
+                        "stepId": "step-start",
+                        "startMs": 0,
+                        "durationMs": 100,
+                        "endMs": 100,
+                        "capture": null,
+                        "interaction": null,
+                        "frames": [
+                            { "path": "frames/open.png", "durationMs": 100 },
+                            { "path": "frames/settled.png", "durationMs": 200 }
+                        ],
+                        "waitMs": 0
+                    },
+                    {
+                        "id": "segment-terminal",
+                        "kind": "scene",
+                        "stepId": "step-start",
+                        "startMs": 100,
+                        "durationMs": 300,
+                        "endMs": 400,
+                        "capture": { "path": "captures/terminal.png" },
+                        "interaction": null,
+                        "frames": [],
+                        "waitMs": 0
+                    }
+                ],
+                "diagnostics": []
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let loaded = load_resolved_demo(root, ".cutready/scenecast/resolved-demo.json", 1).unwrap();
+        let sequence = resolved_demo_frame_sequence_for_row(&loaded, 1, 1.2, 10)
+            .unwrap()
+            .expect("resolved demo row media should create a frame sequence");
+
+        assert_eq!(sequence.frames.len(), 3);
+        assert_eq!(sequence.frames[0].path, frames_dir.join("open.png"));
+        assert_seconds(sequence.frames[0].duration_seconds, 0.1);
+        assert_eq!(sequence.frames[1].path, frames_dir.join("settled.png"));
+        assert_seconds(sequence.frames[1].duration_seconds, 0.2);
+        assert_eq!(sequence.frames[2].path, captures_dir.join("terminal.png"));
+        assert_seconds(sequence.frames[2].duration_seconds, 0.9);
+        match sequence.fit {
+            FrameSequenceFit::Held { hold_seconds } => assert_seconds(hold_seconds, 0.9),
+            fit => panic!("expected held frame sequence, got {fit:?}"),
+        }
+    }
+
+    #[test]
+    fn resolved_demo_media_requires_existing_safe_assets() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+        let schema_dir = root.join(".cutready").join("scenecast");
+        fs::create_dir_all(&schema_dir).unwrap();
+        fs::write(
+            schema_dir.join("resolved-demo.json"),
+            serde_json::json!({
+                "schemaVersion": "scenecast.resolved-demo.v1",
+                "title": "Demo",
+                "startSceneId": "start",
+                "capturePolicy": {
+                    "kind": "reference-existing-assets",
+                    "assetBase": "bundle-relative",
+                    "missingCaptureBehavior": "diagnostic"
+                },
+                "steps": [{
+                    "id": "step-start",
+                    "order": 0,
+                    "sceneId": "start",
+                    "title": "Start",
+                    "targets": [],
+                    "guideMarks": []
+                }],
+                "segments": [{
+                    "id": "segment-start",
+                    "kind": "scene",
+                    "stepId": "step-start",
+                    "startMs": 0,
+                    "durationMs": 100,
+                    "endMs": 100,
+                    "capture": { "path": "captures/missing.png" },
+                    "interaction": null,
+                    "frames": [],
+                    "waitMs": 0
+                }],
+                "diagnostics": []
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let loaded = load_resolved_demo(root, ".cutready/scenecast/resolved-demo.json", 1).unwrap();
+        assert!(resolved_demo_frame_sequence_for_row(&loaded, 1, 1.0, 10)
+            .unwrap_err()
+            .to_string()
+            .contains("Resolved demo asset does not exist"));
     }
 
     #[test]
@@ -4541,6 +4816,255 @@ mod tests {
         .unwrap();
 
         assert_eq!(export.row_count, 1);
+        assert!(output.is_file());
+        assert!(output.metadata().unwrap().len() > 0);
+    }
+
+    #[test]
+    fn export_sketch_video_uses_resolved_demo_media_without_row_screenshot() {
+        if ensure_ffmpeg_available().is_err() {
+            eprintln!("Skipping resolved demo media export test because FFmpeg is unavailable");
+            return;
+        }
+
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+        let schema_dir = root.join(".cutready").join("scenecast");
+        let frames_dir = schema_dir.join("frames");
+        fs::create_dir_all(&frames_dir).unwrap();
+        RgbImage::from_pixel(64, 36, Rgb([20, 80, 180]))
+            .save(frames_dir.join("open.png"))
+            .unwrap();
+        RgbImage::from_pixel(64, 36, Rgb([180, 80, 20]))
+            .save(frames_dir.join("terminal.png"))
+            .unwrap();
+        fs::write(
+            schema_dir.join("resolved-demo.json"),
+            serde_json::json!({
+                "schemaVersion": "scenecast.resolved-demo.v1",
+                "title": "Demo",
+                "startSceneId": "start",
+                "capturePolicy": {
+                    "kind": "reference-existing-assets",
+                    "assetBase": "bundle-relative",
+                    "missingCaptureBehavior": "diagnostic"
+                },
+                "steps": [{
+                    "id": "step-start",
+                    "order": 0,
+                    "sceneId": "start",
+                    "title": "Start",
+                    "targets": [],
+                    "guideMarks": []
+                }],
+                "segments": [{
+                    "id": "segment-start",
+                    "kind": "scene",
+                    "stepId": "step-start",
+                    "startMs": 0,
+                    "durationMs": 400,
+                    "endMs": 400,
+                    "capture": null,
+                    "interaction": null,
+                    "frames": [
+                        { "path": "frames/open.png", "durationMs": 100 },
+                        { "path": "frames/terminal.png", "durationMs": 0 }
+                    ],
+                    "waitMs": 0
+                }],
+                "diagnostics": []
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let narration_path = root.join("row-1.wav");
+        run_ffmpeg(vec![
+            "-y".to_string(),
+            "-hide_banner".to_string(),
+            "-loglevel".to_string(),
+            "error".to_string(),
+            "-f".to_string(),
+            "lavfi".to_string(),
+            "-i".to_string(),
+            "sine=frequency=440:duration=0.1".to_string(),
+            "-c:a".to_string(),
+            "pcm_s16le".to_string(),
+            narration_path.to_string_lossy().to_string(),
+        ])
+        .unwrap();
+
+        let mut sketch = Sketch::new("Resolved Media Export");
+        let mut row = PlanningRow::new();
+        row.screenshot = None;
+        row.narration = Some(NarrationAsset {
+            path: "row-1.wav".to_string(),
+            source_text: "Hello".to_string(),
+            source_text_hash: "hash".to_string(),
+            mime_type: "audio/wav".to_string(),
+            duration_ms: Some(100),
+            leading_silence_ms: None,
+            trailing_silence_ms: None,
+            silence_threshold_db: None,
+            byte_size: narration_path.metadata().unwrap().len(),
+            recorded_at: Utc::now(),
+        });
+        sketch.rows = vec![row];
+        project::write_sketch(&sketch, &root.join("resolved-media.sk"), root).unwrap();
+
+        let output = root.join("resolved-media.mp4");
+        let settings = SketchVideoExportSettings {
+            include_title_card: false,
+            title_to_first_row_hold_seconds: 0.0,
+            final_hold_seconds: 0.0,
+            narration_tail_hold_seconds: 0.0,
+            video_width: 64,
+            video_height: 36,
+            video_fps: 30,
+            resolved_demo_path: Some(".cutready/scenecast/resolved-demo.json".to_string()),
+            ..SketchVideoExportSettings::default()
+        };
+        let export = export_sketch_video_with_progress(
+            root,
+            root,
+            "resolved-media.sk",
+            Some(&output),
+            settings,
+            |_| {},
+        )
+        .unwrap();
+
+        assert_eq!(export.row_count, 1);
+        assert_seconds(export.duration_seconds, 0.6);
+        assert!(output.is_file());
+        assert!(output.metadata().unwrap().len() > 0);
+    }
+
+    #[test]
+    fn export_sketch_video_skips_resolved_demo_media_for_overlay_rows() {
+        if ensure_ffmpeg_available().is_err() {
+            eprintln!("Skipping resolved demo media overlay test because FFmpeg is unavailable");
+            return;
+        }
+
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+        fs::create_dir_all(root.join(".cutready/screenshots")).unwrap();
+        fs::create_dir_all(root.join(".cutready/scenecast")).unwrap();
+
+        let screenshot_path = root.join(".cutready/screenshots/row-1.png");
+        RgbImage::from_pixel(64, 36, Rgb([80, 20, 180]))
+            .save(&screenshot_path)
+            .unwrap();
+        fs::write(
+            root.join(".cutready/scenecast/resolved-demo.json"),
+            serde_json::json!({
+                "schemaVersion": "scenecast.resolved-demo.v1",
+                "title": "Demo",
+                "startSceneId": "start",
+                "capturePolicy": {
+                    "kind": "reference-existing-assets",
+                    "assetBase": "bundle-relative",
+                    "missingCaptureBehavior": "diagnostic"
+                },
+                "steps": [{
+                    "id": "step-start",
+                    "order": 0,
+                    "sceneId": "start",
+                    "title": "Start",
+                    "targets": [],
+                    "guideMarks": []
+                }],
+                "segments": [{
+                    "id": "segment-start",
+                    "kind": "scene",
+                    "stepId": "step-start",
+                    "startMs": 0,
+                    "durationMs": 400,
+                    "endMs": 400,
+                    "capture": { "path": "captures/missing.png" },
+                    "interaction": null,
+                    "frames": [],
+                    "waitMs": 0
+                }],
+                "diagnostics": []
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let narration_path = root.join("row-1.wav");
+        run_ffmpeg(vec![
+            "-y".to_string(),
+            "-hide_banner".to_string(),
+            "-loglevel".to_string(),
+            "error".to_string(),
+            "-f".to_string(),
+            "lavfi".to_string(),
+            "-i".to_string(),
+            "sine=frequency=440:duration=0.1".to_string(),
+            "-c:a".to_string(),
+            "pcm_s16le".to_string(),
+            narration_path.to_string_lossy().to_string(),
+        ])
+        .unwrap();
+
+        let mut sketch = Sketch::new("Resolved Media Overlay Export");
+        let mut row = PlanningRow::new();
+        row.screenshot = Some(".cutready/screenshots/row-1.png".to_string());
+        row.typing_spots = vec![TypingSpot {
+            x: 0.2,
+            y: 0.25,
+            width: 0.5,
+            height: 0.12,
+            text: "Overlay".to_string(),
+            start_offset_ms: Some(0),
+            duration_ms: None,
+            characters_per_second: Some(24.0),
+            show_cursor: Some(true),
+            text_color: Some("#ffffff".to_string()),
+            font_family: Some("sans".to_string()),
+            font_scale: Some(1.0),
+        }];
+        row.narration = Some(NarrationAsset {
+            path: "row-1.wav".to_string(),
+            source_text: "Hello".to_string(),
+            source_text_hash: "hash".to_string(),
+            mime_type: "audio/wav".to_string(),
+            duration_ms: Some(100),
+            leading_silence_ms: None,
+            trailing_silence_ms: None,
+            silence_threshold_db: None,
+            byte_size: narration_path.metadata().unwrap().len(),
+            recorded_at: Utc::now(),
+        });
+        sketch.rows = vec![row];
+        project::write_sketch(&sketch, &root.join("resolved-overlay.sk"), root).unwrap();
+
+        let output = root.join("resolved-overlay.mp4");
+        let settings = SketchVideoExportSettings {
+            include_title_card: false,
+            title_to_first_row_hold_seconds: 0.0,
+            final_hold_seconds: 0.0,
+            narration_tail_hold_seconds: 0.0,
+            video_width: 64,
+            video_height: 36,
+            video_fps: 30,
+            resolved_demo_path: Some(".cutready/scenecast/resolved-demo.json".to_string()),
+            ..SketchVideoExportSettings::default()
+        };
+        let export = export_sketch_video_with_progress(
+            root,
+            root,
+            "resolved-overlay.sk",
+            Some(&output),
+            settings,
+            |_| {},
+        )
+        .unwrap();
+
+        assert_eq!(export.row_count, 1);
+        assert_seconds(export.duration_seconds, 0.6);
         assert!(output.is_file());
         assert!(output.metadata().unwrap().len() > 0);
     }

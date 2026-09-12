@@ -515,7 +515,7 @@ function VideoExportOptionsDialog({
               Video export inputs
             </h2>
             <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
-              Optional pipeline artifacts for the current export. Leave them blank for the screenshot-and-narration path.
+              Optional pipeline artifacts for the current export. Leave them blank for the sketch media-and-narration path.
             </p>
           </div>
           <button
@@ -532,7 +532,7 @@ function VideoExportOptionsDialog({
           <label className="block">
             <span className="text-xs font-semibold text-[rgb(var(--color-text))]">Scenecast resolved demo</span>
             <span className="mt-1 block text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
-              Project-relative path to a resolved-demo JSON file. It can extend row timing from Scenecast playback spans.
+              Project-relative path to a resolved-demo JSON file. It can provide Scenecast playback media and extend row timing from playback spans.
             </span>
             <div className="mt-2 flex gap-2">
               <input

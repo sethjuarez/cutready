@@ -23,6 +23,13 @@ const checks = [
     expectedMinTests: 2,
   },
   {
+    id: "resolved-demo-media",
+    description: "Resolved-demo captures and frames render screenshot-less rows from bundle-relative media",
+    args: ["test", "-p", "cutready", "resolved_demo_media", "--lib", "--quiet"],
+    expectedMinTests: 4,
+    forbiddenOutput: ["Skipping resolved demo media export test", "Skipping resolved demo media overlay test"],
+  },
+  {
     id: "scenecast-adapter",
     description: "CutReady sketch rows materialize into portable Scenecast bundles and CLI export calls",
     args: ["test", "-p", "cutready", "scenecast_adapter", "--lib", "--quiet"],

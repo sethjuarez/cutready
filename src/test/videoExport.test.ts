@@ -63,7 +63,55 @@ describe("video export utilities", () => {
       { resolvedDemoPath: null, generateResolvedDemo: false, visualFrameManifestPaths: [] },
     )).toEqual([{
       rowNumber: 1,
-      missing: ["screenshot, visual, or visual frame manifest"],
+      missing: ["screenshot, visual, visual frame manifest, or resolved demo media"],
+    }]);
+  });
+
+  it("accepts a provided resolved demo as a media source", () => {
+    expect(getVideoExportIssues(
+      [row({ screenshot: null, visual: null })],
+      {
+        resolvedDemoPath: ".cutready/scenecast/resolved-demo.json",
+        generateResolvedDemo: false,
+        visualFrameManifestPaths: [],
+      },
+    )).toEqual([]);
+  });
+
+  it("does not treat resolved demo media as available for overlay rows", () => {
+    expect(getVideoExportIssues(
+      [row({ screenshot: null, visual: null, typing_spots: [{
+        x: 0.2,
+        y: 0.2,
+        width: 0.4,
+        height: 0.1,
+        text: "Overlay",
+      }] })],
+      {
+        resolvedDemoPath: ".cutready/scenecast/resolved-demo.json",
+        generateResolvedDemo: false,
+        visualFrameManifestPaths: [],
+      },
+    )).toEqual([{
+      rowNumber: 1,
+      missing: ["screenshot, visual, visual frame manifest, or resolved demo media"],
+    }]);
+  });
+
+  it("does not treat resolved demo media as available for motion rows", () => {
+    expect(getVideoExportIssues(
+      [row({ screenshot: null, visual: null, motion_plan: {
+        kind: "subtle_push",
+        keyframes: [],
+      } })],
+      {
+        resolvedDemoPath: ".cutready/scenecast/resolved-demo.json",
+        generateResolvedDemo: false,
+        visualFrameManifestPaths: [],
+      },
+    )).toEqual([{
+      rowNumber: 1,
+      missing: ["screenshot, visual, visual frame manifest, or resolved demo media"],
     }]);
   });
 
