@@ -92,6 +92,15 @@ type ResolvedDemoRowInspection = {
   mediaAssetCount: number;
   missingAssetCount: number;
   invalidAssetCount: number;
+  steps: ResolvedDemoStepInspection[];
+};
+type ResolvedDemoStepInspection = {
+  id: string;
+  title: string;
+  description?: string | null;
+  targetLabels: string[];
+  guideMarkLabels: string[];
+  segmentKinds: string[];
 };
 type ResolvedDemoDiagnostic = {
   severity: string;
@@ -767,13 +776,20 @@ function ResolvedDemoCoverageRow({
       <span className="min-w-0">
         <span className="block truncate text-[rgb(var(--color-text))]">{coverage.label}</span>
         {inspection && (
-          <span className="mt-0.5 block truncate text-[rgb(var(--color-text-secondary))]">
-            {inspection.segmentCount} segment{inspection.segmentCount === 1 ? "" : "s"}
-            {inspection.durationSeconds != null ? `, ${formatCompactSeconds(inspection.durationSeconds)}` : ""}
-            {inspection.mediaAssetCount > 0 ? `, ${inspection.mediaAssetCount} demo media asset${inspection.mediaAssetCount === 1 ? "" : "s"}` : ""}
-            {inspection.missingAssetCount > 0 ? `, ${inspection.missingAssetCount} missing demo asset${inspection.missingAssetCount === 1 ? "" : "s"}` : ""}
-            {inspection.invalidAssetCount > 0 ? `, ${inspection.invalidAssetCount} invalid demo asset${inspection.invalidAssetCount === 1 ? "" : "s"}` : ""}
-          </span>
+          <>
+            <span className="mt-0.5 block truncate text-[rgb(var(--color-text-secondary))]">
+              {inspection.segmentCount} segment{inspection.segmentCount === 1 ? "" : "s"}
+              {inspection.durationSeconds != null ? `, ${formatCompactSeconds(inspection.durationSeconds)}` : ""}
+              {inspection.mediaAssetCount > 0 ? `, ${inspection.mediaAssetCount} demo media asset${inspection.mediaAssetCount === 1 ? "" : "s"}` : ""}
+              {inspection.missingAssetCount > 0 ? `, ${inspection.missingAssetCount} missing demo asset${inspection.missingAssetCount === 1 ? "" : "s"}` : ""}
+              {inspection.invalidAssetCount > 0 ? `, ${inspection.invalidAssetCount} invalid demo asset${inspection.invalidAssetCount === 1 ? "" : "s"}` : ""}
+            </span>
+            {(inspection.steps ?? []).length > 0 && (
+              <span className="mt-0.5 block truncate text-[10px] text-[rgb(var(--color-text-secondary))]">
+                Demo doc: {summarizeResolvedDemoSteps(inspection.steps ?? [])}
+              </span>
+            )}
+          </>
         )}
       </span>
       <SourceBadge source={coverage.mediaSource} />
@@ -830,6 +846,19 @@ function ResolvedDemoInspectionPanel({ state }: { state: ResolvedDemoInspectionS
 
 function formatCompactSeconds(value: number): string {
   return `${value.toFixed(value < 10 ? 2 : 1).replace(/\.?0+$/, "")}s`;
+}
+
+function summarizeResolvedDemoSteps(steps: ResolvedDemoStepInspection[]): string {
+  const visibleSteps = steps.slice(0, 2).map(summarizeResolvedDemoStep);
+  const remaining = steps.length - visibleSteps.length;
+  return `${visibleSteps.join("; ")}${remaining > 0 ? ` +${remaining} more` : ""}`;
+}
+
+function summarizeResolvedDemoStep(step: ResolvedDemoStepInspection): string {
+  const targetSummary = step.targetLabels.length > 0
+    ? ` -> ${step.targetLabels.slice(0, 2).join(", ")}${step.targetLabels.length > 2 ? ` +${step.targetLabels.length - 2}` : ""}`
+    : "";
+  return `${step.title}${targetSummary}`;
 }
 
 function SourceBadge({ source }: { source: VideoExportMediaSource }) {

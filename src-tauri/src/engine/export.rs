@@ -285,6 +285,18 @@ pub struct ResolvedDemoRowInspection {
     pub media_asset_count: usize,
     pub missing_asset_count: usize,
     pub invalid_asset_count: usize,
+    pub steps: Vec<ResolvedDemoStepInspection>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedDemoStepInspection {
+    pub id: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub target_labels: Vec<String>,
+    pub guide_mark_labels: Vec<String>,
+    pub segment_kinds: Vec<String>,
 }
 
 /// Planned timeline buckets before ffmpeg frame quantization and media probing.
@@ -1291,6 +1303,34 @@ fn inspect_resolved_demo_row(
         .filter(|step| step.order == row_order)
         .map(|step| step.id.as_str())
         .collect::<HashSet<_>>();
+    let steps = loaded
+        .demo
+        .steps
+        .iter()
+        .filter(|step| step.order == row_order)
+        .map(|step| ResolvedDemoStepInspection {
+            id: step.id.clone(),
+            title: step.title.clone(),
+            description: step.description.clone(),
+            target_labels: step
+                .targets
+                .iter()
+                .map(|target| target.label.clone())
+                .collect(),
+            guide_mark_labels: step
+                .guide_marks
+                .iter()
+                .map(|mark| mark.label.clone())
+                .collect(),
+            segment_kinds: loaded
+                .demo
+                .segments
+                .iter()
+                .filter(|segment| segment.step_id == step.id)
+                .map(|segment| segment.kind.clone())
+                .collect(),
+        })
+        .collect::<Vec<_>>();
     let mut media_asset_count = 0usize;
     let mut missing_asset_count = 0usize;
     let mut invalid_asset_count = 0usize;
@@ -1333,6 +1373,7 @@ fn inspect_resolved_demo_row(
         media_asset_count,
         missing_asset_count,
         invalid_asset_count,
+        steps,
     }
 }
 
@@ -4148,11 +4189,16 @@ mod tests {
         assert_eq!(inspection.rows[0].segment_count, 1);
         assert_eq!(inspection.rows[0].media_asset_count, 1);
         assert_eq!(inspection.rows[0].missing_asset_count, 0);
+        assert_eq!(inspection.rows[0].invalid_asset_count, 0);
+        assert_eq!(inspection.rows[0].steps.len(), 1);
+        assert_eq!(inspection.rows[0].steps[0].title, "Start");
+        assert_eq!(inspection.rows[0].steps[0].segment_kinds, vec!["scene"]);
         assert_seconds(inspection.rows[0].duration_seconds.unwrap(), 0.25);
         assert_eq!(inspection.rows[1].step_count, 1);
         assert_eq!(inspection.rows[1].segment_count, 0);
         assert_eq!(inspection.rows[1].duration_seconds, None);
         assert_eq!(inspection.rows[1].media_asset_count, 0);
+        assert_eq!(inspection.rows[1].steps[0].title, "Empty");
     }
 
     #[test]

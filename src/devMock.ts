@@ -208,6 +208,14 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
           mediaAssetCount: 1,
           missingAssetCount: 0,
           invalidAssetCount: 0,
+          steps: [{
+            id: `mock-step-${index + 1}`,
+            title: `Mock row ${index + 1}`,
+            description: null,
+            targetLabels: ["Continue"],
+            guideMarkLabels: [],
+            segmentKinds: ["scene"],
+          }],
         })),
         diagnostics: [],
       };
