@@ -220,6 +220,26 @@ struct RowSegment {
     typing_spots: Vec<TypingSpot>,
 }
 
+/// Planned timeline buckets before ffmpeg frame quantization and media probing.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ExportTimelineTiming {
+    title_card_seconds: f64,
+    lead_in_seconds: f64,
+    row_content_seconds: f64,
+    interior_transition_seconds: f64,
+    final_hold_seconds: f64,
+}
+
+impl ExportTimelineTiming {
+    fn total_seconds(self) -> f64 {
+        self.title_card_seconds
+            + self.lead_in_seconds
+            + self.row_content_seconds
+            + self.interior_transition_seconds
+            + self.final_hold_seconds
+    }
+}
+
 #[allow(dead_code)]
 pub fn export_sketch_video(
     project_root: &Path,
@@ -415,19 +435,8 @@ where
     let background_music_step_count = usize::from(settings.background_music_path.is_some());
     let total_steps =
         title_step_count + 1 + segments.len() + gap_count + 1 + 1 + background_music_step_count;
-    let title_card_duration_seconds = if settings.include_title_card {
-        settings.title_card_duration_seconds
-    } else {
-        0.0
-    };
-    let duration_seconds = title_card_duration_seconds
-        + segments
-            .iter()
-            .map(|segment| segment.duration_seconds)
-            .sum::<f64>()
-        + settings.title_to_first_row_hold_seconds
-        + (gap_count as f64 * settings.row_transition_hold_seconds)
-        + settings.final_hold_seconds;
+    let timeline_timing = export_timeline_timing(&segments, &settings);
+    let duration_seconds = timeline_timing.total_seconds();
 
     let work_relative = format!("{TEMP_DIR}/{}", Utc::now().format("%Y%m%d-%H%M%S-%3f"));
     let work_dir = project::safe_resolve(project_root, &work_relative)?;
@@ -782,7 +791,7 @@ fn collect_row_segments(
                 narration.leading_silence_ms,
                 narration.trailing_silence_ms,
             );
-            let duration_seconds = audio_duration_seconds + settings.narration_tail_hold_seconds;
+            let duration_seconds = row_content_duration_seconds(audio_duration_seconds, settings);
 
             Ok(RowSegment {
                 row_number: index + 1,
@@ -796,6 +805,34 @@ fn collect_row_segments(
             })
         })
         .collect()
+}
+
+fn row_content_duration_seconds(
+    audio_duration_seconds: f64,
+    settings: &SketchVideoExportSettings,
+) -> f64 {
+    audio_duration_seconds + settings.narration_tail_hold_seconds
+}
+
+fn export_timeline_timing(
+    segments: &[RowSegment],
+    settings: &SketchVideoExportSettings,
+) -> ExportTimelineTiming {
+    let gap_count = segments.len().saturating_sub(1);
+    ExportTimelineTiming {
+        title_card_seconds: if settings.include_title_card {
+            settings.title_card_duration_seconds
+        } else {
+            0.0
+        },
+        lead_in_seconds: settings.title_to_first_row_hold_seconds,
+        row_content_seconds: segments
+            .iter()
+            .map(|segment| segment.duration_seconds)
+            .sum(),
+        interior_transition_seconds: gap_count as f64 * settings.row_transition_hold_seconds,
+        final_hold_seconds: settings.final_hold_seconds,
+    }
 }
 
 fn render_segment(
@@ -2258,21 +2295,21 @@ fn effective_source_duration_seconds(
 fn run_ffmpeg(args: Vec<String>) -> anyhow::Result<()> {
     let diagnostics = FfmpegFilterDiagnostics::from_args(&args);
     let mut args = args;
-    let _filter_scripts = match offload_large_filter_arguments(&mut args, FilterFileSyntax::detect())
-    {
-        Ok(scripts) => scripts,
-        Err(error) => {
-            log_ffmpeg_failure(
-                None,
-                &error.to_string(),
-                "",
-                "",
-                &diagnostics,
-                "FFmpeg filter script preparation failed",
-            );
-            return Err(error);
-        }
-    };
+    let _filter_scripts =
+        match offload_large_filter_arguments(&mut args, FilterFileSyntax::detect()) {
+            Ok(scripts) => scripts,
+            Err(error) => {
+                log_ffmpeg_failure(
+                    None,
+                    &error.to_string(),
+                    "",
+                    "",
+                    &diagnostics,
+                    "FFmpeg filter script preparation failed",
+                );
+                return Err(error);
+            }
+        };
     let output = match ffmpeg::run_ffmpeg(&args) {
         Ok(output) => output,
         Err(error) => {
@@ -2748,8 +2785,7 @@ mod tests {
         let filter = "null,".repeat(FFMPEG_FILTER_SCRIPT_THRESHOLD_BYTES / 4 + 1);
         let mut args = vec!["-vf".to_string(), filter.clone()];
 
-        let scripts =
-            offload_large_filter_arguments(&mut args, FilterFileSyntax::Legacy).unwrap();
+        let scripts = offload_large_filter_arguments(&mut args, FilterFileSyntax::Legacy).unwrap();
 
         assert_eq!(args[0], "-filter_script:v");
         assert_eq!(scripts.len(), 1);
@@ -2761,8 +2797,7 @@ mod tests {
         let filter = "null,".repeat(FFMPEG_FILTER_SCRIPT_THRESHOLD_BYTES / 4 + 1);
         let mut args = vec!["-vf".to_string(), filter.clone()];
 
-        let scripts =
-            offload_large_filter_arguments(&mut args, FilterFileSyntax::Generic).unwrap();
+        let scripts = offload_large_filter_arguments(&mut args, FilterFileSyntax::Generic).unwrap();
 
         // FFmpeg 9.0 removed `-filter_script`, so modern builds must receive the
         // generic read-option-from-file flag instead.
@@ -3046,6 +3081,59 @@ mod tests {
             unchanged,
             "atrim=start=0.500:duration=3.000,asetpts=PTS-STARTPTS,apad,atrim=duration=3.350,aresample=48000,aformat=channel_layouts=stereo"
         );
+    }
+
+    #[test]
+    fn export_timeline_timing_keeps_row_content_and_transitions_separate() {
+        let settings = SketchVideoExportSettings {
+            title_card_duration_seconds: 3.0,
+            title_to_first_row_hold_seconds: 0.5,
+            row_transition_hold_seconds: 2.0,
+            final_hold_seconds: 4.0,
+            narration_tail_hold_seconds: 0.35,
+            ..SketchVideoExportSettings::default()
+        };
+        let segments = vec![
+            test_row_segment(1, 1.0, settings.narration_tail_hold_seconds),
+            test_row_segment(2, 1.5, settings.narration_tail_hold_seconds),
+        ];
+
+        let timing = export_timeline_timing(&segments, &settings);
+
+        assert_seconds(timing.title_card_seconds, 3.0);
+        assert_seconds(timing.lead_in_seconds, 0.5);
+        assert_seconds(timing.row_content_seconds, 3.2);
+        assert_seconds(timing.interior_transition_seconds, 2.0);
+        assert_seconds(timing.final_hold_seconds, 4.0);
+        assert_seconds(timing.total_seconds(), 12.7);
+    }
+
+    #[test]
+    fn export_timeline_timing_preserves_terminal_narration_tail_without_terminal_transition() {
+        let settings = SketchVideoExportSettings {
+            include_title_card: false,
+            title_to_first_row_hold_seconds: 0.5,
+            row_transition_hold_seconds: 9.0,
+            final_hold_seconds: 3.0,
+            narration_tail_hold_seconds: 0.4,
+            ..SketchVideoExportSettings::default()
+        };
+        let segments = vec![test_row_segment(
+            1,
+            2.0,
+            settings.narration_tail_hold_seconds,
+        )];
+
+        let timing = export_timeline_timing(&segments, &settings);
+
+        assert_seconds(row_content_duration_seconds(2.0, &settings), 2.4);
+        assert_seconds(segments[0].duration_seconds, 2.4);
+        assert_seconds(timing.title_card_seconds, 0.0);
+        assert_seconds(timing.lead_in_seconds, 0.5);
+        assert_seconds(timing.row_content_seconds, 2.4);
+        assert_seconds(timing.interior_transition_seconds, 0.0);
+        assert_seconds(timing.final_hold_seconds, 3.0);
+        assert_seconds(timing.total_seconds(), 5.9);
     }
 
     #[test]
@@ -3545,4 +3633,34 @@ mod tests {
             export_sketch_video(root, "unsafe.sk", Some(Path::new("escape.mp4"))).unwrap_err();
         assert!(error.to_string().contains("must be absolute"));
     }
+}
+
+#[cfg(test)]
+fn test_row_segment(
+    row_number: usize,
+    audio_duration_seconds: f64,
+    narration_tail_hold_seconds: f64,
+) -> RowSegment {
+    let settings = SketchVideoExportSettings {
+        narration_tail_hold_seconds,
+        ..SketchVideoExportSettings::default()
+    };
+    RowSegment {
+        row_number,
+        image_path: PathBuf::from(format!("row-{row_number}.png")),
+        narration_path: PathBuf::from(format!("row-{row_number}.wav")),
+        audio_start_seconds: 0.0,
+        audio_duration_seconds,
+        duration_seconds: row_content_duration_seconds(audio_duration_seconds, &settings),
+        motion_plan: None,
+        typing_spots: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+fn assert_seconds(actual: f64, expected: f64) {
+    assert!(
+        (actual - expected).abs() < 0.000_001,
+        "expected {expected}, got {actual}"
+    );
 }
