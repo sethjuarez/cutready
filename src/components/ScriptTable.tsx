@@ -1365,7 +1365,11 @@ function SortableRow({
   const displayScreenshotSrc = projectRoot ? screenshotSrc : row.screenshot;
   const isRecordingNarration = narrationRecordingRow === idx;
   const isSavingNarration = narrationSavingRows?.has(idx) ?? false;
-  const narrationStale = Boolean(row.narration && row.narration.source_text !== row.narrative);
+  const narrationStale = Boolean(row.narration && (
+    row.narration.narrative_text != null
+      ? row.narration.narrative_text !== row.narrative
+      : row.narration.source_text !== row.narrative
+  ));
   const narrationPath = row.narration?.path ?? null;
   const motionPointCount = row.motion_points?.length ?? 0;
   const { confirm, confirmationDialog } = useConfirmDialog();

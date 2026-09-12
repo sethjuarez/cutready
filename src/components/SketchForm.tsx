@@ -1964,14 +1964,16 @@ The Actions describe what happens on screen — use them as visual design hints.
 
   const handleNarrationPicked = useCallback(async (asset: ProjectAudioAsset) => {
     if (narrationPickerRowIdx === null) return;
-    const sourceText = localRows[narrationPickerRowIdx]?.narrative ?? "";
+    const narrativeText = localRows[narrationPickerRowIdx]?.narrative ?? "";
     const updated = [...localRows];
     updated[narrationPickerRowIdx] = {
       ...updated[narrationPickerRowIdx],
       narration: {
         path: asset.path,
-        source_text: sourceText,
-        source_text_hash: await sha256Hex(sourceText),
+        source_text: narrativeText,
+        source_text_hash: await sha256Hex(narrativeText),
+        narrative_text: narrativeText,
+        narrative_text_hash: await sha256Hex(narrativeText),
         mime_type: asset.mimeType,
         duration_ms: null,
         leading_silence_ms: null,

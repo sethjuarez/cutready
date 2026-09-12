@@ -61,6 +61,12 @@ const checks = [
     expectedMinTests: 1,
   },
   {
+    id: "narration-freshness",
+    description: "Narration source text and fingerprints must match current row narrative before export",
+    args: ["test", "-p", "cutready", "stale_narration", "--lib", "--quiet"],
+    expectedMinTests: 2,
+  },
+  {
     id: "elucim-frame-renderer",
     description: "Elucim visuals rasterize to themed PNG frames and a terminal frame manifest",
     args: ["test", "-p", "cutready", "animation", "--lib", "--quiet"],

@@ -298,10 +298,13 @@ fn persist_narration_asset(
     std::fs::rename(&tmp_path, &output_path)
         .map_err(|e| format!("Failed to finalize narration recording: {e}"))?;
 
+    let narrative_text = row.narrative.clone();
     let asset = NarrationAsset {
         path: relative_path,
         source_text_hash: sha256_hex(&source_text),
         source_text,
+        narrative_text_hash: Some(sha256_hex(&narrative_text)),
+        narrative_text: Some(narrative_text),
         mime_type: mime_type.to_string(),
         duration_ms,
         leading_silence_ms,

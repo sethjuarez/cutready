@@ -125,6 +125,48 @@ describe("video export utilities", () => {
     expect(issues).toEqual([{ rowNumber: 1, missing: ["narration"] }]);
   });
 
+  it("requires narration to match the current row narrative", () => {
+    const issues = getVideoExportIssues([
+      row({
+        narrative: "Updated narration",
+        narration: {
+          path: "narration/row-1.wav",
+          source_text: "Rewritten spoken narration",
+          source_text_hash: "hash",
+          narrative_text: "Old narration",
+          narrative_text_hash: "hash",
+          mime_type: "audio/wav",
+          duration_ms: 5_000,
+          byte_size: 1024,
+          recorded_at: "2026-01-01T00:00:00.000Z",
+        },
+      }),
+    ]);
+
+    expect(issues).toEqual([{ rowNumber: 1, missing: ["fresh narration matching current narrative"] }]);
+  });
+
+  it("allows rewritten spoken narration when the narrative snapshot is fresh", () => {
+    const issues = getVideoExportIssues([
+      row({
+        narrative: "Show the dashboard",
+        narration: {
+          path: "narration/row-1.wav",
+          source_text: "Now let's look at the dashboard.",
+          source_text_hash: "hash",
+          narrative_text: "Show the dashboard",
+          narrative_text_hash: "hash",
+          mime_type: "audio/wav",
+          duration_ms: 5_000,
+          byte_size: 1024,
+          recorded_at: "2026-01-01T00:00:00.000Z",
+        },
+      }),
+    ]);
+
+    expect(issues).toEqual([]);
+  });
+
   it("rejects unsafe typed artifact paths before export starts", () => {
     expect(getVideoExportIssues(
       [row()],

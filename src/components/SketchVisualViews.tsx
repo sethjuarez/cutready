@@ -348,7 +348,9 @@ function RowNarration({
 
   if (!narration) return null;
 
-  const isStale = narration.source_text !== row.narrative;
+  const isStale = narration.narrative_text != null
+    ? narration.narrative_text !== row.narrative
+    : narration.source_text !== row.narrative;
   const canEditNarration = !readOnly && !mediaLocked;
 
   return (

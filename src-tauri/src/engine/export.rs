@@ -24,7 +24,7 @@ use crate::{
     },
     models::{
         resolved_demo::{ResolvedDemo, ResolvedDemoDiagnostic, RESOLVED_DEMO_SCHEMA_VERSION},
-        sketch::{MotionPlan, MotionPlanKeyframe, Sketch, TypingSpot},
+        sketch::{MotionPlan, MotionPlanKeyframe, NarrationAsset, PlanningRow, Sketch, TypingSpot},
     },
 };
 
@@ -879,6 +879,7 @@ fn collect_row_segments(
                 .narration
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("Row {} has no narration", index + 1))?;
+            validate_narration_fresh(index + 1, row, narration)?;
             let narration_path = project::safe_resolve(project_root, &narration.path)?;
             if !narration_path.is_file() {
                 anyhow::bail!(
@@ -1183,6 +1184,38 @@ fn row_content_duration_seconds(
     settings: &SketchVideoExportSettings,
 ) -> f64 {
     audio_duration_seconds.max(resolved_demo_seconds) + settings.narration_tail_hold_seconds
+}
+
+fn validate_narration_fresh(
+    row_number: usize,
+    row: &PlanningRow,
+    narration: &NarrationAsset,
+) -> anyhow::Result<()> {
+    if let Some(narrative_text) = narration.narrative_text.as_deref() {
+        if narrative_text != row.narrative {
+            anyhow::bail!(
+                "Row {row_number} narration is stale; rerecord or regenerate narration after editing the narrative"
+            );
+        }
+    }
+
+    if let Some(narrative_text_hash) = narration.narrative_text_hash.as_deref() {
+        if narrative_text_hash.len() != 64 {
+            return Ok(());
+        }
+        let current_hash = sha256_hex(&row.narrative);
+        if !narrative_text_hash.eq_ignore_ascii_case(&current_hash) {
+            anyhow::bail!(
+                "Row {row_number} narration fingerprint is stale; rerecord or regenerate narration after editing the narrative"
+            );
+        }
+    }
+    Ok(())
+}
+
+fn sha256_hex(value: &str) -> String {
+    let digest = Sha256::digest(value.as_bytes());
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 fn load_resolved_demo(
@@ -4064,6 +4097,82 @@ mod tests {
     }
 
     #[test]
+    fn stale_narration_source_text_blocks_export_before_media_probe() {
+        let mut row = PlanningRow::new();
+        row.narrative = "Updated narration".to_string();
+        row.narration = Some(NarrationAsset {
+            path: "missing.wav".to_string(),
+            source_text: "Old narration".to_string(),
+            source_text_hash: sha256_hex("Old narration"),
+            narrative_text: Some("Old narration".to_string()),
+            narrative_text_hash: Some(sha256_hex("Old narration")),
+            mime_type: "audio/wav".to_string(),
+            duration_ms: Some(250),
+            leading_silence_ms: None,
+            trailing_silence_ms: None,
+            silence_threshold_db: None,
+            byte_size: 0,
+            recorded_at: Utc::now(),
+        });
+
+        let error = validate_narration_fresh(1, &row, row.narration.as_ref().unwrap())
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("Row 1 narration is stale"));
+    }
+
+    #[test]
+    fn stale_narration_fingerprint_blocks_export_before_media_probe() {
+        let mut row = PlanningRow::new();
+        row.narrative = "Current narration".to_string();
+        row.narration = Some(NarrationAsset {
+            path: "missing.wav".to_string(),
+            source_text: "Current narration".to_string(),
+            source_text_hash: sha256_hex("Current narration"),
+            narrative_text: Some("Current narration".to_string()),
+            narrative_text_hash: Some(
+                "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            ),
+            mime_type: "audio/wav".to_string(),
+            duration_ms: Some(250),
+            leading_silence_ms: None,
+            trailing_silence_ms: None,
+            silence_threshold_db: None,
+            byte_size: 0,
+            recorded_at: Utc::now(),
+        });
+
+        let error = validate_narration_fresh(2, &row, row.narration.as_ref().unwrap())
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("Row 2 narration fingerprint is stale"));
+    }
+
+    #[test]
+    fn rewritten_spoken_narration_passes_with_fresh_narrative_fingerprint() {
+        let mut row = PlanningRow::new();
+        row.narrative = "Show the project dashboard.".to_string();
+        row.narration = Some(NarrationAsset {
+            path: "missing.wav".to_string(),
+            source_text: "Now we can see the project dashboard.".to_string(),
+            source_text_hash: sha256_hex("Now we can see the project dashboard."),
+            narrative_text: Some("Show the project dashboard.".to_string()),
+            narrative_text_hash: Some(sha256_hex("Show the project dashboard.")),
+            mime_type: "audio/wav".to_string(),
+            duration_ms: Some(250),
+            leading_silence_ms: None,
+            trailing_silence_ms: None,
+            silence_threshold_db: None,
+            byte_size: 0,
+            recorded_at: Utc::now(),
+        });
+
+        validate_narration_fresh(1, &row, row.narration.as_ref().unwrap()).unwrap();
+    }
+
+    #[test]
     fn generated_resolved_demo_requires_screenshots_for_every_row() {
         let mut sketch = Sketch::new("Generated demo");
         let mut first = PlanningRow::new();
@@ -4825,10 +4934,13 @@ mod tests {
             ],
             rationale: None,
         });
+        row.narrative = "Hello".to_string();
         row.narration = Some(NarrationAsset {
             path: ".cutready/narration/row-1.wav".to_string(),
             source_text: "Hello".to_string(),
             source_text_hash: "hash".to_string(),
+            narrative_text: Some("Hello".to_string()),
+            narrative_text_hash: Some("hash".to_string()),
             mime_type: "audio/wav".to_string(),
             duration_ms: Some(250),
             leading_silence_ms: None,
@@ -4888,10 +5000,13 @@ mod tests {
         let mut sketch = Sketch::new("Custom Export");
         let mut row = PlanningRow::new();
         row.screenshot = Some(".cutready/screenshots/row-1.png".to_string());
+        row.narrative = "Hello".to_string();
         row.narration = Some(NarrationAsset {
             path: ".cutready/narration/row-1.wav".to_string(),
             source_text: "Hello".to_string(),
             source_text_hash: "hash".to_string(),
+            narrative_text: Some("Hello".to_string()),
+            narrative_text_hash: Some("hash".to_string()),
             mime_type: "audio/wav".to_string(),
             duration_ms: Some(250),
             leading_silence_ms: None,
@@ -4962,10 +5077,13 @@ mod tests {
         let mut sketch = Sketch::new("Frame Manifest Export");
         let mut row = PlanningRow::new();
         row.screenshot = None;
+        row.narrative = "Hello".to_string();
         row.narration = Some(NarrationAsset {
             path: "row-1.wav".to_string(),
             source_text: "Hello".to_string(),
             source_text_hash: "hash".to_string(),
+            narrative_text: Some("Hello".to_string()),
+            narrative_text_hash: Some("hash".to_string()),
             mime_type: "audio/wav".to_string(),
             duration_ms: Some(100),
             leading_silence_ms: None,
@@ -5090,10 +5208,13 @@ mod tests {
         row.visual = Some(serde_json::Value::String(
             ".cutready/visuals/intro.json".to_string(),
         ));
+        row.narrative = "Hello".to_string();
         row.narration = Some(NarrationAsset {
             path: "row-1.wav".to_string(),
             source_text: "Hello".to_string(),
             source_text_hash: "hash".to_string(),
+            narrative_text: Some("Hello".to_string()),
+            narrative_text_hash: Some("hash".to_string()),
             mime_type: "audio/wav".to_string(),
             duration_ms: Some(100),
             leading_silence_ms: None,
@@ -5208,10 +5329,13 @@ mod tests {
         let mut sketch = Sketch::new("Resolved Media Export");
         let mut row = PlanningRow::new();
         row.screenshot = None;
+        row.narrative = "Hello".to_string();
         row.narration = Some(NarrationAsset {
             path: "row-1.wav".to_string(),
             source_text: "Hello".to_string(),
             source_text_hash: "hash".to_string(),
+            narrative_text: Some("Hello".to_string()),
+            narrative_text_hash: Some("hash".to_string()),
             mime_type: "audio/wav".to_string(),
             duration_ms: Some(100),
             leading_silence_ms: None,
@@ -5337,10 +5461,13 @@ mod tests {
             font_family: Some("sans".to_string()),
             font_scale: Some(1.0),
         }];
+        row.narrative = "Hello".to_string();
         row.narration = Some(NarrationAsset {
             path: "row-1.wav".to_string(),
             source_text: "Hello".to_string(),
             source_text_hash: "hash".to_string(),
+            narrative_text: Some("Hello".to_string()),
+            narrative_text_hash: Some("hash".to_string()),
             mime_type: "audio/wav".to_string(),
             duration_ms: Some(100),
             leading_silence_ms: None,
@@ -5387,10 +5514,13 @@ mod tests {
         let mut sketch = Sketch::new("Unsafe Export");
         let mut row = PlanningRow::new();
         row.screenshot = Some("missing.png".to_string());
+        row.narrative = "Hello".to_string();
         row.narration = Some(NarrationAsset {
             path: "missing.wav".to_string(),
             source_text: "Hello".to_string(),
             source_text_hash: "hash".to_string(),
+            narrative_text: Some("Hello".to_string()),
+            narrative_text_hash: Some("hash".to_string()),
             mime_type: "audio/wav".to_string(),
             duration_ms: Some(250),
             leading_silence_ms: None,

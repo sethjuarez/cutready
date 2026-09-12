@@ -11,10 +11,14 @@ export type SketchState =
 export interface NarrationAsset {
   /** Project-relative path to recorded or generated narration audio. */
   path: string;
-  /** Narrative text used when this audio was recorded/generated. */
+  /** Spoken text used when this audio was recorded/generated. */
   source_text: string;
   /** SHA-256 of the source text. */
   source_text_hash: string;
+  /** Row narrative text when this audio was recorded/generated. */
+  narrative_text?: string | null;
+  /** SHA-256 of the row narrative text. */
+  narrative_text_hash?: string | null;
   mime_type: string;
   duration_ms?: number | null;
   /** Detected silence before speech begins, stored non-destructively for future trim/alignment. */

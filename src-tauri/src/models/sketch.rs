@@ -110,10 +110,16 @@ pub enum SketchState {
 pub struct NarrationAsset {
     /// Path to the audio asset relative to the project root.
     pub path: String,
-    /// The row narrative text at the moment this asset was recorded/generated.
+    /// Spoken text used when this audio was recorded/generated.
     pub source_text: String,
-    /// SHA-256 of `source_text` for future non-lossy staleness checks.
+    /// SHA-256 of `source_text`.
     pub source_text_hash: String,
+    /// Row narrative text at the moment this asset was recorded/generated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub narrative_text: Option<String>,
+    /// SHA-256 of `narrative_text` for non-lossy staleness checks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub narrative_text_hash: Option<String>,
     pub mime_type: String,
     pub duration_ms: Option<u32>,
     /// Detected silence before speech begins, stored non-destructively for future trim/alignment.

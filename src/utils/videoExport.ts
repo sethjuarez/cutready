@@ -81,7 +81,11 @@ export function getVideoExportIssues(rows: PlanningRow[], options?: VideoExportO
     ) {
       missing.push("screenshot for generated Scenecast resolved demo");
     }
-    if (!row.narration?.path?.trim()) missing.push("narration");
+    if (!row.narration?.path?.trim()) {
+      missing.push("narration");
+    } else if (row.narration.narrative_text != null && row.narration.narrative_text !== row.narrative) {
+      missing.push("fresh narration matching current narrative");
+    }
     return missing.length > 0 ? [{ rowNumber: index + 1, missing }] : [];
   });
 
