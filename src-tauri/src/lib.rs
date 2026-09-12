@@ -625,6 +625,7 @@ pub fn run() {
             commands::project::set_workspace_settings,
             commands::project::resolve_deep_link,
             commands::export::export_sketch_video,
+            commands::export::inspect_resolved_demo,
             commands::diagnostics::dump_diagnostics,
             commands::diagnostics::get_diagnostics_policy,
             commands::diagnostics::get_auditaur_diagnostics,

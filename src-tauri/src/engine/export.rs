@@ -9,6 +9,7 @@ use std::{
     sync::OnceLock,
 };
 
+use anyhow::Context;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -22,7 +23,7 @@ use crate::{
         narration_preview, project, scenecast_adapter,
     },
     models::{
-        resolved_demo::{ResolvedDemo, RESOLVED_DEMO_SCHEMA_VERSION},
+        resolved_demo::{ResolvedDemo, ResolvedDemoDiagnostic, RESOLVED_DEMO_SCHEMA_VERSION},
         sketch::{MotionPlan, MotionPlanKeyframe, Sketch, TypingSpot},
     },
 };
@@ -261,6 +262,31 @@ struct LoadedResolvedDemo {
     asset_base_dir: PathBuf,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedDemoInspection {
+    pub schema_version: String,
+    pub title: String,
+    pub can_export: bool,
+    pub blocking_error: Option<String>,
+    pub diagnostic_count: usize,
+    pub row_count: usize,
+    pub rows: Vec<ResolvedDemoRowInspection>,
+    pub diagnostics: Vec<ResolvedDemoDiagnostic>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedDemoRowInspection {
+    pub row_number: usize,
+    pub step_count: usize,
+    pub segment_count: usize,
+    pub duration_seconds: Option<f64>,
+    pub media_asset_count: usize,
+    pub missing_asset_count: usize,
+    pub invalid_asset_count: usize,
+}
+
 /// Planned timeline buckets before ffmpeg frame quantization and media probing.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct ExportTimelineTiming {
@@ -421,6 +447,56 @@ pub fn render_background_music_preview(
     Ok(BackgroundMusicPreview {
         path: output_path.to_string_lossy().to_string(),
         duration_seconds,
+    })
+}
+
+pub fn inspect_resolved_demo(
+    project_root: &Path,
+    path: &str,
+    row_count: usize,
+) -> anyhow::Result<ResolvedDemoInspection> {
+    let path = project::safe_resolve(project_root, path)?;
+    let value: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(&path)
+            .with_context(|| format!("Could not read resolved demo file {}", path.display()))?,
+    )
+    .with_context(|| format!("Could not parse resolved demo JSON {}", path.display()))?;
+    let schema_version = value
+        .get("schemaVersion")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Resolved demo is missing schemaVersion"))?;
+    if schema_version != RESOLVED_DEMO_SCHEMA_VERSION {
+        anyhow::bail!(
+            "Unsupported resolved demo schemaVersion `{schema_version}`; expected `{RESOLVED_DEMO_SCHEMA_VERSION}`"
+        );
+    }
+
+    let demo: ResolvedDemo = serde_json::from_value(value)
+        .with_context(|| format!("Could not parse resolved demo schema {}", path.display()))?;
+    let blocking_error = demo
+        .validate_for_row_count(row_count)
+        .err()
+        .map(|error| error.to_string());
+    let loaded = LoadedResolvedDemo {
+        demo: demo.clone(),
+        asset_base_dir: path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| project_root.to_path_buf()),
+    };
+    let rows = (1..=row_count)
+        .map(|row_number| inspect_resolved_demo_row(&loaded, row_number))
+        .collect();
+
+    Ok(ResolvedDemoInspection {
+        schema_version: demo.schema_version,
+        title: demo.title,
+        can_export: blocking_error.is_none(),
+        blocking_error,
+        diagnostic_count: demo.diagnostics.len(),
+        row_count,
+        rows,
+        diagnostics: demo.diagnostics,
     })
 }
 
@@ -1201,6 +1277,77 @@ fn is_missing_resolved_demo_asset_error(error: &anyhow::Error) -> bool {
             .to_string()
             .contains("Resolved demo asset does not exist")
     })
+}
+
+fn inspect_resolved_demo_row(
+    loaded: &LoadedResolvedDemo,
+    row_number: usize,
+) -> ResolvedDemoRowInspection {
+    let row_order = row_number.saturating_sub(1) as u32;
+    let step_ids = loaded
+        .demo
+        .steps
+        .iter()
+        .filter(|step| step.order == row_order)
+        .map(|step| step.id.as_str())
+        .collect::<HashSet<_>>();
+    let mut media_asset_count = 0usize;
+    let mut missing_asset_count = 0usize;
+    let mut invalid_asset_count = 0usize;
+    let mut segment_count = 0usize;
+    for segment in loaded
+        .demo
+        .segments
+        .iter()
+        .filter(|segment| step_ids.contains(segment.step_id.as_str()))
+    {
+        segment_count += 1;
+        if segment.frames.is_empty() {
+            if let Some(capture) = segment.capture.as_ref() {
+                inspect_resolved_demo_asset(
+                    &loaded.asset_base_dir,
+                    &capture.path,
+                    &mut media_asset_count,
+                    &mut missing_asset_count,
+                    &mut invalid_asset_count,
+                );
+            }
+        } else {
+            for frame in &segment.frames {
+                inspect_resolved_demo_asset(
+                    &loaded.asset_base_dir,
+                    &frame.path,
+                    &mut media_asset_count,
+                    &mut missing_asset_count,
+                    &mut invalid_asset_count,
+                );
+            }
+        }
+    }
+
+    ResolvedDemoRowInspection {
+        row_number,
+        step_count: step_ids.len(),
+        segment_count,
+        duration_seconds: loaded.demo.row_playback_duration_seconds(row_number),
+        media_asset_count,
+        missing_asset_count,
+        invalid_asset_count,
+    }
+}
+
+fn inspect_resolved_demo_asset(
+    asset_base_dir: &Path,
+    asset_path: &str,
+    media_asset_count: &mut usize,
+    missing_asset_count: &mut usize,
+    invalid_asset_count: &mut usize,
+) {
+    match resolve_resolved_demo_asset_path(asset_base_dir, asset_path) {
+        Ok(_) => *media_asset_count += 1,
+        Err(error) if is_missing_resolved_demo_asset_error(&error) => *missing_asset_count += 1,
+        Err(_) => *invalid_asset_count += 1,
+    }
 }
 
 fn resolved_demo_frame_sequence_for_row(
@@ -3926,6 +4073,124 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("Unsupported resolved demo schemaVersion"));
+    }
+
+    #[test]
+    fn inspect_resolved_demo_reports_row_coverage_and_assets() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+        let schema_dir = root.join(".cutready").join("scenecast");
+        let captures_dir = schema_dir.join("captures");
+        let frames_dir = schema_dir.join("frames");
+        fs::create_dir_all(&captures_dir).unwrap();
+        fs::create_dir_all(&frames_dir).unwrap();
+        fs::write(captures_dir.join("row-1.png"), b"capture").unwrap();
+        fs::write(frames_dir.join("row-1.png"), b"frame").unwrap();
+        fs::write(
+            schema_dir.join("resolved-demo.json"),
+            serde_json::json!({
+                "schemaVersion": "scenecast.resolved-demo.v1",
+                "title": "Demo",
+                "startSceneId": "start",
+                "capturePolicy": {
+                    "kind": "reference-existing-assets",
+                    "assetBase": "bundle-relative",
+                    "missingCaptureBehavior": "diagnostic"
+                },
+                "steps": [
+                    {
+                        "id": "step-start",
+                        "order": 0,
+                        "sceneId": "start",
+                        "title": "Start",
+                        "targets": [],
+                        "guideMarks": []
+                    },
+                    {
+                        "id": "step-empty",
+                        "order": 1,
+                        "sceneId": "empty",
+                        "title": "Empty",
+                        "targets": [],
+                        "guideMarks": []
+                    }
+                ],
+                "segments": [{
+                    "id": "segment-start",
+                    "kind": "scene",
+                    "stepId": "step-start",
+                    "startMs": 0,
+                    "durationMs": 250,
+                    "endMs": 250,
+                    "capture": { "path": "captures/stale.png" },
+                    "interaction": null,
+                    "frames": [{ "path": "frames/row-1.png", "durationMs": 250 }],
+                    "waitMs": 0
+                }],
+                "diagnostics": [{
+                    "severity": "warning",
+                    "code": "demo_note",
+                    "message": "Informational warning"
+                }]
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let inspection =
+            inspect_resolved_demo(root, ".cutready/scenecast/resolved-demo.json", 2).unwrap();
+
+        assert!(inspection.can_export);
+        assert_eq!(inspection.title, "Demo");
+        assert_eq!(inspection.diagnostic_count, 1);
+        assert_eq!(inspection.rows.len(), 2);
+        assert_eq!(inspection.rows[0].step_count, 1);
+        assert_eq!(inspection.rows[0].segment_count, 1);
+        assert_eq!(inspection.rows[0].media_asset_count, 1);
+        assert_eq!(inspection.rows[0].missing_asset_count, 0);
+        assert_seconds(inspection.rows[0].duration_seconds.unwrap(), 0.25);
+        assert_eq!(inspection.rows[1].step_count, 1);
+        assert_eq!(inspection.rows[1].segment_count, 0);
+        assert_eq!(inspection.rows[1].duration_seconds, None);
+        assert_eq!(inspection.rows[1].media_asset_count, 0);
+    }
+
+    #[test]
+    fn inspect_resolved_demo_returns_blocking_diagnostic_as_data() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+        fs::write(
+            root.join("resolved-demo.json"),
+            serde_json::json!({
+                "schemaVersion": "scenecast.resolved-demo.v1",
+                "title": "Demo",
+                "startSceneId": "start",
+                "capturePolicy": {
+                    "kind": "reference-existing-assets",
+                    "assetBase": "bundle-relative",
+                    "missingCaptureBehavior": "diagnostic"
+                },
+                "steps": [],
+                "segments": [],
+                "diagnostics": [{
+                    "severity": "error",
+                    "code": "missing_scene",
+                    "message": "Scene could not be resolved"
+                }]
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let inspection = inspect_resolved_demo(root, "resolved-demo.json", 1).unwrap();
+
+        assert!(!inspection.can_export);
+        assert!(inspection
+            .blocking_error
+            .as_deref()
+            .unwrap()
+            .contains("missing_scene"));
+        assert_eq!(inspection.diagnostics[0].severity, "error");
     }
 
     #[test]

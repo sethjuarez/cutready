@@ -30,6 +30,12 @@ const checks = [
     forbiddenOutput: ["Skipping resolved demo media export test", "Skipping resolved demo media overlay test"],
   },
   {
+    id: "resolved-demo-inspection",
+    description: "Resolved-demo inspection reports row coverage, diagnostics, and blocking schema state",
+    args: ["test", "-p", "cutready", "inspect_resolved_demo", "--lib", "--quiet"],
+    expectedMinTests: 2,
+  },
+  {
     id: "scenecast-adapter",
     description: "CutReady sketch rows materialize into portable Scenecast bundles and CLI export calls",
     args: ["test", "-p", "cutready", "scenecast_adapter", "--lib", "--quiet"],

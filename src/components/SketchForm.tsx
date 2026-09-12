@@ -49,6 +49,7 @@ import {
   getVideoExportCoverage,
   getVideoExportIssues,
   normalizeVideoExportOptions,
+  isSafeProjectRelativePath,
   selectedFileToProjectRelativePath,
   type VideoExportIssue,
   type VideoExportMediaSource,
@@ -73,6 +74,36 @@ type ProjectAsset = { path: string; size: number; assetType: string };
 type ProjectAudioAsset = { path: string; size: number; mimeType: string; modifiedAt: number };
 type SketchVideoExport = { path: string; duration_seconds: number; row_count: number };
 type SketchVideoExportProgress = { phase: string; current: number; total: number; message: string };
+type ResolvedDemoInspection = {
+  schemaVersion: string;
+  title: string;
+  canExport: boolean;
+  blockingError?: string | null;
+  diagnosticCount: number;
+  rowCount: number;
+  rows: ResolvedDemoRowInspection[];
+  diagnostics: ResolvedDemoDiagnostic[];
+};
+type ResolvedDemoRowInspection = {
+  rowNumber: number;
+  stepCount: number;
+  segmentCount: number;
+  durationSeconds?: number | null;
+  mediaAssetCount: number;
+  missingAssetCount: number;
+  invalidAssetCount: number;
+};
+type ResolvedDemoDiagnostic = {
+  severity: string;
+  code: string;
+  message: string;
+};
+type ResolvedDemoInspectionState = {
+  path: string;
+  loading: boolean;
+  inspection: ResolvedDemoInspection | null;
+  error: string | null;
+};
 type NarrationGenerationProgress = { phase: string; current: number; total: number; message: string };
 type AgentStreamEvent = { type: string; content?: string; client_run_id?: string };
 type SketchVideoExportSettings = {
@@ -467,13 +498,50 @@ function VideoExportOptionsDialog({
   const coverage = getVideoExportCoverage(rows, normalizedOptions);
   const resolvedMediaRows = coverage.filter((row) => row.usesResolvedDemoMedia).length;
   const resolvedTimingRows = coverage.filter((row) => row.timingSource === "resolved-demo").length;
+  const [resolvedDemoInspection, setResolvedDemoInspection] = useState<ResolvedDemoInspectionState | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setOptions(emptyVideoExportOptions(rows.length));
       setPathError(null);
+      setResolvedDemoInspection(null);
     }
   }, [isOpen, rows.length]);
+
+  useEffect(() => {
+    const path = normalizedOptions.resolvedDemoPath;
+    if (!isOpen || !path || !isSafeProjectRelativePath(path)) {
+      setResolvedDemoInspection(null);
+      return;
+    }
+
+    let cancelled = false;
+    setResolvedDemoInspection({ path, loading: true, inspection: null, error: null });
+    const timeout = window.setTimeout(() => {
+      void invoke<ResolvedDemoInspection>("inspect_resolved_demo", {
+        relativePath: path,
+        rowCount: rows.length,
+      })
+        .then((inspection) => {
+          if (!cancelled) setResolvedDemoInspection({ path, loading: false, inspection, error: null });
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            setResolvedDemoInspection({
+              path,
+              loading: false,
+              inspection: null,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [isOpen, normalizedOptions.resolvedDemoPath, rows.length]);
 
   const chooseJsonPath = useCallback(async (onSelected: (relativePath: string) => void) => {
     setPathError(null);
@@ -601,17 +669,20 @@ function VideoExportOptionsDialog({
               </div>
               <div className="mt-3 grid gap-1.5">
                 {coverage.map((rowCoverage) => (
-                  <div
+                  <ResolvedDemoCoverageRow
                     key={rowCoverage.rowNumber}
-                    className="grid grid-cols-[3rem_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-xl border border-[rgb(var(--color-border))]/70 bg-[rgb(var(--color-surface))]/70 px-2.5 py-2 text-[11px]"
-                  >
-                    <span className="font-medium text-[rgb(var(--color-text-secondary))]">Row {rowCoverage.rowNumber}</span>
-                    <span className="truncate text-[rgb(var(--color-text))]">{rowCoverage.label}</span>
-                    <SourceBadge source={rowCoverage.mediaSource} />
-                    <TimingBadge source={rowCoverage.timingSource} />
-                  </div>
+                    coverage={rowCoverage}
+                    inspection={resolvedDemoInspection?.path === normalizedOptions.resolvedDemoPath
+                      ? resolvedDemoInspection.inspection?.rows.find((row) => row.rowNumber === rowCoverage.rowNumber) ?? null
+                      : null}
+                  />
                 ))}
               </div>
+              {normalizedOptions.resolvedDemoPath && (
+                <ResolvedDemoInspectionPanel
+                  state={resolvedDemoInspection?.path === normalizedOptions.resolvedDemoPath ? resolvedDemoInspection : null}
+                />
+              )}
             </div>
           )}
 
@@ -681,6 +752,84 @@ function VideoExportOptionsDialog({
       </div>
     </Dialog>
   );
+}
+
+function ResolvedDemoCoverageRow({
+  coverage,
+  inspection,
+}: {
+  coverage: ReturnType<typeof getVideoExportCoverage>[number];
+  inspection: ResolvedDemoRowInspection | null;
+}) {
+  return (
+    <div className="grid grid-cols-[3rem_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-xl border border-[rgb(var(--color-border))]/70 bg-[rgb(var(--color-surface))]/70 px-2.5 py-2 text-[11px]">
+      <span className="font-medium text-[rgb(var(--color-text-secondary))]">Row {coverage.rowNumber}</span>
+      <span className="min-w-0">
+        <span className="block truncate text-[rgb(var(--color-text))]">{coverage.label}</span>
+        {inspection && (
+          <span className="mt-0.5 block truncate text-[rgb(var(--color-text-secondary))]">
+            {inspection.segmentCount} segment{inspection.segmentCount === 1 ? "" : "s"}
+            {inspection.durationSeconds != null ? `, ${formatCompactSeconds(inspection.durationSeconds)}` : ""}
+            {inspection.mediaAssetCount > 0 ? `, ${inspection.mediaAssetCount} demo media asset${inspection.mediaAssetCount === 1 ? "" : "s"}` : ""}
+            {inspection.missingAssetCount > 0 ? `, ${inspection.missingAssetCount} missing demo asset${inspection.missingAssetCount === 1 ? "" : "s"}` : ""}
+            {inspection.invalidAssetCount > 0 ? `, ${inspection.invalidAssetCount} invalid demo asset${inspection.invalidAssetCount === 1 ? "" : "s"}` : ""}
+          </span>
+        )}
+      </span>
+      <SourceBadge source={coverage.mediaSource} />
+      <TimingBadge source={coverage.timingSource} />
+    </div>
+  );
+}
+
+function ResolvedDemoInspectionPanel({ state }: { state: ResolvedDemoInspectionState | null }) {
+  if (!state) return null;
+  if (state.loading) {
+    return (
+      <div className="mt-3 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/70 px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))]">
+        Inspecting resolved demo...
+      </div>
+    );
+  }
+  if (state.error) {
+    return (
+      <div className="mt-3 rounded-xl border border-[rgb(var(--color-warning))]/30 bg-[rgb(var(--color-warning))]/10 px-3 py-2 text-xs leading-5 text-[rgb(var(--color-text))]">
+        Could not inspect resolved demo: {state.error}
+      </div>
+    );
+  }
+  if (!state.inspection) return null;
+
+  const diagnostics = state.inspection.diagnostics.slice(0, 3);
+  return (
+    <div className="mt-3 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/70 px-3 py-2 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold text-[rgb(var(--color-text))]">{state.inspection.title}</span>
+        <span>{state.inspection.rowCount} row{state.inspection.rowCount === 1 ? "" : "s"}</span>
+        <span>{state.inspection.diagnosticCount} diagnostic{state.inspection.diagnosticCount === 1 ? "" : "s"}</span>
+        <span className={state.inspection.canExport ? "text-[rgb(var(--color-accent))]" : "text-[rgb(var(--color-warning))]"}>
+          {state.inspection.canExport ? "schema valid" : "blocked"}
+        </span>
+      </div>
+      {state.inspection.blockingError && (
+        <div className="mt-1 text-[rgb(var(--color-warning))]">{state.inspection.blockingError}</div>
+      )}
+      {diagnostics.length > 0 && (
+        <div className="mt-2 space-y-1">
+          {diagnostics.map((diagnostic, index) => (
+            <div key={`${index}-${diagnostic.severity}-${diagnostic.code}-${diagnostic.message}`}>
+              <span className="font-medium text-[rgb(var(--color-text))]">{diagnostic.severity}</span>{" "}
+              <span className="font-mono">{diagnostic.code}</span>: {diagnostic.message}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatCompactSeconds(value: number): string {
+  return `${value.toFixed(value < 10 ? 2 : 1).replace(/\.?0+$/, "")}s`;
 }
 
 function SourceBadge({ source }: { source: VideoExportMediaSource }) {

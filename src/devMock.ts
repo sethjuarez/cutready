@@ -190,6 +190,28 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return MOCK_SKETCH;
     case "save_sketch":
       return null;
+    case "inspect_resolved_demo":
+      {
+        const rowCount = typeof args?.rowCount === "number" ? args.rowCount : 3;
+      return {
+        schemaVersion: "scenecast.resolved-demo.v1",
+        title: "Mock resolved demo",
+        canExport: true,
+        blockingError: null,
+        diagnosticCount: 0,
+        rowCount,
+        rows: Array.from({ length: rowCount }, (_, index) => ({
+          rowNumber: index + 1,
+          stepCount: 1,
+          segmentCount: 1,
+          durationSeconds: 2.5,
+          mediaAssetCount: 1,
+          missingAssetCount: 0,
+          invalidAssetCount: 0,
+        })),
+        diagnostics: [],
+      };
+      }
     case "export_sketch_video":
       sendMockProgress(args, {
         phase: "title",
