@@ -90,6 +90,42 @@ export interface MotionPlan {
   rationale?: string | null;
 }
 
+export type InteractionCapturePolicy = "before_after" | "before_after_and_motion";
+export type WaitEditPolicy = "keep_natural" | "compress_wait" | "show_start_and_end" | "cut_to_completion" | "keep_visible";
+
+export type DemoStep =
+  | { kind: "navigate"; target: string }
+  | { kind: "click"; target: string; capture?: InteractionCapturePolicy | null }
+  | { kind: "type"; text: string; target?: string | null; clear_first?: boolean | null }
+  | { kind: "select"; target: string; value: string }
+  | { kind: "wait_for"; condition: string; timeout_ms?: number | null; edit_policy?: WaitEditPolicy | null }
+  | { kind: "highlight"; target: string };
+
+export interface FramingRect {
+  /** Normalized left edge, relative to the row screenshot or visual. */
+  x: number;
+  /** Normalized top edge, relative to the row screenshot or visual. */
+  y: number;
+  /** Normalized width, relative to the row screenshot or visual. */
+  width: number;
+  /** Normalized height, relative to the row screenshot or visual. */
+  height: number;
+}
+
+export type FramingEasing = "linear" | "ease_in_out" | "ease_out";
+
+export type FramingBeat =
+  | { kind: "full_screen"; at_ms?: number }
+  | {
+      kind: "zoom_to";
+      at_ms?: number;
+      target?: string | null;
+      rect?: FramingRect | null;
+      duration_ms?: number | null;
+      easing?: FramingEasing | null;
+    }
+  | { kind: "hold"; at_ms?: number; duration_ms: number };
+
 export interface PlanningRow {
   /** Whether the entire row is protected from edits. */
   locked?: boolean;
@@ -100,6 +136,8 @@ export interface PlanningRow {
   duration_seconds?: number | null;
   narrative: string;
   demo_actions: string;
+  /** Normalized walkthrough steps compiled from prose actions or rough recordings. */
+  demo_steps?: DemoStep[] | null;
   screenshot: string | null;
   /** Path to an elucim visual file (e.g., ".cutready/visuals/abc123.json"). */
   visual?: string | null;
@@ -109,6 +147,8 @@ export interface PlanningRow {
   typing_spots?: TypingSpot[] | null;
   /** Agent-generated camera motion plan for screenshot rows. */
   motion_plan?: MotionPlan | null;
+  /** Editorial camera/framing beats for zoom, pan, crop, and hold intent; times are row-relative. */
+  framing_beats?: FramingBeat[] | null;
   /** English-language design brief for the visual (created by Designer agent Pass 1). */
   design_plan?: string | null;
   /** Recorded or generated narration audio attached to this row. */

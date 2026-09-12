@@ -932,8 +932,10 @@ fn row_content_matches(
     old.time == new.time
         && old.narrative == new.narrative
         && old.demo_actions == new.demo_actions
+        && old.demo_steps == new.demo_steps
         && old.screenshot == new.screenshot
         && old.visual == new.visual
+        && old.framing_beats == new.framing_beats
         && old.design_plan == new.design_plan
 }
 
@@ -3436,6 +3438,22 @@ mod tests {
     }
 
     #[test]
+    fn row_update_rejects_locked_row_compiled_intent_change() {
+        let mut old = crate::models::sketch::PlanningRow::new();
+        old.locked = true;
+        old.demo_steps = vec![crate::models::sketch::DemoStep::Click {
+            target: "Generate".into(),
+            capture: None,
+        }];
+
+        let mut new = old.clone();
+        new.demo_steps.clear();
+
+        let err = validate_rows_update_allowed(&[old], &[new]).unwrap_err();
+        assert!(err.to_string().contains("Planning row 1 is locked"));
+    }
+
+    #[test]
     fn scan_sketches_finds_all() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
@@ -4125,7 +4143,10 @@ Some text
             read_workspace_state(root, &beta).active_tab_id.as_deref(),
             Some("tab-1")
         );
-        assert_eq!(read_sidebar_order(root, &beta).sketches, vec!["b.sk", "a.sk"]);
+        assert_eq!(
+            read_sidebar_order(root, &beta).sketches,
+            vec!["b.sk", "a.sk"]
+        );
     }
 
     #[test]

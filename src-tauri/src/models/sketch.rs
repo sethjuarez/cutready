@@ -231,6 +231,113 @@ pub enum MotionPlanEasing {
     EaseOut,
 }
 
+/// High-level walkthrough intent derived from row action prose or a recorded demo.
+///
+/// This sits between `demo_actions` prose and low-level replay `Action` values:
+/// prose remains user-authored, demo steps capture normalized intent, and replay
+/// actions bind that intent to concrete browser/native selectors.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DemoStep {
+    Navigate {
+        target: String,
+    },
+    Click {
+        target: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        capture: Option<InteractionCapturePolicy>,
+    },
+    Type {
+        text: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        target: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        clear_first: Option<bool>,
+    },
+    Select {
+        target: String,
+        value: String,
+    },
+    WaitFor {
+        condition: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        timeout_ms: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        edit_policy: Option<WaitEditPolicy>,
+    },
+    Highlight {
+        target: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum InteractionCapturePolicy {
+    BeforeAfter,
+    BeforeAfterAndMotion,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum WaitEditPolicy {
+    KeepNatural,
+    CompressWait,
+    ShowStartAndEnd,
+    CutToCompletion,
+    KeepVisible,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FramingRect {
+    /// Normalized left edge, relative to the row screenshot or visual.
+    pub x: f32,
+    /// Normalized top edge, relative to the row screenshot or visual.
+    pub y: f32,
+    /// Normalized width, relative to the row screenshot or visual.
+    pub width: f32,
+    /// Normalized height, relative to the row screenshot or visual.
+    pub height: f32,
+}
+
+/// Editorial camera intent for a sketch row, separate from interaction replay.
+///
+/// `at_ms` values are relative to the start of this planning row. These beats
+/// express authoring intent; `motion_plan` is the compiled export-era camera
+/// plan derived from or superseded by this higher-level intent.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum FramingBeat {
+    FullScreen {
+        #[serde(default)]
+        at_ms: u32,
+    },
+    ZoomTo {
+        #[serde(default)]
+        at_ms: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        target: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rect: Option<FramingRect>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        duration_ms: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        easing: Option<FramingEasing>,
+    },
+    Hold {
+        #[serde(default)]
+        at_ms: u32,
+        duration_ms: u32,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum FramingEasing {
+    Linear,
+    EaseInOut,
+    EaseOut,
+}
+
 /// A row in the sketch planning table (4 columns).
 ///
 /// Row identity is its array index — no UUID needed.
@@ -251,6 +358,13 @@ pub struct PlanningRow {
     pub narrative: String,
     /// Demo action bullet points for this step.
     pub demo_actions: String,
+    /// Normalized walkthrough steps compiled from prose actions or rough recordings.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_vec_or_default",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub demo_steps: Vec<DemoStep>,
     /// Path to a captured screenshot (relative to project dir).
     pub screenshot: Option<String>,
     /// Optional elucim DSL document for an animated framing visual.
@@ -273,6 +387,13 @@ pub struct PlanningRow {
     /// Agent-generated camera motion plan for screenshot rows.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub motion_plan: Option<MotionPlan>,
+    /// Editorial camera/framing beats for zoom, pan, crop, and hold intent.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_vec_or_default",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub framing_beats: Vec<FramingBeat>,
     /// English-language design brief describing layout, elements, colors, and animation intent.
     /// Created by the Designer agent's conceptual pass before generating DSL JSON.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -294,11 +415,13 @@ impl PlanningRow {
             duration_seconds: None,
             narrative: String::new(),
             demo_actions: String::new(),
+            demo_steps: Vec::new(),
             screenshot: None,
             visual: None,
             motion_points: Vec::new(),
             typing_spots: Vec::new(),
             motion_plan: None,
+            framing_beats: Vec::new(),
             design_plan: None,
             narration: None,
             narration_plan: None,
@@ -691,11 +814,13 @@ mod tests {
             duration_seconds: Some(30),
             narrative: "Click the button".into(),
             demo_actions: "Navigate, click CTA".into(),
+            demo_steps: Vec::new(),
             screenshot: Some("screenshots/step1.png".into()),
             visual: None,
             motion_points: Vec::new(),
             typing_spots: Vec::new(),
             motion_plan: None,
+            framing_beats: Vec::new(),
             design_plan: None,
             narration: None,
             narration_plan: None,
@@ -769,6 +894,8 @@ mod tests {
         assert!(row.duration_seconds.is_none());
         assert!(row.narrative.is_empty());
         assert!(row.demo_actions.is_empty());
+        assert!(row.demo_steps.is_empty());
+        assert!(row.framing_beats.is_empty());
         assert!(row.screenshot.is_none());
     }
 
@@ -787,6 +914,8 @@ mod tests {
         .unwrap();
 
         assert!(row.motion_points.is_empty());
+        assert!(row.demo_steps.is_empty());
+        assert!(row.framing_beats.is_empty());
         assert!(row.motion_plan.is_none());
         assert!(row.narration_plan.is_none());
     }
@@ -837,6 +966,20 @@ mod tests {
             duration_seconds: Some(30),
             narrative: "Click the sign-up button".into(),
             demo_actions: "Navigate to /signup, click CTA".into(),
+            demo_steps: vec![
+                DemoStep::Navigate {
+                    target: "/signup".into(),
+                },
+                DemoStep::Click {
+                    target: "CTA".into(),
+                    capture: Some(InteractionCapturePolicy::BeforeAfterAndMotion),
+                },
+                DemoStep::WaitFor {
+                    condition: "dashboard appears".into(),
+                    timeout_ms: Some(30_000),
+                    edit_policy: Some(WaitEditPolicy::CompressWait),
+                },
+            ],
             screenshot: Some("screenshots/step1.png".into()),
             visual: None,
             motion_points: vec![MotionPoint {
@@ -879,6 +1022,25 @@ mod tests {
                 ],
                 rationale: Some("Push toward the primary CTA.".into()),
             }),
+            framing_beats: vec![
+                FramingBeat::FullScreen { at_ms: 0 },
+                FramingBeat::ZoomTo {
+                    at_ms: 900,
+                    target: Some("Primary CTA".into()),
+                    rect: Some(FramingRect {
+                        x: 0.55,
+                        y: 0.35,
+                        width: 0.25,
+                        height: 0.2,
+                    }),
+                    duration_ms: Some(700),
+                    easing: Some(FramingEasing::EaseOut),
+                },
+                FramingBeat::Hold {
+                    at_ms: 1_600,
+                    duration_ms: 400,
+                },
+            ],
             design_plan: None,
             narration: None,
             narration_plan: None,
@@ -889,6 +1051,16 @@ mod tests {
         assert_eq!(parsed.duration_seconds, Some(30));
         assert_eq!(parsed.screenshot, Some("screenshots/step1.png".into()));
         assert_eq!(parsed.motion_points.len(), 1);
+        assert_eq!(parsed.demo_steps.len(), 3);
+        assert_eq!(
+            parsed.demo_steps[2],
+            DemoStep::WaitFor {
+                condition: "dashboard appears".into(),
+                timeout_ms: Some(30_000),
+                edit_policy: Some(WaitEditPolicy::CompressWait),
+            }
+        );
+        assert_eq!(parsed.framing_beats.len(), 3);
         assert_eq!(parsed.typing_spots.len(), 1);
         assert_eq!(parsed.typing_spots[0].text, "Create a workspace");
         assert_eq!(
@@ -899,6 +1071,32 @@ mod tests {
             parsed.motion_plan.as_ref().map(|plan| &plan.kind),
             Some(&MotionPlanKind::SubtlePush)
         );
+    }
+
+    #[test]
+    fn planning_row_demo_steps_use_snake_case_schema_names() {
+        let row = PlanningRow {
+            demo_steps: vec![DemoStep::WaitFor {
+                condition: "rows appear".into(),
+                timeout_ms: Some(30_000),
+                edit_policy: Some(WaitEditPolicy::ShowStartAndEnd),
+            }],
+            framing_beats: vec![FramingBeat::ZoomTo {
+                at_ms: 500,
+                target: Some("generated outline".into()),
+                rect: None,
+                duration_ms: Some(800),
+                easing: Some(FramingEasing::EaseInOut),
+            }],
+            ..PlanningRow::new()
+        };
+
+        let value = serde_json::to_value(row).unwrap();
+
+        assert_eq!(value["demo_steps"][0]["kind"], "wait_for");
+        assert_eq!(value["demo_steps"][0]["edit_policy"], "show_start_and_end");
+        assert_eq!(value["framing_beats"][0]["kind"], "zoom_to");
+        assert_eq!(value["framing_beats"][0]["easing"], "ease_in_out");
     }
 
     #[test]

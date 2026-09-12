@@ -21,7 +21,7 @@ use crate::engine::visual_document::{
     normalize_visual_document_for_save, normalize_visual_to_v2, validate_agentic_visual,
     validate_dsl_doc, visual_to_renderable_v1,
 };
-use crate::models::sketch::{MotionPlan, MotionPoint, PlanningRow, Sketch};
+use crate::models::sketch::{DemoStep, FramingBeat, MotionPlan, MotionPoint, PlanningRow, Sketch};
 
 // `ToolDefinition` / `ToolFunctionDefinition` (the wire shape of the tool
 // contract) now live in the `harness-contract` crate. Re-exported here so the
@@ -2327,6 +2327,11 @@ fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .into(),
+                demo_steps: r
+                    .get("demo_steps")
+                    .cloned()
+                    .and_then(|value| serde_json::from_value::<Vec<DemoStep>>(value).ok())
+                    .unwrap_or_default(),
                 screenshot: r
                     .get("screenshot")
                     .and_then(|v| v.as_str())
@@ -2348,6 +2353,11 @@ fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
                     .get("motion_plan")
                     .cloned()
                     .and_then(|value| serde_json::from_value::<MotionPlan>(value).ok()),
+                framing_beats: r
+                    .get("framing_beats")
+                    .cloned()
+                    .and_then(|value| serde_json::from_value::<Vec<FramingBeat>>(value).ok())
+                    .unwrap_or_default(),
                 design_plan: r
                     .get("design_plan")
                     .and_then(|v| v.as_str())
@@ -2403,6 +2413,8 @@ fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
         sketch.description = serde_json::Value::String(d.to_string());
     }
 
+    preserve_missing_compiled_row_intent(&sketch.rows, rows_val, &mut new_rows);
+
     if let Err(e) = project::validate_rows_update_allowed(&sketch.rows, &new_rows) {
         return ToolOutput::failed(format!("Error: {e}"));
     }
@@ -2413,6 +2425,30 @@ fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
     match project::write_sketch(&sketch, &path, root) {
         Ok(()) => ToolOutput::from(format!("Set {count} planning rows in {}", path.display())),
         Err(e) => ToolOutput::failed(format!("Error writing sketch: {e}")),
+    }
+}
+
+fn preserve_missing_compiled_row_intent(
+    existing: &[PlanningRow],
+    rows_value: &Value,
+    updated: &mut [PlanningRow],
+) {
+    let Some(rows) = rows_value.as_array() else {
+        return;
+    };
+    for ((old, raw), new) in existing.iter().zip(rows.iter()).zip(updated.iter_mut()) {
+        if !raw
+            .as_object()
+            .is_some_and(|row| row.contains_key("demo_steps"))
+        {
+            new.demo_steps = old.demo_steps.clone();
+        }
+        if !raw
+            .as_object()
+            .is_some_and(|row| row.contains_key("framing_beats"))
+        {
+            new.framing_beats = old.framing_beats.clone();
+        }
     }
 }
 
@@ -2568,7 +2604,9 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> ToolOutput {
     };
 
     if sketch.locked {
-        return ToolOutput::failed("Error: This sketch is locked. Unlock it before editing with AI.");
+        return ToolOutput::failed(
+            "Error: This sketch is locked. Unlock it before editing with AI.",
+        );
     }
     if sketch.rows[index].locked {
         return ToolOutput::failed(format!(
@@ -2823,7 +2861,9 @@ fn exec_apply_row_visual_nudge(root: &Path, args: &Value) -> ToolOutput {
     };
     let changed = count_changed_paths(&before, &updated);
     if let Err(e) = validate_agentic_visual(&updated) {
-        return ToolOutput::failed(format!("Nudge produced an invalid visual; nothing saved:\n  • {e}"));
+        return ToolOutput::failed(format!(
+            "Nudge produced an invalid visual; nothing saved:\n  • {e}"
+        ));
     }
     match save_row_visual(root, &path, &mut sketch, index, &updated) {
         Ok(rel_path) => ToolOutput::from(format!(
@@ -2858,7 +2898,9 @@ fn exec_apply_row_visual_command(root: &Path, args: &Value) -> ToolOutput {
     };
     let changed = count_changed_paths(&before, &updated);
     if let Err(e) = validate_agentic_visual(&updated) {
-        return ToolOutput::failed(format!("Command produced an invalid visual; nothing saved:\n  • {e}"));
+        return ToolOutput::failed(format!(
+            "Command produced an invalid visual; nothing saved:\n  • {e}"
+        ));
     }
     let op = command
         .get("op")
@@ -4170,7 +4212,9 @@ fn flatten_nodes(children: &[Value]) -> Vec<&Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::sketch::Sketch;
+    use crate::models::sketch::{
+        FramingEasing, FramingRect, InteractionCapturePolicy, Sketch, WaitEditPolicy,
+    };
     use serde_json::json;
     use tempfile::TempDir;
 
@@ -4233,8 +4277,7 @@ mod tests {
         std::fs::create_dir_all(&outside).unwrap();
         std::fs::write(outside.join("leak.png"), b"not really an image").unwrap();
 
-        let (_text, image_parts) =
-            extract_and_encode_images("![leak](../outside/leak.png)", &root);
+        let (_text, image_parts) = extract_and_encode_images("![leak](../outside/leak.png)", &root);
 
         assert!(
             image_parts.is_empty(),
@@ -4351,11 +4394,13 @@ mod tests {
             duration_seconds: None,
             narrative: "Narrate".into(),
             demo_actions: "Act".into(),
+            demo_steps: Vec::new(),
             screenshot: None,
             visual: None,
             motion_points: Vec::new(),
             typing_spots: Vec::new(),
             motion_plan: None,
+            framing_beats: Vec::new(),
             design_plan: None,
             narration: None,
             narration_plan: None,
@@ -4658,7 +4703,10 @@ mod tests {
 
         // Success: write a note with mutations enabled.
         let ok = execute_tool(
-            &tool_call("write_note", json!({ "path": "notes/a.md", "content": "hi" })),
+            &tool_call(
+                "write_note",
+                json!({ "path": "notes/a.md", "content": "hi" }),
+            ),
             root,
             root,
             false,
@@ -4742,7 +4790,10 @@ mod tests {
 
         // review_row_visual on a row that has no visual fails via load_row_visual.
         let bad_review = execute_tool(
-            &tool_call("review_row_visual", json!({ "path": "demo.sk", "row_number": 1 })),
+            &tool_call(
+                "review_row_visual",
+                json!({ "path": "demo.sk", "row_number": 1 }),
+            ),
             root,
             root,
             false,
@@ -5035,6 +5086,62 @@ mod tests {
         let saved = project::read_sketch(&root.join(rel)).unwrap();
         assert_eq!(saved.rows[0].narrative, "Keep this narrative");
         assert_eq!(saved.rows[0].demo_actions, "Allowed old action");
+    }
+
+    #[test]
+    fn write_sketch_tool_preserves_missing_compiled_row_intent() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        let mut row = PlanningRow::new();
+        row.narrative = "Old narration".into();
+        row.demo_actions = "Click Generate".into();
+        row.demo_steps = vec![
+            DemoStep::Click {
+                target: "Generate storyboard".into(),
+                capture: Some(InteractionCapturePolicy::BeforeAfterAndMotion),
+            },
+            DemoStep::WaitFor {
+                condition: "rows appear".into(),
+                timeout_ms: Some(30_000),
+                edit_policy: Some(WaitEditPolicy::CompressWait),
+            },
+        ];
+        row.framing_beats = vec![FramingBeat::ZoomTo {
+            at_ms: 500,
+            target: Some("generated outline".into()),
+            rect: Some(FramingRect {
+                x: 0.1,
+                y: 0.2,
+                width: 0.7,
+                height: 0.4,
+            }),
+            duration_ms: Some(800),
+            easing: Some(FramingEasing::EaseOut),
+        }];
+        write_test_sketch(root, rel, row.clone());
+
+        let result = exec_write_sketch(
+            root,
+            &json!({
+                "path": rel,
+                "rows": [{
+                    "time": "",
+                    "narrative": "New narration",
+                    "demo_actions": "Click Generate"
+                }]
+            }),
+        );
+
+        assert!(
+            !result.text().starts_with("Error:"),
+            "write_sketch should preserve omitted compiled intent: {}",
+            result.text()
+        );
+        let saved = project::read_sketch(&root.join(rel)).unwrap();
+        assert_eq!(saved.rows[0].narrative, "New narration");
+        assert_eq!(saved.rows[0].demo_steps, row.demo_steps);
+        assert_eq!(saved.rows[0].framing_beats, row.framing_beats);
     }
 
     #[test]
