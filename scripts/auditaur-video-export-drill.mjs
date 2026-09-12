@@ -23,6 +23,12 @@ const checks = [
     expectedMinTests: 2,
   },
   {
+    id: "scenecast-adapter",
+    description: "CutReady sketch rows materialize into portable Scenecast bundles and CLI export calls",
+    args: ["test", "-p", "cutready", "scenecast_adapter", "--lib", "--quiet"],
+    expectedMinTests: 10,
+  },
+  {
     id: "frame-sequence-planner",
     description: "Elucim frame sequence terminal, dwell, exact-fit, and truncation rules",
     args: ["test", "-p", "cutready", "frame_sequence", "--lib", "--quiet"],

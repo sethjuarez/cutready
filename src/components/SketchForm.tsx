@@ -81,6 +81,7 @@ type SketchVideoExportSettings = {
   rowTransitionDipSeconds: number;
   narrationTailHoldSeconds: number;
   resolvedDemoPath?: string | null;
+  generateResolvedDemo?: boolean;
   visualFrameManifestPaths?: Array<string | null>;
   motionMaxScale: number;
   videoWidth: number;
@@ -552,6 +553,27 @@ function VideoExportOptionsDialog({
                 Browse
               </button>
             </div>
+          </label>
+
+          <label className="flex items-start gap-3 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/50 px-3 py-2">
+            <input
+              type="checkbox"
+              checked={options.generateResolvedDemo}
+              disabled={Boolean(options.resolvedDemoPath?.trim())}
+              onChange={(event) => {
+                setOptions((current) => ({ ...current, generateResolvedDemo: event.target.checked }));
+              }}
+              className="mt-0.5 h-4 w-4 rounded border-[rgb(var(--color-border))] accent-[rgb(var(--color-accent))]"
+              data-testid="video-export-generate-resolved-demo"
+            />
+            <span>
+              <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">
+                Generate resolved demo with Scenecast
+              </span>
+              <span className="mt-1 block text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
+                Builds a temporary .scenecast bundle from screenshot-backed rows and runs scenecast-cli for this export.
+              </span>
+            </span>
           </label>
 
           <div>
@@ -2395,6 +2417,7 @@ Rules:
           ? settings.workspaceVideoExportNarrationTailHoldSeconds
           : settings.videoExportNarrationTailHoldSeconds,
         resolvedDemoPath: exportOptions.resolvedDemoPath,
+        generateResolvedDemo: exportOptions.generateResolvedDemo,
         visualFrameManifestPaths: exportOptions.visualFrameManifestPaths,
         motionMaxScale: settings.videoExportOverrideEnabled
           ? settings.workspaceVideoExportMotionMaxScale

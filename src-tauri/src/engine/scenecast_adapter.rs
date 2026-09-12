@@ -1,6 +1,7 @@
 use std::{
-    fs,
+    env, fs,
     path::{Path, PathBuf},
+    process::{Command, Stdio},
 };
 
 use anyhow::Context;
@@ -11,6 +12,9 @@ use crate::models::sketch::{DemoStep, PlanningRow, Sketch};
 use super::project::safe_resolve;
 
 pub const SCENECAST_BUNDLE_SCHEMA_VERSION: &str = "scenecast.bundle.v1";
+const SCENECAST_CLI_ENV: &str = "CUTREADY_SCENECAST_CLI";
+const SCENECAST_CLI_NAME: &str = "scenecast-cli";
+const RESOLVED_DEMO_FILE: &str = "resolved-demo.json";
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ScenecastBundleBuild {
@@ -200,6 +204,87 @@ pub fn write_scenecast_bundle(
     result
 }
 
+pub fn export_resolved_demo_with_scenecast_cli(
+    bundle_dir: &Path,
+    output_dir: &Path,
+) -> anyhow::Result<PathBuf> {
+    export_resolved_demo_with_scenecast_cli_path(resolve_scenecast_cli()?, bundle_dir, output_dir)
+}
+
+pub fn resolve_scenecast_cli() -> anyhow::Result<PathBuf> {
+    if let Some(explicit) = env::var_os(SCENECAST_CLI_ENV).filter(|value| !value.is_empty()) {
+        let explicit = PathBuf::from(explicit);
+        if explicit.is_file() {
+            return Ok(explicit);
+        }
+        anyhow::bail!(
+            "{SCENECAST_CLI_ENV} points at `{}` which does not exist or is not a file",
+            explicit.display()
+        );
+    }
+
+    let candidates = scenecast_cli_candidates();
+    candidates
+        .iter()
+        .find(|candidate| command_exists(candidate))
+        .cloned()
+        .with_context(|| {
+            let searched = candidates
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "Scenecast CLI was not found. Set {SCENECAST_CLI_ENV} or add {SCENECAST_CLI_NAME} to PATH. Searched: {searched}"
+            )
+        })
+}
+
+fn export_resolved_demo_with_scenecast_cli_path(
+    cli_path: PathBuf,
+    bundle_dir: &Path,
+    output_dir: &Path,
+) -> anyhow::Result<PathBuf> {
+    fs::create_dir_all(output_dir).with_context(|| {
+        format!(
+            "Failed to create Scenecast resolved-demo output directory `{}`",
+            output_dir.display()
+        )
+    })?;
+
+    let output = command_for_path(cli_path.clone())
+        .arg("export-resolved-demo")
+        .arg(bundle_dir)
+        .arg(output_dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .with_context(|| format!("Failed to start Scenecast CLI `{}`", cli_path.display()))?;
+
+    if !output.status.success() {
+        anyhow::bail!(
+            "Scenecast CLI failed with status {}: {}",
+            output
+                .status
+                .code()
+                .map(|code| code.to_string())
+                .unwrap_or_else(|| "terminated by signal".to_string()),
+            command_output_excerpt(&output.stderr, &output.stdout)
+        );
+    }
+
+    let resolved_demo_path = output_dir.join(RESOLVED_DEMO_FILE);
+    if !resolved_demo_path.is_file() {
+        anyhow::bail!(
+            "Scenecast CLI completed but did not write `{}`",
+            resolved_demo_path.display()
+        );
+    }
+
+    Ok(resolved_demo_path)
+}
+
 fn write_scenecast_bundle_to(
     project_root: &Path,
     bundle_dir: &Path,
@@ -284,6 +369,78 @@ fn temporary_bundle_dir(bundle_dir: &Path) -> anyhow::Result<PathBuf> {
         .and_then(|name| name.to_str())
         .context("Scenecast bundle directory must have a valid file name")?;
     Ok(parent.join(format!(".{name}.tmp-{}", std::process::id())))
+}
+
+fn scenecast_cli_candidates() -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(paths) = env::var_os("PATH") {
+        for dir in env::split_paths(&paths) {
+            candidates.extend(executable_candidates_in_dir(&dir, SCENECAST_CLI_NAME));
+        }
+    }
+    candidates.push(PathBuf::from(SCENECAST_CLI_NAME));
+    dedupe_paths(candidates)
+}
+
+fn executable_candidates_in_dir(dir: &Path, executable_name: &str) -> Vec<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        vec![
+            dir.join(format!("{executable_name}.exe")),
+            dir.join(format!("{executable_name}.cmd")),
+            dir.join(executable_name),
+        ]
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        vec![dir.join(executable_name)]
+    }
+}
+
+fn dedupe_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut deduped = Vec::new();
+    for path in paths {
+        if !deduped.iter().any(|existing| existing == &path) {
+            deduped.push(path);
+        }
+    }
+    deduped
+}
+
+fn command_exists(candidate: &Path) -> bool {
+    if !candidate.is_file() {
+        return false;
+    }
+    command_for_path(candidate.to_path_buf())
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn command_for_path(program: PathBuf) -> Command {
+    let mut command = Command::new(program);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    command
+}
+
+fn command_output_excerpt(stderr: &[u8], stdout: &[u8]) -> String {
+    let raw = if stderr.is_empty() { stdout } else { stderr };
+    let text = String::from_utf8_lossy(raw);
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return "<no output>".to_string();
+    }
+    const MAX_OUTPUT_CHARS: usize = 800;
+    trimmed.chars().take(MAX_OUTPUT_CHARS).collect()
 }
 
 fn build_hotspots(
@@ -570,5 +727,72 @@ mod tests {
         );
         assert!(resolve_bundle_path(Path::new("bundle"), "captures\\row.png").is_err());
         assert!(resolve_bundle_path(Path::new("bundle"), "C:/row.png").is_err());
+    }
+
+    #[test]
+    fn invokes_scenecast_cli_export_resolved_demo() {
+        let project = tempfile::tempdir().unwrap();
+        let cli = write_fake_scenecast_cli(project.path(), true);
+        let bundle_dir = project.path().join("demo.scenecast");
+        let output_dir = project.path().join("resolved");
+        std::fs::create_dir_all(&bundle_dir).unwrap();
+
+        let resolved =
+            export_resolved_demo_with_scenecast_cli_path(cli, &bundle_dir, &output_dir).unwrap();
+
+        assert_eq!(resolved, output_dir.join(RESOLVED_DEMO_FILE));
+        let resolved_json = std::fs::read_to_string(resolved).unwrap();
+        assert!(resolved_json.contains("scenecast.resolved-demo.v1"));
+    }
+
+    #[test]
+    fn reports_scenecast_cli_failures() {
+        let project = tempfile::tempdir().unwrap();
+        let cli = write_fake_scenecast_cli(project.path(), false);
+        let err = export_resolved_demo_with_scenecast_cli_path(
+            cli,
+            &project.path().join("demo.scenecast"),
+            &project.path().join("resolved"),
+        )
+        .unwrap_err();
+
+        let message = err.to_string();
+        assert!(message.contains("Scenecast CLI failed"));
+        assert!(message.contains("fake scenecast failure"));
+    }
+
+    #[cfg(target_os = "windows")]
+    fn write_fake_scenecast_cli(root: &Path, succeeds: bool) -> PathBuf {
+        let cli = root.join("scenecast-cli.cmd");
+        let body = if succeeds {
+            format!(
+                "@echo off\r\nif \"%1\"==\"--version\" exit /b 0\r\nif not \"%1\"==\"export-resolved-demo\" exit /b 7\r\nif not exist \"%3\" mkdir \"%3\"\r\necho {{\"schemaVersion\":\"scenecast.resolved-demo.v1\"}}>\"%3\\{}\"\r\n",
+                RESOLVED_DEMO_FILE
+            )
+        } else {
+            "@echo off\r\necho fake scenecast failure 1>&2\r\nexit /b 9\r\n".to_string()
+        };
+        std::fs::write(&cli, body).unwrap();
+        cli
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    fn write_fake_scenecast_cli(root: &Path, succeeds: bool) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+
+        let cli = root.join("scenecast-cli");
+        let body = if succeeds {
+            format!(
+                "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then exit 0; fi\nif [ \"$1\" != \"export-resolved-demo\" ]; then exit 7; fi\nmkdir -p \"$3\"\nprintf '{{\"schemaVersion\":\"scenecast.resolved-demo.v1\"}}' > \"$3/{}\"\n",
+                RESOLVED_DEMO_FILE
+            )
+        } else {
+            "#!/bin/sh\necho fake scenecast failure >&2\nexit 9\n".to_string()
+        };
+        std::fs::write(&cli, body).unwrap();
+        let mut permissions = std::fs::metadata(&cli).unwrap().permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&cli, permissions).unwrap();
+        cli
     }
 }

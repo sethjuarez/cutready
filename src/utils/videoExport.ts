@@ -4,12 +4,14 @@ export type VideoExportIssue = { rowNumber: number; missing: string[] };
 
 export type VideoExportOptions = {
   resolvedDemoPath: string | null;
+  generateResolvedDemo: boolean;
   visualFrameManifestPaths: Array<string | null>;
 };
 
 export function emptyVideoExportOptions(rowCount: number): VideoExportOptions {
   return {
     resolvedDemoPath: null,
+    generateResolvedDemo: false,
     visualFrameManifestPaths: Array.from({ length: rowCount }, () => null),
   };
 }
@@ -17,6 +19,7 @@ export function emptyVideoExportOptions(rowCount: number): VideoExportOptions {
 export function normalizeVideoExportOptions(options: VideoExportOptions, rowCount: number): VideoExportOptions {
   return {
     resolvedDemoPath: options.resolvedDemoPath?.trim() || null,
+    generateResolvedDemo: Boolean(options.generateResolvedDemo),
     visualFrameManifestPaths: Array.from({ length: rowCount }, (_, index) => (
       options.visualFrameManifestPaths[index]?.trim() || null
     )),
@@ -49,6 +52,13 @@ export function getVideoExportIssues(rows: PlanningRow[], options?: VideoExportO
     }
     if (!row.screenshot?.trim() && !visualFrameManifestPath) {
       missing.push("screenshot or visual frame manifest");
+    }
+    if (
+      normalizedOptions.generateResolvedDemo
+      && !normalizedOptions.resolvedDemoPath
+      && !row.screenshot?.trim()
+    ) {
+      missing.push("screenshot for generated Scenecast resolved demo");
     }
     if (!row.narration?.path?.trim()) missing.push("narration");
     return missing.length > 0 ? [{ rowNumber: index + 1, missing }] : [];

@@ -18,7 +18,7 @@ use crate::{
         frame_sequence::{
             plan_frame_sequence, FrameManifestEntry, FrameSequenceFit, FrameSequencePlan,
         },
-        narration_preview, project,
+        narration_preview, project, scenecast_adapter,
     },
     models::{
         resolved_demo::{ResolvedDemo, RESOLVED_DEMO_SCHEMA_VERSION},
@@ -117,6 +117,8 @@ pub struct SketchVideoExportSettings {
     #[serde(default)]
     pub resolved_demo_path: Option<String>,
     #[serde(default)]
+    pub generate_resolved_demo: bool,
+    #[serde(default)]
     pub visual_frame_manifest_paths: Vec<Option<String>>,
     #[serde(default = "default_motion_max_scale")]
     pub motion_max_scale: f64,
@@ -153,6 +155,7 @@ impl Default for SketchVideoExportSettings {
             row_transition_dip_seconds: DEFAULT_ROW_TRANSITION_DIP_SECONDS,
             narration_tail_hold_seconds: DEFAULT_NARRATION_TAIL_HOLD_SECONDS,
             resolved_demo_path: None,
+            generate_resolved_demo: false,
             visual_frame_manifest_paths: Vec::new(),
             motion_max_scale: DEFAULT_MOTION_MAX_SCALE,
             video_width: DEFAULT_VIDEO_WIDTH,
@@ -202,6 +205,7 @@ impl SketchVideoExportSettings {
                 .as_ref()
                 .map(|path| path.trim().to_string())
                 .filter(|path| !path.is_empty()),
+            generate_resolved_demo: self.generate_resolved_demo,
             visual_frame_manifest_paths: self
                 .visual_frame_manifest_paths
                 .iter()
@@ -457,7 +461,8 @@ where
         .ok_or_else(|| anyhow::anyhow!("Export output path has no parent directory"))?;
     fs::create_dir_all(output_dir)?;
 
-    let segments = collect_row_segments(project_root, &sketch, &settings)?;
+    let segments =
+        collect_row_segments(project_root, app_data_dir, sketch_path, &sketch, &settings)?;
 
     ensure_ffmpeg_available()?;
     let gap_count = segments.len().saturating_sub(1);
@@ -759,6 +764,8 @@ fn render_title_card(
 
 fn collect_row_segments(
     project_root: &Path,
+    app_data_dir: &Path,
+    sketch_path: &str,
     sketch: &Sketch,
     settings: &SketchVideoExportSettings,
 ) -> anyhow::Result<Vec<RowSegment>> {
@@ -766,11 +773,8 @@ fn collect_row_segments(
         anyhow::bail!("Sketch has no rows to export");
     }
 
-    let resolved_demo = settings
-        .resolved_demo_path
-        .as_deref()
-        .map(|path| load_resolved_demo(project_root, path, sketch.rows.len()))
-        .transpose()?;
+    let resolved_demo =
+        load_or_generate_resolved_demo(project_root, app_data_dir, sketch_path, sketch, settings)?;
 
     sketch
         .rows
@@ -975,6 +979,80 @@ fn load_resolved_demo(
     if !path.is_file() {
         anyhow::bail!("Resolved demo schema file does not exist: {relative_path}");
     }
+    load_resolved_demo_file(&path, row_count)
+}
+
+fn load_or_generate_resolved_demo(
+    project_root: &Path,
+    app_data_dir: &Path,
+    sketch_path: &str,
+    sketch: &Sketch,
+    settings: &SketchVideoExportSettings,
+) -> anyhow::Result<Option<ResolvedDemo>> {
+    if let Some(path) = settings.resolved_demo_path.as_deref() {
+        return load_resolved_demo(project_root, path, sketch.rows.len()).map(Some);
+    }
+    if !settings.generate_resolved_demo {
+        return Ok(None);
+    }
+    let missing_screenshot_rows = rows_missing_screenshots(sketch);
+    if !missing_screenshot_rows.is_empty() {
+        anyhow::bail!(
+            "Generating a Scenecast resolved demo requires every row to have a screenshot; rows {} have none",
+            missing_screenshot_rows
+                .iter()
+                .map(usize::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+
+    let sketch_stem = Path::new(sketch_path)
+        .file_stem()
+        .and_then(OsStr::to_str)
+        .map(slugify)
+        .unwrap_or_else(|| "sketch".to_string());
+    let work_dir = app_data_dir.join(TEMP_DIR).join(format!(
+        "scenecast-{}-{}",
+        sketch_stem,
+        Utc::now().format("%Y%m%d-%H%M%S-%3f")
+    ));
+    let bundle_dir = work_dir.join("bundle.scenecast");
+    let output_dir = work_dir.join("resolved");
+
+    let result = (|| {
+        scenecast_adapter::write_scenecast_bundle(project_root, sketch, &bundle_dir)?;
+        let resolved_demo_path =
+            scenecast_adapter::export_resolved_demo_with_scenecast_cli(&bundle_dir, &output_dir)?;
+        load_resolved_demo_file(&resolved_demo_path, sketch.rows.len()).map(Some)
+    })();
+    if work_dir.exists() {
+        if let Err(error) = fs::remove_dir_all(&work_dir) {
+            tracing::warn!(
+                path = %work_dir.display(),
+                error = %error,
+                "Failed to clean up temporary Scenecast export directory"
+            );
+        }
+    }
+    result
+}
+
+fn rows_missing_screenshots(sketch: &Sketch) -> Vec<usize> {
+    sketch
+        .rows
+        .iter()
+        .enumerate()
+        .filter_map(|(index, row)| {
+            row.screenshot
+                .as_deref()
+                .is_none_or(|path| path.trim().is_empty())
+                .then_some(index + 1)
+        })
+        .collect()
+}
+
+fn load_resolved_demo_file(path: &Path, row_count: usize) -> anyhow::Result<ResolvedDemo> {
     let value: serde_json::Value = serde_json::from_reader(fs::File::open(&path)?)
         .map_err(|error| anyhow::anyhow!("Could not parse resolved demo schema: {error}"))?;
     let schema_version = value
@@ -3564,6 +3642,18 @@ mod tests {
 
         assert_seconds(row_content_duration_seconds(2.0, 5.0, &settings), 5.4);
         assert_seconds(row_content_duration_seconds(5.0, 2.0, &settings), 5.4);
+    }
+
+    #[test]
+    fn generated_resolved_demo_requires_screenshots_for_every_row() {
+        let mut sketch = Sketch::new("Generated demo");
+        let mut first = PlanningRow::new();
+        first.screenshot = Some("screenshots/first.png".to_string());
+        let mut second = PlanningRow::new();
+        second.screenshot = Some("  ".to_string());
+        sketch.rows = vec![first, second, PlanningRow::new()];
+
+        assert_eq!(rows_missing_screenshots(&sketch), vec![2, 3]);
     }
 
     #[test]
