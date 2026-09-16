@@ -7,7 +7,10 @@ use std::{
 use anyhow::Context;
 use serde::Serialize;
 
-use crate::models::sketch::{DemoStep, PlanningRow, Sketch};
+use crate::models::{
+    resolved_demo::cutready_row_scene_id,
+    sketch::{DemoStep, PlanningRow, Sketch},
+};
 
 use super::project::safe_resolve;
 
@@ -130,12 +133,12 @@ pub fn build_scenecast_bundle(sketch: &Sketch) -> anyhow::Result<ScenecastBundle
 
     for (sequence_index, (row_index, row)) in rows_with_screenshots.iter().enumerate() {
         let row_number = row_index + 1;
-        let scene_id = row_scene_id(row_number);
+        let scene_id = row_scene_id(row_number, row);
         let bundle_screenshot_path =
             bundle_capture_path(row_number, row.screenshot.as_deref().unwrap())?;
         let next_scene_id = rows_with_screenshots
             .get(sequence_index + 1)
-            .map(|(next_row_index, _)| row_scene_id(next_row_index + 1));
+            .map(|(next_row_index, next_row)| row_scene_id(next_row_index + 1, next_row));
 
         asset_copies.push(ScenecastAssetCopy {
             source_project_path: row.screenshot.as_ref().unwrap().clone(),
@@ -470,8 +473,12 @@ fn step_requires_bounds(step: &DemoStep) -> bool {
     )
 }
 
-fn row_scene_id(row_number: usize) -> String {
-    format!("row-{row_number:03}")
+fn row_scene_id(row_number: usize, row: &PlanningRow) -> String {
+    if row.row_id.trim().is_empty() {
+        format!("row-{row_number:03}")
+    } else {
+        cutready_row_scene_id(&row.row_id)
+    }
 }
 
 fn row_title(row_number: usize, row: &PlanningRow) -> String {
@@ -537,11 +544,17 @@ mod tests {
     }
 
     fn row(screenshot: &str) -> PlanningRow {
+        let row_id = Path::new(screenshot)
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or("row")
+            .to_string();
         PlanningRow {
             time: "~10s".to_string(),
             narrative: "Show the dashboard.".to_string(),
             demo_actions: "Click Continue.".to_string(),
             screenshot: Some(screenshot.to_string()),
+            row_id,
             ..PlanningRow::new()
         }
     }
@@ -560,10 +573,10 @@ mod tests {
             build.manifest.schema_version,
             SCENECAST_BUNDLE_SCHEMA_VERSION
         );
-        assert_eq!(build.manifest.graph.start_scene, "row-001");
+        assert_eq!(build.manifest.graph.start_scene, "cutready-row-dashboard");
         assert_eq!(
             build.manifest.sections[0].scenes,
-            vec!["row-001", "row-002"]
+            vec!["cutready-row-dashboard", "cutready-row-pricing"]
         );
         assert_eq!(
             build.manifest.graph.scenes[0].assets.screenshot,
@@ -610,8 +623,11 @@ mod tests {
         ]))
         .unwrap();
 
-        assert_eq!(build.manifest.graph.start_scene, "row-002");
-        assert_eq!(build.manifest.sections[0].scenes, vec!["row-002"]);
+        assert_eq!(build.manifest.graph.start_scene, "cutready-row-second");
+        assert_eq!(
+            build.manifest.sections[0].scenes,
+            vec!["cutready-row-second"]
+        );
         assert_eq!(build.asset_copies[0].bundle_path, "captures/row-002.jpg");
     }
 
@@ -651,7 +667,7 @@ mod tests {
         let manifest = std::fs::read_to_string(bundle_dir.join("manifest.json")).unwrap();
         let manifest: serde_json::Value = serde_json::from_str(&manifest).unwrap();
         assert_eq!(manifest["schema_version"], SCENECAST_BUNDLE_SCHEMA_VERSION);
-        assert_eq!(manifest["graph"]["start_scene"], "row-001");
+        assert_eq!(manifest["graph"]["start_scene"], "cutready-row-dashboard");
     }
 
     #[test]
@@ -773,6 +789,43 @@ mod tests {
         assert_eq!(resolved, output_dir.join(RESOLVED_DEMO_FILE));
         let resolved_json = std::fs::read_to_string(resolved).unwrap();
         assert!(resolved_json.contains("scenecast.resolved-demo.v1"));
+    }
+
+    #[test]
+    fn real_scenecast_cli_resolved_demo_contract_when_configured() {
+        let Some(cli) = env::var_os(SCENECAST_CLI_ENV) else {
+            eprintln!(
+                "Skipping real Scenecast CLI contract test because {SCENECAST_CLI_ENV} is not set"
+            );
+            return;
+        };
+        let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures")
+            .join("scenecast")
+            .join("minimal.scenecast");
+        let output_dir = tempfile::tempdir().unwrap();
+
+        let resolved = export_resolved_demo_with_scenecast_cli_path(
+            PathBuf::from(cli),
+            &fixture_dir,
+            output_dir.path(),
+        )
+        .unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(resolved).unwrap()).unwrap();
+        let demo: crate::models::resolved_demo::ResolvedDemo =
+            serde_json::from_value(value.clone()).unwrap();
+
+        demo.validate_for_row_count(2).unwrap();
+        assert_eq!(value["sceneOrder"], serde_json::json!(["start", "pricing"]));
+        assert_eq!(value["sections"][0]["id"], "main");
+        assert_eq!(value["steps"][0]["targets"][0]["scrollDirection"], "any");
+        assert!(value["segments"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|segment| segment["frames"].as_array().into_iter().flatten())
+            .all(|frame| frame.get("durationMs").is_some()));
     }
 
     #[test]

@@ -345,8 +345,6 @@ pub enum FramingEasing {
 }
 
 /// A row in the sketch planning table (4 columns).
-///
-/// Row identity is its array index — no UUID needed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanningRow {
     /// Whether the entire row is protected from edits.
@@ -355,6 +353,10 @@ pub struct PlanningRow {
     /// Per-cell lock state for targeted protection.
     #[serde(default)]
     pub locks: PlanningCellLocks,
+    /// Stable row identity used to map compiled playback artifacts back to this
+    /// authoring row even after rows are inserted or reordered.
+    #[serde(default = "new_row_id")]
+    pub row_id: String,
     /// Approximate duration (e.g., "~30s", "1:00", "2m").
     pub time: String,
     /// Concrete duration in seconds for reliable total-time summaries.
@@ -417,6 +419,7 @@ impl PlanningRow {
         Self {
             locked: false,
             locks: PlanningCellLocks::default(),
+            row_id: new_row_id(),
             time: String::new(),
             duration_seconds: None,
             narrative: String::new(),
@@ -438,6 +441,10 @@ impl PlanningRow {
         self.locked = locked;
         self.locks.set_all(locked);
     }
+}
+
+pub fn new_row_id() -> String {
+    uuid::Uuid::new_v4().to_string()
 }
 
 impl Default for PlanningRow {
@@ -816,6 +823,7 @@ mod tests {
         sketch.rows.push(PlanningRow {
             locked: false,
             locks: PlanningCellLocks::default(),
+            row_id: "row-test".into(),
             time: "~30s".into(),
             duration_seconds: Some(30),
             narrative: "Click the button".into(),
@@ -968,6 +976,7 @@ mod tests {
         let row = PlanningRow {
             locked: false,
             locks: PlanningCellLocks::default(),
+            row_id: "row-roundtrip".into(),
             time: "~30s".into(),
             duration_seconds: Some(30),
             narrative: "Click the sign-up button".into(),
@@ -1054,6 +1063,7 @@ mod tests {
         let json = serde_json::to_string(&row).unwrap();
         let parsed: PlanningRow = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.time, "~30s");
+        assert_eq!(parsed.row_id, "row-roundtrip");
         assert_eq!(parsed.duration_seconds, Some(30));
         assert_eq!(parsed.screenshot, Some("screenshots/step1.png".into()));
         assert_eq!(parsed.motion_points.len(), 1);
@@ -1109,6 +1119,8 @@ mod tests {
     fn planning_row_default_matches_new() {
         let from_new = PlanningRow::new();
         let from_default = PlanningRow::default();
+        assert!(!from_new.row_id.is_empty());
+        assert!(!from_default.row_id.is_empty());
         assert_eq!(from_new.time, from_default.time);
         assert_eq!(from_new.locked, from_default.locked);
         assert_eq!(from_new.locks, from_default.locks);

@@ -131,6 +131,8 @@ export type FramingBeat =
   | { kind: "hold"; at_ms?: number; duration_ms: number };
 
 export interface PlanningRow {
+  /** Stable row identity used to map compiled playback artifacts back to this authoring row. */
+  row_id?: string;
   /** Whether the entire row is protected from edits. */
   locked?: boolean;
   /** Per-cell lock state for targeted AI-safe editing. */

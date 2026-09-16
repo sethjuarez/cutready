@@ -113,6 +113,10 @@ type ResolvedDemoInspectionState = {
   inspection: ResolvedDemoInspection | null;
   error: string | null;
 };
+
+function createPlanningRowId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `row-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
 type NarrationGenerationProgress = { phase: string; current: number; total: number; message: string };
 type AgentStreamEvent = { type: string; content?: string; client_run_id?: string };
 type SketchVideoExportSettings = {
@@ -544,6 +548,7 @@ function VideoExportOptionsDialog({
       void invoke<ResolvedDemoInspection>("inspect_resolved_demo", {
         relativePath: path,
         rowCount: rows.length,
+        sourceRowIds: rows.map((row) => row.row_id ?? ""),
       })
         .then((inspection) => {
           if (!cancelled) setResolvedDemoInspection({ path, loading: false, inspection, error: null });
@@ -3164,6 +3169,7 @@ The row already has a visual and design_plan. You may read the sketch for contex
                 <button
                   onClick={() => {
                     const newRow: PlanningRow = {
+                      row_id: createPlanningRowId(),
                       time: "",
                       narrative: "",
                       demo_actions: "",

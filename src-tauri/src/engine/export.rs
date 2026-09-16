@@ -466,6 +466,7 @@ pub fn inspect_resolved_demo(
     project_root: &Path,
     path: &str,
     row_count: usize,
+    source_row_ids: Option<&[String]>,
 ) -> anyhow::Result<ResolvedDemoInspection> {
     let path = project::safe_resolve(project_root, path)?;
     let value: serde_json::Value = serde_json::from_str(
@@ -485,8 +486,7 @@ pub fn inspect_resolved_demo(
 
     let demo: ResolvedDemo = serde_json::from_value(value)
         .with_context(|| format!("Could not parse resolved demo schema {}", path.display()))?;
-    let blocking_error = demo
-        .validate_for_row_count(row_count)
+    let blocking_error = validate_resolved_demo(&demo, row_count, source_row_ids)
         .err()
         .map(|error| error.to_string());
     let loaded = LoadedResolvedDemo {
@@ -1218,17 +1218,41 @@ fn sha256_hex(value: &str) -> String {
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+#[cfg(test)]
 fn load_resolved_demo(
     project_root: &Path,
     relative_path: &str,
     row_count: usize,
+) -> anyhow::Result<LoadedResolvedDemo> {
+    load_resolved_demo_for_source_rows(project_root, relative_path, row_count, None)
+}
+
+fn load_resolved_demo_for_sketch(
+    project_root: &Path,
+    relative_path: &str,
+    sketch: &Sketch,
+) -> anyhow::Result<LoadedResolvedDemo> {
+    let source_row_ids = sketch_source_row_ids(sketch);
+    load_resolved_demo_for_source_rows(
+        project_root,
+        relative_path,
+        sketch.rows.len(),
+        Some(source_row_ids.as_slice()),
+    )
+}
+
+fn load_resolved_demo_for_source_rows(
+    project_root: &Path,
+    relative_path: &str,
+    row_count: usize,
+    source_row_ids: Option<&[String]>,
 ) -> anyhow::Result<LoadedResolvedDemo> {
     let path = project::safe_resolve(project_root, relative_path)?;
     if !path.is_file() {
         anyhow::bail!("Resolved demo schema file does not exist: {relative_path}");
     }
     let asset_base_dir = path.parent().unwrap_or(project_root).to_path_buf();
-    let demo = load_resolved_demo_file(&path, row_count)?;
+    let demo = load_resolved_demo_file(&path, row_count, source_row_ids)?;
     Ok(LoadedResolvedDemo {
         demo,
         asset_base_dir,
@@ -1243,7 +1267,7 @@ fn load_or_generate_resolved_demo(
     settings: &SketchVideoExportSettings,
 ) -> anyhow::Result<Option<LoadedResolvedDemo>> {
     if let Some(path) = settings.resolved_demo_path.as_deref() {
-        return load_resolved_demo(project_root, path, sketch.rows.len()).map(Some);
+        return load_resolved_demo_for_sketch(project_root, path, sketch).map(Some);
     }
     if !settings.generate_resolved_demo {
         return Ok(None);
@@ -1276,7 +1300,13 @@ fn load_or_generate_resolved_demo(
     scenecast_adapter::write_scenecast_bundle(project_root, sketch, &bundle_dir)?;
     let resolved_demo_path =
         scenecast_adapter::export_resolved_demo_with_scenecast_cli(&bundle_dir, &output_dir)?;
-    load_resolved_demo_file(&resolved_demo_path, sketch.rows.len()).map(|demo| {
+    let source_row_ids = sketch_source_row_ids(sketch);
+    load_resolved_demo_file(
+        &resolved_demo_path,
+        sketch.rows.len(),
+        Some(source_row_ids.as_slice()),
+    )
+    .map(|demo| {
         Some(LoadedResolvedDemo {
             demo,
             asset_base_dir: bundle_dir,
@@ -1298,7 +1328,11 @@ fn rows_missing_screenshots(sketch: &Sketch) -> Vec<usize> {
         .collect()
 }
 
-fn load_resolved_demo_file(path: &Path, row_count: usize) -> anyhow::Result<ResolvedDemo> {
+fn load_resolved_demo_file(
+    path: &Path,
+    row_count: usize,
+    source_row_ids: Option<&[String]>,
+) -> anyhow::Result<ResolvedDemo> {
     let value: serde_json::Value = serde_json::from_reader(fs::File::open(&path)?)
         .map_err(|error| anyhow::anyhow!("Could not parse resolved demo schema: {error}"))?;
     let schema_version = value
@@ -1312,8 +1346,25 @@ fn load_resolved_demo_file(path: &Path, row_count: usize) -> anyhow::Result<Reso
     }
     let demo: ResolvedDemo = serde_json::from_value(value)
         .map_err(|error| anyhow::anyhow!("Could not parse resolved demo schema: {error}"))?;
-    demo.validate_for_row_count(row_count)?;
+    validate_resolved_demo(&demo, row_count, source_row_ids)?;
     Ok(demo)
+}
+
+fn validate_resolved_demo(
+    demo: &ResolvedDemo,
+    row_count: usize,
+    source_row_ids: Option<&[String]>,
+) -> anyhow::Result<()> {
+    match source_row_ids {
+        Some(source_row_ids) if source_row_ids.len() == row_count => {
+            demo.validate_for_source_rows(source_row_ids)
+        }
+        _ => demo.validate_for_row_count(row_count),
+    }
+}
+
+fn sketch_source_row_ids(sketch: &Sketch) -> Vec<String> {
+    sketch.rows.iter().map(|row| row.row_id.clone()).collect()
 }
 
 fn is_missing_resolved_demo_asset_error(error: &anyhow::Error) -> bool {
@@ -4288,7 +4339,7 @@ mod tests {
         .unwrap();
 
         let inspection =
-            inspect_resolved_demo(root, ".cutready/scenecast/resolved-demo.json", 2).unwrap();
+            inspect_resolved_demo(root, ".cutready/scenecast/resolved-demo.json", 2, None).unwrap();
 
         assert!(inspection.can_export);
         assert_eq!(inspection.title, "Demo");
@@ -4337,7 +4388,7 @@ mod tests {
         )
         .unwrap();
 
-        let inspection = inspect_resolved_demo(root, "resolved-demo.json", 1).unwrap();
+        let inspection = inspect_resolved_demo(root, "resolved-demo.json", 1, None).unwrap();
 
         assert!(!inspection.can_export);
         assert!(inspection
@@ -4346,6 +4397,59 @@ mod tests {
             .unwrap()
             .contains("missing_scene"));
         assert_eq!(inspection.diagnostics[0].severity, "error");
+    }
+
+    #[test]
+    fn inspect_resolved_demo_reports_stale_cutready_row_mapping() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+        fs::write(
+            root.join("resolved-demo.json"),
+            serde_json::json!({
+                "schemaVersion": "scenecast.resolved-demo.v1",
+                "title": "Demo",
+                "startSceneId": "start",
+                "capturePolicy": {
+                    "kind": "reference-existing-assets",
+                    "assetBase": "bundle-relative",
+                    "missingCaptureBehavior": "diagnostic"
+                },
+                "steps": [{
+                    "id": "step-row-a",
+                    "order": 0,
+                    "sceneId": crate::models::resolved_demo::cutready_row_scene_id("row-a"),
+                    "title": "Start",
+                    "targets": [],
+                    "guideMarks": []
+                }],
+                "segments": [{
+                    "id": "segment-row-a",
+                    "kind": "scene",
+                    "stepId": "step-row-a",
+                    "startMs": 0,
+                    "durationMs": 1000,
+                    "endMs": 1000,
+                    "capture": null,
+                    "interaction": null,
+                    "frames": [],
+                    "waitMs": 0
+                }],
+                "diagnostics": []
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let inspection =
+            inspect_resolved_demo(root, "resolved-demo.json", 1, Some(&["row-b".to_string()]))
+                .unwrap();
+
+        assert!(!inspection.can_export);
+        assert!(inspection
+            .blocking_error
+            .as_deref()
+            .unwrap()
+            .contains("regenerate the resolved demo"));
     }
 
     #[test]

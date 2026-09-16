@@ -839,11 +839,21 @@ pub fn write_sketch(
         std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
     }
 
-    let json =
-        serde_json::to_string_pretty(sketch).map_err(|e| ProjectError::Serialize(e.to_string()))?;
+    let mut sketch = sketch.clone();
+    ensure_planning_row_ids(&mut sketch.rows);
+    let json = serde_json::to_string_pretty(&sketch)
+        .map_err(|e| ProjectError::Serialize(e.to_string()))?;
     std::fs::write(path, json).map_err(|e| ProjectError::Io(e.to_string()))?;
 
     Ok(())
+}
+
+pub fn ensure_planning_row_ids(rows: &mut [crate::models::sketch::PlanningRow]) {
+    for row in rows {
+        if row.row_id.trim().is_empty() {
+            row.row_id = crate::models::sketch::new_row_id();
+        }
+    }
 }
 
 pub fn ensure_sketch_unlocked(sketch: &Sketch) -> Result<(), ProjectError> {
@@ -871,6 +881,9 @@ pub fn apply_locked_row_metadata(
     updated: &mut [crate::models::sketch::PlanningRow],
 ) {
     for (old, new) in existing.iter().zip(updated.iter_mut()) {
+        if new.row_id.trim().is_empty() {
+            new.row_id = old.row_id.clone();
+        }
         new.locked = old.locked;
         new.locks = old.locks.clone();
     }

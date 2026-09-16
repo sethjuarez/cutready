@@ -6,6 +6,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 pub const RESOLVED_DEMO_SCHEMA_VERSION: &str = "scenecast.resolved-demo.v1";
+pub const CUTREADY_ROW_SCENE_PREFIX: &str = "cutready-row-";
 
 /// Scenecast-owned resolved click-through demo output consumed by CutReady export.
 ///
@@ -83,6 +84,48 @@ impl ResolvedDemo {
         Ok(())
     }
 
+    pub fn validate_for_source_rows(&self, source_row_ids: &[String]) -> anyhow::Result<()> {
+        self.validate_for_row_count(source_row_ids.len())?;
+
+        for step in &self.steps {
+            let expected_row_id = source_row_ids
+                .get(step.order as usize)
+                .map(String::as_str)
+                .unwrap_or_default();
+            if expected_row_id.is_empty() {
+                continue;
+            }
+
+            if let Some(source_row_id) = step.source_row_id.as_deref() {
+                if source_row_id != expected_row_id {
+                    anyhow::bail!(
+                        "Resolved demo step `{}` was compiled for row `{}` but row {} is now `{}`; regenerate the resolved demo",
+                        step.id,
+                        source_row_id,
+                        step.order + 1,
+                        expected_row_id
+                    );
+                }
+                continue;
+            }
+
+            if step.scene_id.starts_with(CUTREADY_ROW_SCENE_PREFIX) {
+                let expected_scene_id = cutready_row_scene_id(expected_row_id);
+                if step.scene_id != expected_scene_id {
+                    anyhow::bail!(
+                        "Resolved demo step `{}` points at scene `{}` but row {} now maps to `{}`; regenerate the resolved demo",
+                        step.id,
+                        step.scene_id,
+                        step.order + 1,
+                        expected_scene_id
+                    );
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn row_playback_duration_seconds(&self, row_number: usize) -> Option<f64> {
         let row_order = row_number.checked_sub(1)? as u32;
         let row_step_ids = self
@@ -121,6 +164,10 @@ pub struct ResolvedDemoStep {
     pub id: String,
     pub order: u32,
     pub scene_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_row_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_row_order: Option<u32>,
     pub title: String,
     #[serde(default)]
     pub description: Option<String>,
@@ -296,6 +343,38 @@ fn is_forbidden_path_component(component: Component<'_>) -> bool {
     matches!(component, Component::ParentDir | Component::RootDir) || is_path_prefix(component)
 }
 
+pub fn cutready_row_scene_id(row_id: &str) -> String {
+    let mut slug = String::new();
+    let mut previous_dash = false;
+    for ch in row_id.trim().chars() {
+        let normalized = if ch.is_ascii_alphanumeric() {
+            previous_dash = false;
+            Some(ch.to_ascii_lowercase())
+        } else if ch == '-' || ch == '_' {
+            if previous_dash {
+                None
+            } else {
+                previous_dash = true;
+                Some('-')
+            }
+        } else if previous_dash {
+            None
+        } else {
+            previous_dash = true;
+            Some('-')
+        };
+        if let Some(ch) = normalized {
+            slug.push(ch);
+        }
+    }
+    let slug = slug.trim_matches('-');
+    if slug.is_empty() {
+        format!("{CUTREADY_ROW_SCENE_PREFIX}unknown")
+    } else {
+        format!("{CUTREADY_ROW_SCENE_PREFIX}{slug}")
+    }
+}
+
 #[cfg(target_os = "windows")]
 fn is_path_prefix(component: Component<'_>) -> bool {
     matches!(component, Component::Prefix(_))
@@ -412,6 +491,31 @@ mod tests {
         assert_eq!(demo.steps[0].description, None);
         assert_eq!(demo.steps[0].targets[0].selectors[0].confidence, None);
         assert_eq!(demo.row_playback_duration_seconds(1), Some(1.0));
+    }
+
+    #[test]
+    fn resolved_demo_validates_cutready_source_row_mapping_when_present() {
+        let mut value = scenecast_fixture();
+        value_with_id_mut(&mut value, "steps", "step-start")["sceneId"] =
+            serde_json::json!(cutready_row_scene_id("row-a"));
+        value_with_id_mut(&mut value, "steps", "step-pricing")["sourceRowId"] =
+            serde_json::json!("row-b");
+        let demo: ResolvedDemo = serde_json::from_value(value).unwrap();
+
+        demo.validate_for_source_rows(&["row-a".to_string(), "row-b".to_string()])
+            .unwrap();
+
+        assert!(demo
+            .validate_for_source_rows(&["row-b".to_string(), "row-a".to_string()])
+            .unwrap_err()
+            .to_string()
+            .contains("regenerate the resolved demo"));
+    }
+
+    #[test]
+    fn cutready_row_scene_ids_are_portable_identifiers() {
+        assert_eq!(cutready_row_scene_id("A Row_ID!!"), "cutready-row-a-row-id");
+        assert_eq!(cutready_row_scene_id("   "), "cutready-row-unknown");
     }
 
     #[test]

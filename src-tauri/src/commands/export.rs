@@ -69,11 +69,12 @@ pub async fn export_sketch_video(
 pub async fn inspect_resolved_demo(
     relative_path: String,
     row_count: usize,
+    source_row_ids: Option<Vec<String>>,
     state: State<'_, AppState>,
 ) -> Result<export::ResolvedDemoInspection, String> {
     let root = project_root(&state)?;
     tokio::task::spawn_blocking(move || {
-        export::inspect_resolved_demo(&root, &relative_path, row_count)
+        export::inspect_resolved_demo(&root, &relative_path, row_count, source_row_ids.as_deref())
     })
     .await
     .map_err(|e| e.to_string())?
