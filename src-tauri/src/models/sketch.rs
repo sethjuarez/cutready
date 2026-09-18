@@ -251,6 +251,8 @@ pub enum DemoStep {
     Click {
         target: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        target_bounds: Option<InteractionBounds>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         capture: Option<InteractionCapturePolicy>,
     },
     Type {
@@ -258,11 +260,15 @@ pub enum DemoStep {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         target: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        target_bounds: Option<InteractionBounds>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         clear_first: Option<bool>,
     },
     Select {
         target: String,
         value: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        target_bounds: Option<InteractionBounds>,
     },
     WaitFor {
         condition: String,
@@ -273,6 +279,8 @@ pub enum DemoStep {
     },
     Highlight {
         target: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        target_bounds: Option<InteractionBounds>,
     },
 }
 
@@ -302,6 +310,18 @@ pub struct FramingRect {
     /// Normalized width, relative to the row screenshot or visual.
     pub width: f32,
     /// Normalized height, relative to the row screenshot or visual.
+    pub height: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct InteractionBounds {
+    /// Left edge in source screenshot pixels.
+    pub x: f32,
+    /// Top edge in source screenshot pixels.
+    pub y: f32,
+    /// Width in source screenshot pixels.
+    pub width: f32,
+    /// Height in source screenshot pixels.
     pub height: f32,
 }
 
@@ -987,6 +1007,7 @@ mod tests {
                 },
                 DemoStep::Click {
                     target: "CTA".into(),
+                    target_bounds: None,
                     capture: Some(InteractionCapturePolicy::BeforeAfterAndMotion),
                 },
                 DemoStep::WaitFor {

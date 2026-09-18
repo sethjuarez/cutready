@@ -21,7 +21,9 @@ use crate::engine::visual_document::{
     normalize_visual_document_for_save, normalize_visual_to_v2, validate_agentic_visual,
     validate_dsl_doc, visual_to_renderable_v1,
 };
-use crate::models::sketch::{DemoStep, FramingBeat, MotionPlan, MotionPoint, PlanningRow, Sketch};
+use crate::models::sketch::{
+    new_row_id, DemoStep, FramingBeat, MotionPlan, MotionPoint, PlanningRow, Sketch,
+};
 
 // `ToolDefinition` / `ToolFunctionDefinition` (the wire shape of the tool
 // contract) now live in the `harness-contract` crate. Re-exported here so the
@@ -2312,6 +2314,13 @@ fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
             .map(|r| PlanningRow {
                 locked: false,
                 locks: crate::models::sketch::PlanningCellLocks::default(),
+                row_id: r
+                    .get("row_id")
+                    .and_then(|v| v.as_str())
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(ToOwned::to_owned)
+                    .unwrap_or_else(new_row_id),
                 time: r.get("time").and_then(|v| v.as_str()).unwrap_or("").into(),
                 duration_seconds: r
                     .get("duration_seconds")
@@ -4390,6 +4399,7 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let mut sketch = Sketch::new("Intro");
         sketch.rows.push(PlanningRow {
+            row_id: "row-test".into(),
             time: "0:00".into(),
             duration_seconds: None,
             narrative: "Narrate".into(),
@@ -5099,6 +5109,7 @@ mod tests {
         row.demo_steps = vec![
             DemoStep::Click {
                 target: "Generate storyboard".into(),
+                target_bounds: None,
                 capture: Some(InteractionCapturePolicy::BeforeAfterAndMotion),
             },
             DemoStep::WaitFor {

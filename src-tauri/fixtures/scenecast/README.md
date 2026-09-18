@@ -13,4 +13,8 @@ Then copy `<output-dir>/resolved-demo.json` here and run CutReady's resolved-dem
 
 `minimal.scenecast` mirrors Scenecast's core `interactive.scenecast` fixture, but also includes exact-case files under `captures/` so it can be used for CLI validation. Bundle manifests intentionally use snake_case (`schema_version`, `start_scene`, `guide_marks`) while resolved-demo output uses camelCase (`schemaVersion`, `startSceneId`).
 
-Generated CutReady bundles use stable row-derived scene IDs with the `cutready-row-` prefix. Resolved demos may also include `sourceRowId` and `sourceRowOrder`; CutReady treats them as optional metadata today, but validates them when present to detect stale generated artifacts after sketch rows are inserted, deleted, or reordered.
+Generated CutReady bundles use stable row-derived scene IDs with the `cutready-row-` prefix.
+Interactive `demo_steps` with screenshot-pixel `target_bounds` compile to Scenecast hotspots
+that point at the following screenshot scene. Resolved demos may also include `sourceRowId`
+and `sourceRowOrder`; CutReady treats them as optional metadata today, but validates them when
+present to detect stale generated artifacts after sketch rows are inserted, deleted, or reordered.

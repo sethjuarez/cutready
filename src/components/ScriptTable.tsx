@@ -43,7 +43,7 @@ import {
 } from "lucide-react";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
-import type { DemoStep, FramingBeat, MotionPoint, PlanningCellField, PlanningRow, TypingSpot } from "../types/sketch";
+import type { DemoStep, FramingBeat, InteractionBounds, MotionPoint, PlanningCellField, PlanningRow, TypingSpot } from "../types/sketch";
 import { normalizeDocument } from "@elucim/dsl";
 import type { CutReadyElucimDocument } from "../types/elucim";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -1976,13 +1976,14 @@ function validateIntentEntry(entry: Record<string, unknown>, label: string, item
 
   switch (entry.kind) {
     case "navigate":
+      return requireString("target");
     case "click":
     case "highlight":
-      return requireString("target");
+      return requireString("target") ?? validateOptionalInteractionBounds(entry.target_bounds, prefix);
     case "type":
-      return requireString("text") ?? optionalBoolean("clear_first");
+      return requireString("text") ?? validateOptionalInteractionBounds(entry.target_bounds, prefix) ?? optionalBoolean("clear_first");
     case "select":
-      return requireString("target") ?? requireString("value");
+      return requireString("target") ?? requireString("value") ?? validateOptionalInteractionBounds(entry.target_bounds, prefix);
     case "wait_for":
       return requireString("condition") ?? optionalNumber("timeout_ms");
     case "full_screen":
@@ -2007,21 +2008,42 @@ function validateOptionalFramingRect(rect: unknown, prefix: string): string | nu
   return null;
 }
 
+function validateOptionalInteractionBounds(bounds: unknown, prefix: string): string | null {
+  if (bounds == null) return null;
+  if (!bounds || typeof bounds !== "object" || Array.isArray(bounds)) return `${prefix} needs object "target_bounds".`;
+  const fields = ["x", "y", "width", "height"];
+  for (const field of fields) {
+    const value = (bounds as Record<string, unknown>)[field];
+    if (typeof value !== "number" || !Number.isFinite(value)) return `${prefix} target_bounds needs numeric "${field}".`;
+    if (value < 0 || (field === "width" || field === "height") && value === 0) {
+      return `${prefix} target_bounds needs non-negative x/y and positive width/height.`;
+    }
+  }
+  return null;
+}
+
 function summarizeDemoStep(step: DemoStep): string {
+  const boundsSummary = step.kind !== "navigate" && step.kind !== "wait_for" && step.target_bounds
+    ? ` @ ${formatBounds(step.target_bounds)}`
+    : "";
   switch (step.kind) {
     case "navigate":
       return `Navigate: ${step.target}`;
     case "click":
-      return `Click: ${step.target}`;
+      return `Click: ${step.target}${boundsSummary}`;
     case "type":
-      return `Type: ${step.target ? `${step.target} · ` : ""}${step.text}`;
+      return `Type: ${step.target ? `${step.target} · ` : ""}${step.text}${boundsSummary}`;
     case "select":
-      return `Select: ${step.target} → ${step.value}`;
+      return `Select: ${step.target} → ${step.value}${boundsSummary}`;
     case "wait_for":
       return `Wait: ${step.condition}`;
     case "highlight":
-      return `Highlight: ${step.target}`;
+      return `Highlight: ${step.target}${boundsSummary}`;
   }
+}
+
+function formatBounds(bounds: InteractionBounds): string {
+  return `${Math.round(bounds.x)},${Math.round(bounds.y)} ${Math.round(bounds.width)}×${Math.round(bounds.height)}px`;
 }
 
 function summarizeFramingBeat(beat: FramingBeat): string {

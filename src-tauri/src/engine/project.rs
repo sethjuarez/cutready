@@ -3456,6 +3456,7 @@ mod tests {
         old.locked = true;
         old.demo_steps = vec![crate::models::sketch::DemoStep::Click {
             target: "Generate".into(),
+            target_bounds: None,
             capture: None,
         }];
 

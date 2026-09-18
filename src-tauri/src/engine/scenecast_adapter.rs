@@ -449,21 +449,58 @@ fn command_output_excerpt(stderr: &[u8], stdout: &[u8]) -> String {
 fn build_hotspots(
     row_number: usize,
     row: &PlanningRow,
-    _next_scene_id: Option<&str>,
+    next_scene_id: Option<&str>,
     diagnostics: &mut Vec<ScenecastAdapterDiagnostic>,
 ) -> Vec<ScenecastHotspot> {
-    for step in &row.demo_steps {
-        if step_requires_bounds(step) {
+    let mut hotspots = Vec::new();
+    for (step_index, step) in row.demo_steps.iter().enumerate() {
+        let Some((label, rect)) = step_hotspot_target(step) else {
+            if step_requires_bounds(step) {
+                diagnostics.push(ScenecastAdapterDiagnostic {
+                    severity: ScenecastAdapterSeverity::Warning,
+                    row_number,
+                    code: "missing_hotspot_bounds",
+                    message: "Skipped Scenecast hotspot because CutReady demo_steps do not carry target_bounds geometry yet.".to_string(),
+                });
+            }
+            continue;
+        };
+
+        let Some(next_scene_id) = next_scene_id else {
             diagnostics.push(ScenecastAdapterDiagnostic {
                 severity: ScenecastAdapterSeverity::Warning,
                 row_number,
-                code: "missing_hotspot_bounds",
-                message: "Skipped Scenecast hotspot because CutReady demo_steps do not carry capture-pixel bounds yet.".to_string(),
+                code: "missing_hotspot_target",
+                message: "Skipped Scenecast hotspot because the row has no following screenshot scene target.".to_string(),
             });
+            continue;
+        };
+
+        if !is_valid_hotspot_bounds(rect) {
+            diagnostics.push(ScenecastAdapterDiagnostic {
+                severity: ScenecastAdapterSeverity::Warning,
+                row_number,
+                code: "invalid_hotspot_bounds",
+                message: "Skipped Scenecast hotspot because demo_steps target_bounds must use finite screenshot-pixel bounds with positive size.".to_string(),
+            });
+            continue;
         }
+
+        hotspots.push(ScenecastHotspot {
+            id: format!("row-{row_number:03}-step-{:03}", step_index + 1),
+            label: label.to_string(),
+            target: next_scene_id.to_string(),
+            bounds: ScenecastRect {
+                x: rect.x,
+                y: rect.y,
+                width: rect.width,
+                height: rect.height,
+            },
+            trigger: "click",
+        });
     }
 
-    Vec::new()
+    hotspots
 }
 
 fn step_requires_bounds(step: &DemoStep) -> bool {
@@ -471,6 +508,39 @@ fn step_requires_bounds(step: &DemoStep) -> bool {
         step,
         DemoStep::Click { .. } | DemoStep::Select { .. } | DemoStep::Highlight { .. }
     )
+}
+
+fn step_hotspot_target(
+    step: &DemoStep,
+) -> Option<(&str, &crate::models::sketch::InteractionBounds)> {
+    match step {
+        DemoStep::Click {
+            target,
+            target_bounds: Some(rect),
+            ..
+        }
+        | DemoStep::Select {
+            target,
+            target_bounds: Some(rect),
+            ..
+        }
+        | DemoStep::Highlight {
+            target,
+            target_bounds: Some(rect),
+        } => Some((target.as_str(), rect)),
+        _ => None,
+    }
+}
+
+fn is_valid_hotspot_bounds(rect: &crate::models::sketch::InteractionBounds) -> bool {
+    rect.x.is_finite()
+        && rect.y.is_finite()
+        && rect.width.is_finite()
+        && rect.height.is_finite()
+        && rect.x >= 0.0
+        && rect.y >= 0.0
+        && rect.width > 0.0
+        && rect.height > 0.0
 }
 
 fn row_scene_id(row_number: usize, row: &PlanningRow) -> String {
@@ -564,6 +634,7 @@ mod tests {
         let mut first = row("screenshots/dashboard.PNG");
         first.demo_steps = vec![DemoStep::Click {
             target: "Continue".to_string(),
+            target_bounds: None,
             capture: Some(InteractionCapturePolicy::BeforeAfterAndMotion),
         }];
         let build =
@@ -604,6 +675,7 @@ mod tests {
         let mut only = row("screenshots/dashboard.png");
         only.demo_steps = vec![DemoStep::Click {
             target: "Continue".to_string(),
+            target_bounds: None,
             capture: None,
         }];
 
@@ -613,6 +685,48 @@ mod tests {
         assert_eq!(build.diagnostics.len(), 1);
         assert_eq!(build.diagnostics[0].row_number, 1);
         assert_eq!(build.diagnostics[0].code, "missing_hotspot_bounds");
+    }
+
+    #[test]
+    fn emits_hotspots_from_demo_step_target_bounds() {
+        let mut first = row("screenshots/dashboard.png");
+        first.demo_steps = vec![DemoStep::Click {
+            target: "View pricing".to_string(),
+            target_bounds: Some(crate::models::sketch::InteractionBounds {
+                x: 420.0,
+                y: 240.0,
+                width: 160.0,
+                height: 48.0,
+            }),
+            capture: Some(InteractionCapturePolicy::BeforeAfter),
+        }];
+
+        let build =
+            build_scenecast_bundle(&sketch(vec![first, row("screenshots/pricing.png")])).unwrap();
+
+        assert!(build.diagnostics.is_empty());
+        assert_eq!(build.manifest.graph.scenes[0].hotspots.len(), 1);
+        assert_eq!(
+            build.manifest.graph.scenes[0].hotspots[0].id,
+            "row-001-step-001"
+        );
+        assert_eq!(
+            build.manifest.graph.scenes[0].hotspots[0].label,
+            "View pricing"
+        );
+        assert_eq!(
+            build.manifest.graph.scenes[0].hotspots[0].target,
+            "cutready-row-pricing"
+        );
+        assert_eq!(
+            build.manifest.graph.scenes[0].hotspots[0].bounds,
+            ScenecastRect {
+                x: 420.0,
+                y: 240.0,
+                width: 160.0,
+                height: 48.0,
+            }
+        );
     }
 
     #[test]

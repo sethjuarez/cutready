@@ -99,11 +99,22 @@ export type WaitEditPolicy = "keep_natural" | "compress_wait" | "show_start_and_
 
 export type DemoStep =
   | { kind: "navigate"; target: string }
-  | { kind: "click"; target: string; capture?: InteractionCapturePolicy | null }
-  | { kind: "type"; text: string; target?: string | null; clear_first?: boolean | null }
-  | { kind: "select"; target: string; value: string }
+  | { kind: "click"; target: string; target_bounds?: InteractionBounds | null; capture?: InteractionCapturePolicy | null }
+  | { kind: "type"; text: string; target?: string | null; target_bounds?: InteractionBounds | null; clear_first?: boolean | null }
+  | { kind: "select"; target: string; value: string; target_bounds?: InteractionBounds | null }
   | { kind: "wait_for"; condition: string; timeout_ms?: number | null; edit_policy?: WaitEditPolicy | null }
-  | { kind: "highlight"; target: string };
+  | { kind: "highlight"; target: string; target_bounds?: InteractionBounds | null };
+
+export interface InteractionBounds {
+  /** Left edge in source screenshot pixels. */
+  x: number;
+  /** Top edge in source screenshot pixels. */
+  y: number;
+  /** Width in source screenshot pixels. */
+  width: number;
+  /** Height in source screenshot pixels. */
+  height: number;
+}
 
 export interface FramingRect {
   /** Normalized left edge, relative to the row screenshot or visual. */

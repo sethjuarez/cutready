@@ -98,6 +98,7 @@ Sketch files are JSON documents containing a structured planning table:
   },
   "rows": [
     {
+      "row_id": "b8f4c7de-91f3-4c4f-bc78-55ce0c4db4f3",
       "locked": false,
       "locks": {
         "time": false,
@@ -110,6 +111,13 @@ Sketch files are JSON documents containing a structured planning table:
       "time": "0:00",
       "narrative": "Welcome to the dashboard overview",
       "demo_actions": "Navigate to /dashboard",
+      "demo_steps": [
+        {
+          "kind": "click",
+          "target": "View pricing",
+          "target_bounds": { "x": 420, "y": 240, "width": 160, "height": 48 }
+        }
+      ],
       "screenshot": ".cutready/screenshots/screenshot-001.png",
       "visual": ".cutready/visuals/a1b2c3d4e5f6.json",
       "design_plan": "Frame the dashboard metrics as three cards."
@@ -142,14 +150,19 @@ Sketch files are JSON documents containing a structured planning table:
 
 | Field | Type | Description |
 | --- | --- | --- |
+| `row_id` | string | Stable source-row identity used to map generated playback artifacts back to the authoring row |
 | `time` | string | Target timing (e.g., `"0:30"`, `"1:15"`) |
 | `narrative` | string | Voiceover script text |
 | `demo_actions` | string | Demo action descriptions |
+| `demo_steps` | array/null | Optional normalized action intent. Interactive steps can include screenshot-pixel `target_bounds` geometry for Scenecast hotspot export |
 | `screenshot` | string/null | Reference screenshot path relative to the project |
 | `locked` | boolean | Protects the whole row from edits |
 | `locks` | object | Per-cell locks for `time`, `narrative`, `demo_actions`, `screenshot`, `visual`, and `design_plan` |
 | `visual` | string/null | External Elucim DSL file in `.cutready/visuals/` |
 | `design_plan` | string/null | Plain-English visual brief saved by the Designer agent |
+
+`target_bounds` values are measured in source screenshot pixels: `x`/`y` are
+the left/top edges and `width`/`height` are the target size.
 
 ## Storyboard Files (`.sb`)
 
