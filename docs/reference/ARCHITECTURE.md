@@ -325,7 +325,7 @@ struct PlanningTable {
 }
 
 struct PlanningRow {
-    id: Uuid,
+    id: Uuid,                       // Stable source-row identity
     time: Option<String>,           // Estimated duration
     narrative_bullets: Vec<String>,  // Voiceover talking points
     demo_action_bullets: Vec<String>,// What to demonstrate
@@ -348,6 +348,8 @@ struct DocumentSummary {
     updated_at: DateTime<Utc>,
 }
 ```
+
+Planning row identity is durable authoring metadata, not display order. CutReady uses it to compile generated Scenecast scenes with stable `cutready-row-...` IDs and to reject stale `resolved-demo.json` artifacts that no longer match the current `.sk` row identities.
 
 ### Project Storage
 
