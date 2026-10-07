@@ -13,7 +13,7 @@ import {
   needsResponsesApi,
   providerById,
   providerToConfigInput,
-  supportsPromptyReasoningEffort,
+  supportsAgentReasoningEffort,
   supportedReasoningEfforts,
 } from "../utils/providerConfig";
 import type { AiProviderConfig } from "../hooks/useSettings";
@@ -92,11 +92,11 @@ describe("buildProviderConfig", () => {
   });
 
   test("includes supported reasoning effort and drops unsupported selections", () => {
-    expect(supportedReasoningEfforts("openai", "gpt-5.6-terra")).toContain("xhigh");
+    expect(supportedReasoningEfforts("openai", "gpt-6.1-sol")).toContain("xhigh");
 
     const supported = buildProviderConfig({
       ...base,
-      aiModel: "gpt-5.6-terra",
+      aiModel: "gpt-6.1-sol",
       aiReasoningEffort: "high",
     }, "agentive");
     expect(supported.reasoning_effort).toBe("high");
@@ -109,10 +109,10 @@ describe("buildProviderConfig", () => {
     expect(unsupported.reasoning_effort).toBeNull();
   });
 
-  test("omits Prompty reasoning effort for chat-completions models", () => {
+  test("omits agent reasoning effort for chat-completions models", () => {
     expect(supportedReasoningEfforts("openai", "gpt-5.6-luna")).toContain("high");
     expect(needsResponsesApi("gpt-5.6-luna")).toBe(false);
-    expect(supportsPromptyReasoningEffort("gpt-5.6-luna")).toBe(false);
+    expect(supportsAgentReasoningEffort("gpt-5.6-luna")).toBe(false);
 
     const promptyChat = buildProviderConfig({
       ...base,
@@ -126,14 +126,21 @@ describe("buildProviderConfig", () => {
       aiModel: "gpt-5.6-luna",
       aiReasoningEffort: "high",
     }, "agentive");
-    expect(nonPromptyChat.reasoning_effort).toBe("high");
+    expect(nonPromptyChat.reasoning_effort).toBeNull();
+
+    const providerOwned = buildProviderConfig({
+      ...base,
+      aiModel: "gpt-6.1-sol",
+      aiReasoningEffort: "high",
+    }, "copilot-sdk");
+    expect(providerOwned.reasoning_effort).toBeNull();
   });
 
-  test("keeps Prompty reasoning effort for responses-routed models", () => {
+  test("keeps agent reasoning effort for responses-routed models", () => {
     expect(needsResponsesApi("gpt-5.1-codex")).toBe(true);
-    expect(supportsPromptyReasoningEffort("gpt-5.1-codex")).toBe(true);
+    expect(supportsAgentReasoningEffort("gpt-5.1-codex")).toBe(true);
     expect(needsResponsesApi("gpt-6.1-sol")).toBe(true);
-    expect(supportsPromptyReasoningEffort("gpt-6.1-sol")).toBe(true);
+    expect(supportsAgentReasoningEffort("gpt-6.1-sol")).toBe(true);
 
     const cfg = buildProviderConfig({
       ...base,

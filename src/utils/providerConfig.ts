@@ -121,7 +121,7 @@ export function needsResponsesApi(model: string | undefined, baseModel?: string)
   return modelKey.includes("codex") || modelKey.includes("gpt-6") || (modelKey.includes("gpt-5") && modelKey.endsWith("-pro"));
 }
 
-export function supportsPromptyReasoningEffort(model: string | undefined, baseModel?: string): boolean {
+export function supportsAgentReasoningEffort(model: string | undefined, baseModel?: string): boolean {
   return needsResponsesApi(model, baseModel);
 }
 
@@ -312,9 +312,9 @@ export function buildProviderConfig(
   const provider = requestInput ? settings.provider : settings.aiProvider;
   const model = (requestInput ? settings.model : settings.aiModel) || "unused";
   const normalizedReasoningEffort = normalizeReasoningEffort(settings.aiReasoningEffort, provider, model, modelReasoningEfforts, modelBaseModel);
-  const reasoningEffort = executionEngine === "prompty" && !supportsPromptyReasoningEffort(model, modelBaseModel)
-    ? ""
-    : normalizedReasoningEffort;
+  const reasoningEffort = executionEngine !== "copilot-sdk" && supportsAgentReasoningEffort(model, modelBaseModel)
+    ? normalizedReasoningEffort
+    : "";
   return {
     provider,
     endpoint: requestInput ? settings.endpoint : settings.aiEndpoint,

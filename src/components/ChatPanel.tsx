@@ -21,7 +21,7 @@ import {
   providerById,
   providerToConfigInput,
   supportedReasoningEfforts,
-  supportsPromptyReasoningEffort,
+  supportsAgentReasoningEffort,
   normalizeReasoningEffort,
   filterAgentCompatibleModels,
 } from "../utils/providerConfig";
@@ -1047,7 +1047,10 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const effectiveModelBaseModel = selectedAgentModelOverride ? "" : (effectiveProvider?.modelBaseModel || settings.aiModelBaseModel || "");
   const reasoningEfforts = useMemo(
     () => {
-      if (settings.aiAgentExecutionEngine === "prompty" && !supportsPromptyReasoningEffort(effectiveModel, effectiveModelBaseModel)) {
+      if (settings.aiAgentExecutionEngine === "copilot-sdk") {
+        return [];
+      }
+      if (!supportsAgentReasoningEffort(effectiveModel, effectiveModelBaseModel)) {
         return [];
       }
       return supportedReasoningEfforts(effectiveProvider?.provider, effectiveModel, effectiveModelReasoningEfforts, effectiveModelBaseModel);
@@ -1055,8 +1058,10 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     [effectiveModel, effectiveModelBaseModel, effectiveModelReasoningEfforts, effectiveProvider?.provider, settings.aiAgentExecutionEngine],
   );
   const effectiveReasoningEffort = useMemo(
-    () => normalizeReasoningEffort(settings.aiReasoningEffort, effectiveProvider?.provider, effectiveModel, effectiveModelReasoningEfforts, effectiveModelBaseModel),
-    [effectiveModel, effectiveModelBaseModel, effectiveModelReasoningEfforts, effectiveProvider?.provider, settings.aiReasoningEffort],
+    () => settings.aiAgentExecutionEngine === "copilot-sdk"
+      ? ""
+      : normalizeReasoningEffort(settings.aiReasoningEffort, effectiveProvider?.provider, effectiveModel, effectiveModelReasoningEfforts, effectiveModelBaseModel),
+    [effectiveModel, effectiveModelBaseModel, effectiveModelReasoningEfforts, effectiveProvider?.provider, settings.aiAgentExecutionEngine, settings.aiReasoningEffort],
   );
   const latestRunDetails = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -1466,6 +1471,8 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           modelOverride ? "" : effectiveProviderInput.modelReasoningEfforts,
           modelOverride ? "" : effectiveProviderInput.modelBaseModel,
         ) || null;
+      } else {
+        config.reasoning_effort = null;
       }
 
       // Build agent prompts map for sub-agent delegation

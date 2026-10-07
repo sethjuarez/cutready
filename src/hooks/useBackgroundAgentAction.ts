@@ -6,7 +6,7 @@ import { useAiApplyGateStore } from "../stores/aiApplyGateStore";
 import { useSettings, type AgentPreset } from "./useSettings";
 import { invoke } from "../services/tauri";
 import type { ChatMessage } from "../types/sketch";
-import { buildProviderConfig } from "../utils/providerConfig";
+import { buildProviderConfig, normalizeReasoningEffort } from "../utils/providerConfig";
 import {
   buildRefreshedProviderInput,
   resolveAgentModelOverride,
@@ -212,7 +212,18 @@ export function useBackgroundAgentAction() {
       const result = await invoke<AgentChatResult>("agent_chat_with_tools", {
         config: {
           ...providerConfig,
-          ...(modelOverride ? { model: modelOverride } : {}),
+          ...(modelOverride ? {
+            model: modelOverride,
+            model_base_model: null,
+            model_reasoning_efforts: null,
+            reasoning_effort: normalizeReasoningEffort(
+              settings.aiReasoningEffort,
+              providerConfig.provider,
+              modelOverride,
+              "",
+              "",
+            ) || null,
+          } : {}),
         },
         messages: [
           { role: "system", content: buildSystemPrompt(effectiveAgent.id) },
