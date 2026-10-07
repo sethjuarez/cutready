@@ -163,6 +163,9 @@ pub struct ProviderConfig {
     pub endpoint: String,
     pub api_key: String,
     pub model: String,
+    /// Underlying provider model for deployment aliases, when known.
+    #[serde(default)]
+    pub model_base_model: Option<String>,
     #[serde(default)]
     pub bearer_token: Option<String>,
     /// API-reported context window (tokens) for the selected model.
@@ -315,10 +318,7 @@ fn normalize_reasoning_effort(
         return Ok(None);
     };
     let effort = effort.to_ascii_lowercase();
-    let openai_wire_provider = matches!(
-        provider,
-        "openai" | "azure_openai" | "microsoft_foundry"
-    );
+    let openai_wire_provider = matches!(provider, "openai" | "azure_openai" | "microsoft_foundry");
     let supported = if !openai_wire_provider {
         Vec::new()
     } else if let Some(discovered) = discovered_efforts {
@@ -336,6 +336,10 @@ fn normalize_reasoning_effort(
     Err(format!(
         "Reasoning effort '{effort}' is not supported for provider '{provider}' and model '{model}'"
     ))
+}
+
+fn supports_prompty_reasoning_effort(model: &str) -> bool {
+    llm::needs_responses_api(model)
 }
 
 fn context_kind_from_name(kind: &str) -> ContextKind {
@@ -410,8 +414,10 @@ impl From<ProviderConfig> for LlmConfig {
             endpoint: c.endpoint,
             api_key: c.api_key,
             model: c.model,
+            model_base_model: c.model_base_model,
             bearer_token: c.bearer_token,
             reasoning_effort: c.reasoning_effort,
+            model_reasoning_efforts: c.model_reasoning_efforts,
         }
     }
 }
@@ -885,18 +891,27 @@ pub async fn agent_chat_with_tools(
     // logic. Resolve only the canonical id up front (needed for the durable run
     // row's metadata); the harness itself is built after the store below so the
     // per-run store can be injected into the harness that owns durability.
-    let harness_id =
-        HarnessRegistry::canonical_id(config.execution_engine.as_deref())?.to_string();
+    let harness_id = HarnessRegistry::canonical_id(config.execution_engine.as_deref())?.to_string();
     let provider_name = config.provider.clone();
     let configured_provider_name = config.provider_name.clone();
     let configured_provider_id = config.provider_id.clone();
     let model = config.model.clone();
+    let route_model = config
+        .model_base_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+        .unwrap_or(&model)
+        .to_string();
     config.reasoning_effort = normalize_reasoning_effort(
         config.reasoning_effort.as_deref(),
         &provider_name,
-        &model,
+        &route_model,
         config.model_reasoning_efforts.as_deref(),
     )?;
+    if harness_id == "prompty" && !supports_prompty_reasoning_effort(&route_model) {
+        config.reasoning_effort = None;
+    }
     let llm_config: LlmConfig = config.into();
     let context_item_configs = context_items.unwrap_or_default();
 
@@ -991,7 +1006,7 @@ pub async fn agent_chat_with_tools(
         .collect::<Result<Vec<_>, _>>()?;
     context_items.extend(recalled_context_items(&messages, agent_state.as_ref()));
     log::info!(
-        "[agent_chat_with_tools] start run_id={} engine={} agent={} provider={} model={} requested_provider={} requested_model={} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} mutation_tools={} max_tool_rounds={} prompts={}",
+        "[agent_chat_with_tools] start run_id={} engine={} agent={} provider={} model={} requested_provider={} requested_model={} reasoning_effort={:?} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} mutation_tools={} max_tool_rounds={} prompts={}",
         run_id,
         harness_id.as_str(),
         agent_id,
@@ -999,6 +1014,7 @@ pub async fn agent_chat_with_tools(
         effective_model,
         provider_name,
         model,
+        effective_reasoning_effort,
         message_count,
         message_chars,
         budget_chars,
@@ -1020,6 +1036,8 @@ pub async fn agent_chat_with_tools(
             "requested_provider": &provider_name,
             "requested_model": &model,
             "harness_provides_own_provider": harness_provides_own_provider,
+            "reasoning_effort": effective_reasoning_effort,
+            "prompty_reasoning_effort_supported": harness_id != "prompty" || supports_prompty_reasoning_effort(&route_model),
             "execution_engine": harness_id.as_str(),
             "run_id": &run_id,
             "messages": message_count,
@@ -1291,8 +1309,7 @@ pub fn list_agent_harnesses(
 #[instrument_ipc(skip_all)]
 pub async fn copilot_auth_status(
     auditaur_trace_context: Option<IpcTraceContext>,
-) -> crate::engine::agent::harness::copilot_sdk::CopilotAuthStatus
-{
+) -> crate::engine::agent::harness::copilot_sdk::CopilotAuthStatus {
     crate::engine::agent::harness::copilot_sdk::probe_auth().await
 }
 
@@ -1352,9 +1369,7 @@ pub async fn archive_chat_session(
     let matched = {
         let mut guard = state.last_chat_summary.lock().unwrap();
         match guard.as_ref() {
-            Some(p) if p.session_id == session_id => {
-                guard.take().map(|p| (p.repo_root, p.root))
-            }
+            Some(p) if p.session_id == session_id => guard.take().map(|p| (p.repo_root, p.root)),
             _ => None,
         }
     };
@@ -1386,12 +1401,15 @@ pub async fn update_chat_summary(
     // Prefer the frontend-supplied origin (captured with the summary). Fall back
     // to the active project only for older callers that supply no origin.
     let origin = match (origin_repo_root, origin_root) {
-        (Some(repo_root), Some(root)) if !repo_root.is_empty() && !root.is_empty() => {
-            Some((std::path::PathBuf::from(repo_root), std::path::PathBuf::from(root)))
-        }
+        (Some(repo_root), Some(root)) if !repo_root.is_empty() && !root.is_empty() => Some((
+            std::path::PathBuf::from(repo_root),
+            std::path::PathBuf::from(root),
+        )),
         _ => {
             let guard = state.current_project.lock().unwrap();
-            guard.as_ref().map(|v| (v.repo_root.clone(), v.root.clone()))
+            guard
+                .as_ref()
+                .map(|v| (v.repo_root.clone(), v.root.clone()))
         }
     };
     let mut pending = state.last_chat_summary.lock().unwrap();
@@ -1933,6 +1951,7 @@ mod tests {
             endpoint: "https://example.com".into(),
             api_key: "key".into(),
             model: "gpt-4o".into(),
+            model_base_model: None,
             bearer_token: Some("token".into()),
             context_length: Some(128_000),
             vision_mode: Some("off".into()),
@@ -2025,6 +2044,14 @@ mod tests {
             Some("low,medium,high")
         )
         .is_err());
+    }
+
+    #[test]
+    fn prompty_reasoning_effort_only_applies_to_responses_models() {
+        assert!(!supports_prompty_reasoning_effort("gpt-5.6-luna"));
+        assert!(supports_prompty_reasoning_effort("gpt-6.1-sol"));
+        assert!(supports_prompty_reasoning_effort("gpt-5.1-codex"));
+        assert!(supports_prompty_reasoning_effort("gpt-5-pro"));
     }
 
     #[test]

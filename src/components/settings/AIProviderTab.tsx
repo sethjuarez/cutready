@@ -3,7 +3,7 @@ import { Brain, RefreshCw, X } from "lucide-react";
 import { useSettings, type AiReasoningEffort } from "../../hooks/useSettings";
 import { inputClass } from "../../styles";
 import { FoundryResourcePicker } from "../FoundryResourcePicker";
-import { activeProvider, createAiProviderConfig, normalizeReasoningEffort, supportedReasoningEfforts } from "../../utils/providerConfig";
+import { activeProvider, createAiProviderConfig, normalizeReasoningEffort, supportedReasoningEfforts, supportsPromptyReasoningEffort } from "../../utils/providerConfig";
 import type { ModelInfo } from "./types";
 
 export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropic, isOAuth, hasToken, canFetchModels, models, setModels, loadingModels, modelFilter, setModelFilter, modelError, fetchModels, oauthStatus, oauthError, startOAuthFlow, signOut }: {
@@ -31,15 +31,22 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
   const selectedProvider = activeProvider(settings);
   const defaultProvider = providers.find((provider) => provider.id === settings.aiDefaultProviderId) ?? selectedProvider;
   const activeModel = selectedProvider?.model || settings.aiModel || "";
+  const activeBaseModel = selectedProvider?.modelBaseModel || settings.aiModelBaseModel || "";
   const reasoningEfforts = useMemo(
-    () => supportedReasoningEfforts(selectedProvider?.provider, activeModel, settings.aiModelReasoningEfforts),
-    [activeModel, selectedProvider?.provider, settings.aiModelReasoningEfforts],
+    () => {
+      if (settings.aiAgentExecutionEngine === "prompty" && !supportsPromptyReasoningEffort(activeModel, activeBaseModel)) {
+        return [];
+      }
+      return supportedReasoningEfforts(selectedProvider?.provider, activeModel, settings.aiModelReasoningEfforts, activeBaseModel);
+    },
+    [activeBaseModel, activeModel, selectedProvider?.provider, settings.aiAgentExecutionEngine, settings.aiModelReasoningEfforts],
   );
   const effectiveReasoningEffort = normalizeReasoningEffort(
     settings.aiReasoningEffort,
     selectedProvider?.provider,
     activeModel,
     settings.aiModelReasoningEfforts,
+    activeBaseModel,
   );
   // Persisted per-connection "kind" values are unchanged wire values. The two
   // Azure kinds (microsoft_foundry, azure_openai) are surfaced as one "Microsoft
@@ -501,6 +508,7 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
                 setModelFilter(e.target.value);
               } else {
                 updateSetting("aiModel", e.target.value);
+                updateSetting("aiModelBaseModel", "");
                 updateSetting("aiModelReasoningEfforts", "");
               }
             }}
@@ -542,6 +550,9 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
                   key={m.id}
                   onClick={() => {
                     updateSetting("aiModel", m.id);
+                    const ownedBy = (m.owned_by ?? "").trim();
+                    const baseModel = /^(gpt-|o1|o3|o4|claude-)/i.test(ownedBy) ? ownedBy : "";
+                    updateSetting("aiModelBaseModel", baseModel);
                     if (m.context_length) {
                       updateSetting("aiContextLength", m.context_length);
                     }

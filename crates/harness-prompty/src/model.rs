@@ -17,7 +17,10 @@ use prompty::{
 };
 use serde_json::{json, Value};
 
-use harness_contract::llm::{context_budget, needs_responses_api, LlmConfig, LlmProvider};
+use harness_contract::llm::{context_budget, LlmConfig, LlmProvider};
+use harness_contract::routing::{
+    resolve_agent_model_route, AgentRunRequirements, HistoryStrategy, ModelApiRoute,
+};
 use harness_contract::tools::ToolDefinition;
 
 pub struct ProductionPromptyModel {
@@ -25,6 +28,7 @@ pub struct ProductionPromptyModel {
     pub provider_name: String,
     pub model_name: String,
     pub context_budget_chars: usize,
+    pub history_strategy: HistoryStrategy,
 }
 
 pub fn build_production_model(
@@ -33,7 +37,25 @@ pub fn build_production_model(
     tools: Vec<ToolDefinition>,
 ) -> Result<ProductionPromptyModel, String> {
     let model_name = effective_model(config).to_string();
-    let responses = needs_responses_api(&model_name);
+    let base_model = config
+        .model_base_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|model| !model.is_empty());
+    let route = resolve_agent_model_route(
+        config.provider.clone(),
+        &model_name,
+        "prompty",
+        AgentRunRequirements {
+            tool_calling: !tools.is_empty(),
+            vision: false,
+            reasoning_effort: config.reasoning_effort.clone(),
+        },
+        base_model,
+        config.model_reasoning_efforts.as_deref(),
+    )
+    .map_err(|error| error.to_string())?;
+    let responses = route.api_route == ModelApiRoute::Responses;
     let (provider_name, connection, executor, processor): (
         String,
         Value,
@@ -136,14 +158,17 @@ pub fn build_production_model(
         .map(tool_definition_to_prompty_value)
         .collect::<Result<Vec<_>, _>>()?;
     let mut options = json!({ "stream": true });
-    if let Some(reasoning_effort) = config
-        .reasoning_effort
-        .as_deref()
-        .map(str::trim)
-        .filter(|effort| !effort.is_empty())
-    {
+    if let Some(reasoning_effort) = route.effective_reasoning_effort.as_deref() {
         options["reasoningEffort"] = Value::String(reasoning_effort.to_string());
     }
+    log::info!(
+        "[prompty_model] provider={} model={} api_type={} tools={} reasoning_effort_option={:?}",
+        provider_name,
+        model_name,
+        api_type,
+        tool_values.len(),
+        options.get("reasoningEffort").and_then(Value::as_str)
+    );
     let agent = Prompty::load_from_value(
         &json!({
             "name": "CutReady",
@@ -158,12 +183,13 @@ pub fn build_production_model(
         }),
         &LoadContext::default(),
     );
-    let context_budget_chars = context_budget(&model_name, reported_context_length);
+    let context_budget_chars = context_budget(&route.identity.base_model, reported_context_length);
     Ok(ProductionPromptyModel {
         port: Arc::new(PromptyExecutorModelPort::new(agent, executor, processor)),
         provider_name,
         model_name,
         context_budget_chars,
+        history_strategy: route.history_strategy,
     })
 }
 
@@ -922,11 +948,10 @@ mod tests {
             tool_requests[0].metadata["arguments_json"],
             "{\"include_images\":false}"
         );
-        let native_calls =
-            serde_json::from_value::<Vec<harness_contract::execution::ToolCall>>(
-                response.assistant_messages.as_deref().unwrap_or(&[])[0].metadata["tool_calls"].clone(),
-            )
-            .unwrap();
+        let native_calls = serde_json::from_value::<Vec<harness_contract::execution::ToolCall>>(
+            response.assistant_messages.as_deref().unwrap_or(&[])[0].metadata["tool_calls"].clone(),
+        )
+        .unwrap();
         assert_eq!(native_calls[0].id, "call-list");
         assert_eq!(native_calls[0].function.name, "list_project_files");
         assert_eq!(
@@ -957,7 +982,9 @@ mod tests {
             .invoke(&request(), &CancellationToken::new(), &NoopModelStreamPort)
             .await
             .unwrap();
-        assert!(response.assistant_messages.as_deref().unwrap_or(&[])[0].parts.is_empty());
+        assert!(response.assistant_messages.as_deref().unwrap_or(&[])[0]
+            .parts
+            .is_empty());
     }
 
     #[tokio::test]
@@ -1082,8 +1109,10 @@ mod tests {
                 endpoint: server.url(""),
                 api_key: "test-key".into(),
                 model: "gpt-5.1-codex".into(),
+                model_base_model: None,
                 bearer_token: None,
                 reasoning_effort: None,
+                model_reasoning_efforts: None,
             },
             None,
             Vec::new(),
@@ -1129,8 +1158,10 @@ mod tests {
                 endpoint: server.url(""),
                 api_key: "test-key".into(),
                 model: "gpt-5.1-codex".into(),
+                model_base_model: None,
                 bearer_token: None,
                 reasoning_effort: None,
+                model_reasoning_efforts: None,
             },
             None,
             Vec::new(),
@@ -1162,7 +1193,8 @@ mod tests {
             "call-list"
         );
         assert_eq!(
-            response.assistant_messages.as_deref().unwrap_or(&[])[0].metadata["tool_calls"][0]["id"],
+            response.assistant_messages.as_deref().unwrap_or(&[])[0].metadata["tool_calls"][0]
+                ["id"],
             "call-list"
         );
     }
@@ -1201,8 +1233,10 @@ mod tests {
                 endpoint: server.url(""),
                 api_key: "test-key".into(),
                 model: "gpt-5.1-codex".into(),
+                model_base_model: None,
                 bearer_token: None,
                 reasoning_effort: None,
+                model_reasoning_efforts: None,
             },
             None,
             Vec::new(),
@@ -1330,11 +1364,25 @@ mod tests {
             endpoint: String::new(),
             api_key: "test-key".into(),
             model: "gpt-5.1-codex".into(),
+            model_base_model: None,
             bearer_token: None,
             reasoning_effort: None,
+            model_reasoning_efforts: None,
         };
 
-        let production = build_production_model(&config, Some(10_000), Vec::new()).unwrap();
+        let tool = ToolDefinition::function(
+            "inspect",
+            "Inspect the project.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "target": { "type": "string" }
+                },
+                "required": ["target"]
+            }),
+        );
+
+        let production = build_production_model(&config, Some(10_000), vec![tool]).unwrap();
 
         assert_eq!(production.provider_name, "openai");
         assert_eq!(production.model_name, "gpt-5.1-codex");
@@ -1353,8 +1401,10 @@ mod tests {
             endpoint: String::new(),
             api_key: "test-key".into(),
             model: "gpt-5.1-codex".into(),
+            model_base_model: None,
             bearer_token: None,
             reasoning_effort: Some("high".into()),
+            model_reasoning_efforts: None,
         };
 
         let production = build_production_model(&config, Some(10_000), Vec::new()).unwrap();
@@ -1363,6 +1413,82 @@ mod tests {
             production.port.agent.model["options"]["reasoningEffort"],
             "high"
         );
+    }
+
+    #[test]
+    fn production_factory_routes_deployment_alias_by_base_model() {
+        let config = LlmConfig {
+            provider: LlmProvider::Openai,
+            endpoint: String::new(),
+            api_key: "test-key".into(),
+            model: "demo-deployment".into(),
+            model_base_model: Some("gpt-6-astra".into()),
+            bearer_token: None,
+            reasoning_effort: Some("high".into()),
+            model_reasoning_efforts: Some("low,medium,high,xhigh,max".into()),
+        };
+
+        let production = build_production_model(&config, Some(10_000), Vec::new()).unwrap();
+
+        assert_eq!(production.model_name, "demo-deployment");
+        assert_eq!(production.port.agent.model["apiType"], "responses");
+        assert_eq!(
+            production.port.agent.model["options"]["reasoningEffort"],
+            "high"
+        );
+    }
+
+    #[test]
+    fn production_factory_omits_chat_reasoning_effort() {
+        let config = LlmConfig {
+            provider: LlmProvider::Openai,
+            endpoint: String::new(),
+            api_key: "test-key".into(),
+            model: "gpt-5.6-luna".into(),
+            model_base_model: None,
+            bearer_token: None,
+            reasoning_effort: Some("high".into()),
+            model_reasoning_efforts: None,
+        };
+
+        let production = build_production_model(&config, Some(10_000), Vec::new()).unwrap();
+
+        assert_eq!(production.port.agent.model["apiType"], "chat");
+        assert!(production.port.agent.model["options"]
+            .get("reasoningEffort")
+            .is_none());
+    }
+
+    #[test]
+    fn production_factory_omits_chat_reasoning_effort_from_openai_wire_args() {
+        let config = LlmConfig {
+            provider: LlmProvider::Openai,
+            endpoint: String::new(),
+            api_key: "test-key".into(),
+            model: "gpt-5.6-luna".into(),
+            model_base_model: None,
+            bearer_token: None,
+            reasoning_effort: Some("high".into()),
+            model_reasoning_efforts: None,
+        };
+        let tool = ToolDefinition::function(
+            "inspect",
+            "Inspect the project.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "target": { "type": "string" }
+                },
+                "required": ["target"]
+            }),
+        );
+
+        let production = build_production_model(&config, Some(10_000), vec![tool]).unwrap();
+        let wire = prompty_openai::build_chat_args(&production.port.agent, &[]).unwrap();
+
+        assert_eq!(wire["model"], "gpt-5.6-luna");
+        assert!(wire.get("tools").is_some());
+        assert!(wire.get("reasoning_effort").is_none());
     }
 
     #[test]
@@ -1392,8 +1518,10 @@ mod tests {
             endpoint: "https://example.services.ai.azure.com/api/projects/demo".into(),
             api_key: String::new(),
             model: "gpt-4o".into(),
+            model_base_model: None,
             bearer_token: None,
             reasoning_effort: None,
+            model_reasoning_efforts: None,
         };
 
         let error = build_production_model(&config, None, Vec::new())
@@ -1410,8 +1538,10 @@ mod tests {
             endpoint: "https://example.openai.azure.com".into(),
             api_key: "legacy-key".into(),
             model: "gpt-4o".into(),
+            model_base_model: None,
             bearer_token: Some("entra-token".into()),
             reasoning_effort: None,
+            model_reasoning_efforts: None,
         };
 
         let production = build_production_model(&config, None, Vec::new()).unwrap();

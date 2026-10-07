@@ -21,7 +21,9 @@ import {
   providerById,
   providerToConfigInput,
   supportedReasoningEfforts,
+  supportsPromptyReasoningEffort,
   normalizeReasoningEffort,
+  filterAgentCompatibleModels,
 } from "../utils/providerConfig";
 import {
   buildEffectiveProviderInput as buildEffectiveProviderInputShared,
@@ -509,7 +511,7 @@ export function reconcileMessagesForDisplay(
     .filter((message): message is ChatMessage => message !== null);
 }
 
-interface FileReference {
+export interface FileReference {
   type: "sketch" | "note" | "storyboard" | "web";
   path: string;
   title: string;
@@ -519,6 +521,64 @@ interface FileReference {
   webStatus?: "queued" | "loading" | "ready" | "error";
   /** Keep a locally fetched web snapshot available to future project chats. */
   persist?: boolean;
+}
+
+const FILE_REFERENCE_TYPES = new Set<FileReference["type"]>(["sketch", "note", "storyboard"]);
+
+function normalizeMentionToken(value: string): string {
+  return value.trim().replace(/[),.;!?]+$/g, "");
+}
+
+function pathBaseName(path: string): string {
+  const name = path.split(/[\\/]/).pop() ?? path;
+  return name.replace(/\.[^.]+$/, "");
+}
+
+function sameReference(a: Pick<FileReference, "type" | "path">, b: Pick<FileReference, "type" | "path">): boolean {
+  return a.type === b.type && a.path === b.path;
+}
+
+function findMentionFileReference(token: string, files: FileReference[]): FileReference | null {
+  const prefixed = token.match(/^(sketch|note|storyboard):(.+)$/i);
+  const requestedType = prefixed?.[1].toLowerCase() as FileReference["type"] | undefined;
+  const query = normalizeMentionToken(prefixed?.[2] ?? token).toLowerCase();
+  if (!query) return null;
+
+  return files.find((file) => {
+    if (requestedType && file.type !== requestedType) return false;
+    const title = file.title.toLowerCase();
+    const path = file.path.toLowerCase();
+    return title === query || path === query || pathBaseName(path) === query;
+  }) ?? null;
+}
+
+export function extractMentionReferences(
+  text: string,
+  files: FileReference[],
+  existing: FileReference[] = [],
+): FileReference[] {
+  const found: FileReference[] = [];
+  const addReference = (reference: FileReference) => {
+    if (existing.some((item) => sameReference(item, reference))) return;
+    if (found.some((item) => sameReference(item, reference))) return;
+    found.push(reference);
+  };
+
+  for (const match of text.matchAll(/@(?:web:)?(https?:\/\/[^\s<>"']+)/gi)) {
+    const url = normalizeMentionToken(match[1]);
+    addReference({ type: "web", path: url, title: url, webStatus: "queued" });
+  }
+
+  for (const match of text.matchAll(/@(?:"([^"]+)"|([^\s,;!?)\]}]+))/g)) {
+    const token = normalizeMentionToken(match[1] ?? match[2] ?? "");
+    if (!token || /^(?:web:)?https?:\/\//i.test(token)) continue;
+    const prefix = token.match(/^([^:]+):/)?.[1].toLowerCase();
+    if (prefix && !FILE_REFERENCE_TYPES.has(prefix as FileReference["type"])) continue;
+    const file = findMentionFileReference(token, files);
+    if (file) addReference(file);
+  }
+
+  return found;
 }
 
 type SecondaryTab = "chat" | "sessions" | "runs" | "database";
@@ -978,13 +1038,19 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   );
   const effectiveModel = selectedAgentModelOverride || effectiveProvider?.model || settings.aiModel || "";
   const effectiveModelReasoningEfforts = selectedAgentModelOverride ? "" : settings.aiModelReasoningEfforts;
+  const effectiveModelBaseModel = selectedAgentModelOverride ? "" : (effectiveProvider?.modelBaseModel || settings.aiModelBaseModel || "");
   const reasoningEfforts = useMemo(
-    () => supportedReasoningEfforts(effectiveProvider?.provider, effectiveModel, effectiveModelReasoningEfforts),
-    [effectiveModel, effectiveModelReasoningEfforts, effectiveProvider?.provider],
+    () => {
+      if (settings.aiAgentExecutionEngine === "prompty" && !supportsPromptyReasoningEffort(effectiveModel, effectiveModelBaseModel)) {
+        return [];
+      }
+      return supportedReasoningEfforts(effectiveProvider?.provider, effectiveModel, effectiveModelReasoningEfforts, effectiveModelBaseModel);
+    },
+    [effectiveModel, effectiveModelBaseModel, effectiveModelReasoningEfforts, effectiveProvider?.provider, settings.aiAgentExecutionEngine],
   );
   const effectiveReasoningEffort = useMemo(
-    () => normalizeReasoningEffort(settings.aiReasoningEffort, effectiveProvider?.provider, effectiveModel, effectiveModelReasoningEfforts),
-    [effectiveModel, effectiveModelReasoningEfforts, effectiveProvider?.provider, settings.aiReasoningEffort],
+    () => normalizeReasoningEffort(settings.aiReasoningEffort, effectiveProvider?.provider, effectiveModel, effectiveModelReasoningEfforts, effectiveModelBaseModel),
+    [effectiveModel, effectiveModelBaseModel, effectiveModelReasoningEfforts, effectiveProvider?.provider, settings.aiReasoningEffort],
   );
   const latestRunDetails = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -1204,8 +1270,12 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     const sendId = crypto.randomUUID();
     activePreflightSendIdRef.current = sendId;
     abortedRef.current = false;
+    const turnReferences = [
+      ...references,
+      ...extractMentionReferences(text, allFiles, references),
+    ];
 
-    const webReferences = references.filter((reference) => reference.type === "web");
+    const webReferences = turnReferences.filter((reference) => reference.type === "web");
     let resolvedWebReferences = webReferences;
     if (webReferences.length > 0) {
       setChatLoading(true);
@@ -1240,9 +1310,9 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     // Build user message with @references context (agentive protocol)
     let userContent = text;
     const contextItems: AgentContextItem[] = [];
-    if (references.length > 0) {
+    if (turnReferences.length > 0) {
       const webRefs = resolvedWebReferences;
-      const fileRefs = references.filter((r) => r.type !== "web");
+      const fileRefs = turnReferences.filter((r) => r.type !== "web");
       const parts: string[] = [];
 
       if (fileRefs.length > 0) {
@@ -1525,7 +1595,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       thinkingRef.current = "";
       workingDraftsRef.current = [];
     }
-  }, [input, loading, messages, references, systemPrompt, buildEffectiveProviderInput, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings, selectedAgent, memoryContext, activeSketchPath, activeStoryboardPath, activeNotePath, chatSessionPath, persistChatSession, refreshSketchAfterMutation, refreshStoryboardAfterMutation, resetChatStreaming, scrollMessagesToBottom, setChatStreamingState, updateSetting]);
+  }, [input, loading, messages, references, allFiles, systemPrompt, buildEffectiveProviderInput, setChatMessages, setChatLoading, setChatError, addActivityEntries, settings, selectedAgent, memoryContext, activeSketchPath, activeStoryboardPath, activeNotePath, chatSessionPath, persistChatSession, refreshSketchAfterMutation, refreshStoryboardAfterMutation, resetChatStreaming, scrollMessagesToBottom, setChatStreamingState, updateSetting]);
 
   // Pick up prompts queued from outside the chat (e.g. sparkle buttons)
   const handleSendRef = useRef(handleSend);
@@ -1613,6 +1683,27 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       setShowAutocomplete(false);
     },
     [loading],
+  );
+
+  const handleInputPaste = useCallback(
+    (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      if (loading) return;
+      const pastedText = e.clipboardData.getData("text/plain");
+      if (!pastedText.includes("@")) return;
+
+      const target = e.currentTarget;
+      const start = target.selectionStart ?? input.length;
+      const end = target.selectionEnd ?? start;
+      const nextInput = `${input.slice(0, start)}${pastedText}${input.slice(end)}`;
+      const pastedReferences = extractMentionReferences(nextInput, allFiles, references);
+      if (pastedReferences.length === 0) return;
+
+      setReferences((previous) => [
+        ...previous,
+        ...pastedReferences.filter((reference) => !previous.some((item) => sameReference(item, reference))),
+      ]);
+    },
+    [allFiles, input, loading, references],
   );
 
   const insertReference = useCallback(
@@ -2002,6 +2093,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
+            onPaste={handleInputPaste}
           />
         </div>
 
@@ -3076,17 +3168,9 @@ function ModelPickerDropdown({
           providerInput,
           settings.aiAgentExecutionEngine || "prompty",
         );
-        const result = await invoke<{ id: string; name: string; capabilities?: Record<string, string> }[]>("list_models", { config });
+        const result = await invoke<{ id: string; name: string; owned_by?: string; capabilities?: Record<string, string>; context_length?: number }[]>("list_models", { config });
         if (!cancelled) {
-          // Show chat-capable models AND Responses API models (codex/pro)
-          const chatModels = result.filter((m) => {
-            if (!m.capabilities) return true; // no capabilities info = include (OpenAI, etc.)
-            if (m.capabilities.chat_completion === "true") return true;
-            // Include codex/pro models — we support them via Responses API
-            const name = (m.id || m.name || "").toLowerCase();
-            return name.includes("codex") || (name.includes("gpt-5") && name.endsWith("-pro"));
-          });
-          const ids = chatModels.map((m) => m.id || m.name);
+          const ids = filterAgentCompatibleModels(result, config.provider).map((m) => m.id || m.name);
           modelCache.key = cacheKey;
           modelCache.models = ids;
           modelCache.ts = Date.now();

@@ -186,8 +186,10 @@ impl HarnessContract {
                 endpoint: String::new(),
                 api_key: String::new(),
                 model: String::new(),
+                model_base_model: None,
                 bearer_token: None,
                 reasoning_effort: None,
+                model_reasoning_efforts: None,
             },
             Ownership::Requires | Ownership::Augments => llm,
         }
@@ -321,8 +323,10 @@ mod tests {
             endpoint: "https://example.services.ai.azure.com".to_string(),
             api_key: "secret-key".to_string(),
             model: "gpt-5.6-terra".to_string(),
+            model_base_model: None,
             bearer_token: Some("entra-token".to_string()),
             reasoning_effort: None,
+            model_reasoning_efforts: None,
         }
     }
 

@@ -28,8 +28,9 @@ use prompty::{
 };
 use serde_json::{json, Value};
 
-use harness_contract::tools::ToolExecutionContext;
 use crate::{DurableRunStore, PromptyHost, ResolvedProjectReference};
+use harness_contract::routing::HistoryStrategy;
+use harness_contract::tools::ToolExecutionContext;
 
 use harness_contract::execution::{
     estimate_message_chars, parse_tool_arguments, AgentEvent, ChatMessage, ContentPart,
@@ -181,6 +182,7 @@ struct PromptyTurn {
     provider_name: String,
     model_name: String,
     context_budget_chars: usize,
+    history_strategy: HistoryStrategy,
     messages: Vec<ChatMessage>,
     repo_root: PathBuf,
     project_root: PathBuf,
@@ -213,6 +215,7 @@ struct DelegationContext {
     provider_name: String,
     model_name: String,
     context_budget_chars: usize,
+    history_strategy: HistoryStrategy,
     repo_root: PathBuf,
     project_root: PathBuf,
     agent_prompts: Arc<HashMap<String, String>>,
@@ -239,6 +242,7 @@ pub async fn run(
     provider_name: String,
     model_name: String,
     context_budget_chars: usize,
+    history_strategy: HistoryStrategy,
     messages: Vec<ChatMessage>,
     repo_root: &Path,
     project_root: &Path,
@@ -263,6 +267,7 @@ pub async fn run(
         provider_name,
         model_name,
         context_budget_chars,
+        history_strategy,
         messages,
         repo_root: repo_root.to_path_buf(),
         project_root: project_root.to_path_buf(),
@@ -293,6 +298,7 @@ async fn run_turn(turn: PromptyTurn) -> Result<RunResult, String> {
         provider_name,
         model_name,
         context_budget_chars,
+        history_strategy,
         messages,
         repo_root,
         project_root,
@@ -381,6 +387,7 @@ async fn run_turn(turn: PromptyTurn) -> Result<RunResult, String> {
         provider_name: provider_name.clone(),
         model_name: model_name.clone(),
         context_budget_chars,
+        history_strategy,
         repo_root: repo_root.clone(),
         project_root: project_root.clone(),
         agent_prompts: agent_prompts.clone(),
@@ -467,6 +474,18 @@ async fn run_turn(turn: PromptyTurn) -> Result<RunResult, String> {
         },
     );
 
+    let (messages, sanitized_history_messages) = match history_strategy {
+        HistoryStrategy::ResponsesSanitizedReplay => sanitize_responses_replay_history(messages),
+        _ => (messages, 0),
+    };
+    if sanitized_history_messages > 0 {
+        log::info!(
+            "[prompty-agent] run_id={} model={} dropped {} replay-only tool exchange message(s) for Responses API history",
+            run_id,
+            model_name,
+            sanitized_history_messages
+        );
+    }
     let prompty_messages = messages
         .iter()
         .map(native_to_prompty_message)
@@ -988,7 +1007,8 @@ impl PermissionPort for CutReadyPermissionPort {
         request: &EngineToolRequest,
         _cancellation: &CancellationToken,
     ) -> Result<EnginePermissionDecision, PortError> {
-        let denial = if !self.mutation_tools_enabled && !self.host.is_read_only_tool(&request.name) {
+        let denial = if !self.mutation_tools_enabled && !self.host.is_read_only_tool(&request.name)
+        {
             Some(format!(
                 "Error: {} is disabled by the current AI mutation guard. Enable mutation tools before applying changes.",
                 request.name
@@ -1168,6 +1188,7 @@ async fn run_delegated_agent(delegation: &DelegationContext, call: &ToolCall) ->
         provider_name: delegation.provider_name.clone(),
         model_name: delegation.model_name.clone(),
         context_budget_chars: delegation.context_budget_chars,
+        history_strategy: delegation.history_strategy,
         messages: vec![ChatMessage::system(prompt), ChatMessage::user(message)],
         repo_root: delegation.repo_root.clone(),
         project_root: delegation.project_root.clone(),
@@ -1268,14 +1289,10 @@ fn trim_native_history_to_budget(messages: &mut Vec<ChatMessage>, max_chars: usi
         .unwrap_or(messages.len());
     let prefix = messages.drain(..prefix_end).collect::<Vec<_>>();
     let budget = max_chars
-        .saturating_sub(estimate_message_chars(
-            &prefix,
-        ))
+        .saturating_sub(estimate_message_chars(&prefix))
         .saturating_sub(5_000);
     let mut dropped = Vec::new();
-    while estimate_message_chars(messages) > budget
-        && messages.len() > 2
-    {
+    while estimate_message_chars(messages) > budget && messages.len() > 2 {
         let group = take_oldest_native_message_group(messages);
         if group.is_empty() {
             break;
@@ -1379,6 +1396,47 @@ fn summarize_dropped_native_messages(messages: &[ChatMessage]) -> String {
         summary.push('\n');
     }
     summary
+}
+
+fn sanitize_responses_replay_history(messages: Vec<ChatMessage>) -> (Vec<ChatMessage>, usize) {
+    let mut sanitized = Vec::with_capacity(messages.len());
+    let mut dropped = 0;
+
+    for message in messages {
+        if is_tool_image_followup(&message) {
+            dropped += 1;
+            continue;
+        }
+
+        if message.role == "assistant" {
+            if message
+                .tool_calls
+                .as_ref()
+                .filter(|calls| !calls.is_empty())
+                .is_some()
+            {
+                dropped += 1;
+                continue;
+            }
+        }
+
+        if message.role == "tool" {
+            dropped += 1;
+            continue;
+        }
+
+        sanitized.push(message);
+    }
+
+    (sanitized, dropped)
+}
+
+fn is_tool_image_followup(message: &ChatMessage) -> bool {
+    message.role == "user"
+        && message.text().is_some_and(|text| {
+            text.starts_with("[Images from the tool result above")
+                || text.starts_with("Images returned by tool '")
+        })
 }
 
 struct CutReadyDurabilityPort {

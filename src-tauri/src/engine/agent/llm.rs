@@ -234,8 +234,10 @@ mod tests {
             endpoint: "https://my-resource.openai.azure.com".into(),
             api_key: "test-key".into(),
             model: "gpt-4o".into(),
+            model_base_model: None,
             bearer_token: bearer.map(String::from),
             reasoning_effort: None,
+            model_reasoning_efforts: None,
         }
     }
 
@@ -248,8 +250,10 @@ mod tests {
             endpoint: "https://my-ai.services.ai.azure.com/".into(),
             api_key: String::new(),
             model: "gpt-4o".into(),
+            model_base_model: None,
             bearer_token: Some("entra-token".into()),
             reasoning_effort: None,
+            model_reasoning_efforts: None,
         };
         let connection = discovery_connection(&config).unwrap();
         assert_eq!(connection["kind"], "foundry");
@@ -267,8 +271,10 @@ mod tests {
             endpoint: "https://my-ai.openai.azure.com".into(),
             api_key: String::new(),
             model: "gpt-4o".into(),
+            model_base_model: None,
             bearer_token: Some("entra-token".into()),
             reasoning_effort: None,
+            model_reasoning_efforts: None,
         };
 
         let error = discovery_connection(&config).unwrap_err();
@@ -291,8 +297,10 @@ mod tests {
             endpoint: String::new(),
             api_key: "sk-test".into(),
             model: "gpt-4o".into(),
+            model_base_model: None,
             bearer_token: None,
             reasoning_effort: None,
+            model_reasoning_efforts: None,
         };
         let connection = discovery_connection(&config).unwrap();
         assert_eq!(connection["kind"], "key");
@@ -323,8 +331,10 @@ mod tests {
             endpoint: String::new(),
             api_key: "sk-ant-test".into(),
             model: "claude-sonnet-4-6".into(),
+            model_base_model: None,
             bearer_token: None,
             reasoning_effort: None,
+            model_reasoning_efforts: None,
         };
         assert_eq!(effective_endpoint(&config), "https://api.anthropic.com");
     }

@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Which LLM provider to use.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum LlmProvider {
     MicrosoftFoundry,
@@ -28,20 +28,25 @@ pub struct LlmConfig {
     pub api_key: String,
     /// Deployment / model name (e.g. "gpt-4o", "claude-sonnet-4").
     pub model: String,
+    /// Underlying model name for deployments/aliases, when known.
+    #[serde(default)]
+    pub model_base_model: Option<String>,
     /// ****** (Entra OAuth for Azure/Foundry).
     #[serde(default)]
     pub bearer_token: Option<String>,
     /// Optional model reasoning effort. None means provider/model default.
     #[serde(default)]
     pub reasoning_effort: Option<String>,
+    /// Comma-separated provider-discovered reasoning efforts for this model/deployment.
+    #[serde(default)]
+    pub model_reasoning_efforts: Option<String>,
 }
 
 /// Whether a model must be driven through the Responses API rather than
 /// Chat Completions. A harness-neutral model-name heuristic used by adapters
 /// when constructing a provider model.
 pub fn needs_responses_api(model: &str) -> bool {
-    let model = model.to_ascii_lowercase();
-    model.contains("codex") || (model.contains("gpt-5") && model.ends_with("-pro"))
+    crate::routing::requires_responses_api(model)
 }
 
 /// Character budget for a model's usable context window. When the provider
@@ -100,6 +105,7 @@ mod tests {
     fn needs_responses_api_targets_codex_and_gpt5_pro() {
         assert!(needs_responses_api("gpt-5-codex"));
         assert!(needs_responses_api("gpt-5-pro"));
+        assert!(needs_responses_api("gpt-6.1-sol"));
         assert!(!needs_responses_api("gpt-4o"));
         assert!(!needs_responses_api("gpt-5"));
     }

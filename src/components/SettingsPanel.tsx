@@ -4,7 +4,7 @@ import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
 import { invoke } from "../services/tauri";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
-import { buildProviderConfig, canFetchModelsFor } from "../utils/providerConfig";
+import { buildProviderConfig, canFetchModelsFor, filterAgentCompatibleModels } from "../utils/providerConfig";
 import { persistConnectionTokens, clearConnectionTokens } from "../utils/agentProvider";
 import { AIProviderTab } from "./settings/AIProviderTab";
 import { AgentsTab, HarnessPicker } from "./settings/AgentsTab";
@@ -160,8 +160,9 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
       const result = await invoke<ModelInfo[]>("list_models", {
         config,
       });
-      console.info({ ...traceDetails, phase: "success", model_count: result.length });
-      setModels(result);
+      const agentModels = filterAgentCompatibleModels(result, config.provider);
+      console.info({ ...traceDetails, phase: "success", model_count: result.length, agent_model_count: agentModels.length });
+      setModels(agentModels);
     } catch (e) {
       console.warn({ ...traceDetails, phase: "error", error: String(e) });
       setModelError(String(e));

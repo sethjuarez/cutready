@@ -135,6 +135,14 @@ impl AgentHarness for PromptyHarness {
         let durable = self.durable.clone();
         let host = self.host.clone();
 
+        #[cfg(debug_assertions)]
+        prompty::tracing::PromptyTracer::register(
+            repo_root
+                .join(".git")
+                .join("cutready")
+                .join("prompty-traces"),
+        );
+
         // Translate the CutReady-owned tool contract and provider config into a
         // Prompty model. This is the boundary where `prompty::*` types begin.
         let production_model =
@@ -152,6 +160,7 @@ impl AgentHarness for PromptyHarness {
             production_model.provider_name,
             production_model.model_name,
             production_model.context_budget_chars,
+            production_model.history_strategy,
             messages,
             &repo_root,
             &project_root,
@@ -245,10 +254,7 @@ mod tests {
             Err("unused".to_string())
         }
 
-        fn record_native_memory_promotion(
-            &self,
-            _: &serde_json::Value,
-        ) -> Result<(), String> {
+        fn record_native_memory_promotion(&self, _: &serde_json::Value) -> Result<(), String> {
             Ok(())
         }
     }
