@@ -269,6 +269,12 @@ interface AgentChatResult {
   };
 }
 
+interface AgentModelRoutePreview {
+  api_route: string;
+  history_strategy: string;
+  effective_reasoning_effort?: string | null;
+}
+
 export function providerRunLabel(provider: string | undefined): string {
   switch ((provider ?? "").toLowerCase()) {
     case "microsoft_foundry":
@@ -1436,14 +1442,31 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       const config = {
         ...providerConfig,
         // Apply per-agent model override when configured; otherwise use the provider model.
-        ...(modelOverride ? { model: modelOverride } : {}),
+        ...(modelOverride ? { model: modelOverride, model_base_model: null, model_reasoning_efforts: null } : {}),
       };
       config.reasoning_effort = normalizeReasoningEffort(
         settings.aiReasoningEffort,
         config.provider,
         config.model,
         modelOverride ? "" : effectiveProviderInput.modelReasoningEfforts,
+        modelOverride ? "" : effectiveProviderInput.modelBaseModel,
       ) || null;
+      const routePreview = await invoke<AgentModelRoutePreview | null>("preview_agent_model_route", {
+        config: {
+          ...config,
+          api_key: "",
+          bearer_token: null,
+        },
+      });
+      if (routePreview) {
+        config.reasoning_effort = normalizeReasoningEffort(
+          routePreview.effective_reasoning_effort || "",
+          config.provider,
+          config.model,
+          modelOverride ? "" : effectiveProviderInput.modelReasoningEfforts,
+          modelOverride ? "" : effectiveProviderInput.modelBaseModel,
+        ) || null;
+      }
 
       // Build agent prompts map for sub-agent delegation
       const agentPrompts: Record<string, string> = {};

@@ -793,6 +793,7 @@ pub fn run() {
             commands::video_import::import_video,
             commands::video_import::import_video_with_progress,
             commands::agent::list_models,
+            commands::agent::preview_agent_model_route,
             commands::agent::agent_chat,
             commands::agent::agent_chat_with_tools,
             commands::agent::cancel_agent_chat_run,
