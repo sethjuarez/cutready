@@ -13,6 +13,7 @@ use crate::engine::agent_state::{
     ChatSessionRecord, ChatSessionSummary, ContextAssetInput, ContextAssetScope,
 };
 use crate::{AgentChatCancellationRegistry, AppState};
+use harness_contract::routing::{resolve_agent_model_route, AgentModelRoute, AgentRunRequirements};
 use prompty_foundry::oauth;
 use prompty_foundry::{DeviceCodeResponse, TokenResponse};
 use std::collections::HashSet;
@@ -338,8 +339,29 @@ fn normalize_reasoning_effort(
     ))
 }
 
-fn supports_prompty_reasoning_effort(model: &str) -> bool {
-    llm::needs_responses_api(model)
+fn provider_from_config(provider: &str) -> LlmProvider {
+    match provider {
+        "openai" => LlmProvider::Openai,
+        "anthropic" => LlmProvider::Anthropic,
+        "microsoft_foundry" => LlmProvider::MicrosoftFoundry,
+        _ => LlmProvider::AzureOpenai,
+    }
+}
+
+fn resolve_prompty_model_route(config: &ProviderConfig) -> Result<AgentModelRoute, String> {
+    resolve_agent_model_route(
+        provider_from_config(&config.provider),
+        &config.model,
+        "prompty",
+        AgentRunRequirements {
+            tool_calling: true,
+            vision: false,
+            reasoning_effort: config.reasoning_effort.clone(),
+        },
+        config.model_base_model.as_deref(),
+        config.model_reasoning_efforts.as_deref(),
+    )
+    .map_err(|error| error.to_string())
 }
 
 fn context_kind_from_name(kind: &str) -> ContextKind {
@@ -909,8 +931,13 @@ pub async fn agent_chat_with_tools(
         &route_model,
         config.model_reasoning_efforts.as_deref(),
     )?;
-    if harness_id == "prompty" && !supports_prompty_reasoning_effort(&route_model) {
-        config.reasoning_effort = None;
+    let prompty_route = if harness_id == "prompty" {
+        Some(resolve_prompty_model_route(&config)?)
+    } else {
+        None
+    };
+    if let Some(route) = prompty_route.as_ref() {
+        config.reasoning_effort = route.effective_reasoning_effort.clone();
     }
     let llm_config: LlmConfig = config.into();
     let context_item_configs = context_items.unwrap_or_default();
@@ -936,15 +963,21 @@ pub async fn agent_chat_with_tools(
     };
 
     // Determine effective vision: user setting AND discovered/static model capability.
+    let capability_model = llm_config
+        .model_base_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+        .unwrap_or(&llm_config.model);
     let model_supports_vision =
-        discovered_vision_support.unwrap_or_else(|| llm::supports_vision(&llm_config.model));
+        discovered_vision_support.unwrap_or_else(|| llm::supports_vision(capability_model));
     let vision_enabled = vision_mode != "off" && model_supports_vision;
     let vision = VisionConfig {
         enabled: vision_enabled,
     };
     let web_access = WebAccessConfig { search_enabled };
 
-    let budget_chars = llm::context_budget(&llm_config.model, reported_context);
+    let budget_chars = llm::context_budget(capability_model, reported_context);
     let run_id = uuid::Uuid::new_v4().to_string();
     let _active_run_guard =
         ActiveAgentRunGuard::register(state.active_agent_runs.clone(), run_id.clone());
@@ -1037,7 +1070,8 @@ pub async fn agent_chat_with_tools(
             "requested_model": &model,
             "harness_provides_own_provider": harness_provides_own_provider,
             "reasoning_effort": effective_reasoning_effort,
-            "prompty_reasoning_effort_supported": harness_id != "prompty" || supports_prompty_reasoning_effort(&route_model),
+            "model_api_route": prompty_route.as_ref().map(|route| serde_json::json!(route.api_route)),
+            "history_strategy": prompty_route.as_ref().map(|route| serde_json::json!(route.history_strategy)),
             "execution_engine": harness_id.as_str(),
             "run_id": &run_id,
             "messages": message_count,
@@ -2048,10 +2082,40 @@ mod tests {
 
     #[test]
     fn prompty_reasoning_effort_only_applies_to_responses_models() {
-        assert!(!supports_prompty_reasoning_effort("gpt-5.6-luna"));
-        assert!(supports_prompty_reasoning_effort("gpt-6.1-sol"));
-        assert!(supports_prompty_reasoning_effort("gpt-5.1-codex"));
-        assert!(supports_prompty_reasoning_effort("gpt-5-pro"));
+        let mut chat = make_config("openai");
+        chat.model = "gpt-5.6-luna".into();
+        chat.reasoning_effort = Some("high".into());
+        let chat_route = resolve_prompty_model_route(&chat).unwrap();
+        assert_eq!(chat_route.effective_reasoning_effort, None);
+
+        let mut responses = make_config("openai");
+        responses.model = "gpt-6.1-sol".into();
+        responses.reasoning_effort = Some("high".into());
+        let responses_route = resolve_prompty_model_route(&responses).unwrap();
+        assert_eq!(
+            responses_route.effective_reasoning_effort.as_deref(),
+            Some("high")
+        );
+
+        for model in ["gpt-5.1-codex", "gpt-5-pro"] {
+            let mut config = make_config("openai");
+            config.model = model.into();
+            config.reasoning_effort = Some("high".into());
+            let route = resolve_prompty_model_route(&config).unwrap();
+            assert_eq!(route.effective_reasoning_effort.as_deref(), Some("high"));
+        }
+
+        let mut alias = make_config("microsoft_foundry");
+        alias.model = "demo-deployment".into();
+        alias.model_base_model = Some("gpt-6-astra".into());
+        alias.model_reasoning_efforts = Some("low,medium,high,xhigh,max".into());
+        alias.reasoning_effort = Some("medium".into());
+        let alias_route = resolve_prompty_model_route(&alias).unwrap();
+        assert_eq!(alias_route.identity.base_model, "gpt-6-astra");
+        assert_eq!(
+            alias_route.effective_reasoning_effort.as_deref(),
+            Some("medium")
+        );
     }
 
     #[test]
