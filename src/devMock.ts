@@ -112,6 +112,7 @@ const mockSettingsStore: Record<string, unknown> = {
   aiSelectedAgent: "planner",
   aiAgents: [],
   aiAgentModelOverrides: {},
+  aiAgentModelOverrideMetadata: {},
   aiAgentProviderOverrides: {},
   aiActiveProviderId: "mock-azure-openai",
   aiDefaultProviderId: "mock-azure-openai",

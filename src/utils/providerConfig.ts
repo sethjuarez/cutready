@@ -15,6 +15,7 @@ export interface ProviderSettings {
   aiAuthMode: string;
   aiAccessToken: string;
   aiContextLength?: number;
+  aiModelBaseModel?: string;
   aiVisionMode?: "off" | "notes" | "notes_and_sketches";
   aiModelSupportsVision?: string;
   aiModelReasoningEfforts?: string;
@@ -39,6 +40,7 @@ export interface ProviderConfigInput {
   authMode: string;
   accessToken: string;
   contextLength?: number;
+  modelBaseModel?: string;
   modelSupportsVision?: string;
   modelReasoningEfforts?: string;
   providerId?: string;
@@ -66,6 +68,7 @@ export function createAiProviderConfig(provider: AiProviderKind = "azure_openai"
     authMode: provider === "azure_openai" || provider === "microsoft_foundry" ? "api_key" : "api_key",
     endpoint: "",
     model: "",
+    modelBaseModel: "",
     contextLength: 0,
     modelSupportsVision: "",
     tenantId: "",
@@ -77,6 +80,14 @@ export function createAiProviderConfig(provider: AiProviderKind = "azure_openai"
 }
 
 export const REASONING_EFFORT_OPTIONS: AiReasoningEffort[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
+
+export interface AgentModelInfo {
+  id: string;
+  name?: string;
+  owned_by?: string;
+  capabilities?: Record<string, string>;
+  context_length?: number;
+}
 
 function parseReasoningEfforts(value: string | undefined): AiReasoningEffort[] {
   const valid = new Set(REASONING_EFFORT_OPTIONS);
@@ -90,11 +101,12 @@ export function supportedReasoningEfforts(
   provider: string | undefined,
   model: string | undefined,
   discoveredEfforts?: string,
+  baseModel?: string,
 ): AiReasoningEffort[] {
   const discovered = parseReasoningEfforts(discoveredEfforts);
   if (discovered.length > 0) return discovered;
   const providerKey = (provider ?? "").toLowerCase();
-  const modelKey = (model ?? "").toLowerCase();
+  const modelKey = (baseModel || model || "").toLowerCase();
   if (!modelKey) return [];
   const isOpenAiWireProvider = providerKey === "openai" || providerKey === "azure_openai" || providerKey === "microsoft_foundry";
   if (!isOpenAiWireProvider) return [];
@@ -104,15 +116,98 @@ export function supportedReasoningEfforts(
   return [];
 }
 
+export function needsResponsesApi(model: string | undefined, baseModel?: string): boolean {
+  const modelKey = (baseModel || model || "").toLowerCase();
+  return modelKey.includes("codex") || modelKey.includes("gpt-6") || (modelKey.includes("gpt-5") && modelKey.endsWith("-pro"));
+}
+
+export function supportsAgentReasoningEffort(model: string | undefined, baseModel?: string): boolean {
+  return needsResponsesApi(model, baseModel);
+}
+
 export function normalizeReasoningEffort(
   effort: string | undefined,
   provider: string | undefined,
   model: string | undefined,
   discoveredEfforts?: string,
+  baseModel?: string,
 ): AiReasoningEffort {
   const value = (effort ?? "").trim().toLowerCase() as AiReasoningEffort;
   if (!value) return "";
-  return supportedReasoningEfforts(provider, model, discoveredEfforts).includes(value) ? value : "";
+  return supportedReasoningEfforts(provider, model, discoveredEfforts, baseModel).includes(value) ? value : "";
+}
+
+function capabilityValue(capabilities: Record<string, string> | undefined, key: string): string {
+  return (capabilities?.[key] ?? "").trim().toLowerCase();
+}
+
+function capabilityModelName(model: AgentModelInfo): string {
+  const ownedBy = (model.owned_by ?? "").trim();
+  return looksLikeAgentModelId(ownedBy) ? ownedBy : (model.id || model.name || "").trim();
+}
+
+function looksLikeAgentModelId(model: string): boolean {
+  const value = model.toLowerCase();
+  return (
+    value.startsWith("gpt-") ||
+    value.startsWith("o1") ||
+    value.startsWith("o3") ||
+    value.startsWith("o4") ||
+    value.startsWith("claude-")
+  );
+}
+
+export function baseModelFromOwnedBy(ownedBy: string | undefined): string {
+  const value = (ownedBy ?? "").trim();
+  return looksLikeAgentModelId(value) ? value : "";
+}
+
+function isClearlyNonAgentModel(model: string): boolean {
+  const value = model.toLowerCase();
+  return [
+    "embedding",
+    "moderation",
+    "omni-moderation",
+    "whisper",
+    "tts",
+    "transcribe",
+    "speech",
+    "audio",
+    "realtime",
+    "voice",
+    "image",
+    "dall",
+    "rerank",
+    "babbage",
+    "davinci",
+  ].some((marker) => value.includes(marker));
+}
+
+export function isAgentCompatibleModel(model: AgentModelInfo, provider: string | undefined): boolean {
+  const modelName = capabilityModelName(model);
+  if (!modelName) return false;
+
+  const providerKey = (provider ?? "").toLowerCase();
+  const capabilities = model.capabilities;
+  const chatCompletion = capabilityValue(capabilities, "chat_completion");
+  const responsesApi = capabilityValue(capabilities, "responses_api");
+  const toolCalling = capabilityValue(capabilities, "tool_calling") || capabilityValue(capabilities, "function_calling");
+  const toolCallingKnownUnsupported = toolCalling === "false" || toolCalling === "unsupported";
+
+  if (looksLikeAgentModelId(modelName) && isClearlyNonAgentModel(modelName)) return false;
+  if (toolCallingKnownUnsupported) return false;
+  if (responsesApi === "true" || chatCompletion === "true") return true;
+  if (responsesApi === "false" && chatCompletion === "false") return false;
+
+  if (providerKey === "anthropic") {
+    return modelName.toLowerCase().startsWith("claude-");
+  }
+
+  return looksLikeAgentModelId(modelName);
+}
+
+export function filterAgentCompatibleModels<T extends AgentModelInfo>(models: T[], provider: string | undefined): T[] {
+  return models.filter((model) => isAgentCompatibleModel(model, provider));
 }
 
 export function providerToConfigInput(
@@ -125,6 +220,7 @@ export function providerToConfigInput(
     endpoint: provider.endpoint,
     apiKey: secrets.apiKey ?? "",
     model: provider.model,
+    modelBaseModel: provider.modelBaseModel,
     authMode: provider.authMode,
     accessToken: secrets.accessToken ?? "",
     contextLength: provider.contextLength,
@@ -218,14 +314,19 @@ export function buildProviderConfig(
   const contextLength = requestInput ? settings.contextLength : settings.aiContextLength;
   const modelSupportsVision = requestInput ? settings.modelSupportsVision : settings.aiModelSupportsVision;
   const modelReasoningEfforts = requestInput ? settings.modelReasoningEfforts : settings.aiModelReasoningEfforts;
+  const modelBaseModel = requestInput ? settings.modelBaseModel : settings.aiModelBaseModel;
   const provider = requestInput ? settings.provider : settings.aiProvider;
   const model = (requestInput ? settings.model : settings.aiModel) || "unused";
-  const reasoningEffort = normalizeReasoningEffort(settings.aiReasoningEffort, provider, model, modelReasoningEfforts);
+  const normalizedReasoningEffort = normalizeReasoningEffort(settings.aiReasoningEffort, provider, model, modelReasoningEfforts, modelBaseModel);
+  const reasoningEffort = executionEngine !== "copilot-sdk" && supportsAgentReasoningEffort(model, modelBaseModel)
+    ? normalizedReasoningEffort
+    : "";
   return {
     provider,
     endpoint: requestInput ? settings.endpoint : settings.aiEndpoint,
     api_key: requestInput ? settings.apiKey : settings.aiApiKey,
     model,
+    model_base_model: modelBaseModel || null,
     bearer_token:
       (requestInput ? settings.authMode : settings.aiAuthMode) === "azure_oauth"
         ? (requestInput ? settings.accessToken : settings.aiAccessToken)

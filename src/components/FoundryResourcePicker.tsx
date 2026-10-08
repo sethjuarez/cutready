@@ -171,6 +171,7 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
       await updateSetting("aiResourceName", "");
       await updateSetting("aiEndpoint", "");
       await updateSetting("aiModel", "");
+      await updateSetting("aiModelBaseModel", "");
     }
     loadResources(sub.subscriptionId);
   };
@@ -186,6 +187,7 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
     await updateSetting("aiEndpoint", res.endpoint);
     if (changed) {
       await updateSetting("aiModel", "");
+      await updateSetting("aiModelBaseModel", "");
     }
     loadProjects(res);
   };
@@ -196,6 +198,7 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
     await updateSetting("aiEndpoint", proj.endpoint);
     if (changed) {
       await updateSetting("aiModel", "");
+      await updateSetting("aiModelBaseModel", "");
     }
   };
 

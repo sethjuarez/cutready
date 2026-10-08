@@ -5,11 +5,15 @@ import {
   buildProviderConfig,
   canFetchModelsFor,
   defaultProvider,
+  filterAgentCompatibleModels,
+  isAgentCompatibleModel,
   isAiProviderConfigured,
   isProviderInputConfigured,
   narrationProvider,
+  needsResponsesApi,
   providerById,
   providerToConfigInput,
+  supportsAgentReasoningEffort,
   supportedReasoningEfforts,
 } from "../utils/providerConfig";
 import type { AiProviderConfig } from "../hooks/useSettings";
@@ -88,13 +92,13 @@ describe("buildProviderConfig", () => {
   });
 
   test("includes supported reasoning effort and drops unsupported selections", () => {
-    expect(supportedReasoningEfforts("openai", "gpt-5.6-terra")).toContain("xhigh");
+    expect(supportedReasoningEfforts("openai", "gpt-6.1-sol")).toContain("xhigh");
 
     const supported = buildProviderConfig({
       ...base,
-      aiModel: "gpt-5.6-terra",
+      aiModel: "gpt-6.1-sol",
       aiReasoningEffort: "high",
-    });
+    }, "agentive");
     expect(supported.reasoning_effort).toBe("high");
 
     const unsupported = buildProviderConfig({
@@ -105,15 +109,58 @@ describe("buildProviderConfig", () => {
     expect(unsupported.reasoning_effort).toBeNull();
   });
 
+  test("omits agent reasoning effort for chat-completions models", () => {
+    expect(supportedReasoningEfforts("openai", "gpt-5.6-luna")).toContain("high");
+    expect(needsResponsesApi("gpt-5.6-luna")).toBe(false);
+    expect(supportsAgentReasoningEffort("gpt-5.6-luna")).toBe(false);
+
+    const promptyChat = buildProviderConfig({
+      ...base,
+      aiModel: "gpt-5.6-luna",
+      aiReasoningEffort: "high",
+    });
+    expect(promptyChat.reasoning_effort).toBeNull();
+
+    const nonPromptyChat = buildProviderConfig({
+      ...base,
+      aiModel: "gpt-5.6-luna",
+      aiReasoningEffort: "high",
+    }, "agentive");
+    expect(nonPromptyChat.reasoning_effort).toBeNull();
+
+    const providerOwned = buildProviderConfig({
+      ...base,
+      aiModel: "gpt-6.1-sol",
+      aiReasoningEffort: "high",
+    }, "copilot-sdk");
+    expect(providerOwned.reasoning_effort).toBeNull();
+  });
+
+  test("keeps agent reasoning effort for responses-routed models", () => {
+    expect(needsResponsesApi("gpt-5.1-codex")).toBe(true);
+    expect(supportsAgentReasoningEffort("gpt-5.1-codex")).toBe(true);
+    expect(needsResponsesApi("gpt-6.1-sol")).toBe(true);
+    expect(supportsAgentReasoningEffort("gpt-6.1-sol")).toBe(true);
+
+    const cfg = buildProviderConfig({
+      ...base,
+      aiModel: "gpt-6.1-sol",
+      aiReasoningEffort: "high",
+    });
+    expect(cfg.reasoning_effort).toBe("high");
+  });
+
   test("uses discovered reasoning efforts for deployment aliases", () => {
     const cfg = buildProviderConfig({
       ...base,
       aiProvider: "microsoft_foundry",
       aiModel: "demo-deployment",
+      aiModelBaseModel: "gpt-6-astra",
       aiModelReasoningEfforts: "low,medium,high",
       aiReasoningEffort: "medium",
     });
 
+    expect(cfg.model_base_model).toBe("gpt-6-astra");
     expect(cfg.reasoning_effort).toBe("medium");
   });
 
@@ -125,6 +172,51 @@ describe("buildProviderConfig", () => {
     });
     expect(cfg.provider).toBe("anthropic");
     expect(cfg.bearer_token).toBeNull();
+  });
+});
+
+describe("agent model compatibility", () => {
+  test("keeps chat and responses models that can run agents", () => {
+    const models = filterAgentCompatibleModels([
+      { id: "gpt-4o", capabilities: { chat_completion: "true", tool_calling: "true" }, context_length: 128000 },
+      { id: "gpt-5-codex", capabilities: { responses_api: "true", tool_calling: "true" }, context_length: 272000 },
+      { id: "text-embedding-3-large", capabilities: { chat_completion: "false", responses_api: "false" } },
+      { id: "dall-e-3", capabilities: { chat_completion: "false", responses_api: "false" } },
+      { id: "gpt-4o-transcribe", capabilities: { chat_completion: "false", responses_api: "false" } },
+      { id: "gpt-4o-realtime-preview", capabilities: { chat_completion: "true", tool_calling: "true" } },
+      { id: "gpt-realtime", capabilities: { chat_completion: "true", tool_calling: "true" } },
+      { id: "gpt-4o-audio-preview", capabilities: { chat_completion: "true", tool_calling: "true" } },
+    ], "openai");
+
+    expect(models.map((model) => model.id)).toEqual(["gpt-4o", "gpt-5-codex"]);
+  });
+
+  test("uses deployment owned_by when classifying Foundry aliases", () => {
+    expect(isAgentCompatibleModel({
+      id: "demo-prod",
+      owned_by: "gpt-6-astra",
+      capabilities: { chat_completion: "true", tool_calling: "true" },
+    }, "microsoft_foundry")).toBe(true);
+
+    expect(isAgentCompatibleModel({
+      id: "embedding-prod",
+      owned_by: "text-embedding-3-large",
+      capabilities: { chat_completion: "false", responses_api: "false" },
+    }, "microsoft_foundry")).toBe(false);
+  });
+
+  test("keeps aliases with explicit chat capability despite media words", () => {
+    expect(isAgentCompatibleModel({
+      id: "voiceover-image-prod",
+      capabilities: { chat_completion: "true", tool_calling: "true" },
+    }, "microsoft_foundry")).toBe(true);
+  });
+
+  test("drops models that explicitly do not support tool calling", () => {
+    expect(isAgentCompatibleModel({
+      id: "gpt-lite",
+      capabilities: { chat_completion: "true", tool_calling: "false" },
+    }, "openai")).toBe(false);
   });
 });
 
@@ -141,6 +233,7 @@ describe("feedback issue target", () => {
       authMode: "api_key",
       endpoint: "",
       model: "gpt-4o",
+      modelBaseModel: "",
       contextLength: 128000,
       modelSupportsVision: "true",
       tenantId: "",

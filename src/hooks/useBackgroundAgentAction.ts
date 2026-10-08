@@ -6,7 +6,7 @@ import { useAiApplyGateStore } from "../stores/aiApplyGateStore";
 import { useSettings, type AgentPreset } from "./useSettings";
 import { invoke } from "../services/tauri";
 import type { ChatMessage } from "../types/sketch";
-import { buildProviderConfig } from "../utils/providerConfig";
+import { buildProviderConfig, normalizeReasoningEffort } from "../utils/providerConfig";
 import {
   buildRefreshedProviderInput,
   resolveAgentModelOverride,
@@ -209,10 +209,34 @@ export function useBackgroundAgentAction() {
         await buildRefreshedProviderInput(settings, effectiveAgent, updateSetting),
         settings.aiAgentExecutionEngine || "prompty",
       );
+      const modelOverrideMetadata = modelOverride
+        ? settings.aiAgentModelOverrideMetadata?.[effectiveAgent.id]
+        : undefined;
+      const matchingModelOverrideMetadata =
+        modelOverrideMetadata?.model && modelOverrideMetadata.model !== modelOverride
+          ? undefined
+          : modelOverrideMetadata;
+      const modelOverrideVision = matchingModelOverrideMetadata?.modelSupportsVision;
       const result = await invoke<AgentChatResult>("agent_chat_with_tools", {
         config: {
           ...providerConfig,
-          ...(modelOverride ? { model: modelOverride } : {}),
+          ...(modelOverride ? {
+            model: modelOverride,
+            model_base_model: matchingModelOverrideMetadata?.modelBaseModel || null,
+            model_reasoning_efforts: matchingModelOverrideMetadata?.modelReasoningEfforts || null,
+            context_length: matchingModelOverrideMetadata?.contextLength || null,
+            model_supports_vision:
+              modelOverrideVision === undefined || modelOverrideVision === ""
+                ? null
+                : modelOverrideVision === "true",
+            reasoning_effort: normalizeReasoningEffort(
+              settings.aiReasoningEffort,
+              providerConfig.provider,
+              modelOverride,
+              matchingModelOverrideMetadata?.modelReasoningEfforts || "",
+              matchingModelOverrideMetadata?.modelBaseModel || "",
+            ) || null,
+          } : {}),
         },
         messages: [
           { role: "system", content: buildSystemPrompt(effectiveAgent.id) },

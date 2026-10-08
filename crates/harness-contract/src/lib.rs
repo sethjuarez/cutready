@@ -20,6 +20,7 @@
 pub mod execution;
 pub mod harness;
 pub mod llm;
+pub mod routing;
 pub mod sanitize;
 pub mod tools;
 
@@ -34,4 +35,8 @@ pub use harness::{
     HarnessContract, HarnessDescriptor, HarnessEventEmitter, Ownership,
 };
 pub use llm::{LlmConfig, LlmProvider};
+pub use routing::{
+    resolve_agent_model_route, AgentModelRoute, AgentRunRequirements, HarnessRouteCapabilities,
+    HistoryStrategy, ModelApiRoute, ModelCapabilityProfile, ModelIdentity, RouteError,
+};
 pub use tools::{HostToolExecutor, ToolDefinition, ToolExecutionContext, ToolFunctionDefinition};

@@ -13,9 +13,9 @@ use prompty::model::InvocationUsage;
 use tokio::sync::Notify;
 
 use super::*;
+use crate::ContextAssetExcerpt;
 use harness_contract::execution::{FunctionCall, ImageUrl};
 use harness_contract::tools::ToolDefinition;
-use crate::ContextAssetExcerpt;
 
 /// A host that owns no real tools or project references. The delegation and
 /// budgeting logic under test never dispatches through it, so its tool surface
@@ -170,9 +170,9 @@ impl ModelPort for ScriptedModelPort {
                 }
                 Ok(ModelInvocationResponse {
                     output: Some(Value::String(text.clone())),
-                    assistant_messages: Some(vec![native_to_prompty_message(&ChatMessage::assistant(
-                        &text,
-                    ))
+                    assistant_messages: Some(vec![native_to_prompty_message(
+                        &ChatMessage::assistant(&text),
+                    )
                     .map_err(PortError::configuration)?]),
                     tool_requests: Some(Vec::new()),
                     next_context_state: None,
@@ -195,8 +195,9 @@ impl ModelPort for ScriptedModelPort {
                 let assistant = ChatMessage::assistant_with_tool_calls(vec![tool_call.clone()]);
                 Ok(ModelInvocationResponse {
                     output: None,
-                    assistant_messages: Some(vec![native_to_prompty_message(&assistant)
-                        .map_err(PortError::configuration)?]),
+                    assistant_messages: Some(vec![
+                        native_to_prompty_message(&assistant).map_err(PortError::configuration)?
+                    ]),
                     tool_requests: Some(vec![EngineToolRequest {
                         id: tool_call.id,
                         name: tool_call.function.name,
@@ -260,6 +261,7 @@ async fn run_script_in_crate(
         "scripted".into(),
         "scripted-model".into(),
         context_budget_chars,
+        HistoryStrategy::ChatMessages,
         messages,
         root,
         root,
@@ -369,6 +371,7 @@ async fn delegation_depth_cap_blocks_further_delegation() {
         provider_name: "scripted".into(),
         model_name: "scripted-model".into(),
         context_budget_chars: 20_000,
+        history_strategy: HistoryStrategy::ChatMessages,
         repo_root: PathBuf::from("."),
         project_root: PathBuf::from("."),
         agent_prompts: Arc::new(HashMap::from([(
@@ -408,6 +411,7 @@ async fn delegation_missing_arguments_is_a_tool_error() {
         provider_name: "scripted".into(),
         model_name: "scripted-model".into(),
         context_budget_chars: 20_000,
+        history_strategy: HistoryStrategy::ChatMessages,
         repo_root: PathBuf::from("."),
         project_root: PathBuf::from("."),
         agent_prompts: Arc::new(HashMap::from([(
@@ -460,6 +464,7 @@ async fn delegation_propagates_parent_cancellation_to_child() {
         provider_name: "scripted".into(),
         model_name: "scripted-model".into(),
         context_budget_chars: 20_000,
+        history_strategy: HistoryStrategy::ChatMessages,
         repo_root: PathBuf::from("."),
         project_root: PathBuf::from("."),
         agent_prompts: Arc::new(HashMap::from([(
@@ -742,6 +747,68 @@ fn prompty_history_trimming_keeps_responses_multi_call_exchange_atomic() {
     assert_eq!(messages[0].text(), Some("next turn"));
 }
 
+#[test]
+fn responses_replay_history_drops_persisted_tool_exchanges() {
+    let assistant = ChatMessage::assistant_with_tool_calls(vec![ToolCall {
+        id: "call-1".into(),
+        call_type: "function".into(),
+        function: FunctionCall {
+            name: "inspect".into(),
+            arguments: "{}".into(),
+        },
+    }]);
+    let messages = vec![
+        ChatMessage::user("first turn"),
+        assistant,
+        ChatMessage::tool_result("call-1", "tool output"),
+        ChatMessage {
+            role: "user".into(),
+            content: Some(MessageContent::Text(
+                "Images returned by tool 'inspect':".into(),
+            )),
+            tool_calls: None,
+            tool_call_id: None,
+        },
+        ChatMessage::assistant("Final answer."),
+        ChatMessage::user("next turn"),
+    ];
+
+    let (sanitized, dropped) = sanitize_responses_replay_history(messages);
+
+    assert_eq!(dropped, 3);
+    assert_eq!(
+        sanitized
+            .iter()
+            .map(|message| (message.role.as_str(), message.text().unwrap_or("")))
+            .collect::<Vec<_>>(),
+        [
+            ("user", "first turn"),
+            ("assistant", "Final answer."),
+            ("user", "next turn")
+        ]
+    );
+}
+
+#[test]
+fn responses_replay_history_drops_orphan_tool_results() {
+    let messages = vec![
+        ChatMessage::user("first turn"),
+        ChatMessage::tool_result("orphan-call", "orphan output"),
+        ChatMessage::assistant("Final answer."),
+    ];
+
+    let (sanitized, dropped) = sanitize_responses_replay_history(messages);
+
+    assert_eq!(dropped, 1);
+    assert_eq!(
+        sanitized
+            .iter()
+            .map(|message| message.role.as_str())
+            .collect::<Vec<_>>(),
+        ["user", "assistant"]
+    );
+}
+
 #[tokio::test]
 async fn prompty_host_event_callback_panics_cannot_change_committed_result() {
     let project = tempfile::tempdir().unwrap();
@@ -753,6 +820,7 @@ async fn prompty_host_event_callback_panics_cannot_change_committed_result() {
         "scripted".into(),
         "scripted-model".into(),
         20_000,
+        HistoryStrategy::ChatMessages,
         vec![ChatMessage::user("Complete despite callback failure.")],
         project.path(),
         project.path(),

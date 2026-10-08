@@ -26,6 +26,14 @@ export interface AgentPreset {
   providerOverride?: string;
 }
 
+export interface AgentModelOverrideMetadata {
+  model?: string;
+  modelBaseModel?: string;
+  modelReasoningEfforts?: string;
+  contextLength?: number;
+  modelSupportsVision?: "" | "true" | "false";
+}
+
 export type AiProviderKind = "microsoft_foundry" | "azure_openai" | "openai" | "anthropic";
 export type AiAuthMode = "api_key" | "azure_oauth";
 export type AiApplyMode = "ask" | "auto";
@@ -46,6 +54,7 @@ export interface AiProviderConfig {
   authMode: AiAuthMode;
   endpoint: string;
   model: string;
+  modelBaseModel?: string;
   contextLength: number;
   modelSupportsVision: "" | "true" | "false";
   tenantId: string;
@@ -99,6 +108,8 @@ export interface GlobalSettings {
   aiAgents: AgentPreset[];
   /** Per-agent model overrides for built-in agents. Empty/missing means use the global model. */
   aiAgentModelOverrides: Record<string, string>;
+  /** Model metadata captured when an agent override is selected. */
+  aiAgentModelOverrideMetadata: Record<string, AgentModelOverrideMetadata>;
   /* ── Display settings ────────────────────────── */
   /** Editor text size in px (13–18, default 14). */
   displayFontSize: number;
@@ -138,6 +149,8 @@ export interface GlobalSettings {
   presentationExitHotkey: string;
   /** API-reported context window (tokens) for the selected model. */
   aiContextLength: number;
+  /** Underlying model name for deployment aliases. */
+  aiModelBaseModel: string;
   /** Vision mode: "off", "notes", or "notes_and_sketches". */
   aiVisionMode: "off" | "notes" | "notes_and_sketches";
   /** Whether the selected model supports vision (set when model is picked). */
@@ -323,6 +336,7 @@ const defaultGlobalSettings: GlobalSettings = {
   aiSelectedAgent: "planner",
   aiAgents: [],
   aiAgentModelOverrides: {},
+  aiAgentModelOverrideMetadata: {},
   displayFontSize: 14,
   displayChatFontSize: 14,
   displayRowDensity: "comfortable",
@@ -342,6 +356,7 @@ const defaultGlobalSettings: GlobalSettings = {
   presentationToggleModeHotkey: "CmdOrControl+Alt+Shift+T",
   presentationExitHotkey: "CmdOrControl+Alt+Shift+Q",
   aiContextLength: 0,
+  aiModelBaseModel: "",
   aiVisionMode: "notes_and_sketches",
   aiModelSupportsVision: "",
   aiModelReasoningEfforts: "",
@@ -456,6 +471,7 @@ const FLAT_PROVIDER_FIELDS: Partial<Record<keyof GlobalSettings, keyof AiProvide
   aiAuthMode: "authMode",
   aiEndpoint: "endpoint",
   aiModel: "model",
+  aiModelBaseModel: "modelBaseModel",
   aiContextLength: "contextLength",
   aiModelSupportsVision: "modelSupportsVision",
   aiTenantId: "tenantId",
@@ -533,6 +549,7 @@ function createProviderFromFlat(settings: GlobalSettings): AiProviderConfig {
     authMode: normalizeAuthMode(settings.aiAuthMode, provider),
     endpoint: settings.aiEndpoint || "",
     model: settings.aiModel || "",
+    modelBaseModel: settings.aiModelBaseModel || "",
     contextLength: settings.aiContextLength || 0,
     modelSupportsVision: settings.aiModelSupportsVision === "true" || settings.aiModelSupportsVision === "false"
       ? settings.aiModelSupportsVision
@@ -554,6 +571,7 @@ function normalizeProviderConfig(input: Partial<AiProviderConfig>, fallback: AiP
     authMode: normalizeAuthMode(input.authMode || fallback.authMode, provider),
     endpoint: String(input.endpoint ?? fallback.endpoint ?? ""),
     model: String(input.model ?? fallback.model ?? ""),
+    modelBaseModel: String(input.modelBaseModel ?? fallback.modelBaseModel ?? ""),
     contextLength: Number(input.contextLength ?? fallback.contextLength ?? 0) || 0,
     modelSupportsVision: input.modelSupportsVision === "true" || input.modelSupportsVision === "false"
       ? input.modelSupportsVision
@@ -578,6 +596,7 @@ function applyProviderToFlat(result: GlobalSettings, provider: AiProviderConfig)
   result.aiAuthMode = provider.authMode;
   result.aiEndpoint = provider.endpoint;
   result.aiModel = provider.model;
+  result.aiModelBaseModel = provider.modelBaseModel || "";
   result.aiContextLength = provider.contextLength;
   result.aiModelSupportsVision = provider.modelSupportsVision;
   result.aiTenantId = provider.tenantId;

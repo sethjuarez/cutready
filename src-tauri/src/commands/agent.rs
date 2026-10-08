@@ -13,6 +13,9 @@ use crate::engine::agent_state::{
     ChatSessionRecord, ChatSessionSummary, ContextAssetInput, ContextAssetScope,
 };
 use crate::{AgentChatCancellationRegistry, AppState};
+use harness_contract::routing::{
+    resolve_agent_model_route, AgentModelRoute, AgentRunRequirements, RouteError,
+};
 use prompty_foundry::oauth;
 use prompty_foundry::{DeviceCodeResponse, TokenResponse};
 use std::collections::HashSet;
@@ -163,6 +166,9 @@ pub struct ProviderConfig {
     pub endpoint: String,
     pub api_key: String,
     pub model: String,
+    /// Underlying provider model for deployment aliases, when known.
+    #[serde(default)]
+    pub model_base_model: Option<String>,
     #[serde(default)]
     pub bearer_token: Option<String>,
     /// API-reported context window (tokens) for the selected model.
@@ -305,6 +311,7 @@ fn bounded_context_preview(content: &str, max_bytes: usize) -> String {
     )
 }
 
+#[cfg(test)]
 fn normalize_reasoning_effort(
     effort: Option<&str>,
     provider: &str,
@@ -315,27 +322,79 @@ fn normalize_reasoning_effort(
         return Ok(None);
     };
     let effort = effort.to_ascii_lowercase();
-    let openai_wire_provider = matches!(
-        provider,
-        "openai" | "azure_openai" | "microsoft_foundry"
-    );
+    let openai_wire_provider = matches!(provider, "openai" | "azure_openai" | "microsoft_foundry");
+    let discovered = discovered_efforts
+        .map(|discovered| {
+            discovered
+                .split(',')
+                .map(str::trim)
+                .filter(|item| !item.is_empty())
+                .map(str::to_ascii_lowercase)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
     let supported = if !openai_wire_provider {
         Vec::new()
-    } else if let Some(discovered) = discovered_efforts {
+    } else if !discovered.is_empty() {
         discovered
-            .split(',')
-            .map(str::trim)
-            .filter(|item| !item.is_empty())
-            .collect::<Vec<_>>()
     } else {
         llm::supported_reasoning_efforts(model)
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
     };
-    if supported.iter().any(|supported| *supported == effort) {
+    if supported.iter().any(|supported| supported == &effort) {
         return Ok(Some(effort));
     }
     Err(format!(
         "Reasoning effort '{effort}' is not supported for provider '{provider}' and model '{model}'"
     ))
+}
+
+fn provider_from_config(provider: &str) -> LlmProvider {
+    match provider {
+        "openai" => LlmProvider::Openai,
+        "anthropic" => LlmProvider::Anthropic,
+        "microsoft_foundry" => LlmProvider::MicrosoftFoundry,
+        _ => LlmProvider::AzureOpenai,
+    }
+}
+
+#[cfg(test)]
+fn resolve_prompty_model_route(config: &ProviderConfig) -> Result<AgentModelRoute, String> {
+    resolve_agent_model_route_for_harness(config, "prompty").map_err(|error| error.to_string())
+}
+
+fn resolve_agent_model_route_for_harness(
+    config: &ProviderConfig,
+    harness_id: &str,
+) -> Result<AgentModelRoute, RouteError> {
+    resolve_agent_model_route(
+        provider_from_config(&config.provider),
+        &config.model,
+        harness_id,
+        AgentRunRequirements {
+            tool_calling: true,
+            vision: false,
+            reasoning_effort: config.reasoning_effort.clone(),
+        },
+        config.model_base_model.as_deref(),
+        config.model_reasoning_efforts.as_deref(),
+    )
+}
+
+fn preview_agent_model_route_inner(
+    config: ProviderConfig,
+) -> Result<Option<AgentModelRoute>, String> {
+    let harness_id = HarnessRegistry::canonical_id(config.execution_engine.as_deref())?;
+    if HarnessRegistry::contract(Some(harness_id))?.provides_own_provider() {
+        return Ok(None);
+    }
+    match resolve_agent_model_route_for_harness(&config, harness_id) {
+        Ok(route) => Ok(Some(route)),
+        Err(error) if matches!(error, RouteError::HarnessOwnsProvider(_)) => Ok(None),
+        Err(error) => Err(error.to_string()),
+    }
 }
 
 fn context_kind_from_name(kind: &str) -> ContextKind {
@@ -410,8 +469,10 @@ impl From<ProviderConfig> for LlmConfig {
             endpoint: c.endpoint,
             api_key: c.api_key,
             model: c.model,
+            model_base_model: c.model_base_model,
             bearer_token: c.bearer_token,
             reasoning_effort: c.reasoning_effort,
+            model_reasoning_efforts: c.model_reasoning_efforts,
         }
     }
 }
@@ -504,6 +565,14 @@ pub async fn list_models(config: ProviderConfig) -> Result<Vec<ModelInfo>, Strin
             Err(err.to_string())
         }
     }
+}
+
+/// Preview the model route CutReady will use for agent turns.
+#[auditaur_command(skip_all, err)]
+pub async fn preview_agent_model_route(
+    config: ProviderConfig,
+) -> Result<Option<AgentModelRoute>, String> {
+    preview_agent_model_route_inner(config)
 }
 
 /// A single chat turn (non-streaming) for quick operations like ✨ field fill.
@@ -885,21 +954,11 @@ pub async fn agent_chat_with_tools(
     // logic. Resolve only the canonical id up front (needed for the durable run
     // row's metadata); the harness itself is built after the store below so the
     // per-run store can be injected into the harness that owns durability.
-    let harness_id =
-        HarnessRegistry::canonical_id(config.execution_engine.as_deref())?.to_string();
+    let harness_id = HarnessRegistry::canonical_id(config.execution_engine.as_deref())?.to_string();
     let provider_name = config.provider.clone();
     let configured_provider_name = config.provider_name.clone();
     let configured_provider_id = config.provider_id.clone();
     let model = config.model.clone();
-    config.reasoning_effort = normalize_reasoning_effort(
-        config.reasoning_effort.as_deref(),
-        &provider_name,
-        &model,
-        config.model_reasoning_efforts.as_deref(),
-    )?;
-    let llm_config: LlmConfig = config.into();
-    let context_item_configs = context_items.unwrap_or_default();
-
     // Resolve the ownership contract once, by canonical id, so run diagnostics
     // and provider provisioning share a single authoritative source. A harness
     // that provides its own provider (e.g. copilot-sdk on the Copilot
@@ -909,6 +968,20 @@ pub async fn agent_chat_with_tools(
     // worth surfacing rather than silently mislabelling the run.
     let harness_contract = HarnessRegistry::contract(Some(&harness_id))?;
     let harness_provides_own_provider = harness_contract.provides_own_provider();
+    let agent_route = if harness_provides_own_provider {
+        None
+    } else {
+        Some(
+            resolve_agent_model_route_for_harness(&config, &harness_id)
+                .map_err(|error| error.to_string())?,
+        )
+    };
+    if let Some(route) = agent_route.as_ref() {
+        config.reasoning_effort = route.effective_reasoning_effort.clone();
+    }
+    let llm_config: LlmConfig = config.into();
+    let context_item_configs = context_items.unwrap_or_default();
+
     let (effective_provider, effective_model) = if harness_provides_own_provider {
         (harness_id.clone(), "default".to_string())
     } else {
@@ -921,15 +994,21 @@ pub async fn agent_chat_with_tools(
     };
 
     // Determine effective vision: user setting AND discovered/static model capability.
+    let capability_model = llm_config
+        .model_base_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+        .unwrap_or(&llm_config.model);
     let model_supports_vision =
-        discovered_vision_support.unwrap_or_else(|| llm::supports_vision(&llm_config.model));
+        discovered_vision_support.unwrap_or_else(|| llm::supports_vision(capability_model));
     let vision_enabled = vision_mode != "off" && model_supports_vision;
     let vision = VisionConfig {
         enabled: vision_enabled,
     };
     let web_access = WebAccessConfig { search_enabled };
 
-    let budget_chars = llm::context_budget(&llm_config.model, reported_context);
+    let budget_chars = llm::context_budget(capability_model, reported_context);
     let run_id = uuid::Uuid::new_v4().to_string();
     let _active_run_guard =
         ActiveAgentRunGuard::register(state.active_agent_runs.clone(), run_id.clone());
@@ -991,7 +1070,7 @@ pub async fn agent_chat_with_tools(
         .collect::<Result<Vec<_>, _>>()?;
     context_items.extend(recalled_context_items(&messages, agent_state.as_ref()));
     log::info!(
-        "[agent_chat_with_tools] start run_id={} engine={} agent={} provider={} model={} requested_provider={} requested_model={} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} mutation_tools={} max_tool_rounds={} prompts={}",
+        "[agent_chat_with_tools] start run_id={} engine={} agent={} provider={} model={} requested_provider={} requested_model={} reasoning_effort={:?} messages={} chars={} budget={}chars reported_context={:?} vision={} web_search={} mutation_tools={} max_tool_rounds={} prompts={}",
         run_id,
         harness_id.as_str(),
         agent_id,
@@ -999,6 +1078,7 @@ pub async fn agent_chat_with_tools(
         effective_model,
         provider_name,
         model,
+        effective_reasoning_effort,
         message_count,
         message_chars,
         budget_chars,
@@ -1020,6 +1100,9 @@ pub async fn agent_chat_with_tools(
             "requested_provider": &provider_name,
             "requested_model": &model,
             "harness_provides_own_provider": harness_provides_own_provider,
+            "reasoning_effort": effective_reasoning_effort,
+            "model_api_route": agent_route.as_ref().map(|route| serde_json::json!(route.api_route)),
+            "history_strategy": agent_route.as_ref().map(|route| serde_json::json!(route.history_strategy)),
             "execution_engine": harness_id.as_str(),
             "run_id": &run_id,
             "messages": message_count,
@@ -1291,8 +1374,7 @@ pub fn list_agent_harnesses(
 #[instrument_ipc(skip_all)]
 pub async fn copilot_auth_status(
     auditaur_trace_context: Option<IpcTraceContext>,
-) -> crate::engine::agent::harness::copilot_sdk::CopilotAuthStatus
-{
+) -> crate::engine::agent::harness::copilot_sdk::CopilotAuthStatus {
     crate::engine::agent::harness::copilot_sdk::probe_auth().await
 }
 
@@ -1352,9 +1434,7 @@ pub async fn archive_chat_session(
     let matched = {
         let mut guard = state.last_chat_summary.lock().unwrap();
         match guard.as_ref() {
-            Some(p) if p.session_id == session_id => {
-                guard.take().map(|p| (p.repo_root, p.root))
-            }
+            Some(p) if p.session_id == session_id => guard.take().map(|p| (p.repo_root, p.root)),
             _ => None,
         }
     };
@@ -1386,12 +1466,15 @@ pub async fn update_chat_summary(
     // Prefer the frontend-supplied origin (captured with the summary). Fall back
     // to the active project only for older callers that supply no origin.
     let origin = match (origin_repo_root, origin_root) {
-        (Some(repo_root), Some(root)) if !repo_root.is_empty() && !root.is_empty() => {
-            Some((std::path::PathBuf::from(repo_root), std::path::PathBuf::from(root)))
-        }
+        (Some(repo_root), Some(root)) if !repo_root.is_empty() && !root.is_empty() => Some((
+            std::path::PathBuf::from(repo_root),
+            std::path::PathBuf::from(root),
+        )),
         _ => {
             let guard = state.current_project.lock().unwrap();
-            guard.as_ref().map(|v| (v.repo_root.clone(), v.root.clone()))
+            guard
+                .as_ref()
+                .map(|v| (v.repo_root.clone(), v.root.clone()))
         }
     };
     let mut pending = state.last_chat_summary.lock().unwrap();
@@ -1933,6 +2016,7 @@ mod tests {
             endpoint: "https://example.com".into(),
             api_key: "key".into(),
             model: "gpt-4o".into(),
+            model_base_model: None,
             bearer_token: Some("token".into()),
             context_length: Some(128_000),
             vision_mode: Some("off".into()),
@@ -2018,6 +2102,20 @@ mod tests {
             .unwrap(),
             Some("medium".into())
         );
+        assert_eq!(
+            normalize_reasoning_effort(
+                Some("high"),
+                "microsoft_foundry",
+                "demo-deployment",
+                Some("Low,Medium,High")
+            )
+            .unwrap(),
+            Some("high".into())
+        );
+        assert_eq!(
+            normalize_reasoning_effort(Some("high"), "openai", "gpt-6.1-sol", Some("")).unwrap(),
+            Some("high".into())
+        );
         assert!(normalize_reasoning_effort(
             Some("medium"),
             "anthropic",
@@ -2025,6 +2123,94 @@ mod tests {
             Some("low,medium,high")
         )
         .is_err());
+    }
+
+    #[test]
+    fn prompty_reasoning_effort_only_applies_to_responses_models() {
+        let mut chat = make_config("openai");
+        chat.model = "gpt-5.6-luna".into();
+        chat.reasoning_effort = Some("high".into());
+        let chat_route = resolve_prompty_model_route(&chat).unwrap();
+        assert_eq!(chat_route.effective_reasoning_effort, None);
+
+        let mut responses = make_config("openai");
+        responses.model = "gpt-6.1-sol".into();
+        responses.reasoning_effort = Some("high".into());
+        let responses_route = resolve_prompty_model_route(&responses).unwrap();
+        assert_eq!(
+            responses_route.effective_reasoning_effort.as_deref(),
+            Some("high")
+        );
+
+        for model in ["gpt-5.1-codex", "gpt-5-pro"] {
+            let mut config = make_config("openai");
+            config.model = model.into();
+            config.reasoning_effort = Some("high".into());
+            let route = resolve_prompty_model_route(&config).unwrap();
+            assert_eq!(route.effective_reasoning_effort.as_deref(), Some("high"));
+        }
+
+        let mut alias = make_config("microsoft_foundry");
+        alias.model = "demo-deployment".into();
+        alias.model_base_model = Some("gpt-6-astra".into());
+        alias.model_reasoning_efforts = Some("low,medium,high,xhigh,max".into());
+        alias.reasoning_effort = Some("medium".into());
+        let alias_route = resolve_prompty_model_route(&alias).unwrap();
+        assert_eq!(alias_route.identity.base_model, "gpt-6-astra");
+        assert_eq!(
+            alias_route.effective_reasoning_effort.as_deref(),
+            Some("medium")
+        );
+    }
+
+    #[tokio::test]
+    async fn route_preview_matches_run_policy_for_deployment_alias() {
+        let mut config = make_config("microsoft_foundry");
+        config.model = "demo-deployment".into();
+        config.model_base_model = Some("gpt-6-astra".into());
+        config.model_reasoning_efforts = Some("low,medium,high,xhigh,max".into());
+        config.reasoning_effort = Some("medium".into());
+
+        let route = preview_agent_model_route_inner(config)
+            .unwrap()
+            .expect("prompty exposes an explicit route");
+
+        assert_eq!(route.identity.base_model, "gpt-6-astra");
+        assert_eq!(
+            route.api_route,
+            harness_contract::routing::ModelApiRoute::Responses
+        );
+        assert_eq!(route.effective_reasoning_effort.as_deref(), Some("medium"));
+    }
+
+    #[tokio::test]
+    async fn route_preview_uses_shared_policy_without_provider_secrets() {
+        let mut config = make_config("openai");
+        config.api_key = String::new();
+        config.bearer_token = None;
+        config.model = "gpt-6.1-sol".into();
+        config.reasoning_effort = Some("high".into());
+
+        let route = preview_agent_model_route_inner(config)
+            .unwrap()
+            .expect("prompty exposes an explicit route");
+
+        assert_eq!(
+            route.api_route,
+            harness_contract::routing::ModelApiRoute::Responses
+        );
+        assert_eq!(route.effective_reasoning_effort.as_deref(), Some("high"));
+    }
+
+    #[tokio::test]
+    async fn route_preview_returns_none_when_harness_owns_provider() {
+        if HarnessRegistry::canonical_id(Some("copilot-sdk")).is_err() {
+            return;
+        }
+        let mut config = make_config("openai");
+        config.execution_engine = Some("copilot-sdk".into());
+
+        assert!(preview_agent_model_route_inner(config).unwrap().is_none());
     }
 
     #[test]

@@ -16,6 +16,7 @@ import {
   harnessRunLabel,
   resolveWebReferenceContent,
   extractInlineToolActivity,
+  extractMentionReferences,
   isChatScrolledNearBottom,
   providerRunLabel,
   reconcileMessagesForDisplay,
@@ -87,6 +88,35 @@ describe("describeToolCall", () => {
 
       expect(cancel).toHaveBeenCalledExactlyOnceWith("42");
     });
+  });
+});
+
+describe("extractMentionReferences", () => {
+  const files = [
+    { type: "sketch" as const, path: "intro.sk", title: "Intro" },
+    { type: "note" as const, path: "notes/setup.md", title: "Setup Notes" },
+    { type: "storyboard" as const, path: "demo.sb", title: "Demo Storyboard" },
+  ];
+
+  it("resolves pasted @ mentions into file references", () => {
+    const refs = extractMentionReferences('Use @Intro and @"Setup Notes" with @storyboard:demo.sb', files);
+
+    expect(refs.map((ref) => `${ref.type}:${ref.path}`)).toEqual([
+      "sketch:intro.sk",
+      "note:notes/setup.md",
+      "storyboard:demo.sb",
+    ]);
+  });
+
+  it("resolves pasted web mentions and ignores duplicates", () => {
+    const refs = extractMentionReferences(
+      "Read @web:https://example.com/docs and @https://example.com/docs.",
+      files,
+    );
+
+    expect(refs).toEqual([
+      { type: "web", path: "https://example.com/docs", title: "https://example.com/docs", webStatus: "queued" },
+    ]);
   });
 });
 

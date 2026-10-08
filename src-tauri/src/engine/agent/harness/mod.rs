@@ -546,8 +546,10 @@ mod tests {
             endpoint: "https://seth-foundry-dev.services.ai.azure.com".to_string(),
             api_key: "shared-narration-key".to_string(),
             model: "gpt-5.6-terra".to_string(),
+            model_base_model: None,
             bearer_token: Some("shared-bearer".to_string()),
             reasoning_effort: None,
+            model_reasoning_efforts: None,
         }
     }
 

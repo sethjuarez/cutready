@@ -28,6 +28,7 @@ use harness_contract::execution::{
     AgentEvent, ChatMessage, ContextItem, ContextSource, FunctionCall, RunCancellation, RunResult,
     ToolCall, VisionConfig, WebAccessConfig,
 };
+use harness_contract::routing::HistoryStrategy;
 use harness_prompty::{
     build_production_model, native_to_prompty_message, prompty_to_native_message, run,
     DurableRunStore, PromptyHost, PromptySteering,
@@ -53,8 +54,10 @@ fn production_tool_wire_preserves_cutready_nullable_union_schemas() {
         endpoint: String::new(),
         api_key: "test-key".into(),
         model: "gpt-4o".into(),
+        model_base_model: None,
         bearer_token: None,
         reasoning_effort: None,
+        model_reasoning_efforts: None,
     };
     let production =
         build_production_model(&config, Some(10_000), all_tools(true, true, true)).unwrap();
@@ -267,6 +270,7 @@ async fn run_script_with_state(
         "scripted".into(),
         "scripted-model".into(),
         context_budget_chars,
+        HistoryStrategy::ChatMessages,
         messages,
         root,
         root,
@@ -308,6 +312,7 @@ async fn run_delegating(
         "scripted".into(),
         "scripted-model".into(),
         context_budget_chars,
+        HistoryStrategy::ChatMessages,
         messages,
         root,
         root,
