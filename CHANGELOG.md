@@ -10,6 +10,13 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.36.1](https://github.com/sethjuarez/cutready/compare/v1.36.0...v1.36.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **agent:** harden model routing for release ([#288](https://github.com/sethjuarez/cutready/issues/288)) ([1c0e676](https://github.com/sethjuarez/cutready/commit/1c0e676c73f43e1039eae58d2271ff3b47d19c61))
+
 ## [1.36.0](https://github.com/sethjuarez/cutready/compare/v1.35.0...v1.36.0) (2026-09-11)
 
 
