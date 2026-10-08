@@ -154,9 +154,13 @@ pub fn model_capability_profile(
     owned_by: Option<&str>,
     discovered_reasoning_efforts: Option<&str>,
 ) -> ModelCapabilityProfile {
-    let classifier = owned_by.filter(|value| !value.trim().is_empty()).unwrap_or(model);
+    let owned_by_model = owned_by
+        .map(str::trim)
+        .filter(|value| looks_like_model_id(value));
+    let classifier = owned_by_model.unwrap_or_else(|| model.trim());
+    let classifier_is_model_id = owned_by_model.is_some() || looks_like_model_id(classifier);
     let key = classifier.to_ascii_lowercase();
-    let non_agent = is_non_agent_model(&key);
+    let non_agent = classifier_is_model_id && is_non_agent_model(&key);
     let text_generation = !non_agent;
     let tool_calling = text_generation && !is_legacy_completion_model(&key);
     let vision = text_generation
@@ -193,11 +197,13 @@ pub fn resolve_agent_model_route(
         provider: provider.clone(),
         requested_model: model.to_string(),
         base_model: owned_by
-            .filter(|value| !value.trim().is_empty())
+            .map(str::trim)
+            .filter(|value| looks_like_model_id(value))
             .unwrap_or(model)
             .to_string(),
         deployment_id: owned_by
-            .filter(|value| !value.trim().is_empty())
+            .map(str::trim)
+            .filter(|value| looks_like_model_id(value))
             .map(|_| model.to_string()),
     };
     let capabilities =
@@ -277,6 +283,26 @@ pub fn requires_responses_api(model: &str) -> bool {
     model.contains("codex")
         || model.contains("gpt-6")
         || (model.contains("gpt-5") && model.ends_with("-pro"))
+}
+
+fn looks_like_model_id(model: &str) -> bool {
+    let model = model.trim().to_ascii_lowercase();
+    model.starts_with("gpt-")
+        || model.starts_with("o1")
+        || model.starts_with("o3")
+        || model.starts_with("o4")
+        || model.starts_with("claude-")
+        || model.starts_with("text-")
+        || model.starts_with("dall-e")
+        || model.starts_with("whisper")
+        || model.starts_with("tts")
+        || model.starts_with("omni-moderation")
+        || model.starts_with("moderation")
+        || model.starts_with("rerank")
+        || model.starts_with("babbage")
+        || model.starts_with("davinci")
+        || model.starts_with("curie")
+        || model.starts_with("ada")
 }
 
 fn is_non_agent_model(model: &str) -> bool {
@@ -432,6 +458,39 @@ mod tests {
         assert_eq!(route.identity.deployment_id.as_deref(), Some("demo-deployment"));
         assert_eq!(route.api_route, ModelApiRoute::Responses);
         assert_eq!(route.effective_reasoning_effort.as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn deployment_alias_names_do_not_trigger_non_agent_heuristics() {
+        let route = resolve_agent_model_route(
+            LlmProvider::MicrosoftFoundry,
+            "voiceover-image-prod",
+            "prompty",
+            requirements(),
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(route.identity.base_model, "voiceover-image-prod");
+        assert_eq!(route.api_route, ModelApiRoute::ChatCompletions);
+    }
+
+    #[test]
+    fn ignores_owned_by_values_that_are_not_model_ids() {
+        let route = resolve_agent_model_route(
+            LlmProvider::Openai,
+            "gpt-6.1-sol",
+            "prompty",
+            requirements(),
+            Some("openai"),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(route.identity.base_model, "gpt-6.1-sol");
+        assert_eq!(route.identity.deployment_id, None);
+        assert_eq!(route.api_route, ModelApiRoute::Responses);
     }
 
     #[test]

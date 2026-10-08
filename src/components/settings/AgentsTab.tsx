@@ -5,6 +5,7 @@ import { useSettings, type AgentPreset } from "../../hooks/useSettings";
 import { invoke } from "../../services/tauri";
 import { inputClass } from "../../styles";
 import { BUILT_IN_AGENTS } from "../../agents/builtInAgents";
+import { baseModelFromOwnedBy } from "../../utils/providerConfig";
 import type { ModelInfo } from "./types";
 
 type HarnessOwnership = "requires" | "provides" | "augments";
@@ -513,6 +514,7 @@ export function AgentsTab({ settings, updateSetting, models, loadingModels, canF
   const [newPrompt, setNewPrompt] = useState("");
   const customAgents = settings.aiAgents || [];
   const agentModelOverrides = settings.aiAgentModelOverrides || {};
+  const agentModelOverrideMetadata = settings.aiAgentModelOverrideMetadata || {};
   const agentProviderOverrides = settings.aiAgentProviderOverrides || {};
   const providers = settings.aiProviders || [];
   const modelOptions = models.map((m) => m.id);
@@ -534,6 +536,51 @@ export function AgentsTab({ settings, updateSetting, models, loadingModels, canF
     return values;
   };
 
+  const metadataForModel = (model: string) => {
+    const info = models.find((m) => m.id === model);
+    if (!model || !info) return undefined;
+    return {
+      model,
+      modelBaseModel: baseModelFromOwnedBy(info.owned_by),
+      modelReasoningEfforts: info.capabilities?.reasoning_efforts ?? "",
+      contextLength: info.context_length,
+      modelSupportsVision: info.capabilities?.vision === "true" ? "true" as const : "false" as const,
+    };
+  };
+
+  const updateAgentModelMetadata = (id: string, model: string) => {
+    const next = { ...agentModelOverrideMetadata };
+    const metadata = metadataForModel(model);
+    if (model && metadata) {
+      next[id] = metadata;
+    } else {
+      delete next[id];
+    }
+    updateSetting("aiAgentModelOverrideMetadata", next);
+  };
+
+  useEffect(() => {
+    if (models.length === 0) return;
+
+    const next = { ...agentModelOverrideMetadata };
+    let changed = false;
+
+    const backfill = (id: string, model: string | undefined) => {
+      if (!model) return;
+      const metadata = metadataForModel(model);
+      if (!metadata || next[id]?.model === model) return;
+      next[id] = metadata;
+      changed = true;
+    };
+
+    Object.entries(agentModelOverrides).forEach(([id, model]) => backfill(id, model));
+    customAgents.forEach((agent) => backfill(agent.id, agent.modelOverride));
+
+    if (changed) {
+      updateSetting("aiAgentModelOverrideMetadata", next);
+    }
+  }, [models, agentModelOverrides, customAgents, agentModelOverrideMetadata, updateSetting]);
+
   const updateBuiltInModel = (id: string, model: string) => {
     const next = { ...agentModelOverrides };
     if (model) {
@@ -542,19 +589,23 @@ export function AgentsTab({ settings, updateSetting, models, loadingModels, canF
       delete next[id];
     }
     updateSetting("aiAgentModelOverrides", next);
+    updateAgentModelMetadata(id, model);
   };
 
   const updateBuiltInProvider = (id: string, providerId: string) => {
     const nextProviders = { ...agentProviderOverrides };
     const nextModels = { ...agentModelOverrides };
+    const nextMetadata = { ...agentModelOverrideMetadata };
     if (providerId) {
       nextProviders[id] = providerId;
     } else {
       delete nextProviders[id];
     }
     delete nextModels[id];
+    delete nextMetadata[id];
     updateSetting("aiAgentProviderOverrides", nextProviders);
     updateSetting("aiAgentModelOverrides", nextModels);
+    updateSetting("aiAgentModelOverrideMetadata", nextMetadata);
   };
 
   const providerName = (providerId: string) =>
@@ -644,8 +695,16 @@ export function AgentsTab({ settings, updateSetting, models, loadingModels, canF
     ));
   };
 
+  const updateCustomAgentModel = (id: string, model: string) => {
+    updateAgent(id, { modelOverride: model || undefined });
+    updateAgentModelMetadata(id, model);
+  };
+
   const deleteAgent = (id: string) => {
     updateSetting("aiAgents", customAgents.filter((a) => a.id !== id));
+    const nextMetadata = { ...agentModelOverrideMetadata };
+    delete nextMetadata[id];
+    updateSetting("aiAgentModelOverrideMetadata", nextMetadata);
     if (settings.aiSelectedAgent === id) {
       updateSetting("aiSelectedAgent", "planner");
     }
@@ -724,11 +783,14 @@ export function AgentsTab({ settings, updateSetting, models, loadingModels, canF
                   />
                   <AgentProviderSelect
                     value={agent.providerOverride || ""}
-                    onChange={(providerId) => updateAgent(agent.id, { providerOverride: providerId || undefined, modelOverride: undefined })}
+                    onChange={(providerId) => {
+                      updateAgent(agent.id, { providerOverride: providerId || undefined, modelOverride: undefined });
+                      updateAgentModelMetadata(agent.id, "");
+                    }}
                   />
                   <AgentModelSelect
                     value={agent.modelOverride || ""}
-                    onChange={(model) => updateAgent(agent.id, { modelOverride: model || undefined })}
+                    onChange={(model) => updateCustomAgentModel(agent.id, model)}
                   />
                   <button
                     onClick={() => setEditingId(null)}
@@ -764,13 +826,16 @@ export function AgentsTab({ settings, updateSetting, models, loadingModels, canF
                   <div className="mt-3">
                     <AgentProviderSelect
                       value={agent.providerOverride || ""}
-                      onChange={(providerId) => updateAgent(agent.id, { providerOverride: providerId || undefined, modelOverride: undefined })}
+                      onChange={(providerId) => {
+                        updateAgent(agent.id, { providerOverride: providerId || undefined, modelOverride: undefined });
+                        updateAgentModelMetadata(agent.id, "");
+                      }}
                     />
                   </div>
                   <div className="mt-3">
                     <AgentModelSelect
                       value={agent.modelOverride || ""}
-                      onChange={(model) => updateAgent(agent.id, { modelOverride: model || undefined })}
+                      onChange={(model) => updateCustomAgentModel(agent.id, model)}
                     />
                   </div>
                 </>

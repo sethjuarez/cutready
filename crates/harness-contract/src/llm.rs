@@ -68,6 +68,7 @@ pub fn context_budget(model: &str, reported_context: Option<usize>) -> usize {
     } else if model.contains("claude") {
         100_000
     } else if model.contains("gpt-5")
+        || model.contains("gpt-6")
         || model.contains("gpt-4o")
         || model.contains("gpt-4.1")
         || model.contains("gpt-4-turbo")
@@ -112,6 +113,7 @@ mod tests {
 
     #[test]
     fn context_budget_preserves_legacy_host_policy_defaults() {
+        assert_eq!(context_budget("gpt-6.1-sol", None), 384_000);
         assert_eq!(context_budget("mistral-7b", None), 24_000);
         assert_eq!(context_budget("custom-private-model", None), 96_000);
         assert_eq!(context_budget("custom-private-model", Some(10_000)), 30_000);

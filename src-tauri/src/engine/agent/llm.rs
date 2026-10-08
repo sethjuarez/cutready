@@ -41,6 +41,7 @@ pub fn supports_vision(model: &str) -> bool {
     model.contains("gpt-4o")
         || model.contains("gpt-4.1")
         || model.contains("gpt-5")
+        || model.contains("gpt-6")
         || model.contains("gpt-4-turbo")
         || model.contains("gpt-4-vision")
         || model.contains("claude-3-5")
@@ -361,6 +362,8 @@ mod tests {
 
     #[test]
     fn context_budget_preserves_legacy_host_policy_defaults() {
+        assert!(supports_vision("gpt-6.1-sol"));
+        assert_eq!(context_budget("gpt-6.1-sol", None), 384_000);
         assert_eq!(context_budget("mistral-7b", None), 24_000);
         assert_eq!(context_budget("custom-private-model", None), 96_000);
         assert_eq!(context_budget("custom-private-model", Some(10_000)), 30_000);

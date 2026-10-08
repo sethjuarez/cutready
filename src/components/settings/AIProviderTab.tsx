@@ -3,7 +3,7 @@ import { Brain, RefreshCw, X } from "lucide-react";
 import { useSettings, type AiReasoningEffort } from "../../hooks/useSettings";
 import { inputClass } from "../../styles";
 import { FoundryResourcePicker } from "../FoundryResourcePicker";
-import { activeProvider, createAiProviderConfig, normalizeReasoningEffort, supportedReasoningEfforts, supportsAgentReasoningEffort } from "../../utils/providerConfig";
+import { activeProvider, baseModelFromOwnedBy, createAiProviderConfig, normalizeReasoningEffort, supportedReasoningEfforts, supportsAgentReasoningEffort } from "../../utils/providerConfig";
 import type { ModelInfo } from "./types";
 
 export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isAnthropic, isOAuth, hasToken, canFetchModels, models, setModels, loadingModels, modelFilter, setModelFilter, modelError, fetchModels, oauthStatus, oauthError, startOAuthFlow, signOut }: {
@@ -555,9 +555,7 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
                   key={m.id}
                   onClick={() => {
                     updateSetting("aiModel", m.id);
-                    const ownedBy = (m.owned_by ?? "").trim();
-                    const baseModel = /^(gpt-|o1|o3|o4|claude-)/i.test(ownedBy) ? ownedBy : "";
-                    updateSetting("aiModelBaseModel", baseModel);
+                    updateSetting("aiModelBaseModel", baseModelFromOwnedBy(m.owned_by));
                     if (m.context_length) {
                       updateSetting("aiContextLength", m.context_length);
                     }

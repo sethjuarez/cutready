@@ -157,6 +157,11 @@ function looksLikeAgentModelId(model: string): boolean {
   );
 }
 
+export function baseModelFromOwnedBy(ownedBy: string | undefined): string {
+  const value = (ownedBy ?? "").trim();
+  return looksLikeAgentModelId(value) ? value : "";
+}
+
 function isClearlyNonAgentModel(model: string): boolean {
   const value = model.toLowerCase();
   return [
@@ -180,7 +185,7 @@ function isClearlyNonAgentModel(model: string): boolean {
 
 export function isAgentCompatibleModel(model: AgentModelInfo, provider: string | undefined): boolean {
   const modelName = capabilityModelName(model);
-  if (!modelName || isClearlyNonAgentModel(modelName)) return false;
+  if (!modelName) return false;
 
   const providerKey = (provider ?? "").toLowerCase();
   const capabilities = model.capabilities;
@@ -189,6 +194,7 @@ export function isAgentCompatibleModel(model: AgentModelInfo, provider: string |
   const toolCalling = capabilityValue(capabilities, "tool_calling") || capabilityValue(capabilities, "function_calling");
   const toolCallingKnownUnsupported = toolCalling === "false" || toolCalling === "unsupported";
 
+  if (looksLikeAgentModelId(modelName) && isClearlyNonAgentModel(modelName)) return false;
   if (toolCallingKnownUnsupported) return false;
   if (responsesApi === "true" || chatCompletion === "true") return true;
   if (responsesApi === "false" && chatCompletion === "false") return false;

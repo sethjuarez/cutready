@@ -205,6 +205,13 @@ describe("agent model compatibility", () => {
     }, "microsoft_foundry")).toBe(false);
   });
 
+  test("keeps aliases with explicit chat capability despite media words", () => {
+    expect(isAgentCompatibleModel({
+      id: "voiceover-image-prod",
+      capabilities: { chat_completion: "true", tool_calling: "true" },
+    }, "microsoft_foundry")).toBe(true);
+  });
+
   test("drops models that explicitly do not support tool calling", () => {
     expect(isAgentCompatibleModel({
       id: "gpt-lite",

@@ -1042,9 +1042,16 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     () => resolveAgentModelOverride(selectedAgent, settings.aiAgentModelOverrides),
     [selectedAgent, settings.aiAgentModelOverrides],
   );
+  const selectedAgentModelOverrideMetadata = selectedAgentModelOverride
+    ? settings.aiAgentModelOverrideMetadata?.[selectedAgent.id]
+    : undefined;
+  const matchingSelectedAgentModelOverrideMetadata =
+    selectedAgentModelOverrideMetadata?.model && selectedAgentModelOverrideMetadata.model !== selectedAgentModelOverride
+      ? undefined
+      : selectedAgentModelOverrideMetadata;
   const effectiveModel = selectedAgentModelOverride || effectiveProvider?.model || settings.aiModel || "";
-  const effectiveModelReasoningEfforts = selectedAgentModelOverride ? "" : settings.aiModelReasoningEfforts;
-  const effectiveModelBaseModel = selectedAgentModelOverride ? "" : (effectiveProvider?.modelBaseModel || settings.aiModelBaseModel || "");
+  const effectiveModelReasoningEfforts = selectedAgentModelOverride ? matchingSelectedAgentModelOverrideMetadata?.modelReasoningEfforts ?? "" : settings.aiModelReasoningEfforts;
+  const effectiveModelBaseModel = selectedAgentModelOverride ? matchingSelectedAgentModelOverrideMetadata?.modelBaseModel ?? "" : (effectiveProvider?.modelBaseModel || settings.aiModelBaseModel || "");
   const reasoningEfforts = useMemo(
     () => {
       if (settings.aiAgentExecutionEngine === "copilot-sdk") {
@@ -1444,17 +1451,34 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
         effectiveProviderInput,
         settings.aiAgentExecutionEngine || "prompty",
       );
+      const modelOverrideMetadata = modelOverride
+        ? settings.aiAgentModelOverrideMetadata?.[effectiveAgent.id]
+        : undefined;
+      const matchingModelOverrideMetadata =
+        modelOverrideMetadata?.model && modelOverrideMetadata.model !== modelOverride
+          ? undefined
+          : modelOverrideMetadata;
+      const modelOverrideVision = matchingModelOverrideMetadata?.modelSupportsVision;
       const config = {
         ...providerConfig,
         // Apply per-agent model override when configured; otherwise use the provider model.
-        ...(modelOverride ? { model: modelOverride, model_base_model: null, model_reasoning_efforts: null } : {}),
+        ...(modelOverride ? {
+          model: modelOverride,
+          model_base_model: matchingModelOverrideMetadata?.modelBaseModel || null,
+          model_reasoning_efforts: matchingModelOverrideMetadata?.modelReasoningEfforts || null,
+          context_length: matchingModelOverrideMetadata?.contextLength || null,
+          model_supports_vision:
+            modelOverrideVision === undefined || modelOverrideVision === ""
+              ? null
+              : modelOverrideVision === "true",
+        } : {}),
       };
       config.reasoning_effort = normalizeReasoningEffort(
         settings.aiReasoningEffort,
         config.provider,
         config.model,
-        modelOverride ? "" : effectiveProviderInput.modelReasoningEfforts,
-        modelOverride ? "" : effectiveProviderInput.modelBaseModel,
+        config.model_reasoning_efforts ?? "",
+        config.model_base_model ?? "",
       ) || null;
       const routePreview = await invoke<AgentModelRoutePreview | null>("preview_agent_model_route", {
         config: {
@@ -1468,8 +1492,8 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           routePreview.effective_reasoning_effort || "",
           config.provider,
           config.model,
-          modelOverride ? "" : effectiveProviderInput.modelReasoningEfforts,
-          modelOverride ? "" : effectiveProviderInput.modelBaseModel,
+          config.model_reasoning_efforts ?? "",
+          config.model_base_model ?? "",
         ) || null;
       } else {
         config.reasoning_effort = null;

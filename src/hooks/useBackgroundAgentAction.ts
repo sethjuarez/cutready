@@ -209,19 +209,32 @@ export function useBackgroundAgentAction() {
         await buildRefreshedProviderInput(settings, effectiveAgent, updateSetting),
         settings.aiAgentExecutionEngine || "prompty",
       );
+      const modelOverrideMetadata = modelOverride
+        ? settings.aiAgentModelOverrideMetadata?.[effectiveAgent.id]
+        : undefined;
+      const matchingModelOverrideMetadata =
+        modelOverrideMetadata?.model && modelOverrideMetadata.model !== modelOverride
+          ? undefined
+          : modelOverrideMetadata;
+      const modelOverrideVision = matchingModelOverrideMetadata?.modelSupportsVision;
       const result = await invoke<AgentChatResult>("agent_chat_with_tools", {
         config: {
           ...providerConfig,
           ...(modelOverride ? {
             model: modelOverride,
-            model_base_model: null,
-            model_reasoning_efforts: null,
+            model_base_model: matchingModelOverrideMetadata?.modelBaseModel || null,
+            model_reasoning_efforts: matchingModelOverrideMetadata?.modelReasoningEfforts || null,
+            context_length: matchingModelOverrideMetadata?.contextLength || null,
+            model_supports_vision:
+              modelOverrideVision === undefined || modelOverrideVision === ""
+                ? null
+                : modelOverrideVision === "true",
             reasoning_effort: normalizeReasoningEffort(
               settings.aiReasoningEffort,
               providerConfig.provider,
               modelOverride,
-              "",
-              "",
+              matchingModelOverrideMetadata?.modelReasoningEfforts || "",
+              matchingModelOverrideMetadata?.modelBaseModel || "",
             ) || null,
           } : {}),
         },
