@@ -39,6 +39,8 @@ swift test --package-path ios
 
 A vector with no adapter fails unless it is waived. A waived vector that starts passing also fails, so remove waivers as adapters land.
 
+The `Contracts` workflow (`.github/workflows/contracts.yml`) runs `npm run check` and all three suites on every change to the contract or either binding.
+
 ## Canonical save form
 
 Desktop is the reference. Every runtime must save `.sk` files this way. Typra can't express explicit `null` or unknown-field passthrough yet, so the vectors pin these rules.

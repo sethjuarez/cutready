@@ -1,0 +1,81 @@
+name: Contracts
+
+# Keeps the Typra SketchDocument contract, its generated outputs, and the
+# desktop (Rust) and companion (Swift) bindings in lockstep.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "contracts/**"
+      - "crates/cutready-contracts/**"
+      - "src-tauri/src/models/sketch.rs"
+      - "src-tauri/src/engine/sketch_edits.rs"
+      - "src-tauri/src/lib.rs"
+      - "ios/Package.swift"
+      - "ios/Sources/CutReadyMobileCore/**"
+      - "ios/Tests/CutReadyContractConformanceTests/**"
+      - "Cargo.lock"
+      - ".github/workflows/contracts.yml"
+  push:
+    branches: [main]
+    paths:
+      - "contracts/**"
+      - "crates/cutready-contracts/**"
+      - "src-tauri/src/models/sketch.rs"
+      - "src-tauri/src/engine/sketch_edits.rs"
+      - "src-tauri/src/lib.rs"
+      - "ios/Package.swift"
+      - "ios/Sources/CutReadyMobileCore/**"
+      - "ios/Tests/CutReadyContractConformanceTests/**"
+      - "Cargo.lock"
+      - ".github/workflows/contracts.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  generated:
+    name: Generated output is current
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: contracts/package-lock.json
+
+      - name: Install contract tooling
+        run: npm ci
+        working-directory: contracts
+
+      - name: Regenerate and diff
+        run: npm run check
+        working-directory: contracts
+
+  conformance:
+    name: Rust and Swift conformance
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Desktop conformance
+        run: cargo test -p cutready-contracts
+
+      - name: Generated Swift package
+        run: swift test --package-path contracts/generated/swift
+
+      - name: Companion conformance
+        run: swift test --package-path ios --filter CutReadyContractConformanceTests
