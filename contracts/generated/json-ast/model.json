@@ -1,0 +1,2104 @@
+{
+  "typeName": {
+    "namespace": "CutReady.Contracts",
+    "name": "Sketch"
+  },
+  "description": "A `.sk` file: a focused scene with a planning table.\nUnknown top-level fields must survive every runtime's decode -> save.",
+  "base": {},
+  "isAbstract": false,
+  "isProtocol": false,
+  "entryShorthand": null,
+  "coercions": [],
+  "factories": [],
+  "methods": [],
+  "childTypes": [],
+  "properties": [
+    {
+      "name": "title",
+      "typeName": {
+        "namespace": "",
+        "name": "string"
+      },
+      "description": "",
+      "samples": [
+        {
+          "sample": {
+            "title": "Intro"
+          },
+          "title": "",
+          "description": ""
+        }
+      ],
+      "knownAs": [],
+      "defaultFor": [],
+      "isScalar": true,
+      "isOptional": false,
+      "isCollection": false,
+      "isAny": false,
+      "isDict": false,
+      "dictValueType": null,
+      "defaultValue": "null",
+      "hasExplicitDefault": false,
+      "allowedValues": [],
+      "parseAliases": {},
+      "enumName": null,
+      "isOpenEnum": false,
+      "isNamedCollection": false
+    },
+    {
+      "name": "locked",
+      "typeName": {
+        "namespace": "",
+        "name": "boolean"
+      },
+      "description": "Whether the whole sketch is protected from edits. Saved as `false` when unset.",
+      "samples": [],
+      "knownAs": [],
+      "defaultFor": [],
+      "isScalar": true,
+      "isOptional": true,
+      "isCollection": false,
+      "isAny": false,
+      "isDict": false,
+      "dictValueType": null,
+      "defaultValue": "null",
+      "hasExplicitDefault": false,
+      "allowedValues": [],
+      "parseAliases": {},
+      "enumName": null,
+      "isOpenEnum": false,
+      "isNamedCollection": false
+    },
+    {
+      "name": "description",
+      "typeName": {
+        "namespace": "",
+        "name": "unknown"
+      },
+      "description": "Rich-text description (Lexical JSON, Markdown string, or null). Opaque.",
+      "samples": [],
+      "knownAs": [],
+      "defaultFor": [],
+      "isScalar": true,
+      "isOptional": true,
+      "isCollection": false,
+      "isAny": true,
+      "isDict": false,
+      "dictValueType": null,
+      "defaultValue": "null",
+      "hasExplicitDefault": false,
+      "allowedValues": [],
+      "parseAliases": {},
+      "enumName": null,
+      "isOpenEnum": false,
+      "isNamedCollection": false
+    },
+    {
+      "name": "rows",
+      "typeName": {
+        "namespace": "CutReady.Contracts",
+        "name": "PlanningRow"
+      },
+      "description": "",
+      "samples": [],
+      "knownAs": [],
+      "defaultFor": [],
+      "isScalar": false,
+      "isOptional": false,
+      "isCollection": true,
+      "isAny": false,
+      "isDict": false,
+      "dictValueType": null,
+      "defaultValue": "null",
+      "hasExplicitDefault": false,
+      "allowedValues": [],
+      "parseAliases": {},
+      "enumName": null,
+      "isOpenEnum": false,
+      "isNamedCollection": false,
+      "type": {
+        "typeName": {
+          "namespace": "CutReady.Contracts",
+          "name": "PlanningRow"
+        },
+        "description": "A row in the sketch planning table.\nUnknown fields must survive every runtime's decode -> save.",
+        "base": {},
+        "isAbstract": false,
+        "isProtocol": false,
+        "entryShorthand": null,
+        "coercions": [],
+        "factories": [],
+        "methods": [],
+        "childTypes": [],
+        "properties": [
+          {
+            "name": "locked",
+            "typeName": {
+              "namespace": "",
+              "name": "boolean"
+            },
+            "description": "Whether the entire row is protected from edits. Saved as `false` when unset.",
+            "samples": [],
+            "knownAs": [],
+            "defaultFor": [],
+            "isScalar": true,
+            "isOptional": true,
+            "isCollection": false,
+            "isAny": false,
+            "isDict": false,
+            "dictValueType": null,
+            "defaultValue": "null",
+            "hasExplicitDefault": false,
+            "allowedValues": [],
+            "parseAliases": {},
+            "enumName": null,
+            "isOpenEnum": false,
+            "isNamedCollection": false
+          },
+          {
+            "name": "locks",
+            "typeName": {
+              "namespace": "CutReady.Contracts",
+              "name": "PlanningCellLocks"
+            },
+            "description": "Saved with all six fields, even when nothing is locked.",
+            "samples": [],
+            "knownAs": [],
+            "defaultFor": [],
+            "isScalar": false,
+            "isOptional": true,
+            "isCollection": false,
+            "isAny": false,
+            "isDict": false,
+            "dictValueType": null,
+            "defaultValue": "null",
+            "hasExplicitDefault": false,
+            "allowedValues": [],
+            "parseAliases": {},
+            "enumName": null,
+            "isOpenEnum": false,
+            "isNamedCollection": false,
+            "type": {
+              "typeName": {
+                "namespace": "CutReady.Contracts",
+                "name": "PlanningCellLocks"
+              },
+              "description": "Per-cell lock state. Canonical save writes all six fields.",
+              "base": {},
+              "isAbstract": false,
+              "isProtocol": false,
+              "entryShorthand": null,
+              "coercions": [],
+              "factories": [],
+              "methods": [],
+              "childTypes": [],
+              "properties": [
+                {
+                  "name": "time",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "boolean"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "narrative",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "boolean"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "demo_actions",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "boolean"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "screenshot",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "boolean"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "visual",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "boolean"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "design_plan",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "boolean"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                }
+              ]
+            }
+          },
+          {
+            "name": "time",
+            "typeName": {
+              "namespace": "",
+              "name": "string"
+            },
+            "description": "Human duration such as `~30s`, `0:20`, or `2m`.",
+            "samples": [
+              {
+                "sample": {
+                  "time": "0:20"
+                },
+                "title": "",
+                "description": ""
+              }
+            ],
+            "knownAs": [],
+            "defaultFor": [],
+            "isScalar": true,
+            "isOptional": false,
+            "isCollection": false,
+            "isAny": false,
+            "isDict": false,
+            "dictValueType": null,
+            "defaultValue": "null",
+            "hasExplicitDefault": false,
+            "allowedValues": [],
+            "parseAliases": {},
+            "enumName": null,
+            "isOpenEnum": false,
+            "isNamedCollection": false
+          },
+          {
+            "name": "duration_seconds",
+            "typeName": {
+              "namespace": "",
+              "name": "int32"
+            },
+            "description": "Concrete duration in seconds.",
+            "samples": [],
+            "knownAs": [],
+            "defaultFor": [],
+            "isScalar": true,
+            "isOptional": true,
+            "isCollection": false,
+            "isAny": false,
+            "isDict": false,
+            "dictValueType": null,
+            "defaultValue": "null",
+            "hasExplicitDefault": false,
+            "allowedValues": [],
+            "parseAliases": {},
+            "enumName": null,
+            "isOpenEnum": false,
+            "isNamedCollection": false
+          },
+          {
+            "name": "narrative",
+            "typeName": {
+              "namespace": "",
+              "name": "string"
+            },
+            "description": "",
+            "samples": [
+              {
+                "sample": {
+                  "narrative": "Welcome to CutReady."
+                },
+                "title": "",
+                "description": ""
+              }
+            ],
+            "knownAs": [],
+            "defaultFor": [],
+            "isScalar": true,
+            "isOptional": false,
+            "isCollection": false,
+            "isAny": false,
+            "isDict": false,
+            "dictValueType": null,
+            "defaultValue": "null",
+            "hasExplicitDefault": false,
+            "allowedValues": [],
+            "parseAliases": {},
+            "enumName": null,
+            "isOpenEnum": false,
+            "isNamedCollection": false
+          },
+          {
+            "name": "demo_actions",
+            "typeName": {
+              "namespace": "",
+              "name": "string"
+            },
+            "description": "",
+            "samples": [
+              {
+                "sample": {
+                  "demo_actions": "Open the workspace."
+                },
+                "title": "",
+                "description": ""
+              }
+            ],
+            "knownAs": [],
+            "defaultFor": [],
+            "isScalar": true,
+            "isOptional": false,
+            "isCollection": false,
+            "isAny": false,
+            "isDict": false,
+            "dictValueType": null,
+            "defaultValue": "null",
+            "hasExplicitDefault": false,
+            "allowedValues": [],
+            "parseAliases": {},
+            "enumName": null,
+            "isOpenEnum": false,
+            "isNamedCollection": false
+          },
+          {
+            "name": "screenshot",
+            "typeName": {
+              "namespace": "",
+              "name": "string"
+            },
+            "description": "Project-relative screenshot path. Canonical save writes `null` when absent.",
+            "samples": [],
+            "knownAs": [],
+            "defaultFor": [],
+            "isScalar": true,
+            "isOptional": true,
+            "isCollection": false,
+            "isAny": false,
+            "isDict": false,
+            "dictValueType": null,
+            "defaultValue": "null",
+            "hasExplicitDefault": false,
+            "allowedValues": [],
+            "parseAliases": {},
+            "enumName": null,
+            "isOpenEnum": false,
+            "isNamedCollection": false
+          },
+          {
+            "name": "visual",
+            "typeName": {
+              "namespace": "",
+              "name": "unknown"
+            },
+            "description": "Project-relative Elucim visual path (legacy files may inline the document). Opaque.",
+            "samples": [],
+            "knownAs": [],
+            "defaultFor": [],
+            "isScalar": true,
+            "isOptional": true,
+            "isCollection": false,
+            "isAny": true,
+            "isDict": false,
+            "dictValueType": null,
+            "defaultValue": "null",
+            "hasExplicitDefault": false,
+            "allowedValues": [],
+            "parseAliases": {},
+            "enumName": null,
+            "isOpenEnum": false,
+            "isNamedCollection": false
+          },
+          {
+            "name": "motion_points",
+            "typeName": {
+              "namespace": "CutReady.Contracts",
+              "name": "MotionPoint"
+            },
+            "description": "",
+            "samples": [],
+            "knownAs": [],
+            "defaultFor": [],
+            "isScalar": false,
+            "isOptional": true,
+            "isCollection": true,
+            "isAny": false,
+            "isDict": false,
+            "dictValueType": null,
+            "defaultValue": "null",
+            "hasExplicitDefault": false,
+            "allowedValues": [],
+            "parseAliases": {},
+            "enumName": null,
+            "isOpenEnum": false,
+            "isNamedCollection": false,
+            "type": {
+              "typeName": {
+                "namespace": "CutReady.Contracts",
+                "name": "MotionPoint"
+              },
+              "description": "Ranked normalized screenshot point used for camera moves.",
+              "base": {},
+              "isAbstract": false,
+              "isProtocol": false,
+              "entryShorthand": null,
+              "coercions": [],
+              "factories": [],
+              "methods": [],
+              "childTypes": [],
+              "properties": [
+                {
+                  "name": "rank",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "int32"
+                  },
+                  "description": "1, 2, or 3.",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "x",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "float32"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "y",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "float32"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "label",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "string"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                }
+              ]
+            }
+          },
+          {
+            "name": "typing_spots",
+            "typeName": {
+              "namespace": "CutReady.Contracts",
+              "name": "TypingSpot"
+            },
+            "description": "",
+            "samples": [],
+            "knownAs": [],
+            "defaultFor": [],
+            "isScalar": false,
+            "isOptional": true,
+            "isCollection": true,
+            "isAny": false,
+            "isDict": false,
+            "dictValueType": null,
+            "defaultValue": "null",
+            "hasExplicitDefault": false,
+            "allowedValues": [],
+            "parseAliases": {},
+            "enumName": null,
+            "isOpenEnum": false,
+            "isNamedCollection": false,
+            "type": {
+              "typeName": {
+                "namespace": "CutReady.Contracts",
+                "name": "TypingSpot"
+              },
+              "description": "A normalized text region rendered as a typewriter overlay.",
+              "base": {},
+              "isAbstract": false,
+              "isProtocol": false,
+              "entryShorthand": null,
+              "coercions": [],
+              "factories": [],
+              "methods": [],
+              "childTypes": [],
+              "properties": [
+                {
+                  "name": "x",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "float32"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "y",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "float32"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "width",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "float32"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "height",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "float32"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "text",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "string"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "start_offset_ms",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "int64"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "duration_ms",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "int64"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "characters_per_second",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "float32"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "show_cursor",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "boolean"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "text_color",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "string"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "font_family",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "string"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "font_scale",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "float32"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                }
+              ]
+            }
+          },
+          {
+            "name": "motion_plan",
+            "typeName": {
+              "namespace": "CutReady.Contracts",
+              "name": "MotionPlan"
+            },
+            "description": "",
+            "samples": [],
+            "knownAs": [],
+            "defaultFor": [],
+            "isScalar": false,
+            "isOptional": true,
+            "isCollection": false,
+            "isAny": false,
+            "isDict": false,
+            "dictValueType": null,
+            "defaultValue": "null",
+            "hasExplicitDefault": false,
+            "allowedValues": [],
+            "parseAliases": {},
+            "enumName": null,
+            "isOpenEnum": false,
+            "isNamedCollection": false,
+            "type": {
+              "typeName": {
+                "namespace": "CutReady.Contracts",
+                "name": "MotionPlan"
+              },
+              "description": "Agent-generated camera motion plan for screenshot rows.",
+              "base": {},
+              "isAbstract": false,
+              "isProtocol": false,
+              "entryShorthand": null,
+              "coercions": [],
+              "factories": [],
+              "methods": [],
+              "childTypes": [],
+              "properties": [
+                {
+                  "name": "kind",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "string"
+                  },
+                  "description": "`subtle_push`, `wide_hold_then_push`, or `push_then_drift`.\nA string until Typra emits matching Rust enum variant names for\nmulti-word values in generated tests.",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "keyframes",
+                  "typeName": {
+                    "namespace": "CutReady.Contracts",
+                    "name": "MotionPlanKeyframe"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": false,
+                  "isOptional": true,
+                  "isCollection": true,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false,
+                  "type": {
+                    "typeName": {
+                      "namespace": "CutReady.Contracts",
+                      "name": "MotionPlanKeyframe"
+                    },
+                    "description": "",
+                    "base": {},
+                    "isAbstract": false,
+                    "isProtocol": false,
+                    "entryShorthand": null,
+                    "coercions": [],
+                    "factories": [],
+                    "methods": [],
+                    "childTypes": [],
+                    "properties": [
+                      {
+                        "name": "time_ms",
+                        "typeName": {
+                          "namespace": "",
+                          "name": "int64"
+                        },
+                        "description": "",
+                        "samples": [],
+                        "knownAs": [],
+                        "defaultFor": [],
+                        "isScalar": true,
+                        "isOptional": false,
+                        "isCollection": false,
+                        "isAny": false,
+                        "isDict": false,
+                        "dictValueType": null,
+                        "defaultValue": "null",
+                        "hasExplicitDefault": false,
+                        "allowedValues": [],
+                        "parseAliases": {},
+                        "enumName": null,
+                        "isOpenEnum": false,
+                        "isNamedCollection": false
+                      },
+                      {
+                        "name": "scale",
+                        "typeName": {
+                          "namespace": "",
+                          "name": "float32"
+                        },
+                        "description": "",
+                        "samples": [],
+                        "knownAs": [],
+                        "defaultFor": [],
+                        "isScalar": true,
+                        "isOptional": false,
+                        "isCollection": false,
+                        "isAny": false,
+                        "isDict": false,
+                        "dictValueType": null,
+                        "defaultValue": "null",
+                        "hasExplicitDefault": false,
+                        "allowedValues": [],
+                        "parseAliases": {},
+                        "enumName": null,
+                        "isOpenEnum": false,
+                        "isNamedCollection": false
+                      },
+                      {
+                        "name": "x",
+                        "typeName": {
+                          "namespace": "",
+                          "name": "float32"
+                        },
+                        "description": "",
+                        "samples": [],
+                        "knownAs": [],
+                        "defaultFor": [],
+                        "isScalar": true,
+                        "isOptional": false,
+                        "isCollection": false,
+                        "isAny": false,
+                        "isDict": false,
+                        "dictValueType": null,
+                        "defaultValue": "null",
+                        "hasExplicitDefault": false,
+                        "allowedValues": [],
+                        "parseAliases": {},
+                        "enumName": null,
+                        "isOpenEnum": false,
+                        "isNamedCollection": false
+                      },
+                      {
+                        "name": "y",
+                        "typeName": {
+                          "namespace": "",
+                          "name": "float32"
+                        },
+                        "description": "",
+                        "samples": [],
+                        "knownAs": [],
+                        "defaultFor": [],
+                        "isScalar": true,
+                        "isOptional": false,
+                        "isCollection": false,
+                        "isAny": false,
+                        "isDict": false,
+                        "dictValueType": null,
+                        "defaultValue": "null",
+                        "hasExplicitDefault": false,
+                        "allowedValues": [],
+                        "parseAliases": {},
+                        "enumName": null,
+                        "isOpenEnum": false,
+                        "isNamedCollection": false
+                      },
+                      {
+                        "name": "easing",
+                        "typeName": {
+                          "namespace": "",
+                          "name": "string"
+                        },
+                        "description": "",
+                        "samples": [],
+                        "knownAs": [],
+                        "defaultFor": [],
+                        "isScalar": true,
+                        "isOptional": true,
+                        "isCollection": false,
+                        "isAny": false,
+                        "isDict": false,
+                        "dictValueType": null,
+                        "defaultValue": "null",
+                        "hasExplicitDefault": false,
+                        "allowedValues": [
+                          "linear",
+                          "ease_in_out",
+                          "ease_out"
+                        ],
+                        "parseAliases": {},
+                        "enumName": "MotionPlanEasing",
+                        "isOpenEnum": false,
+                        "isNamedCollection": false
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "rationale",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "string"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                }
+              ]
+            }
+          },
+          {
+            "name": "design_plan",
+            "typeName": {
+              "namespace": "",
+              "name": "string"
+            },
+            "description": "Designer brief for the visual.",
+            "samples": [],
+            "knownAs": [],
+            "defaultFor": [],
+            "isScalar": true,
+            "isOptional": true,
+            "isCollection": false,
+            "isAny": false,
+            "isDict": false,
+            "dictValueType": null,
+            "defaultValue": "null",
+            "hasExplicitDefault": false,
+            "allowedValues": [],
+            "parseAliases": {},
+            "enumName": null,
+            "isOpenEnum": false,
+            "isNamedCollection": false
+          },
+          {
+            "name": "narration",
+            "typeName": {
+              "namespace": "CutReady.Contracts",
+              "name": "NarrationAsset"
+            },
+            "description": "",
+            "samples": [],
+            "knownAs": [],
+            "defaultFor": [],
+            "isScalar": false,
+            "isOptional": true,
+            "isCollection": false,
+            "isAny": false,
+            "isDict": false,
+            "dictValueType": null,
+            "defaultValue": "null",
+            "hasExplicitDefault": false,
+            "allowedValues": [],
+            "parseAliases": {},
+            "enumName": null,
+            "isOpenEnum": false,
+            "isNamedCollection": false,
+            "type": {
+              "typeName": {
+                "namespace": "CutReady.Contracts",
+                "name": "NarrationAsset"
+              },
+              "description": "Recorded or generated narration audio attached to a row.",
+              "base": {},
+              "isAbstract": false,
+              "isProtocol": false,
+              "entryShorthand": null,
+              "coercions": [],
+              "factories": [],
+              "methods": [],
+              "childTypes": [],
+              "properties": [
+                {
+                  "name": "path",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "string"
+                  },
+                  "description": "",
+                  "samples": [
+                    {
+                      "sample": {
+                        "path": ".cutready/narration/row-1.wav"
+                      },
+                      "title": "",
+                      "description": ""
+                    }
+                  ],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "source_text",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "string"
+                  },
+                  "description": "Narrative text at the moment the audio was recorded or generated.",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "source_text_hash",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "string"
+                  },
+                  "description": "SHA-256 of `source_text`.",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "mime_type",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "string"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "duration_ms",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "int64"
+                  },
+                  "description": "Canonical save writes `null` when unknown.",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "leading_silence_ms",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "int64"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "trailing_silence_ms",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "int64"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "silence_threshold_db",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "float32"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "byte_size",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "int64"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "recorded_at",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "string"
+                  },
+                  "description": "RFC 3339 UTC timestamp.",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                }
+              ]
+            }
+          },
+          {
+            "name": "narration_plan",
+            "typeName": {
+              "namespace": "CutReady.Contracts",
+              "name": "NarrationPlan"
+            },
+            "description": "",
+            "samples": [],
+            "knownAs": [],
+            "defaultFor": [],
+            "isScalar": false,
+            "isOptional": true,
+            "isCollection": false,
+            "isAny": false,
+            "isDict": false,
+            "dictValueType": null,
+            "defaultValue": "null",
+            "hasExplicitDefault": false,
+            "allowedValues": [],
+            "parseAliases": {},
+            "enumName": null,
+            "isOpenEnum": false,
+            "isNamedCollection": false,
+            "type": {
+              "typeName": {
+                "namespace": "CutReady.Contracts",
+                "name": "NarrationPlan"
+              },
+              "description": "Durable creative direction and compiled SSML for generated narration.",
+              "base": {},
+              "isAbstract": false,
+              "isProtocol": false,
+              "entryShorthand": null,
+              "coercions": [],
+              "factories": [],
+              "methods": [],
+              "childTypes": [],
+              "properties": [
+                {
+                  "name": "source_text",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "string"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "voice",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "string"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "locale",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "string"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "ssml",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "string"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "baseline_style",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "string"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "pronunciation_overrides",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "dictionary"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": true,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": true,
+                  "dictValueType": "string",
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                },
+                {
+                  "name": "beats",
+                  "typeName": {
+                    "namespace": "CutReady.Contracts",
+                    "name": "NarrationBeat"
+                  },
+                  "description": "",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": false,
+                  "isOptional": true,
+                  "isCollection": true,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false,
+                  "type": {
+                    "typeName": {
+                      "namespace": "CutReady.Contracts",
+                      "name": "NarrationBeat"
+                    },
+                    "description": "A deliberate delivery beat for generated narration.",
+                    "base": {},
+                    "isAbstract": false,
+                    "isProtocol": false,
+                    "entryShorthand": null,
+                    "coercions": [],
+                    "factories": [],
+                    "methods": [],
+                    "childTypes": [],
+                    "properties": [
+                      {
+                        "name": "text",
+                        "typeName": {
+                          "namespace": "",
+                          "name": "string"
+                        },
+                        "description": "",
+                        "samples": [],
+                        "knownAs": [],
+                        "defaultFor": [],
+                        "isScalar": true,
+                        "isOptional": false,
+                        "isCollection": false,
+                        "isAny": false,
+                        "isDict": false,
+                        "dictValueType": null,
+                        "defaultValue": "null",
+                        "hasExplicitDefault": false,
+                        "allowedValues": [],
+                        "parseAliases": {},
+                        "enumName": null,
+                        "isOpenEnum": false,
+                        "isNamedCollection": false
+                      },
+                      {
+                        "name": "purpose",
+                        "typeName": {
+                          "namespace": "",
+                          "name": "string"
+                        },
+                        "description": "",
+                        "samples": [],
+                        "knownAs": [],
+                        "defaultFor": [],
+                        "isScalar": true,
+                        "isOptional": true,
+                        "isCollection": false,
+                        "isAny": false,
+                        "isDict": false,
+                        "dictValueType": null,
+                        "defaultValue": "null",
+                        "hasExplicitDefault": false,
+                        "allowedValues": [],
+                        "parseAliases": {},
+                        "enumName": null,
+                        "isOpenEnum": false,
+                        "isNamedCollection": false
+                      },
+                      {
+                        "name": "style",
+                        "typeName": {
+                          "namespace": "",
+                          "name": "string"
+                        },
+                        "description": "",
+                        "samples": [],
+                        "knownAs": [],
+                        "defaultFor": [],
+                        "isScalar": true,
+                        "isOptional": true,
+                        "isCollection": false,
+                        "isAny": false,
+                        "isDict": false,
+                        "dictValueType": null,
+                        "defaultValue": "null",
+                        "hasExplicitDefault": false,
+                        "allowedValues": [],
+                        "parseAliases": {},
+                        "enumName": null,
+                        "isOpenEnum": false,
+                        "isNamedCollection": false
+                      },
+                      {
+                        "name": "style_degree",
+                        "typeName": {
+                          "namespace": "",
+                          "name": "float32"
+                        },
+                        "description": "",
+                        "samples": [],
+                        "knownAs": [],
+                        "defaultFor": [],
+                        "isScalar": true,
+                        "isOptional": true,
+                        "isCollection": false,
+                        "isAny": false,
+                        "isDict": false,
+                        "dictValueType": null,
+                        "defaultValue": "null",
+                        "hasExplicitDefault": false,
+                        "allowedValues": [],
+                        "parseAliases": {},
+                        "enumName": null,
+                        "isOpenEnum": false,
+                        "isNamedCollection": false
+                      },
+                      {
+                        "name": "emphasis",
+                        "typeName": {
+                          "namespace": "",
+                          "name": "string"
+                        },
+                        "description": "",
+                        "samples": [],
+                        "knownAs": [],
+                        "defaultFor": [],
+                        "isScalar": true,
+                        "isOptional": true,
+                        "isCollection": false,
+                        "isAny": false,
+                        "isDict": false,
+                        "dictValueType": null,
+                        "defaultValue": "null",
+                        "hasExplicitDefault": false,
+                        "allowedValues": [],
+                        "parseAliases": {},
+                        "enumName": null,
+                        "isOpenEnum": false,
+                        "isNamedCollection": false
+                      },
+                      {
+                        "name": "pause_after_ms",
+                        "typeName": {
+                          "namespace": "",
+                          "name": "int64"
+                        },
+                        "description": "",
+                        "samples": [],
+                        "knownAs": [],
+                        "defaultFor": [],
+                        "isScalar": true,
+                        "isOptional": true,
+                        "isCollection": false,
+                        "isAny": false,
+                        "isDict": false,
+                        "dictValueType": null,
+                        "defaultValue": "null",
+                        "hasExplicitDefault": false,
+                        "allowedValues": [],
+                        "parseAliases": {},
+                        "enumName": null,
+                        "isOpenEnum": false,
+                        "isNamedCollection": false
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "generated_at",
+                  "typeName": {
+                    "namespace": "",
+                    "name": "string"
+                  },
+                  "description": "RFC 3339 UTC timestamp.",
+                  "samples": [],
+                  "knownAs": [],
+                  "defaultFor": [],
+                  "isScalar": true,
+                  "isOptional": false,
+                  "isCollection": false,
+                  "isAny": false,
+                  "isDict": false,
+                  "dictValueType": null,
+                  "defaultValue": "null",
+                  "hasExplicitDefault": false,
+                  "allowedValues": [],
+                  "parseAliases": {},
+                  "enumName": null,
+                  "isOpenEnum": false,
+                  "isNamedCollection": false
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "metadata",
+      "typeName": {
+        "namespace": "CutReady.Contracts",
+        "name": "DocumentMetadata"
+      },
+      "description": "",
+      "samples": [],
+      "knownAs": [],
+      "defaultFor": [],
+      "isScalar": false,
+      "isOptional": true,
+      "isCollection": false,
+      "isAny": false,
+      "isDict": false,
+      "dictValueType": null,
+      "defaultValue": "null",
+      "hasExplicitDefault": false,
+      "allowedValues": [],
+      "parseAliases": {},
+      "enumName": null,
+      "isOpenEnum": false,
+      "isNamedCollection": false,
+      "type": {
+        "typeName": {
+          "namespace": "CutReady.Contracts",
+          "name": "DocumentMetadata"
+        },
+        "description": "User-defined key/value metadata stored with portable documents.",
+        "base": {},
+        "isAbstract": false,
+        "isProtocol": false,
+        "entryShorthand": null,
+        "coercions": [],
+        "factories": [],
+        "methods": [],
+        "childTypes": [],
+        "properties": [
+          {
+            "name": "fields",
+            "typeName": {
+              "namespace": "",
+              "name": "dictionary"
+            },
+            "description": "",
+            "samples": [],
+            "knownAs": [],
+            "defaultFor": [],
+            "isScalar": true,
+            "isOptional": true,
+            "isCollection": false,
+            "isAny": false,
+            "isDict": true,
+            "dictValueType": "string",
+            "defaultValue": "null",
+            "hasExplicitDefault": false,
+            "allowedValues": [],
+            "parseAliases": {},
+            "enumName": null,
+            "isOpenEnum": false,
+            "isNamedCollection": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "state",
+      "typeName": {
+        "namespace": "",
+        "name": "string"
+      },
+      "description": "",
+      "samples": [],
+      "knownAs": [],
+      "defaultFor": [],
+      "isScalar": true,
+      "isOptional": false,
+      "isCollection": false,
+      "isAny": false,
+      "isDict": false,
+      "dictValueType": null,
+      "defaultValue": "null",
+      "hasExplicitDefault": false,
+      "allowedValues": [
+        "draft",
+        "recording_enriched",
+        "refined",
+        "final"
+      ],
+      "parseAliases": {
+        "draft": [
+          "sketch"
+        ]
+      },
+      "enumName": "SketchState",
+      "isOpenEnum": false,
+      "isNamedCollection": false
+    },
+    {
+      "name": "created_at",
+      "typeName": {
+        "namespace": "",
+        "name": "string"
+      },
+      "description": "RFC 3339 UTC timestamp. Runtimes never rewrite a timestamp they did not change.",
+      "samples": [
+        {
+          "sample": {
+            "created_at": "2026-06-28T20:00:00Z"
+          },
+          "title": "",
+          "description": ""
+        }
+      ],
+      "knownAs": [],
+      "defaultFor": [],
+      "isScalar": true,
+      "isOptional": false,
+      "isCollection": false,
+      "isAny": false,
+      "isDict": false,
+      "dictValueType": null,
+      "defaultValue": "null",
+      "hasExplicitDefault": false,
+      "allowedValues": [],
+      "parseAliases": {},
+      "enumName": null,
+      "isOpenEnum": false,
+      "isNamedCollection": false
+    },
+    {
+      "name": "updated_at",
+      "typeName": {
+        "namespace": "",
+        "name": "string"
+      },
+      "description": "RFC 3339 UTC timestamp, set by every successful edit.",
+      "samples": [
+        {
+          "sample": {
+            "updated_at": "2026-06-28T20:20:00Z"
+          },
+          "title": "",
+          "description": ""
+        }
+      ],
+      "knownAs": [],
+      "defaultFor": [],
+      "isScalar": true,
+      "isOptional": false,
+      "isCollection": false,
+      "isAny": false,
+      "isDict": false,
+      "dictValueType": null,
+      "defaultValue": "null",
+      "hasExplicitDefault": false,
+      "allowedValues": [],
+      "parseAliases": {},
+      "enumName": null,
+      "isOpenEnum": false,
+      "isNamedCollection": false
+    }
+  ]
+}

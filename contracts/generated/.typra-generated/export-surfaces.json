@@ -1,0 +1,596 @@
+{
+  "emitter": "typra-emitter",
+  "version": 1,
+  "toolchain": {
+    "packages": [
+      {
+        "name": "@typespec/compiler",
+        "version": "1.10.0",
+        "supportedRange": ">=1.10.0 <2.0.0",
+        "supported": true
+      },
+      {
+        "name": "@typespec/json-schema",
+        "version": "1.10.0",
+        "supportedRange": ">=1.10.0 <2.0.0",
+        "supported": true
+      },
+      {
+        "name": "@typra/emitter",
+        "version": "2.1.8",
+        "supportedRange": "2.1.8",
+        "supported": true
+      }
+    ]
+  },
+  "root": {
+    "object": "CutReady.Contracts.Sketch",
+    "namespace": "CutReady.Contracts",
+    "alias": "Contracts"
+  },
+  "targets": [
+    {
+      "target": "markdown",
+      "outputRoot": "generated/markdown",
+      "rootExports": [
+        "DocumentMetadata",
+        "MotionPlan",
+        "MotionPlanKeyframe",
+        "MotionPoint",
+        "NarrationAsset",
+        "NarrationBeat",
+        "NarrationPlan",
+        "PlanningCellLocks",
+        "PlanningRow",
+        "RowTextUpdate",
+        "Sketch",
+        "SketchDocument",
+        "SketchEditError",
+        "TypingSpot"
+      ],
+      "exports": [
+        {
+          "name": "DocumentMetadata",
+          "kind": "value",
+          "group": "",
+          "source": "DocumentMetadata",
+          "protocol": false
+        },
+        {
+          "name": "MotionPlan",
+          "kind": "value",
+          "group": "",
+          "source": "MotionPlan",
+          "protocol": false
+        },
+        {
+          "name": "MotionPlanKeyframe",
+          "kind": "value",
+          "group": "",
+          "source": "MotionPlanKeyframe",
+          "protocol": false
+        },
+        {
+          "name": "MotionPoint",
+          "kind": "value",
+          "group": "",
+          "source": "MotionPoint",
+          "protocol": false
+        },
+        {
+          "name": "NarrationAsset",
+          "kind": "value",
+          "group": "",
+          "source": "NarrationAsset",
+          "protocol": false
+        },
+        {
+          "name": "NarrationBeat",
+          "kind": "value",
+          "group": "",
+          "source": "NarrationBeat",
+          "protocol": false
+        },
+        {
+          "name": "NarrationPlan",
+          "kind": "value",
+          "group": "",
+          "source": "NarrationPlan",
+          "protocol": false
+        },
+        {
+          "name": "PlanningCellLocks",
+          "kind": "value",
+          "group": "",
+          "source": "PlanningCellLocks",
+          "protocol": false
+        },
+        {
+          "name": "PlanningRow",
+          "kind": "value",
+          "group": "",
+          "source": "PlanningRow",
+          "protocol": false
+        },
+        {
+          "name": "RowTextUpdate",
+          "kind": "value",
+          "group": "",
+          "source": "RowTextUpdate",
+          "protocol": false
+        },
+        {
+          "name": "Sketch",
+          "kind": "value",
+          "group": "",
+          "source": "Sketch",
+          "protocol": false
+        },
+        {
+          "name": "SketchDocument",
+          "kind": "type",
+          "group": "",
+          "source": "SketchDocument",
+          "protocol": true
+        },
+        {
+          "name": "SketchEditError",
+          "kind": "value",
+          "group": "",
+          "source": "SketchEditError",
+          "protocol": false
+        },
+        {
+          "name": "TypingSpot",
+          "kind": "value",
+          "group": "",
+          "source": "TypingSpot",
+          "protocol": false
+        }
+      ],
+      "groups": [],
+      "protocols": [
+        {
+          "name": "SketchDocument",
+          "group": "",
+          "symbol": "SketchDocument",
+          "source": "SketchDocument",
+          "methods": [
+            {
+              "name": "reorderRows",
+              "returns": "Sketch",
+              "params": {
+                "now": "string",
+                "order": "int32[]",
+                "sketch": "Sketch"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "roundTrip",
+              "returns": "Sketch",
+              "params": {
+                "sketch": "Sketch"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "updateRowText",
+              "returns": "Sketch",
+              "params": {
+                "now": "string",
+                "sketch": "Sketch",
+                "update": "RowTextUpdate"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            }
+          ]
+        }
+      ],
+      "modules": [
+        "DocumentMetadata",
+        "MotionPlan",
+        "MotionPlanKeyframe",
+        "MotionPoint",
+        "NarrationAsset",
+        "NarrationBeat",
+        "NarrationPlan",
+        "PlanningCellLocks",
+        "PlanningRow",
+        "RowTextUpdate",
+        "Sketch",
+        "SketchDocument",
+        "SketchEditError",
+        "TypingSpot"
+      ]
+    },
+    {
+      "target": "rust",
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "rootExports": [
+        "DocumentMetadata",
+        "MotionPlan",
+        "MotionPlanKeyframe",
+        "MotionPoint",
+        "NarrationAsset",
+        "NarrationBeat",
+        "NarrationPlan",
+        "PlanningCellLocks",
+        "PlanningRow",
+        "RowTextUpdate",
+        "Sketch",
+        "SketchDocument",
+        "SketchEditError",
+        "TypingSpot"
+      ],
+      "exports": [
+        {
+          "name": "DocumentMetadata",
+          "kind": "value",
+          "group": "",
+          "source": "document_metadata",
+          "protocol": false
+        },
+        {
+          "name": "MotionPlan",
+          "kind": "value",
+          "group": "",
+          "source": "motion_plan",
+          "protocol": false
+        },
+        {
+          "name": "MotionPlanKeyframe",
+          "kind": "value",
+          "group": "",
+          "source": "motion_plan_keyframe",
+          "protocol": false
+        },
+        {
+          "name": "MotionPoint",
+          "kind": "value",
+          "group": "",
+          "source": "motion_point",
+          "protocol": false
+        },
+        {
+          "name": "NarrationAsset",
+          "kind": "value",
+          "group": "",
+          "source": "narration_asset",
+          "protocol": false
+        },
+        {
+          "name": "NarrationBeat",
+          "kind": "value",
+          "group": "",
+          "source": "narration_beat",
+          "protocol": false
+        },
+        {
+          "name": "NarrationPlan",
+          "kind": "value",
+          "group": "",
+          "source": "narration_plan",
+          "protocol": false
+        },
+        {
+          "name": "PlanningCellLocks",
+          "kind": "value",
+          "group": "",
+          "source": "planning_cell_locks",
+          "protocol": false
+        },
+        {
+          "name": "PlanningRow",
+          "kind": "value",
+          "group": "",
+          "source": "planning_row",
+          "protocol": false
+        },
+        {
+          "name": "RowTextUpdate",
+          "kind": "value",
+          "group": "",
+          "source": "row_text_update",
+          "protocol": false
+        },
+        {
+          "name": "Sketch",
+          "kind": "value",
+          "group": "",
+          "source": "sketch",
+          "protocol": false
+        },
+        {
+          "name": "SketchDocument",
+          "kind": "type",
+          "group": "",
+          "source": "sketch_document",
+          "protocol": true
+        },
+        {
+          "name": "SketchEditError",
+          "kind": "value",
+          "group": "",
+          "source": "sketch_edit_error",
+          "protocol": false
+        },
+        {
+          "name": "TypingSpot",
+          "kind": "value",
+          "group": "",
+          "source": "typing_spot",
+          "protocol": false
+        }
+      ],
+      "groups": [],
+      "protocols": [
+        {
+          "name": "SketchDocument",
+          "group": "",
+          "symbol": "SketchDocument",
+          "source": "sketch_document",
+          "methods": [
+            {
+              "name": "reorderRows",
+              "returns": "Sketch",
+              "params": {
+                "now": "string",
+                "order": "int32[]",
+                "sketch": "Sketch"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "roundTrip",
+              "returns": "Sketch",
+              "params": {
+                "sketch": "Sketch"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "updateRowText",
+              "returns": "Sketch",
+              "params": {
+                "now": "string",
+                "sketch": "Sketch",
+                "update": "RowTextUpdate"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            }
+          ]
+        }
+      ],
+      "modules": [
+        "context",
+        "document_metadata",
+        "motion_plan",
+        "motion_plan_keyframe",
+        "motion_point",
+        "narration_asset",
+        "narration_beat",
+        "narration_plan",
+        "planning_cell_locks",
+        "planning_row",
+        "row_text_update",
+        "sketch",
+        "sketch_document",
+        "sketch_edit_error",
+        "typing_spot"
+      ]
+    },
+    {
+      "target": "swift",
+      "outputRoot": "generated/swift",
+      "packageName": "CutReadyContracts",
+      "rootExports": [
+        "DocumentMetadata",
+        "MotionPlan",
+        "MotionPlanKeyframe",
+        "MotionPoint",
+        "NarrationAsset",
+        "NarrationBeat",
+        "NarrationPlan",
+        "PlanningCellLocks",
+        "PlanningRow",
+        "RowTextUpdate",
+        "Sketch",
+        "SketchDocument",
+        "SketchEditError",
+        "TypingSpot"
+      ],
+      "exports": [
+        {
+          "name": "DocumentMetadata",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/document_metadata.swift",
+          "protocol": false
+        },
+        {
+          "name": "MotionPlan",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/motion_plan.swift",
+          "protocol": false
+        },
+        {
+          "name": "MotionPlanKeyframe",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/motion_plan_keyframe.swift",
+          "protocol": false
+        },
+        {
+          "name": "MotionPoint",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/motion_point.swift",
+          "protocol": false
+        },
+        {
+          "name": "NarrationAsset",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/narration_asset.swift",
+          "protocol": false
+        },
+        {
+          "name": "NarrationBeat",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/narration_beat.swift",
+          "protocol": false
+        },
+        {
+          "name": "NarrationPlan",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/narration_plan.swift",
+          "protocol": false
+        },
+        {
+          "name": "PlanningCellLocks",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/planning_cell_locks.swift",
+          "protocol": false
+        },
+        {
+          "name": "PlanningRow",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/planning_row.swift",
+          "protocol": false
+        },
+        {
+          "name": "RowTextUpdate",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/row_text_update.swift",
+          "protocol": false
+        },
+        {
+          "name": "Sketch",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/sketch.swift",
+          "protocol": false
+        },
+        {
+          "name": "SketchDocument",
+          "kind": "type",
+          "group": "",
+          "source": "Sources/CutReadyContracts/sketch_document.swift",
+          "protocol": true
+        },
+        {
+          "name": "SketchEditError",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/sketch_edit_error.swift",
+          "protocol": false
+        },
+        {
+          "name": "TypingSpot",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/typing_spot.swift",
+          "protocol": false
+        }
+      ],
+      "groups": [],
+      "protocols": [
+        {
+          "name": "SketchDocument",
+          "group": "",
+          "symbol": "SketchDocument",
+          "source": "Sources/CutReadyContracts/sketch_document.swift",
+          "methods": [
+            {
+              "name": "reorderRows",
+              "returns": "Sketch",
+              "params": {
+                "now": "string",
+                "order": "int32[]",
+                "sketch": "Sketch"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "roundTrip",
+              "returns": "Sketch",
+              "params": {
+                "sketch": "Sketch"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "updateRowText",
+              "returns": "Sketch",
+              "params": {
+                "now": "string",
+                "sketch": "Sketch",
+                "update": "RowTextUpdate"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            }
+          ]
+        }
+      ],
+      "modules": [
+        "Sources/CutReadyContracts/document_metadata.swift",
+        "Sources/CutReadyContracts/motion_plan.swift",
+        "Sources/CutReadyContracts/motion_plan_keyframe.swift",
+        "Sources/CutReadyContracts/motion_point.swift",
+        "Sources/CutReadyContracts/narration_asset.swift",
+        "Sources/CutReadyContracts/narration_beat.swift",
+        "Sources/CutReadyContracts/narration_plan.swift",
+        "Sources/CutReadyContracts/planning_cell_locks.swift",
+        "Sources/CutReadyContracts/planning_row.swift",
+        "Sources/CutReadyContracts/row_text_update.swift",
+        "Sources/CutReadyContracts/sketch.swift",
+        "Sources/CutReadyContracts/sketch_document.swift",
+        "Sources/CutReadyContracts/sketch_edit_error.swift",
+        "Sources/CutReadyContracts/typing_spot.swift"
+      ]
+    }
+  ]
+}

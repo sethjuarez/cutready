@@ -1,0 +1,32 @@
+{
+  "emitter": "typra-emitter",
+  "version": 1,
+  "protectedPaths": [],
+  "hydrationZones": [],
+  "seams": [
+    {
+      "contract": "SketchDocument",
+      "target": "markdown",
+      "group": "",
+      "symbol": "SketchDocument",
+      "generatedSource": "SketchDocument",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "SketchDocument",
+      "target": "rust",
+      "group": "",
+      "symbol": "SketchDocument",
+      "generatedSource": "sketch_document",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "SketchDocument",
+      "target": "swift",
+      "group": "",
+      "symbol": "SketchDocument",
+      "generatedSource": "Sources/CutReadyContracts/sketch_document.swift",
+      "seamKind": "protocol-adapter"
+    }
+  ]
+}

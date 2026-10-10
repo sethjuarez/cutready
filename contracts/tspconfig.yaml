@@ -1,0 +1,32 @@
+emit:
+  - "@typra/emitter"
+
+options:
+  "@typra/emitter":
+    emitter-output-dir: "{cwd}/generated"
+    root-object: "CutReady.Contracts.Sketch"
+    root-namespace: "CutReady.Contracts"
+    additional-roots:
+      - "CutReady.Contracts.RowTextUpdate"
+      - "CutReady.Contracts.SketchEditError"
+    deterministic-output: true
+    emit-targets:
+      # Desktop (Rust). Models + sample tests compile inside the
+      # crates/cutready-contracts crate; the @vector harness there drives the
+      # desktop's real document code through src/vector_adapters.rs.
+      - type: Rust
+        output-dir: "../crates/cutready-contracts/src/model"
+        test-dir: "../crates/cutready-contracts/src/generated_tests"
+        vector-adapter-path: "../vector_adapters.rs"
+        format: false
+      # iOS (Swift). Models live in a standalone generated package; the @vector
+      # harness is emitted into the iOS package so it drives CutReadyMobileCore
+      # through the hand-authored VectorAdapters.swift beside it.
+      - type: Swift
+        output-dir: "generated/swift"
+        test-dir: "generated/swift/Tests/CutReadyContractsTests"
+        package-name: "CutReadyContracts"
+        harness-test-dir: "../ios/Tests/CutReadyContractConformanceTests"
+        format: false
+      - type: Markdown
+        output-dir: "generated/markdown"

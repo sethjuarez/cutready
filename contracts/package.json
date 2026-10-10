@@ -1,0 +1,16 @@
+{
+  "name": "cutready-contracts",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Typra/TypeSpec contracts shared by the CutReady desktop (Rust) and iOS (Swift) runtimes.",
+  "scripts": {
+    "generate": "node ./vectors/build.mjs && tsp compile ./main.tsp --config ./tspconfig.yaml",
+    "check": "node ./scripts/check-generated.mjs"
+  },
+  "devDependencies": {
+    "@typespec/compiler": "1.10.0",
+    "@typespec/http": "1.10.0",
+    "@typespec/json-schema": "1.10.0",
+    "@typra/emitter": "2.1.8"
+  }
+}

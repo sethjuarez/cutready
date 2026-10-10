@@ -1,0 +1,407 @@
+{
+  "emitter": "typra-emitter",
+  "version": 1,
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "files": [
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/document_metadata_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/main.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/motion_plan_keyframe_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/motion_plan_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/motion_point_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/narration_asset_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/narration_beat_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/narration_plan_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/planning_cell_locks_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/planning_row_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/row_text_update_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/sketch_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/typing_spot_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/vector_conformance_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/vector_runner/mod.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/context.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/document_metadata.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/mod.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/motion_plan_keyframe.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/motion_plan.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/motion_point.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/narration_asset.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/narration_beat.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/narration_plan.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/planning_cell_locks.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/planning_row.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/row_text_update.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/sketch_document.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/sketch_edit_error.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/sketch.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/typing_spot.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/vector_conformance.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "../ios/Tests/CutReadyContractConformanceTests/VectorConformanceTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "../ios/Tests/CutReadyContractConformanceTests/VectorRunner.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/json-ast",
+      "path": "generated/json-ast/model.json",
+      "marker": false
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/DocumentMetadata.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/index.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/MotionPlan.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/MotionPlanKeyframe.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/MotionPoint.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/NarrationAsset.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/NarrationBeat.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/NarrationPlan.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/PlanningCellLocks.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/PlanningRow.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/RowTextUpdate.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/Sketch.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/SketchDocument.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/SketchEditError.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/TypingSpot.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Package.swift",
+      "marker": false
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/document_metadata.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/motion_plan_keyframe.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/motion_plan.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/motion_point.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/narration_asset.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/narration_beat.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/narration_plan.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/planning_cell_locks.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/planning_row.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/row_text_update.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/sketch_document.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/sketch_edit_error.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/sketch.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/typing_spot.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/TypraRuntime.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/vector_conformance.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/ConformanceTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/DocumentMetadataTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/MotionPlanKeyframeTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/MotionPlanTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/MotionPointTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/NarrationAssetTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/NarrationBeatTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/NarrationPlanTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/PlanningCellLocksTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/PlanningRowTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/RowTextUpdateTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/SketchTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/TypingSpotTests.swift",
+      "marker": true
+    }
+  ]
+}

@@ -43,6 +43,10 @@ let package = Package(
             name: "CutReadyMobileCoreTests",
             dependencies: ["CutReadyMobileCore"]
         ),
+        .testTarget(
+            name: "CutReadyContractConformanceTests",
+            dependencies: ["CutReadyMobileCore"]
+        ),
         .target(
             name: "DraftlineMobileC",
             publicHeadersPath: "include"

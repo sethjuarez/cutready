@@ -1,0 +1,18 @@
+[package]
+name = "cutready-contracts"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Typra-generated CutReady document contracts plus the @vector conformance suite that binds them to the desktop's production document code."
+
+[lib]
+name = "cutready_contracts"
+
+[dependencies]
+async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }
