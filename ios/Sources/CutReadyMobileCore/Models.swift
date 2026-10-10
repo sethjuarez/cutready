@@ -45,8 +45,67 @@ enum UnknownFieldCodec {
 }
 
 enum CutReadyDocumentDateCodec {
+    /// Formats like the desktop's chrono `DateTime<Utc>` serializer: whole
+    /// seconds print without a fraction, otherwise 3 or 6 digits as needed.
     static func string(from date: Date) -> String {
-        iso8601WithFractions.string(from: date)
+        var seconds = date.timeIntervalSince1970.rounded(.down)
+        var micros = Int(((date.timeIntervalSince1970 - seconds) * 1_000_000).rounded())
+        if micros >= 1_000_000 {
+            seconds += 1
+            micros -= 1_000_000
+        }
+        let base = String(iso8601.string(from: Date(timeIntervalSince1970: seconds)).dropLast())
+        return base + fraction(nanos: micros * 1_000) + "Z"
+    }
+
+    /// Rewrites an RFC 3339 timestamp the way desktop chrono saves it: UTC with
+    /// `Z`, keeping up to nine fraction digits. Returns nil for anything else.
+    static func canonical(_ raw: String) -> String? {
+        let pattern = #"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+              let match = regex.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)) else {
+            return nil
+        }
+        func group(_ index: Int) -> String? {
+            Range(match.range(at: index), in: raw).map { String(raw[$0]) }
+        }
+        guard let base = group(1), let zone = group(3),
+              let seconds = iso8601.date(from: base + (zone.uppercased() == "Z" ? "Z" : zone)) else {
+            return nil
+        }
+        let digits = group(2) ?? ""
+        let nanos = Int(digits.padding(toLength: 9, withPad: "0", startingAt: 0)) ?? 0
+        return String(iso8601.string(from: seconds).dropLast()) + fraction(nanos: nanos) + "Z"
+    }
+
+    /// Parses an RFC 3339 timestamp, keeping microsecond precision.
+    static func date(from raw: String) -> Date? {
+        guard let canonical = canonical(raw) else { return nil }
+        let wholeSeconds = String(canonical.prefix(19)) + "Z"
+        guard let seconds = iso8601.date(from: wholeSeconds) else { return nil }
+        let digits = canonical.count > 20 ? String(canonical.dropFirst(20).dropLast()) : ""
+        let micros = Double(digits.padding(toLength: 6, withPad: "0", startingAt: 0).prefix(6)) ?? 0
+        return seconds.addingTimeInterval(micros / 1_000_000)
+    }
+
+    /// Prefers the decoded text while the date is unchanged so precision beyond
+    /// what `Date` parsing keeps survives a mobile save.
+    static func string(from date: Date, raw: DocumentTimestamp) -> String {
+        if raw.date == date, let text = raw.text, let canonical = canonical(text) {
+            return canonical
+        }
+        return string(from: date)
+    }
+
+    private static func fraction(nanos: Int) -> String {
+        if nanos == 0 { return "" }
+        if nanos % 1_000_000 == 0 { return String(format: ".%03d", nanos / 1_000_000) }
+        if nanos % 1_000 == 0 { return String(format: ".%06d", nanos / 1_000) }
+        return String(format: ".%09d", nanos)
+    }
+
+    static func raw<Key: CodingKey>(from container: KeyedDecodingContainer<Key>, forKey key: Key, date: Date?) -> DocumentTimestamp {
+        DocumentTimestamp(text: try? container.decodeIfPresent(String.self, forKey: key), date: date)
     }
 
     static func decode<Key: CodingKey>(
@@ -78,7 +137,7 @@ enum CutReadyDocumentDateCodec {
         key: Key,
         container: KeyedDecodingContainer<Key>
     ) throws -> Date {
-        if let date = iso8601WithFractions.date(from: value) ?? iso8601.date(from: value) {
+        if let date = Self.date(from: value) ?? iso8601WithFractions.date(from: value) ?? iso8601.date(from: value) {
             return date
         }
 
@@ -109,6 +168,60 @@ enum CutReadyDocumentDateCodec {
     }()
 }
 
+/// The timestamp text a document was decoded with. Bookkeeping only, so it
+/// never affects equality.
+struct DocumentTimestamp: Equatable, Sendable {
+    var text: String?
+    var date: Date?
+
+    static func == (lhs: DocumentTimestamp, rhs: DocumentTimestamp) -> Bool { true }
+}
+
+/// Canonicalizes the desktop-typed row fields mobile keeps as passthrough JSON.
+/// Every optional and collection inside them is omitted when null or empty on
+/// desktop, so the same rule applies here (contracts/README.md).
+enum DesktopRowFields {
+    static let keys: Set<String> = ["motion_points", "typing_spots", "motion_plan", "narration_plan"]
+
+    static func canonicalize(_ fields: [String: JSONValue]) -> [String: JSONValue] {
+        var result = fields
+        for key in keys {
+            guard let value = fields[key] else { continue }
+            result[key] = isEmpty(value) ? nil : prune(value)
+        }
+        if case .object(var plan)? = result["narration_plan"],
+           case .string(let generatedAt)? = plan["generated_at"],
+           let canonical = CutReadyDocumentDateCodec.canonical(generatedAt) {
+            plan["generated_at"] = .string(canonical)
+            result["narration_plan"] = .object(plan)
+        }
+        return result
+    }
+
+    private static func prune(_ value: JSONValue) -> JSONValue {
+        switch value {
+        case .object(let object):
+            return .object(object.compactMapValues { member in
+                let pruned = prune(member)
+                return isEmpty(pruned) ? nil : pruned
+            })
+        case .array(let items):
+            return .array(items.map(prune))
+        default:
+            return value
+        }
+    }
+
+    private static func isEmpty(_ value: JSONValue) -> Bool {
+        switch value {
+        case .null: return true
+        case .array(let items): return items.isEmpty
+        case .object(let object): return object.isEmpty
+        default: return false
+        }
+    }
+}
+
 public enum SketchState: String, Codable, CaseIterable, Sendable {
     case draft
     case recordingEnriched = "recording_enriched"
@@ -134,7 +247,6 @@ public enum PlanningCellField: String, Codable, CaseIterable, Hashable, Sendable
     case screenshot
     case visual
     case designPlan = "design_plan"
-    case narration
 }
 
 public struct RowNarration: Codable, Equatable, Sendable {
@@ -184,6 +296,20 @@ public struct RowNarration: Codable, Equatable, Sendable {
         case silenceThresholdDb = "silence_threshold_db"
         case byteSize = "byte_size"
         case recordedAt = "recorded_at"
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(path, forKey: .path)
+        try container.encodeIfPresent(sourceText, forKey: .sourceText)
+        try container.encodeIfPresent(sourceTextHash, forKey: .sourceTextHash)
+        try container.encodeIfPresent(mimeType, forKey: .mimeType)
+        try container.encode(durationMs, forKey: .durationMs)
+        try container.encodeIfPresent(leadingSilenceMs, forKey: .leadingSilenceMs)
+        try container.encodeIfPresent(trailingSilenceMs, forKey: .trailingSilenceMs)
+        try container.encodeIfPresent(silenceThresholdDb, forKey: .silenceThresholdDb)
+        try container.encodeIfPresent(byteSize, forKey: .byteSize)
+        try container.encodeIfPresent(recordedAt.map { CutReadyDocumentDateCodec.canonical($0) ?? $0 }, forKey: .recordedAt)
     }
 }
 
@@ -261,28 +387,38 @@ public struct PlanningRow: Codable, Equatable, Sendable {
         narrative = try container.decodeIfPresent(String.self, forKey: .narrative) ?? ""
         demoActions = try container.decodeIfPresent(String.self, forKey: .demoActions) ?? ""
         screenshot = try container.decodeIfPresent(String.self, forKey: .screenshot)
-        visual = try container.decodeIfPresent(JSONValue.self, forKey: .visual)
+        visual = try container.decodeIfPresent(JSONValue.self, forKey: .visual).flatMap { $0 == .null ? nil : $0 }
         designPlan = try container.decodeIfPresent(String.self, forKey: .designPlan)
         narration = try container.decodeIfPresent(RowNarration.self, forKey: .narration)
-        unknownFields = try UnknownFieldCodec.decode(from: decoder, knownKeys: Self.knownKeys)
+        unknownFields = DesktopRowFields.canonicalize(
+            try UnknownFieldCodec.decode(from: decoder, knownKeys: Self.knownKeys)
+        )
     }
+
+    /// Whether the whole row is locked.
+    public var isLocked: Bool { locked == true }
+
+    /// Whether a cell is locked, ignoring the row lock.
+    public func isCellLocked(_ field: PlanningCellField) -> Bool { locks?[field] == true }
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encodeIfPresent(locked, forKey: .locked)
-        if let locks {
-            let encodedLocks = Dictionary(uniqueKeysWithValues: locks.map { ($0.key.rawValue, $0.value) })
-            try container.encode(encodedLocks, forKey: .locks)
+        try container.encode(isLocked, forKey: .locked)
+        var lockContainer = container.nestedContainer(keyedBy: AnyCodingKey.self, forKey: .locks)
+        for field in PlanningCellField.allCases {
+            try lockContainer.encode(isCellLocked(field), forKey: AnyCodingKey(stringValue: field.rawValue))
         }
         try container.encode(time, forKey: .time)
         try container.encodeIfPresent(durationSeconds, forKey: .durationSeconds)
         try container.encode(narrative, forKey: .narrative)
         try container.encode(demoActions, forKey: .demoActions)
-        try container.encodeIfPresent(screenshot, forKey: .screenshot)
-        try container.encodeIfPresent(visual, forKey: .visual)
+        try container.encode(screenshot, forKey: .screenshot)
+        if let visual, visual != .null {
+            try container.encode(visual, forKey: .visual)
+        }
         try container.encodeIfPresent(designPlan, forKey: .designPlan)
         try container.encodeIfPresent(narration, forKey: .narration)
-        try UnknownFieldCodec.encode(unknownFields, to: encoder, knownKeys: Self.knownKeys)
+        try UnknownFieldCodec.encode(DesktopRowFields.canonicalize(unknownFields), to: encoder, knownKeys: Self.knownKeys)
     }
 
     private static func decodeLocks(from container: KeyedDecodingContainer<CodingKeys>) throws -> [PlanningCellField: Bool]? {
@@ -313,6 +449,8 @@ public struct Sketch: Codable, Equatable, Sendable {
     /// Top-level sketch fields the mobile model does not model explicitly, plus
     /// any unknown future fields, preserved verbatim across mobile edits (#272).
     public var unknownFields: [String: JSONValue]
+    var decodedCreatedAt = DocumentTimestamp()
+    var decodedUpdatedAt = DocumentTimestamp()
 
     public init(
         title: String,
@@ -360,18 +498,22 @@ public struct Sketch: Codable, Equatable, Sendable {
         createdAt = try CutReadyDocumentDateCodec.decode(from: container, forKey: .createdAt) ?? Date(timeIntervalSince1970: 0)
         updatedAt = try CutReadyDocumentDateCodec.decode(from: container, forKey: .updatedAt) ?? createdAt
         unknownFields = try UnknownFieldCodec.decode(from: decoder, knownKeys: Self.knownKeys)
+        decodedCreatedAt = CutReadyDocumentDateCodec.raw(from: container, forKey: .createdAt, date: createdAt)
+        decodedUpdatedAt = CutReadyDocumentDateCodec.raw(from: container, forKey: .updatedAt, date: updatedAt)
     }
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(title, forKey: .title)
-        try container.encodeIfPresent(locked, forKey: .locked)
+        try container.encode(locked == true, forKey: .locked)
         try container.encode(description, forKey: .description)
         try container.encode(rows, forKey: .rows)
-        try container.encodeIfPresent(metadata, forKey: .metadata)
+        if let fields = metadata?.fields, !fields.isEmpty {
+            try container.encode(DocumentMetadata(fields: fields), forKey: .metadata)
+        }
         try container.encode(state, forKey: .state)
-        try container.encode(CutReadyDocumentDateCodec.string(from: createdAt), forKey: .createdAt)
-        try container.encode(CutReadyDocumentDateCodec.string(from: updatedAt), forKey: .updatedAt)
+        try container.encode(CutReadyDocumentDateCodec.string(from: createdAt, raw: decodedCreatedAt), forKey: .createdAt)
+        try container.encode(CutReadyDocumentDateCodec.string(from: updatedAt, raw: decodedUpdatedAt), forKey: .updatedAt)
         try UnknownFieldCodec.encode(unknownFields, to: encoder, knownKeys: Self.knownKeys)
     }
 }
@@ -569,4 +711,23 @@ private func unquoteFrontmatterValue(_ value: String) -> String {
         return value
     }
     return (try? JSONDecoder().decode(String.self, from: data)) ?? value
+}
+
+/// Production `.sk` decode/save, shared by the workspace client and the
+/// contract conformance tests.
+public enum SketchDocumentCodec {
+    public static func decode(_ data: Data) throws -> Sketch {
+        try JSONDecoder().decode(Sketch.self, from: data)
+    }
+
+    /// Parses an RFC 3339 edit time with microsecond precision.
+    public static func timestamp(from text: String) -> Date? {
+        CutReadyDocumentDateCodec.date(from: text)
+    }
+
+    public static func encode(_ sketch: Sketch) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
+        return try encoder.encode(sketch)
+    }
 }

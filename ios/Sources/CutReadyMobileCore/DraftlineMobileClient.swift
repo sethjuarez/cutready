@@ -373,7 +373,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
             throw DraftlineMobileBridgeError.invalidPath(path)
         }
         let data = try await readUTF8File(path: path).data(using: .utf8) ?? Data()
-        return try JSONDecoder().decode(Sketch.self, from: data)
+        return try SketchDocumentCodec.decode(data)
     }
 
     public func readNote(path: String) async throws -> String {
@@ -402,7 +402,7 @@ public final class DraftlineNativeMobileClient: DraftlineMobileWorkspaceClient, 
         guard MobileWorkspacePolicy.canEdit(path: path) else {
             throw DraftlineMobileBridgeError.invalidPath(path)
         }
-        let data = try JSONEncoder().encode(sketch)
+        let data = try SketchDocumentCodec.encode(sketch)
         try await writeFile(data, path: path)
     }
 

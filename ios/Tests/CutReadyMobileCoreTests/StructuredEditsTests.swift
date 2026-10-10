@@ -50,6 +50,35 @@ final class StructuredEditsTests: XCTestCase {
         XCTAssertEqual(sketch.rows.map(\.narrative), ["Second", "First"])
     }
 
+    func testReorderFollowsDesktopLockPolicy() throws {
+        var sketch = makeSketch(rows: [
+            PlanningRow(locked: true, time: "0:00", narrative: "Locked", demoActions: "Hold"),
+            PlanningRow(time: "0:10", narrative: "Second", demoActions: "Click"),
+            PlanningRow(time: "0:20", narrative: "Third", demoActions: "Close")
+        ])
+
+        XCTAssertThrowsError(try MobileEdits.apply(.reorderRows([1, 0, 2]), to: &sketch)) { error in
+            XCTAssertEqual(error as? MobileEditError, .lockedRow(index: 0))
+        }
+
+        try MobileEdits.apply(.reorderRows([0, 2, 1]), to: &sketch)
+        XCTAssertEqual(sketch.rows.map(\.narrative), ["Locked", "Third", "Second"])
+        XCTAssertEqual(sketch.rows.map(\.isLocked), [true, false, false])
+    }
+
+    func testUnchangedLockedCellValueIsAccepted() throws {
+        var sketch = makeSketch(rows: [
+            PlanningRow(locks: [.narrative: true], time: "0:00", narrative: "Same", demoActions: "Old")
+        ])
+
+        try MobileEdits.apply(
+            .updateRowText(index: 0, RowTextUpdate(narrative: "Same", demoActions: "New")),
+            to: &sketch
+        )
+
+        XCTAssertEqual(sketch.rows[0].demoActions, "New")
+    }
+
     func testRejectsInvalidReorder() throws {
         var sketch = makeSketch()
 
@@ -111,10 +140,10 @@ final class StructuredEditsTests: XCTestCase {
         // Every untouched field survives the decode -> edit -> encode round trip.
         XCTAssertEqual(roundTripped.rows[0].unknownFields, originalRowExtras)
         XCTAssertEqual(roundTripped.unknownFields, originalDocExtras)
-        // Null semantics inside preserved data are retained.
+        // Desktop omits null optionals inside its typed fields.
         if case let .array(points)? = roundTripped.rows[0].unknownFields["motion_points"],
            case let .object(first)? = points.first {
-            XCTAssertEqual(first["label"], .null)
+            XCTAssertNil(first["label"])
         } else {
             XCTFail("motion_points did not round trip as an array of objects")
         }

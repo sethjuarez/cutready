@@ -213,6 +213,19 @@ const roundTripVectors = [
     expected: lockedFixture,
   },
   {
+    name: "timestamps are saved as UTC",
+    input: {
+      sketch: sketch(
+        [row({ time: "0:05", narrative: "Offset.", demo_actions: "", narration: { ...narration, recorded_at: "2026-06-28T22:05:00.5+02:00" } })],
+        { created_at: "2026-06-28T22:00:00+02:00", updated_at: "2026-06-28T20:20:00.123456789Z" },
+      ),
+    },
+    expected: sketch(
+      [row({ time: "0:05", narrative: "Offset.", demo_actions: "", narration: { ...narration, recorded_at: "2026-06-28T20:05:00.500Z" } })],
+      { created_at: CREATED, updated_at: "2026-06-28T20:20:00.123456789Z" },
+    ),
+  },
+  {
     name: "null and empty optional values are omitted",
     input: {
       sketch: sketch(
@@ -273,6 +286,17 @@ const roundTripVectors = [
 const updateRow = (row_index, cells) => ({ row_index, ...cells });
 
 const updateRowTextVectors = [
+  {
+    name: "edit time keeps microseconds",
+    input: { sketch: unlockedFixture, update: updateRow(1, { demo_actions: "Double-click." }), now: "2026-07-01T09:30:00.123456Z" },
+    expected: (() => {
+      const next = edited(unlockedFixture, (s) => {
+        s.rows[1].demo_actions = "Double-click.";
+      });
+      next.updated_at = "2026-07-01T09:30:00.123456Z";
+      return next;
+    })(),
+  },
   {
     name: "narrative edit preserves desktop-only and unknown fields",
     input: { sketch: lockedFixture, update: updateRow(0, { narrative: "Open the CutReady app." }), now: NOW },

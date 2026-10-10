@@ -469,6 +469,85 @@ const RoundTripVectors = """
     }
   },
   {
+    "name": "timestamps are saved as UTC",
+    "input": {
+      "sketch": {
+        "title": "Contract sketch",
+        "locked": false,
+        "description": null,
+        "rows": [
+          {
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:05",
+            "narrative": "Offset.",
+            "demo_actions": "",
+            "narration": {
+              "path": ".cutready/narration/row-1.wav",
+              "source_text": "Open the workspace.",
+              "source_text_hash": "4f1c2a",
+              "mime_type": "audio/wav",
+              "duration_ms": 4200,
+              "leading_silence_ms": 120,
+              "trailing_silence_ms": 80,
+              "silence_threshold_db": -41.5,
+              "byte_size": 4096,
+              "recorded_at": "2026-06-28T22:05:00.5+02:00"
+            }
+          }
+        ],
+        "state": "draft",
+        "created_at": "2026-06-28T22:00:00+02:00",
+        "updated_at": "2026-06-28T20:20:00.123456789Z"
+      }
+    },
+    "expected": {
+      "title": "Contract sketch",
+      "locked": false,
+      "description": null,
+      "rows": [
+        {
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": null,
+          "time": "0:05",
+          "narrative": "Offset.",
+          "demo_actions": "",
+          "narration": {
+            "path": ".cutready/narration/row-1.wav",
+            "source_text": "Open the workspace.",
+            "source_text_hash": "4f1c2a",
+            "mime_type": "audio/wav",
+            "duration_ms": 4200,
+            "leading_silence_ms": 120,
+            "trailing_silence_ms": 80,
+            "silence_threshold_db": -41.5,
+            "byte_size": 4096,
+            "recorded_at": "2026-06-28T20:05:00.500Z"
+          }
+        }
+      ],
+      "state": "draft",
+      "created_at": "2026-06-28T20:00:00Z",
+      "updated_at": "2026-06-28T20:20:00.123456789Z"
+    }
+  },
+  {
     "name": "null and empty optional values are omitted",
     "input": {
       "sketch": {
@@ -582,6 +661,98 @@ const RoundTripVectors = """
 
 const UpdateRowTextVectors = """
 [
+  {
+    "name": "edit time keeps microseconds",
+    "input": {
+      "sketch": {
+        "title": "Contract sketch",
+        "locked": false,
+        "description": null,
+        "rows": [
+          {
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:10",
+            "narrative": "First.",
+            "demo_actions": "Open.",
+            "future_row_field": "first"
+          },
+          {
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": "screenshots/second.png",
+            "time": "0:20",
+            "narrative": "Second.",
+            "demo_actions": "Click."
+          }
+        ],
+        "state": "draft",
+        "created_at": "2026-06-28T20:00:00Z",
+        "updated_at": "2026-06-28T20:20:00Z"
+      },
+      "update": {
+        "row_index": 1,
+        "demo_actions": "Double-click."
+      },
+      "now": "2026-07-01T09:30:00.123456Z"
+    },
+    "expected": {
+      "title": "Contract sketch",
+      "locked": false,
+      "description": null,
+      "rows": [
+        {
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": null,
+          "time": "0:10",
+          "narrative": "First.",
+          "demo_actions": "Open.",
+          "future_row_field": "first"
+        },
+        {
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": "screenshots/second.png",
+          "time": "0:20",
+          "narrative": "Second.",
+          "demo_actions": "Double-click."
+        }
+      ],
+      "state": "draft",
+      "created_at": "2026-06-28T20:00:00Z",
+      "updated_at": "2026-07-01T09:30:00.123456Z"
+    }
+  },
   {
     "name": "narrative edit preserves desktop-only and unknown fields",
     "input": {

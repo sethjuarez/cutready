@@ -286,6 +286,121 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         assert_eq!(actual, expected, "canonical desktop sketch is unchanged misrouted");
     }
     // skipped: earlier locked cell fires before a later locked row — expectedError on a @sync op has no typed error channel
+    // vector: edit time keeps microseconds
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "First.",
+      "demo_actions": "Open.",
+      "future_row_field": "first"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/second.png",
+      "time": "0:20",
+      "narrative": "Second.",
+      "demo_actions": "Click."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let update = crate::model::RowTextUpdate::from_json(
+            r####"
+{
+  "row_index": 1,
+  "demo_actions": "Double-click."
+}
+"####,
+            &ctx,
+        )
+        .expect("update parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00.123456Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.update_row_text(&sketch, &update, &now);
+        let expected = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "First.",
+      "demo_actions": "Open.",
+      "future_row_field": "first"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/second.png",
+      "time": "0:20",
+      "narrative": "Second.",
+      "demo_actions": "Double-click."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-07-01T09:30:00.123456Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("edit time keeps microseconds: expected parses");
+        assert_eq!(actual, expected, "edit time keeps microseconds misrouted");
+    }
     // vector: legacy minimal sketch gains canonical defaults
     {
         let sketch = crate::model::Sketch::from_json(
@@ -1334,6 +1449,97 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         )
         .expect("time edit leaves duration_seconds untouched: expected parses");
         assert_eq!(actual, expected, "time edit leaves duration_seconds untouched misrouted");
+    }
+    // vector: timestamps are saved as UTC
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:05",
+      "narrative": "Offset.",
+      "demo_actions": "",
+      "narration": {
+        "path": ".cutready/narration/row-1.wav",
+        "source_text": "Open the workspace.",
+        "source_text_hash": "4f1c2a",
+        "mime_type": "audio/wav",
+        "duration_ms": 4200,
+        "leading_silence_ms": 120,
+        "trailing_silence_ms": 80,
+        "silence_threshold_db": -41.5,
+        "byte_size": 4096,
+        "recorded_at": "2026-06-28T22:05:00.5+02:00"
+      }
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T22:00:00+02:00",
+  "updated_at": "2026-06-28T20:20:00.123456789Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let actual = seam.round_trip(&sketch);
+        let expected = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:05",
+      "narrative": "Offset.",
+      "demo_actions": "",
+      "narration": {
+        "path": ".cutready/narration/row-1.wav",
+        "source_text": "Open the workspace.",
+        "source_text_hash": "4f1c2a",
+        "mime_type": "audio/wav",
+        "duration_ms": 4200,
+        "leading_silence_ms": 120,
+        "trailing_silence_ms": 80,
+        "silence_threshold_db": -41.5,
+        "byte_size": 4096,
+        "recorded_at": "2026-06-28T20:05:00.500Z"
+      }
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00.123456789Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("timestamps are saved as UTC: expected parses");
+        assert_eq!(actual, expected, "timestamps are saved as UTC misrouted");
     }
     // vector: unknown sketch and row fields are preserved
     {

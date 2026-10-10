@@ -64,6 +64,22 @@ public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async thr
       throw SeamConformanceError("earlier locked cell fires before a later locked row: expected an error")
     }
   }
+  // vector: edit time keeps microseconds
+  do {
+    let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":1,\"demo_actions\":\"Double-click.\"},\"now\":\"2026-07-01T09:30:00.123456Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("edit time keeps microseconds: failed to parse embedded vector input")
+    }
+    let sketch = try Sketch.load(input["sketch"]!)
+    let update = try RowTextUpdate.load(input["update"]!)
+    let now = input["now"] as! String
+    let actual = try seam.updateRowText(sketch: sketch, update: update, now: now)
+    let expectedData = "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Double-click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00.123456Z\"}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("edit time keeps microseconds misrouted")
+    }
+  }
   // vector: legacy minimal sketch gains canonical defaults
   do {
     let inputData = "{\"sketch\":{\"title\":\"Legacy\",\"rows\":[{\"time\":\"~30s\",\"narrative\":\"Legacy row.\",\"demo_actions\":\"\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\"}}],\"state\":\"sketch\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}}".data(using: .utf8)!
@@ -417,6 +433,20 @@ public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async thr
     let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
     guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
       throw SeamConformanceError("time edit leaves duration_seconds untouched misrouted")
+    }
+  }
+  // vector: timestamps are saved as UTC
+  do {
+    let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05\",\"narrative\":\"Offset.\",\"demo_actions\":\"\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":4200,\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T22:05:00.5+02:00\"}}],\"state\":\"draft\",\"created_at\":\"2026-06-28T22:00:00+02:00\",\"updated_at\":\"2026-06-28T20:20:00.123456789Z\"}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("timestamps are saved as UTC: failed to parse embedded vector input")
+    }
+    let sketch = try Sketch.load(input["sketch"]!)
+    let actual = try seam.roundTrip(sketch: sketch)
+    let expectedData = "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05\",\"narrative\":\"Offset.\",\"demo_actions\":\"\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":4200,\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00.500Z\"}}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00.123456789Z\"}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("timestamps are saved as UTC misrouted")
     }
   }
   // vector: unknown sketch and row fields are preserved

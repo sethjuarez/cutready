@@ -100,8 +100,39 @@ final class SketchDocumentTests: XCTestCase {
         let data = try JSONEncoder().encode(sketch)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
 
-        XCTAssertEqual(object["created_at"] as? String, "2026-07-08T17:00:00.000Z")
-        XCTAssertEqual(object["updated_at"] as? String, "2026-07-08T17:01:00.000Z")
+        XCTAssertEqual(object["created_at"] as? String, "2026-07-08T17:00:00Z")
+        XCTAssertEqual(object["updated_at"] as? String, "2026-07-08T17:01:00Z")
+    }
+
+    func testEncodesFractionalDatesLikeDesktop() throws {
+        let sketch = Sketch(
+            title: "Fractional",
+            rows: [],
+            createdAt: Date(timeIntervalSince1970: 1_783_530_000.25),
+            updatedAt: Date(timeIntervalSince1970: 1_783_530_000.123456)
+        )
+
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: SketchDocumentCodec.encode(sketch)) as? [String: Any])
+
+        XCTAssertEqual(object["created_at"] as? String, "2026-07-08T17:00:00.250Z")
+        XCTAssertEqual(object["updated_at"] as? String, "2026-07-08T17:00:00.123456Z")
+    }
+
+    func testUnchangedTimestampsKeepDesktopPrecision() throws {
+        let data = Data("""
+        {"title":"Precise","rows":[],"state":"draft",
+         "created_at":"2026-10-10T07:41:03.626945Z","updated_at":"2026-10-10T07:41:03.000Z"}
+        """.utf8)
+
+        var sketch = try SketchDocumentCodec.decode(data)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: SketchDocumentCodec.encode(sketch)) as? [String: Any])
+        XCTAssertEqual(object["created_at"] as? String, "2026-10-10T07:41:03.626945Z")
+        XCTAssertEqual(object["updated_at"] as? String, "2026-10-10T07:41:03Z")
+
+        sketch.updatedAt = Date(timeIntervalSince1970: 1_783_530_000)
+        object = try XCTUnwrap(JSONSerialization.jsonObject(with: SketchDocumentCodec.encode(sketch)) as? [String: Any])
+        XCTAssertEqual(object["created_at"] as? String, "2026-10-10T07:41:03.626945Z")
+        XCTAssertEqual(object["updated_at"] as? String, "2026-07-08T17:00:00Z")
     }
 
     func testPreservesDesktopOnlyRowFieldsThroughReencode() throws {
@@ -120,7 +151,7 @@ final class SketchDocumentTests: XCTestCase {
               "motion_points": [
                 { "rank": 1, "x": 0.5, "y": 0.5, "label": null }
               ],
-              "motion_plan": { "keyframes": [] }
+              "motion_plan": { "kind": "subtle_push", "keyframes": [] }
             }
           ],
           "state": "draft",
@@ -140,6 +171,8 @@ final class SketchDocumentTests: XCTestCase {
         let points = try XCTUnwrap(firstRow["motion_points"] as? [[String: Any]])
         XCTAssertEqual(points.count, 1)
         XCTAssertEqual(points[0]["x"] as? Double, 0.5)
-        XCTAssertTrue(points[0]["label"] is NSNull, "null label must be preserved")
+        // Desktop omits null and empty optionals inside its typed fields.
+        XCTAssertNil(points[0]["label"])
+        XCTAssertEqual(firstRow["motion_plan"] as? [String: String], ["kind": "subtle_push"])
     }
 }

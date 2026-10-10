@@ -51,6 +51,9 @@ public enum StoryboardStructuredEdit: Equatable, Sendable {
     case reorderSketchReferences([String])
 }
 
+/// Structured edits and their lock policy. Mirrors the desktop's
+/// `engine::sketch_edits`; both are pinned by the `SketchDocument` contract
+/// vectors in contracts/.
 public enum MobileEdits {
     public static func apply(_ edit: SketchStructuredEdit, to sketch: inout Sketch, now: Date = Date()) throws {
         try ensureEditable(sketch)
@@ -64,24 +67,43 @@ public enum MobileEdits {
             guard sketch.rows.indices.contains(index) else {
                 throw MobileEditError.rowNotFound(index: index)
             }
-            try ensureEditable(sketch.rows[index], index: index)
+            var rows = sketch.rows
             if let time = update.time {
-                try ensureCellEditable(sketch.rows[index], index: index, field: .time)
-                sketch.rows[index].time = time
+                rows[index].time = time
             }
             if let narrative = update.narrative {
-                try ensureCellEditable(sketch.rows[index], index: index, field: .narrative)
-                sketch.rows[index].narrative = narrative
+                rows[index].narrative = narrative
             }
             if let demoActions = update.demoActions {
-                try ensureCellEditable(sketch.rows[index], index: index, field: .demoActions)
-                sketch.rows[index].demoActions = demoActions
+                rows[index].demoActions = demoActions
             }
-        case .reorderRows(let indices):
-            sketch.rows = try reorderedRows(sketch.rows, by: indices)
+            try checkRowsUpdate(existing: sketch.rows, updated: rows)
+            sketch.rows = rows
+        case .reorderRows(let order):
+            guard order.count == sketch.rows.count, Set(order) == Set(sketch.rows.indices) else {
+                throw MobileEditError.invalidReorder(indices: order)
+            }
+            var rows = order.map { sketch.rows[$0] }
+            try checkRowsUpdate(existing: sketch.rows, updated: rows)
+            applyLockedRowMetadata(existing: sketch.rows, updated: &rows)
+            sketch.rows = rows
         }
 
         sketch.updatedAt = now
+    }
+
+    /// Checks proposed rows against the locks on the current rows, position by
+    /// position. Unchanged values on locked content are allowed; the first
+    /// change to a locked row, then to a locked cell in column order, is reported.
+    public static func checkRowsUpdate(existing: [PlanningRow], updated: [PlanningRow]) throws {
+        for (index, (old, new)) in zip(existing, updated).enumerated() {
+            if old.isLocked && content(of: old) != content(of: new) {
+                throw MobileEditError.lockedRow(index: index)
+            }
+            for field in PlanningCellField.allCases where old.isCellLocked(field) && !matches(old, new, field) {
+                throw MobileEditError.lockedCell(index: index, field: field)
+            }
+        }
     }
 
     public static func apply(_ edit: StoryboardStructuredEdit, to storyboard: inout Storyboard, now: Date = Date()) throws {
@@ -116,23 +138,35 @@ public enum MobileEdits {
         }
     }
 
-    private static func ensureEditable(_ row: PlanningRow, index: Int) throws {
-        if row.locked == true {
-            throw MobileEditError.lockedRow(index: index)
+    /// Lock state belongs to the position, not to the row content moving through it.
+    private static func applyLockedRowMetadata(existing: [PlanningRow], updated: inout [PlanningRow]) {
+        for index in updated.indices where existing.indices.contains(index) {
+            updated[index].locked = existing[index].locked
+            updated[index].locks = existing[index].locks
         }
     }
 
-    private static func ensureCellEditable(_ row: PlanningRow, index: Int, field: PlanningCellField) throws {
-        if row.locks?[field] == true {
-            throw MobileEditError.lockedCell(index: index, field: field)
-        }
+    /// Everything a locked row protects: the row minus its lock state.
+    private static func content(of row: PlanningRow) -> PlanningRow {
+        var copy = row
+        copy.locked = nil
+        copy.locks = nil
+        return copy
     }
 
-    private static func reorderedRows(_ rows: [PlanningRow], by indices: [Int]) throws -> [PlanningRow] {
-        guard indices.count == rows.count, Set(indices) == Set(rows.indices) else {
-            throw MobileEditError.invalidReorder(indices: indices)
+    /// Screenshot and visual locks each guard both cells.
+    private static func matches(_ old: PlanningRow, _ new: PlanningRow, _ field: PlanningCellField) -> Bool {
+        switch field {
+        case .time:
+            return old.time == new.time
+        case .narrative:
+            return old.narrative == new.narrative
+        case .demoActions:
+            return old.demoActions == new.demoActions
+        case .screenshot, .visual:
+            return old.screenshot == new.screenshot && old.visual == new.visual
+        case .designPlan:
+            return old.designPlan == new.designPlan
         }
-
-        return indices.map { rows[$0] }
     }
 }

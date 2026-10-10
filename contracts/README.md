@@ -50,7 +50,7 @@ Desktop is the reference. Every runtime must save `.sk` files this way. Typra ca
 | Always written | Row `locked`, all six `locks`, `screenshot` (`null` if unset); sketch `locked`, `description` (`null` if unset); narration `duration_ms` (`null` if unknown) |
 | Omitted when unset or empty | `visual`, `design_plan`, `duration_seconds`, `motion_points`, `typing_spots`, `motion_plan`, `narration`, `narration_plan`, `metadata` |
 | Legacy state | `"sketch"` loads as `"draft"` |
-| Timestamps | RFC 3339 UTC; a runtime never rewrites a timestamp it did not change |
+| Timestamps | Saved as UTC with `Z`: no fraction for whole seconds, otherwise 3, 6, or 9 digits. Unchanged timestamps keep their precision; edit times (`now`) carry at most microseconds |
 
 ## Edit policy
 

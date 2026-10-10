@@ -8,7 +8,7 @@ use super::row_text_update::RowTextUpdate;
 
 use super::sketch::Sketch;
 
-/// Behavioral contract for `.sk` documents. Each runtime binds these operations to its production decode, edit, and save code through a thin vector adapter. Inputs and outputs are raw `.sk` JSON, so the vectors also prove that fields a runtime does not model survive the round trip. Successful edits set `updated_at` to `now`; rejected edits report a SketchEditError.
+/// Behavioral contract for `.sk` documents. Each runtime binds these operations to its production decode, edit, and save code through a thin vector adapter. Inputs and outputs are raw `.sk` JSON, so the vectors also prove that fields a runtime does not model survive the round trip. Successful edits set `updated_at` to `now` (RFC 3339, at most microsecond precision); rejected edits report a SketchEditError.
 #[async_trait::async_trait]
 pub trait SketchDocument: Send + Sync {
     /// Reorder rows. `order[i]` is the current zero-based index of the row that moves to position `i`.

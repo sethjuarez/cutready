@@ -55,7 +55,8 @@ model SketchEditError {
  * to its production decode, edit, and save code through a thin vector adapter.
  * Inputs and outputs are raw `.sk` JSON, so the vectors also prove that fields
  * a runtime does not model survive the round trip.
- * Successful edits set `updated_at` to `now`; rejected edits report a SketchEditError.
+ * Successful edits set `updated_at` to `now` (RFC 3339, at most microsecond
+ * precision); rejected edits report a SketchEditError.
  */
 interface SketchDocument {
   /** Decode a `.sk` document and save it again without changes. */
