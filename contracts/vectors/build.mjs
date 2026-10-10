@@ -153,6 +153,12 @@ const visualLockFixture = sketch([
 const lockedFixtureWithSpare = clone(lockedFixture);
 lockedFixtureWithSpare.rows.push(row({ time: "0:40", narrative: "Spare.", demo_actions: "Wrap up." }));
 
+// Rows that differ only in fields the edit UI never shows.
+const hiddenFieldFixture = sketch([
+  { ...row({ time: "0:10", narrative: "Same.", demo_actions: "Same.", future_row_field: "a" }), locked: true },
+  row({ time: "0:10", narrative: "Same.", demo_actions: "Same.", future_row_field: "b" }),
+]);
+
 const edited = (base, mutate) => {
   const next = clone(base);
   mutate(next);
@@ -374,6 +380,11 @@ const reorderRowsVectors = [
     name: "visual lock also guards the screenshot",
     input: { sketch: visualLockFixture, order: [1, 0], now: NOW },
     expectedError: { code: "locked_cell", row_index: 0, field: "visual" },
+  },
+  {
+    name: "locked row protects fields a runtime does not model",
+    input: { sketch: hiddenFieldFixture, order: [1, 0], now: NOW },
+    expectedError: { code: "locked_row", row_index: 0 },
   },
   {
     name: "locked sketch takes precedence over an invalid order",

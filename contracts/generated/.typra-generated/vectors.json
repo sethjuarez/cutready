@@ -116,6 +116,77 @@
       "returns": "Sketch",
       "sync": true,
       "vector": {
+        "name": "locked row protects fields a runtime does not model",
+        "input": {
+          "sketch": {
+            "title": "Contract sketch",
+            "locked": false,
+            "description": null,
+            "rows": [
+              {
+                "locked": true,
+                "locks": {
+                  "time": false,
+                  "narrative": false,
+                  "demo_actions": false,
+                  "screenshot": false,
+                  "visual": false,
+                  "design_plan": false
+                },
+                "screenshot": null,
+                "time": "0:10",
+                "narrative": "Same.",
+                "demo_actions": "Same.",
+                "future_row_field": "a"
+              },
+              {
+                "locked": false,
+                "locks": {
+                  "time": false,
+                  "narrative": false,
+                  "demo_actions": false,
+                  "screenshot": false,
+                  "visual": false,
+                  "design_plan": false
+                },
+                "screenshot": null,
+                "time": "0:10",
+                "narrative": "Same.",
+                "demo_actions": "Same.",
+                "future_row_field": "b"
+              }
+            ],
+            "state": "draft",
+            "created_at": "2026-06-28T20:00:00Z",
+            "updated_at": "2026-06-28T20:20:00Z"
+          },
+          "order": [
+            1,
+            0
+          ],
+          "now": "2026-07-01T09:30:00Z"
+        },
+        "expectedError": {
+          "code": "locked_row",
+          "row_index": 0
+        },
+        "operation": "reorderRows",
+        "stage": "callable"
+      }
+    },
+    {
+      "contract": "SketchDocument",
+      "namespace": "CutReady.Contracts",
+      "group": "",
+      "operation": "reorderRows",
+      "params": {
+        "sketch": "Sketch",
+        "order": "int32[]",
+        "now": "string"
+      },
+      "returns": "Sketch",
+      "sync": true,
+      "vector": {
         "name": "locked sketch takes precedence over an invalid order",
         "input": {
           "sketch": {

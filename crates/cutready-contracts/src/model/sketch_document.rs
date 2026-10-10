@@ -11,7 +11,7 @@ use super::sketch::Sketch;
 /// Behavioral contract for `.sk` documents. Each runtime binds these operations to its production decode, edit, and save code through a thin vector adapter. Inputs and outputs are raw `.sk` JSON, so the vectors also prove that fields a runtime does not model survive the round trip. Successful edits set `updated_at` to `now`; rejected edits report a SketchEditError.
 #[async_trait::async_trait]
 pub trait SketchDocument: Send + Sync {
-    /// Reorder rows. `order[i]` is the current index of the row that moves to position `i`.
+    /// Reorder rows. `order[i]` is the current zero-based index of the row that moves to position `i`.
     fn reorder_rows(&self, sketch: &Sketch, order: &Vec<i32>, now: &String) -> Sketch;
     /// Decode a `.sk` document and save it again without changes.
     fn round_trip(&self, sketch: &Sketch) -> Sketch;

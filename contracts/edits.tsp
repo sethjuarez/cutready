@@ -10,7 +10,7 @@ namespace CutReady.Contracts;
  * (see contracts/README.md, "Open policy questions").
  */
 model RowTextUpdate {
-  /** Zero-based row index. */
+  /** Zero-based, non-negative row index. */
   row_index: int32;
 
   time?: string;
@@ -26,7 +26,7 @@ union SketchEditErrorCode {
   /** The whole sketch is locked; every edit is rejected. */
   lockedDocument: "locked_document",
 
-  /** A locked row's content would change. */
+  /** A locked row's content would change, including fields a runtime doesn't model. */
   lockedRow: "locked_row",
 
   /** A locked cell's value would change. Screenshot and visual locks guard both cells. */
@@ -68,7 +68,10 @@ interface SketchDocument {
   @vector(UpdateRowTextVectors)
   updateRowText(sketch: Sketch, update: RowTextUpdate, now: string): Sketch;
 
-  /** Reorder rows. `order[i]` is the current index of the row that moves to position `i`. */
+  /**
+   * Reorder rows. `order[i]` is the current zero-based index of the row that
+   * moves to position `i`.
+   */
   @sync
   @vector(ReorderRowsVectors)
   reorderRows(sketch: Sketch, order: int32[], now: string): Sketch;

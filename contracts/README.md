@@ -57,7 +57,7 @@ Desktop is the reference. Every runtime must save `.sk` files this way. Typra ca
 | Check | Result |
 | --- | --- |
 | Sketch `locked` | Every edit fails with `locked_document` |
-| Row `locked` | Fails with `locked_row` only if that row's content changes |
+| Row `locked` | Fails with `locked_row` only if that row's content changes, including unknown and desktop-only fields |
 | Cell lock | Fails with `locked_cell` only if that cell changes; screenshot and visual locks guard both cells |
 | Reorder | Checked position by position against the locks at each position |
 | Success | `updated_at` is set to the edit time |

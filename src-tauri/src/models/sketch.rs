@@ -283,6 +283,10 @@ pub struct PlanningRow {
     /// Durable SSML and creative direction for generated narration.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub narration_plan: Option<NarrationPlan>,
+    /// Fields this version does not model (written by newer desktop or iOS builds).
+    /// Preserved verbatim so a save never drops them.
+    #[serde(flatten)]
+    pub unknown_fields: serde_json::Map<String, serde_json::Value>,
 }
 
 impl PlanningRow {
@@ -302,6 +306,7 @@ impl PlanningRow {
             design_plan: None,
             narration: None,
             narration_plan: None,
+            unknown_fields: serde_json::Map::new(),
         }
     }
 
@@ -338,6 +343,10 @@ pub struct Sketch {
     pub state: SketchState,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Fields this version does not model (written by newer desktop or iOS builds).
+    /// Preserved verbatim so a save never drops them.
+    #[serde(flatten)]
+    pub unknown_fields: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Sketch {
@@ -352,6 +361,7 @@ impl Sketch {
             state: SketchState::Draft,
             created_at: now,
             updated_at: now,
+            unknown_fields: serde_json::Map::new(),
         }
     }
 
@@ -699,6 +709,7 @@ mod tests {
             design_plan: None,
             narration: None,
             narration_plan: None,
+            unknown_fields: Default::default(),
         });
         sketch
             .metadata
@@ -882,6 +893,7 @@ mod tests {
             design_plan: None,
             narration: None,
             narration_plan: None,
+            unknown_fields: Default::default(),
         };
         let json = serde_json::to_string(&row).unwrap();
         let parsed: PlanningRow = serde_json::from_str(&json).unwrap();

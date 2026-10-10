@@ -539,6 +539,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
     }
     // skipped: locked cell rejects a change — expectedError on a @sync op has no typed error channel
     // skipped: locked cells are checked in column order — expectedError on a @sync op has no typed error channel
+    // skipped: locked row protects fields a runtime does not model — expectedError on a @sync op has no typed error channel
     // skipped: locked row rejects a change — expectedError on a @sync op has no typed error channel
     // skipped: locked sketch rejects every edit — expectedError on a @sync op has no typed error channel
     // skipped: locked sketch takes precedence over a missing row — expectedError on a @sync op has no typed error channel

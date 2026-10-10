@@ -33,7 +33,7 @@ classDiagram
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| row_index | int32 | Zero-based row index. |
+| row_index | int32 | Zero-based, non-negative row index. |
 | time | string |  |
 | narrative | string |  |
 | demo_actions | string |  |

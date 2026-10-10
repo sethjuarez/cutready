@@ -8,7 +8,7 @@ use super::context::{LoadContext, SaveContext};
 /// Text cells to replace on one planning row. Omitted cells are left untouched. Desktop's time-cell UI also recomputes `duration_seconds`; this edit does not (see contracts/README.md, "Open policy questions").
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RowTextUpdate {
-    /// Zero-based row index.
+    /// Zero-based, non-negative row index.
     pub row_index: i32,
     pub time: Option<String>,
     pub narrative: Option<String>,

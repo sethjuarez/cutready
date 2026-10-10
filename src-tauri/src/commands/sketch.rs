@@ -52,23 +52,21 @@ pub async fn update_sketch(
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     let mut sketch = project::read_sketch(&abs_path).map_err(|e| e.to_string())?;
+    let now = chrono::Utc::now();
 
     if let Some(desc) = description {
         project::ensure_sketch_unlocked(&sketch).map_err(|e| e.to_string())?;
         sketch.description = desc;
     }
     if let Some(r) = rows {
-        project::ensure_sketch_unlocked(&sketch).map_err(|e| e.to_string())?;
-        project::validate_rows_update_allowed(&sketch.rows, &r).map_err(|e| e.to_string())?;
-        let mut updated_rows = r;
-        project::apply_locked_row_metadata(&sketch.rows, &mut updated_rows);
-        sketch.rows = updated_rows;
+        crate::engine::sketch_edits::replace_rows(&mut sketch, r, now)
+            .map_err(|e| e.to_string())?;
     }
     if let Some(metadata) = metadata {
         project::ensure_sketch_unlocked(&sketch).map_err(|e| e.to_string())?;
         sketch.metadata = metadata;
     }
-    sketch.updated_at = chrono::Utc::now();
+    sketch.updated_at = now;
 
     project::write_sketch(&sketch, &abs_path, &root).map_err(|e| e.to_string())?;
     Ok(())

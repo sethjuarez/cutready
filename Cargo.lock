@@ -1536,6 +1536,8 @@ name = "cutready-contracts"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
+ "cutready",
  "serde",
  "serde_json",
  "serde_yaml",

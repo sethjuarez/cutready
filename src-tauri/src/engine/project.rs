@@ -16,6 +16,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 use crate::engine::draftline_adapter::CutReadyDraftlineAdapter;
+use crate::engine::sketch_edits;
 use crate::models::script::{ProjectEntry, ProjectManifest, ProjectView, RepoView};
 use crate::models::sketch::{NoteSummary, Sketch, SketchSummary, Storyboard, StoryboardSummary};
 
@@ -847,12 +848,7 @@ pub fn write_sketch(
 }
 
 pub fn ensure_sketch_unlocked(sketch: &Sketch) -> Result<(), ProjectError> {
-    if sketch.locked {
-        return Err(ProjectError::Locked(
-            "This sketch is locked. Unlock it before editing.".into(),
-        ));
-    }
-    Ok(())
+    sketch_edits::ensure_unlocked(sketch).map_err(ProjectError::from)
 }
 
 fn ensure_sketch_has_no_locked_content(sketch: &Sketch) -> Result<(), ProjectError> {
@@ -866,90 +862,13 @@ fn ensure_sketch_has_no_locked_content(sketch: &Sketch) -> Result<(), ProjectErr
     Ok(())
 }
 
-pub fn apply_locked_row_metadata(
-    existing: &[crate::models::sketch::PlanningRow],
-    updated: &mut [crate::models::sketch::PlanningRow],
-) {
-    for (old, new) in existing.iter().zip(updated.iter_mut()) {
-        new.locked = old.locked;
-        new.locks = old.locks.clone();
-    }
-}
+pub use sketch_edits::apply_locked_row_metadata;
 
 pub fn validate_rows_update_allowed(
     existing: &[crate::models::sketch::PlanningRow],
     updated: &[crate::models::sketch::PlanningRow],
 ) -> Result<(), ProjectError> {
-    let has_locks = existing.iter().any(|row| row.locked || row.locks.any());
-    if has_locks && existing.len() != updated.len() {
-        return Err(ProjectError::Locked(
-            "Cannot add, remove, or reorder planning rows while a row or cell is locked.".into(),
-        ));
-    }
-
-    for (idx, (old, new)) in existing.iter().zip(updated.iter()).enumerate() {
-        if old.locked && !row_content_matches(old, new) {
-            return Err(ProjectError::Locked(format!(
-                "Planning row {} is locked. Unlock it before editing.",
-                idx + 1
-            )));
-        }
-        for field in locked_fields(old) {
-            if !field_matches(old, new, field) {
-                return Err(ProjectError::Locked(format!(
-                    "Planning row {} {} cell is locked. Unlock it before editing.",
-                    idx + 1,
-                    field.replace('_', " ")
-                )));
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn locked_fields(row: &crate::models::sketch::PlanningRow) -> Vec<&'static str> {
-    let mut fields = Vec::new();
-    for field in [
-        "time",
-        "narrative",
-        "demo_actions",
-        "screenshot",
-        "visual",
-        "design_plan",
-    ] {
-        if row.locks.is_locked(field) {
-            fields.push(field);
-        }
-    }
-    fields
-}
-
-fn row_content_matches(
-    old: &crate::models::sketch::PlanningRow,
-    new: &crate::models::sketch::PlanningRow,
-) -> bool {
-    old.time == new.time
-        && old.narrative == new.narrative
-        && old.demo_actions == new.demo_actions
-        && old.screenshot == new.screenshot
-        && old.visual == new.visual
-        && old.design_plan == new.design_plan
-}
-
-fn field_matches(
-    old: &crate::models::sketch::PlanningRow,
-    new: &crate::models::sketch::PlanningRow,
-    field: &str,
-) -> bool {
-    match field {
-        "time" => old.time == new.time,
-        "narrative" => old.narrative == new.narrative,
-        "demo_actions" => old.demo_actions == new.demo_actions,
-        "screenshot" | "visual" => old.screenshot == new.screenshot && old.visual == new.visual,
-        "design_plan" => old.design_plan == new.design_plan,
-        _ => true,
-    }
+    sketch_edits::check_rows_update(existing, updated).map_err(ProjectError::from)
 }
 
 /// Read a sketch from a `.sk` file, migrating any inline visuals to external files.
@@ -2829,6 +2748,12 @@ pub enum ProjectError {
     PathTraversal(String),
     #[error("{0}")]
     Locked(String),
+}
+
+impl From<sketch_edits::SketchEditError> for ProjectError {
+    fn from(err: sketch_edits::SketchEditError) -> Self {
+        ProjectError::Locked(err.to_string())
+    }
 }
 
 #[cfg(test)]

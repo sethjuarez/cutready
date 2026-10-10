@@ -17,6 +17,7 @@ use crate::engine::agent::execution::{
 };
 use crate::engine::draftline_adapter::CutReadyDraftlineAdapter;
 use crate::engine::project;
+use crate::engine::sketch_edits;
 use crate::engine::visual_document::{
     normalize_visual_document_for_save, normalize_visual_to_v2, validate_agentic_visual,
     validate_dsl_doc, visual_to_renderable_v1,
@@ -2354,6 +2355,7 @@ fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
                     .map(|s| s.to_string()),
                 narration: None,
                 narration_plan: None,
+                unknown_fields: Default::default(),
             })
             .collect(),
         None => return ToolOutput::failed("Error: 'rows' must be an array"),
@@ -2385,6 +2387,7 @@ fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
                 state: crate::models::sketch::SketchState::Draft,
                 created_at: chrono::Utc::now(),
                 updated_at: chrono::Utc::now(),
+                unknown_fields: Default::default(),
             }
         }
     };
@@ -2403,12 +2406,10 @@ fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
         sketch.description = serde_json::Value::String(d.to_string());
     }
 
-    if let Err(e) = project::validate_rows_update_allowed(&sketch.rows, &new_rows) {
+    let count = new_rows.len();
+    if let Err(e) = sketch_edits::replace_rows(&mut sketch, new_rows, chrono::Utc::now()) {
         return ToolOutput::failed(format!("Error: {e}"));
     }
-    project::apply_locked_row_metadata(&sketch.rows, &mut new_rows);
-    let count = new_rows.len();
-    sketch.rows = new_rows;
 
     match project::write_sketch(&sketch, &path, root) {
         Ok(()) => ToolOutput::from(format!("Set {count} planning rows in {}", path.display())),
@@ -2443,20 +2444,27 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> ToolOutput {
             "Error: This sketch is locked. Unlock it before editing with AI.",
         );
     }
-    if sketch.rows[index].locked {
-        return ToolOutput::failed(format!(
-            "Error: Planning row {} is locked. Unlock it before editing with AI.",
-            index + 1
-        ));
-    }
-    for field in ["time", "narrative", "demo_actions", "screenshot"] {
-        if args.get(field).is_some() && sketch.rows[index].locks.is_locked(field) {
-            return ToolOutput::failed(format!(
-                "Error: Planning row {} {} cell is locked. Unlock it before editing with AI.",
-                index + 1,
-                field.replace('_', " ")
-            ));
+
+    // Validate the complete candidate row once so lock errors follow column
+    // order and take precedence over stale expected_* values.
+    let mut rows = sketch.rows.clone();
+    {
+        let row = &mut rows[index];
+        if let Some(t) = args.get("time").and_then(|v| v.as_str()) {
+            row.time = t.into();
         }
+        if let Some(n) = args.get("narrative").and_then(|v| v.as_str()) {
+            row.narrative = n.into();
+        }
+        if let Some(d) = args.get("demo_actions").and_then(|v| v.as_str()) {
+            row.demo_actions = d.into();
+        }
+        if let Some(s) = args.get("screenshot").and_then(|v| v.as_str()) {
+            row.screenshot = Some(s.into());
+        }
+    }
+    if let Err(e) = sketch_edits::check_rows_update(&sketch.rows, &rows) {
+        return ToolOutput::failed(format!("Error: {e}"));
     }
 
     let row_number = index + 1;
@@ -2479,22 +2487,13 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> ToolOutput {
             return ToolOutput::failed(e);
         }
     }
-
-    let row = &mut sketch.rows[index];
-    if let Some(t) = args.get("time").and_then(|v| v.as_str()) {
-        row.time = t.into();
-    }
-    if let Some(n) = args.get("narrative").and_then(|v| v.as_str()) {
-        row.narrative = n.into();
-    }
-    if let Some(d) = args.get("demo_actions").and_then(|v| v.as_str()) {
-        row.demo_actions = d.into();
-    }
     if let Some(s) = args.get("screenshot").and_then(|v| v.as_str()) {
         if let Err(e) = validate_project_relative_value(root, "screenshot", s) {
             return ToolOutput::failed(e);
         }
-        row.screenshot = Some(s.into());
+    }
+    if let Err(e) = sketch_edits::replace_rows(&mut sketch, rows, chrono::Utc::now()) {
+        return ToolOutput::failed(format!("Error: {e}"));
     }
 
     match project::write_sketch(&sketch, &path, root) {
@@ -4359,6 +4358,7 @@ mod tests {
             design_plan: None,
             narration: None,
             narration_plan: None,
+            unknown_fields: Default::default(),
             locked: false,
             locks: Default::default(),
         });
@@ -5061,6 +5061,67 @@ mod tests {
         assert!(result.contains("time cell is locked"), "{result}");
         let saved = project::read_sketch(&root.join(rel)).unwrap();
         assert_eq!(saved.rows[0].time, "0:10");
+    }
+
+    #[test]
+    fn update_planning_row_tool_reports_first_locked_column_before_stale_values() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        let mut row = PlanningRow::new();
+        row.time = "0:10".into();
+        row.screenshot = Some("screenshots/a.png".into());
+        row.locks.time = true;
+        row.locks.screenshot = true;
+        write_test_sketch(root, rel, row);
+
+        let result = exec_update_planning_row(
+            root,
+            &json!({
+                "path": rel,
+                "row_number": 1,
+                "time": "0:20",
+                "screenshot": "screenshots/b.png",
+                "expected_narrative": "stale"
+            }),
+        );
+        let result = result.text();
+
+        assert!(result.contains("time cell is locked"), "{result}");
+    }
+
+    #[test]
+    fn update_planning_row_tool_follows_shared_lock_policy() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        let mut row = PlanningRow::new();
+        row.time = "0:10".into();
+        row.locks.time = true;
+        row.unknown_fields
+            .insert("future_row_field".into(), json!({ "keep": true }));
+        write_test_sketch(root, rel, row);
+        let before = project::read_sketch(&root.join(rel)).unwrap().updated_at;
+
+        let result = exec_update_planning_row(
+            root,
+            &json!({
+                "path": rel,
+                "row_number": 1,
+                "time": "0:10",
+                "narrative": "New narrative"
+            }),
+        );
+        let result = result.text();
+
+        assert!(!result.starts_with("Error:"), "{result}");
+        let saved = project::read_sketch(&root.join(rel)).unwrap();
+        assert_eq!(saved.rows[0].narrative, "New narrative");
+        assert_eq!(
+            saved.rows[0].unknown_fields["future_row_field"],
+            json!({ "keep": true })
+        );
+        assert!(saved.updated_at > before);
     }
 
     #[test]
