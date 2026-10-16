@@ -485,3 +485,73 @@ async fn test_vector_62_sketchdocument_updaterowtext_unparseable_time_edit_remov
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "updateRowText", vector, true, vc_seam()).await;
 }
+
+#[tokio::test]
+async fn test_vector_63_storyboarddocument_roundtrip_canonical_desktop_storyboard_is_unchanged() {
+    let vector: Value = serde_json::from_str("{\"name\":\"canonical desktop storyboard is unchanged\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"End-to-end launch demo.\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"description\":\"Get signed in.\",\"sketches\":[\"flows/login.sk\",\"flows/workspace.sk\"]},{\"type\":\"section\",\"title\":\"Wrap-up\",\"sketches\":[]},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"partners\"}},\"future_storyboard_field\":{\"owner\":\"ios\",\"tags\":[\"a\",\"b\"]}}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"End-to-end launch demo.\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"description\":\"Get signed in.\",\"sketches\":[\"flows/login.sk\",\"flows/workspace.sk\"]},{\"type\":\"section\",\"title\":\"Wrap-up\",\"sketches\":[]},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"partners\"}},\"future_storyboard_field\":{\"owner\":\"ios\",\"tags\":[\"a\",\"b\"]}},\"operation\":\"roundTrip\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("StoryboardDocument", "roundTrip", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_64_storyboarddocument_roundtrip_timestamps_are_saved_as_utc() {
+    let vector: Value = serde_json::from_str("{\"name\":\"timestamps are saved as UTC\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[],\"created_at\":\"2026-06-28T22:00:00+02:00\",\"updated_at\":\"2026-06-28T20:20:00.123456789Z\"}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00.123456789Z\"},\"operation\":\"roundTrip\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("StoryboardDocument", "roundTrip", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_65_storyboarddocument_upgrade_canonical_storyboard_is_already_current() {
+    let vector: Value = serde_json::from_str("{\"name\":\"canonical storyboard is already current\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"End-to-end launch demo.\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"description\":\"Get signed in.\",\"sketches\":[\"flows/login.sk\",\"flows/workspace.sk\"]},{\"type\":\"section\",\"title\":\"Wrap-up\",\"sketches\":[]},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"partners\"}},\"future_storyboard_field\":{\"owner\":\"ios\",\"tags\":[\"a\",\"b\"]}}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"End-to-end launch demo.\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"description\":\"Get signed in.\",\"sketches\":[\"flows/login.sk\",\"flows/workspace.sk\"]},{\"type\":\"section\",\"title\":\"Wrap-up\",\"sketches\":[]},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"partners\"}},\"future_storyboard_field\":{\"owner\":\"ios\",\"tags\":[\"a\",\"b\"]}},\"operation\":\"upgrade\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("StoryboardDocument", "upgrade", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_66_storyboarddocument_upgrade_items_win_over_a_legacy_sketches_list_which_is_dropped() {
+    let vector: Value = serde_json::from_str("{\"name\":\"items win over a legacy sketches list, which is dropped\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"sketches\":[\"stale.sk\"]}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("StoryboardDocument", "upgrade", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_67_storyboarddocument_upgrade_legacy_sketches_list_becomes_sketch_references() {
+    let vector: Value = serde_json::from_str("{\"name\":\"legacy sketches list becomes sketch references\",\"input\":{\"storyboard\":{\"title\":\"Legacy\",\"sketches\":[\"intro.sk\",\"outro.sk\"],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}},\"expected\":{\"title\":\"Legacy\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("StoryboardDocument", "upgrade", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_68_storyboarddocument_upgrade_missing_items_and_sketches_become_an_empty_sequence() {
+    let vector: Value = serde_json::from_str("{\"name\":\"missing items and sketches become an empty sequence\",\"input\":{\"storyboard\":{\"title\":\"Empty\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}},\"expected\":{\"title\":\"Empty\",\"description\":\"\",\"locked\":false,\"items\":[],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("StoryboardDocument", "upgrade", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_69_storyboarddocument_upgrade_null_and_empty_optional_values_take_canonical_defaults() {
+    let vector: Value = serde_json::from_str("{\"name\":\"null and empty optional values take canonical defaults\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":null,\"locked\":null,\"items\":[{\"type\":\"section\",\"title\":\"Setup\",\"description\":null,\"sketches\":[\"intro.sk\"]},{\"type\":\"section\",\"title\":\"Empty\",\"description\":\"\",\"sketches\":[]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{}}}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"intro.sk\"]},{\"type\":\"section\",\"title\":\"Empty\",\"sketches\":[]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("StoryboardDocument", "upgrade", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_70_storyboarddocument_upgrade_null_items_fall_back_to_the_legacy_sketches_list() {
+    let vector: Value = serde_json::from_str("{\"name\":\"null items fall back to the legacy sketches list\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":null,\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"sketches\":[\"intro.sk\"]}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("StoryboardDocument", "upgrade", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_71_storyboarddocument_upgrade_section_without_sketches_becomes_an_empty_section() {
+    let vector: Value = serde_json::from_str("{\"name\":\"section without sketches becomes an empty section\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"section\",\"title\":\"Later\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"section\",\"title\":\"Later\",\"sketches\":[]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("StoryboardDocument", "upgrade", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_72_storyboarddocument_upgrade_sketch_item_type_becomes_sketch_ref() {
+    let vector: Value = serde_json::from_str("{\"name\":\"sketch item type becomes sketch_ref\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("StoryboardDocument", "upgrade", vector, true, vc_seam()).await;
+}

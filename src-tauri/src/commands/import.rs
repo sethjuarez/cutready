@@ -241,8 +241,8 @@ pub async fn import_storyboard(
     let source_path = Path::new(&file_path);
     let data = fs::read_to_string(source_path).map_err(|e| format!("Failed to read file: {e}"))?;
 
-    let storyboard: crate::models::sketch::Storyboard =
-        serde_json::from_str(&data).map_err(|e| format!("Invalid storyboard file: {e}"))?;
+    let (storyboard, _) = crate::models::sketch::Storyboard::from_json_upgraded(&data)
+        .map_err(|e| format!("Invalid storyboard file: {e}"))?;
 
     let filename = source_path
         .file_stem()

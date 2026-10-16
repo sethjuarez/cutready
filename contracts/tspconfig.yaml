@@ -9,6 +9,7 @@ options:
     additional-roots:
       - "CutReady.Contracts.RowTextUpdate"
       - "CutReady.Contracts.SketchEditError"
+      - "CutReady.Contracts.Storyboard"
     deterministic-output: true
     emit-targets:
       # Desktop (Rust). Models + sample tests compile inside the

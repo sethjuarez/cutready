@@ -21,6 +21,14 @@
       "seamKind": "protocol-adapter"
     },
     {
+      "contract": "StoryboardDocument",
+      "target": "markdown",
+      "group": "",
+      "symbol": "StoryboardDocument",
+      "generatedSource": "StoryboardDocument",
+      "seamKind": "protocol-adapter"
+    },
+    {
       "contract": "PlanningTiming",
       "target": "rust",
       "group": "",
@@ -34,6 +42,14 @@
       "group": "",
       "symbol": "SketchDocument",
       "generatedSource": "sketch_document",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "StoryboardDocument",
+      "target": "rust",
+      "group": "",
+      "symbol": "StoryboardDocument",
+      "generatedSource": "storyboard_document",
       "seamKind": "protocol-adapter"
     },
     {
@@ -53,6 +69,14 @@
       "seamKind": "protocol-adapter"
     },
     {
+      "contract": "StoryboardDocument",
+      "target": "swift",
+      "group": "",
+      "symbol": "StoryboardDocument",
+      "generatedSource": "Sources/CutReadyContracts/storyboard_document.swift",
+      "seamKind": "protocol-adapter"
+    },
+    {
       "contract": "PlanningTiming",
       "target": "typescript",
       "group": "",
@@ -66,6 +90,14 @@
       "group": "",
       "symbol": "SketchDocument",
       "generatedSource": "./sketch-document",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "StoryboardDocument",
+      "target": "typescript",
+      "group": "",
+      "symbol": "StoryboardDocument",
+      "generatedSource": "./storyboard-document",
       "seamKind": "protocol-adapter"
     }
   ]

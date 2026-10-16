@@ -280,6 +280,7 @@ mod tests {
             }],
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            unknown_fields: Default::default(),
         };
 
         set_referenced_sketches_lock(root, &storyboard, true).unwrap();

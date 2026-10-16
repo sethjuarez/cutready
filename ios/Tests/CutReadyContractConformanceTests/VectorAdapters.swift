@@ -46,7 +46,13 @@ enum VectorAdapters {
   }
 
   static func waivers() -> [String: String] {
-    return [:]
+    let viewOnlyStoryboards =
+      "The companion is view-only for storyboards today; desktop upgrades .sb files on read "
+      + "and saves them in the canonical shape. Bind these when iOS writes storyboards."
+    return [
+      "StoryboardDocument.roundTrip": viewOnlyStoryboards,
+      "StoryboardDocument.upgrade": viewOnlyStoryboards,
+    ]
   }
 
   static func doubles() -> Any? { return nil }

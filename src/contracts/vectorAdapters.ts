@@ -4,7 +4,7 @@ import { parseDurationSeconds } from "../utils/documentMetadata";
 import type { VectorAdapter } from "./generated/tests/vector-runner";
 
 const backendOwnsDocuments =
-  "The desktop frontend never decodes, edits, or saves .sk files; it sends edits " +
+  "The desktop frontend never decodes, edits, or saves .sk or .sb files; it sends edits " +
   "over IPC to the Rust backend, whose production path runs these vectors in " +
   "crates/cutready-contracts.";
 
@@ -18,4 +18,6 @@ export const vectorWaivers: Record<string, string> = {
   "SketchDocument.roundTrip": backendOwnsDocuments,
   "SketchDocument.updateRowText": backendOwnsDocuments,
   "SketchDocument.reorderRows": backendOwnsDocuments,
+  "StoryboardDocument.roundTrip": backendOwnsDocuments,
+  "StoryboardDocument.upgrade": backendOwnsDocuments,
 };

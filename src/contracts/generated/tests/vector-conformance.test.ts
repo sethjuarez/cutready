@@ -592,4 +592,64 @@ describe("callable vector conformance", () => {
     ) as Record<string, unknown>;
     await runVector("SketchDocument", "updateRowText", vector, true, seam);
   });
+  it("StoryboardDocument.roundTrip:canonical desktop storyboard is unchanged", async () => {
+    const vector = JSON.parse(
+      '{"name":"canonical desktop storyboard is unchanged","input":{"storyboard":{"title":"Contract storyboard","description":"End-to-end launch demo.","locked":true,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","description":"Get signed in.","sketches":["flows/login.sk","flows/workspace.sk"]},{"type":"section","title":"Wrap-up","sketches":[]},{"type":"sketch_ref","path":"outro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","metadata":{"fields":{"audience":"partners"}},"future_storyboard_field":{"owner":"ios","tags":["a","b"]}}},"expected":{"title":"Contract storyboard","description":"End-to-end launch demo.","locked":true,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","description":"Get signed in.","sketches":["flows/login.sk","flows/workspace.sk"]},{"type":"section","title":"Wrap-up","sketches":[]},{"type":"sketch_ref","path":"outro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","metadata":{"fields":{"audience":"partners"}},"future_storyboard_field":{"owner":"ios","tags":["a","b"]}},"operation":"roundTrip","stage":"callable"}',
+    ) as Record<string, unknown>;
+    await runVector("StoryboardDocument", "roundTrip", vector, true, seam);
+  });
+  it("StoryboardDocument.roundTrip:timestamps are saved as UTC", async () => {
+    const vector = JSON.parse(
+      '{"name":"timestamps are saved as UTC","input":{"storyboard":{"title":"Contract storyboard","description":"","locked":false,"items":[],"created_at":"2026-06-28T22:00:00+02:00","updated_at":"2026-06-28T20:20:00.123456789Z"}},"expected":{"title":"Contract storyboard","description":"","locked":false,"items":[],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00.123456789Z"},"operation":"roundTrip","stage":"callable"}',
+    ) as Record<string, unknown>;
+    await runVector("StoryboardDocument", "roundTrip", vector, true, seam);
+  });
+  it("StoryboardDocument.upgrade:canonical storyboard is already current", async () => {
+    const vector = JSON.parse(
+      '{"name":"canonical storyboard is already current","input":{"storyboard":{"title":"Contract storyboard","description":"End-to-end launch demo.","locked":true,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","description":"Get signed in.","sketches":["flows/login.sk","flows/workspace.sk"]},{"type":"section","title":"Wrap-up","sketches":[]},{"type":"sketch_ref","path":"outro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","metadata":{"fields":{"audience":"partners"}},"future_storyboard_field":{"owner":"ios","tags":["a","b"]}}},"expected":{"title":"Contract storyboard","description":"End-to-end launch demo.","locked":true,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","description":"Get signed in.","sketches":["flows/login.sk","flows/workspace.sk"]},{"type":"section","title":"Wrap-up","sketches":[]},{"type":"sketch_ref","path":"outro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","metadata":{"fields":{"audience":"partners"}},"future_storyboard_field":{"owner":"ios","tags":["a","b"]}},"operation":"upgrade","stage":"callable"}',
+    ) as Record<string, unknown>;
+    await runVector("StoryboardDocument", "upgrade", vector, true, seam);
+  });
+  it("StoryboardDocument.upgrade:items win over a legacy sketches list, which is dropped", async () => {
+    const vector = JSON.parse(
+      '{"name":"items win over a legacy sketches list, which is dropped","input":{"storyboard":{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","sketches":["stale.sk"]}},"expected":{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"},"operation":"upgrade","stage":"callable"}',
+    ) as Record<string, unknown>;
+    await runVector("StoryboardDocument", "upgrade", vector, true, seam);
+  });
+  it("StoryboardDocument.upgrade:legacy sketches list becomes sketch references", async () => {
+    const vector = JSON.parse(
+      '{"name":"legacy sketches list becomes sketch references","input":{"storyboard":{"title":"Legacy","sketches":["intro.sk","outro.sk"],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}},"expected":{"title":"Legacy","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"sketch_ref","path":"outro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"},"operation":"upgrade","stage":"callable"}',
+    ) as Record<string, unknown>;
+    await runVector("StoryboardDocument", "upgrade", vector, true, seam);
+  });
+  it("StoryboardDocument.upgrade:missing items and sketches become an empty sequence", async () => {
+    const vector = JSON.parse(
+      '{"name":"missing items and sketches become an empty sequence","input":{"storyboard":{"title":"Empty","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}},"expected":{"title":"Empty","description":"","locked":false,"items":[],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"},"operation":"upgrade","stage":"callable"}',
+    ) as Record<string, unknown>;
+    await runVector("StoryboardDocument", "upgrade", vector, true, seam);
+  });
+  it("StoryboardDocument.upgrade:null and empty optional values take canonical defaults", async () => {
+    const vector = JSON.parse(
+      '{"name":"null and empty optional values take canonical defaults","input":{"storyboard":{"title":"Contract storyboard","description":null,"locked":null,"items":[{"type":"section","title":"Setup","description":null,"sketches":["intro.sk"]},{"type":"section","title":"Empty","description":"","sketches":[]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","metadata":{"fields":{}}}},"expected":{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"section","title":"Setup","sketches":["intro.sk"]},{"type":"section","title":"Empty","sketches":[]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"},"operation":"upgrade","stage":"callable"}',
+    ) as Record<string, unknown>;
+    await runVector("StoryboardDocument", "upgrade", vector, true, seam);
+  });
+  it("StoryboardDocument.upgrade:null items fall back to the legacy sketches list", async () => {
+    const vector = JSON.parse(
+      '{"name":"null items fall back to the legacy sketches list","input":{"storyboard":{"title":"Contract storyboard","description":"","locked":false,"items":null,"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","sketches":["intro.sk"]}},"expected":{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"},"operation":"upgrade","stage":"callable"}',
+    ) as Record<string, unknown>;
+    await runVector("StoryboardDocument", "upgrade", vector, true, seam);
+  });
+  it("StoryboardDocument.upgrade:section without sketches becomes an empty section", async () => {
+    const vector = JSON.parse(
+      '{"name":"section without sketches becomes an empty section","input":{"storyboard":{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"section","title":"Later"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}},"expected":{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"section","title":"Later","sketches":[]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"},"operation":"upgrade","stage":"callable"}',
+    ) as Record<string, unknown>;
+    await runVector("StoryboardDocument", "upgrade", vector, true, seam);
+  });
+  it("StoryboardDocument.upgrade:sketch item type becomes sketch_ref", async () => {
+    const vector = JSON.parse(
+      '{"name":"sketch item type becomes sketch_ref","input":{"storyboard":{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch","path":"intro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}},"expected":{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"},"operation":"upgrade","stage":"callable"}',
+    ) as Record<string, unknown>;
+    await runVector("StoryboardDocument", "upgrade", vector, true, seam);
+  });
 });

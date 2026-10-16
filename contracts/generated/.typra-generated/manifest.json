@@ -65,6 +65,16 @@
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/storyboard_item_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/storyboard_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
       "path": "../crates/cutready-contracts/src/generated_tests/typing_spot_test.rs",
       "marker": true
     },
@@ -156,6 +166,21 @@
     {
       "outputRoot": "../crates/cutready-contracts/src/model",
       "path": "../crates/cutready-contracts/src/model/sketch.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/storyboard_document.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/storyboard_item.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/storyboard.rs",
       "marker": true
     },
     {
@@ -265,6 +290,21 @@
     },
     {
       "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/storyboard-document.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/storyboard-item.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/storyboard.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
       "path": "../src/contracts/generated/model/typing-spot.ts",
       "marker": true
     },
@@ -326,6 +366,26 @@
     {
       "outputRoot": "../src/contracts/generated/tests",
       "path": "../src/contracts/generated/tests/sketch.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/storyboard-item.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/storyboard-section.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/storyboard-sketch-ref.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/storyboard.test.ts",
       "marker": true
     },
     {
@@ -425,6 +485,31 @@
     },
     {
       "outputRoot": "generated/markdown",
+      "path": "generated/markdown/Storyboard.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/StoryboardDocument.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/StoryboardItem.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/StoryboardSection.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/StoryboardSketchRef.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
       "path": "generated/markdown/TypingSpot.md",
       "marker": true
     },
@@ -505,6 +590,21 @@
     },
     {
       "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/storyboard_document.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/storyboard_item.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/storyboard.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
       "path": "generated/swift/Sources/CutReadyContracts/typing_spot.swift",
       "marker": true
     },
@@ -576,6 +676,16 @@
     {
       "outputRoot": "generated/swift",
       "path": "generated/swift/Tests/CutReadyContractsTests/SketchTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/StoryboardItemTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/StoryboardTests.swift",
       "marker": true
     },
     {

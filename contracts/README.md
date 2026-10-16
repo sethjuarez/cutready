@@ -8,6 +8,7 @@ Portable CutReady document contracts, written in TypeSpec and emitted by [Typra]
 | --- | --- |
 | `sketch.tsp` | `.sk` document models: `Sketch`, `PlanningRow`, locks, narration, motion |
 | `edits.tsp` | `SketchDocument` operations, `PlanningTiming`, and the shared edit error payload |
+| `storyboard.tsp` | `.sb` document models plus canonical round-trip and legacy-upgrade operations |
 | `vectors/build.mjs` | Readable vector fixtures; writes `vectors.tsp` |
 | `generated/` | Swift model package and Markdown reference (do not edit) |
 
@@ -43,9 +44,15 @@ npx vitest run src/contracts
 
 A vector with no adapter fails unless it is waived. A waived vector that starts passing also fails, so remove waivers as adapters land.
 
-The TypeScript harness waives the `SketchDocument` vectors: the frontend sends edits to the Rust backend over IPC and never saves `.sk` files itself.
+The TypeScript harness waives the document vectors: the frontend sends edits to the Rust backend over IPC and never saves `.sk` or `.sb` files itself. The Swift harness waives `StoryboardDocument` vectors while the companion remains view-only for storyboards.
 
 The `Contracts` workflow (`.github/workflows/contracts.yml`) runs `npm run check`, the Rust, Swift, and TypeScript conformance suites, and the sketch model regressions on changes to the contract or any binding.
+
+## Storyboard documents
+
+Desktop is the reference for `.sb` files. `StoryboardDocument.roundTrip` pins the canonical save form; `StoryboardDocument.upgrade` converts older shapes before decode. Desktop runs the upgrade while scanning storyboards and opening one, then rewrites files that changed. It moves legacy `sketches` into `items`, maps item type `sketch` to `sketch_ref`, and fills canonical defaults. Unknown top-level fields are preserved.
+
+The desktop TypeScript harness and the Swift harness currently waive these vectors because neither runtime owns storyboard persistence.
 
 ## Canonical save form
 

@@ -39,6 +39,12 @@ pub use document_metadata::*;
 pub mod sketch;
 pub use sketch::*;
 
+pub mod storyboard_item;
+pub use storyboard_item::*;
+
+pub mod storyboard;
+pub use storyboard::*;
+
 pub mod row_text_update;
 pub use row_text_update::*;
 
@@ -50,5 +56,8 @@ pub use planning_timing::*;
 
 pub mod sketch_document;
 pub use sketch_document::*;
+
+pub mod storyboard_document;
+pub use storyboard_document::*;
 
 pub mod vector_conformance;

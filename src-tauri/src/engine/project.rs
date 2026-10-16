@@ -954,7 +954,7 @@ fn storyboards_with_sketch_removed(
         "sb",
         &mut |_rel_path, abs_path| {
             if let Ok(data) = std::fs::read_to_string(abs_path) {
-                if let Ok(mut storyboard) = serde_json::from_str::<Storyboard>(&data) {
+                if let Ok((mut storyboard, _)) = Storyboard::from_json_upgraded(&data) {
                     if storyboard.remove_sketch_references(sketch_rel_path) > 0 {
                         if storyboard.locked {
                             locked_error = Some(ProjectError::Locked(format!(
@@ -1337,7 +1337,7 @@ fn plan_storyboard_sketch_reference_rewrites(
             match std::fs::read(abs_path)
                 .map_err(|e| ProjectError::Io(e.to_string()))
                 .and_then(|original| {
-                    let mut storyboard: Storyboard = serde_json::from_slice(&original)
+                    let (mut storyboard, _) = Storyboard::from_json_bytes_upgraded(&original)
                         .map_err(|e| ProjectError::Deserialize(e.to_string()))?;
                     let count = storyboard.replace_sketch_references(old_rel, new_rel);
                     if count == 0 {
@@ -1789,7 +1789,28 @@ pub fn read_storyboard(path: &Path) -> Result<Storyboard, ProjectError> {
         return Err(ProjectError::NotFound(path.to_string_lossy().into_owned()));
     }
     let data = std::fs::read_to_string(path).map_err(|e| ProjectError::Io(e.to_string()))?;
-    serde_json::from_str(&data).map_err(|e| ProjectError::Deserialize(e.to_string()))
+    let (storyboard, upgraded) = Storyboard::from_json_upgraded(&data)
+        .map_err(|e| ProjectError::Deserialize(e.to_string()))?;
+    if upgraded {
+        save_upgraded_storyboard(&storyboard, path);
+    }
+    Ok(storyboard)
+}
+
+/// Persist a storyboard whose older on-disk shape was just upgraded on read.
+/// Best effort: a failed write leaves the old file, which upgrades again next read.
+fn save_upgraded_storyboard(storyboard: &Storyboard, path: &Path) {
+    match serde_json::to_string_pretty(storyboard) {
+        Ok(json) => {
+            if let Err(err) = std::fs::write(path, json) {
+                log::warn!(
+                    "could not save upgraded storyboard {}: {err}",
+                    path.display()
+                );
+            }
+        }
+        Err(err) => log::warn!("could not serialize upgraded storyboard: {err}"),
+    }
 }
 
 /// Delete a storyboard file and auto-commit.
@@ -1836,7 +1857,10 @@ pub fn scan_storyboards(project_root: &Path) -> Result<Vec<StoryboardSummary>, P
         "sb",
         &mut |rel_path, abs_path| {
             if let Ok(data) = std::fs::read_to_string(abs_path) {
-                if let Ok(sb) = serde_json::from_str::<Storyboard>(&data) {
+                if let Ok((sb, upgraded)) = Storyboard::from_json_upgraded(&data) {
+                    if upgraded {
+                        save_upgraded_storyboard(&sb, abs_path);
+                    }
                     summaries.push(StoryboardSummary::from_storyboard(&sb, rel_path));
                 }
             }
@@ -1858,7 +1882,7 @@ pub fn storyboards_referencing_sketch(
         "sb",
         &mut |_rel_path, abs_path| {
             if let Ok(data) = std::fs::read_to_string(abs_path) {
-                if let Ok(sb) = serde_json::from_str::<Storyboard>(&data) {
+                if let Ok((sb, _)) = Storyboard::from_json_upgraded(&data) {
                     if sb.references_sketch(sketch_rel_path) {
                         titles.push(sb.title.clone());
                     }
@@ -3036,6 +3060,7 @@ mod tests {
             ],
             created_at: now,
             updated_at: now,
+            unknown_fields: Default::default(),
         };
         write_storyboard(&storyboard, &storyboard_path, root).unwrap();
 
@@ -3411,6 +3436,47 @@ mod tests {
         write_storyboard(&sb, &path, root).unwrap();
         let loaded = read_storyboard(&path).unwrap();
         assert_eq!(loaded.title, "Full Demo");
+    }
+
+    #[test]
+    fn read_storyboard_upgrades_and_rewrites_legacy_file() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("legacy.sb");
+        std::fs::write(
+            &path,
+            r#"{"title":"Legacy","sketches":["intro.sk"],"created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z"}"#,
+        )
+        .unwrap();
+
+        let storyboard = read_storyboard(&path).unwrap();
+
+        assert_eq!(storyboard.description, "");
+        assert_eq!(storyboard.sketch_paths(), vec!["intro.sk"]);
+        let saved: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(saved.get("sketches").is_none());
+        assert_eq!(saved["items"][0]["type"], "sketch_ref");
+    }
+
+    #[test]
+    fn scan_storyboards_upgrades_and_rewrites_legacy_file() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let path = root.join("legacy.sb");
+        std::fs::write(
+            &path,
+            r#"{"title":"Legacy","sketches":["intro.sk"],"created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z"}"#,
+        )
+        .unwrap();
+
+        let summaries = scan_storyboards(root).unwrap();
+
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].title, "Legacy");
+        let saved: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        assert!(saved.get("sketches").is_none());
+        assert_eq!(saved["items"][0]["path"], "intro.sk");
     }
 
     #[test]
@@ -4050,7 +4116,10 @@ Some text
             read_workspace_state(root, &beta).active_tab_id.as_deref(),
             Some("tab-1")
         );
-        assert_eq!(read_sidebar_order(root, &beta).sketches, vec!["b.sk", "a.sk"]);
+        assert_eq!(
+            read_sidebar_order(root, &beta).sketches,
+            vec!["b.sk", "a.sk"]
+        );
     }
 
     #[test]

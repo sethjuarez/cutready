@@ -4198,3 +4198,562 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         assert!(result.is_err(), "{}: expected an error, got Ok", "visual lock also guards the screenshot");
     }
 }
+
+/// Typed @vector conformance for StoryboardDocument. Pass your real `impl StoryboardDocument`; the
+/// `S: StoryboardDocument` bound makes the compiler prove every op is implemented. Call
+/// from a test, e.g. `run_storyboard_document_conformance(&StoryboardDocumentImpl).await;` (or without `.await` when sync).
+pub fn run_storyboard_document_conformance<S: crate::model::StoryboardDocument + ?Sized>(seam: &S) {
+    let ctx = crate::model::context::LoadContext::default();
+    // vector: canonical desktop storyboard is unchanged
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "End-to-end launch demo.",
+  "locked": true,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "description": "Get signed in.",
+      "sketches": [
+        "flows/login.sk",
+        "flows/workspace.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap-up",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "metadata": {
+    "fields": {
+      "audience": "partners"
+    }
+  },
+  "future_storyboard_field": {
+    "owner": "ios",
+    "tags": [
+      "a",
+      "b"
+    ]
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let actual = seam.round_trip(&storyboard)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "canonical desktop storyboard is unchanged", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "End-to-end launch demo.",
+  "locked": true,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "description": "Get signed in.",
+      "sketches": [
+        "flows/login.sk",
+        "flows/workspace.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap-up",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "metadata": {
+    "fields": {
+      "audience": "partners"
+    }
+  },
+  "future_storyboard_field": {
+    "owner": "ios",
+    "tags": [
+      "a",
+      "b"
+    ]
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("canonical desktop storyboard is unchanged: expected parses");
+        assert_eq!(actual, expected, "canonical desktop storyboard is unchanged misrouted");
+    }
+    // vector: canonical storyboard is already current
+    {
+        let storyboard: serde_json::Value = serde_json::from_str(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "End-to-end launch demo.",
+  "locked": true,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "description": "Get signed in.",
+      "sketches": [
+        "flows/login.sk",
+        "flows/workspace.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap-up",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "metadata": {
+    "fields": {
+      "audience": "partners"
+    }
+  },
+  "future_storyboard_field": {
+    "owner": "ios",
+    "tags": [
+      "a",
+      "b"
+    ]
+  }
+}
+"####,
+        )
+        .expect("storyboard parses");
+        let actual = seam.upgrade(&storyboard)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "canonical storyboard is already current", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "End-to-end launch demo.",
+  "locked": true,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "description": "Get signed in.",
+      "sketches": [
+        "flows/login.sk",
+        "flows/workspace.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap-up",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "metadata": {
+    "fields": {
+      "audience": "partners"
+    }
+  },
+  "future_storyboard_field": {
+    "owner": "ios",
+    "tags": [
+      "a",
+      "b"
+    ]
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("canonical storyboard is already current: expected parses");
+        assert_eq!(actual, expected, "canonical storyboard is already current misrouted");
+    }
+    // vector: items win over a legacy sketches list, which is dropped
+    {
+        let storyboard: serde_json::Value = serde_json::from_str(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "sketches": [
+    "stale.sk"
+  ]
+}
+"####,
+        )
+        .expect("storyboard parses");
+        let actual = seam.upgrade(&storyboard)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "items win over a legacy sketches list, which is dropped", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("items win over a legacy sketches list, which is dropped: expected parses");
+        assert_eq!(actual, expected, "items win over a legacy sketches list, which is dropped misrouted");
+    }
+    // vector: legacy sketches list becomes sketch references
+    {
+        let storyboard: serde_json::Value = serde_json::from_str(
+            r####"
+{
+  "title": "Legacy",
+  "sketches": [
+    "intro.sk",
+    "outro.sk"
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+        )
+        .expect("storyboard parses");
+        let actual = seam.upgrade(&storyboard)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "legacy sketches list becomes sketch references", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Legacy",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("legacy sketches list becomes sketch references: expected parses");
+        assert_eq!(actual, expected, "legacy sketches list becomes sketch references misrouted");
+    }
+    // vector: missing items and sketches become an empty sequence
+    {
+        let storyboard: serde_json::Value = serde_json::from_str(
+            r####"
+{
+  "title": "Empty",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+        )
+        .expect("storyboard parses");
+        let actual = seam.upgrade(&storyboard)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "missing items and sketches become an empty sequence", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Empty",
+  "description": "",
+  "locked": false,
+  "items": [],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("missing items and sketches become an empty sequence: expected parses");
+        assert_eq!(actual, expected, "missing items and sketches become an empty sequence misrouted");
+    }
+    // vector: null and empty optional values take canonical defaults
+    {
+        let storyboard: serde_json::Value = serde_json::from_str(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": null,
+  "locked": null,
+  "items": [
+    {
+      "type": "section",
+      "title": "Setup",
+      "description": null,
+      "sketches": [
+        "intro.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Empty",
+      "description": "",
+      "sketches": []
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "metadata": {
+    "fields": {}
+  }
+}
+"####,
+        )
+        .expect("storyboard parses");
+        let actual = seam.upgrade(&storyboard)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "null and empty optional values take canonical defaults", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "intro.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Empty",
+      "sketches": []
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("null and empty optional values take canonical defaults: expected parses");
+        assert_eq!(actual, expected, "null and empty optional values take canonical defaults misrouted");
+    }
+    // vector: null items fall back to the legacy sketches list
+    {
+        let storyboard: serde_json::Value = serde_json::from_str(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": null,
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "sketches": [
+    "intro.sk"
+  ]
+}
+"####,
+        )
+        .expect("storyboard parses");
+        let actual = seam.upgrade(&storyboard)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "null items fall back to the legacy sketches list", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("null items fall back to the legacy sketches list: expected parses");
+        assert_eq!(actual, expected, "null items fall back to the legacy sketches list misrouted");
+    }
+    // vector: section without sketches becomes an empty section
+    {
+        let storyboard: serde_json::Value = serde_json::from_str(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "section",
+      "title": "Later"
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+        )
+        .expect("storyboard parses");
+        let actual = seam.upgrade(&storyboard)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "section without sketches becomes an empty section", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "section",
+      "title": "Later",
+      "sketches": []
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("section without sketches becomes an empty section: expected parses");
+        assert_eq!(actual, expected, "section without sketches becomes an empty section misrouted");
+    }
+    // vector: sketch item type becomes sketch_ref
+    {
+        let storyboard: serde_json::Value = serde_json::from_str(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch",
+      "path": "intro.sk"
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+        )
+        .expect("storyboard parses");
+        let actual = seam.upgrade(&storyboard)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "sketch item type becomes sketch_ref", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch item type becomes sketch_ref: expected parses");
+        assert_eq!(actual, expected, "sketch item type becomes sketch_ref misrouted");
+    }
+    // vector: timestamps are saved as UTC
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [],
+  "created_at": "2026-06-28T22:00:00+02:00",
+  "updated_at": "2026-06-28T20:20:00.123456789Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let actual = seam.round_trip(&storyboard)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "timestamps are saved as UTC", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00.123456789Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("timestamps are saved as UTC: expected parses");
+        assert_eq!(actual, expected, "timestamps are saved as UTC misrouted");
+    }
+}

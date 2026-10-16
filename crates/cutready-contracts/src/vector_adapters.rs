@@ -1,10 +1,10 @@
-// Binds the SketchDocument @vector operations (contracts/edits.tsp) to the
-// desktop's production document code: serde for decode/save and
-// engine::sketch_edits for edits. Included by the generated conformance suite
+// Binds the SketchDocument and StoryboardDocument @vector operations
+// (contracts/edits.tsp, contracts/storyboard.tsp) to the desktop's production
+// document code: serde for decode/save and engine::sketch_edits for edits. Included by the generated conformance suite
 // via #[path].
 #![allow(dead_code, unused_variables, clippy::all)]
 
-use cutready_lib::document::{self, RowTextUpdate, Sketch, SketchEditError};
+use cutready_lib::document::{self, RowTextUpdate, Sketch, SketchEditError, Storyboard};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::future::Future;
@@ -140,6 +140,27 @@ fn reorder_rows(input: &Value, _ctx: &Context) -> Result<Value, VectorError> {
     save(&sketch)
 }
 
+// Same serializer as project::write_storyboard.
+fn storyboard_round_trip(input: &Value, _ctx: &Context) -> Result<Value, VectorError> {
+    let storyboard: Storyboard =
+        serde_json::from_value(input.get("storyboard").cloned().unwrap_or(Value::Null))
+            .map_err(|e| VectorError::harness(format!("decode storyboard: {e}")))?;
+    let text = serde_json::to_string_pretty(&storyboard)
+        .map_err(|e| VectorError::harness(format!("save storyboard: {e}")))?;
+    serde_json::from_str(&text)
+        .map_err(|e| VectorError::harness(format!("reparse storyboard: {e}")))
+}
+
+// Same path as project::read_storyboard: upgrade raw JSON, decode, save canonically.
+fn storyboard_upgrade(input: &Value, _ctx: &Context) -> Result<Value, VectorError> {
+    let raw = input.get("storyboard").cloned().unwrap_or(Value::Null);
+    let (storyboard, _) = Storyboard::from_json_upgraded(&raw.to_string())
+        .map_err(|e| VectorError::harness(format!("upgrade storyboard: {e}")))?;
+    let text = serde_json::to_string_pretty(&storyboard)
+        .map_err(|e| VectorError::harness(format!("save storyboard: {e}")))?;
+    serde_json::from_str(&text)
+        .map_err(|e| VectorError::harness(format!("reparse storyboard: {e}")))
+}
 fn parse_duration_seconds(input: &Value, _ctx: &Context) -> Result<Value, VectorError> {
     let time = text(input, "time").ok_or_else(|| VectorError::harness("time is required"))?;
     Ok(document::parse_duration_seconds(&time).map_or(Value::Null, |seconds| json!(seconds)))
@@ -164,6 +185,14 @@ pub fn adapters() -> HashMap<&'static str, Adapter> {
         (
             "PlanningTiming.parseDurationSeconds",
             Adapter::sync(parse_duration_seconds),
+        ),
+        (
+            "StoryboardDocument.roundTrip",
+            Adapter::sync(storyboard_round_trip),
+        ),
+        (
+            "StoryboardDocument.upgrade",
+            Adapter::sync(storyboard_upgrade),
         ),
     ])
 }

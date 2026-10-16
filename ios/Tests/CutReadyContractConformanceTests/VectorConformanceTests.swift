@@ -664,4 +664,104 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "updateRowText", vector: vector, sync: true, seam: seam())
   }
 
+  func testVector63StoryboardDocumentRoundTripCanonicalDesktopStoryboardIsUnchanged() async throws {
+    guard let vectorData = "{\"name\":\"canonical desktop storyboard is unchanged\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"End-to-end launch demo.\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"description\":\"Get signed in.\",\"sketches\":[\"flows/login.sk\",\"flows/workspace.sk\"]},{\"type\":\"section\",\"title\":\"Wrap-up\",\"sketches\":[]},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"partners\"}},\"future_storyboard_field\":{\"owner\":\"ios\",\"tags\":[\"a\",\"b\"]}}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"End-to-end launch demo.\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"description\":\"Get signed in.\",\"sketches\":[\"flows/login.sk\",\"flows/workspace.sk\"]},{\"type\":\"section\",\"title\":\"Wrap-up\",\"sketches\":[]},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"partners\"}},\"future_storyboard_field\":{\"owner\":\"ios\",\"tags\":[\"a\",\"b\"]}},\"operation\":\"roundTrip\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "StoryboardDocument", operation: "roundTrip", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector64StoryboardDocumentRoundTripTimestampsAreSavedAsUTC() async throws {
+    guard let vectorData = "{\"name\":\"timestamps are saved as UTC\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[],\"created_at\":\"2026-06-28T22:00:00+02:00\",\"updated_at\":\"2026-06-28T20:20:00.123456789Z\"}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00.123456789Z\"},\"operation\":\"roundTrip\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "StoryboardDocument", operation: "roundTrip", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector65StoryboardDocumentUpgradeCanonicalStoryboardIsAlreadyCurrent() async throws {
+    guard let vectorData = "{\"name\":\"canonical storyboard is already current\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"End-to-end launch demo.\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"description\":\"Get signed in.\",\"sketches\":[\"flows/login.sk\",\"flows/workspace.sk\"]},{\"type\":\"section\",\"title\":\"Wrap-up\",\"sketches\":[]},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"partners\"}},\"future_storyboard_field\":{\"owner\":\"ios\",\"tags\":[\"a\",\"b\"]}}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"End-to-end launch demo.\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"description\":\"Get signed in.\",\"sketches\":[\"flows/login.sk\",\"flows/workspace.sk\"]},{\"type\":\"section\",\"title\":\"Wrap-up\",\"sketches\":[]},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"partners\"}},\"future_storyboard_field\":{\"owner\":\"ios\",\"tags\":[\"a\",\"b\"]}},\"operation\":\"upgrade\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "StoryboardDocument", operation: "upgrade", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector66StoryboardDocumentUpgradeItemsWinOverALegacySketchesListWhichIsDropped() async throws {
+    guard let vectorData = "{\"name\":\"items win over a legacy sketches list, which is dropped\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"sketches\":[\"stale.sk\"]}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "StoryboardDocument", operation: "upgrade", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector67StoryboardDocumentUpgradeLegacySketchesListBecomesSketchReferences() async throws {
+    guard let vectorData = "{\"name\":\"legacy sketches list becomes sketch references\",\"input\":{\"storyboard\":{\"title\":\"Legacy\",\"sketches\":[\"intro.sk\",\"outro.sk\"],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}},\"expected\":{\"title\":\"Legacy\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "StoryboardDocument", operation: "upgrade", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector68StoryboardDocumentUpgradeMissingItemsAndSketchesBecomeAnEmptySequence() async throws {
+    guard let vectorData = "{\"name\":\"missing items and sketches become an empty sequence\",\"input\":{\"storyboard\":{\"title\":\"Empty\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}},\"expected\":{\"title\":\"Empty\",\"description\":\"\",\"locked\":false,\"items\":[],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "StoryboardDocument", operation: "upgrade", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector69StoryboardDocumentUpgradeNullAndEmptyOptionalValuesTakeCanonicalDefaults() async throws {
+    guard let vectorData = "{\"name\":\"null and empty optional values take canonical defaults\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":null,\"locked\":null,\"items\":[{\"type\":\"section\",\"title\":\"Setup\",\"description\":null,\"sketches\":[\"intro.sk\"]},{\"type\":\"section\",\"title\":\"Empty\",\"description\":\"\",\"sketches\":[]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{}}}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"intro.sk\"]},{\"type\":\"section\",\"title\":\"Empty\",\"sketches\":[]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "StoryboardDocument", operation: "upgrade", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector70StoryboardDocumentUpgradeNullItemsFallBackToTheLegacySketchesList() async throws {
+    guard let vectorData = "{\"name\":\"null items fall back to the legacy sketches list\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":null,\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"sketches\":[\"intro.sk\"]}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "StoryboardDocument", operation: "upgrade", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector71StoryboardDocumentUpgradeSectionWithoutSketchesBecomesAnEmptySection() async throws {
+    guard let vectorData = "{\"name\":\"section without sketches becomes an empty section\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"section\",\"title\":\"Later\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"section\",\"title\":\"Later\",\"sketches\":[]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "StoryboardDocument", operation: "upgrade", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector72StoryboardDocumentUpgradeSketchItemTypeBecomesSketchRef() async throws {
+    guard let vectorData = "{\"name\":\"sketch item type becomes sketch_ref\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "StoryboardDocument", operation: "upgrade", vector: vector, sync: true, seam: seam())
+  }
+
 }

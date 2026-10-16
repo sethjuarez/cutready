@@ -423,21 +423,24 @@ impl SketchSummary {
 /// A storyboard — an ordered sequence of sketches with optional sections.
 ///
 /// Stored as a `.sb` file. The file path is the identity (no internal ID).
-#[derive(Debug, Clone, Serialize)]
+///
+/// Decoding is strict: read files through [`Storyboard::from_json_upgraded`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Storyboard {
     pub title: String,
-    #[serde(default)]
     pub description: String,
     /// Whether the whole storyboard is protected from edits.
-    #[serde(default)]
     pub locked: bool,
     #[serde(default, skip_serializing_if = "DocumentMetadata::is_empty")]
     pub metadata: DocumentMetadata,
     /// Ordered items: loose sketch refs and/or named sections.
-    #[serde(default)]
     pub items: Vec<StoryboardItem>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Fields this version does not model (written by newer desktop or iOS builds).
+    /// Preserved verbatim so a save never drops them.
+    #[serde(flatten)]
+    pub unknown_fields: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Storyboard {
@@ -451,6 +454,7 @@ impl Storyboard {
             items: Vec::new(),
             created_at: now,
             updated_at: now,
+            unknown_fields: serde_json::Map::new(),
         }
     }
 
@@ -510,48 +514,78 @@ impl Storyboard {
     }
 }
 
-impl<'de> Deserialize<'de> for Storyboard {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct StoryboardShape {
-            title: String,
-            #[serde(default)]
-            description: String,
-            #[serde(default)]
-            locked: bool,
-            #[serde(default)]
-            metadata: DocumentMetadata,
-            items: Option<Vec<StoryboardItem>>,
-            #[serde(default)]
-            sketches: Vec<String>,
-            created_at: DateTime<Utc>,
-            updated_at: DateTime<Utc>,
-        }
+impl Storyboard {
+    /// Parse `.sb` JSON, upgrading older shapes first.
+    /// Returns whether the upgrade changed anything, so callers can save the canonical form.
+    pub fn from_json_upgraded(text: &str) -> Result<(Self, bool), serde_json::Error> {
+        Self::from_json_bytes_upgraded(text.as_bytes())
+    }
 
-        let shape = StoryboardShape::deserialize(deserializer)?;
-        let items = shape.items.unwrap_or_else(|| {
-            shape
-                .sketches
-                .into_iter()
-                .map(|path| StoryboardItem::SketchRef { path })
-                .collect()
-        });
-
-        Ok(Self {
-            title: shape.title,
-            description: shape.description,
-            locked: shape.locked,
-            metadata: shape.metadata,
-            items,
-            created_at: shape.created_at,
-            updated_at: shape.updated_at,
-        })
+    /// Parse bytes directly so invalid UTF-8 is reported instead of replaced.
+    pub fn from_json_bytes_upgraded(bytes: &[u8]) -> Result<(Self, bool), serde_json::Error> {
+        let mut value: serde_json::Value = serde_json::from_slice(bytes)?;
+        let upgraded = upgrade_storyboard_json(&mut value);
+        Ok((serde_json::from_value(value)?, upgraded))
     }
 }
 
+/// Convert an older `.sb` shape to the canonical one (`StoryboardDocument.upgrade`
+/// in contracts/storyboard.tsp). Returns whether anything changed.
+pub fn upgrade_storyboard_json(value: &mut serde_json::Value) -> bool {
+    use serde_json::{json, Value};
+
+    let Some(doc) = value.as_object_mut() else {
+        return false;
+    };
+    let before = doc.clone();
+
+    let legacy = doc.remove("sketches");
+    if doc.get("items").map_or(true, Value::is_null) {
+        let items = legacy
+            .as_ref()
+            .and_then(Value::as_array)
+            .map(|paths| {
+                paths
+                    .iter()
+                    .map(|path| json!({ "type": "sketch_ref", "path": path }))
+                    .collect()
+            })
+            .unwrap_or_default();
+        doc.insert("items".into(), Value::Array(items));
+    }
+    if let Some(items) = doc.get_mut("items").and_then(Value::as_array_mut) {
+        for item in items.iter_mut().filter_map(Value::as_object_mut) {
+            match item.get("type").and_then(Value::as_str) {
+                Some("sketch") => {
+                    item.insert("type".into(), json!("sketch_ref"));
+                }
+                Some("section") => {
+                    if item
+                        .get("description")
+                        .is_some_and(|d| d.is_null() || d.as_str() == Some(""))
+                    {
+                        item.remove("description");
+                    }
+                    if item.get("sketches").map_or(true, Value::is_null) {
+                        item.insert("sketches".into(), json!([]));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    if doc.get("description").map_or(true, Value::is_null) {
+        doc.insert("description".into(), json!(""));
+    }
+    if doc.get("locked").map_or(true, Value::is_null) {
+        doc.insert("locked".into(), json!(false));
+    }
+    if doc.get("metadata").is_some_and(Value::is_null) {
+        doc.remove("metadata");
+    }
+
+    *doc != before
+}
 /// An item in a storyboard's sequence.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -1104,6 +1138,7 @@ mod tests {
             ],
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            unknown_fields: Default::default(),
         };
 
         let json = serde_json::to_string_pretty(&sb).unwrap();
@@ -1187,8 +1222,9 @@ mod tests {
             "updated_at": "2025-01-01T00:00:00Z"
         }"#;
 
-        let storyboard: Storyboard = serde_json::from_str(json).unwrap();
+        let (storyboard, upgraded) = Storyboard::from_json_upgraded(json).unwrap();
 
+        assert!(upgraded);
         assert_eq!(storyboard.title, "Legacy Board");
         assert_eq!(storyboard.sketch_paths(), vec!["intro.sk", "demo.sk"]);
         assert_eq!(storyboard.sketch_count(), 2);
@@ -1246,6 +1282,7 @@ mod tests {
             ],
             created_at: now,
             updated_at: now,
+            unknown_fields: Default::default(),
         };
 
         let removed = storyboard.remove_sketch_references("delete-me.sk");

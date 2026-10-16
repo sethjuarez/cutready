@@ -14,7 +14,15 @@ export { NarrationPlan } from "./narration-plan";
 export { PlanningRow } from "./planning-row";
 export { DocumentMetadata } from "./document-metadata";
 export { Sketch } from "./sketch";
+
+export {
+  StoryboardItem,
+  StoryboardSketchRef,
+  StoryboardSection,
+} from "./storyboard-item";
+export { Storyboard } from "./storyboard";
 export { RowTextUpdate } from "./row-text-update";
 export { SketchEditError } from "./sketch-edit-error";
 export type { PlanningTiming } from "./planning-timing";
 export type { SketchDocument } from "./sketch-document";
+export type { StoryboardDocument } from "./storyboard-document";

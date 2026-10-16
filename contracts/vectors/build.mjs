@@ -6,7 +6,9 @@
 // - sketches always carry `locked` and `description` (null if unset);
 // - narration always carries `duration_ms` (null if unknown);
 // - empty collections and unset optional values are omitted;
-// - unknown fields on sketches and rows are preserved.
+// - unknown fields on sketches and rows are preserved;
+// - storyboards always carry `description` and `locked`, sections omit an empty
+//   `description`; older storyboard shapes are covered by the upgrade vectors.
 // Floats are non-integral binary fractions so every runtime prints them identically.
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -556,6 +558,119 @@ const parseDurationSecondsVectors = [
   parseDuration("rounds up past uint32", "4294967295.5", null),
 ];
 
+// Storyboards always carry `description` ("" if unset) and `locked`; sections
+// omit an empty `description`; legacy top-level `sketches` is never written.
+const storyboard = (items, extra = {}) => ({
+  title: "Contract storyboard",
+  description: "",
+  locked: false,
+  items,
+  created_at: CREATED,
+  updated_at: UPDATED,
+  ...extra,
+});
+const sketchRef = (path) => ({ type: "sketch_ref", path });
+const section = (title, sketches, extra = {}) => ({ type: "section", title, ...extra, sketches });
+
+const desktopStoryboard = storyboard(
+  [
+    sketchRef("intro.sk"),
+    section("Setup", ["flows/login.sk", "flows/workspace.sk"], { description: "Get signed in." }),
+    section("Wrap-up", []),
+    sketchRef("outro.sk"),
+  ],
+  {
+    description: "End-to-end launch demo.",
+    locked: true,
+    metadata: { fields: { audience: "partners" } },
+    future_storyboard_field: { owner: "ios", tags: ["a", "b"] },
+  },
+);
+
+const storyboardRoundTripVectors = [
+  {
+    name: "canonical desktop storyboard is unchanged",
+    input: { storyboard: desktopStoryboard },
+    expected: desktopStoryboard,
+  },
+  {
+    name: "timestamps are saved as UTC",
+    input: {
+      storyboard: storyboard([], {
+        created_at: "2026-06-28T22:00:00+02:00",
+        updated_at: "2026-06-28T20:20:00.123456789Z",
+      }),
+    },
+    expected: storyboard([], { updated_at: "2026-06-28T20:20:00.123456789Z" }),
+  },
+];
+
+// Older shapes are upgraded once, when a runtime reads the file, and saved canonically.
+const storyboardUpgradeVectors = [
+  {
+    name: "canonical storyboard is already current",
+    input: { storyboard: desktopStoryboard },
+    expected: desktopStoryboard,
+  },
+  {
+    name: "legacy sketches list becomes sketch references",
+    input: {
+      storyboard: {
+        title: "Legacy",
+        sketches: ["intro.sk", "outro.sk"],
+        created_at: CREATED,
+        updated_at: UPDATED,
+      },
+    },
+    expected: storyboard([sketchRef("intro.sk"), sketchRef("outro.sk")], { title: "Legacy" }),
+  },
+  {
+    name: "items win over a legacy sketches list, which is dropped",
+    input: {
+      storyboard: { ...storyboard([sketchRef("intro.sk")]), sketches: ["stale.sk"] },
+    },
+    expected: storyboard([sketchRef("intro.sk")]),
+  },
+  {
+    name: "null items fall back to the legacy sketches list",
+    input: {
+      storyboard: { ...storyboard(null), sketches: ["intro.sk"] },
+    },
+    expected: storyboard([sketchRef("intro.sk")]),
+  },
+  {
+    name: "missing items and sketches become an empty sequence",
+    input: {
+      storyboard: { title: "Empty", created_at: CREATED, updated_at: UPDATED },
+    },
+    expected: storyboard([], { title: "Empty" }),
+  },
+  {
+    name: "null and empty optional values take canonical defaults",
+    input: {
+      storyboard: storyboard(
+        [section("Setup", ["intro.sk"], { description: null }), section("Empty", [], { description: "" })],
+        { description: null, locked: null, metadata: { fields: {} } },
+      ),
+    },
+    expected: storyboard([section("Setup", ["intro.sk"]), section("Empty", [])]),
+  },
+  {
+    name: "sketch item type becomes sketch_ref",
+    input: {
+      storyboard: storyboard([{ type: "sketch", path: "intro.sk" }]),
+    },
+    expected: storyboard([sketchRef("intro.sk")]),
+  },
+  {
+    name: "section without sketches becomes an empty section",
+    input: {
+      storyboard: storyboard([{ type: "section", title: "Later" }]),
+    },
+    expected: storyboard([section("Later", [])]),
+  },
+];
+
 const tspConst = (name, vectors) => `const ${name} = """\n${JSON.stringify(vectors, null, 2)}\n""";\n`;
 
 const contractsDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -570,5 +685,7 @@ writeFileSync(
     tspConst("UpdateRowTextVectors", updateRowTextVectors),
     tspConst("ReorderRowsVectors", reorderRowsVectors),
     tspConst("ParseDurationSecondsVectors", parseDurationSecondsVectors),
+    tspConst("StoryboardRoundTripVectors", storyboardRoundTripVectors),
+    tspConst("StoryboardUpgradeVectors", storyboardUpgradeVectors),
   ].join("\n"),
 );

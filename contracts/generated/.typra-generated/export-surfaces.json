@@ -47,6 +47,11 @@
         "Sketch",
         "SketchDocument",
         "SketchEditError",
+        "Storyboard",
+        "StoryboardDocument",
+        "StoryboardItem",
+        "StoryboardSection",
+        "StoryboardSketchRef",
         "TypingSpot"
       ],
       "exports": [
@@ -149,6 +154,41 @@
           "protocol": false
         },
         {
+          "name": "Storyboard",
+          "kind": "value",
+          "group": "",
+          "source": "Storyboard",
+          "protocol": false
+        },
+        {
+          "name": "StoryboardDocument",
+          "kind": "type",
+          "group": "",
+          "source": "StoryboardDocument",
+          "protocol": true
+        },
+        {
+          "name": "StoryboardItem",
+          "kind": "value",
+          "group": "",
+          "source": "StoryboardItem",
+          "protocol": false
+        },
+        {
+          "name": "StoryboardSection",
+          "kind": "value",
+          "group": "",
+          "source": "StoryboardItem",
+          "protocol": false
+        },
+        {
+          "name": "StoryboardSketchRef",
+          "kind": "value",
+          "group": "",
+          "source": "StoryboardItem",
+          "protocol": false
+        },
+        {
           "name": "TypingSpot",
           "kind": "value",
           "group": "",
@@ -225,6 +265,38 @@
               "nonFatal": false
             }
           ]
+        },
+        {
+          "name": "StoryboardDocument",
+          "group": "",
+          "symbol": "StoryboardDocument",
+          "source": "StoryboardDocument",
+          "methods": [
+            {
+              "name": "roundTrip",
+              "returns": "Storyboard",
+              "params": {
+                "storyboard": "Storyboard"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "upgrade",
+              "returns": "Storyboard",
+              "params": {
+                "storyboard": "unknown"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            }
+          ]
         }
       ],
       "modules": [
@@ -242,6 +314,9 @@
         "Sketch",
         "SketchDocument",
         "SketchEditError",
+        "Storyboard",
+        "StoryboardDocument",
+        "StoryboardItem",
         "TypingSpot"
       ]
     },
@@ -263,6 +338,11 @@
         "Sketch",
         "SketchDocument",
         "SketchEditError",
+        "Storyboard",
+        "StoryboardDocument",
+        "StoryboardItem",
+        "StoryboardSection",
+        "StoryboardSketchRef",
         "TypingSpot"
       ],
       "exports": [
@@ -365,6 +445,41 @@
           "protocol": false
         },
         {
+          "name": "Storyboard",
+          "kind": "value",
+          "group": "",
+          "source": "storyboard",
+          "protocol": false
+        },
+        {
+          "name": "StoryboardDocument",
+          "kind": "type",
+          "group": "",
+          "source": "storyboard_document",
+          "protocol": true
+        },
+        {
+          "name": "StoryboardItem",
+          "kind": "value",
+          "group": "",
+          "source": "storyboard_item",
+          "protocol": false
+        },
+        {
+          "name": "StoryboardSection",
+          "kind": "value",
+          "group": "",
+          "source": "storyboard_item",
+          "protocol": false
+        },
+        {
+          "name": "StoryboardSketchRef",
+          "kind": "value",
+          "group": "",
+          "source": "storyboard_item",
+          "protocol": false
+        },
+        {
           "name": "TypingSpot",
           "kind": "value",
           "group": "",
@@ -441,6 +556,38 @@
               "nonFatal": false
             }
           ]
+        },
+        {
+          "name": "StoryboardDocument",
+          "group": "",
+          "symbol": "StoryboardDocument",
+          "source": "storyboard_document",
+          "methods": [
+            {
+              "name": "roundTrip",
+              "returns": "Storyboard",
+              "params": {
+                "storyboard": "Storyboard"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "upgrade",
+              "returns": "Storyboard",
+              "params": {
+                "storyboard": "unknown"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            }
+          ]
         }
       ],
       "modules": [
@@ -459,6 +606,9 @@
         "sketch",
         "sketch_document",
         "sketch_edit_error",
+        "storyboard",
+        "storyboard_document",
+        "storyboard_item",
         "typing_spot"
       ]
     },
@@ -481,6 +631,11 @@
         "Sketch",
         "SketchDocument",
         "SketchEditError",
+        "Storyboard",
+        "StoryboardDocument",
+        "StoryboardItem",
+        "StoryboardSection",
+        "StoryboardSketchRef",
         "TypingSpot"
       ],
       "exports": [
@@ -583,6 +738,41 @@
           "protocol": false
         },
         {
+          "name": "Storyboard",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/storyboard.swift",
+          "protocol": false
+        },
+        {
+          "name": "StoryboardDocument",
+          "kind": "type",
+          "group": "",
+          "source": "Sources/CutReadyContracts/storyboard_document.swift",
+          "protocol": true
+        },
+        {
+          "name": "StoryboardItem",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/storyboard_item.swift",
+          "protocol": false
+        },
+        {
+          "name": "StoryboardSection",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/storyboard_item.swift",
+          "protocol": false
+        },
+        {
+          "name": "StoryboardSketchRef",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/storyboard_item.swift",
+          "protocol": false
+        },
+        {
           "name": "TypingSpot",
           "kind": "value",
           "group": "",
@@ -659,6 +849,38 @@
               "nonFatal": false
             }
           ]
+        },
+        {
+          "name": "StoryboardDocument",
+          "group": "",
+          "symbol": "StoryboardDocument",
+          "source": "Sources/CutReadyContracts/storyboard_document.swift",
+          "methods": [
+            {
+              "name": "roundTrip",
+              "returns": "Storyboard",
+              "params": {
+                "storyboard": "Storyboard"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "upgrade",
+              "returns": "Storyboard",
+              "params": {
+                "storyboard": "unknown"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            }
+          ]
         }
       ],
       "modules": [
@@ -676,6 +898,9 @@
         "Sources/CutReadyContracts/sketch.swift",
         "Sources/CutReadyContracts/sketch_document.swift",
         "Sources/CutReadyContracts/sketch_edit_error.swift",
+        "Sources/CutReadyContracts/storyboard.swift",
+        "Sources/CutReadyContracts/storyboard_document.swift",
+        "Sources/CutReadyContracts/storyboard_item.swift",
         "Sources/CutReadyContracts/typing_spot.swift"
       ]
     },
@@ -698,6 +923,11 @@
         "Sketch",
         "SketchDocument",
         "SketchEditError",
+        "Storyboard",
+        "StoryboardDocument",
+        "StoryboardItem",
+        "StoryboardSection",
+        "StoryboardSketchRef",
         "TypingSpot"
       ],
       "exports": [
@@ -800,6 +1030,41 @@
           "protocol": false
         },
         {
+          "name": "Storyboard",
+          "kind": "value",
+          "group": "",
+          "source": "./storyboard",
+          "protocol": false
+        },
+        {
+          "name": "StoryboardDocument",
+          "kind": "type",
+          "group": "",
+          "source": "./storyboard-document",
+          "protocol": true
+        },
+        {
+          "name": "StoryboardItem",
+          "kind": "value",
+          "group": "",
+          "source": "./storyboard-item",
+          "protocol": false
+        },
+        {
+          "name": "StoryboardSection",
+          "kind": "value",
+          "group": "",
+          "source": "./storyboard-item",
+          "protocol": false
+        },
+        {
+          "name": "StoryboardSketchRef",
+          "kind": "value",
+          "group": "",
+          "source": "./storyboard-item",
+          "protocol": false
+        },
+        {
           "name": "TypingSpot",
           "kind": "value",
           "group": "",
@@ -876,6 +1141,38 @@
               "nonFatal": false
             }
           ]
+        },
+        {
+          "name": "StoryboardDocument",
+          "group": "",
+          "symbol": "StoryboardDocument",
+          "source": "./storyboard-document",
+          "methods": [
+            {
+              "name": "roundTrip",
+              "returns": "Storyboard",
+              "params": {
+                "storyboard": "Storyboard"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "upgrade",
+              "returns": "Storyboard",
+              "params": {
+                "storyboard": "unknown"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            }
+          ]
         }
       ],
       "modules": [
@@ -893,6 +1190,9 @@
         "./sketch",
         "./sketch-document",
         "./sketch-edit-error",
+        "./storyboard",
+        "./storyboard-document",
+        "./storyboard-item",
         "./typing-spot"
       ]
     }

@@ -14,5 +14,7 @@ mod narration_plan_test;
 mod planning_row_test;
 mod document_metadata_test;
 mod sketch_test;
+mod storyboard_item_test;
+mod storyboard_test;
 mod row_text_update_test;
 mod vector_conformance_test;

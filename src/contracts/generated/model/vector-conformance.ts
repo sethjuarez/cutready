@@ -18,6 +18,8 @@ import type {
   RowTextUpdate,
   Sketch,
   SketchDocument,
+  Storyboard,
+  StoryboardDocument,
 } from "./index";
 
 // Runtime-neutral assert shims (no `node:assert`): the entrypoint ships inside
@@ -998,6 +1000,154 @@ export async function runSketchDocumentConformance(
     seamConformanceAssert(
       caught !== undefined,
       "visual lock also guards the screenshot: expected an error",
+    );
+  }
+}
+
+/** Typed @vector conformance for StoryboardDocument. Pass your real `implements StoryboardDocument`;
+    the `StoryboardDocument` parameter makes tsc prove every op is implemented. Call from a
+    test, e.g. `await runStoryboardDocumentConformance(new StoryboardDocumentImpl());`. */
+export async function runStoryboardDocumentConformance(
+  seam: StoryboardDocument,
+): Promise<void> {
+  // vector: canonical desktop storyboard is unchanged
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"End-to-end launch demo.","locked":true,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","description":"Get signed in.","sketches":["flows/login.sk","flows/workspace.sk"]},{"type":"section","title":"Wrap-up","sketches":[]},{"type":"sketch_ref","path":"outro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","metadata":{"fields":{"audience":"partners"}},"future_storyboard_field":{"owner":"ios","tags":["a","b"]}}';
+    const storyboard = JSON.parse(storyboardJson) as Storyboard;
+    const actual = await seam.roundTrip(storyboard);
+    const expected = JSON.parse(
+      '{"title":"Contract storyboard","description":"End-to-end launch demo.","locked":true,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","description":"Get signed in.","sketches":["flows/login.sk","flows/workspace.sk"]},{"type":"section","title":"Wrap-up","sketches":[]},{"type":"sketch_ref","path":"outro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","metadata":{"fields":{"audience":"partners"}},"future_storyboard_field":{"owner":"ios","tags":["a","b"]}}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "canonical desktop storyboard is unchanged misrouted",
+    );
+  }
+  // vector: canonical storyboard is already current
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"End-to-end launch demo.","locked":true,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","description":"Get signed in.","sketches":["flows/login.sk","flows/workspace.sk"]},{"type":"section","title":"Wrap-up","sketches":[]},{"type":"sketch_ref","path":"outro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","metadata":{"fields":{"audience":"partners"}},"future_storyboard_field":{"owner":"ios","tags":["a","b"]}}';
+    const storyboard = JSON.parse(storyboardJson) as unknown;
+    const actual = await seam.upgrade(storyboard);
+    const expected = JSON.parse(
+      '{"title":"Contract storyboard","description":"End-to-end launch demo.","locked":true,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","description":"Get signed in.","sketches":["flows/login.sk","flows/workspace.sk"]},{"type":"section","title":"Wrap-up","sketches":[]},{"type":"sketch_ref","path":"outro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","metadata":{"fields":{"audience":"partners"}},"future_storyboard_field":{"owner":"ios","tags":["a","b"]}}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "canonical storyboard is already current misrouted",
+    );
+  }
+  // vector: items win over a legacy sketches list, which is dropped
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","sketches":["stale.sk"]}';
+    const storyboard = JSON.parse(storyboardJson) as unknown;
+    const actual = await seam.upgrade(storyboard);
+    const expected = JSON.parse(
+      '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "items win over a legacy sketches list, which is dropped misrouted",
+    );
+  }
+  // vector: legacy sketches list becomes sketch references
+  {
+    const storyboardJson = '{"title":"Legacy","sketches":["intro.sk","outro.sk"],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}';
+    const storyboard = JSON.parse(storyboardJson) as unknown;
+    const actual = await seam.upgrade(storyboard);
+    const expected = JSON.parse(
+      '{"title":"Legacy","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"sketch_ref","path":"outro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "legacy sketches list becomes sketch references misrouted",
+    );
+  }
+  // vector: missing items and sketches become an empty sequence
+  {
+    const storyboardJson = '{"title":"Empty","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}';
+    const storyboard = JSON.parse(storyboardJson) as unknown;
+    const actual = await seam.upgrade(storyboard);
+    const expected = JSON.parse(
+      '{"title":"Empty","description":"","locked":false,"items":[],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "missing items and sketches become an empty sequence misrouted",
+    );
+  }
+  // vector: null and empty optional values take canonical defaults
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":null,"locked":null,"items":[{"type":"section","title":"Setup","description":null,"sketches":["intro.sk"]},{"type":"section","title":"Empty","description":"","sketches":[]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","metadata":{"fields":{}}}';
+    const storyboard = JSON.parse(storyboardJson) as unknown;
+    const actual = await seam.upgrade(storyboard);
+    const expected = JSON.parse(
+      '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"section","title":"Setup","sketches":["intro.sk"]},{"type":"section","title":"Empty","sketches":[]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "null and empty optional values take canonical defaults misrouted",
+    );
+  }
+  // vector: null items fall back to the legacy sketches list
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":false,"items":null,"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","sketches":["intro.sk"]}';
+    const storyboard = JSON.parse(storyboardJson) as unknown;
+    const actual = await seam.upgrade(storyboard);
+    const expected = JSON.parse(
+      '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "null items fall back to the legacy sketches list misrouted",
+    );
+  }
+  // vector: section without sketches becomes an empty section
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"section","title":"Later"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}';
+    const storyboard = JSON.parse(storyboardJson) as unknown;
+    const actual = await seam.upgrade(storyboard);
+    const expected = JSON.parse(
+      '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"section","title":"Later","sketches":[]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "section without sketches becomes an empty section misrouted",
+    );
+  }
+  // vector: sketch item type becomes sketch_ref
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch","path":"intro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}';
+    const storyboard = JSON.parse(storyboardJson) as unknown;
+    const actual = await seam.upgrade(storyboard);
+    const expected = JSON.parse(
+      '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "sketch item type becomes sketch_ref misrouted",
+    );
+  }
+  // vector: timestamps are saved as UTC
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":false,"items":[],"created_at":"2026-06-28T22:00:00+02:00","updated_at":"2026-06-28T20:20:00.123456789Z"}';
+    const storyboard = JSON.parse(storyboardJson) as Storyboard;
+    const actual = await seam.roundTrip(storyboard);
+    const expected = JSON.parse(
+      '{"title":"Contract storyboard","description":"","locked":false,"items":[],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00.123456789Z"}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "timestamps are saved as UTC misrouted",
     );
   }
 }

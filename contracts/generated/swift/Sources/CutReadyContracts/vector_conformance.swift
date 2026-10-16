@@ -1022,3 +1022,148 @@ public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async thr
     }
   }
 }
+
+/// Typed @vector conformance for StoryboardDocument. Pass your real `StoryboardDocument` impl; the
+/// `S: StoryboardDocument` constraint makes the compiler prove every op is implemented.
+public func runStoryboardDocumentConformance<S: StoryboardDocument>(_ seam: S) async throws {
+  // vector: canonical desktop storyboard is unchanged
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"End-to-end launch demo.\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"description\":\"Get signed in.\",\"sketches\":[\"flows/login.sk\",\"flows/workspace.sk\"]},{\"type\":\"section\",\"title\":\"Wrap-up\",\"sketches\":[]},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"partners\"}},\"future_storyboard_field\":{\"owner\":\"ios\",\"tags\":[\"a\",\"b\"]}}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("canonical desktop storyboard is unchanged: failed to parse embedded vector input")
+    }
+    let storyboard = try Storyboard.load(input["storyboard"]!)
+    let actual = try seam.roundTrip(storyboard: storyboard)
+    let expectedData = "{\"title\":\"Contract storyboard\",\"description\":\"End-to-end launch demo.\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"description\":\"Get signed in.\",\"sketches\":[\"flows/login.sk\",\"flows/workspace.sk\"]},{\"type\":\"section\",\"title\":\"Wrap-up\",\"sketches\":[]},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"partners\"}},\"future_storyboard_field\":{\"owner\":\"ios\",\"tags\":[\"a\",\"b\"]}}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("canonical desktop storyboard is unchanged misrouted")
+    }
+  }
+  // vector: canonical storyboard is already current
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"End-to-end launch demo.\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"description\":\"Get signed in.\",\"sketches\":[\"flows/login.sk\",\"flows/workspace.sk\"]},{\"type\":\"section\",\"title\":\"Wrap-up\",\"sketches\":[]},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"partners\"}},\"future_storyboard_field\":{\"owner\":\"ios\",\"tags\":[\"a\",\"b\"]}}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("canonical storyboard is already current: failed to parse embedded vector input")
+    }
+    let storyboard = input["storyboard"]!
+    let actual = try seam.upgrade(storyboard: storyboard)
+    let expectedData = "{\"title\":\"Contract storyboard\",\"description\":\"End-to-end launch demo.\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"description\":\"Get signed in.\",\"sketches\":[\"flows/login.sk\",\"flows/workspace.sk\"]},{\"type\":\"section\",\"title\":\"Wrap-up\",\"sketches\":[]},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"partners\"}},\"future_storyboard_field\":{\"owner\":\"ios\",\"tags\":[\"a\",\"b\"]}}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("canonical storyboard is already current misrouted")
+    }
+  }
+  // vector: items win over a legacy sketches list, which is dropped
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"sketches\":[\"stale.sk\"]}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("items win over a legacy sketches list, which is dropped: failed to parse embedded vector input")
+    }
+    let storyboard = input["storyboard"]!
+    let actual = try seam.upgrade(storyboard: storyboard)
+    let expectedData = "{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("items win over a legacy sketches list, which is dropped misrouted")
+    }
+  }
+  // vector: legacy sketches list becomes sketch references
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Legacy\",\"sketches\":[\"intro.sk\",\"outro.sk\"],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("legacy sketches list becomes sketch references: failed to parse embedded vector input")
+    }
+    let storyboard = input["storyboard"]!
+    let actual = try seam.upgrade(storyboard: storyboard)
+    let expectedData = "{\"title\":\"Legacy\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("legacy sketches list becomes sketch references misrouted")
+    }
+  }
+  // vector: missing items and sketches become an empty sequence
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Empty\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("missing items and sketches become an empty sequence: failed to parse embedded vector input")
+    }
+    let storyboard = input["storyboard"]!
+    let actual = try seam.upgrade(storyboard: storyboard)
+    let expectedData = "{\"title\":\"Empty\",\"description\":\"\",\"locked\":false,\"items\":[],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("missing items and sketches become an empty sequence misrouted")
+    }
+  }
+  // vector: null and empty optional values take canonical defaults
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":null,\"locked\":null,\"items\":[{\"type\":\"section\",\"title\":\"Setup\",\"description\":null,\"sketches\":[\"intro.sk\"]},{\"type\":\"section\",\"title\":\"Empty\",\"description\":\"\",\"sketches\":[]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{}}}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("null and empty optional values take canonical defaults: failed to parse embedded vector input")
+    }
+    let storyboard = input["storyboard"]!
+    let actual = try seam.upgrade(storyboard: storyboard)
+    let expectedData = "{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"intro.sk\"]},{\"type\":\"section\",\"title\":\"Empty\",\"sketches\":[]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("null and empty optional values take canonical defaults misrouted")
+    }
+  }
+  // vector: null items fall back to the legacy sketches list
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":null,\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"sketches\":[\"intro.sk\"]}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("null items fall back to the legacy sketches list: failed to parse embedded vector input")
+    }
+    let storyboard = input["storyboard"]!
+    let actual = try seam.upgrade(storyboard: storyboard)
+    let expectedData = "{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("null items fall back to the legacy sketches list misrouted")
+    }
+  }
+  // vector: section without sketches becomes an empty section
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"section\",\"title\":\"Later\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("section without sketches becomes an empty section: failed to parse embedded vector input")
+    }
+    let storyboard = input["storyboard"]!
+    let actual = try seam.upgrade(storyboard: storyboard)
+    let expectedData = "{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"section\",\"title\":\"Later\",\"sketches\":[]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("section without sketches becomes an empty section misrouted")
+    }
+  }
+  // vector: sketch item type becomes sketch_ref
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("sketch item type becomes sketch_ref: failed to parse embedded vector input")
+    }
+    let storyboard = input["storyboard"]!
+    let actual = try seam.upgrade(storyboard: storyboard)
+    let expectedData = "{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("sketch item type becomes sketch_ref misrouted")
+    }
+  }
+  // vector: timestamps are saved as UTC
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[],\"created_at\":\"2026-06-28T22:00:00+02:00\",\"updated_at\":\"2026-06-28T20:20:00.123456789Z\"}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("timestamps are saved as UTC: failed to parse embedded vector input")
+    }
+    let storyboard = try Storyboard.load(input["storyboard"]!)
+    let actual = try seam.roundTrip(storyboard: storyboard)
+    let expectedData = "{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00.123456789Z\"}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("timestamps are saved as UTC misrouted")
+    }
+  }
+}
