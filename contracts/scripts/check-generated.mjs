@@ -1,6 +1,6 @@
 // Regenerates every Typra output and fails when the committed tree drifts from
 // the TypeSpec source (modified, deleted, or newly emitted files).
-import { execFileSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -15,7 +15,8 @@ const generatedPaths = [
   "ios/Tests/CutReadyContractConformanceTests/VectorRunner.swift",
 ];
 
-execFileSync("npm", ["run", "generate"], { cwd: contractsDir, stdio: "inherit" });
+// execSync runs through a shell so npm resolves to npm.cmd on Windows.
+execSync("npm run generate", { cwd: contractsDir, stdio: "inherit" });
 
 const status = execFileSync(
   "git",
