@@ -133,6 +133,18 @@ pub fn harness_route_capabilities(harness_id: &str) -> HarnessRouteCapabilities 
             sanitized_replay: true,
             stateful_continuation: false,
         },
+        "prompty" => HarnessRouteCapabilities {
+            provider_owned: false,
+            external_model_selection: true,
+            chat_completions: true,
+            responses: true,
+            anthropic_messages: true,
+            tool_calling: true,
+            vision: true,
+            reasoning_effort: true,
+            sanitized_replay: true,
+            stateful_continuation: true,
+        },
         _ => HarnessRouteCapabilities {
             provider_owned: false,
             external_model_selection: true,
@@ -399,7 +411,27 @@ mod tests {
         assert_eq!(route.api_route, ModelApiRoute::Responses);
         assert_eq!(
             route.history_strategy,
-            HistoryStrategy::ResponsesSanitizedReplay
+            HistoryStrategy::ResponsesContinuation
+        );
+        assert_eq!(route.effective_reasoning_effort.as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn routes_gpt5_pro_to_responses_continuation_for_prompty() {
+        let route = resolve_agent_model_route(
+            LlmProvider::Openai,
+            "gpt-5.5-pro",
+            "prompty",
+            requirements(),
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(route.api_route, ModelApiRoute::Responses);
+        assert_eq!(
+            route.history_strategy,
+            HistoryStrategy::ResponsesContinuation
         );
         assert_eq!(route.effective_reasoning_effort.as_deref(), Some("high"));
     }
