@@ -15,7 +15,8 @@ use crate::engine::agent::execution::{
     parse_tool_arguments, ContentPart, ImageUrl, ResourceOperation, ToolCall, ToolExecutionStatus,
     ToolOutput, TouchedResource, VerificationResult, VerificationStatus,
 };
-use crate::engine::draftline_adapter::CutReadyDraftlineAdapter;
+use crate::engine::draftline_adapter::{DeferReason, StructureChange, StructureSnapshot};
+use crate::engine::identity;
 use crate::engine::project;
 use crate::engine::sketch_edits;
 use crate::engine::visual_document::{
@@ -1377,6 +1378,16 @@ fn verify_expected_row_value(
 }
 
 fn exec_create_project(current_project_root: &Path, args: &Value) -> String {
+    exec_create_project_as(current_project_root, args, |repo_root| {
+        identity::acting(Some(repo_root))
+    })
+}
+
+fn exec_create_project_as(
+    current_project_root: &Path,
+    args: &Value,
+    author: impl FnOnce(&Path) -> Result<identity::ResolvedIdentity, String>,
+) -> String {
     let name = match args.get("name").and_then(Value::as_str).map(str::trim) {
         Some(name) if !name.is_empty() => name,
         _ => return "Error: missing 'name' argument".into(),
@@ -1392,43 +1403,44 @@ fn exec_create_project(current_project_root: &Path, args: &Value) -> String {
         Err(e) => return format!("Error creating project: {e}"),
     };
 
-    match project::create_project_in_repo(&repo_root, name, description) {
-        Ok(entry) => {
-            if let Err(e) = snapshot_workspace_structure(
-                &repo_root,
-                &format!("Add {} to workspace", entry.name),
-            ) {
-                return format!("Error creating project: project was created but not saved: {e}");
-            }
-            let root = repo_root.join(&entry.path);
-            json!({
-                "project_path": entry.path,
-                "name": entry.name,
-                "description": entry.description,
-                "root": root.to_string_lossy(),
-                "message": "Project created. Use project_path as target_project_path with add_items_to_project. Refresh projects to see the new entry in the UI."
-            })
-            .to_string()
-        }
-        Err(e) => format!("Error creating project: {e}"),
-    }
-}
-
-fn snapshot_workspace_structure(repo_root: &Path, message: &str) -> Result<(), String> {
-    let adapter = CutReadyDraftlineAdapter::open_project(repo_root).map_err(|e| e.to_string())?;
-    if !adapter
-        .inspect_changes()
-        .map_err(|e| e.to_string())?
-        .is_empty()
+    let change = match StructureChange::begin(
+        &repo_root,
+        format!("Add {name} to workspace"),
+        [project::MANIFEST_PATH],
+    ) {
+        Ok(change) => change,
+        Err(e) => return format!("Error creating project: {e}"),
+    };
+    let entry = match project::create_project_in_repo(&repo_root, name, description) {
+        Ok(entry) => entry,
+        Err(e) => return format!("Error creating project: {e}"),
+    };
+    let snapshot = match change
+        .touching(&entry.path)
+        .finish(&repo_root, author(&repo_root))
     {
-        adapter
-            .save_version(message)
-            .map(|_| ())
-            .map_err(|e| e.to_string())?;
+        Ok(snapshot) => snapshot,
+        Err(e) => return format!("Error creating project: project was created but not saved: {e}"),
+    };
+    let root = repo_root.join(&entry.path);
+    let mut result = json!({
+        "project_path": entry.path,
+        "name": entry.name,
+        "description": entry.description,
+        "root": root.to_string_lossy(),
+        "message": "Project created. Use project_path as target_project_path with add_items_to_project. Refresh projects to see the new entry in the UI."
+    });
+    if let StructureSnapshot::Deferred { reason, message } = snapshot {
+        let next = match reason {
+            DeferReason::Identity => "Tell the user this so they can finish setting up their profile.",
+            DeferReason::UnsavedEdits => "Tell the user this so they can save a version.",
+        };
+        result["versioning"] = json!("deferred");
+        result["versioning_reason"] = json!(reason);
+        result["versioning_message"] = json!(format!("{message} {next}"));
     }
-    Ok(())
+    result.to_string()
 }
-
 fn exec_add_items_to_project(current_project_root: &Path, args: &Value) -> String {
     let target_project_path = match args
         .get("target_project_path")
@@ -4391,6 +4403,7 @@ fn flatten_nodes(children: &[Value]) -> Vec<&Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::draftline_adapter::CutReadyDraftlineAdapter;
     use crate::models::sketch::Sketch;
     use serde_json::json;
     use tempfile::TempDir;
@@ -5013,10 +5026,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn create_project_tool_adds_manifest_entry_for_writer() {
-        let tmp = TempDir::new().unwrap();
-        let repo_root = tmp.path();
+    /// A saved two-level workspace whose git config differs from the profile.
+    fn saved_workspace(repo_root: &Path) -> CutReadyDraftlineAdapter {
         project::write_manifest(
             repo_root,
             &crate::models::script::ProjectManifest {
@@ -5029,29 +5040,117 @@ mod tests {
         )
         .unwrap();
         std::fs::create_dir_all(repo_root.join("source")).unwrap();
+        std::fs::write(repo_root.join("source/notes.md"), "notes").unwrap();
+        let adapter = CutReadyDraftlineAdapter::open_project(repo_root).unwrap();
+        let repo = git2::Repository::open(repo_root).unwrap();
+        let mut config = repo
+            .config()
+            .unwrap()
+            .open_level(git2::ConfigLevel::Local)
+            .unwrap();
+        config.set_str("user.name", "Agent Tester").unwrap();
+        config.set_str("user.email", "agent@example.com").unwrap();
+        adapter
+            .save_version_with_profile(
+                "Initial",
+                &crate::engine::draftline_adapter::contributor_profile_for(grace()),
+            )
+            .unwrap();
+        adapter
+    }
 
-        let result = exec_create_project(
+    fn grace() -> identity::ResolvedIdentity {
+        identity::ResolvedIdentity {
+            name: "Grace Hopper".into(),
+            email: Some("grace@example.com".into()),
+            name_source: identity::IdentitySource::Profile,
+            email_source: Some(identity::IdentitySource::Profile),
+            profile: None,
+            needs_setup: false,
+        }
+    }
+
+    fn head_people(repo_root: &Path) -> (String, String, String) {
+        let repo = git2::Repository::open(repo_root).unwrap();
+        let commit = repo.head().unwrap().peel_to_commit().unwrap();
+        let person = |sig: git2::Signature| {
+            format!("{} <{}>", sig.name().unwrap(), sig.email().unwrap())
+        };
+        (
+            commit.summary().unwrap().to_string(),
+            person(commit.author()),
+            person(commit.committer()),
+        )
+    }
+
+    #[test]
+    fn create_project_tool_saves_as_the_acting_user() {
+        let tmp = TempDir::new().unwrap();
+        let repo_root = tmp.path();
+        let adapter = saved_workspace(repo_root);
+
+        let result = exec_create_project_as(
             &repo_root.join("source"),
             &json!({ "name": "Derived Project", "description": "Split out demo" }),
+            |_| Ok(grace()),
         );
 
         assert!(
             result.contains("\"project_path\":\"derived-project\""),
             "{result}"
         );
+        assert!(!result.contains("deferred"), "{result}");
         assert!(repo_root.join("derived-project/sketches").is_dir());
         let manifest = project::read_manifest(repo_root).unwrap();
         assert!(manifest
             .projects
             .iter()
             .any(|entry| entry.path == "derived-project" && entry.name == "Derived Project"));
-        let adapter = CutReadyDraftlineAdapter::open_project(repo_root).unwrap();
         assert!(
             adapter.inspect_changes().unwrap().is_empty(),
-            "agent-created project manifest change should be saved immediately"
+            "agent-created project should be saved immediately"
+        );
+        assert_eq!(
+            head_people(repo_root),
+            (
+                "Add Derived Project to workspace".into(),
+                "Grace Hopper <grace@example.com>".into(),
+                "CutReady <app@cutready.local>".into(),
+            ),
+            "authored by the profile, not git config"
         );
     }
 
+    #[test]
+    fn create_project_tool_defers_when_the_profile_is_unavailable() {
+        let tmp = TempDir::new().unwrap();
+        let repo_root = tmp.path();
+        let adapter = saved_workspace(repo_root);
+
+        // Tests never install the app's profile source, so this fails closed.
+        let result = exec_create_project(
+            &repo_root.join("source"),
+            &json!({ "name": "Derived Project" }),
+        );
+
+        let result: Value = serde_json::from_str(&result).expect(&result);
+        assert_eq!(result["project_path"], "derived-project");
+        assert_eq!(result["versioning"], "deferred");
+        assert_eq!(result["versioning_reason"], "identity");
+        let message = result["versioning_message"].as_str().unwrap();
+        assert!(
+            message.starts_with(
+                "\"Add Derived Project to workspace\" is in your pending changes. CutReady couldn't read your profile."
+            ),
+            "{message}"
+        );
+        assert!(
+            message.ends_with("Tell the user this so they can finish setting up their profile."),
+            "{message}"
+        );
+        assert_eq!(head_people(repo_root).0, "Initial", "no anonymous commit");
+        assert!(!adapter.inspect_changes().unwrap().is_empty());
+    }
     #[test]
     fn add_items_to_project_copies_storyboard_sketches_and_assets() {
         let tmp = TempDir::new().unwrap();

@@ -118,7 +118,7 @@ pub fn init_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
 
 // ── Multi-project manifest ────────────────────────────────────────
 
-const MANIFEST_PATH: &str = ".cutready/projects.json";
+pub const MANIFEST_PATH: &str = ".cutready/projects.json";
 
 /// Workspace manifest health state.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -2437,7 +2437,7 @@ pub fn migrate_legacy_chat_sessions(
 // Only user content (sketches, visuals, screenshots, etc.) stays in the working tree.
 const GIT_STATE_DIR: &str = ".git/cutready";
 
-const REPO_SETTINGS_FILE: &str = ".cutready/settings.json";
+pub const REPO_SETTINGS_FILE: &str = ".cutready/settings.json";
 
 /// Resolve the per-project state directory inside .git/cutready/.
 /// For single-project repos: `.git/cutready/`

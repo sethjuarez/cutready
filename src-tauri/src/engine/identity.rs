@@ -4,8 +4,32 @@
 //! the CutReady profile, `GIT_AUTHOR_*`, git config, then the OS username.
 
 use std::path::Path;
+use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
+
+type ProfileSource = dyn Fn() -> Result<Option<Identity>, String> + Send + Sync;
+
+static PROFILE_SOURCE: OnceLock<Box<ProfileSource>> = OnceLock::new();
+
+/// Let code without an app handle (agent tools) read the saved CutReady profile.
+/// The app installs this once at startup.
+pub fn install_profile_source(
+    source: impl Fn() -> Result<Option<Identity>, String> + Send + Sync + 'static,
+) -> Result<(), String> {
+    PROFILE_SOURCE
+        .set(Box::new(source))
+        .map_err(|_| "CutReady's profile source is already installed.".to_string())
+}
+
+/// The acting identity, using the installed profile source. Fails when the
+/// saved profile can't be read, so callers never commit under a fallback author.
+pub fn acting(project_root: Option<&Path>) -> Result<ResolvedIdentity, String> {
+    let source = PROFILE_SOURCE
+        .get()
+        .ok_or_else(|| "CutReady couldn't read your profile.".to_string())?;
+    Ok(resolve(project_root, source()?))
+}
 
 /// Name used when no layer supplies one.
 pub const FALLBACK_NAME: &str = "CutReady User";

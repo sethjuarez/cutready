@@ -6,16 +6,20 @@
 
 #![allow(dead_code)]
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use draftline::{
-    ApplyIncomingReport, ApplyIncomingResult, ChangeSet, ContentPolicy, ContributorProfile,
-    HistoryEntry, MergeConflictResolution, MergeIncomingReport, MergeIncomingResult,
-    MergeIncomingToken, PreflightReport, PreviewFile, PublishResult, RemoteCredential,
-    RemoteEndpoint, RemoteOptions, Result as DraftlineResult, Shelf, SwitchPolicy, SyncStatus,
-    Variation, VariationId, VariationMetadata, VariationSummary, Version, VersionDiff, VersionId,
-    VersionPreview, Workspace, WorkspaceSummary,
+    ApplyIncomingReport, ApplyIncomingResult, ChangeSet, ContentPolicy, Contributor,
+    ContributorProfile, HistoryEntry, MergeConflictResolution, MergeIncomingReport,
+    MergeIncomingResult, MergeIncomingToken, PreflightReport, PreviewFile, PublishResult,
+    RemoteCredential, RemoteEndpoint, RemoteOptions, Result as DraftlineResult, Shelf,
+    SwitchPolicy, SyncStatus, Variation, VariationId, VariationMetadata, VariationSummary, Version,
+    VersionDiff, VersionId, VersionPreview, Workspace, WorkspaceSummary,
 };
+
+use serde::Serialize;
+
+use crate::engine::identity::ResolvedIdentity;
 
 const EXCLUDED_RUNTIME_PATHS: &[&str] = &[
     ".chats",
@@ -100,6 +104,8 @@ impl CutReadyDraftlineAdapter {
         self.workspace.workspace_summary()
     }
 
+    /// Unattributed save, for tests only: app saves must name the acting user.
+    #[cfg(test)]
     pub fn save_version(&self, label: &str) -> DraftlineResult<Version> {
         self.workspace.save_version(label)
     }
@@ -110,6 +116,23 @@ impl CutReadyDraftlineAdapter {
         profile: &ContributorProfile,
     ) -> DraftlineResult<Version> {
         self.workspace.save_version_with_profile(label, profile)
+    }
+
+    pub fn changed_files(&self) -> DraftlineResult<Vec<draftline::ChangedFile>> {
+        self.workspace.changed_files()
+    }
+
+    pub fn save_files_with_profile<I, P>(
+        &self,
+        paths: I,
+        label: &str,
+        profile: &ContributorProfile,
+    ) -> DraftlineResult<Version>
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        self.workspace.save_files_with_profile(paths, label, profile)
     }
 
     pub fn versions(&self) -> DraftlineResult<Vec<Version>> {
@@ -343,6 +366,162 @@ pub fn is_github_remote_url(url: &str) -> bool {
 /// Remaining CutReady-owned integration gaps after Draftline owns versioning.
 pub fn draftline_integration_gaps() -> &'static [&'static str] {
     &[]
+}
+
+/// Who recorded a change: the acting user as author, CutReady as the tool that saved it.
+pub fn contributor_profile_for(author: ResolvedIdentity) -> ContributorProfile {
+    ContributorProfile::new(
+        Contributor {
+            name: author.name,
+            email: author.email,
+        },
+        Contributor {
+            name: "CutReady".to_string(),
+            email: Some("app@cutready.local".to_string()),
+        },
+    )
+}
+
+/// Shown when CutReady keeps a workspace change pending instead of saving it anonymously.
+pub const STRUCTURE_SNAPSHOT_DEFERRED_HINT: &str =
+    "Add your name and email in Settings › Profile to save it as a version.";
+
+/// Shown when a workspace change touched files that already had unsaved edits.
+pub const STRUCTURE_SNAPSHOT_UNSAVED_HINT: &str =
+    "It touched files with unsaved edits, so save a version to record them together.";
+
+/// Why an automatic save stayed in pending changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeferReason {
+    /// CutReady doesn't know who is acting.
+    Identity,
+    /// The change touched files with unsaved edits a version would sweep in.
+    UnsavedEdits,
+}
+
+/// Result of saving a workspace-structure change automatically.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StructureSnapshot {
+    /// Recorded as a new version under the acting user.
+    Saved,
+    /// Nothing to record.
+    Clean,
+    /// Left in pending changes; the user's next save records it.
+    Deferred { reason: DeferReason, message: String },
+}
+
+/// A workspace-structure edit (projects, manifest, settings) that CutReady saves
+/// as its own version, authored by the acting user.
+///
+/// Call [`StructureChange::begin`] before mutating, naming the repo-relative
+/// files or folders the edit touches (`.` for the whole workspace). Only those
+/// paths are saved, so unrelated pending work stays pending. The save is
+/// deferred instead when CutReady doesn't know who is acting, or when those
+/// paths already had unsaved edits that the version would otherwise sweep in.
+pub struct StructureChange {
+    message: String,
+    scope: Vec<PathBuf>,
+    removed: Vec<PathBuf>,
+    pending_before: Vec<PathBuf>,
+}
+
+impl StructureChange {
+    pub fn begin<I, P>(repo_root: &Path, message: impl Into<String>, scope: I) -> Result<Self, String>
+    where
+        I: IntoIterator<Item = P>,
+        P: Into<PathBuf>,
+    {
+        let adapter =
+            CutReadyDraftlineAdapter::open_project(repo_root).map_err(|e| e.to_string())?;
+        let pending_before = adapter
+            .changed_files()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|file| file.path)
+            .collect();
+        Ok(Self {
+            message: message.into(),
+            scope: scope.into_iter().map(Into::into).collect(),
+            removed: Vec::new(),
+            pending_before,
+        })
+    }
+
+    /// Add a path the edit created, such as a new project folder.
+    pub fn touching(mut self, path: impl Into<PathBuf>) -> Self {
+        self.scope.push(path.into());
+        self
+    }
+
+    /// Add a path the edit deleted. Unsaved edits there are gone, so they
+    /// don't defer the save.
+    pub fn removing(mut self, path: impl Into<PathBuf>) -> Self {
+        self.removed.push(path.into());
+        self
+    }
+
+    pub fn finish(
+        self,
+        repo_root: &Path,
+        author: Result<ResolvedIdentity, String>,
+    ) -> Result<StructureSnapshot, String> {
+        let adapter =
+            CutReadyDraftlineAdapter::open_project(repo_root).map_err(|e| e.to_string())?;
+        let touched: Vec<PathBuf> = adapter
+            .changed_files()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|file| file.path)
+            .filter(|path| self.covers(path) || covered(&self.removed, path))
+            .collect();
+        if touched.is_empty() {
+            return Ok(StructureSnapshot::Clean);
+        }
+        let message = &self.message;
+        let author = match author {
+            Ok(author) if !author.needs_setup => author,
+            Ok(_) => {
+                return Ok(StructureSnapshot::Deferred {
+                    reason: DeferReason::Identity,
+                    message: format!(
+                        "\"{message}\" is in your pending changes. {STRUCTURE_SNAPSHOT_DEFERRED_HINT}"
+                    ),
+                })
+            }
+            Err(reason) => {
+                let reason = reason.trim().trim_end_matches('.');
+                return Ok(StructureSnapshot::Deferred {
+                    reason: DeferReason::Identity,
+                    message: format!(
+                        "\"{message}\" is in your pending changes. {reason}. {STRUCTURE_SNAPSHOT_DEFERRED_HINT}"
+                    ),
+                });
+            }
+        };
+        if self.pending_before.iter().any(|path| self.covers(path)) {
+            return Ok(StructureSnapshot::Deferred {
+                reason: DeferReason::UnsavedEdits,
+                message: format!(
+                    "\"{message}\" is in your pending changes. {STRUCTURE_SNAPSHOT_UNSAVED_HINT}"
+                ),
+            });
+        }
+        adapter
+            .save_files_with_profile(&touched, message, &contributor_profile_for(author))
+            .map(|_| StructureSnapshot::Saved)
+            .map_err(|e| e.to_string())
+    }
+
+    fn covers(&self, path: &Path) -> bool {
+        covered(&self.scope, path)
+    }
+}
+
+fn covered(scope: &[PathBuf], path: &Path) -> bool {
+    scope
+        .iter()
+        .any(|scope| scope.as_os_str() == "." || path.starts_with(scope))
 }
 
 #[cfg(test)]
@@ -1277,4 +1456,276 @@ mod tests {
         assert!(!first_root.join(".git/cutready/locks.json").exists());
         assert!(first.inspect_changes().unwrap().is_empty());
     }
-}
+
+    fn acting_as(name: &str, email: Option<&str>) -> ResolvedIdentity {
+        use crate::engine::identity::IdentitySource;
+        ResolvedIdentity {
+            name: name.into(),
+            email: email.map(str::to_string),
+            name_source: IdentitySource::Profile,
+            email_source: email.map(|_| IdentitySource::Profile),
+            profile: None,
+            needs_setup: email.is_none(),
+        }
+    }
+
+    const MANIFEST: &str = ".cutready/projects.json";
+
+    struct Head {
+        id: git2::Oid,
+        author: String,
+        committer: String,
+        paths: Vec<String>,
+    }
+
+    fn head(root: &Path) -> Head {
+        let repo = git2::Repository::open(root).unwrap();
+        let commit = repo.head().unwrap().peel_to_commit().unwrap();
+        let parent_tree = commit.parent(0).ok().map(|parent| parent.tree().unwrap());
+        let diff = repo
+            .diff_tree_to_tree(parent_tree.as_ref(), Some(&commit.tree().unwrap()), None)
+            .unwrap();
+        let paths = diff
+            .deltas()
+            .filter_map(|delta| delta.new_file().path().or(delta.old_file().path()))
+            .map(|path| path.to_string_lossy().replace('\\', "/"))
+            .collect();
+        let author = commit.author();
+        let committer = commit.committer();
+        let result = Head {
+            id: commit.id(),
+            author: format!("{} <{}>", author.name().unwrap(), author.email().unwrap()),
+            committer: format!("{} <{}>", committer.name().unwrap(), committer.email().unwrap()),
+            paths,
+        };
+        result
+    }
+
+    fn pending(adapter: &CutReadyDraftlineAdapter) -> Vec<String> {
+        adapter
+            .changed_files()
+            .unwrap()
+            .into_iter()
+            .map(|file| file.path.to_string_lossy().replace('\\', "/"))
+            .collect()
+    }
+
+    fn grace() -> Result<ResolvedIdentity, String> {
+        Ok(acting_as("Grace Hopper", Some("grace@example.com")))
+    }
+
+    /// A saved workspace with a manifest and one project, attributed to Ada.
+    fn structure_repo(root: &Path) -> CutReadyDraftlineAdapter {
+        write(root.join(MANIFEST), r#"{"projects":[{"path":"demo","name":"Demo"}]}"#);
+        write(root.join("demo/intro.sk"), "{}");
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        configure_identity(root, "Git Config", "git-config@example.com");
+        adapter
+            .save_version_with_profile(
+                "Initial",
+                &contributor_profile_for(acting_as("Ada Lovelace", Some("ada@example.com"))),
+            )
+            .unwrap();
+        adapter
+    }
+
+    fn add_project(root: &Path) {
+        write(
+            root.join(MANIFEST),
+            r#"{"projects":[{"path":"demo","name":"Demo"},{"path":"extra","name":"Extra"}]}"#,
+        );
+    }
+
+    #[test]
+    fn structure_change_is_authored_by_the_acting_user() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+
+        let change = StructureChange::begin(root, "Add Extra to workspace", [MANIFEST]).unwrap();
+        add_project(root);
+        let result = change.finish(root, grace()).unwrap();
+
+        assert_eq!(result, StructureSnapshot::Saved);
+        assert!(pending(&adapter).is_empty());
+        let head = head(root);
+        assert_eq!(head.author, "Grace Hopper <grace@example.com>", "profile beats git config");
+        assert_eq!(head.committer, "CutReady <app@cutready.local>");
+    }
+
+    #[test]
+    fn structure_change_leaves_unrelated_pending_work_alone() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+        write(root.join("demo/notes.md"), "draft");
+
+        let change = StructureChange::begin(root, "Add Extra to workspace", [MANIFEST]).unwrap();
+        add_project(root);
+        let result = change.finish(root, grace()).unwrap();
+
+        assert_eq!(result, StructureSnapshot::Saved);
+        assert_eq!(head(root).paths, vec![MANIFEST.to_string()]);
+        assert_eq!(pending(&adapter), vec!["demo/notes.md".to_string()]);
+    }
+
+    #[test]
+    fn structure_change_defers_when_its_files_had_unsaved_edits() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+        write(root.join(MANIFEST), r#"{"projects":[]}"#);
+        let before = head(root).id;
+
+        let change = StructureChange::begin(root, "Add Extra to workspace", [MANIFEST]).unwrap();
+        add_project(root);
+        let result = change.finish(root, grace()).unwrap();
+
+        assert_eq!(
+            result,
+            StructureSnapshot::Deferred {
+                reason: DeferReason::UnsavedEdits,
+                message: format!(
+                    "\"Add Extra to workspace\" is in your pending changes. {STRUCTURE_SNAPSHOT_UNSAVED_HINT}"
+                ),
+            }
+        );
+        assert_eq!(head(root).id, before);
+        assert_eq!(pending(&adapter), vec![MANIFEST.to_string()]);
+    }
+
+    #[test]
+    fn whole_workspace_change_defers_on_any_unsaved_edit() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        structure_repo(root);
+        write(root.join("demo/notes.md"), "draft");
+        let before = head(root).id;
+
+        let change = StructureChange::begin(root, "Organize workspace projects", ["."]).unwrap();
+        add_project(root);
+        let result = change.finish(root, grace()).unwrap();
+
+        assert!(matches!(
+            result,
+            StructureSnapshot::Deferred { reason: DeferReason::UnsavedEdits, .. }
+        ));
+        assert_eq!(head(root).id, before);
+    }
+
+    #[test]
+    fn structure_change_records_moved_project_folders() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+
+        let change =
+            StructureChange::begin(root, "Rename workspace project", [MANIFEST, "demo"]).unwrap();
+        std::fs::rename(root.join("demo"), root.join("renamed")).unwrap();
+        write(root.join(MANIFEST), r#"{"projects":[{"path":"renamed","name":"Renamed"}]}"#);
+        let result = change.touching("renamed").finish(root, grace()).unwrap();
+
+        assert_eq!(result, StructureSnapshot::Saved);
+        assert!(pending(&adapter).is_empty(), "{:?}", pending(&adapter));
+        let mut paths = head(root).paths;
+        paths.sort();
+        assert_eq!(paths, vec![MANIFEST, "demo/intro.sk", "renamed/intro.sk"]);
+    }
+
+    #[test]
+    fn deleting_a_project_with_unsaved_edits_still_saves() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+        write(root.join("demo/intro.sk"), r#"{"title":"unsaved"}"#);
+
+        let change = StructureChange::begin(root, "Delete workspace project", [MANIFEST]).unwrap();
+        std::fs::remove_dir_all(root.join("demo")).unwrap();
+        write(root.join(MANIFEST), r#"{"projects":[]}"#);
+        let result = change.removing("demo").finish(root, grace()).unwrap();
+
+        assert_eq!(result, StructureSnapshot::Saved);
+        assert!(pending(&adapter).is_empty(), "{:?}", pending(&adapter));
+    }
+
+    #[test]
+    fn renaming_only_the_display_name_ignores_dirty_project_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+        write(root.join("demo/intro.sk"), r#"{"title":"unsaved"}"#);
+
+        let change =
+            StructureChange::begin(root, "Rename workspace project", [MANIFEST]).unwrap();
+        write(root.join(MANIFEST), r#"{"projects":[{"path":"demo","name":"Renamed"}]}"#);
+        let result = change.finish(root, grace()).unwrap();
+
+        assert_eq!(result, StructureSnapshot::Saved);
+        assert_eq!(pending(&adapter), vec!["demo/intro.sk".to_string()]);
+    }
+
+    #[test]
+    fn structure_change_defers_without_an_email() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+        let before = head(root).id;
+
+        let change = StructureChange::begin(root, "Add Extra to workspace", [MANIFEST]).unwrap();
+        add_project(root);
+        let result = change.finish(root, Ok(acting_as("sejuare", None))).unwrap();
+
+        assert_eq!(
+            result,
+            StructureSnapshot::Deferred {
+                reason: DeferReason::Identity,
+                message: format!(
+                    "\"Add Extra to workspace\" is in your pending changes. {STRUCTURE_SNAPSHOT_DEFERRED_HINT}"
+                ),
+            }
+        );
+        assert_eq!(head(root).id, before, "no anonymous commit");
+        assert_eq!(pending(&adapter), vec![MANIFEST.to_string()]);
+    }
+
+    #[test]
+    fn structure_change_defers_when_the_profile_is_unreadable() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        structure_repo(root);
+        let before = head(root).id;
+
+        let change = StructureChange::begin(root, "Add Extra to workspace", [MANIFEST]).unwrap();
+        add_project(root);
+        let result = change
+            .finish(root, Err("Couldn't read your saved profile: bad json.".into()))
+            .unwrap();
+
+        assert_eq!(
+            result,
+            StructureSnapshot::Deferred {
+                reason: DeferReason::Identity,
+                message: format!(
+                    "\"Add Extra to workspace\" is in your pending changes. Couldn't read your saved profile: bad json. {STRUCTURE_SNAPSHOT_DEFERRED_HINT}"
+                ),
+            }
+        );
+        assert_eq!(head(root).id, before);
+    }
+
+    #[test]
+    fn structure_change_is_clean_when_its_files_are_not_versioned() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+        write(root.join("demo/notes.md"), "draft");
+
+        let change =
+            StructureChange::begin(root, "Update workspace settings", [".cutready/settings.json"])
+                .unwrap();
+        write(root.join(".cutready/settings.json"), r#"{"theme":"dark"}"#);
+        let result = change.finish(root, Err("no profile".into())).unwrap();
+
+        assert_eq!(result, StructureSnapshot::Clean);
+        assert_eq!(pending(&adapter), vec!["demo/notes.md".to_string()]);
+    }}

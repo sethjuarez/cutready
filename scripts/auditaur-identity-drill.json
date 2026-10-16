@@ -141,6 +141,35 @@
       "expectValue": "closed"
     },
     {
+      "id": "auto-save-create-project",
+      "drive": "evaluate",
+      "expression": "(function(){window.__drillCreate='pending';window.__TAURI_INTERNALS__.invoke('create_project_in_repo',{name:'Drill Extra',description:null}).then(function(){window.__drillCreate='ok';},function(e){window.__drillCreate='err:'+e;});return 'sent';})()",
+      "expectValue": "sent"
+    },
+    {
+      "id": "auto-save-author-is-profile",
+      "git": ["log", "-1", "--format=%s | %an <%ae> | %cn"],
+      "expectContains": "Add Drill Extra to workspace | Drill Profile <profile@drill.test> | CutReady",
+      "timeoutMs": 30000
+    },
+    {
+      "id": "auto-save-create-project-resolved",
+      "drive": "evaluate",
+      "expression": "window.__drillCreate",
+      "expectValue": "ok"
+    },
+    {
+      "id": "emit-deferred-auto-save",
+      "drive": "evaluate",
+      "expression": "(function(){window.__TAURI_INTERNALS__.invoke('plugin:event|emit',{event:'workspace-snapshot-deferred',payload:{reason:'identity',message:'Drill change is in your pending changes. Add your name and email in Settings › Profile to save it as a version.'}});return 'sent';})()",
+      "expectValue": "sent"
+    },
+    {
+      "id": "deferred-auto-save-warning-shown",
+      "expectText": "Drill change is in your pending changes.",
+      "timeoutMs": 15000
+    },
+    {
       "id": "reopen-settings",
       "drive": "click",
       "selector": "[data-testid=\"activity-settings\"]"

@@ -1,4 +1,4 @@
-import { invoke } from "./tauri";
+import { invoke, listen } from "./tauri";
 
 export type IdentitySource = "profile" | "environment" | "git_config" | "system" | "fallback";
 
@@ -59,4 +59,20 @@ export function isContributorIdentityRequired(error: unknown): boolean {
     if (typeof message === "string") return message.includes(CONTRIBUTOR_IDENTITY_REQUIRED_HINT);
   }
   return false;
+}
+
+/** Emitted when an automatic workspace save stays pending because CutReady doesn't know who is acting. */
+export const WORKSPACE_SNAPSHOT_DEFERRED_EVENT = "workspace-snapshot-deferred";
+
+/** Why an automatic save stayed pending: no known author, or it touched unsaved edits. */
+export type SnapshotDeferReason = "identity" | "unsaved_edits";
+
+export function onWorkspaceSnapshotDeferred(
+  handler: (message: string, reason: SnapshotDeferReason) => void,
+) {
+  return listen<{ message?: unknown; reason?: unknown }>(WORKSPACE_SNAPSHOT_DEFERRED_EVENT, (event) => {
+    const message = event.payload?.message;
+    const reason = event.payload?.reason === "unsaved_edits" ? "unsaved_edits" : "identity";
+    if (typeof message === "string" && message.trim()) handler(message, reason);
+  });
 }

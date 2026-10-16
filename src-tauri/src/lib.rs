@@ -496,6 +496,15 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            // Agent tools have no app handle; let them read the saved profile
+            // so their automatic saves are attributed to the acting user.
+            {
+                let handle = app.handle().clone();
+                engine::identity::install_profile_source(move || {
+                    commands::identity::saved_profile(&handle)
+                })?;
+            }
+
             // Deep link: register URL scheme handler on Windows/Linux
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             {
