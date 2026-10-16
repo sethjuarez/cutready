@@ -2,6 +2,47 @@ import XCTest
 @testable import CutReadyMobileCore
 
 final class SketchDocumentTests: XCTestCase {
+    func testNullLocksEncodeLikeAbsentLocks() throws {
+        let nullCells = Dictionary(uniqueKeysWithValues: PlanningCellField.allCases.map {
+            ($0.rawValue, NSNull())
+        })
+        let cases: [[String: Any]] = [
+            [:],
+            ["locked": NSNull(), "locks": NSNull()],
+            ["locks": nullCells],
+        ]
+        let expectedLocks = Dictionary(uniqueKeysWithValues: PlanningCellField.allCases.map {
+            ($0.rawValue, false)
+        })
+
+        for fields in cases {
+            var input: [String: Any] = ["time": "0:05", "narrative": "Wait.", "demo_actions": "Wait."]
+            input.merge(fields) { _, new in new }
+            let data = try JSONSerialization.data(withJSONObject: input)
+            let row = try JSONDecoder().decode(PlanningRow.self, from: data)
+            let saved = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: JSONEncoder().encode(row)) as? [String: Any]
+            )
+
+            XCTAssertFalse(row.isLocked)
+            XCTAssertEqual(saved["locked"] as? Bool, false)
+            XCTAssertEqual(saved["locks"] as? [String: Bool], expectedLocks)
+        }
+    }
+
+    func testNullLockToleranceStillRejectsMalformedLocks() throws {
+        let invalidLocks: [Any] = [
+            false, 0, "invalid", [false],
+            ["time": "true"], ["narrative": 1],
+        ]
+        for locks in invalidLocks {
+            let data = try JSONSerialization.data(withJSONObject: [
+                "time": "0:05", "narrative": "Wait.", "demo_actions": "Wait.", "locks": locks,
+            ])
+            XCTAssertThrowsError(try JSONDecoder().decode(PlanningRow.self, from: data), "\(locks)")
+        }
+    }
+
     func testDecodesExampleSketchWithPathBackedVisual() throws {
         let data = Data("""
         {

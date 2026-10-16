@@ -14,6 +14,7 @@ on:
       - "ios/Package.swift"
       - "ios/Sources/CutReadyMobileCore/**"
       - "ios/Tests/CutReadyContractConformanceTests/**"
+      - "ios/Tests/CutReadyMobileCoreTests/SketchDocumentTests.swift"
       - "Cargo.lock"
       - ".github/workflows/contracts.yml"
   push:
@@ -27,6 +28,7 @@ on:
       - "ios/Package.swift"
       - "ios/Sources/CutReadyMobileCore/**"
       - "ios/Tests/CutReadyContractConformanceTests/**"
+      - "ios/Tests/CutReadyMobileCoreTests/SketchDocumentTests.swift"
       - "Cargo.lock"
       - ".github/workflows/contracts.yml"
 
@@ -74,8 +76,11 @@ jobs:
       - name: Desktop conformance
         run: cargo test -p cutready-contracts
 
+      - name: Desktop sketch model regressions
+        run: cargo test -p cutready --lib models::sketch
+
       - name: Generated Swift package
         run: swift test --package-path contracts/generated/swift
 
       - name: Companion conformance
-        run: swift test --package-path ios --filter CutReadyContractConformanceTests
+        run: swift test --package-path ios --filter 'CutReadyContractConformanceTests|SketchDocumentTests'

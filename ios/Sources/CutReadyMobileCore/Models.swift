@@ -422,13 +422,13 @@ public struct PlanningRow: Codable, Equatable, Sendable {
     }
 
     private static func decodeLocks(from container: KeyedDecodingContainer<CodingKeys>) throws -> [PlanningCellField: Bool]? {
-        guard container.contains(.locks) else {
+        // `null` locks, or a `null` cell, load like an absent key (contracts/README.md).
+        guard let rawLocks = try container.decodeIfPresent([String: Bool?].self, forKey: .locks) else {
             return nil
         }
 
-        let rawLocks = try container.decode([String: Bool].self, forKey: .locks)
         let mappedLocks = rawLocks.compactMap { key, value -> (PlanningCellField, Bool)? in
-            guard let field = PlanningCellField(rawValue: key) else {
+            guard let field = PlanningCellField(rawValue: key), let value else {
                 return nil
             }
             return (field, value)

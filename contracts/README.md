@@ -39,7 +39,7 @@ swift test --package-path ios
 
 A vector with no adapter fails unless it is waived. A waived vector that starts passing also fails, so remove waivers as adapters land.
 
-The `Contracts` workflow (`.github/workflows/contracts.yml`) runs `npm run check` and all three suites on every change to the contract or either binding.
+The `Contracts` workflow (`.github/workflows/contracts.yml`) runs `npm run check`, the conformance suites, and Rust and Swift sketch model regressions on changes to the contract or either binding.
 
 ## Canonical save form
 
@@ -49,6 +49,7 @@ Desktop is the reference. Every runtime must save `.sk` files this way. Fields t
 | --- | --- |
 | Wire names | `snake_case` |
 | Unknown fields | Preserved on `Sketch` and `PlanningRow`, not on nested models |
+| Optional fields | A known optional field set to `null` loads like an absent key. Locks default to `false`; empty optional collections are omitted on save. Unknown fields keep their null values. |
 | Always written | Row `locked`, all six `locks`, `screenshot` (`null` if unset); sketch `locked`, `description` (`null` if unset); narration `duration_ms` (`null` if unknown) |
 | Omitted when unset or empty | `visual`, `design_plan`, `duration_seconds`, `motion_points`, `typing_spots`, `motion_plan`, `narration`, `narration_plan`, `metadata` |
 | Legacy state | `"sketch"` loads as `"draft"` |

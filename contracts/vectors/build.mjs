@@ -292,6 +292,63 @@ const roundTripVectors = [
       }),
     ]),
   },
+  {
+    name: "null optional fields load as absent",
+    input: {
+      sketch: sketch(
+        [
+          {
+            ...row({
+              time: "0:05",
+              narrative: "Null row.",
+              demo_actions: "Wait.",
+              future_row_field: null,
+              typing_spots: null,
+              motion_plan: { kind: "subtle_push", keyframes: null },
+              narration_plan: {
+                source_text: "Null row.",
+                voice: "en-US-Harper:MAI-Voice-2",
+                locale: "en-US",
+                ssml: "<speak>Null row.</speak>",
+                pronunciation_overrides: null,
+                beats: null,
+                generated_at: "2026-06-28T20:06:00Z",
+              },
+            }),
+            locked: null,
+            locks: null,
+          },
+          row(
+            { time: "0:10", narrative: "Null cell lock.", demo_actions: "Wait." },
+            { time: null, narrative: true, demo_actions: null, screenshot: null, visual: null, design_plan: null },
+          ),
+        ],
+        { locked: null, metadata: null, future_document_field: { kept: null } },
+      ),
+    },
+    expected: sketch([
+      row({
+        time: "0:05",
+        narrative: "Null row.",
+        demo_actions: "Wait.",
+        future_row_field: null,
+        motion_plan: { kind: "subtle_push" },
+        narration_plan: {
+          source_text: "Null row.",
+          voice: "en-US-Harper:MAI-Voice-2",
+          locale: "en-US",
+          ssml: "<speak>Null row.</speak>",
+          generated_at: "2026-06-28T20:06:00Z",
+        },
+      }),
+      row({ time: "0:10", narrative: "Null cell lock.", demo_actions: "Wait." }, { narrative: true }),
+    ], { future_document_field: { kept: null } }),
+  },
+  {
+    name: "null metadata fields load as absent",
+    input: { sketch: sketch([], { metadata: { fields: null } }) },
+    expected: sketch([]),
+  },
 ];
 
 const updateRow = (row_index, cells) => ({ row_index, ...cells });

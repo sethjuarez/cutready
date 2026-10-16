@@ -2293,6 +2293,169 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         .expect("null and empty optional values are omitted: expected parses");
         assert_eq!(actual, expected, "null and empty optional values are omitted misrouted");
     }
+    // vector: null metadata fields load as absent
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "metadata": {
+    "fields": null
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let actual = seam.round_trip(&sketch)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "null metadata fields load as absent", error));
+        let expected = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("null metadata fields load as absent: expected parses");
+        assert_eq!(actual, expected, "null metadata fields load as absent misrouted");
+    }
+    // vector: null optional fields load as absent
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": null,
+  "description": null,
+  "rows": [
+    {
+      "locked": null,
+      "locks": null,
+      "screenshot": null,
+      "time": "0:05",
+      "narrative": "Null row.",
+      "demo_actions": "Wait.",
+      "future_row_field": null,
+      "typing_spots": null,
+      "motion_plan": {
+        "kind": "subtle_push",
+        "keyframes": null
+      },
+      "narration_plan": {
+        "source_text": "Null row.",
+        "voice": "en-US-Harper:MAI-Voice-2",
+        "locale": "en-US",
+        "ssml": "<speak>Null row.</speak>",
+        "pronunciation_overrides": null,
+        "beats": null,
+        "generated_at": "2026-06-28T20:06:00Z"
+      }
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": null,
+        "narrative": true,
+        "demo_actions": null,
+        "screenshot": null,
+        "visual": null,
+        "design_plan": null
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "Null cell lock.",
+      "demo_actions": "Wait."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "metadata": null,
+  "future_document_field": {
+    "kept": null
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let actual = seam.round_trip(&sketch)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "null optional fields load as absent", error));
+        let expected = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:05",
+      "narrative": "Null row.",
+      "demo_actions": "Wait.",
+      "future_row_field": null,
+      "motion_plan": {
+        "kind": "subtle_push"
+      },
+      "narration_plan": {
+        "source_text": "Null row.",
+        "voice": "en-US-Harper:MAI-Voice-2",
+        "locale": "en-US",
+        "ssml": "<speak>Null row.</speak>",
+        "generated_at": "2026-06-28T20:06:00Z"
+      }
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": true,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "Null cell lock.",
+      "demo_actions": "Wait."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_document_field": {
+    "kept": null
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("null optional fields load as absent: expected parses");
+        assert_eq!(actual, expected, "null optional fields load as absent misrouted");
+    }
     // vector: reorder around locked rows keeps locks in place
     {
         let sketch = crate::model::Sketch::from_json(

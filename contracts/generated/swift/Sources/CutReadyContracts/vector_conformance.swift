@@ -736,6 +736,34 @@ public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async thr
       throw SeamConformanceError("null and empty optional values are omitted misrouted")
     }
   }
+  // vector: null metadata fields load as absent
+  do {
+    let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":null}}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("null metadata fields load as absent: failed to parse embedded vector input")
+    }
+    let sketch = try Sketch.load(input["sketch"]!)
+    let actual = try seam.roundTrip(sketch: sketch)
+    let expectedData = "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("null metadata fields load as absent misrouted")
+    }
+  }
+  // vector: null optional fields load as absent
+  do {
+    let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":null,\"description\":null,\"rows\":[{\"locked\":null,\"locks\":null,\"screenshot\":null,\"time\":\"0:05\",\"narrative\":\"Null row.\",\"demo_actions\":\"Wait.\",\"future_row_field\":null,\"typing_spots\":null,\"motion_plan\":{\"kind\":\"subtle_push\",\"keyframes\":null},\"narration_plan\":{\"source_text\":\"Null row.\",\"voice\":\"en-US-Harper:MAI-Voice-2\",\"locale\":\"en-US\",\"ssml\":\"<speak>Null row.</speak>\",\"pronunciation_overrides\":null,\"beats\":null,\"generated_at\":\"2026-06-28T20:06:00Z\"}},{\"locked\":false,\"locks\":{\"time\":null,\"narrative\":true,\"demo_actions\":null,\"screenshot\":null,\"visual\":null,\"design_plan\":null},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Null cell lock.\",\"demo_actions\":\"Wait.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":null,\"future_document_field\":{\"kept\":null}}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("null optional fields load as absent: failed to parse embedded vector input")
+    }
+    let sketch = try Sketch.load(input["sketch"]!)
+    let actual = try seam.roundTrip(sketch: sketch)
+    let expectedData = "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05\",\"narrative\":\"Null row.\",\"demo_actions\":\"Wait.\",\"future_row_field\":null,\"motion_plan\":{\"kind\":\"subtle_push\"},\"narration_plan\":{\"source_text\":\"Null row.\",\"voice\":\"en-US-Harper:MAI-Voice-2\",\"locale\":\"en-US\",\"ssml\":\"<speak>Null row.</speak>\",\"generated_at\":\"2026-06-28T20:06:00Z\"}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Null cell lock.\",\"demo_actions\":\"Wait.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":{\"kept\":null}}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("null optional fields load as absent misrouted")
+    }
+  }
   // vector: reorder around locked rows keeps locks in place
   do {
     let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:40\",\"narrative\":\"Spare.\",\"demo_actions\":\"Wrap up.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"order\":[3,1,2,0],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
