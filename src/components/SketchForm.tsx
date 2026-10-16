@@ -2404,7 +2404,7 @@ Rules:
       onSelect: () => void runBackgroundAgentAction(
         localRows.length === 0
           ? `Generate a complete sketch plan for "${activeSketch?.title ?? "this sketch"}". ${activeSketch?.description && typeof activeSketch.description === "string" ? `Description: ${activeSketch.description}. ` : ""}Create well-structured planning rows with time, narrative, and demo_actions.`
-          : `Review and improve the entire sketch "${activeSketchPath ?? "current"}". Refine the narrative flow, tighten timing, and make demo actions more specific. Use write_sketch to apply changes.`,
+          : `Review and improve the entire sketch "${activeSketchPath ?? "current"}". Refine the narrative flow, tighten timing, and make demo actions more specific. Use write_sketch to apply changes, passing source_row on every row that keeps or edits an existing row.`,
         { label: localRows.length === 0 ? "Generate plan" : "Improve sketch" },
       ),
     },
@@ -2549,7 +2549,7 @@ Rules:
             {localTitle && !sketchLocked && (
               <FieldAiButton
                 onClick={() => void runBackgroundAgentAction(
-                  `Improve the title of sketch "${activeSketchPath ?? "current"}". Current title: "${localTitle}". Suggest a more compelling, concise title. IMPORTANT: Only update the title — do NOT change the description or any rows. Use write_sketch with the improved title but keep the existing description and all rows exactly as they are.`,
+                  `Improve the title of sketch "${activeSketchPath ?? "current"}". Current title: "${localTitle}". Suggest a more compelling, concise title. IMPORTANT: Only update the title — do NOT change the description or any rows. Call write_sketch with only path and title; omit description and rows so they stay unchanged.`,
                   { label: "Improve sketch title" }
                 )}
                 className="absolute right-0 top-1/2 -translate-y-1/2 group-hover/title:opacity-100"
@@ -2579,8 +2579,8 @@ Rules:
             <FieldAiButton
               onClick={() => void runBackgroundAgentAction(
                 localDesc
-                  ? `Improve the description of sketch "${activeSketchPath ?? "current"}". Current description: "${localDesc}". Make it clearer and more informative. IMPORTANT: Only update the description — do NOT change the title or any rows. Use write_sketch with the improved description but keep the existing title and all rows exactly as they are.`
-                  : `Write a description for sketch "${activeSketchPath ?? "current"}" titled "${localTitle}". Look at the planning rows to understand what the sketch covers and write a concise description. IMPORTANT: Only update the description — do NOT change the title or any rows. Use write_sketch with the new description but keep the existing title and all rows exactly as they are.`,
+                  ? `Improve the description of sketch "${activeSketchPath ?? "current"}". Current description: "${localDesc}". Make it clearer and more informative. IMPORTANT: Only update the description — do NOT change the title or any rows. Call write_sketch with only path and description; omit title and rows so they stay unchanged.`
+                  : `Write a description for sketch "${activeSketchPath ?? "current"}" titled "${localTitle}". Look at the planning rows to understand what the sketch covers and write a concise description. IMPORTANT: Only update the description — do NOT change the title or any rows. Call write_sketch with only path and description; omit title and rows so they stay unchanged.`,
                 { label: localDesc ? "Improve sketch description" : "Generate sketch description" }
               )}
               className="absolute right-2 top-2 group-hover/desc:opacity-100 group-focus-within/desc:opacity-100"

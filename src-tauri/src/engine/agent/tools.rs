@@ -22,7 +22,7 @@ use crate::engine::visual_document::{
     normalize_visual_document_for_save, normalize_visual_to_v2, validate_agentic_visual,
     validate_dsl_doc, visual_to_renderable_v1,
 };
-use crate::models::sketch::{MotionPlan, MotionPoint, PlanningRow, Sketch};
+use crate::models::sketch::{PlanningRow, Sketch};
 
 // `ToolDefinition` / `ToolFunctionDefinition` (the wire shape of the tool
 // contract) now live in the `harness-contract` crate. Re-exported here so the
@@ -378,7 +378,7 @@ pub fn all_tools(
         ),
         Tool::function(
             "write_sketch",
-            "Replace ALL planning rows in a sketch, or create a new sketch if the path doesn't exist. Use this to generate a full plan from scratch or restructure an existing sketch.",
+            "Replace the planning rows in a sketch, or create a new sketch if the path doesn't exist. Use this to generate a full plan or restructure an existing sketch. To keep an existing row (edited or moved), set source_row to its row number from read_sketch: the row keeps its narration, visual, design plan, and other attached data, and only the fields you pass change. Rows without source_row start empty, except a row that exactly repeats an existing row's text, which continues it; ambiguous repeats of rows with attached data are rejected, so prefer source_row. Existing rows you don't include are removed. Omit rows to change only the title or description.",
             json!({
                 "type": "object",
                 "properties": {
@@ -387,19 +387,20 @@ pub fn all_tools(
                     "description": { "type": "string", "description": "Brief description of the sketch content and purpose (optional)" },
                     "rows": {
                         "type": "array",
+                        "description": "The complete new row list, in order. Required when creating a sketch; omit to keep the current rows.",
                         "items": {
                             "type": "object",
                             "properties": {
-                                "time": { "type": "string", "description": "Duration (e.g. '~30s', '1:00')" },
-                                "narrative": { "type": "string", "description": "Voiceover/narration bullets" },
-                                "demo_actions": { "type": "string", "description": "On-screen action bullets" },
-                                "screenshot": { "type": "string", "description": "Optional path to a screenshot image (relative, from list_project_files with include_images: true)" }
-                            },
-                            "required": ["time", "narrative", "demo_actions"]
+                                "source_row": { "type": "integer", "minimum": 1, "description": "1-based row number (from read_sketch) of the existing row this row continues. Each existing row can be used once. Omit for a new row." },
+                                "time": { "type": "string", "description": "Duration (e.g. '~30s', '1:00'). Required for new rows; omit to keep the source row's value." },
+                                "narrative": { "type": "string", "description": "Voiceover/narration bullets. Required for new rows; omit to keep the source row's value." },
+                                "demo_actions": { "type": "string", "description": "On-screen action bullets. Required for new rows; omit to keep the source row's value." },
+                                "screenshot": { "type": "string", "description": "Optional path to a screenshot image (relative, from list_project_files with include_images: true). Empty string removes it; omit to keep the source row's screenshot." }
+                            }
                         }
                     }
                 },
-                "required": ["path", "rows"]
+                "required": ["path"]
             }),
         ),
         Tool::function(
@@ -2248,6 +2249,10 @@ fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> ToolOutp
                     Some(plan) => format!("**Design Plan:** {}\n", plan),
                     None => String::new(),
                 };
+                let narration_line = match &row.narration {
+                    Some(_) => "**Narration:** ✓ (audio attached)\n".to_string(),
+                    None => String::new(),
+                };
                 let lock_line = if row.locked {
                     "**Locked:** entire row\n".to_string()
                 } else {
@@ -2269,7 +2274,7 @@ fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> ToolOutp
                     }
                 };
                 out.push_str(&format!(
-                    "## Row {} [{}]\n{}**Narrative:** {}\n**Actions:** {}\n{}{}{}\n",
+                    "## Row {} [{}]\n{}**Narrative:** {}\n**Actions:** {}\n{}{}{}{}\n",
                     i + 1,
                     row.time,
                     lock_line,
@@ -2277,7 +2282,8 @@ fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> ToolOutp
                     row.demo_actions,
                     screenshot_line,
                     visual_line,
-                    plan_line
+                    plan_line,
+                    narration_line
                 ));
             }
             if vision_enabled && !image_parts.is_empty() {
@@ -2294,6 +2300,209 @@ fn exec_read_sketch(root: &Path, args: &Value, vision_enabled: bool) -> ToolOutp
     }
 }
 
+/// Parses an optional structured row field. `null` clears it; malformed input
+/// is rejected rather than silently replacing existing data with a default.
+fn parse_write_sketch_row_field<T: serde::de::DeserializeOwned + Default>(
+    value: &Value,
+    key: &str,
+    row_number: usize,
+) -> Result<T, String> {
+    if value.is_null() {
+        return Ok(T::default());
+    }
+    serde_json::from_value(value.clone())
+        .map_err(|e| format!("Error: invalid '{key}' in row {row_number}: {e}"))
+}
+
+/// Applies the fields supplied for one `write_sketch` row on top of `row`.
+/// Omitted fields keep `row`'s value, so a continued row keeps data the agent
+/// never sees or resends (narration, visuals, motion data, unknown fields).
+fn apply_write_sketch_row_fields(
+    row: &mut PlanningRow,
+    item: &Value,
+    row_number: usize,
+) -> Result<(), String> {
+    if let Some(time) = item.get("time").and_then(Value::as_str) {
+        // A kept duration_seconds would outrank the edited time in totals.
+        if time != row.time && item.get("duration_seconds").is_none() {
+            row.duration_seconds = None;
+        }
+        row.time = time.into();
+    }
+    if let Some(narrative) = item.get("narrative").and_then(Value::as_str) {
+        row.narrative = narrative.into();
+    }
+    if let Some(demo_actions) = item.get("demo_actions").and_then(Value::as_str) {
+        row.demo_actions = demo_actions.into();
+    }
+    if let Some(screenshot) = item.get("screenshot") {
+        row.screenshot = screenshot
+            .as_str()
+            .filter(|s| !s.trim().is_empty())
+            .map(str::to_string);
+    }
+    if let Some(duration) = item.get("duration_seconds") {
+        row.duration_seconds = duration.as_u64().and_then(|v| u32::try_from(v).ok());
+    }
+    if let Some(visual) = item.get("visual") {
+        row.visual = (!visual.is_null()).then(|| visual.clone());
+    }
+    if let Some(design_plan) = item.get("design_plan") {
+        row.design_plan = design_plan.as_str().map(str::to_string);
+    }
+    if let Some(value) = item.get("motion_points") {
+        row.motion_points = parse_write_sketch_row_field(value, "motion_points", row_number)?;
+    }
+    if let Some(value) = item.get("typing_spots") {
+        row.typing_spots = parse_write_sketch_row_field(value, "typing_spots", row_number)?;
+    }
+    if let Some(value) = item.get("motion_plan") {
+        row.motion_plan = parse_write_sketch_row_field(value, "motion_plan", row_number)?;
+    }
+    Ok(())
+}
+
+/// The agent-visible text of a row, as `read_sketch` shows it.
+fn write_sketch_row_text(row: &PlanningRow) -> (&str, &str, &str, &str) {
+    (
+        row.time.as_str(),
+        row.narrative.as_str(),
+        row.demo_actions.as_str(),
+        row.screenshot.as_deref().unwrap_or(""),
+    )
+}
+
+/// Whether `row` carries anything beyond its agent-visible text and locks.
+fn row_has_attached_data(row: &PlanningRow) -> bool {
+    let plain = PlanningRow {
+        locked: row.locked,
+        locks: row.locks.clone(),
+        time: row.time.clone(),
+        narrative: row.narrative.clone(),
+        demo_actions: row.demo_actions.clone(),
+        screenshot: row.screenshot.clone(),
+        ..PlanningRow::new()
+    };
+    serde_json::to_value(row).ok() != serde_json::to_value(&plain).ok()
+}
+
+/// Builds the replacement rows for `write_sketch`. Rows have no stable IDs, so
+/// a row continues an existing one through its explicit 1-based `source_row`.
+/// A row without one that repeats an unclaimed existing row's text exactly is
+/// treated as that row when the pairing is unique; an ambiguous repeat of a
+/// row with attached data is rejected rather than guessed. Returns the rows
+/// and, per row, the source index.
+fn build_write_sketch_rows(
+    items: &[Value],
+    existing: &[PlanningRow],
+) -> Result<(Vec<PlanningRow>, Vec<Option<usize>>), String> {
+    let mut sources: Vec<Option<usize>> = vec![None; items.len()];
+    let mut claimed_by: Vec<Option<usize>> = vec![None; existing.len()];
+
+    for (index, item) in items.iter().enumerate() {
+        let row_number = index + 1;
+        if !item.is_object() {
+            return Err(format!("Error: row {row_number} must be an object"));
+        }
+        let Some(source_row) =
+            parse_integer_arg(item, "source_row").map_err(|e| format!("{e} (row {row_number})"))?
+        else {
+            continue;
+        };
+        if source_row == 0 || source_row > existing.len() {
+            return Err(format!(
+                "Error: source_row {source_row} in row {row_number} does not exist.{}",
+                row_number_hint(existing.len())
+            ));
+        }
+        let source = source_row - 1;
+        if let Some(other) = claimed_by[source] {
+            return Err(format!(
+                "Error: rows {} and {row_number} both use source_row {source_row}; an existing row can continue into only one row",
+                other + 1
+            ));
+        }
+        claimed_by[source] = Some(index);
+        sources[index] = Some(source);
+    }
+
+    let mut candidates = Vec::with_capacity(items.len());
+    for (index, item) in items.iter().enumerate() {
+        let mut candidate = PlanningRow::new();
+        apply_write_sketch_row_fields(&mut candidate, item, index + 1)?;
+        candidates.push(candidate);
+    }
+
+    // Claims only ever pair one requested row with one existing row of the
+    // same text, so they never change another text group's counts.
+    for index in 0..items.len() {
+        if sources[index].is_some() {
+            continue;
+        }
+        let text = write_sketch_row_text(&candidates[index]);
+        let matches: Vec<usize> = (0..existing.len())
+            .filter(|&source| {
+                claimed_by[source].is_none() && write_sketch_row_text(&existing[source]) == text
+            })
+            .collect();
+        if matches.is_empty() {
+            continue;
+        }
+        let repeats: Vec<usize> = (0..items.len())
+            .filter(|&other| {
+                sources[other].is_none() && write_sketch_row_text(&candidates[other]) == text
+            })
+            .collect();
+        if matches.len() == 1 && repeats.len() == 1
+            || !matches
+                .iter()
+                .any(|&source| row_has_attached_data(&existing[source]))
+        {
+            // Unique, or the candidates carry nothing beyond their text, so
+            // any pairing gives the same rows.
+            claimed_by[matches[0]] = Some(index);
+            sources[index] = Some(matches[0]);
+        } else {
+            let label = |indexes: &[usize]| {
+                let numbers = indexes
+                    .iter()
+                    .map(|i| (i + 1).to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                if indexes.len() == 1 {
+                    format!("row {numbers}")
+                } else {
+                    format!("rows {numbers}")
+                }
+            };
+            let verb = if repeats.len() == 1 {
+                "repeats"
+            } else {
+                "repeat"
+            };
+            return Err(format!(
+                "Error: {} {verb} the text of existing {}, so which row continues which is ambiguous. Pass source_row on each row that continues an existing row so its narration, visual, and other attached data stay on the right row.",
+                label(&repeats),
+                label(&matches)
+            ));
+        }
+    }
+
+    let mut rows = Vec::with_capacity(items.len());
+    for (index, (item, candidate)) in items.iter().zip(candidates).enumerate() {
+        let row = match sources[index] {
+            Some(source) => {
+                let mut row = existing[source].clone();
+                apply_write_sketch_row_fields(&mut row, item, index + 1)?;
+                row
+            }
+            None => candidate,
+        };
+        rows.push(row);
+    }
+    Ok((rows, sources))
+}
+
 fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
     let path = match args.get("path").and_then(|v| v.as_str()) {
         Some(p) => match resolve_path(root, p) {
@@ -2302,70 +2511,31 @@ fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
         },
         None => return ToolOutput::failed("Error: missing 'path' argument"),
     };
-    let rows_val = match args.get("rows") {
-        Some(v) => v,
-        None => return ToolOutput::failed("Error: missing 'rows' argument"),
+    let row_items = match args.get("rows") {
+        None => None,
+        Some(value) => match value.as_array() {
+            Some(items) => Some(items),
+            None => return ToolOutput::failed("Error: 'rows' must be an array"),
+        },
     };
 
-    let mut new_rows: Vec<PlanningRow> = match rows_val.as_array() {
-        Some(arr) => arr
-            .iter()
-            .map(|r| PlanningRow {
-                locked: false,
-                locks: crate::models::sketch::PlanningCellLocks::default(),
-                time: r.get("time").and_then(|v| v.as_str()).unwrap_or("").into(),
-                duration_seconds: r
-                    .get("duration_seconds")
-                    .and_then(|v| v.as_u64())
-                    .and_then(|v| u32::try_from(v).ok()),
-                narrative: r
-                    .get("narrative")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .into(),
-                demo_actions: r
-                    .get("demo_actions")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .into(),
-                screenshot: r
-                    .get("screenshot")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
-                visual: r.get("visual").cloned(),
-                motion_points: r
-                    .get("motion_points")
-                    .cloned()
-                    .and_then(|value| serde_json::from_value::<Vec<MotionPoint>>(value).ok())
-                    .unwrap_or_default(),
-                typing_spots: r
-                    .get("typing_spots")
-                    .cloned()
-                    .and_then(|value| {
-                        serde_json::from_value::<Vec<crate::models::sketch::TypingSpot>>(value).ok()
-                    })
-                    .unwrap_or_default(),
-                motion_plan: r
-                    .get("motion_plan")
-                    .cloned()
-                    .and_then(|value| serde_json::from_value::<MotionPlan>(value).ok()),
-                design_plan: r
-                    .get("design_plan")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
-                narration: None,
-                narration_plan: None,
-                unknown_fields: Default::default(),
-            })
-            .collect(),
-        None => return ToolOutput::failed("Error: 'rows' must be an array"),
+    // An existing sketch that fails to parse must not be overwritten.
+    let existing = if path.exists() {
+        match project::read_sketch(&path) {
+            Ok(sketch) => Some(sketch),
+            Err(e) => return ToolOutput::failed(format!("Error reading sketch: {e}")),
+        }
+    } else {
+        None
     };
-    if let Err(e) = validate_planning_row_asset_paths(root, &new_rows) {
-        return ToolOutput::failed(e);
+    let is_new = existing.is_none();
+    if is_new && row_items.is_none() {
+        return ToolOutput::failed(
+            "Error: missing 'rows' argument (required when creating a sketch)",
+        );
     }
 
-    // Load existing sketch or create a new one
-    let mut sketch = match project::read_sketch(&path).ok() {
+    let mut sketch = match existing {
         Some(s) => s,
         None => {
             // New sketch — use provided title or derive from filename
@@ -2406,13 +2576,68 @@ fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
         sketch.description = serde_json::Value::String(d.to_string());
     }
 
-    let count = new_rows.len();
-    if let Err(e) = sketch_edits::replace_rows(&mut sketch, new_rows, chrono::Utc::now()) {
-        return ToolOutput::failed(format!("Error: {e}"));
-    }
+    let summary = match row_items {
+        None => {
+            sketch.updated_at = chrono::Utc::now();
+            format!(
+                "Updated {} and kept its {} planning rows",
+                path.display(),
+                sketch.rows.len()
+            )
+        }
+        Some(items) => {
+            let (new_rows, sources) = match build_write_sketch_rows(items, &sketch.rows) {
+                Ok(built) => built,
+                Err(e) => return ToolOutput::failed(e),
+            };
+            if let Err(e) = validate_planning_row_asset_paths(root, &new_rows) {
+                return ToolOutput::failed(e);
+            }
+            let count = new_rows.len();
+            let continued = sources.iter().flatten().count();
+            let removed: Vec<String> = (0..sketch.rows.len())
+                .filter(|source| !sources.contains(&Some(*source)))
+                .map(|source| (source + 1).to_string())
+                .collect();
+            let stale_narration: Vec<String> = new_rows
+                .iter()
+                .zip(&sources)
+                .enumerate()
+                .filter(|(_, (row, source))| {
+                    source.is_some_and(|s| sketch.rows[s].narrative != row.narrative)
+                        && row
+                            .narration
+                            .as_ref()
+                            .is_some_and(|n| n.source_text != row.narrative)
+                })
+                .map(|(index, _)| (index + 1).to_string())
+                .collect();
+            if let Err(e) = sketch_edits::replace_rows(&mut sketch, new_rows, chrono::Utc::now()) {
+                return ToolOutput::failed(format!("Error: {e}"));
+            }
+            let mut summary = format!("Set {count} planning rows in {}", path.display());
+            if !is_new {
+                summary.push_str(&format!(
+                    " ({continued} continued from existing rows, {} new",
+                    count - continued
+                ));
+                if !removed.is_empty() {
+                    summary.push_str(&format!("; removed existing rows {}", removed.join(", ")));
+                }
+                summary.push(')');
+            }
+            if !stale_narration.is_empty() {
+                summary.push_str(&format!(
+                    ". Narration audio on rows {} was recorded for the previous narrative and is now stale; tell the user to regenerate it",
+                    stale_narration.join(", ")
+                ));
+            }
+            summary
+        }
+    };
 
     match project::write_sketch(&sketch, &path, root) {
-        Ok(()) => ToolOutput::from(format!("Set {count} planning rows in {}", path.display())),
+        Ok(()) => ToolOutput::from(summary),
         Err(e) => ToolOutput::failed(format!("Error writing sketch: {e}")),
     }
 }
@@ -5035,6 +5260,404 @@ mod tests {
         let saved = project::read_sketch(&root.join(rel)).unwrap();
         assert_eq!(saved.rows[0].narrative, "Keep this narrative");
         assert_eq!(saved.rows[0].demo_actions, "Allowed old action");
+    }
+
+    fn rich_row(time: &str, narrative: &str, actions: &str, extra: Value) -> PlanningRow {
+        let mut value = json!({ "time": time, "narrative": narrative, "demo_actions": actions });
+        value
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        serde_json::from_value(value).unwrap()
+    }
+
+    fn narration_json(text: &str) -> Value {
+        json!({
+            "path": format!("narration/{}.mp3", text.len()),
+            "source_text": text,
+            "source_text_hash": "hash",
+            "mime_type": "audio/mpeg",
+            "duration_ms": 1200,
+            "byte_size": 42,
+            "recorded_at": "2026-01-01T00:00:00Z"
+        })
+    }
+
+    fn write_rows(root: &Path, rel: &str, rows: Vec<PlanningRow>) {
+        let mut sketch = Sketch::new("Restructure");
+        sketch.rows = rows;
+        project::write_sketch(&sketch, &root.join(rel), root).unwrap();
+    }
+
+    fn row_value(row: &PlanningRow) -> Value {
+        serde_json::to_value(row).unwrap()
+    }
+
+    #[test]
+    fn write_sketch_source_row_keeps_row_data_when_restructuring() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        let intro = rich_row(
+            "~10s",
+            "Intro",
+            "Show title",
+            json!({
+                "duration_seconds": 10,
+                "screenshot": "shots/intro.png",
+                "visual": ".cutready/visuals/intro.json",
+                "design_plan": "Title card",
+                "narration": narration_json("Intro"),
+                "future_row_field": { "kept": true }
+            }),
+        );
+        let middle = rich_row(
+            "~20s",
+            "Middle",
+            "Click run",
+            json!({ "design_plan": "Callout", "narration": narration_json("Middle"), "future_row_field": 7 }),
+        );
+        write_rows(root, rel, vec![intro.clone(), middle.clone()]);
+
+        let result = exec_write_sketch(
+            root,
+            &json!({
+                "path": rel,
+                "rows": [
+                    { "time": "~5s", "narrative": "New opener", "demo_actions": "Open app" },
+                    { "source_row": 2 },
+                    { "source_row": "1", "narrative": "Intro, tightened", "screenshot": "" }
+                ]
+            }),
+        )
+        .text()
+        .to_string();
+
+        assert!(
+            result.contains("2 continued from existing rows, 1 new"),
+            "{result}"
+        );
+        assert!(
+            result.contains("Narration audio on rows 3 was recorded for the previous narrative"),
+            "{result}"
+        );
+        let saved = project::read_sketch(&root.join(rel)).unwrap();
+        assert_eq!(saved.rows.len(), 3);
+        assert_eq!(saved.rows[0].narrative, "New opener");
+        assert!(saved.rows[0].narration.is_none());
+        assert!(saved.rows[0].visual.is_none());
+        assert!(saved.rows[0].unknown_fields.is_empty());
+        assert_eq!(row_value(&saved.rows[1]), row_value(&middle));
+
+        let mut expected_intro = intro;
+        expected_intro.narrative = "Intro, tightened".into();
+        expected_intro.screenshot = None;
+        assert_eq!(row_value(&saved.rows[2]), row_value(&expected_intro));
+        assert_eq!(
+            saved.rows[2].unknown_fields["future_row_field"],
+            json!({ "kept": true })
+        );
+    }
+
+    #[test]
+    fn write_sketch_keeps_row_data_for_rows_repeated_without_source_row() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        let first = rich_row(
+            "~10s",
+            "First",
+            "Open",
+            json!({ "screenshot": "shots/first.png", "narration": narration_json("First"), "future_row_field": 1 }),
+        );
+        let dropped = rich_row("~5s", "Dropped", "Wait", json!({}));
+        let last = rich_row(
+            "~10s",
+            "Last",
+            "Close",
+            json!({ "visual": ".cutready/visuals/last.json", "narration": narration_json("Last") }),
+        );
+        write_rows(root, rel, vec![first.clone(), dropped, last.clone()]);
+
+        let read = exec_read_sketch(root, &json!({ "path": rel }), false)
+            .text()
+            .to_string();
+        assert!(read.contains("**Narration:** ✓"), "{read}");
+
+        let result = exec_write_sketch(
+            root,
+            &json!({
+                "path": rel,
+                "rows": [
+                    { "time": "~10s", "narrative": "Last", "demo_actions": "Close" },
+                    { "time": "~10s", "narrative": "First", "demo_actions": "Open", "screenshot": "shots/first.png" }
+                ]
+            }),
+        )
+        .text().to_string();
+
+        assert!(result.contains("removed existing rows 2"), "{result}");
+        let saved = project::read_sketch(&root.join(rel)).unwrap();
+        assert_eq!(saved.rows.len(), 2);
+        assert_eq!(row_value(&saved.rows[0]), row_value(&last));
+        assert_eq!(row_value(&saved.rows[1]), row_value(&first));
+    }
+
+    #[test]
+    fn write_sketch_rejects_invalid_source_rows_without_writing() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        write_rows(
+            root,
+            rel,
+            vec![
+                rich_row("~1s", "One", "A", json!({})),
+                rich_row("~2s", "Two", "B", json!({})),
+            ],
+        );
+        let before = std::fs::read_to_string(root.join(rel)).unwrap();
+
+        for (rows, expected) in [
+            (
+                json!([{ "source_row": 3 }]),
+                "source_row 3 in row 1 does not exist",
+            ),
+            (
+                json!([{ "source_row": 0 }]),
+                "source_row 0 in row 1 does not exist",
+            ),
+            (
+                json!([{ "source_row": 1 }, { "source_row": 1 }]),
+                "rows 1 and 2 both use source_row 1",
+            ),
+            (
+                json!([{ "source_row": 1, "motion_plan": "zoom" }]),
+                "invalid 'motion_plan' in row 1",
+            ),
+            (json!(["not a row"]), "row 1 must be an object"),
+        ] {
+            let result = exec_write_sketch(root, &json!({ "path": rel, "rows": rows }))
+                .text()
+                .to_string();
+            assert!(result.starts_with("Error:"), "{result}");
+            assert!(
+                result.contains(expected),
+                "expected {expected:?} in {result}"
+            );
+            assert_eq!(std::fs::read_to_string(root.join(rel)).unwrap(), before);
+        }
+
+        let result = exec_write_sketch(
+            root,
+            &json!({ "path": "new.sk", "rows": [{ "source_row": 1 }] }),
+        )
+        .text()
+        .to_string();
+        assert!(
+            result.contains("source_row 1 in row 1 does not exist"),
+            "{result}"
+        );
+        assert!(!root.join("new.sk").exists());
+    }
+
+    #[test]
+    fn write_sketch_without_rows_updates_title_and_keeps_rows() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        let row = rich_row(
+            "~10s",
+            "Keep",
+            "Me",
+            json!({ "narration": narration_json("Keep"), "future_row_field": "x" }),
+        );
+        write_rows(root, rel, vec![row.clone()]);
+
+        let result = exec_write_sketch(root, &json!({ "path": rel, "title": "Better title" }))
+            .text()
+            .to_string();
+
+        assert!(result.contains("kept its 1 planning rows"), "{result}");
+        let saved = project::read_sketch(&root.join(rel)).unwrap();
+        assert_eq!(saved.title, "Better title");
+        assert_eq!(row_value(&saved.rows[0]), row_value(&row));
+
+        let result = exec_write_sketch(root, &json!({ "path": "new.sk", "title": "New" }))
+            .text()
+            .to_string();
+        assert!(
+            result.contains("required when creating a sketch"),
+            "{result}"
+        );
+        assert!(!root.join("new.sk").exists());
+    }
+
+    #[test]
+    fn write_sketch_refuses_to_overwrite_unreadable_sketch() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "broken.sk";
+        std::fs::write(root.join(rel), "{ not json").unwrap();
+
+        let result = exec_write_sketch(
+            root,
+            &json!({ "path": rel, "rows": [{ "time": "", "narrative": "New", "demo_actions": "" }] }),
+        )
+        .text().to_string();
+
+        assert!(result.starts_with("Error reading sketch:"), "{result}");
+        assert_eq!(
+            std::fs::read_to_string(root.join(rel)).unwrap(),
+            "{ not json"
+        );
+    }
+
+    #[test]
+    fn write_sketch_source_row_keeps_locked_row_with_attached_data() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        let mut row = rich_row(
+            "~10s",
+            "Locked",
+            "Hold",
+            json!({ "narration": narration_json("Locked"), "visual": ".cutready/visuals/locked.json" }),
+        );
+        row.locked = true;
+        write_rows(root, rel, vec![row.clone()]);
+
+        let result = exec_write_sketch(
+            root,
+            &json!({ "path": rel, "title": "Renamed", "rows": [{ "source_row": 1 }] }),
+        )
+        .text()
+        .to_string();
+
+        assert!(!result.starts_with("Error"), "{result}");
+        let saved = project::read_sketch(&root.join(rel)).unwrap();
+        assert_eq!(saved.title, "Renamed");
+        assert_eq!(row_value(&saved.rows[0]), row_value(&row));
+    }
+
+    #[test]
+    fn write_sketch_clears_kept_duration_only_when_time_changes() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        write_rows(
+            root,
+            rel,
+            vec![
+                rich_row("~10s", "A", "a", json!({ "duration_seconds": 10 })),
+                rich_row("~20s", "B", "b", json!({ "duration_seconds": 20 })),
+                rich_row("~30s", "C", "c", json!({ "duration_seconds": 30 })),
+            ],
+        );
+
+        let result = exec_write_sketch(
+            root,
+            &json!({
+                "path": rel,
+                "rows": [
+                    { "source_row": 1, "time": "~15s" },
+                    { "source_row": 2, "time": "~20s", "narrative": "B edited" },
+                    { "source_row": 3, "time": "~45s", "duration_seconds": 45 }
+                ]
+            }),
+        )
+        .text()
+        .to_string();
+
+        assert!(!result.starts_with("Error"), "{result}");
+        let saved = project::read_sketch(&root.join(rel)).unwrap();
+        assert_eq!(saved.rows[0].time, "~15s");
+        assert_eq!(saved.rows[0].duration_seconds, None);
+        assert_eq!(saved.rows[1].duration_seconds, Some(20));
+        assert_eq!(saved.rows[2].duration_seconds, Some(45));
+    }
+
+    #[test]
+    fn write_sketch_rejects_ambiguous_repeats_of_rows_with_attached_data() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        let same = |text: &str| {
+            rich_row(
+                "~10s",
+                "Same",
+                "Do it",
+                json!({ "narration": narration_json(text) }),
+            )
+        };
+        let plain = json!({ "time": "~10s", "narrative": "Same", "demo_actions": "Do it" });
+
+        // One existing row with narration, requested twice without source_row.
+        write_rows(root, rel, vec![same("Same")]);
+        let before = std::fs::read_to_string(root.join(rel)).unwrap();
+        let result = exec_write_sketch(root, &json!({ "path": rel, "rows": [plain, plain] }))
+            .text()
+            .to_string();
+        assert!(
+            result.contains("rows 1, 2 repeat the text of existing row 1,"),
+            "{result}"
+        );
+        assert_eq!(std::fs::read_to_string(root.join(rel)).unwrap(), before);
+
+        // Two existing rows with different narration, requested once.
+        write_rows(root, rel, vec![same("first"), same("second")]);
+        let before = std::fs::read_to_string(root.join(rel)).unwrap();
+        let result = exec_write_sketch(root, &json!({ "path": rel, "rows": [plain] }))
+            .text()
+            .to_string();
+        assert!(
+            result.contains("row 1 repeats the text of existing rows 1, 2,"),
+            "{result}"
+        );
+        assert_eq!(std::fs::read_to_string(root.join(rel)).unwrap(), before);
+
+        // source_row resolves it.
+        let result = exec_write_sketch(
+            root,
+            &json!({ "path": rel, "rows": [{ "source_row": 2 }, plain] }),
+        )
+        .text()
+        .to_string();
+        assert!(!result.starts_with("Error"), "{result}");
+        let saved = project::read_sketch(&root.join(rel)).unwrap();
+        assert_eq!(
+            saved.rows[0].narration.as_ref().unwrap().source_text,
+            "second"
+        );
+        assert_eq!(
+            saved.rows[1].narration.as_ref().unwrap().source_text,
+            "first"
+        );
+    }
+
+    #[test]
+    fn write_sketch_pairs_ambiguous_repeats_of_plain_rows_in_order() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let rel = "demo.sk";
+        let blank = rich_row("", "", "", json!({}));
+        write_rows(root, rel, vec![blank.clone(), blank.clone()]);
+
+        let empty = json!({ "time": "", "narrative": "", "demo_actions": "" });
+        let result =
+            exec_write_sketch(root, &json!({ "path": rel, "rows": [empty, empty, empty] }))
+                .text()
+                .to_string();
+
+        assert!(
+            result.contains("2 continued from existing rows, 1 new)"),
+            "{result}"
+        );
+        let saved = project::read_sketch(&root.join(rel)).unwrap();
+        assert_eq!(saved.rows.len(), 3);
+        for row in &saved.rows {
+            assert_eq!(row_value(row), row_value(&blank));
+        }
     }
 
     #[test]
