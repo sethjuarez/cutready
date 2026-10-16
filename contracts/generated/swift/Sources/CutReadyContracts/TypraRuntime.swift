@@ -72,6 +72,9 @@ public enum TypraRuntime {
   }
 
   public static func double(_ data: Any, field: String) throws -> Double {
+    if isNativeBool(data) { throw TypraRuntimeError.invalidField(field: field, expected: "number") }
+    if let value = nativeSigned(data) { return Double(value) }
+    if let value = nativeUnsigned(data) { return Double(value) }
     if let number = data as? NSNumber {
       if isBoolNumber(number) { throw TypraRuntimeError.invalidField(field: field, expected: "number") }
       return number.doubleValue
@@ -101,7 +104,66 @@ public enum TypraRuntime {
     return Int32(value)
   }
 
+  public static func int16(_ data: Any, field: String) throws -> Int16 {
+    guard let value = Int16(exactly: try int64(data, field: field)) else { throw TypraRuntimeError.invalidField(field: field, expected: "int16") }
+    return value
+  }
+
+  public static func int8(_ data: Any, field: String) throws -> Int8 {
+    guard let value = Int8(exactly: try int64(data, field: field)) else { throw TypraRuntimeError.invalidField(field: field, expected: "int8") }
+    return value
+  }
+
+  public static func uint32(_ data: Any, field: String) throws -> UInt32 {
+    guard let value = UInt32(exactly: try int64(data, field: field)) else { throw TypraRuntimeError.invalidField(field: field, expected: "uint32") }
+    return value
+  }
+
+  public static func uint16(_ data: Any, field: String) throws -> UInt16 {
+    guard let value = UInt16(exactly: try int64(data, field: field)) else { throw TypraRuntimeError.invalidField(field: field, expected: "uint16") }
+    return value
+  }
+
+  public static func uint8(_ data: Any, field: String) throws -> UInt8 {
+    guard let value = UInt8(exactly: try int64(data, field: field)) else { throw TypraRuntimeError.invalidField(field: field, expected: "uint8") }
+    return value
+  }
+
+  public static func uint64(_ data: Any, field: String) throws -> UInt64 {
+    if isNativeBool(data) { throw TypraRuntimeError.invalidField(field: field, expected: "integer") }
+    if let value = nativeUnsigned(data) { return value }
+    if let value = nativeSigned(data) {
+      guard let unsigned = UInt64(exactly: value) else { throw TypraRuntimeError.invalidField(field: field, expected: "uint64") }
+      return unsigned
+    }
+    if let number = data as? NSNumber {
+      if isBoolNumber(number) { throw TypraRuntimeError.invalidField(field: field, expected: "integer") }
+      switch String(cString: number.objCType) {
+      case "C", "S", "I", "L", "Q":
+        return number.uint64Value
+      default:
+        break
+      }
+    }
+    if let value = data as? UInt64 { return value }
+    if let value = data as? UInt { return UInt64(value) }
+    if let value = try? int64(data, field: field) {
+      guard let unsigned = UInt64(exactly: value) else { throw TypraRuntimeError.invalidField(field: field, expected: "uint64") }
+      return unsigned
+    }
+    // Above Int64.max the value arrives as a wide NSNumber or Decimal; accept only an exact integer.
+    if let decimal = data as? Decimal, let value = UInt64(NSDecimalNumber(decimal: decimal).stringValue) { return value }
+    if let number = data as? NSNumber, let value = UInt64(number.stringValue) { return value }
+    throw TypraRuntimeError.invalidField(field: field, expected: "uint64")
+  }
+
   public static func int64(_ data: Any, field: String) throws -> Int64 {
+    if isNativeBool(data) { throw TypraRuntimeError.invalidField(field: field, expected: "integer") }
+    if let value = nativeSigned(data) { return value }
+    if let value = nativeUnsigned(data) {
+      guard value <= UInt64(Int64.max) else { throw TypraRuntimeError.invalidField(field: field, expected: "int64") }
+      return Int64(value)
+    }
     if let number = data as? NSNumber {
       if isBoolNumber(number) { throw TypraRuntimeError.invalidField(field: field, expected: "integer") }
       return try exactInt64(number, field: field)
@@ -119,6 +181,10 @@ public enum TypraRuntime {
       return Int64(value)
     }
     if let value = data as? UInt32 { return Int64(value) }
+    if let value = data as? Int16 { return Int64(value) }
+    if let value = data as? Int8 { return Int64(value) }
+    if let value = data as? UInt16 { return Int64(value) }
+    if let value = data as? UInt8 { return Int64(value) }
     throw TypraRuntimeError.invalidField(field: field, expected: "integer")
   }
 
@@ -144,9 +210,39 @@ public enum TypraRuntime {
     return parsed
   }
 
+  // Swift-native integers are matched by exact dynamic type, never by NSNumber bridging:
+  // NSNumber(value: Int8) reports objCType "c", the same encoding Foundation uses for Bool.
+  public static func isNativeBool(_ data: Any) -> Bool {
+    return type(of: data) == Bool.self
+  }
+
+  public static func nativeSigned(_ data: Any) -> Int64? {
+    let dynamicType = type(of: data)
+    if dynamicType == Int8.self { return Int64(data as! Int8) }
+    if dynamicType == Int16.self { return Int64(data as! Int16) }
+    if dynamicType == Int32.self { return Int64(data as! Int32) }
+    if dynamicType == Int64.self { return data as? Int64 }
+    if dynamicType == Int.self { return Int64(data as! Int) }
+    return nil
+  }
+
+  public static func nativeUnsigned(_ data: Any) -> UInt64? {
+    let dynamicType = type(of: data)
+    if dynamicType == UInt8.self { return UInt64(data as! UInt8) }
+    if dynamicType == UInt16.self { return UInt64(data as! UInt16) }
+    if dynamicType == UInt32.self { return UInt64(data as! UInt32) }
+    if dynamicType == UInt64.self { return data as? UInt64 }
+    if dynamicType == UInt.self { return UInt64(data as! UInt) }
+    return nil
+  }
+
   public static func isBoolNumber(_ number: NSNumber) -> Bool {
+    #if canImport(Darwin)
+    return CFGetTypeID(number as CFTypeRef) == CFBooleanGetTypeID()
+    #else
     let type = String(cString: number.objCType)
     return type == "c" || type == "B"
+    #endif
   }
 
   public static func jsonObject(from json: String, typeName: String) throws -> Any {

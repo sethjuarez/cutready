@@ -104,34 +104,34 @@ impl PlanningRow {
     }
 
     pub(crate) fn validate_input_at(value: &serde_json::Value, path: &str) -> Result<(), String> {
-        let child_path = if path.is_empty() { "locks".to_string() } else { format!("{}.locks", path) };
-        if let Some(child) = value.get("locks") {
+        let child_path = if path.is_empty() { "locks".to_string() } else { format!("{}.{}", path, "locks") };
+        if let Some(child) = value.get("locks").filter(|candidate| !candidate.is_null()) {
             PlanningCellLocks::validate_input_at(child, &child_path)?;
         }
         if let Some(entries) = value.get("motion_points").and_then(|candidate| candidate.as_array()) {
-            let collection_path = if path.is_empty() { "motion_points".to_string() } else { format!("{}.motion_points", path) };
+            let collection_path = if path.is_empty() { "motion_points".to_string() } else { format!("{}.{}", path, "motion_points") };
             for (index, entry) in entries.iter().enumerate() {
                 let entry_path = format!("{}[{}]", collection_path, index);
                 MotionPoint::validate_input_at(entry, &entry_path)?;
             }
         }
         if let Some(entries) = value.get("typing_spots").and_then(|candidate| candidate.as_array()) {
-            let collection_path = if path.is_empty() { "typing_spots".to_string() } else { format!("{}.typing_spots", path) };
+            let collection_path = if path.is_empty() { "typing_spots".to_string() } else { format!("{}.{}", path, "typing_spots") };
             for (index, entry) in entries.iter().enumerate() {
                 let entry_path = format!("{}[{}]", collection_path, index);
                 TypingSpot::validate_input_at(entry, &entry_path)?;
             }
         }
-        let child_path = if path.is_empty() { "motion_plan".to_string() } else { format!("{}.motion_plan", path) };
-        if let Some(child) = value.get("motion_plan") {
+        let child_path = if path.is_empty() { "motion_plan".to_string() } else { format!("{}.{}", path, "motion_plan") };
+        if let Some(child) = value.get("motion_plan").filter(|candidate| !candidate.is_null()) {
             MotionPlan::validate_input_at(child, &child_path)?;
         }
-        let child_path = if path.is_empty() { "narration".to_string() } else { format!("{}.narration", path) };
-        if let Some(child) = value.get("narration") {
+        let child_path = if path.is_empty() { "narration".to_string() } else { format!("{}.{}", path, "narration") };
+        if let Some(child) = value.get("narration").filter(|candidate| !candidate.is_null()) {
             NarrationAsset::validate_input_at(child, &child_path)?;
         }
-        let child_path = if path.is_empty() { "narration_plan".to_string() } else { format!("{}.narration_plan", path) };
-        if let Some(child) = value.get("narration_plan") {
+        let child_path = if path.is_empty() { "narration_plan".to_string() } else { format!("{}.{}", path, "narration_plan") };
+        if let Some(child) = value.get("narration_plan").filter(|candidate| !candidate.is_null()) {
             NarrationPlan::validate_input_at(child, &child_path)?;
         }
         Ok(())

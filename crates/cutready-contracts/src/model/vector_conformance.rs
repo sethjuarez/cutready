@@ -152,7 +152,8 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
             &ctx,
         )
         .expect("sketch parses");
-        let actual = seam.round_trip(&sketch);
+        let actual = seam.round_trip(&sketch)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "canonical desktop sketch is unchanged", error));
         let expected = crate::model::Sketch::from_json(
             r####"
 {
@@ -285,7 +286,103 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         .expect("canonical desktop sketch is unchanged: expected parses");
         assert_eq!(actual, expected, "canonical desktop sketch is unchanged misrouted");
     }
-    // skipped: earlier locked cell fires before a later locked row — expectedError on a @sync op has no typed error channel
+    // vector: earlier locked cell fires before a later locked row
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/open.png",
+      "time": "0:10",
+      "duration_seconds": 10,
+      "narrative": "Open the app.",
+      "demo_actions": "Click Open.",
+      "motion_points": [
+        {
+          "rank": 1,
+          "x": 0.5,
+          "y": 0.25
+        }
+      ],
+      "future_row_field": {
+        "keep": true
+      }
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": true,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Locked narration.",
+      "demo_actions": "Type a name."
+    },
+    {
+      "locked": true,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:30",
+      "narrative": "Locked row.",
+      "demo_actions": "Close."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_document_field": [
+    "still",
+    "here"
+  ]
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let order: Vec<i32> = serde_json::from_str(
+            r####"
+[
+  0,
+  2,
+  1
+]
+"####,
+        )
+        .expect("order parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.reorder_rows(&sketch, &order, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "earlier locked cell fires before a later locked row");
+    }
     // vector: edit time keeps microseconds
     {
         let sketch = crate::model::Sketch::from_json(
@@ -351,7 +448,8 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
 "####,
         )
         .expect("now parses");
-        let actual = seam.update_row_text(&sketch, &update, &now);
+        let actual = seam.update_row_text(&sketch, &update, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "edit time keeps microseconds", error));
         let expected = crate::model::Sketch::from_json(
             r####"
 {
@@ -433,7 +531,8 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
             &ctx,
         )
         .expect("sketch parses");
-        let actual = seam.round_trip(&sketch);
+        let actual = seam.round_trip(&sketch)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "legacy minimal sketch gains canonical defaults", error));
         let expected = crate::model::Sketch::from_json(
             r####"
 {
@@ -573,7 +672,8 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
 "####,
         )
         .expect("now parses");
-        let actual = seam.update_row_text(&sketch, &update, &now);
+        let actual = seam.update_row_text(&sketch, &update, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "locked cell accepts an unchanged value", error));
         let expected = crate::model::Sketch::from_json(
             r####"
 {
@@ -652,13 +752,539 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         .expect("locked cell accepts an unchanged value: expected parses");
         assert_eq!(actual, expected, "locked cell accepts an unchanged value misrouted");
     }
-    // skipped: locked cell rejects a change — expectedError on a @sync op has no typed error channel
-    // skipped: locked cells are checked in column order — expectedError on a @sync op has no typed error channel
-    // skipped: locked row protects fields a runtime does not model — expectedError on a @sync op has no typed error channel
-    // skipped: locked row rejects a change — expectedError on a @sync op has no typed error channel
-    // skipped: locked sketch rejects every edit — expectedError on a @sync op has no typed error channel
-    // skipped: locked sketch takes precedence over a missing row — expectedError on a @sync op has no typed error channel
-    // skipped: locked sketch takes precedence over an invalid order — expectedError on a @sync op has no typed error channel
+    // vector: locked cell rejects a change
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/open.png",
+      "time": "0:10",
+      "duration_seconds": 10,
+      "narrative": "Open the app.",
+      "demo_actions": "Click Open.",
+      "motion_points": [
+        {
+          "rank": 1,
+          "x": 0.5,
+          "y": 0.25
+        }
+      ],
+      "future_row_field": {
+        "keep": true
+      }
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": true,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Locked narration.",
+      "demo_actions": "Type a name."
+    },
+    {
+      "locked": true,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:30",
+      "narrative": "Locked row.",
+      "demo_actions": "Close."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_document_field": [
+    "still",
+    "here"
+  ]
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let update = crate::model::RowTextUpdate::from_json(
+            r####"
+{
+  "row_index": 1,
+  "narrative": "Changed."
+}
+"####,
+            &ctx,
+        )
+        .expect("update parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.update_row_text(&sketch, &update, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "locked cell rejects a change");
+    }
+    // vector: locked cells are checked in column order
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": true,
+      "locks": {
+        "time": false,
+        "narrative": true,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "Row lock wins.",
+      "demo_actions": "Hold."
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": true,
+        "narrative": true,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Two locked cells.",
+      "demo_actions": "Hold."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let update = crate::model::RowTextUpdate::from_json(
+            r####"
+{
+  "row_index": 1,
+  "time": "0:25",
+  "narrative": "Changed."
+}
+"####,
+            &ctx,
+        )
+        .expect("update parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.update_row_text(&sketch, &update, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "locked cells are checked in column order");
+    }
+    // vector: locked row protects fields a runtime does not model
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": true,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "Same.",
+      "demo_actions": "Same.",
+      "future_row_field": "a"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "Same.",
+      "demo_actions": "Same.",
+      "future_row_field": "b"
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let order: Vec<i32> = serde_json::from_str(
+            r####"
+[
+  1,
+  0
+]
+"####,
+        )
+        .expect("order parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.reorder_rows(&sketch, &order, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "locked row protects fields a runtime does not model");
+    }
+    // vector: locked row rejects a change
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/open.png",
+      "time": "0:10",
+      "duration_seconds": 10,
+      "narrative": "Open the app.",
+      "demo_actions": "Click Open.",
+      "motion_points": [
+        {
+          "rank": 1,
+          "x": 0.5,
+          "y": 0.25
+        }
+      ],
+      "future_row_field": {
+        "keep": true
+      }
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": true,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Locked narration.",
+      "demo_actions": "Type a name."
+    },
+    {
+      "locked": true,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:30",
+      "narrative": "Locked row.",
+      "demo_actions": "Close."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_document_field": [
+    "still",
+    "here"
+  ]
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let update = crate::model::RowTextUpdate::from_json(
+            r####"
+{
+  "row_index": 2,
+  "time": "0:45"
+}
+"####,
+            &ctx,
+        )
+        .expect("update parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.update_row_text(&sketch, &update, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "locked row rejects a change");
+    }
+    // vector: locked sketch rejects every edit
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": true,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "First.",
+      "demo_actions": "Open.",
+      "future_row_field": "first"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/second.png",
+      "time": "0:20",
+      "narrative": "Second.",
+      "demo_actions": "Click."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let update = crate::model::RowTextUpdate::from_json(
+            r####"
+{
+  "row_index": 0,
+  "narrative": "First."
+}
+"####,
+            &ctx,
+        )
+        .expect("update parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.update_row_text(&sketch, &update, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "locked sketch rejects every edit");
+    }
+    // vector: locked sketch takes precedence over a missing row
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": true,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "First.",
+      "demo_actions": "Open.",
+      "future_row_field": "first"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/second.png",
+      "time": "0:20",
+      "narrative": "Second.",
+      "demo_actions": "Click."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let update = crate::model::RowTextUpdate::from_json(
+            r####"
+{
+  "row_index": 9,
+  "narrative": "Missing."
+}
+"####,
+            &ctx,
+        )
+        .expect("update parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.update_row_text(&sketch, &update, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "locked sketch takes precedence over a missing row");
+    }
+    // vector: locked sketch takes precedence over an invalid order
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": true,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "First.",
+      "demo_actions": "Open.",
+      "future_row_field": "first"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/second.png",
+      "time": "0:20",
+      "narrative": "Second.",
+      "demo_actions": "Click."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let order: Vec<i32> = serde_json::from_str(
+            r####"
+[
+  0,
+  0
+]
+"####,
+        )
+        .expect("order parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.reorder_rows(&sketch, &order, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "locked sketch takes precedence over an invalid order");
+    }
     // vector: narrative edit preserves desktop-only and unknown fields
     {
         let sketch = crate::model::Sketch::from_json(
@@ -753,7 +1379,8 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
 "####,
         )
         .expect("now parses");
-        let actual = seam.update_row_text(&sketch, &update, &now);
+        let actual = seam.update_row_text(&sketch, &update, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "narrative edit preserves desktop-only and unknown fields", error));
         let expected = crate::model::Sketch::from_json(
             r####"
 {
@@ -900,7 +1527,8 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
             &ctx,
         )
         .expect("sketch parses");
-        let actual = seam.round_trip(&sketch);
+        let actual = seam.round_trip(&sketch)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "null and empty optional values are omitted", error));
         let expected = crate::model::Sketch::from_json(
             r####"
 {
@@ -1063,7 +1691,8 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
 "####,
         )
         .expect("now parses");
-        let actual = seam.reorder_rows(&sketch, &order, &now);
+        let actual = seam.reorder_rows(&sketch, &order, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "reorder around locked rows keeps locks in place", error));
         let expected = crate::model::Sketch::from_json(
             r####"
 {
@@ -1221,7 +1850,8 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
 "####,
         )
         .expect("now parses");
-        let actual = seam.reorder_rows(&sketch, &order, &now);
+        let actual = seam.reorder_rows(&sketch, &order, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "reorder moves whole rows including unknown fields", error));
         let expected = crate::model::Sketch::from_json(
             r####"
 {
@@ -1271,12 +1901,499 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         .expect("reorder moves whole rows including unknown fields: expected parses");
         assert_eq!(actual, expected, "reorder moves whole rows including unknown fields misrouted");
     }
-    // skipped: reorder that changes a locked cell is rejected — expectedError on a @sync op has no typed error channel
-    // skipped: reorder that changes a locked row is rejected — expectedError on a @sync op has no typed error channel
-    // skipped: reorder that is not a permutation is rejected — expectedError on a @sync op has no typed error channel
-    // skipped: row index outside the table is rejected — expectedError on a @sync op has no typed error channel
-    // skipped: row lock takes precedence over a cell lock — expectedError on a @sync op has no typed error channel
-    // skipped: screenshot lock also guards the visual — expectedError on a @sync op has no typed error channel
+    // vector: reorder that changes a locked cell is rejected
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/open.png",
+      "time": "0:10",
+      "duration_seconds": 10,
+      "narrative": "Open the app.",
+      "demo_actions": "Click Open.",
+      "motion_points": [
+        {
+          "rank": 1,
+          "x": 0.5,
+          "y": 0.25
+        }
+      ],
+      "future_row_field": {
+        "keep": true
+      }
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": true,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Locked narration.",
+      "demo_actions": "Type a name."
+    },
+    {
+      "locked": true,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:30",
+      "narrative": "Locked row.",
+      "demo_actions": "Close."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_document_field": [
+    "still",
+    "here"
+  ]
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let order: Vec<i32> = serde_json::from_str(
+            r####"
+[
+  1,
+  0,
+  2
+]
+"####,
+        )
+        .expect("order parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.reorder_rows(&sketch, &order, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "reorder that changes a locked cell is rejected");
+    }
+    // vector: reorder that changes a locked row is rejected
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/open.png",
+      "time": "0:10",
+      "duration_seconds": 10,
+      "narrative": "Open the app.",
+      "demo_actions": "Click Open.",
+      "motion_points": [
+        {
+          "rank": 1,
+          "x": 0.5,
+          "y": 0.25
+        }
+      ],
+      "future_row_field": {
+        "keep": true
+      }
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": true,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Locked narration.",
+      "demo_actions": "Type a name."
+    },
+    {
+      "locked": true,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:30",
+      "narrative": "Locked row.",
+      "demo_actions": "Close."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_document_field": [
+    "still",
+    "here"
+  ]
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let order: Vec<i32> = serde_json::from_str(
+            r####"
+[
+  2,
+  1,
+  0
+]
+"####,
+        )
+        .expect("order parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.reorder_rows(&sketch, &order, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "reorder that changes a locked row is rejected");
+    }
+    // vector: reorder that is not a permutation is rejected
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "First.",
+      "demo_actions": "Open.",
+      "future_row_field": "first"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/second.png",
+      "time": "0:20",
+      "narrative": "Second.",
+      "demo_actions": "Click."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let order: Vec<i32> = serde_json::from_str(
+            r####"
+[
+  0,
+  0
+]
+"####,
+        )
+        .expect("order parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.reorder_rows(&sketch, &order, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "reorder that is not a permutation is rejected");
+    }
+    // vector: row index outside the table is rejected
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/open.png",
+      "time": "0:10",
+      "duration_seconds": 10,
+      "narrative": "Open the app.",
+      "demo_actions": "Click Open.",
+      "motion_points": [
+        {
+          "rank": 1,
+          "x": 0.5,
+          "y": 0.25
+        }
+      ],
+      "future_row_field": {
+        "keep": true
+      }
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": true,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Locked narration.",
+      "demo_actions": "Type a name."
+    },
+    {
+      "locked": true,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:30",
+      "narrative": "Locked row.",
+      "demo_actions": "Close."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_document_field": [
+    "still",
+    "here"
+  ]
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let update = crate::model::RowTextUpdate::from_json(
+            r####"
+{
+  "row_index": 3,
+  "narrative": "Missing."
+}
+"####,
+            &ctx,
+        )
+        .expect("update parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.update_row_text(&sketch, &update, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "row index outside the table is rejected");
+    }
+    // vector: row lock takes precedence over a cell lock
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": true,
+      "locks": {
+        "time": false,
+        "narrative": true,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "Row lock wins.",
+      "demo_actions": "Hold."
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": true,
+        "narrative": true,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Two locked cells.",
+      "demo_actions": "Hold."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let update = crate::model::RowTextUpdate::from_json(
+            r####"
+{
+  "row_index": 0,
+  "narrative": "Changed."
+}
+"####,
+            &ctx,
+        )
+        .expect("update parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.update_row_text(&sketch, &update, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "row lock takes precedence over a cell lock");
+    }
+    // vector: screenshot lock also guards the visual
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": true,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/shared.png",
+      "time": "0:10",
+      "narrative": "A.",
+      "demo_actions": "",
+      "visual": ".cutready/visuals/one.json"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/shared.png",
+      "time": "0:10",
+      "narrative": "A.",
+      "demo_actions": "",
+      "visual": ".cutready/visuals/two.json"
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let order: Vec<i32> = serde_json::from_str(
+            r####"
+[
+  1,
+  0
+]
+"####,
+        )
+        .expect("order parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.reorder_rows(&sketch, &order, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "screenshot lock also guards the visual");
+    }
     // vector: time edit leaves duration_seconds untouched
     {
         let sketch = crate::model::Sketch::from_json(
@@ -1371,7 +2488,8 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
 "####,
         )
         .expect("now parses");
-        let actual = seam.update_row_text(&sketch, &update, &now);
+        let actual = seam.update_row_text(&sketch, &update, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "time edit leaves duration_seconds untouched", error));
         let expected = crate::model::Sketch::from_json(
             r####"
 {
@@ -1495,7 +2613,8 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
             &ctx,
         )
         .expect("sketch parses");
-        let actual = seam.round_trip(&sketch);
+        let actual = seam.round_trip(&sketch)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "timestamps are saved as UTC", error));
         let expected = crate::model::Sketch::from_json(
             r####"
 {
@@ -1619,7 +2738,8 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
             &ctx,
         )
         .expect("sketch parses");
-        let actual = seam.round_trip(&sketch);
+        let actual = seam.round_trip(&sketch)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "unknown sketch and row fields are preserved", error));
         let expected = crate::model::Sketch::from_json(
             r####"
 {
@@ -1793,7 +2913,8 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
 "####,
         )
         .expect("now parses");
-        let actual = seam.update_row_text(&sketch, &update, &now);
+        let actual = seam.update_row_text(&sketch, &update, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "unlocked cells on a row with a locked cell are editable", error));
         let expected = crate::model::Sketch::from_json(
             r####"
 {
@@ -1872,5 +2993,72 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         .expect("unlocked cells on a row with a locked cell are editable: expected parses");
         assert_eq!(actual, expected, "unlocked cells on a row with a locked cell are editable misrouted");
     }
-    // skipped: visual lock also guards the screenshot — expectedError on a @sync op has no typed error channel
+    // vector: visual lock also guards the screenshot
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": true,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/one.png",
+      "time": "0:10",
+      "narrative": "A.",
+      "demo_actions": "",
+      "visual": ".cutready/visuals/shared.json"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/two.png",
+      "time": "0:10",
+      "narrative": "A.",
+      "demo_actions": "",
+      "visual": ".cutready/visuals/shared.json"
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let order: Vec<i32> = serde_json::from_str(
+            r####"
+[
+  1,
+  0
+]
+"####,
+        )
+        .expect("order parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.reorder_rows(&sketch, &order, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "visual lock also guards the screenshot");
+    }
 }

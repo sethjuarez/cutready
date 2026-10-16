@@ -12,7 +12,7 @@ use super::planning_row::PlanningRow;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SketchState {
     Draft,
-    Recording_enriched,
+    RecordingEnriched,
     Refined,
     Final,
 }
@@ -27,7 +27,7 @@ impl std::fmt::Display for SketchState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Draft => write!(f, "draft"),
-            Self::Recording_enriched => write!(f, "recording_enriched"),
+            Self::RecordingEnriched => write!(f, "recording_enriched"),
             Self::Refined => write!(f, "refined"),
             Self::Final => write!(f, "final"),
         }
@@ -38,7 +38,7 @@ impl SketchState {
     pub fn from_str_opt(s: &str) -> Option<Self> {
         match s {
             "draft" => Some(Self::Draft),
-            "recording_enriched" => Some(Self::Recording_enriched),
+            "recording_enriched" => Some(Self::RecordingEnriched),
             "refined" => Some(Self::Refined),
             "final" => Some(Self::Final),
             "sketch" => Some(Self::Draft),
@@ -51,7 +51,7 @@ impl SketchState {
             return Some(Self::Draft);
         }
         if s.eq_ignore_ascii_case("recording_enriched") {
-            return Some(Self::Recording_enriched);
+            return Some(Self::RecordingEnriched);
         }
         if s.eq_ignore_ascii_case("refined") {
             return Some(Self::Refined);
@@ -68,7 +68,7 @@ impl SketchState {
     pub fn as_str(&self) -> &str {
         match self {
             Self::Draft => "draft",
-            Self::Recording_enriched => "recording_enriched",
+            Self::RecordingEnriched => "recording_enriched",
             Self::Refined => "refined",
             Self::Final => "final",
         }
@@ -164,14 +164,14 @@ impl Sketch {
 
     pub(crate) fn validate_input_at(value: &serde_json::Value, path: &str) -> Result<(), String> {
         if let Some(entries) = value.get("rows").and_then(|candidate| candidate.as_array()) {
-            let collection_path = if path.is_empty() { "rows".to_string() } else { format!("{}.rows", path) };
+            let collection_path = if path.is_empty() { "rows".to_string() } else { format!("{}.{}", path, "rows") };
             for (index, entry) in entries.iter().enumerate() {
                 let entry_path = format!("{}[{}]", collection_path, index);
                 PlanningRow::validate_input_at(entry, &entry_path)?;
             }
         }
-        let child_path = if path.is_empty() { "metadata".to_string() } else { format!("{}.metadata", path) };
-        if let Some(child) = value.get("metadata") {
+        let child_path = if path.is_empty() { "metadata".to_string() } else { format!("{}.{}", path, "metadata") };
+        if let Some(child) = value.get("metadata").filter(|candidate| !candidate.is_null()) {
             DocumentMetadata::validate_input_at(child, &child_path)?;
         }
         Ok(())

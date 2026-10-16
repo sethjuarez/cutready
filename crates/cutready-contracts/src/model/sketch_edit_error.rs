@@ -9,10 +9,10 @@ use super::context::{LoadContext, SaveContext};
 pub enum PlanningCellField {
     Time,
     Narrative,
-    Demo_actions,
+    DemoActions,
     Screenshot,
     Visual,
-    Design_plan,
+    DesignPlan,
 }
 
 impl Default for PlanningCellField {
@@ -26,10 +26,10 @@ impl std::fmt::Display for PlanningCellField {
         match self {
             Self::Time => write!(f, "time"),
             Self::Narrative => write!(f, "narrative"),
-            Self::Demo_actions => write!(f, "demo_actions"),
+            Self::DemoActions => write!(f, "demo_actions"),
             Self::Screenshot => write!(f, "screenshot"),
             Self::Visual => write!(f, "visual"),
-            Self::Design_plan => write!(f, "design_plan"),
+            Self::DesignPlan => write!(f, "design_plan"),
         }
     }
 }
@@ -39,10 +39,10 @@ impl PlanningCellField {
         match s {
             "time" => Some(Self::Time),
             "narrative" => Some(Self::Narrative),
-            "demo_actions" => Some(Self::Demo_actions),
+            "demo_actions" => Some(Self::DemoActions),
             "screenshot" => Some(Self::Screenshot),
             "visual" => Some(Self::Visual),
-            "design_plan" => Some(Self::Design_plan),
+            "design_plan" => Some(Self::DesignPlan),
             _ => None,
         }
     }
@@ -55,7 +55,7 @@ impl PlanningCellField {
             return Some(Self::Narrative);
         }
         if s.eq_ignore_ascii_case("demo_actions") {
-            return Some(Self::Demo_actions);
+            return Some(Self::DemoActions);
         }
         if s.eq_ignore_ascii_case("screenshot") {
             return Some(Self::Screenshot);
@@ -64,7 +64,7 @@ impl PlanningCellField {
             return Some(Self::Visual);
         }
         if s.eq_ignore_ascii_case("design_plan") {
-            return Some(Self::Design_plan);
+            return Some(Self::DesignPlan);
         }
         None
     }
@@ -73,10 +73,10 @@ impl PlanningCellField {
         match self {
             Self::Time => "time",
             Self::Narrative => "narrative",
-            Self::Demo_actions => "demo_actions",
+            Self::DemoActions => "demo_actions",
             Self::Screenshot => "screenshot",
             Self::Visual => "visual",
-            Self::Design_plan => "design_plan",
+            Self::DesignPlan => "design_plan",
         }
     }
 }
@@ -99,27 +99,27 @@ impl<'de> serde::Deserialize<'de> for PlanningCellField {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SketchEditErrorCode {
-    Locked_document,
-    Locked_row,
-    Locked_cell,
-    Row_not_found,
-    Invalid_reorder,
+    LockedDocument,
+    LockedRow,
+    LockedCell,
+    RowNotFound,
+    InvalidReorder,
 }
 
 impl Default for SketchEditErrorCode {
     fn default() -> Self {
-        Self::Locked_document
+        Self::LockedDocument
     }
 }
 
 impl std::fmt::Display for SketchEditErrorCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Locked_document => write!(f, "locked_document"),
-            Self::Locked_row => write!(f, "locked_row"),
-            Self::Locked_cell => write!(f, "locked_cell"),
-            Self::Row_not_found => write!(f, "row_not_found"),
-            Self::Invalid_reorder => write!(f, "invalid_reorder"),
+            Self::LockedDocument => write!(f, "locked_document"),
+            Self::LockedRow => write!(f, "locked_row"),
+            Self::LockedCell => write!(f, "locked_cell"),
+            Self::RowNotFound => write!(f, "row_not_found"),
+            Self::InvalidReorder => write!(f, "invalid_reorder"),
         }
     }
 }
@@ -127,41 +127,41 @@ impl std::fmt::Display for SketchEditErrorCode {
 impl SketchEditErrorCode {
     pub fn from_str_opt(s: &str) -> Option<Self> {
         match s {
-            "locked_document" => Some(Self::Locked_document),
-            "locked_row" => Some(Self::Locked_row),
-            "locked_cell" => Some(Self::Locked_cell),
-            "row_not_found" => Some(Self::Row_not_found),
-            "invalid_reorder" => Some(Self::Invalid_reorder),
+            "locked_document" => Some(Self::LockedDocument),
+            "locked_row" => Some(Self::LockedRow),
+            "locked_cell" => Some(Self::LockedCell),
+            "row_not_found" => Some(Self::RowNotFound),
+            "invalid_reorder" => Some(Self::InvalidReorder),
             _ => None,
         }
     }
 
     pub fn from_str_ignore_case_opt(s: &str) -> Option<Self> {
         if s.eq_ignore_ascii_case("locked_document") {
-            return Some(Self::Locked_document);
+            return Some(Self::LockedDocument);
         }
         if s.eq_ignore_ascii_case("locked_row") {
-            return Some(Self::Locked_row);
+            return Some(Self::LockedRow);
         }
         if s.eq_ignore_ascii_case("locked_cell") {
-            return Some(Self::Locked_cell);
+            return Some(Self::LockedCell);
         }
         if s.eq_ignore_ascii_case("row_not_found") {
-            return Some(Self::Row_not_found);
+            return Some(Self::RowNotFound);
         }
         if s.eq_ignore_ascii_case("invalid_reorder") {
-            return Some(Self::Invalid_reorder);
+            return Some(Self::InvalidReorder);
         }
         None
     }
 
     pub fn as_str(&self) -> &str {
         match self {
-            Self::Locked_document => "locked_document",
-            Self::Locked_row => "locked_row",
-            Self::Locked_cell => "locked_cell",
-            Self::Row_not_found => "row_not_found",
-            Self::Invalid_reorder => "invalid_reorder",
+            Self::LockedDocument => "locked_document",
+            Self::LockedRow => "locked_row",
+            Self::LockedCell => "locked_cell",
+            Self::RowNotFound => "row_not_found",
+            Self::InvalidReorder => "invalid_reorder",
         }
     }
 }

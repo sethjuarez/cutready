@@ -77,7 +77,7 @@ impl NarrationPlan {
 
     pub(crate) fn validate_input_at(value: &serde_json::Value, path: &str) -> Result<(), String> {
         if let Some(entries) = value.get("beats").and_then(|candidate| candidate.as_array()) {
-            let collection_path = if path.is_empty() { "beats".to_string() } else { format!("{}.beats", path) };
+            let collection_path = if path.is_empty() { "beats".to_string() } else { format!("{}.{}", path, "beats") };
             for (index, entry) in entries.iter().enumerate() {
                 let entry_path = format!("{}[{}]", collection_path, index);
                 NarrationBeat::validate_input_at(entry, &entry_path)?;

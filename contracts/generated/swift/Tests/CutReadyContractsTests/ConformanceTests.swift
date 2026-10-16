@@ -27,4 +27,21 @@ final class ConformanceTests: XCTestCase {
     XCTAssertThrowsError(try TypraRuntime.double(parsed["boolTrue"]!, field: "boolTrue"))
     XCTAssertThrowsError(try TypraRuntime.double(parsed["boolFalse"]!, field: "boolFalse"))
   }
+
+  func testSizedIntegersAreNotBooleans() throws {
+    XCTAssertEqual(try TypraRuntime.int8(Int8(1) as Any, field: "value"), 1)
+    XCTAssertEqual(try TypraRuntime.int8(Int8(-128) as Any, field: "value"), -128)
+    XCTAssertEqual(try TypraRuntime.int64(Int8(0) as Any, field: "value"), 0)
+    XCTAssertEqual(try TypraRuntime.uint8(UInt8(255) as Any, field: "value"), 255)
+    XCTAssertEqual(try TypraRuntime.uint64(UInt64.max as Any, field: "value"), UInt64.max)
+    XCTAssertEqual(try TypraRuntime.double(Int8(1) as Any, field: "value"), 1)
+    XCTAssertThrowsError(try TypraRuntime.int8(true as Any, field: "value"))
+    XCTAssertThrowsError(try TypraRuntime.uint64(false as Any, field: "value"))
+    XCTAssertThrowsError(try TypraRuntime.int8(Int16(300) as Any, field: "value"))
+    XCTAssertThrowsError(try TypraRuntime.uint8(Int8(-1) as Any, field: "value"))
+    let json = try TypraRuntime.jsonString(from: ["tiny": Int8(1), "octet": UInt8(0)])
+    let reloaded = try TypraRuntime.jsonObject(from: json, typeName: "SizedProbe") as! [String: Any]
+    XCTAssertEqual(try TypraRuntime.int8(reloaded["tiny"]!, field: "tiny"), 1)
+    XCTAssertEqual(try TypraRuntime.uint8(reloaded["octet"]!, field: "octet"), 0)
+  }
 }

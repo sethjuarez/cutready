@@ -8,8 +8,8 @@ use super::context::{LoadContext, SaveContext};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MotionPlanEasing {
     Linear,
-    Ease_in_out,
-    Ease_out,
+    EaseInOut,
+    EaseOut,
 }
 
 impl Default for MotionPlanEasing {
@@ -22,8 +22,8 @@ impl std::fmt::Display for MotionPlanEasing {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Linear => write!(f, "linear"),
-            Self::Ease_in_out => write!(f, "ease_in_out"),
-            Self::Ease_out => write!(f, "ease_out"),
+            Self::EaseInOut => write!(f, "ease_in_out"),
+            Self::EaseOut => write!(f, "ease_out"),
         }
     }
 }
@@ -32,8 +32,8 @@ impl MotionPlanEasing {
     pub fn from_str_opt(s: &str) -> Option<Self> {
         match s {
             "linear" => Some(Self::Linear),
-            "ease_in_out" => Some(Self::Ease_in_out),
-            "ease_out" => Some(Self::Ease_out),
+            "ease_in_out" => Some(Self::EaseInOut),
+            "ease_out" => Some(Self::EaseOut),
             _ => None,
         }
     }
@@ -43,10 +43,10 @@ impl MotionPlanEasing {
             return Some(Self::Linear);
         }
         if s.eq_ignore_ascii_case("ease_in_out") {
-            return Some(Self::Ease_in_out);
+            return Some(Self::EaseInOut);
         }
         if s.eq_ignore_ascii_case("ease_out") {
-            return Some(Self::Ease_out);
+            return Some(Self::EaseOut);
         }
         None
     }
@@ -54,8 +54,8 @@ impl MotionPlanEasing {
     pub fn as_str(&self) -> &str {
         match self {
             Self::Linear => "linear",
-            Self::Ease_in_out => "ease_in_out",
-            Self::Ease_out => "ease_out",
+            Self::EaseInOut => "ease_in_out",
+            Self::EaseOut => "ease_out",
         }
     }
 }

@@ -67,7 +67,7 @@ impl MotionPlan {
 
     pub(crate) fn validate_input_at(value: &serde_json::Value, path: &str) -> Result<(), String> {
         if let Some(entries) = value.get("keyframes").and_then(|candidate| candidate.as_array()) {
-            let collection_path = if path.is_empty() { "keyframes".to_string() } else { format!("{}.keyframes", path) };
+            let collection_path = if path.is_empty() { "keyframes".to_string() } else { format!("{}.{}", path, "keyframes") };
             for (index, entry) in entries.iter().enumerate() {
                 let entry_path = format!("{}[{}]", collection_path, index);
                 MotionPlanKeyframe::validate_input_at(entry, &entry_path)?;
