@@ -1495,18 +1495,26 @@ mod tests {
     fn prompty_production_dependencies_remain_pinned_to_a_single_revision() {
         // Production Prompty crates are pinned to one immutable crates.io release.
         // Bump this constant whenever the pin moves.
-        const VERSION: &str = "2.0.0";
+        const VERSION: &str = "2.0.2";
         let manifest = include_str!("../Cargo.toml");
+        let app_manifest = include_str!("../../../src-tauri/Cargo.toml");
         // The lockfile lives at the workspace root, three directories above
         // this crate source file (crates/harness-prompty/src/model.rs).
         let lockfile = include_str!("../../../Cargo.lock");
 
         assert_eq!(
             manifest
-                .matches(&format!("version = \"{VERSION}\""))
+                .matches(&format!("version = \"={VERSION}\""))
                 .count(),
             4,
             "all production Prompty crates must use the audited version"
+        );
+        assert_eq!(
+            app_manifest
+                .matches(&format!("version = \"={VERSION}\""))
+                .count(),
+            4,
+            "all app Prompty crates must use the audited version"
         );
         assert!(lockfile.contains(VERSION));
     }
