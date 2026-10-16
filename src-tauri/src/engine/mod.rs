@@ -24,3 +24,4 @@ pub mod sketch_edits;
 pub mod speech;
 pub mod video_import;
 pub mod visual_document;
+pub mod word_export;

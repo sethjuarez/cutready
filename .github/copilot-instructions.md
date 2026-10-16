@@ -60,7 +60,7 @@ my-demo-project/
 | Browser automation | **Playwright** (Node.js sidecar) | Headful browser observation and replay automation |
 | LLM | **Microsoft Foundry** | Chat Completions + Responses API, multi-agent system |
 | Visuals | **Elucim DSL** (`@elucim/dsl`) | SVG-based framing visuals with semantic color tokens |
-| Word export | **docx** | Export sketches/storyboards/notes to .docx |
+| Word export | **Quilldown** (Rust) | Markdown → .docx for sketches/storyboards/notes; images validated via `safe_resolve` |
 | History graph | **d3.js** | Git branch/commit visualization |
 | Timeline export | **FCPXML 1.9** | Multi-track, markers, DaVinci Resolve 17+ compatible |
 | Docs site | **Astro Starlight** | Published at `https://cutready.io` |

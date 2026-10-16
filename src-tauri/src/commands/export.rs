@@ -3,7 +3,10 @@
 use tauri::{Manager, State};
 use tauri_plugin_auditaur::auditaur_command;
 
-use crate::{engine::export, AppState};
+use crate::{
+    engine::{export, word_export},
+    AppState,
+};
 
 fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
     let current = state.current_project.lock().map_err(|e| e.to_string())?;
@@ -17,6 +20,28 @@ fn app_data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     app.path()
         .app_data_dir()
         .map_err(|e| format!("Could not resolve app data dir: {e}"))
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn export_markdown_to_word(
+    markdown: String,
+    output_path: String,
+    orientation: word_export::WordOrientation,
+    max_image_width_px: u32,
+    state: State<'_, AppState>,
+) -> Result<word_export::WordExportReport, String> {
+    let root = project_root(&state)?;
+    tokio::task::spawn_blocking(move || {
+        word_export::export_markdown_to_word(
+            &root,
+            &markdown,
+            std::path::Path::new(&output_path),
+            orientation,
+            max_image_width_px,
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[allow(clippy::too_many_arguments)]

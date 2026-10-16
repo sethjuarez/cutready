@@ -633,6 +633,7 @@ pub fn run() {
             commands::project::get_workspace_settings,
             commands::project::set_workspace_settings,
             commands::project::resolve_deep_link,
+            commands::export::export_markdown_to_word,
             commands::export::export_sketch_video,
             commands::diagnostics::dump_diagnostics,
             commands::diagnostics::get_diagnostics_policy,

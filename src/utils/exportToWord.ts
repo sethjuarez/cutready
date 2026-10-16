@@ -1,131 +1,28 @@
 /**
- * exportToWord.ts — Generate .docx files from sketches and storyboards.
+ * exportToWord.ts — Export notes, sketches, and storyboards to .docx.
  *
- * Uses the `docx` library with Word's default Calibri theme and built-in
- * heading styles so documents look native when opened in Word.
- * Markdown in cell content (bold, italic, code, bullets) is rendered.
+ * The frontend builds Markdown; the backend renders it with Quilldown after
+ * validating every image reference against the project root.
  */
 
-import {
-  Document,
-  Packer,
-  Paragraph,
-  TextRun,
-  ImageRun,
-  Table,
-  TableRow,
-  TableCell,
-  WidthType,
-  HeadingLevel,
-  BorderStyle,
-  AlignmentType,
-  LevelFormat,
-  PageOrientation,
-  convertInchesToTwip,
-} from "docx";
 import { save } from "@tauri-apps/plugin-dialog";
-import { readFile, writeFile } from "@tauri-apps/plugin-fs";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { invoke } from "../services/tauri";
-import type { Sketch, Storyboard } from "../types/sketch";
+import type { PlanningRow, Sketch, Storyboard } from "../types/sketch";
 import { getElucimDocumentSize } from "./elucimDocument";
 import { getUniqueStoryboardSketchPaths } from "./storyboard";
 
-// ── Markdown → docx primitives ──────────────────────────────────
+export type WordOrientation = "portrait" | "landscape";
 
-/** Parse inline markdown into styled TextRuns and ImageRuns. Handles **bold**, *italic*, `code`, links, and ![alt](path) images. */
-function parseInlineMarkdown(text: string): TextRun[] {
-  const runs: TextRun[] = [];
-  // Regex matches: image, link, `code`, ***bolditalic***, **bold**, *italic*, or plain text
-  const pattern = /(!\[[^\]]*\]\([^)]+\)|\[[^\]]+\]\([^)]+\)|`[^`]+`|\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|\*[^*]+\*)/g;
-  let lastIndex = 0;
-
-  for (const match of text.matchAll(pattern)) {
-    const before = text.slice(lastIndex, match.index);
-    if (before) runs.push(new TextRun({ text: before }));
-
-    const raw = match[0];
-    if (raw.startsWith("![")) {
-      // Image reference — rendered as placeholder text (actual image handled by caller)
-      const altMatch = raw.match(/!\[([^\]]*)\]\(([^)]+)\)/);
-      const alt = altMatch?.[1] || altMatch?.[2] || "image";
-      runs.push(new TextRun({ text: `[${alt}]`, italics: true }));
-    } else if (raw.startsWith("[")) {
-      const linkMatch = raw.match(/\[([^\]]+)\]\(([^)]+)\)/);
-      const label = linkMatch?.[1] || raw;
-      const url = linkMatch?.[2];
-      runs.push(new TextRun({
-        text: url ? `${label} (${url})` : label,
-        color: "0563C1",
-        underline: {},
-      }));
-    } else if (raw.startsWith("`")) {
-      runs.push(new TextRun({ text: raw.slice(1, -1), font: "Consolas", bold: true }));
-    } else if (raw.startsWith("***")) {
-      runs.push(new TextRun({ text: raw.slice(3, -3), bold: true, italics: true }));
-    } else if (raw.startsWith("**")) {
-      runs.push(new TextRun({ text: raw.slice(2, -2), bold: true }));
-    } else if (raw.startsWith("*")) {
-      runs.push(new TextRun({ text: raw.slice(1, -1), italics: true }));
-    }
-    lastIndex = match.index! + raw.length;
-  }
-
-  const tail = text.slice(lastIndex);
-  if (tail) runs.push(new TextRun({ text: tail }));
-
-  return runs.length > 0 ? runs : [new TextRun({ text: text || "—" })];
+export interface WordExportReport {
+  imagesEmbedded: number;
+  skippedRemoteImages: string[];
 }
 
-/** Convert a markdown string (possibly multi-line with bullets) into Paragraph[]. */
-function markdownToParagraphs(text: string): Paragraph[] {
-  if (!text?.trim()) return [new Paragraph({ text: "—" })];
+const NOTE_IMAGE_WIDTH_PX = 600;
+const TABLE_IMAGE_WIDTH_PX = 240;
 
-  const lines = text.split("\n");
-  const paragraphs: Paragraph[] = [];
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-
-    const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)/);
-    if (headingMatch) {
-      const heading = headingMatch[1].length === 1
-        ? HeadingLevel.HEADING_1
-        : headingMatch[1].length === 2
-          ? HeadingLevel.HEADING_2
-          : HeadingLevel.HEADING_3;
-      paragraphs.push(new Paragraph({
-        children: parseInlineMarkdown(headingMatch[2]),
-        heading,
-      }));
-    }
-    // Bullet list item: - text or * text (but not *italic*)
-    else if (trimmed.match(/^[-*•]\s+(.+)/) && !trimmed.match(/^\*[^*]+\*$/)) {
-      const bulletMatch = trimmed.match(/^[-*•]\s+(.+)/)!;
-      paragraphs.push(new Paragraph({
-        children: parseInlineMarkdown(bulletMatch[1]),
-        bullet: { level: 0 },
-      }));
-    }
-    // Numbered list: 1. text
-    else if (/^\d+[.)]\s+/.test(trimmed)) {
-      const content = trimmed.replace(/^\d+[.)]\s+/, "");
-      paragraphs.push(new Paragraph({
-        children: parseInlineMarkdown(content),
-        numbering: { reference: "decimal-list", level: 0 },
-      }));
-    }
-    // Regular paragraph
-    else {
-      paragraphs.push(new Paragraph({ children: parseInlineMarkdown(trimmed) }));
-    }
-  }
-
-  return paragraphs.length > 0 ? paragraphs : [new Paragraph({ text: "—" })];
-}
-
-// ── Helpers ─────────────────────────────────────────────────────
+// ── Markdown helpers ─────────────────────────────────────────────
 
 function timestamp(): string {
   return new Date().toLocaleDateString("en-US", {
@@ -133,68 +30,90 @@ function timestamp(): string {
   });
 }
 
-const tableBorder = {
-  top: { style: BorderStyle.SINGLE, size: 4, color: "BFBFBF" },
-  bottom: { style: BorderStyle.SINGLE, size: 4, color: "BFBFBF" },
-  left: { style: BorderStyle.SINGLE, size: 4, color: "BFBFBF" },
-  right: { style: BorderStyle.SINGLE, size: 4, color: "BFBFBF" },
-  insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: "BFBFBF" },
-  insideVertical: { style: BorderStyle.SINGLE, size: 4, color: "BFBFBF" },
-} as const;
-
-const cellMargins = {
-  top: convertInchesToTwip(0.04),
-  bottom: convertInchesToTwip(0.04),
-  left: convertInchesToTwip(0.08),
-  right: convertInchesToTwip(0.08),
-};
-
-const TABLE_WIDTH_DXA = convertInchesToTwip(8.6);
-const PLANNING_COLUMNS_NO_MEDIA = [convertInchesToTwip(0.8), convertInchesToTwip(3.9), convertInchesToTwip(3.9)];
-const PLANNING_COLUMNS_WITH_MEDIA = [convertInchesToTwip(0.75), convertInchesToTwip(3.0), convertInchesToTwip(3.0), convertInchesToTwip(1.85)];
-
-function headerCell(text: string, width?: number): TableCell {
-  return new TableCell({
-    children: [new Paragraph({ children: [new TextRun({ text, bold: true })] })],
-    margins: cellMargins,
-    width: width ? { size: width, type: WidthType.DXA } : undefined,
-  });
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
 }
 
-function bodyCell(text: string, width?: number): TableCell {
-  return new TableCell({
-    children: markdownToParagraphs(text),
-    margins: cellMargins,
-    width: width ? { size: width, type: WidthType.DXA } : undefined,
-  });
+/** Escape text so Markdown renders it literally (titles, headings). */
+export function escapeMarkdownText(text: string): string {
+  return text.replace(/\s+/g, " ").trim().replace(/[\\`*_{}[\]()<>#+\-!|$~]/g, "\\$&");
 }
 
-// Thumbnail size for images in the planning table (pixels, ~16:9)
-const THUMBNAIL_WIDTH = 240;
-const THUMBNAIL_HEIGHT = 135;
-
-// Larger size for standalone images in note exports (pixels, ~16:9)
-const INLINE_IMG_WIDTH = 480;
-const INLINE_IMG_HEIGHT = 270;
-
-// Thumbnail size for visuals in the planning table — max 200px wide
-const VISUAL_WIDTH = 200;
-const VISUAL_HEIGHT = 112; // ~16:9
-
-/** Detect image type from file extension for docx embedding. */
-function imageTypeFromPath(path: string): "jpg" | "png" | "gif" | "bmp" {
-  const ext = path.split(".").pop()?.toLowerCase();
-  switch (ext) {
-    case "jpg":
-    case "jpeg":
-      return "jpg";
-    case "gif":
-      return "gif";
-    case "bmp":
-      return "bmp";
-    default:
-      return "png";
+/** Index of the closing backtick run of exactly `len` ticks at or after `from`, or -1. */
+function findClosingTicks(line: string, from: number, len: number): number {
+  for (let i = from; i < line.length; ) {
+    if (line[i] !== "`") { i++; continue; }
+    let j = i;
+    while (line[j] === "`") j++;
+    if (j - i === len) return i;
+    i = j;
   }
+  return -1;
+}
+
+/**
+ * Escape one line for a GFM table cell: pipes everywhere; `<` (raw HTML Quilldown
+ * would drop) and `$` (math) outside code spans; a trailing lone backslash so the
+ * following <br> survives. Existing backslash escapes are preserved.
+ */
+function escapeCellLine(line: string): string {
+  let out = "";
+  let i = 0;
+  while (i < line.length) {
+    const ch = line[i];
+    if (ch === "`") {
+      let j = i;
+      while (line[j] === "`") j++;
+      const close = findClosingTicks(line, j, j - i);
+      if (close >= 0) {
+        out += line.slice(i, close + (j - i)).replace(/\|/g, "\\|");
+        i = close + (j - i);
+      } else {
+        out += line.slice(i, j);
+        i = j;
+      }
+    } else if (ch === "\\") {
+      out += i + 1 < line.length ? line.slice(i, i + 2) : "\\\\";
+      i += 2;
+    } else {
+      out += ch === "|" || ch === "<" || ch === "$" ? `\\${ch}` : ch;
+      i++;
+    }
+  }
+  return out;
+}
+
+/**
+ * Convert multi-line Markdown into a single GFM table cell. Cells are
+ * inline-only, so bullets and headings are flattened and lines join with <br>.
+ */
+export function toTableCell(text: string | null | undefined): string {
+  const lines = (text ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const heading = line.match(/^#{1,6}\s+(.+)/);
+      if (heading) return `**${heading[1]}**`;
+      const bullet = line.match(/^[-*•]\s+(.+)/);
+      if (bullet && !/^\*[^*]+\*$/.test(line)) return `• ${bullet[1]}`;
+      return line;
+    })
+    .map(escapeCellLine);
+  return lines.length > 0 ? lines.join("<br>") : "—";
+}
+
+function imageLink(alt: string, url: string): string {
+  return `![${alt}](<${url.replace(/\\/g, "/")}>)`;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
 }
 
 // Light-mode token map — used to replace $token refs before rendering visuals for Word
@@ -231,100 +150,18 @@ function toLightMode(obj: unknown): unknown {
   return obj;
 }
 
-/** Read a screenshot file and return an ImageRun, or null on failure. */
-async function readScreenshot(
-  projectRoot: string,
-  relativePath: string,
-  width: number = INLINE_IMG_WIDTH,
-  height: number = INLINE_IMG_HEIGHT,
-): Promise<ImageRun | null> {
-  try {
-    const fullPath = `${projectRoot}/${relativePath}`;
-    const data = await readFile(fullPath);
-    return new ImageRun({
-      data,
-      transformation: { width, height },
-      type: imageTypeFromPath(relativePath),
-    });
-  } catch (e) {
-    console.error("[exportToWord] Failed to read screenshot:", relativePath, e);
-    return null;
-  }
-}
+/** Render a visual's last frame to a PNG data URL. */
+async function renderVisualDataUrl(visualPath: string): Promise<string> {
+  const visual = await invoke<Record<string, unknown> | null>("get_visual", { relativePath: visualPath });
+  if (!visual) throw new Error(`Visual not found: ${visualPath}`);
 
-/** Load a visual from its file path, then render the last frame as a PNG ImageRun for Word embedding. */
-async function captureVisualLastFrame(visualPath: string): Promise<ImageRun | null> {
-  try {
-    const visual = await invoke<Record<string, unknown>>("get_visual", { relativePath: visualPath });
-    if (!visual) return null;
-
-    const { renderToPng, toRenderableDocument } = await import("@elucim/dsl");
-
-    // Convert to light-mode colors for print-friendly Word output
-    const dsl = toRenderableDocument(toLightMode(visual));
-    const root = dsl.root as unknown as Record<string, unknown>;
-    const totalFrames = (root.durationInFrames as number) || 60;
-    const lastFrame = Math.max(0, totalFrames - 1);
-    const { width, height } = getElucimDocumentSize(dsl, { width: 640, height: 360 });
-
-    const pngBytes = await renderToPng(dsl, lastFrame, { width, height, scale: 2 });
-
-    return new ImageRun({
-      data: pngBytes,
-      transformation: { width: VISUAL_WIDTH, height: VISUAL_HEIGHT },
-      type: "png",
-    });
-  } catch (e) {
-    console.error("[exportToWord] Failed to capture visual frame:", visualPath, e);
-    return null;
-  }
-}
-
-function screenshotCell(image: ImageRun | null, width?: number): TableCell {
-  return new TableCell({
-    children: [new Paragraph(image ? { children: [image] } : { text: "—" })],
-    margins: cellMargins,
-    width: width ? { size: width, type: WidthType.DXA } : undefined,
-  });
-}
-
-async function buildPlanningTable(rows: Sketch["rows"], projectRoot: string): Promise<Table> {
-  const hasMedia = rows.some((r) => r.screenshot || r.visual);
-  const columnWidths = hasMedia ? PLANNING_COLUMNS_WITH_MEDIA : PLANNING_COLUMNS_NO_MEDIA;
-
-  const headerCells = [
-    headerCell("Time", columnWidths[0]),
-    headerCell("Narrative", columnWidths[1]),
-    headerCell("Demo Actions", columnWidths[2]),
-  ];
-  if (hasMedia) headerCells.push(headerCell("Visual / Screenshot", columnWidths[3]));
-
-  const header = new TableRow({ children: headerCells, tableHeader: true });
-
-  const dataRows = await Promise.all(rows.map(async (row) => {
-    const cells = [
-      bodyCell(row.time, columnWidths[0]),
-      bodyCell(row.narrative, columnWidths[1]),
-      bodyCell(row.demo_actions, columnWidths[2]),
-    ];
-    if (hasMedia) {
-      if (row.visual) {
-        const img = await captureVisualLastFrame(row.visual);
-        cells.push(screenshotCell(img, columnWidths[3]));
-      } else {
-        const img = row.screenshot ? await readScreenshot(projectRoot, row.screenshot, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT) : null;
-        cells.push(screenshotCell(img, columnWidths[3]));
-      }
-    }
-    return new TableRow({ children: cells });
-  }));
-
-  return new Table({
-    rows: [header, ...dataRows],
-    width: { size: TABLE_WIDTH_DXA, type: WidthType.DXA },
-    columnWidths,
-    borders: tableBorder,
-  });
+  const { renderToPng, toRenderableDocument } = await import("@elucim/dsl");
+  const dsl = toRenderableDocument(toLightMode(visual));
+  const root = dsl.root as unknown as Record<string, unknown>;
+  const totalFrames = (root.durationInFrames as number) || 60;
+  const { width, height } = getElucimDocumentSize(dsl, { width: 640, height: 360 });
+  const png = await renderToPng(dsl, Math.max(0, totalFrames - 1), { width, height, scale: 2 });
+  return `data:image/png;base64,${bytesToBase64(png)}`;
 }
 
 function descriptionText(desc: unknown): string {
@@ -343,368 +180,166 @@ function descriptionText(desc: unknown): string {
 }
 
 function sanitizeFilename(title: string): string {
-  return title.replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-");
+  return title.replace(/[^a-zA-Z0-9 ]/g, "").trim().replace(/\s+/g, "-") || "export";
 }
 
-// ── Document factory ────────────────────────────────────────────
+// ── Document builders ────────────────────────────────────────────
 
-export type WordOrientation = "portrait" | "landscape";
-
-function createDocument(children: (Paragraph | Table)[], orientation: WordOrientation = "landscape"): Document {
-  return new Document({
-    styles: {
-      default: {
-        document: {
-          run: { font: "Calibri", size: 22 }, // 11pt Calibri — Word default
-        },
-      },
-    },
-    numbering: {
-      config: [{
-        reference: "decimal-list",
-        levels: [{
-          level: 0,
-          format: LevelFormat.DECIMAL,
-          text: "%1.",
-          alignment: AlignmentType.START,
-          style: {
-            paragraph: {
-              indent: { left: convertInchesToTwip(0.5), hanging: convertInchesToTwip(0.25) },
-            },
-          },
-        }],
-      }],
-    },
-    sections: [{
-      properties: {
-        page: {
-          size: { orientation: orientation === "landscape" ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT },
-        },
-      },
-      children: children as Paragraph[],
-    }],
-  });
+async function mediaCell(row: PlanningRow): Promise<string> {
+  if (row.visual) {
+    try {
+      return imageLink("Visual", await renderVisualDataUrl(row.visual));
+    } catch (e) {
+      throw new Error(`Could not render visual ${row.visual}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return row.screenshot ? imageLink("Screenshot", row.screenshot) : "—";
 }
 
-async function saveDocument(doc: Document, defaultName: string): Promise<boolean> {
-  const blob = await Packer.toBlob(doc);
-  const filePath = await save({
+async function planningTable(rows: PlanningRow[]): Promise<string> {
+  const hasMedia = rows.some((row) => row.screenshot || row.visual);
+  const header = ["Time", "Narrative", "Demo Actions"];
+  if (hasMedia) header.push("Visual / Screenshot");
+
+  const lines = [
+    `| ${header.join(" | ")} |`,
+    `| ${header.map(() => "---").join(" | ")} |`,
+  ];
+  for (const row of rows) {
+    const cells = [toTableCell(row.time), toTableCell(row.narrative), toTableCell(row.demo_actions)];
+    if (hasMedia) cells.push(await mediaCell(row));
+    lines.push(`| ${cells.join(" | ")} |`);
+  }
+  return lines.join("\n");
+}
+
+async function sketchMarkdown(sketch: Sketch, level: number, includeTitle: boolean): Promise<string> {
+  const blocks: string[] = [];
+  if (includeTitle) blocks.push(`${"#".repeat(level)} ${escapeMarkdownText(sketch.title)}`);
+  const desc = descriptionText(sketch.description).trim();
+  if (desc) blocks.push(desc);
+  if (sketch.rows.length > 0) blocks.push(await planningTable(sketch.rows));
+  return blocks.join("\n\n");
+}
+
+export function buildNoteMarkdown(title: string, markdown: string): string {
+  return [`# ${escapeMarkdownText(title)}`, `*Exported ${timestamp()}*`, markdown.trim()]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+export async function buildSketchMarkdown(sketch: Sketch): Promise<string> {
+  return [
+    `# ${escapeMarkdownText(sketch.title)}`,
+    `*Generated ${timestamp()} · ${plural(sketch.rows.length, "scene", "scenes")}*`,
+    await sketchMarkdown(sketch, 1, false),
+  ].filter(Boolean).join("\n\n");
+}
+
+export async function buildStoryboardMarkdown(
+  storyboard: Storyboard,
+  sketchMap: Map<string, Sketch>,
+): Promise<string> {
+  const totalRows = [...sketchMap.values()].reduce((sum, sketch) => sum + sketch.rows.length, 0);
+  const blocks = [
+    `# ${escapeMarkdownText(storyboard.title)}`,
+    `*Generated ${timestamp()} · ${plural(sketchMap.size, "sketch", "sketches")}, ${plural(totalRows, "scene", "scenes")}*`,
+  ];
+  if (storyboard.description?.trim()) blocks.push(storyboard.description.trim());
+
+  for (const item of storyboard.items) {
+    if (item.type === "section") {
+      blocks.push(`## ${escapeMarkdownText(item.title)}`);
+      if (item.description?.trim()) blocks.push(item.description.trim());
+      for (const path of item.sketches) {
+        const sketch = sketchMap.get(path);
+        if (sketch) blocks.push(await sketchMarkdown(sketch, 3, true));
+      }
+    } else {
+      const sketch = sketchMap.get(item.path);
+      if (sketch) blocks.push(await sketchMarkdown(sketch, 2, true));
+    }
+  }
+  return blocks.join("\n\n");
+}
+
+// ── Export ───────────────────────────────────────────────────────
+
+async function saveMarkdownAsWord(
+  markdown: string,
+  defaultName: string,
+  orientation: WordOrientation,
+  maxImageWidthPx: number,
+): Promise<WordExportReport | null> {
+  const outputPath = await save({
     defaultPath: defaultName,
     filters: [{ name: "Word Document", extensions: ["docx"] }],
   });
-  if (!filePath) return false;
-  const buffer = await blob.arrayBuffer();
-  await writeFile(filePath, new Uint8Array(buffer));
-  // Open the exported file in the default application
+  if (!outputPath) return null;
+
+  const report = await invoke<WordExportReport>("export_markdown_to_word", {
+    markdown,
+    outputPath,
+    orientation,
+    maxImageWidthPx,
+  });
   try {
-    await openPath(filePath);
+    await openPath(outputPath);
   } catch (e) {
-    console.error("[exportToWord] Failed to open file:", filePath, e);
+    console.error("[exportToWord] Failed to open file:", outputPath, e);
   }
-  return true;
+  return report;
 }
 
-// ── Note (Markdown) → Word ───────────────────────────────────────
-
-/** Heading-level map: # → HEADING_1, ## → HEADING_2, etc. */
-const headingLevels: Record<number, (typeof HeadingLevel)[keyof typeof HeadingLevel]> = {
-  1: HeadingLevel.HEADING_1,
-  2: HeadingLevel.HEADING_2,
-  3: HeadingLevel.HEADING_3,
-  4: HeadingLevel.HEADING_4,
-  5: HeadingLevel.HEADING_5,
-  6: HeadingLevel.HEADING_6,
-};
-
-/**
- * Parse a full markdown document into docx Paragraphs, handling headings,
- * images, bullet/numbered lists, and inline formatting.
- */
-async function markdownToDocxContent(
-  markdown: string,
-  projectRoot: string,
-): Promise<(Paragraph | Table)[]> {
-  const elements: (Paragraph | Table)[] = [];
-  const lines = markdown.split("\n");
-
-  // Collect GFM table rows
-  let tableBuffer: string[] = [];
-
-  const flushTable = () => {
-    if (tableBuffer.length < 2) {
-      // Not a valid table — emit as regular paragraphs
-      for (const tl of tableBuffer) {
-        elements.push(new Paragraph({ children: parseInlineMarkdown(tl) }));
-      }
-      tableBuffer = [];
-      return;
-    }
-
-    // Parse header and data rows, skip separator row
-    const parseRow = (row: string) =>
-      row.split("|").map((c) => c.trim()).filter((c) => c.length > 0);
-
-    const headers = parseRow(tableBuffer[0]);
-    const dataRows = tableBuffer
-      .slice(2) // skip header + separator
-      .map(parseRow);
-
-    const headerRow = new TableRow({
-      children: headers.map((h) => headerCell(h)),
-      tableHeader: true,
-    });
-
-    const rows = dataRows.map(
-      (cols) =>
-        new TableRow({
-          children: headers.map((_, i) => bodyCell(cols[i] || "")),
-        }),
-    );
-
-    elements.push(
-      new Table({
-        rows: [headerRow, ...rows],
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        borders: tableBorder,
-      }),
-    );
-
-    tableBuffer = [];
-  };
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
-
-    // Detect table rows (start with |)
-    if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
-      // Check if separator row (all dashes/colons)
-      const isSep = /^\|[\s:|-]+\|$/.test(trimmed);
-      if (tableBuffer.length > 0 || (!isSep && trimmed.includes("|"))) {
-        tableBuffer.push(trimmed);
-        continue;
-      }
-    } else if (tableBuffer.length > 0) {
-      flushTable();
-    }
-
-    // Blank line
-    if (!trimmed) {
-      elements.push(new Paragraph({}));
-      continue;
-    }
-
-    // Heading: # through ######
-    const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)/);
-    if (headingMatch) {
-      const level = headingMatch[1].length;
-      const heading = headingLevels[level] ?? HeadingLevel.HEADING_6;
-      elements.push(
-        new Paragraph({
-          children: parseInlineMarkdown(headingMatch[2]),
-          heading,
-        }),
-      );
-      continue;
-    }
-
-    // Image: ![alt](path) — handle lines containing one or more images
-    // Images may be standalone or mixed with text
-    const imgPattern = /!\[([^\]]*)\]\(([^)]+)\)/g;
-    if (imgPattern.test(trimmed)) {
-      imgPattern.lastIndex = 0; // reset after test
-      const parts: (Paragraph | null)[] = [];
-      let lastIdx = 0;
-      for (const m of trimmed.matchAll(imgPattern)) {
-        // Text before image
-        const before = trimmed.slice(lastIdx, m.index).trim();
-        if (before) {
-          parts.push(new Paragraph({ children: parseInlineMarkdown(before) }));
-        }
-        // The image itself
-        const imgPath = m[2];
-        const img = await readScreenshot(projectRoot, imgPath);
-        if (img) {
-          parts.push(new Paragraph({ children: [img] }));
-        } else {
-          parts.push(
-            new Paragraph({
-              children: [new TextRun({ text: `[Image: ${imgPath}]`, italics: true })],
-            }),
-          );
-        }
-        lastIdx = m.index! + m[0].length;
-      }
-      // Text after last image
-      const after = trimmed.slice(lastIdx).trim();
-      if (after) {
-        parts.push(new Paragraph({ children: parseInlineMarkdown(after) }));
-      }
-      for (const p of parts) {
-        if (p) elements.push(p);
-      }
-      continue;
-    }
-
-    // Horizontal rule: --- or *** or ___
-    if (/^[-*_]{3,}$/.test(trimmed)) {
-      elements.push(
-        new Paragraph({
-          border: {
-            bottom: { style: BorderStyle.SINGLE, size: 6, color: "BFBFBF", space: 1 },
-          },
-        }),
-      );
-      continue;
-    }
-
-    // Bullet list: - text or * text (but not *italic*)
-    const bulletMatch = trimmed.match(/^[-*•]\s+(.+)/);
-    if (bulletMatch && !trimmed.match(/^\*[^*]+\*$/)) {
-      elements.push(
-        new Paragraph({
-          children: parseInlineMarkdown(bulletMatch[1]),
-          bullet: { level: 0 },
-        }),
-      );
-      continue;
-    }
-
-    // Numbered list: 1. text
-    if (/^\d+[.)]\s+/.test(trimmed)) {
-      const content = trimmed.replace(/^\d+[.)]\s+/, "");
-      elements.push(
-        new Paragraph({
-          children: parseInlineMarkdown(content),
-          numbering: { reference: "decimal-list", level: 0 },
-        }),
-      );
-      continue;
-    }
-
-    // Blockquote: > text
-    const quoteMatch = trimmed.match(/^>\s*(.*)/);
-    if (quoteMatch) {
-      elements.push(
-        new Paragraph({
-          children: [new TextRun({ text: quoteMatch[1] || "", italics: true })],
-          indent: { left: convertInchesToTwip(0.5) },
-        }),
-      );
-      continue;
-    }
-
-    // Regular paragraph
-    elements.push(new Paragraph({ children: parseInlineMarkdown(trimmed) }));
-  }
-
-  // Flush any remaining table
-  if (tableBuffer.length > 0) flushTable();
-
-  return elements;
-}
-
+/** Returns null when the user cancels the save dialog. */
 export async function exportNoteToWord(
   title: string,
   markdown: string,
-  projectRoot: string,
   orientation: WordOrientation = "portrait",
-): Promise<void> {
-  const children: (Paragraph | Table)[] = [
-    new Paragraph({ text: title, heading: HeadingLevel.TITLE }),
-    new Paragraph({
-      children: [new TextRun({ text: `Exported ${timestamp()}`, italics: true })],
-    }),
-    new Paragraph({}),
-    ...await markdownToDocxContent(markdown, projectRoot),
-  ];
-
-  const doc = createDocument(children, orientation);
-  await saveDocument(doc, `${sanitizeFilename(title)}.docx`);
+): Promise<WordExportReport | null> {
+  return saveMarkdownAsWord(
+    buildNoteMarkdown(title, markdown),
+    `${sanitizeFilename(title)}.docx`,
+    orientation,
+    NOTE_IMAGE_WIDTH_PX,
+  );
 }
 
-// ── Sketch → Word ───────────────────────────────────────────────
-
-async function buildSketchContent(sketch: Sketch, projectRoot: string, level: (typeof HeadingLevel)[keyof typeof HeadingLevel] = HeadingLevel.HEADING_1): Promise<(Paragraph | Table)[]> {
-  const elements: (Paragraph | Table)[] = [];
-
-  elements.push(new Paragraph({ text: sketch.title, heading: level }));
-
-  const desc = descriptionText(sketch.description);
-  if (desc.trim()) {
-    elements.push(...markdownToParagraphs(desc));
-  }
-
-  if (sketch.rows.length > 0) {
-    elements.push(await buildPlanningTable(sketch.rows, projectRoot));
-  }
-
-  return elements;
+/** Returns null when the user cancels the save dialog. */
+export async function exportSketchToWord(
+  sketch: Sketch,
+  orientation: WordOrientation = "landscape",
+): Promise<WordExportReport | null> {
+  return saveMarkdownAsWord(
+    await buildSketchMarkdown(sketch),
+    `${sanitizeFilename(sketch.title)}.docx`,
+    orientation,
+    TABLE_IMAGE_WIDTH_PX,
+  );
 }
 
-export async function exportSketchToWord(sketch: Sketch, projectRoot: string, orientation: WordOrientation = "landscape"): Promise<boolean> {
-  const children: (Paragraph | Table)[] = [
-    new Paragraph({ text: sketch.title, heading: HeadingLevel.TITLE }),
-    new Paragraph({
-      children: [
-        new TextRun({ text: `Generated ${timestamp()}  ·  ${sketch.rows.length} scene${sketch.rows.length !== 1 ? "s" : ""}`, italics: true }),
-      ],
-    }),
-    new Paragraph({}), // blank line
-    ...await buildSketchContent(sketch, projectRoot, HeadingLevel.HEADING_1),
-  ];
-
-  const doc = createDocument(children, orientation);
-  return saveDocument(doc, `${sanitizeFilename(sketch.title)}.docx`);
-}
-
-// ── Storyboard → Word ───────────────────────────────────────────
-
+/** Returns null when the user cancels the save dialog. */
 export async function exportStoryboardToWord(
   storyboard: Storyboard,
-  projectRoot: string,
   resolveSketches: (paths: string[]) => Promise<Map<string, Sketch>>,
   orientation: WordOrientation = "landscape",
-): Promise<void> {
+): Promise<WordExportReport | null> {
   const sketchMap = await resolveSketches(getUniqueStoryboardSketchPaths(storyboard));
-  const children: (Paragraph | Table)[] = [];
+  return saveMarkdownAsWord(
+    await buildStoryboardMarkdown(storyboard, sketchMap),
+    `${sanitizeFilename(storyboard.title)}.docx`,
+    orientation,
+    TABLE_IMAGE_WIDTH_PX,
+  );
+}
 
-  // Title + subtitle
-  children.push(new Paragraph({ text: storyboard.title, heading: HeadingLevel.TITLE }));
-
-  const sketchCount = sketchMap.size;
-  const totalRows = [...sketchMap.values()].reduce((s, sk) => s + sk.rows.length, 0);
-  children.push(new Paragraph({
-    children: [new TextRun({
-      text: `Generated ${timestamp()}  ·  ${sketchCount} sketch${sketchCount !== 1 ? "es" : ""}, ${totalRows} scene${totalRows !== 1 ? "s" : ""}`,
-      italics: true,
-    })],
-  }));
-
-  if (storyboard.description?.trim()) {
-    children.push(new Paragraph({}));
-    children.push(...markdownToParagraphs(storyboard.description));
+/** User-facing summary for a completed export. */
+export function describeWordExport(report: WordExportReport): { message: string; type: "success" | "warning" } {
+  if (report.skippedRemoteImages.length > 0) {
+    return {
+      message: `Exported to Word. ${plural(report.skippedRemoteImages.length, "remote image was", "remote images were")} not embedded.`,
+      type: "warning",
+    };
   }
-
-  children.push(new Paragraph({})); // blank line before content
-
-  // Items in storyboard order
-  for (const item of storyboard.items) {
-    if (item.type === "section") {
-      children.push(new Paragraph({ text: item.title, heading: HeadingLevel.HEADING_1 }));
-      if (item.description?.trim()) {
-        children.push(...markdownToParagraphs(item.description));
-      }
-      for (const spath of item.sketches) {
-        const sk = sketchMap.get(spath);
-        if (sk) children.push(...await buildSketchContent(sk, projectRoot, HeadingLevel.HEADING_2));
-      }
-    } else {
-      const sk = sketchMap.get(item.path);
-      if (sk) children.push(...await buildSketchContent(sk, projectRoot, HeadingLevel.HEADING_1));
-    }
-  }
-
-  const doc = createDocument(children, orientation);
-  await saveDocument(doc, `${sanitizeFilename(storyboard.title)}.docx`);
+  return { message: "Exported to Word", type: "success" };
 }

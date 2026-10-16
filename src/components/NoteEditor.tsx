@@ -8,7 +8,7 @@ import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { invoke } from "../services/tauri";
 import type { TokenResponse } from "../types/auth";
-import { exportNoteToWord } from "../utils/exportToWord";
+import { describeWordExport, exportNoteToWord } from "../utils/exportToWord";
 import { ProjectImage } from "./ProjectImage";
 import { projectRelativeScreenshotPath } from "../utils/projectImage";
 import { DocumentHeader } from "./DocumentHeader";
@@ -311,9 +311,14 @@ Use write_note to save the cleaned Markdown back to "${activeNotePath}". Do not 
     if (!activeNoteContent || exporting) return;
     setExporting(true);
     try {
-      await exportNoteToWord(draftTitle || noteTitleFromPath(activeNotePath), noteDocument.body, projectRoot ?? "", orientation);
+      const report = await exportNoteToWord(draftTitle || noteTitleFromPath(activeNotePath), noteDocument.body, orientation);
+      if (report) {
+        const { message, type } = describeWordExport(report);
+        useToastStore.getState().show(message, 4000, type);
+      }
     } catch (e) {
       console.error("[NoteEditor] Export to Word failed:", e);
+      useToastStore.getState().show(`Word export failed: ${e instanceof Error ? e.message : String(e)}`, 6000, "error");
     } finally {
       setExporting(false);
     }

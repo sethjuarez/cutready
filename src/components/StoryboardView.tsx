@@ -32,7 +32,7 @@ import { SketchPickerItem } from "./SketchCard";
 import { PresentationShell as SketchPreview } from "./presentation/PresentationShell";
 import { ScriptTable } from "./ScriptTable";
 import { useConfirmDialog } from "./ConfirmDialog";
-import { exportStoryboardToWord, type WordOrientation } from "../utils/exportToWord";
+import { describeWordExport, exportStoryboardToWord, type WordOrientation } from "../utils/exportToWord";
 import { exportStoryboardToPowerPoint, type PowerPointExportContent } from "../utils/exportToPowerPoint";
 import { DocumentHeader } from "./DocumentHeader";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
@@ -378,7 +378,7 @@ export function StoryboardView() {
 
   const handleExportWord = useCallback((orientation: WordOrientation) => {
     if (!activeStoryboard) return;
-    return exportStoryboardToWord(activeStoryboard, currentProject?.root ?? "", async (paths) => {
+    return exportStoryboardToWord(activeStoryboard, async (paths) => {
       const map = new Map<string, Sketch>();
       await Promise.all(paths.map(async (p) => {
         const cached = sketchCache.get(p);
@@ -389,11 +389,16 @@ export function StoryboardView() {
         } catch { /* skip missing */ }
       }));
       return map;
-    }, orientation).then(() => {
-      useToastStore.getState().show("Export complete");
+    }, orientation).then((report) => {
+      if (!report) return;
+      const { message, type } = describeWordExport(report);
+      useToastStore.getState().show(message, 4000, type);
       useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "export", content: `Exported "${activeStoryboard.title}" to Word`, level: "success" }]);
-    }).catch(err => console.error("Word export failed:", err));
-  }, [activeStoryboard, currentProject, sketchCache]);
+    }).catch(err => {
+      console.error("Word export failed:", err);
+      useToastStore.getState().show(`Word export failed: ${err instanceof Error ? err.message : String(err)}`, 6000, "error");
+    });
+  }, [activeStoryboard, sketchCache]);
 
   const handleExportPowerPoint = useCallback((content: PowerPointExportContent) => {
     if (!activeStoryboard) return;

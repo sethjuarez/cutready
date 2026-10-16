@@ -191,6 +191,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return MOCK_SKETCH;
     case "save_sketch":
       return null;
+    case "export_markdown_to_word":
+      return { imagesEmbedded: 0, skippedRemoteImages: [] };
     case "export_sketch_video":
       sendMockProgress(args, {
         phase: "title",

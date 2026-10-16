@@ -21,7 +21,7 @@ import { DurationBadge, MetadataEditor } from "./MetadataEditor";
 import { InlineDescriptionEditor } from "./InlineDescriptionEditor";
 import type { PresentationMode } from "./presentation/types";
 import VisualCell from "./VisualCell";
-import { exportSketchToWord, type WordOrientation } from "../utils/exportToWord";
+import { describeWordExport, exportSketchToWord, type WordOrientation } from "../utils/exportToWord";
 import { exportSketchToPowerPoint, type PowerPointExportContent } from "../utils/exportToPowerPoint";
 import type {
   MotionPlan,
@@ -2130,12 +2130,16 @@ Rules:
 
   const handleExportWord = useCallback((orientation: WordOrientation = "landscape") => {
     if (!activeSketch) return;
-    exportSketchToWord(activeSketch, projectRoot, orientation).then((exported) => {
-      if (!exported) return;
-      useToastStore.getState().show("Export complete");
+    exportSketchToWord(activeSketch, orientation).then((report) => {
+      if (!report) return;
+      const { message, type } = describeWordExport(report);
+      useToastStore.getState().show(message, 4000, type);
       useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "export", content: `Exported "${activeSketch.title}" to Word`, level: "success" }]);
-    }).catch(err => console.error("Word export failed:", err));
-  }, [activeSketch, projectRoot]);
+    }).catch(err => {
+      console.error("Word export failed:", err);
+      useToastStore.getState().show(`Word export failed: ${err instanceof Error ? err.message : String(err)}`, 6000, "error");
+    });
+  }, [activeSketch]);
 
   const handleExportPowerPoint = useCallback((content: PowerPointExportContent) => {
     if (!activeSketch) return;
