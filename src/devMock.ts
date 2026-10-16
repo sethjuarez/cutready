@@ -155,6 +155,20 @@ if (typeof window !== "undefined") {
   (window as any).__MOCK_OVERRIDES__ = _overrides;
 }
 
+let mockIdentityProfile: { name: string; email: string } | null = null;
+
+function mockResolvedIdentity() {
+  const profile = mockIdentityProfile;
+  return {
+    name: profile?.name ?? "demo-user",
+    email: profile?.email ?? null,
+    name_source: profile ? "profile" : "system",
+    email_source: profile ? "profile" : null,
+    profile,
+    needs_setup: !profile,
+  };
+}
+
 /** Mock handler for Tauri invoke calls */
 function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
   // Check for E2E overrides first
@@ -1259,6 +1273,17 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       };
     case "github_sign_out":
       return null;
+    case "get_contributor_identity":
+      return mockResolvedIdentity();
+    case "set_contributor_identity":
+      mockIdentityProfile = {
+        name: String(args?.name ?? "").trim(),
+        email: String(args?.email ?? "").trim(),
+      };
+      return mockResolvedIdentity();
+    case "clear_contributor_identity":
+      mockIdentityProfile = null;
+      return mockResolvedIdentity();
     case "list_monitors":
       return [{
         id: 0,

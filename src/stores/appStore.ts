@@ -2579,8 +2579,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   saveVersion: async (label, _forkLabel?) => {
+    // Let save failures reach the caller so the snapshot dialog can stay open and explain why.
+    await saveDraftlineVersion(label);
     try {
-      await saveDraftlineVersion(label);
       const activeTimeline = get().timelines.find((timeline) => timeline.is_active);
       const startedBranch = get().startedBranchFromSnapshot;
       set({
@@ -2596,7 +2597,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().checkRewound();
       await get().refreshSyncStatus();
     } catch (err) {
-      console.error("Failed to save version:", err);
+      console.error("Failed to refresh after saving version:", err);
     }
   },
 
@@ -2824,7 +2825,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       useToastStore.getState().show("Restored snapshot as a new save.", 4000, "success");
     } catch (err) {
       console.error("Failed to restore snapshot:", err);
-      useToastStore.getState().show(`Restore failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Restore failed: ${errorMessage(err)}`, 5000, "error");
     }
   },
 
@@ -2843,7 +2844,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       useToastStore.getState().show(`Restored snapshot on ${targetLabel}.`, 4000, "success");
     } catch (err) {
       console.error("Failed to restore snapshot:", err);
-      useToastStore.getState().show(`Restore failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Restore failed: ${errorMessage(err)}`, 5000, "error");
       throw err;
     }
   },
@@ -2949,7 +2950,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().checkDirty();
     } catch (err) {
       console.error("Failed to switch timeline:", err);
-      useToastStore.getState().show(`Switch failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Switch failed: ${errorMessage(err)}`, 5000, "error");
       throw err;
     } finally {
       set({ loading: false });
@@ -3038,7 +3039,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().applySnapshotCleanup(preview.plan_id);
     } catch (err) {
       console.error("Failed to compact snapshots:", err);
-      useToastStore.getState().show(`Compaction failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Compaction failed: ${errorMessage(err)}`, 5000, "error");
     }
   },
 

@@ -159,14 +159,13 @@ To join a teammate's CutReady project:
 CutReady uses **snapshots** (Draftline-managed versions) to track your work.
 Every time you save, a snapshot is created automatically.
 
-No additional identity setup is needed — CutReady automatically resolves
-your name and email from the GitHub CLI. Since you already ran
-`gh auth login`, your GitHub profile identity is used for snapshots.
+Snapshots are signed with your name and email. CutReady reads them from your
+git config (`user.name` and `user.email`). If they aren't set, it asks for
+them the first time you save a snapshot.
 
 <Aside type="tip">
-  You can override the auto-resolved identity in **Settings** → **Git Remote**
-  → **Git Identity**. See [Workspace Remote](/settings/repository/) for the
-  full resolution chain.
+  Change the name and email in **Settings** → **Profile**. See
+  [Profile](/settings/overview/#profile) for the full resolution order.
 </Aside>
 
 ## Troubleshooting

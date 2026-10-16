@@ -26,10 +26,13 @@ const SENSITIVE_INVOKE_COMMANDS = new Set([
   "azure_browser_auth_complete",
   "azure_device_code_poll",
   "azure_token_refresh",
+  "clear_contributor_identity",
+  "get_contributor_identity",
   "github_device_code_poll",
   "read_narration_asset",
   "save_feedback",
   "save_narration_recording",
+  "set_contributor_identity",
 ]);
 const SENSITIVE_TAURI_EVENTS = new Set(["agent-event"]);
 

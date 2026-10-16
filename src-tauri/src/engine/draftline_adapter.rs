@@ -9,12 +9,12 @@
 use std::path::Path;
 
 use draftline::{
-    ApplyIncomingReport, ApplyIncomingResult, ChangeSet, ContentPolicy, HistoryEntry,
-    MergeConflictResolution, MergeIncomingReport, MergeIncomingResult, MergeIncomingToken,
-    PreflightReport, PreviewFile, PublishResult, RemoteCredential, RemoteEndpoint, RemoteOptions,
-    Result as DraftlineResult, Shelf, SwitchPolicy, SyncStatus, Variation, VariationId,
-    VariationMetadata, VariationSummary, Version, VersionDiff, VersionId, VersionPreview,
-    Workspace, WorkspaceSummary,
+    ApplyIncomingReport, ApplyIncomingResult, ChangeSet, ContentPolicy, ContributorProfile,
+    HistoryEntry, MergeConflictResolution, MergeIncomingReport, MergeIncomingResult,
+    MergeIncomingToken, PreflightReport, PreviewFile, PublishResult, RemoteCredential,
+    RemoteEndpoint, RemoteOptions, Result as DraftlineResult, Shelf, SwitchPolicy, SyncStatus,
+    Variation, VariationId, VariationMetadata, VariationSummary, Version, VersionDiff, VersionId,
+    VersionPreview, Workspace, WorkspaceSummary,
 };
 
 const EXCLUDED_RUNTIME_PATHS: &[&str] = &[
@@ -102,6 +102,14 @@ impl CutReadyDraftlineAdapter {
 
     pub fn save_version(&self, label: &str) -> DraftlineResult<Version> {
         self.workspace.save_version(label)
+    }
+
+    pub fn save_version_with_profile(
+        &self,
+        label: &str,
+        profile: &ContributorProfile,
+    ) -> DraftlineResult<Version> {
+        self.workspace.save_version_with_profile(label, profile)
     }
 
     pub fn versions(&self) -> DraftlineResult<Vec<Version>> {
@@ -631,6 +639,46 @@ mod tests {
             read(root.join(".cutready/ui-state.json")),
             r#"{"panel":"dirty"}"#
         );
+    }
+
+    #[test]
+    fn profile_save_before_switch_credits_the_acting_user() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root.join("intro.sk"), r#"{"title":"Base"}"#);
+
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        let base = adapter.save_version("Base").unwrap();
+        let alternate = adapter
+            .create_variation_from_with_metadata(
+                base.id(),
+                "alternate",
+                Some("Alternate"),
+                Some("alternate"),
+            )
+            .unwrap();
+
+        write(root.join("intro.sk"), r#"{"title":"Dirty"}"#);
+        let profile = ContributorProfile::new(
+            draftline::Contributor {
+                name: "Jess".to_string(),
+                email: Some("jess@example.com".to_string()),
+            },
+            draftline::Contributor {
+                name: "CutReady".to_string(),
+                email: Some("app@cutready.local".to_string()),
+            },
+        );
+        let saved = adapter
+            .save_version_with_profile("Save dirty work before switching", &profile)
+            .unwrap();
+        assert_eq!(saved.author.email.as_deref(), Some("jess@example.com"));
+        assert_eq!(saved.saved_by.email.as_deref(), Some("app@cutready.local"));
+
+        let switched = adapter
+            .switch_variation_with_policy(alternate.id(), SwitchPolicy::AbortIfDirty)
+            .unwrap();
+        assert_eq!(switched.name, "alternate");
     }
 
     #[test]

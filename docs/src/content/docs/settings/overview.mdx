@@ -22,6 +22,28 @@ sidebar. Global settings apply across all workspaces.
 <Screenshot src="/images/settings-panel.png" darkSrc="/images/settings-panel-dark.png" alt="Global settings panel" caption="Global settings with Display, Themes, AI Provider, Agents, Feedback, and Updates tabs" />
 
 <Tabs>
+<TabItem label="Profile">
+
+### Profile
+
+Set the **name** and **email** CutReady signs your snapshots with. Your
+profile is saved on this computer, not in the workspace, so each
+collaborator keeps their own.
+
+If you leave it empty, CutReady uses the first name and email it finds:
+
+1. **Your profile** — the values saved in this tab.
+2. **Environment** — `GIT_AUTHOR_NAME` and `GIT_AUTHOR_EMAIL`.
+3. **Git config** — `user.name` and `user.email` for the workspace, or your
+   global git config.
+4. **System username** — a name only.
+
+The tab shows which source each value came from. If no email is found,
+CutReady asks for your name and email the first time you save a snapshot.
+Select **Use detected** to clear your profile and go back to the detected
+values.
+
+</TabItem>
 <TabItem label="Display">
 
 ### Display Preferences

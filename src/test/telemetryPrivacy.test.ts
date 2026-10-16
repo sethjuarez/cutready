@@ -11,6 +11,12 @@ describe("telemetry privacy", () => {
     expect(isSensitiveInvokeCommand("agent_chat_with_tools")).toBe(true);
   });
 
+  test("contributor identity commands bypass IPC instrumentation", () => {
+    for (const cmd of ["get_contributor_identity", "set_contributor_identity", "clear_contributor_identity"]) {
+      expect(isSensitiveInvokeCommand(cmd)).toBe(true);
+    }
+  });
+
   test("agent events bypass payload instrumentation", () => {
     expect(isSensitiveTauriEvent("agent-event")).toBe(true);
   });

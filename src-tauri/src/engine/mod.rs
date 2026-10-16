@@ -6,6 +6,7 @@ pub mod diagnostics_sanitizer;
 pub mod draftline_adapter;
 pub mod export;
 pub mod ffmpeg;
+pub mod identity;
 pub mod import;
 pub mod interaction;
 pub mod memory;

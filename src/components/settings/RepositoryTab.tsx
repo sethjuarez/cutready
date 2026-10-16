@@ -69,7 +69,7 @@ export function RepositoryTab({ settings, updateSetting }: {
           <li>SSH keys held by your SSH agent.</li>
         </ol>
         <p className="text-xs text-[rgb(var(--color-text-secondary))] mt-1">
-          Snapshots are attributed to <code>GIT_AUTHOR_NAME</code> and <code>GIT_AUTHOR_EMAIL</code>, falling back to your operating system username.
+          Snapshots are attributed to the name and email in Settings &rsaquo; Profile.
         </p>
       </div>
 

@@ -61,6 +61,9 @@ harness-agentive = { path = "../crates/harness-agentive", optional = true }
 harness-copilot-sdk = { path = "../crates/harness-copilot-sdk", optional = true }
 harness-prompty = { path = "../crates/harness-prompty" }
 draftline = "0.2.15"
+# Already in the tree through Draftline; used directly to read the git config
+# identity that contributor attribution falls back to.
+git2 = { version = "0.20", default-features = false }
 keyring = "4.1.2"
 xcap = "0.8"
 image = "0.25"

@@ -1630,6 +1630,7 @@ dependencies = [
  "dirs 6.0.0",
  "draftline",
  "futures-util",
+ "git2",
  "harness-agentive",
  "harness-contract",
  "harness-copilot-sdk",

@@ -6,6 +6,7 @@ pub mod draftline;
 pub mod export;
 pub mod feedback;
 pub mod github;
+pub mod identity;
 pub mod import;
 pub mod interaction;
 pub mod narration_preview;

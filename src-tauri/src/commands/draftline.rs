@@ -75,24 +75,69 @@ fn draftline_root_from_project_view(view: &crate::models::script::ProjectView) -
     view.repo_root.clone()
 }
 
-fn cutready_contributor_profile(_project_root: &Path) -> ContributorProfile {
+/// Error code returned when a command would record a change without knowing
+/// who made it. The frontend keys its "add your name and email" prompt on it.
+pub const CONTRIBUTOR_IDENTITY_REQUIRED: &str = "contributor_identity_required";
+const CONTRIBUTOR_IDENTITY_REQUIRED_MESSAGE: &str =
+    "Add your name and email in Settings › Profile so collaborators can see who made this change.";
+
+fn contributor_profile_for(author: crate::engine::identity::ResolvedIdentity) -> ContributorProfile {
     ContributorProfile::new(
         Contributor {
-            name: std::env::var("GIT_AUTHOR_NAME")
-                .ok()
-                .or_else(|| std::env::var("USERNAME").ok())
-                .or_else(|| std::env::var("USER").ok())
-                .filter(|value| !value.trim().is_empty())
-                .unwrap_or_else(|| "CutReady User".to_string()),
-            email: std::env::var("GIT_AUTHOR_EMAIL")
-                .ok()
-                .filter(|value| !value.trim().is_empty()),
+            name: author.name,
+            email: author.email,
         },
         Contributor {
             name: "CutReady".to_string(),
             email: Some("app@cutready.local".to_string()),
         },
     )
+}
+
+fn cutready_contributor_profile(
+    project_root: &Path,
+    app: Option<&AppHandle>,
+) -> ContributorProfile {
+    contributor_profile_for(crate::commands::identity::resolve_identity(
+        app,
+        Some(project_root),
+    ))
+}
+
+fn contributor_identity_required_error() -> contract::TauriCommandError {
+    contract::TauriCommandError {
+        code: CONTRIBUTOR_IDENTITY_REQUIRED.into(),
+        message: CONTRIBUTOR_IDENTITY_REQUIRED_MESSAGE.into(),
+        details: None,
+    }
+}
+
+fn contributor_identity_unreadable_error(reason: String) -> contract::TauriCommandError {
+    contract::TauriCommandError {
+        code: CONTRIBUTOR_IDENTITY_REQUIRED.into(),
+        message: format!("{reason}. {CONTRIBUTOR_IDENTITY_REQUIRED_MESSAGE}"),
+        details: None,
+    }
+}
+
+/// Resolve who is acting and refuse when no email is known (or the saved
+/// profile can't be read), so commits never fall back to a placeholder author.
+fn require_contributor_profile(
+    project_root: &Path,
+    app: &AppHandle,
+) -> contract::TauriCommandResult<ContributorProfile> {
+    let author = crate::commands::identity::try_resolve_identity(Some(app), Some(project_root))
+        .map_err(contributor_identity_unreadable_error)?;
+    commit_profile_for(author)
+}
+
+fn commit_profile_for(
+    author: crate::engine::identity::ResolvedIdentity,
+) -> contract::TauriCommandResult<ContributorProfile> {
+    if author.needs_setup {
+        return Err(contributor_identity_required_error());
+    }
+    Ok(contributor_profile_for(author))
 }
 
 fn resolve_remote_credential(
@@ -120,22 +165,35 @@ fn resolve_remote_credential(
     Ok(RemoteCredential::Default)
 }
 
+/// Policy and credentials shared by every Draftline command, without any Tauri
+/// handle so tests can drive the contract directly.
+fn core_draftline_context(
+    profile: ContributorProfile,
+) -> Result<contract::DraftlineCommandContext<'static>, String> {
+    Ok(contract::DraftlineCommandContext::new()
+        .with_content_policy(cutready_content_policy().map_err(|error| error.to_string())?)
+        .with_contributor_profile(profile)
+        .with_credentials(resolve_remote_credential))
+}
+
 fn build_draftline_context(
     project_root: &Path,
     app: Option<AppHandle>,
 ) -> Result<contract::DraftlineCommandContext<'static>, String> {
-    let mut context = contract::DraftlineCommandContext::new()
-        .with_content_policy(cutready_content_policy().map_err(|error| error.to_string())?)
-        .with_contributor_profile(cutready_contributor_profile(project_root))
-        .with_credentials(resolve_remote_credential);
+    let profile = cutready_contributor_profile(project_root, app.as_ref());
+    Ok(with_workspace_events(core_draftline_context(profile)?, app))
+}
 
+fn with_workspace_events(
+    mut context: contract::DraftlineCommandContext<'static>,
+    app: Option<AppHandle>,
+) -> contract::DraftlineCommandContext<'static> {
     if let Some(app) = app {
         context = context.with_event_sink(move |event| {
             let _ = app.emit("draftline://workspace_event", event);
         });
     }
-
-    Ok(context)
+    context
 }
 
 fn remote_endpoint_to_dto(remote: RemoteEndpoint) -> DraftlineRemoteEndpointDto {
@@ -151,15 +209,6 @@ fn current_project_roots(state: &AppState) -> Option<(PathBuf, PathBuf)> {
             .as_ref()
             .map(|view| (view.repo_root.clone(), view.root.clone()))
     })
-}
-
-fn switch_policy_from_input(policy: DraftlineSwitchPolicyInput) -> draftline::SwitchPolicy {
-    match policy {
-        DraftlineSwitchPolicyInput::AbortIfDirty => draftline::SwitchPolicy::AbortIfDirty,
-        DraftlineSwitchPolicyInput::SaveFirst { label } => {
-            draftline::SwitchPolicy::SaveFirst { label }
-        }
-    }
 }
 
 fn reject_remote_url_credentials(url: &str) -> Result<(), String> {
@@ -200,13 +249,26 @@ fn context_for_workspace(
     workspace_path: &Path,
     app: AppHandle,
 ) -> contract::TauriCommandResult<contract::DraftlineCommandContext<'static>> {
-    build_draftline_context(workspace_path, Some(app)).map_err(|message| {
-        contract::TauriCommandError {
-            code: "cutready_context_error".into(),
-            message,
-            details: None,
-        }
-    })
+    build_draftline_context(workspace_path, Some(app)).map_err(context_error)
+}
+
+/// Context for commands that record a new version under the acting contributor.
+fn context_for_commit(
+    workspace_path: &Path,
+    app: AppHandle,
+) -> contract::TauriCommandResult<contract::DraftlineCommandContext<'static>> {
+    let profile = require_contributor_profile(workspace_path, &app)?;
+    core_draftline_context(profile)
+        .map(|context| with_workspace_events(context, Some(app)))
+        .map_err(context_error)
+}
+
+fn context_error(message: String) -> contract::TauriCommandError {
+    contract::TauriCommandError {
+        code: "cutready_context_error".into(),
+        message,
+        details: None,
+    }
 }
 
 #[auditaur_command(skip_all)]
@@ -325,16 +387,32 @@ pub async fn preflight_switch_variation(
 #[auditaur_command(skip_all, err)]
 pub async fn switch_variation(
     request: DraftlineSwitchVariationRequest,
+    app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> Result<Variation, String> {
     let _guard = lock.0.lock().await;
     let adapter = CutReadyDraftlineAdapter::open_project(&request.workspace_path)
         .map_err(|error| error.to_string())?;
+    let policy = match request.policy {
+        DraftlineSwitchPolicyInput::AbortIfDirty => draftline::SwitchPolicy::AbortIfDirty,
+        // Draftline's SaveFirst commits under git config, so save with the acting
+        // user's profile here. A clean workspace saves nothing and needs no author.
+        DraftlineSwitchPolicyInput::SaveFirst { label } => {
+            let preflight = adapter
+                .preflight_switch_variation(&request.variation_id)
+                .map_err(|error| error.to_string())?;
+            if !preflight.dirty_files.is_empty() {
+                let profile = require_contributor_profile(&request.workspace_path, &app)
+                    .map_err(|error| error.message)?;
+                adapter
+                    .save_version_with_profile(&label, &profile)
+                    .map_err(|error| error.to_string())?;
+            }
+            draftline::SwitchPolicy::AbortIfDirty
+        }
+    };
     adapter
-        .switch_variation_with_policy(
-            &request.variation_id,
-            switch_policy_from_input(request.policy),
-        )
+        .switch_variation_with_policy(&request.variation_id, policy)
         .map_err(|error| error.to_string())
 }
 
@@ -356,9 +434,11 @@ pub async fn add_remote(
 #[auditaur_command(skip_all, err)]
 pub async fn squash_versions(
     request: DraftlineSquashVersionsRequest,
+    app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> Result<Version, String> {
     let _guard = lock.0.lock().await;
+    require_contributor_profile(&request.workspace_path, &app).map_err(|error| error.message)?;
     let adapter = CutReadyDraftlineAdapter::open_project(&request.workspace_path)
         .map_err(|error| error.to_string())?;
     adapter
@@ -433,7 +513,7 @@ pub async fn apply_history_cleanup(
 ) -> contract::TauriCommandResult<draftline::TimelineCleanupResult> {
     let _guard = lock.0.lock().await;
     let workspace_path = request.workspace_path.clone();
-    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    let mut context = context_for_commit(&request.workspace_path, app)?;
     let result = contract::into_tauri_result(contract::apply_history_cleanup_with_context(
         &mut context,
         request,
@@ -822,7 +902,7 @@ pub async fn restore_version_as_new_save(
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::RestoreVersionResult> {
     let _guard = lock.0.lock().await;
-    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    let mut context = context_for_commit(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::restore_version_as_new_save_with_context(
         &mut context,
         request,
@@ -836,7 +916,7 @@ pub async fn restore_version_as_new_save_to_variation(
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::TargetedRestoreVersionCommandResult> {
     let _guard = lock.0.lock().await;
-    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    let mut context = context_for_commit(&request.workspace_path, app)?;
     contract::into_tauri_result(
         contract::restore_version_as_new_save_to_variation_with_context(&mut context, request),
     )
@@ -849,7 +929,7 @@ pub async fn save(
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::SaveResult> {
     let _guard = lock.0.lock().await;
-    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    let mut context = context_for_commit(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::save_with_context(&mut context, request))
 }
 
@@ -891,7 +971,7 @@ pub async fn selected_save(
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::SelectedSaveResult> {
     let _guard = lock.0.lock().await;
-    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    let mut context = context_for_commit(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::selected_save_with_context(&mut context, request))
 }
 
@@ -1045,7 +1125,7 @@ pub async fn merge_incoming(
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::MergeIncomingCommandResult> {
     let _guard = lock.0.lock().await;
-    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    let mut context = context_for_commit(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::merge_incoming_with_context(&mut context, request))
 }
 
@@ -1056,7 +1136,7 @@ pub async fn merge_incoming_with_resolutions(
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::MergeIncomingCommandResult> {
     let _guard = lock.0.lock().await;
-    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    let mut context = context_for_commit(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::merge_incoming_with_resolutions_with_context(
         &mut context,
         request,
@@ -1135,5 +1215,33 @@ mod tests {
             redact_remote_url_credentials("https://user:token@github.com/owner/repo.git"),
             "https://github.com/owner/repo.git"
         );
+    }
+
+    #[test]
+    fn commits_require_a_known_contributor_email() {
+        use crate::engine::identity::{IdentitySource, ResolvedIdentity};
+        let anonymous = ResolvedIdentity {
+            name: "grace".into(),
+            email: None,
+            name_source: IdentitySource::System,
+            email_source: None,
+            profile: None,
+            needs_setup: true,
+        };
+        let error = commit_profile_for(anonymous).unwrap_err();
+        assert_eq!(error.code, CONTRIBUTOR_IDENTITY_REQUIRED);
+        assert!(error.message.contains("Settings › Profile"));
+
+        let known = ResolvedIdentity {
+            name: "Grace Hopper".into(),
+            email: Some("grace@example.com".into()),
+            name_source: IdentitySource::GitConfig,
+            email_source: Some(IdentitySource::GitConfig),
+            profile: None,
+            needs_setup: false,
+        };
+        let profile = commit_profile_for(known).unwrap();
+        assert_eq!(profile.author.email.as_deref(), Some("grace@example.com"));
+        assert_eq!(profile.saved_by.name, "CutReady");
     }
 }

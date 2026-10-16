@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { Download, AlertCircle } from "lucide-react";
-import { useAppStore } from "../stores/appStore";
+import { Download, AlertCircle, UserRound } from "lucide-react";
+import { errorMessage, useAppStore } from "../stores/appStore";
 import { PromptDialog } from "./PromptDialog";
 import { generateSnapshotName } from "../utils/snapshotName";
+import { useContributorIdentity } from "../hooks/useContributorIdentity";
+import { formatIdentity, setContributorIdentity } from "../services/identity";
+
+const noticeTextClass = "flex items-start gap-2 text-[11px] leading-relaxed text-[rgb(var(--color-text-secondary))]";
+const noticeIconClass = "mt-0.5 h-3.5 w-3.5 shrink-0 text-[rgb(var(--color-accent))]";
 
 /**
  * Modal dialog for naming a snapshot (Ctrl+S).
@@ -23,6 +28,14 @@ export function SnapshotDialog() {
   const [label, setLabel] = useState("");
   const [forkLabel, setForkLabel] = useState("");
   const [saving, setSaving] = useState(false);
+  const { identity, setIdentity, error: identityError, loading: identityLoading } = useContributorIdentity(snapshotPromptOpen);
+  const [authorNameDraft, setAuthorName] = useState<string | null>(null);
+  const [authorEmail, setAuthorEmail] = useState("");
+  const needsIdentity = identity?.needs_setup ?? false;
+  const identityReady = identity !== null && !identityLoading && !identityError;
+  // Suggest the resolved name until the user edits it; a fallback name is never suggested.
+  const authorName = authorNameDraft
+    ?? (identity?.needs_setup && identity.name_source !== "fallback" ? identity.name : "");
 
   // Auto-generate a snapshot name (and fork label when rewound) on open
   useEffect(() => {
@@ -44,6 +57,8 @@ export function SnapshotDialog() {
     });
     setLabel("");
     setForkLabel("");
+    setAuthorName(null);
+    setAuthorEmail("");
     setSaving(false);
   }, []);
 
@@ -51,7 +66,18 @@ export function SnapshotDialog() {
     const name = label.trim();
     if (!name) return;
     if (isRewound && !forkLabel.trim()) return;
+    if (!identityReady) return;
     setSaving(true);
+    if (needsIdentity) {
+      try {
+        setIdentity(await setContributorIdentity(authorName, authorEmail));
+      } catch (err) {
+        const { useToastStore } = await import("../stores/toastStore");
+        useToastStore.getState().show(errorMessage(err), 5000, "error");
+        setSaving(false);
+        return;
+      }
+    }
     try {
       await saveVersion(name, isRewound ? forkLabel.trim() : undefined);
       await loadGraphData();
@@ -69,14 +95,47 @@ export function SnapshotDialog() {
     } catch (err) {
       console.error("Snapshot save failed:", err);
       const { useToastStore } = await import("../stores/toastStore");
-      useToastStore.getState().show(`Snapshot failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Snapshot failed: ${errorMessage(err)}`, 5000, "error");
       setSaving(false);
     }
-  }, [label, forkLabel, isRewound, saveVersion, loadGraphData, loadTimelines, pendingNavAfterSave, pendingTimelineAfterSave, navigateToSnapshot, switchTimeline, close]);
+  }, [label, forkLabel, isRewound, identityReady, needsIdentity, authorName, authorEmail, setIdentity, saveVersion, loadGraphData, loadTimelines, pendingNavAfterSave, pendingTimelineAfterSave, navigateToSnapshot, switchTimeline, close]);
 
   if (!snapshotPromptOpen) return null;
 
   const willFork = isRewound;
+  const identityNotice = identityError ? (
+    <div className={noticeTextClass} data-testid="snapshot-identity-error">
+      <AlertCircle className={noticeIconClass} />
+      <span>
+        <span className="mb-0.5 block font-medium text-[rgb(var(--color-accent))]">Couldn't load your identity</span>
+        CutReady needs to know who is saving. Check Settings &rsaquo; Profile, then try again. ({identityError})
+      </span>
+    </div>
+  ) : needsIdentity ? (
+    <div className={noticeTextClass}>
+      <UserRound className={noticeIconClass} />
+      <span>
+        <span className="mb-0.5 block font-medium text-[rgb(var(--color-accent))]">Who is saving?</span>
+        Add your name and email so collaborators can see who saved this snapshot. CutReady remembers them on this computer.
+      </span>
+    </div>
+  ) : identity ? (
+    <div className={noticeTextClass} data-testid="snapshot-identity">
+      <UserRound className={noticeIconClass} />
+      <span>
+        Saving as <span className="font-medium text-[rgb(var(--color-text))]">{formatIdentity(identity)}</span>. Change it in Settings &rsaquo; Profile.
+      </span>
+    </div>
+  ) : null;
+  const forkNotice = willFork ? (
+    <div className={noticeTextClass}>
+      <AlertCircle className={noticeIconClass} />
+      <span>
+        <span className="mb-0.5 block font-medium text-[rgb(var(--color-accent))]">Creating a new branch</span>
+        Your changes will be saved on a separate timeline, so the original history stays safe.
+      </span>
+    </div>
+  ) : null;
 
   return (
     <PromptDialog
@@ -87,13 +146,10 @@ export function SnapshotDialog() {
       onClose={close}
       focusKey={`${snapshotPromptOpen}:${isRewound}`}
       noticeTone="accent"
-      notice={willFork ? (
-        <div className="flex items-start gap-2 text-[11px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
-          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[rgb(var(--color-accent))]" />
-          <span>
-            <span className="mb-0.5 block font-medium text-[rgb(var(--color-accent))]">Creating a new branch</span>
-            Your changes will be saved on a separate timeline, so the original history stays safe.
-          </span>
+      notice={identityNotice || forkNotice ? (
+        <div className="flex flex-col gap-2">
+          {identityNotice}
+          {forkNotice}
         </div>
       ) : undefined}
       fields={[
@@ -111,6 +167,19 @@ export function SnapshotDialog() {
           onChange: setForkLabel,
           placeholder: "e.g. Alternative intro, V2 approach...",
         }] : []),
+        ...(needsIdentity ? [{
+          id: "snapshot-author-name-input",
+          label: "Your name",
+          value: authorName,
+          onChange: setAuthorName,
+          placeholder: "e.g. Ada Lovelace",
+        }, {
+          id: "snapshot-author-email-input",
+          label: "Your email",
+          value: authorEmail,
+          onChange: setAuthorEmail,
+          placeholder: "you@example.com",
+        }] : []),
       ]}
       actions={[
         { id: "cancel", label: "Cancel", onSelect: close },
@@ -119,7 +188,7 @@ export function SnapshotDialog() {
           label: saving ? "Saving..." : "Save Snapshot",
           onSelect: handleSave,
           variant: "primary",
-          disabled: !label.trim() || (willFork && !forkLabel.trim()) || saving,
+          disabled: !identityReady || !label.trim() || (willFork && !forkLabel.trim()) || (needsIdentity && (!authorName.trim() || !authorEmail.trim())) || saving,
         },
       ]}
     />
