@@ -43,12 +43,12 @@ The `Contracts` workflow (`.github/workflows/contracts.yml`) runs `npm run check
 
 ## Canonical save form
 
-Desktop is the reference. Every runtime must save `.sk` files this way. Fields that are always written but may be `null` use `T | null = null`: legacy files may omit the key, and save always writes it. The vectors pin the rest, including unknown-field passthrough.
+Desktop is the reference. Every runtime must save `.sk` files this way. Fields that are always written but may be `null` use `T | null = null`: legacy files may omit the key, and save always writes it. Unknown fields are declared with `...Record<unknown>`. The vectors pin all of it through each runtime's production code.
 
 | Rule | Detail |
 | --- | --- |
 | Wire names | `snake_case` |
-| Unknown fields | Preserved on `Sketch` and `PlanningRow` |
+| Unknown fields | Preserved on `Sketch` and `PlanningRow`, not on nested models |
 | Always written | Row `locked`, all six `locks`, `screenshot` (`null` if unset); sketch `locked`, `description` (`null` if unset); narration `duration_ms` (`null` if unknown) |
 | Omitted when unset or empty | `visual`, `design_plan`, `duration_seconds`, `motion_points`, `typing_spots`, `motion_plan`, `narration`, `narration_plan`, `metadata` |
 | Legacy state | `"sketch"` loads as `"draft"` |

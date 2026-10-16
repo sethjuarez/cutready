@@ -20,8 +20,11 @@ public struct PlanningRow: TypraModel {
   public var designPlan: String? = nil
   public var narration: NarrationAsset? = nil
   public var narrationPlan: NarrationPlan? = nil
+  /// Undeclared fields captured on load and written back on save (unknown-field passthrough).
+  public var additionalProperties: [String: Any] = [:]
+  static let additionalPropertiesKnownKeys: Set<String> = ["locked", "locks", "time", "duration_seconds", "narrative", "demo_actions", "screenshot", "visual", "motion_points", "typing_spots", "motion_plan", "design_plan", "narration", "narration_plan"]
 
-  public init(locked: Bool? = nil, locks: PlanningCellLocks? = nil, time: String = "", durationSeconds: UInt32? = nil, narrative: String = "", demoActions: String = "", screenshot: String? = nil, visual: Any? = nil, motionPoints: [MotionPoint]? = nil, typingSpots: [TypingSpot]? = nil, motionPlan: MotionPlan? = nil, designPlan: String? = nil, narration: NarrationAsset? = nil, narrationPlan: NarrationPlan? = nil) {
+  public init(locked: Bool? = nil, locks: PlanningCellLocks? = nil, time: String = "", durationSeconds: UInt32? = nil, narrative: String = "", demoActions: String = "", screenshot: String? = nil, visual: Any? = nil, motionPoints: [MotionPoint]? = nil, typingSpots: [TypingSpot]? = nil, motionPlan: MotionPlan? = nil, designPlan: String? = nil, narration: NarrationAsset? = nil, narrationPlan: NarrationPlan? = nil, additionalProperties: [String: Any] = [:]) {
     self.locked = locked
     self.locks = locks
     self.time = time
@@ -36,6 +39,7 @@ public struct PlanningRow: TypraModel {
     self.designPlan = designPlan
     self.narration = narration
     self.narrationPlan = narrationPlan
+    self.additionalProperties = additionalProperties
   }
 
   public static func load(_ data: Any, context: LoadContext = LoadContext()) throws -> PlanningRow {
@@ -83,6 +87,7 @@ public struct PlanningRow: TypraModel {
     if let value = object["narration_plan"] {
       instance.narrationPlan = try NarrationPlan.load(value, context: context.at("narration_plan"))
     }
+    instance.additionalProperties = object.filter { !Self.additionalPropertiesKnownKeys.contains($0.key) }
     return instance
   }
 
@@ -126,6 +131,9 @@ public struct PlanningRow: TypraModel {
     }
     if let value = self.narrationPlan {
       result["narration_plan"] = try value.save(context)
+    }
+    for (key, value) in self.additionalProperties where !Self.additionalPropertiesKnownKeys.contains(key) {
+      result[key] = value
     }
     return result
   }

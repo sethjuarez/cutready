@@ -106,6 +106,8 @@ pub struct Sketch {
     pub created_at: String,
     /// RFC 3339 UTC timestamp, set by every successful edit.
     pub updated_at: String,
+    /// Undeclared fields captured on load and written back on save (unknown-field passthrough).
+    pub additional_properties: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Sketch {
@@ -159,7 +161,26 @@ impl Sketch {
             state: value.get("state").and_then(|v| v.as_str()).and_then(|s| SketchState::from_str_opt(s)).unwrap_or(SketchState::Draft),
             created_at: value.get("created_at").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
             updated_at: value.get("updated_at").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            additional_properties: Self::capture_additional_properties(&value, ""),
         }
+    }
+
+    /// True when `key` is a declared wire key for the given discriminator value.
+    fn additional_properties_known_key(kind: &str, key: &str) -> bool {
+        matches!(key, "title" | "locked" | "description" | "rows" | "metadata" | "state" | "created_at" | "updated_at")
+    }
+
+    fn capture_additional_properties(value: &serde_json::Value, kind: &str) -> serde_json::Map<String, serde_json::Value> {
+        value
+            .as_object()
+            .map(|object| {
+                object
+                    .iter()
+                    .filter(|(key, _)| !Self::additional_properties_known_key(kind, key))
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     pub(crate) fn validate_input_at(value: &serde_json::Value, path: &str) -> Result<(), String> {
@@ -201,6 +222,12 @@ impl Sketch {
         result.insert("state".to_string(), serde_json::Value::String(self.state.to_string()));
         result.insert("created_at".to_string(), serde_json::Value::String(self.created_at.clone()));
         result.insert("updated_at".to_string(), serde_json::Value::String(self.updated_at.clone()));
+        for (key, value) in &self.additional_properties {
+            if Self::additional_properties_known_key("", key) {
+                continue;
+            }
+            result.insert(key.clone(), value.clone());
+        }
         ctx.process_dict(serde_json::Value::Object(result))
     }
 

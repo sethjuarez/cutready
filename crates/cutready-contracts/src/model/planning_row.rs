@@ -41,6 +41,8 @@ pub struct PlanningRow {
     pub design_plan: Option<String>,
     pub narration: Option<NarrationAsset>,
     pub narration_plan: Option<NarrationPlan>,
+    /// Undeclared fields captured on load and written back on save (unknown-field passthrough).
+    pub additional_properties: serde_json::Map<String, serde_json::Value>,
 }
 
 impl PlanningRow {
@@ -100,7 +102,26 @@ impl PlanningRow {
             design_plan: value.get("design_plan").and_then(|v| v.as_str()).map(|s| s.to_string()),
             narration: value.get("narration").filter(|v| v.is_object() || v.is_array() || v.is_string()).map(|v| NarrationAsset::load_from_value(v, ctx)),
             narration_plan: value.get("narration_plan").filter(|v| v.is_object() || v.is_array() || v.is_string()).map(|v| NarrationPlan::load_from_value(v, ctx)),
+            additional_properties: Self::capture_additional_properties(&value, ""),
         }
+    }
+
+    /// True when `key` is a declared wire key for the given discriminator value.
+    fn additional_properties_known_key(kind: &str, key: &str) -> bool {
+        matches!(key, "locked" | "locks" | "time" | "duration_seconds" | "narrative" | "demo_actions" | "screenshot" | "visual" | "motion_points" | "typing_spots" | "motion_plan" | "design_plan" | "narration" | "narration_plan")
+    }
+
+    fn capture_additional_properties(value: &serde_json::Value, kind: &str) -> serde_json::Map<String, serde_json::Value> {
+        value
+            .as_object()
+            .map(|object| {
+                object
+                    .iter()
+                    .filter(|(key, _)| !Self::additional_properties_known_key(kind, key))
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     pub(crate) fn validate_input_at(value: &serde_json::Value, path: &str) -> Result<(), String> {
@@ -191,6 +212,12 @@ impl PlanningRow {
             if !nested.is_null() {
                 result.insert("narration_plan".to_string(), nested);
             }
+        }
+        for (key, value) in &self.additional_properties {
+            if Self::additional_properties_known_key("", key) {
+                continue;
+            }
+            result.insert(key.clone(), value.clone());
         }
         ctx.process_dict(serde_json::Value::Object(result))
     }

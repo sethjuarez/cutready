@@ -31,8 +31,11 @@ public struct Sketch: TypraModel {
   public var state: SketchState = (try! SketchState.parse("draft"))
   public var createdAt: String = ""
   public var updatedAt: String = ""
+  /// Undeclared fields captured on load and written back on save (unknown-field passthrough).
+  public var additionalProperties: [String: Any] = [:]
+  static let additionalPropertiesKnownKeys: Set<String> = ["title", "locked", "description", "rows", "metadata", "state", "created_at", "updated_at"]
 
-  public init(title: String = "", locked: Bool? = nil, description: Any? = nil, rows: [PlanningRow] = [], metadata: DocumentMetadata? = nil, state: SketchState = (try! SketchState.parse("draft")), createdAt: String = "", updatedAt: String = "") {
+  public init(title: String = "", locked: Bool? = nil, description: Any? = nil, rows: [PlanningRow] = [], metadata: DocumentMetadata? = nil, state: SketchState = (try! SketchState.parse("draft")), createdAt: String = "", updatedAt: String = "", additionalProperties: [String: Any] = [:]) {
     self.title = title
     self.locked = locked
     self.description = description
@@ -41,6 +44,7 @@ public struct Sketch: TypraModel {
     self.state = state
     self.createdAt = createdAt
     self.updatedAt = updatedAt
+    self.additionalProperties = additionalProperties
   }
 
   public static func load(_ data: Any, context: LoadContext = LoadContext()) throws -> Sketch {
@@ -70,6 +74,7 @@ public struct Sketch: TypraModel {
     if let value = object["updated_at"] {
       instance.updatedAt = try TypraRuntime.string(value, field: "updated_at")
     }
+    instance.additionalProperties = object.filter { !Self.additionalPropertiesKnownKeys.contains($0.key) }
     return instance
   }
 
@@ -92,6 +97,9 @@ public struct Sketch: TypraModel {
     result["state"] = self.state.rawValue
     result["created_at"] = self.createdAt
     result["updated_at"] = self.updatedAt
+    for (key, value) in self.additionalProperties where !Self.additionalPropertiesKnownKeys.contains(key) {
+      result[key] = value
+    }
     return result
   }
 

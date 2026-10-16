@@ -5,9 +5,8 @@ import "@typra/emitter";
  * `.sk`/`.sb` files are snake_case on disk; Typra derives idiomatic native
  * names (e.g. Swift `demoActions`) from them.
  *
- * Canonical save rules that Typra cannot express yet (unknown-field
- * passthrough) are pinned by the @vector cases in vectors.tsp and documented
- * in contracts/README.md.
+ * The @vector cases in vectors.tsp pin the canonical save form and edit
+ * policy; contracts/README.md documents both.
  */
 namespace CutReady.Contracts;
 
@@ -51,6 +50,9 @@ model Sketch {
   /** RFC 3339 UTC timestamp, set by every successful edit. */
   @sample(#{ updated_at: "2026-06-28T20:20:00Z" })
   updated_at: string;
+
+  /** Fields written by newer desktop or iOS builds, preserved verbatim. */
+  ...Record<unknown>;
 }
 
 /** Planning-table cells that can be locked individually. */
@@ -112,6 +114,9 @@ model PlanningRow {
 
   narration?: NarrationAsset;
   narration_plan?: NarrationPlan;
+
+  /** Fields written by newer desktop or iOS builds, preserved verbatim. */
+  ...Record<unknown>;
 }
 
 /** Recorded or generated narration audio attached to a row. */
