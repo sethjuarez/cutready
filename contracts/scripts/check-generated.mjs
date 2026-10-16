@@ -13,6 +13,7 @@ const generatedPaths = [
   "crates/cutready-contracts/src/generated_tests",
   "ios/Tests/CutReadyContractConformanceTests/VectorConformanceTests.swift",
   "ios/Tests/CutReadyContractConformanceTests/VectorRunner.swift",
+  "src/contracts/generated",
 ];
 
 // execSync runs through a shell so npm resolves to npm.cmd on Windows.

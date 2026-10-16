@@ -1,7 +1,7 @@
 name: Contracts
 
 # Keeps the Typra SketchDocument contract, its generated outputs, and the
-# desktop (Rust) and companion (Swift) bindings in lockstep.
+# desktop (Rust, TypeScript) and companion (Swift) bindings in lockstep.
 on:
   workflow_dispatch:
   pull_request:
@@ -15,6 +15,17 @@ on:
       - "ios/Sources/CutReadyMobileCore/**"
       - "ios/Tests/CutReadyContractConformanceTests/**"
       - "ios/Tests/CutReadyMobileCoreTests/SketchDocumentTests.swift"
+      - "src/contracts/**"
+      - "src/types/contract.ts"
+      - "src/types/sketch.ts"
+      - "src/utils/documentMetadata.ts"
+      - "src/utils/storyboard.ts"
+      - "src/test/documentMetadata.test.ts"
+      - "src/test/setup.ts"
+      - "tsconfig.json"
+      - "vitest.config.ts"
+      - "package.json"
+      - "package-lock.json"
       - "Cargo.lock"
       - ".github/workflows/contracts.yml"
   push:
@@ -29,6 +40,17 @@ on:
       - "ios/Sources/CutReadyMobileCore/**"
       - "ios/Tests/CutReadyContractConformanceTests/**"
       - "ios/Tests/CutReadyMobileCoreTests/SketchDocumentTests.swift"
+      - "src/contracts/**"
+      - "src/types/contract.ts"
+      - "src/types/sketch.ts"
+      - "src/utils/documentMetadata.ts"
+      - "src/utils/storyboard.ts"
+      - "src/test/documentMetadata.test.ts"
+      - "src/test/setup.ts"
+      - "tsconfig.json"
+      - "vitest.config.ts"
+      - "package.json"
+      - "package-lock.json"
       - "Cargo.lock"
       - ".github/workflows/contracts.yml"
 
@@ -58,6 +80,32 @@ jobs:
       - name: Regenerate and diff
         run: npm run check
         working-directory: contracts
+
+  typescript:
+    name: TypeScript conformance
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install app dependencies
+        run: npm ci
+
+      - name: Type-check generated models and adapters
+        run: npm run typecheck:contracts
+
+      - name: Type-check frontend consumers of the contract types
+        run: npx tsc --noEmit
+
+      - name: Vector harness and timing regressions
+        run: npx vitest run src/contracts src/test/documentMetadata.test.ts
 
   conformance:
     name: Rust and Swift conformance

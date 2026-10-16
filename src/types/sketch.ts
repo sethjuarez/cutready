@@ -1,142 +1,73 @@
 /** TypeScript types for Sketches and Storyboards. */
 
-/** Lifecycle state of a sketch. */
-export type SketchState =
-  | "draft"
-  | "recording_enriched"
-  | "refined"
-  | "final";
+import type { ContractData } from "./contract";
+// Import model files directly, not the generated index: type-only imports keep
+// generated runtime code out of the bundle and the program small.
+import type { DocumentMetadata as DocumentMetadataContract } from "../contracts/generated/model/document-metadata";
+import type { MotionPlan as MotionPlanContract, MotionPlanKind } from "../contracts/generated/model/motion-plan";
+import type { MotionPlanEasing, MotionPlanKeyframe as MotionPlanKeyframeContract } from "../contracts/generated/model/motion-plan-keyframe";
+import type { MotionPoint as MotionPointContract } from "../contracts/generated/model/motion-point";
+import type { NarrationAsset as NarrationAssetContract } from "../contracts/generated/model/narration-asset";
+import type { NarrationBeat as NarrationBeatContract } from "../contracts/generated/model/narration-beat";
+import type { NarrationPlan as NarrationPlanContract } from "../contracts/generated/model/narration-plan";
+import type { PlanningCellLocks as PlanningCellLocksContract } from "../contracts/generated/model/planning-cell-locks";
+import type { PlanningRow as PlanningRowContract } from "../contracts/generated/model/planning-row";
+import type { Sketch as SketchContract, SketchState } from "../contracts/generated/model/sketch";
+import type { TypingSpot as TypingSpotContract } from "../contracts/generated/model/typing-spot";
 
-/** A row in the sketch planning table. */
-export interface NarrationAsset {
-  /** Project-relative path to recorded or generated narration audio. */
-  path: string;
-  /** Narrative text used when this audio was recorded/generated. */
-  source_text: string;
-  /** SHA-256 of the source text. */
-  source_text_hash: string;
-  mime_type: string;
-  duration_ms?: number | null;
-  /** Detected silence before speech begins, stored non-destructively for future trim/alignment. */
-  leading_silence_ms?: number | null;
-  /** Detected silence after speech ends, stored non-destructively for future trim/alignment. */
-  trailing_silence_ms?: number | null;
-  /** Decibel threshold used for leading/trailing silence detection. */
-  silence_threshold_db?: number | null;
-  byte_size: number;
-  recorded_at: string;
-}
+// `.sk` document types come from contracts/sketch.tsp. Interfaces below only
+// narrow contract fields the frontend constrains further.
+
+export type { MotionPlanEasing, MotionPlanKind, SketchState };
+
+/** Recorded or generated narration audio attached to a row. */
+export type NarrationAsset = ContractData<NarrationAssetContract>;
 
 export type NarrationEmphasis = "reduced" | "moderate" | "strong";
 
-export interface NarrationBeat {
-  text: string;
-  purpose?: string | null;
-  style?: string | null;
-  style_degree?: number | null;
+export interface NarrationBeat extends ContractData<NarrationBeatContract> {
   emphasis?: NarrationEmphasis | null;
-  pause_after_ms?: number | null;
 }
 
 /** Durable creative direction and compiled SSML for generated narration. */
-export interface NarrationPlan {
-  source_text: string;
-  voice: string;
-  locale: string;
-  ssml: string;
-  baseline_style?: string | null;
-  pronunciation_overrides?: Record<string, string>;
-  beats?: NarrationBeat[];
-  generated_at: string;
+export interface NarrationPlan extends ContractData<NarrationPlanContract> {
+  beats?: NarrationBeat[] | null;
 }
 
-export interface MotionPoint {
+export interface MotionPoint extends ContractData<MotionPointContract> {
   rank: 1 | 2 | 3;
-  x: number;
-  y: number;
-  label?: string | null;
 }
 
 /** A normalized text region rendered as a typewriter overlay during video export. */
-export interface TypingSpot {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  text: string;
-  start_offset_ms?: number | null;
-  duration_ms?: number | null;
-  characters_per_second?: number | null;
-  show_cursor?: boolean | null;
-  text_color?: string | null;
+export interface TypingSpot extends ContractData<TypingSpotContract> {
   font_family?: "sans" | "serif" | "mono" | null;
-  font_scale?: number | null;
 }
 
-export type MotionPlanKind = "subtle_push" | "wide_hold_then_push" | "push_then_drift";
-export type MotionPlanEasing = "linear" | "ease_in_out" | "ease_out";
+export type MotionPlanKeyframe = ContractData<MotionPlanKeyframeContract>;
 
-export interface MotionPlanKeyframe {
-  time_ms: number;
-  scale: number;
-  x: number;
-  y: number;
-  easing?: MotionPlanEasing | null;
-}
+/** Agent-generated camera motion plan. Empty `keyframes` are omitted on save. */
+export type MotionPlan = ContractData<MotionPlanContract>;
 
-export interface MotionPlan {
-  kind: MotionPlanKind;
-  keyframes: MotionPlanKeyframe[];
-  rationale?: string | null;
-}
+export type PlanningCellLocks = ContractData<PlanningCellLocksContract>;
 
-export interface PlanningRow {
-  /** Whether the entire row is protected from edits. */
-  locked?: boolean;
-  /** Per-cell lock state for targeted AI-safe editing. */
-  locks?: Partial<Record<PlanningCellField, boolean>>;
-  time: string;
-  /** Concrete duration in seconds. Legacy rows may only have `time`; totals derive from either field. */
-  duration_seconds?: number | null;
-  narrative: string;
-  demo_actions: string;
-  screenshot: string | null;
-  /** Path to an elucim visual file (e.g., ".cutready/visuals/abc123.json"). */
+/** A lockable planning-table cell. */
+export type PlanningCellField = keyof PlanningCellLocks;
+
+/** A row in the sketch planning table. */
+export interface PlanningRow extends ContractData<PlanningRowContract> {
+  /** Project-relative path to an Elucim visual file (e.g., ".cutready/visuals/abc123.json"). */
   visual?: string | null;
-  /** Ranked normalized screenshot points used by the Motion Director for camera moves. */
   motion_points?: MotionPoint[] | null;
-  /** Positioned text overlays rendered before camera motion, so they compose with zooms. */
   typing_spots?: TypingSpot[] | null;
-  /** Agent-generated camera motion plan for screenshot rows. */
-  motion_plan?: MotionPlan | null;
-  /** English-language design brief for the visual (created by Designer agent Pass 1). */
-  design_plan?: string | null;
-  /** Recorded or generated narration audio attached to this row. */
-  narration?: NarrationAsset | null;
-  /** Durable SSML and creative direction for generated narration. */
   narration_plan?: NarrationPlan | null;
 }
 
-export type PlanningCellField = "time" | "narrative" | "demo_actions" | "screenshot" | "visual" | "design_plan";
-
 /** User-defined key/value metadata stored with portable project documents. */
-export interface DocumentMetadata {
-  fields?: Record<string, string>;
-}
+export type DocumentMetadata = ContractData<DocumentMetadataContract>;
 
 /** A sketch — a focused scene in a demo storyboard. */
-export interface Sketch {
-  title: string;
-  /** Whether the whole sketch is protected from edits. */
-  locked?: boolean;
-  /** Rich-text description — Lexical editor state JSON. */
-  description: unknown;
-  /** Planning table rows. */
+export interface Sketch extends ContractData<SketchContract> {
   rows: PlanningRow[];
-  metadata?: DocumentMetadata;
-  state: SketchState;
-  created_at: string;
-  updated_at: string;
 }
 
 /** Lightweight summary for listing sketches. */

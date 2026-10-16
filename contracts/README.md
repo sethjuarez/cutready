@@ -1,6 +1,6 @@
 # CutReady contracts
 
-Portable CutReady document contracts, written in TypeSpec and emitted by [Typra](https://github.com/sethjuarez/typra). They keep the desktop app (Rust) and the iOS/iPad companion (Swift) from drifting.
+Portable CutReady document contracts, written in TypeSpec and emitted by [Typra](https://github.com/sethjuarez/typra). They keep the desktop app (Rust backend, TypeScript frontend) and the iOS/iPad companion (Swift) from drifting.
 
 ## What lives here
 
@@ -19,6 +19,8 @@ Generated code outside this folder:
 | `crates/cutready-contracts/src/generated_tests/` | Rust model tests and `@vector` harness (do not edit) |
 | `crates/cutready-contracts/src/vector_adapters.rs` | Binds vectors to desktop code (hand-written) |
 | `ios/Tests/CutReadyContractConformanceTests/` | Swift `@vector` harness plus hand-written `VectorAdapters.swift` |
+| `src/contracts/generated/` | TypeScript models and Vitest `@vector` harness (do not edit); `src/types/sketch.ts` derives the frontend document types from these models |
+| `src/contracts/vectorAdapters.ts` | Binds vectors to frontend code (hand-written) |
 
 ## Workflow
 
@@ -35,11 +37,15 @@ Run the conformance suites:
 cargo test -p cutready-contracts
 swift test --package-path contracts/generated/swift
 swift test --package-path ios
+npm run typecheck:contracts   # from the repo root
+npx vitest run src/contracts
 ```
 
 A vector with no adapter fails unless it is waived. A waived vector that starts passing also fails, so remove waivers as adapters land.
 
-The `Contracts` workflow (`.github/workflows/contracts.yml`) runs `npm run check`, the conformance suites, and Rust and Swift sketch model regressions on changes to the contract or either binding.
+The TypeScript harness waives the `SketchDocument` vectors: the frontend sends edits to the Rust backend over IPC and never saves `.sk` files itself.
+
+The `Contracts` workflow (`.github/workflows/contracts.yml`) runs `npm run check`, the Rust, Swift, and TypeScript conformance suites, and the sketch model regressions on changes to the contract or any binding.
 
 ## Canonical save form
 
@@ -69,14 +75,11 @@ Desktop is the reference. Every runtime must save `.sk` files this way. Fields t
 
 ## Timing
 
-`PlanningTiming.parseDurationSeconds` turns a `time` label (`1:30`, `~25s`, `2m 15s`) into whole seconds. Desktop Rust, desktop TypeScript, and iOS each implement it; the TypeScript copy is checked against the same vectors in `src/test/documentMetadata.test.ts`. An unchanged label keeps its duration, so imported ranges such as `0:05 - 0:19` keep theirs. The agent's `write_sketch` tool lets an explicit `duration_seconds` win over the parsed one.
-
-## Open policy questions
-
-- Desktop TypeScript types aren't generated yet.
+`PlanningTiming.parseDurationSeconds` turns a `time` label (`1:30`, `~25s`, `2m 15s`) into whole seconds. Desktop Rust, desktop TypeScript, and iOS each implement it, and each runs the same vectors through its own `@vector` harness. An unchanged label keeps its duration, so imported ranges such as `0:05 - 0:19` keep theirs. The agent's `write_sketch` tool lets an explicit `duration_seconds` win over the parsed one.
 
 ## Typra workarounds
 
 | Gap | Workaround |
 | --- | --- |
-| Formatter output depends on locally installed `swift-format`/`rustfmt` | `format: false` on Rust and Swift targets keeps output deterministic |
+| Formatter output depends on locally installed `swift-format`/`rustfmt`/Prettier | `format: false` on every code target keeps output deterministic |
+| Generated TypeScript imports `LoadContext`/`SaveContext` it doesn't use | `src/contracts/tsconfig.json` turns off `noUnusedLocals` |

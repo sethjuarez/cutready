@@ -51,6 +51,22 @@
       "symbol": "SketchDocument",
       "generatedSource": "Sources/CutReadyContracts/sketch_document.swift",
       "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "PlanningTiming",
+      "target": "typescript",
+      "group": "",
+      "symbol": "PlanningTiming",
+      "generatedSource": "./planning-timing",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "SketchDocument",
+      "target": "typescript",
+      "group": "",
+      "symbol": "SketchDocument",
+      "generatedSource": "./sketch-document",
+      "seamKind": "protocol-adapter"
     }
   ]
 }

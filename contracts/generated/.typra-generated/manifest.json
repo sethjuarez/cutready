@@ -179,6 +179,171 @@
       "marker": true
     },
     {
+      "outputRoot": "../src/contracts/generated",
+      "path": "../src/contracts/generated/eslint.config.js",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/context.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/document-metadata.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/index.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/motion-plan-keyframe.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/motion-plan.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/motion-point.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/narration-asset.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/narration-beat.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/narration-plan.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/planning-cell-locks.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/planning-row.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/planning-timing.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/row-text-update.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/sketch-document.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/sketch-edit-error.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/sketch.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/typing-spot.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/vector-conformance.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/document-metadata.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/motion-plan-keyframe.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/motion-plan.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/motion-point.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/narration-asset.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/narration-beat.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/narration-plan.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/planning-cell-locks.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/planning-row.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/row-text-update.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/sketch.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/typing-spot.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/vector-conformance.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/vector-runner.ts",
+      "marker": true
+    },
+    {
       "outputRoot": "generated/json-ast",
       "path": "generated/json-ast/model.json",
       "marker": false

@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import contractVectorsSource from "../../contracts/vectors.tsp?raw";
 import type { Storyboard } from "../types/sketch";
 import {
   formatDuration,
@@ -22,6 +21,11 @@ describe("document metadata helpers", () => {
     });
   });
 
+  it("treats contract null metadata fields as absent", () => {
+    expect(normalizeMetadata({ fields: null })).toEqual({});
+    expect(serializeNoteDocument({ fields: null }, "# Notes")).toBe("# Notes");
+  });
+
   it("round-trips note metadata as portable frontmatter", () => {
     const content = serializeNoteDocument({ fields: { owner: "Demo: team", status: "draft" } }, "# Notes");
     expect(parseNoteDocument(content)).toEqual({
@@ -37,16 +41,6 @@ describe("duration helpers", () => {
     expect(parseDurationSeconds("1:30")).toBe(90);
     expect(parseDurationSeconds("2m 15s")).toBe(135);
     expect(parseDurationSeconds("not sure")).toBeNull();
-  });
-
-  it("matches the PlanningTiming contract vectors", () => {
-    const block = contractVectorsSource.match(/const ParseDurationSecondsVectors = """\r?\n([\s\S]*?)\r?\n"""/);
-    expect(block).not.toBeNull();
-    const vectors = JSON.parse(block![1]) as { name: string; input: { time: string }; expected: number | null }[];
-    expect(vectors.length).toBeGreaterThan(0);
-    for (const vector of vectors) {
-      expect(parseDurationSeconds(vector.input.time), vector.name).toBe(vector.expected);
-    }
   });
 
   it("recomputes duration_seconds only when the time label changes", () => {

@@ -1,0 +1,13 @@
+{
+  // Type-checks the Typra-generated TypeScript models, their vitest harness,
+  // and the hand-written vector adapters. Run with `npm run typecheck:contracts`.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["vitest/globals", "node"],
+    // Typra 4.0.0 imports LoadContext/SaveContext into models that have no
+    // load/save (sketch-edit-error.ts). Remove once the emitter stops doing so.
+    "noUnusedLocals": false
+  },
+  "include": ["."],
+  "exclude": []
+}

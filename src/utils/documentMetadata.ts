@@ -1,9 +1,5 @@
-import type { PlanningRow, Storyboard } from "../types/sketch";
+import type { DocumentMetadata, PlanningRow, Storyboard } from "../types/sketch";
 import { getStoryboardSketchPaths } from "./storyboard";
-
-export interface DocumentMetadata {
-  fields?: Record<string, string>;
-}
 
 export interface ParsedNoteDocument {
   metadata: DocumentMetadata;
