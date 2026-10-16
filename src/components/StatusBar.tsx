@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
+import { MessageSquare } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 
-export function StatusBar() {
+interface StatusBarProps {
+  onFeedback?: () => void;
+}
+
+export function StatusBar({ onFeedback }: StatusBarProps) {
   const [version, setVersion] = useState("");
   const currentProject = useAppStore((s) => s.currentProject);
   const changedFilesCount = useAppStore((s) => s.changedFiles.length);
@@ -28,6 +33,19 @@ export function StatusBar() {
           </span>
         )}
       </div>
+      {onFeedback && (
+        <button
+          type="button"
+          onClick={onFeedback}
+          className="mr-2 inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+          title="Send Feedback"
+          aria-label="Send feedback"
+          data-testid="status-feedback"
+        >
+          <MessageSquare className="h-3.5 w-3.5" />
+          Feedback
+        </button>
+      )}
       {version && <span className="opacity-60">v{version}</span>}
     </div>
   );
