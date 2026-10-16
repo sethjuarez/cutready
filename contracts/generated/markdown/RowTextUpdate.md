@@ -22,7 +22,7 @@ config:
 ---
 classDiagram
     class RowTextUpdate {
-        +int32 row_index
+        +uint32 row_index
         +string time
         +string narrative
         +string demo_actions
@@ -33,7 +33,7 @@ classDiagram
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| row_index | int32 | Zero-based, non-negative row index. |
+| row_index | uint32 | Zero-based row index. |
 | time | string |  |
 | narrative | string |  |
 | demo_actions | string |  |

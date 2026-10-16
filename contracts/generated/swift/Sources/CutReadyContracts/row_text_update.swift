@@ -6,12 +6,12 @@ import Foundation
 /// Text cells to replace on one planning row. Omitted cells are left untouched. Desktop's time-cell UI also recomputes `duration_seconds`; this edit does not (see contracts/README.md, "Open policy questions").
 public struct RowTextUpdate: TypraModel {
   public static let shorthandProperty: String? = nil
-  public var rowIndex: Int32 = 0
+  public var rowIndex: UInt32 = 0
   public var time: String? = nil
   public var narrative: String? = nil
   public var demoActions: String? = nil
 
-  public init(rowIndex: Int32 = 0, time: String? = nil, narrative: String? = nil, demoActions: String? = nil) {
+  public init(rowIndex: UInt32 = 0, time: String? = nil, narrative: String? = nil, demoActions: String? = nil) {
     self.rowIndex = rowIndex
     self.time = time
     self.narrative = narrative
@@ -22,7 +22,7 @@ public struct RowTextUpdate: TypraModel {
     let object = try TypraRuntime.object(data, typeName: "RowTextUpdate")
     var instance = RowTextUpdate()
     if let value = object["row_index"] {
-      instance.rowIndex = try TypraRuntime.int32(value, field: "row_index")
+      instance.rowIndex = try TypraRuntime.uint32(value, field: "row_index")
     }
     if let value = object["time"] {
       instance.time = try TypraRuntime.string(value, field: "time")

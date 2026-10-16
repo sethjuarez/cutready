@@ -9,24 +9,24 @@ final class MotionPlanTests: XCTestCase {
   func testJSONRoundTrip1() throws {
     let json = """
 {
-  "kind": "sample"
+  "kind": "subtle_push"
 }
 """
     let instance = try MotionPlan.fromJSON(json)
-    XCTAssertEqual(instance.kind, "sample")
+    XCTAssertEqual(instance.kind, MotionPlanKind.subtlePush)
     let reloaded = try MotionPlan.fromJSON(try instance.toJSON())
-    XCTAssertEqual(reloaded.kind, "sample")
+    XCTAssertEqual(reloaded.kind, MotionPlanKind.subtlePush)
   }
 
   func testYAMLRoundTrip1() throws {
     let yaml = """
-kind: sample
+kind: subtle_push
 
 """
     let instance = try MotionPlan.fromYAML(yaml)
-    XCTAssertEqual(instance.kind, "sample")
+    XCTAssertEqual(instance.kind, MotionPlanKind.subtlePush)
     let reloaded = try MotionPlan.fromYAML(try instance.toYAML())
-    XCTAssertEqual(reloaded.kind, "sample")
+    XCTAssertEqual(reloaded.kind, MotionPlanKind.subtlePush)
   }
 
   // Invalid-input test (malformed JSON must be rejected, issue #328 class)

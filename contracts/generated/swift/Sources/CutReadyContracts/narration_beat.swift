@@ -11,9 +11,9 @@ public struct NarrationBeat: TypraModel {
   public var style: String? = nil
   public var styleDegree: Float? = nil
   public var emphasis: String? = nil
-  public var pauseAfterMs: Int64? = nil
+  public var pauseAfterMs: UInt32? = nil
 
-  public init(text: String = "", purpose: String? = nil, style: String? = nil, styleDegree: Float? = nil, emphasis: String? = nil, pauseAfterMs: Int64? = nil) {
+  public init(text: String = "", purpose: String? = nil, style: String? = nil, styleDegree: Float? = nil, emphasis: String? = nil, pauseAfterMs: UInt32? = nil) {
     self.text = text
     self.purpose = purpose
     self.style = style
@@ -41,7 +41,7 @@ public struct NarrationBeat: TypraModel {
       instance.emphasis = try TypraRuntime.string(value, field: "emphasis")
     }
     if let value = object["pause_after_ms"] {
-      instance.pauseAfterMs = try TypraRuntime.int64(value, field: "pause_after_ms")
+      instance.pauseAfterMs = try TypraRuntime.uint32(value, field: "pause_after_ms")
     }
     return instance
   }

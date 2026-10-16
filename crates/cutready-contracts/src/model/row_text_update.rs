@@ -8,8 +8,8 @@ use super::context::{LoadContext, SaveContext};
 /// Text cells to replace on one planning row. Omitted cells are left untouched. Desktop's time-cell UI also recomputes `duration_seconds`; this edit does not (see contracts/README.md, "Open policy questions").
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RowTextUpdate {
-    /// Zero-based, non-negative row index.
-    pub row_index: i32,
+    /// Zero-based row index.
+    pub row_index: u32,
     pub time: Option<String>,
     pub narrative: Option<String>,
     pub demo_actions: Option<String>,
@@ -58,7 +58,7 @@ impl RowTextUpdate {
             panic!("{}", message);
         }
         Self {
-            row_index: value.get("row_index").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
+            row_index: value.get("row_index").and_then(|v| v.as_u64().and_then(|n| u32::try_from(n).ok())).unwrap_or(0),
             time: value.get("time").and_then(|v| v.as_str()).map(|s| s.to_string()),
             narrative: value.get("narrative").and_then(|v| v.as_str()).map(|s| s.to_string()),
             demo_actions: value.get("demo_actions").and_then(|v| v.as_str()).map(|s| s.to_string()),

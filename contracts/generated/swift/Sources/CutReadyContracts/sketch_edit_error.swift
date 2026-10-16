@@ -45,10 +45,10 @@ public enum SketchEditErrorCode: String, Codable, CaseIterable {
 public struct SketchEditError {
   public static let shorthandProperty: String? = nil
   public var code: SketchEditErrorCode = (try! SketchEditErrorCode.parse("locked_document"))
-  public var rowIndex: Int32? = nil
+  public var rowIndex: UInt32? = nil
   public var field: PlanningCellField? = nil
 
-  public init(code: SketchEditErrorCode = (try! SketchEditErrorCode.parse("locked_document")), rowIndex: Int32? = nil, field: PlanningCellField? = nil) {
+  public init(code: SketchEditErrorCode = (try! SketchEditErrorCode.parse("locked_document")), rowIndex: UInt32? = nil, field: PlanningCellField? = nil) {
     self.code = code
     self.rowIndex = rowIndex
     self.field = field

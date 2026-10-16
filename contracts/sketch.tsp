@@ -7,8 +7,7 @@ import "@typra/emitter";
  *
  * Canonical save rules that Typra cannot express yet (explicit `null` and
  * unknown-field passthrough) are pinned by the @vector cases in vectors.tsp
- * and documented in contracts/README.md. Integer counts, ranks, and durations
- * are non-negative; Typra has no unsigned integer types yet.
+ * and documented in contracts/README.md.
  */
 namespace CutReady.Contracts;
 
@@ -90,7 +89,7 @@ model PlanningRow {
   time: string;
 
   /** Concrete duration in seconds. */
-  duration_seconds?: int32;
+  duration_seconds?: uint32;
 
   @sample(#{ narrative: "Welcome to CutReady." })
   narrative: string;
@@ -129,12 +128,12 @@ model NarrationAsset {
   mime_type: string;
 
   /** Canonical save writes `null` when unknown. */
-  duration_ms?: int64;
+  duration_ms?: uint32;
 
-  leading_silence_ms?: int64;
-  trailing_silence_ms?: int64;
+  leading_silence_ms?: uint32;
+  trailing_silence_ms?: uint32;
   silence_threshold_db?: float32;
-  byte_size: int64;
+  byte_size: uint64;
 
   /** RFC 3339 UTC timestamp. */
   recorded_at: string;
@@ -147,7 +146,7 @@ model NarrationBeat {
   style?: string;
   style_degree?: float32;
   emphasis?: string;
-  pause_after_ms?: int64;
+  pause_after_ms?: uint32;
 }
 
 /** Durable creative direction and compiled SSML for generated narration. */
@@ -167,7 +166,7 @@ model NarrationPlan {
 /** Ranked normalized screenshot point used for camera moves. */
 model MotionPoint {
   /** 1, 2, or 3. */
-  rank: int32;
+  rank: uint8;
 
   x: float32;
   y: float32;
@@ -181,8 +180,8 @@ model TypingSpot {
   width: float32;
   height: float32;
   text: string;
-  start_offset_ms?: int64;
-  duration_ms?: int64;
+  start_offset_ms?: uint32;
+  duration_ms?: uint32;
   characters_per_second?: float32;
   show_cursor?: boolean;
   text_color?: string;
@@ -197,21 +196,22 @@ union MotionPlanEasing {
 }
 
 model MotionPlanKeyframe {
-  time_ms: int64;
+  time_ms: uint32;
   scale: float32;
   x: float32;
   y: float32;
   easing?: MotionPlanEasing;
 }
 
+union MotionPlanKind {
+  subtlePush: "subtle_push",
+  wideHoldThenPush: "wide_hold_then_push",
+  pushThenDrift: "push_then_drift",
+}
+
 /** Agent-generated camera motion plan for screenshot rows. */
 model MotionPlan {
-  /**
-   * `subtle_push`, `wide_hold_then_push`, or `push_then_drift`.
-   * A string until Typra emits matching Rust enum variant names for
-   * multi-word values in generated tests.
-   */
-  kind: string;
+  kind: MotionPlanKind;
   keyframes?: MotionPlanKeyframe[];
   rationale?: string;
 }

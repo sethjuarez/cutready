@@ -20,7 +20,7 @@ config:
 ---
 classDiagram
     class MotionPlanKeyframe {
-        +int64 time_ms
+        +uint32 time_ms
         +float32 scale
         +float32 x
         +float32 y
@@ -32,7 +32,7 @@ classDiagram
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| time_ms | int64 |  |
+| time_ms | uint32 |  |
 | scale | float32 |  |
 | x | float32 |  |
 | y | float32 |  |

@@ -26,7 +26,7 @@ config:
 classDiagram
     class SketchDocument {
       <<protocol>>
-        +reorderRows(sketch: Sketch, order: int32[], now: string) Sketch [sync]
+        +reorderRows(sketch: Sketch, order: uint32[], now: string) Sketch [sync]
         +roundTrip(sketch: Sketch) Sketch [sync]
         +updateRowText(sketch: Sketch, update: RowTextUpdate, now: string) Sketch [sync]
     }
@@ -38,7 +38,7 @@ The following helper methods are declared via `@method` and must be implemented 
 
 | Name | Signature | Runtime shape | Description |
 | ---- | --------- | ------------- | ----------- |
-| `reorderRows` | `reorderRows(sketch: Sketch, order: int32[], now: string) -> Sketch` | sync | Reorder rows. `order[i]` is the current zero-based index of the row that
+| `reorderRows` | `reorderRows(sketch: Sketch, order: uint32[], now: string) -> Sketch` | sync | Reorder rows. `order[i]` is the current zero-based index of the row that
 moves to position `i`. |
 | `roundTrip` | `roundTrip(sketch: Sketch) -> Sketch` | sync | Decode a `.sk` document and save it again without changes. |
 | `updateRowText` | `updateRowText(sketch: Sketch, update: RowTextUpdate, now: string) -> Sketch` | sync | Replace text cells on one row. |

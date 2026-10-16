@@ -4,40 +4,41 @@
 #![allow(unused_imports, dead_code, non_camel_case_types, unused_variables, unexpected_cfgs, clippy::all)]
 
 use crate::MotionPlan;
+use crate::MotionPlanKind;
 use crate::context::{LoadContext, SaveContext};
 
 #[test]
 fn test_motion_plan_load_json() {
     let json = r####"
 {
-  "kind": "sample"
+  "kind": "subtle_push"
 }
 "####;
     let ctx = LoadContext::default();
     let result = MotionPlan::from_json(json, &ctx);
     assert!(result.is_ok(), "Failed to load from JSON: {:?}", result.err());
     let instance = result.unwrap();
-    assert_eq!(instance.kind, "sample");
+    assert_eq!(instance.kind, MotionPlanKind::SubtlePush);
 }
 
 #[test]
 fn test_motion_plan_load_yaml() {
     let yaml = r####"
-kind: sample
+kind: subtle_push
 
 "####;
     let ctx = LoadContext::default();
     let result = MotionPlan::from_yaml(yaml, &ctx);
     assert!(result.is_ok(), "Failed to load from YAML: {:?}", result.err());
     let instance = result.unwrap();
-    assert_eq!(instance.kind, "sample");
+    assert_eq!(instance.kind, MotionPlanKind::SubtlePush);
 }
 
 #[test]
 fn test_motion_plan_roundtrip() {
     let json = r####"
 {
-  "kind": "sample"
+  "kind": "subtle_push"
 }
 "####;
     let load_ctx = LoadContext::default();
@@ -54,7 +55,7 @@ fn test_motion_plan_roundtrip() {
 fn test_motion_plan_serde_roundtrip() {
     let json = r####"
 {
-  "kind": "sample"
+  "kind": "subtle_push"
 }
 "####;
     let instance: MotionPlan = serde_json::from_str(json)

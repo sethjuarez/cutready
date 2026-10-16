@@ -3,14 +3,28 @@
 
 import Foundation
 
+public enum MotionPlanKind: String, Codable, CaseIterable {
+  case subtlePush = "subtle_push"
+  case wideHoldThenPush = "wide_hold_then_push"
+  case pushThenDrift = "push_then_drift"
+  public static func parse(_ value: String) throws -> MotionPlanKind {
+    switch value {
+    case "subtle_push": return .subtlePush
+    case "wide_hold_then_push": return .wideHoldThenPush
+    case "push_then_drift": return .pushThenDrift
+    default: throw TypraRuntimeError.invalidEnum(type: "MotionPlanKind", value: value)
+    }
+  }
+}
+
 /// Agent-generated camera motion plan for screenshot rows.
 public struct MotionPlan: TypraModel {
   public static let shorthandProperty: String? = nil
-  public var kind: String = ""
+  public var kind: MotionPlanKind = (try! MotionPlanKind.parse("subtle_push"))
   public var keyframes: [MotionPlanKeyframe]? = nil
   public var rationale: String? = nil
 
-  public init(kind: String = "", keyframes: [MotionPlanKeyframe]? = nil, rationale: String? = nil) {
+  public init(kind: MotionPlanKind = (try! MotionPlanKind.parse("subtle_push")), keyframes: [MotionPlanKeyframe]? = nil, rationale: String? = nil) {
     self.kind = kind
     self.keyframes = keyframes
     self.rationale = rationale
@@ -20,7 +34,7 @@ public struct MotionPlan: TypraModel {
     let object = try TypraRuntime.object(data, typeName: "MotionPlan")
     var instance = MotionPlan()
     if let value = object["kind"] {
-      instance.kind = try TypraRuntime.string(value, field: "kind")
+      instance.kind = try MotionPlanKind.parse(try TypraRuntime.string(value, field: "kind"))
     }
     if let value = object["keyframes"] {
       instance.keyframes = try TypraRuntime.array(value, field: "keyframes").enumerated().map { try MotionPlanKeyframe.load($1, context: context.at("keyframes").atIndex($0)) }
@@ -33,7 +47,7 @@ public struct MotionPlan: TypraModel {
 
   public func save(_ context: SaveContext = SaveContext()) throws -> [String: Any] {
     var result: [String: Any] = [:]
-    result["kind"] = self.kind
+    result["kind"] = self.kind.rawValue
     if let value = self.keyframes {
       result["keyframes"] = try value.map { try $0.save(context) }
     }

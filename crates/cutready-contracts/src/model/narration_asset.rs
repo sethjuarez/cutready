@@ -15,11 +15,11 @@ pub struct NarrationAsset {
     pub source_text_hash: String,
     pub mime_type: String,
     /// Canonical save writes `null` when unknown.
-    pub duration_ms: Option<i64>,
-    pub leading_silence_ms: Option<i64>,
-    pub trailing_silence_ms: Option<i64>,
+    pub duration_ms: Option<u32>,
+    pub leading_silence_ms: Option<u32>,
+    pub trailing_silence_ms: Option<u32>,
     pub silence_threshold_db: Option<f32>,
-    pub byte_size: i64,
+    pub byte_size: u64,
     /// RFC 3339 UTC timestamp.
     pub recorded_at: String,
 }
@@ -71,11 +71,11 @@ impl NarrationAsset {
             source_text: value.get("source_text").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
             source_text_hash: value.get("source_text_hash").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
             mime_type: value.get("mime_type").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
-            duration_ms: value.get("duration_ms").and_then(|v| v.as_i64()),
-            leading_silence_ms: value.get("leading_silence_ms").and_then(|v| v.as_i64()),
-            trailing_silence_ms: value.get("trailing_silence_ms").and_then(|v| v.as_i64()),
+            duration_ms: value.get("duration_ms").and_then(|v| v.as_u64().and_then(|n| u32::try_from(n).ok())),
+            leading_silence_ms: value.get("leading_silence_ms").and_then(|v| v.as_u64().and_then(|n| u32::try_from(n).ok())),
+            trailing_silence_ms: value.get("trailing_silence_ms").and_then(|v| v.as_u64().and_then(|n| u32::try_from(n).ok())),
             silence_threshold_db: value.get("silence_threshold_db").and_then(|v| v.as_f64()).map(|v| v as f32),
-            byte_size: value.get("byte_size").and_then(|v| v.as_i64()).unwrap_or(0),
+            byte_size: value.get("byte_size").and_then(|v| v.as_u64()).unwrap_or(0),
             recorded_at: value.get("recorded_at").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
         }
     }

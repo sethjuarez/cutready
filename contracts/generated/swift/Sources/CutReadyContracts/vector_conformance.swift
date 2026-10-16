@@ -52,7 +52,7 @@ public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async thr
       throw SeamConformanceError("earlier locked cell fires before a later locked row: failed to parse embedded vector input")
     }
     let sketch = try Sketch.load(input["sketch"]!)
-    let order = input["order"] as! [Int32]
+    let order = input["order"] as! [UInt32]
     let now = input["now"] as! String
     var caught: Error? = nil
     do {
@@ -155,7 +155,7 @@ public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async thr
       throw SeamConformanceError("locked row protects fields a runtime does not model: failed to parse embedded vector input")
     }
     let sketch = try Sketch.load(input["sketch"]!)
-    let order = input["order"] as! [Int32]
+    let order = input["order"] as! [UInt32]
     let now = input["now"] as! String
     var caught: Error? = nil
     do {
@@ -231,7 +231,7 @@ public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async thr
       throw SeamConformanceError("locked sketch takes precedence over an invalid order: failed to parse embedded vector input")
     }
     let sketch = try Sketch.load(input["sketch"]!)
-    let order = input["order"] as! [Int32]
+    let order = input["order"] as! [UInt32]
     let now = input["now"] as! String
     var caught: Error? = nil
     do {
@@ -280,7 +280,7 @@ public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async thr
       throw SeamConformanceError("reorder around locked rows keeps locks in place: failed to parse embedded vector input")
     }
     let sketch = try Sketch.load(input["sketch"]!)
-    let order = input["order"] as! [Int32]
+    let order = input["order"] as! [UInt32]
     let now = input["now"] as! String
     let actual = try seam.reorderRows(sketch: sketch, order: order, now: now)
     let expectedData = "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:40\",\"narrative\":\"Spare.\",\"demo_actions\":\"Wrap up.\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]}".data(using: .utf8)!
@@ -296,7 +296,7 @@ public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async thr
       throw SeamConformanceError("reorder moves whole rows including unknown fields: failed to parse embedded vector input")
     }
     let sketch = try Sketch.load(input["sketch"]!)
-    let order = input["order"] as! [Int32]
+    let order = input["order"] as! [UInt32]
     let now = input["now"] as! String
     let actual = try seam.reorderRows(sketch: sketch, order: order, now: now)
     let expectedData = "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
@@ -312,7 +312,7 @@ public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async thr
       throw SeamConformanceError("reorder that changes a locked cell is rejected: failed to parse embedded vector input")
     }
     let sketch = try Sketch.load(input["sketch"]!)
-    let order = input["order"] as! [Int32]
+    let order = input["order"] as! [UInt32]
     let now = input["now"] as! String
     var caught: Error? = nil
     do {
@@ -331,7 +331,7 @@ public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async thr
       throw SeamConformanceError("reorder that changes a locked row is rejected: failed to parse embedded vector input")
     }
     let sketch = try Sketch.load(input["sketch"]!)
-    let order = input["order"] as! [Int32]
+    let order = input["order"] as! [UInt32]
     let now = input["now"] as! String
     var caught: Error? = nil
     do {
@@ -350,7 +350,7 @@ public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async thr
       throw SeamConformanceError("reorder that is not a permutation is rejected: failed to parse embedded vector input")
     }
     let sketch = try Sketch.load(input["sketch"]!)
-    let order = input["order"] as! [Int32]
+    let order = input["order"] as! [UInt32]
     let now = input["now"] as! String
     var caught: Error? = nil
     do {
@@ -407,7 +407,7 @@ public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async thr
       throw SeamConformanceError("screenshot lock also guards the visual: failed to parse embedded vector input")
     }
     let sketch = try Sketch.load(input["sketch"]!)
-    let order = input["order"] as! [Int32]
+    let order = input["order"] as! [UInt32]
     let now = input["now"] as! String
     var caught: Error? = nil
     do {
@@ -486,7 +486,7 @@ public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async thr
       throw SeamConformanceError("visual lock also guards the screenshot: failed to parse embedded vector input")
     }
     let sketch = try Sketch.load(input["sketch"]!)
-    let order = input["order"] as! [Int32]
+    let order = input["order"] as! [UInt32]
     let now = input["now"] as! String
     var caught: Error? = nil
     do {

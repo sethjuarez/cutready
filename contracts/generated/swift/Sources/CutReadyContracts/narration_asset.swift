@@ -10,14 +10,14 @@ public struct NarrationAsset: TypraModel {
   public var sourceText: String = ""
   public var sourceTextHash: String = ""
   public var mimeType: String = ""
-  public var durationMs: Int64? = nil
-  public var leadingSilenceMs: Int64? = nil
-  public var trailingSilenceMs: Int64? = nil
+  public var durationMs: UInt32? = nil
+  public var leadingSilenceMs: UInt32? = nil
+  public var trailingSilenceMs: UInt32? = nil
   public var silenceThresholdDb: Float? = nil
-  public var byteSize: Int64 = 0
+  public var byteSize: UInt64 = 0
   public var recordedAt: String = ""
 
-  public init(path: String = "", sourceText: String = "", sourceTextHash: String = "", mimeType: String = "", durationMs: Int64? = nil, leadingSilenceMs: Int64? = nil, trailingSilenceMs: Int64? = nil, silenceThresholdDb: Float? = nil, byteSize: Int64 = 0, recordedAt: String = "") {
+  public init(path: String = "", sourceText: String = "", sourceTextHash: String = "", mimeType: String = "", durationMs: UInt32? = nil, leadingSilenceMs: UInt32? = nil, trailingSilenceMs: UInt32? = nil, silenceThresholdDb: Float? = nil, byteSize: UInt64 = 0, recordedAt: String = "") {
     self.path = path
     self.sourceText = sourceText
     self.sourceTextHash = sourceTextHash
@@ -46,19 +46,19 @@ public struct NarrationAsset: TypraModel {
       instance.mimeType = try TypraRuntime.string(value, field: "mime_type")
     }
     if let value = object["duration_ms"] {
-      instance.durationMs = try TypraRuntime.int64(value, field: "duration_ms")
+      instance.durationMs = try TypraRuntime.uint32(value, field: "duration_ms")
     }
     if let value = object["leading_silence_ms"] {
-      instance.leadingSilenceMs = try TypraRuntime.int64(value, field: "leading_silence_ms")
+      instance.leadingSilenceMs = try TypraRuntime.uint32(value, field: "leading_silence_ms")
     }
     if let value = object["trailing_silence_ms"] {
-      instance.trailingSilenceMs = try TypraRuntime.int64(value, field: "trailing_silence_ms")
+      instance.trailingSilenceMs = try TypraRuntime.uint32(value, field: "trailing_silence_ms")
     }
     if let value = object["silence_threshold_db"] {
       instance.silenceThresholdDb = try TypraRuntime.float(value, field: "silence_threshold_db")
     }
     if let value = object["byte_size"] {
-      instance.byteSize = try TypraRuntime.int64(value, field: "byte_size")
+      instance.byteSize = try TypraRuntime.uint64(value, field: "byte_size")
     }
     if let value = object["recorded_at"] {
       instance.recordedAt = try TypraRuntime.string(value, field: "recorded_at")

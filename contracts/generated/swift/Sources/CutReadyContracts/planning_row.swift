@@ -9,7 +9,7 @@ public struct PlanningRow: TypraModel {
   public var locked: Bool? = nil
   public var locks: PlanningCellLocks? = nil
   public var time: String = ""
-  public var durationSeconds: Int32? = nil
+  public var durationSeconds: UInt32? = nil
   public var narrative: String = ""
   public var demoActions: String = ""
   public var screenshot: String? = nil
@@ -21,7 +21,7 @@ public struct PlanningRow: TypraModel {
   public var narration: NarrationAsset? = nil
   public var narrationPlan: NarrationPlan? = nil
 
-  public init(locked: Bool? = nil, locks: PlanningCellLocks? = nil, time: String = "", durationSeconds: Int32? = nil, narrative: String = "", demoActions: String = "", screenshot: String? = nil, visual: Any? = nil, motionPoints: [MotionPoint]? = nil, typingSpots: [TypingSpot]? = nil, motionPlan: MotionPlan? = nil, designPlan: String? = nil, narration: NarrationAsset? = nil, narrationPlan: NarrationPlan? = nil) {
+  public init(locked: Bool? = nil, locks: PlanningCellLocks? = nil, time: String = "", durationSeconds: UInt32? = nil, narrative: String = "", demoActions: String = "", screenshot: String? = nil, visual: Any? = nil, motionPoints: [MotionPoint]? = nil, typingSpots: [TypingSpot]? = nil, motionPlan: MotionPlan? = nil, designPlan: String? = nil, narration: NarrationAsset? = nil, narrationPlan: NarrationPlan? = nil) {
     self.locked = locked
     self.locks = locks
     self.time = time
@@ -51,7 +51,7 @@ public struct PlanningRow: TypraModel {
       instance.time = try TypraRuntime.string(value, field: "time")
     }
     if let value = object["duration_seconds"] {
-      instance.durationSeconds = try TypraRuntime.int32(value, field: "duration_seconds")
+      instance.durationSeconds = try TypraRuntime.uint32(value, field: "duration_seconds")
     }
     if let value = object["narrative"] {
       instance.narrative = try TypraRuntime.string(value, field: "narrative")

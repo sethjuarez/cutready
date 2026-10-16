@@ -27,7 +27,7 @@ pub struct PlanningRow {
     /// Human duration such as `~30s`, `0:20`, or `2m`.
     pub time: String,
     /// Concrete duration in seconds.
-    pub duration_seconds: Option<i32>,
+    pub duration_seconds: Option<u32>,
     pub narrative: String,
     pub demo_actions: String,
     /// Project-relative screenshot path. Canonical save writes `null` when absent.
@@ -89,7 +89,7 @@ impl PlanningRow {
             locked: value.get("locked").and_then(|v| v.as_bool()),
             locks: value.get("locks").filter(|v| v.is_object() || v.is_array() || v.is_string()).map(|v| PlanningCellLocks::load_from_value(v, ctx)),
             time: value.get("time").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
-            duration_seconds: value.get("duration_seconds").and_then(|v| v.as_i64()).map(|v| v as i32),
+            duration_seconds: value.get("duration_seconds").and_then(|v| v.as_u64().and_then(|n| u32::try_from(n).ok())),
             narrative: value.get("narrative").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
             demo_actions: value.get("demo_actions").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
             screenshot: value.get("screenshot").and_then(|v| v.as_str()).map(|s| s.to_string()),

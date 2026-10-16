@@ -73,7 +73,4 @@ Desktop is the reference. Every runtime must save `.sk` files this way. Typra ca
 
 | Gap | Workaround |
 | --- | --- |
-| Non-string scalar arrays on discriminated subtypes load as `Vec<Value>` in Rust | Separate `updateRowText` and `reorderRows` operations instead of one polymorphic edit |
-| Rust tests PascalCase multi-word enum values that the model emits as `Subtle_push` | `MotionPlan.kind` is a documented `string` |
-| No unsigned integers (`uint8`/`uint32`/`uint64` emit invalid Rust and Swift) | Signed `int32`/`int64`; values are documented as non-negative |
 | Formatter output depends on locally installed `swift-format`/`rustfmt` | `format: false` on Rust and Swift targets keeps output deterministic |

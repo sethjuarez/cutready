@@ -9,7 +9,7 @@ use super::context::{LoadContext, SaveContext};
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct MotionPoint {
     /// 1, 2, or 3.
-    pub rank: i32,
+    pub rank: u8,
     pub x: f32,
     pub y: f32,
     pub label: Option<String>,
@@ -58,7 +58,7 @@ impl MotionPoint {
             panic!("{}", message);
         }
         Self {
-            rank: value.get("rank").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
+            rank: value.get("rank").and_then(|v| v.as_u64().and_then(|n| u8::try_from(n).ok())).unwrap_or(0),
             x: value.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,
             y: value.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,
             label: value.get("label").and_then(|v| v.as_str()).map(|s| s.to_string()),

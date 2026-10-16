@@ -376,7 +376,7 @@
             "name": "duration_seconds",
             "typeName": {
               "namespace": "",
-              "name": "int32"
+              "name": "uint32"
             },
             "description": "Concrete duration in seconds.",
             "samples": [],
@@ -550,7 +550,7 @@
                   "name": "rank",
                   "typeName": {
                     "namespace": "",
-                    "name": "int32"
+                    "name": "uint8"
                   },
                   "description": "1, 2, or 3.",
                   "samples": [],
@@ -807,7 +807,7 @@
                   "name": "start_offset_ms",
                   "typeName": {
                     "namespace": "",
-                    "name": "int64"
+                    "name": "uint32"
                   },
                   "description": "",
                   "samples": [],
@@ -831,7 +831,7 @@
                   "name": "duration_ms",
                   "typeName": {
                     "namespace": "",
-                    "name": "int64"
+                    "name": "uint32"
                   },
                   "description": "",
                   "samples": [],
@@ -1018,7 +1018,7 @@
                     "namespace": "",
                     "name": "string"
                   },
-                  "description": "`subtle_push`, `wide_hold_then_push`, or `push_then_drift`.\nA string until Typra emits matching Rust enum variant names for\nmulti-word values in generated tests.",
+                  "description": "",
                   "samples": [],
                   "knownAs": [],
                   "defaultFor": [],
@@ -1030,9 +1030,13 @@
                   "dictValueType": null,
                   "defaultValue": "null",
                   "hasExplicitDefault": false,
-                  "allowedValues": [],
+                  "allowedValues": [
+                    "subtle_push",
+                    "wide_hold_then_push",
+                    "push_then_drift"
+                  ],
                   "parseAliases": {},
-                  "enumName": null,
+                  "enumName": "MotionPlanKind",
                   "isOpenEnum": false,
                   "isNamedCollection": false
                 },
@@ -1078,7 +1082,7 @@
                         "name": "time_ms",
                         "typeName": {
                           "namespace": "",
-                          "name": "int64"
+                          "name": "uint32"
                         },
                         "description": "",
                         "samples": [],
@@ -1398,7 +1402,7 @@
                   "name": "duration_ms",
                   "typeName": {
                     "namespace": "",
-                    "name": "int64"
+                    "name": "uint32"
                   },
                   "description": "Canonical save writes `null` when unknown.",
                   "samples": [],
@@ -1422,7 +1426,7 @@
                   "name": "leading_silence_ms",
                   "typeName": {
                     "namespace": "",
-                    "name": "int64"
+                    "name": "uint32"
                   },
                   "description": "",
                   "samples": [],
@@ -1446,7 +1450,7 @@
                   "name": "trailing_silence_ms",
                   "typeName": {
                     "namespace": "",
-                    "name": "int64"
+                    "name": "uint32"
                   },
                   "description": "",
                   "samples": [],
@@ -1494,7 +1498,7 @@
                   "name": "byte_size",
                   "typeName": {
                     "namespace": "",
-                    "name": "int64"
+                    "name": "uint64"
                   },
                   "description": "",
                   "samples": [],
@@ -1885,7 +1889,7 @@
                         "name": "pause_after_ms",
                         "typeName": {
                           "namespace": "",
-                          "name": "int64"
+                          "name": "uint32"
                         },
                         "description": "",
                         "samples": [],

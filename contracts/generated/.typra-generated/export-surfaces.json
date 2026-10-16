@@ -161,7 +161,7 @@
               "returns": "Sketch",
               "params": {
                 "now": "string",
-                "order": "int32[]",
+                "order": "uint32[]",
                 "sketch": "Sketch"
               },
               "optional": false,
@@ -348,7 +348,7 @@
               "returns": "Sketch",
               "params": {
                 "now": "string",
-                "order": "int32[]",
+                "order": "uint32[]",
                 "sketch": "Sketch"
               },
               "optional": false,
@@ -537,7 +537,7 @@
               "returns": "Sketch",
               "params": {
                 "now": "string",
-                "order": "int32[]",
+                "order": "uint32[]",
                 "sketch": "Sketch"
               },
               "optional": false,

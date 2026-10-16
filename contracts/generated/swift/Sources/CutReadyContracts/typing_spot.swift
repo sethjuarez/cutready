@@ -11,15 +11,15 @@ public struct TypingSpot: TypraModel {
   public var width: Float = 0
   public var height: Float = 0
   public var text: String = ""
-  public var startOffsetMs: Int64? = nil
-  public var durationMs: Int64? = nil
+  public var startOffsetMs: UInt32? = nil
+  public var durationMs: UInt32? = nil
   public var charactersPerSecond: Float? = nil
   public var showCursor: Bool? = nil
   public var textColor: String? = nil
   public var fontFamily: String? = nil
   public var fontScale: Float? = nil
 
-  public init(x: Float = 0, y: Float = 0, width: Float = 0, height: Float = 0, text: String = "", startOffsetMs: Int64? = nil, durationMs: Int64? = nil, charactersPerSecond: Float? = nil, showCursor: Bool? = nil, textColor: String? = nil, fontFamily: String? = nil, fontScale: Float? = nil) {
+  public init(x: Float = 0, y: Float = 0, width: Float = 0, height: Float = 0, text: String = "", startOffsetMs: UInt32? = nil, durationMs: UInt32? = nil, charactersPerSecond: Float? = nil, showCursor: Bool? = nil, textColor: String? = nil, fontFamily: String? = nil, fontScale: Float? = nil) {
     self.x = x
     self.y = y
     self.width = width
@@ -53,10 +53,10 @@ public struct TypingSpot: TypraModel {
       instance.text = try TypraRuntime.string(value, field: "text")
     }
     if let value = object["start_offset_ms"] {
-      instance.startOffsetMs = try TypraRuntime.int64(value, field: "start_offset_ms")
+      instance.startOffsetMs = try TypraRuntime.uint32(value, field: "start_offset_ms")
     }
     if let value = object["duration_ms"] {
-      instance.durationMs = try TypraRuntime.int64(value, field: "duration_ms")
+      instance.durationMs = try TypraRuntime.uint32(value, field: "duration_ms")
     }
     if let value = object["characters_per_second"] {
       instance.charactersPerSecond = try TypraRuntime.float(value, field: "characters_per_second")

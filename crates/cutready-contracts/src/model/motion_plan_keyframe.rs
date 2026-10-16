@@ -78,7 +78,7 @@ impl<'de> serde::Deserialize<'de> for MotionPlanEasing {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct MotionPlanKeyframe {
-    pub time_ms: i64,
+    pub time_ms: u32,
     pub scale: f32,
     pub x: f32,
     pub y: f32,
@@ -128,7 +128,7 @@ impl MotionPlanKeyframe {
             panic!("{}", message);
         }
         Self {
-            time_ms: value.get("time_ms").and_then(|v| v.as_i64()).unwrap_or(0),
+            time_ms: value.get("time_ms").and_then(|v| v.as_u64().and_then(|n| u32::try_from(n).ok())).unwrap_or(0),
             scale: value.get("scale").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,
             x: value.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,
             y: value.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,

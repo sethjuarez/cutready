@@ -6,12 +6,12 @@ import Foundation
 /// Ranked normalized screenshot point used for camera moves.
 public struct MotionPoint: TypraModel {
   public static let shorthandProperty: String? = nil
-  public var rank: Int32 = 0
+  public var rank: UInt8 = 0
   public var x: Float = 0
   public var y: Float = 0
   public var label: String? = nil
 
-  public init(rank: Int32 = 0, x: Float = 0, y: Float = 0, label: String? = nil) {
+  public init(rank: UInt8 = 0, x: Float = 0, y: Float = 0, label: String? = nil) {
     self.rank = rank
     self.x = x
     self.y = y
@@ -22,7 +22,7 @@ public struct MotionPoint: TypraModel {
     let object = try TypraRuntime.object(data, typeName: "MotionPoint")
     var instance = MotionPoint()
     if let value = object["rank"] {
-      instance.rank = try TypraRuntime.int32(value, field: "rank")
+      instance.rank = try TypraRuntime.uint8(value, field: "rank")
     }
     if let value = object["x"] {
       instance.x = try TypraRuntime.float(value, field: "x")

@@ -25,7 +25,7 @@ classDiagram
         +string rationale
     }
     class MotionPlanKeyframe {
-        +int64 time_ms
+        +uint32 time_ms
         +float32 scale
         +float32 x
         +float32 y
@@ -38,9 +38,7 @@ classDiagram
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| kind | string | `subtle_push`, `wide_hold_then_push`, or `push_then_drift`.
-A string until Typra emits matching Rust enum variant names for
-multi-word values in generated tests. |
+| kind | string |  |
 | keyframes | [MotionPlanKeyframe[]](../motionplankeyframe/) |  |
 | rationale | string |  |
 

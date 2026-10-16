@@ -187,7 +187,7 @@ impl<'de> serde::Deserialize<'de> for SketchEditErrorCode {
 pub struct SketchEditError {
     pub code: SketchEditErrorCode,
     /// Zero-based row position, for row-scoped errors.
-    pub row_index: Option<i32>,
+    pub row_index: Option<u32>,
     /// The locked cell, for `locked_cell`.
     pub field: Option<PlanningCellField>,
 }

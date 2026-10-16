@@ -13,7 +13,7 @@ pub struct NarrationBeat {
     pub style: Option<String>,
     pub style_degree: Option<f32>,
     pub emphasis: Option<String>,
-    pub pause_after_ms: Option<i64>,
+    pub pause_after_ms: Option<u32>,
 }
 
 impl NarrationBeat {
@@ -64,7 +64,7 @@ impl NarrationBeat {
             style: value.get("style").and_then(|v| v.as_str()).map(|s| s.to_string()),
             style_degree: value.get("style_degree").and_then(|v| v.as_f64()).map(|v| v as f32),
             emphasis: value.get("emphasis").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            pause_after_ms: value.get("pause_after_ms").and_then(|v| v.as_i64()),
+            pause_after_ms: value.get("pause_after_ms").and_then(|v| v.as_u64().and_then(|n| u32::try_from(n).ok())),
         }
     }
 

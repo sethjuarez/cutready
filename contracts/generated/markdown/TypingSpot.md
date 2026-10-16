@@ -25,8 +25,8 @@ classDiagram
         +float32 width
         +float32 height
         +string text
-        +int64 start_offset_ms
-        +int64 duration_ms
+        +uint32 start_offset_ms
+        +uint32 duration_ms
         +float32 characters_per_second
         +boolean show_cursor
         +string text_color
@@ -44,8 +44,8 @@ classDiagram
 | width | float32 |  |
 | height | float32 |  |
 | text | string |  |
-| start_offset_ms | int64 |  |
-| duration_ms | int64 |  |
+| start_offset_ms | uint32 |  |
+| duration_ms | uint32 |  |
 | characters_per_second | float32 |  |
 | show_cursor | boolean |  |
 | text_color | string |  |

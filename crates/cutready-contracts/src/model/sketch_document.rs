@@ -12,7 +12,7 @@ use super::sketch::Sketch;
 #[async_trait::async_trait]
 pub trait SketchDocument: Send + Sync {
     /// Reorder rows. `order[i]` is the current zero-based index of the row that moves to position `i`.
-    fn reorder_rows(&self, sketch: &Sketch, order: &Vec<i32>, now: &String) -> Result<Sketch, Box<dyn std::error::Error + Send + Sync>>;
+    fn reorder_rows(&self, sketch: &Sketch, order: &Vec<u32>, now: &String) -> Result<Sketch, Box<dyn std::error::Error + Send + Sync>>;
     /// Decode a `.sk` document and save it again without changes.
     fn round_trip(&self, sketch: &Sketch) -> Result<Sketch, Box<dyn std::error::Error + Send + Sync>>;
     /// Replace text cells on one row.

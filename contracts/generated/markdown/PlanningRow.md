@@ -24,7 +24,7 @@ classDiagram
         +boolean locked
         +PlanningCellLocks locks
         +string time
-        +int32 duration_seconds
+        +uint32 duration_seconds
         +string narrative
         +string demo_actions
         +string screenshot
@@ -46,7 +46,7 @@ classDiagram
     }
     PlanningRow *-- PlanningCellLocks
     class MotionPoint {
-        +int32 rank
+        +uint8 rank
         +float32 x
         +float32 y
         +string label
@@ -58,8 +58,8 @@ classDiagram
         +float32 width
         +float32 height
         +string text
-        +int64 start_offset_ms
-        +int64 duration_ms
+        +uint32 start_offset_ms
+        +uint32 duration_ms
         +float32 characters_per_second
         +boolean show_cursor
         +string text_color
@@ -78,11 +78,11 @@ classDiagram
         +string source_text
         +string source_text_hash
         +string mime_type
-        +int64 duration_ms
-        +int64 leading_silence_ms
-        +int64 trailing_silence_ms
+        +uint32 duration_ms
+        +uint32 leading_silence_ms
+        +uint32 trailing_silence_ms
         +float32 silence_threshold_db
-        +int64 byte_size
+        +uint64 byte_size
         +string recorded_at
     }
     PlanningRow *-- NarrationAsset
@@ -114,7 +114,7 @@ demo_actions: Open the workspace.
 | locked | boolean | Whether the entire row is protected from edits. Saved as `false` when unset. |
 | locks | [PlanningCellLocks](../planningcelllocks/) | Saved with all six fields, even when nothing is locked. |
 | time | string | Human duration such as `~30s`, `0:20`, or `2m`. |
-| duration_seconds | int32 | Concrete duration in seconds. |
+| duration_seconds | uint32 | Concrete duration in seconds. |
 | narrative | string |  |
 | demo_actions | string |  |
 | screenshot | string | Project-relative screenshot path. Canonical save writes `null` when absent. |

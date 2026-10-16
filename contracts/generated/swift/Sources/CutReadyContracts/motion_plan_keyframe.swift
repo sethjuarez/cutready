@@ -19,13 +19,13 @@ public enum MotionPlanEasing: String, Codable, CaseIterable {
 
 public struct MotionPlanKeyframe: TypraModel {
   public static let shorthandProperty: String? = nil
-  public var timeMs: Int64 = 0
+  public var timeMs: UInt32 = 0
   public var scale: Float = 0
   public var x: Float = 0
   public var y: Float = 0
   public var easing: MotionPlanEasing? = nil
 
-  public init(timeMs: Int64 = 0, scale: Float = 0, x: Float = 0, y: Float = 0, easing: MotionPlanEasing? = nil) {
+  public init(timeMs: UInt32 = 0, scale: Float = 0, x: Float = 0, y: Float = 0, easing: MotionPlanEasing? = nil) {
     self.timeMs = timeMs
     self.scale = scale
     self.x = x
@@ -37,7 +37,7 @@ public struct MotionPlanKeyframe: TypraModel {
     let object = try TypraRuntime.object(data, typeName: "MotionPlanKeyframe")
     var instance = MotionPlanKeyframe()
     if let value = object["time_ms"] {
-      instance.timeMs = try TypraRuntime.int64(value, field: "time_ms")
+      instance.timeMs = try TypraRuntime.uint32(value, field: "time_ms")
     }
     if let value = object["scale"] {
       instance.scale = try TypraRuntime.float(value, field: "scale")

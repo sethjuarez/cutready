@@ -34,7 +34,7 @@ classDiagram
         +boolean locked
         +PlanningCellLocks locks
         +string time
-        +int32 duration_seconds
+        +uint32 duration_seconds
         +string narrative
         +string demo_actions
         +string screenshot

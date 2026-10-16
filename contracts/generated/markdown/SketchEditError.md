@@ -21,7 +21,7 @@ config:
 classDiagram
     class SketchEditError {
         +string code
-        +int32 row_index
+        +uint32 row_index
         +string field
     }
 ```
@@ -31,5 +31,5 @@ classDiagram
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | code | string |  |
-| row_index | int32 | Zero-based row position, for row-scoped errors. |
+| row_index | uint32 | Zero-based row position, for row-scoped errors. |
 | field | string | The locked cell, for `locked_cell`. |

@@ -24,11 +24,11 @@ classDiagram
         +string source_text
         +string source_text_hash
         +string mime_type
-        +int64 duration_ms
-        +int64 leading_silence_ms
-        +int64 trailing_silence_ms
+        +uint32 duration_ms
+        +uint32 leading_silence_ms
+        +uint32 trailing_silence_ms
         +float32 silence_threshold_db
-        +int64 byte_size
+        +uint64 byte_size
         +string recorded_at
     }
 ```
@@ -47,9 +47,9 @@ path: .cutready/narration/row-1.wav
 | source_text | string | Narrative text at the moment the audio was recorded or generated. |
 | source_text_hash | string | SHA-256 of `source_text`. |
 | mime_type | string |  |
-| duration_ms | int64 | Canonical save writes `null` when unknown. |
-| leading_silence_ms | int64 |  |
-| trailing_silence_ms | int64 |  |
+| duration_ms | uint32 | Canonical save writes `null` when unknown. |
+| leading_silence_ms | uint32 |  |
+| trailing_silence_ms | uint32 |  |
 | silence_threshold_db | float32 |  |
-| byte_size | int64 |  |
+| byte_size | uint64 |  |
 | recorded_at | string | RFC 3339 UTC timestamp. |

@@ -9,7 +9,7 @@
       "operation": "reorderRows",
       "params": {
         "sketch": "Sketch",
-        "order": "int32[]",
+        "order": "uint32[]",
         "now": "string"
       },
       "returns": "Sketch",
@@ -110,7 +110,7 @@
       "operation": "reorderRows",
       "params": {
         "sketch": "Sketch",
-        "order": "int32[]",
+        "order": "uint32[]",
         "now": "string"
       },
       "returns": "Sketch",
@@ -181,7 +181,7 @@
       "operation": "reorderRows",
       "params": {
         "sketch": "Sketch",
-        "order": "int32[]",
+        "order": "uint32[]",
         "now": "string"
       },
       "returns": "Sketch",
@@ -250,7 +250,7 @@
       "operation": "reorderRows",
       "params": {
         "sketch": "Sketch",
-        "order": "int32[]",
+        "order": "uint32[]",
         "now": "string"
       },
       "returns": "Sketch",
@@ -447,7 +447,7 @@
       "operation": "reorderRows",
       "params": {
         "sketch": "Sketch",
-        "order": "int32[]",
+        "order": "uint32[]",
         "now": "string"
       },
       "returns": "Sketch",
@@ -554,7 +554,7 @@
       "operation": "reorderRows",
       "params": {
         "sketch": "Sketch",
-        "order": "int32[]",
+        "order": "uint32[]",
         "now": "string"
       },
       "returns": "Sketch",
@@ -655,7 +655,7 @@
       "operation": "reorderRows",
       "params": {
         "sketch": "Sketch",
-        "order": "int32[]",
+        "order": "uint32[]",
         "now": "string"
       },
       "returns": "Sketch",
@@ -755,7 +755,7 @@
       "operation": "reorderRows",
       "params": {
         "sketch": "Sketch",
-        "order": "int32[]",
+        "order": "uint32[]",
         "now": "string"
       },
       "returns": "Sketch",
@@ -824,7 +824,7 @@
       "operation": "reorderRows",
       "params": {
         "sketch": "Sketch",
-        "order": "int32[]",
+        "order": "uint32[]",
         "now": "string"
       },
       "returns": "Sketch",
@@ -896,7 +896,7 @@
       "operation": "reorderRows",
       "params": {
         "sketch": "Sketch",
-        "order": "int32[]",
+        "order": "uint32[]",
         "now": "string"
       },
       "returns": "Sketch",

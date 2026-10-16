@@ -364,7 +364,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
             &ctx,
         )
         .expect("sketch parses");
-        let order: Vec<i32> = serde_json::from_str(
+        let order: Vec<u32> = serde_json::from_str(
             r####"
 [
   0,
@@ -967,7 +967,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
             &ctx,
         )
         .expect("sketch parses");
-        let order: Vec<i32> = serde_json::from_str(
+        let order: Vec<u32> = serde_json::from_str(
             r####"
 [
   1,
@@ -1267,7 +1267,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
             &ctx,
         )
         .expect("sketch parses");
-        let order: Vec<i32> = serde_json::from_str(
+        let order: Vec<u32> = serde_json::from_str(
             r####"
 [
   0,
@@ -1674,7 +1674,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
             &ctx,
         )
         .expect("sketch parses");
-        let order: Vec<i32> = serde_json::from_str(
+        let order: Vec<u32> = serde_json::from_str(
             r####"
 [
   3,
@@ -1835,7 +1835,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
             &ctx,
         )
         .expect("sketch parses");
-        let order: Vec<i32> = serde_json::from_str(
+        let order: Vec<u32> = serde_json::from_str(
             r####"
 [
   1,
@@ -1979,7 +1979,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
             &ctx,
         )
         .expect("sketch parses");
-        let order: Vec<i32> = serde_json::from_str(
+        let order: Vec<u32> = serde_json::from_str(
             r####"
 [
   1,
@@ -2076,7 +2076,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
             &ctx,
         )
         .expect("sketch parses");
-        let order: Vec<i32> = serde_json::from_str(
+        let order: Vec<u32> = serde_json::from_str(
             r####"
 [
   2,
@@ -2144,7 +2144,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
             &ctx,
         )
         .expect("sketch parses");
-        let order: Vec<i32> = serde_json::from_str(
+        let order: Vec<u32> = serde_json::from_str(
             r####"
 [
   0,
@@ -2376,7 +2376,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
             &ctx,
         )
         .expect("sketch parses");
-        let order: Vec<i32> = serde_json::from_str(
+        let order: Vec<u32> = serde_json::from_str(
             r####"
 [
   1,
@@ -3043,7 +3043,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
             &ctx,
         )
         .expect("sketch parses");
-        let order: Vec<i32> = serde_json::from_str(
+        let order: Vec<u32> = serde_json::from_str(
             r####"
 [
   1,

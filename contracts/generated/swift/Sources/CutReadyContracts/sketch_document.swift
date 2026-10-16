@@ -4,7 +4,7 @@
 import Foundation
 
 public protocol SketchDocument: Sendable {
-  func reorderRows(sketch: Sketch, order: [Int32], now: String) throws -> Sketch
+  func reorderRows(sketch: Sketch, order: [UInt32], now: String) throws -> Sketch
   func roundTrip(sketch: Sketch) throws -> Sketch
   func updateRowText(sketch: Sketch, update: RowTextUpdate, now: String) throws -> Sketch
 }

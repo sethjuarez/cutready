@@ -7,11 +7,81 @@ use super::context::{LoadContext, SaveContext};
 
 use super::motion_plan_keyframe::MotionPlanKeyframe;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MotionPlanKind {
+    SubtlePush,
+    WideHoldThenPush,
+    PushThenDrift,
+}
+
+impl Default for MotionPlanKind {
+    fn default() -> Self {
+        Self::SubtlePush
+    }
+}
+
+impl std::fmt::Display for MotionPlanKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SubtlePush => write!(f, "subtle_push"),
+            Self::WideHoldThenPush => write!(f, "wide_hold_then_push"),
+            Self::PushThenDrift => write!(f, "push_then_drift"),
+        }
+    }
+}
+
+impl MotionPlanKind {
+    pub fn from_str_opt(s: &str) -> Option<Self> {
+        match s {
+            "subtle_push" => Some(Self::SubtlePush),
+            "wide_hold_then_push" => Some(Self::WideHoldThenPush),
+            "push_then_drift" => Some(Self::PushThenDrift),
+            _ => None,
+        }
+    }
+
+    pub fn from_str_ignore_case_opt(s: &str) -> Option<Self> {
+        if s.eq_ignore_ascii_case("subtle_push") {
+            return Some(Self::SubtlePush);
+        }
+        if s.eq_ignore_ascii_case("wide_hold_then_push") {
+            return Some(Self::WideHoldThenPush);
+        }
+        if s.eq_ignore_ascii_case("push_then_drift") {
+            return Some(Self::PushThenDrift);
+        }
+        None
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::SubtlePush => "subtle_push",
+            Self::WideHoldThenPush => "wide_hold_then_push",
+            Self::PushThenDrift => "push_then_drift",
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for MotionPlanKind {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for MotionPlanKind {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = <String as serde::Deserialize>::deserialize(deserializer)?;
+        Self::from_str_opt(&s)
+            .ok_or_else(|| serde::de::Error::custom(format!("invalid MotionPlanKind value: {}", s)))
+    }
+}
+
 /// Agent-generated camera motion plan for screenshot rows.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct MotionPlan {
-    /// `subtle_push`, `wide_hold_then_push`, or `push_then_drift`. A string until Typra emits matching Rust enum variant names for multi-word values in generated tests.
-    pub kind: String,
+    pub kind: MotionPlanKind,
     pub keyframes: Option<Vec<MotionPlanKeyframe>>,
     pub rationale: Option<String>,
 }
@@ -59,7 +129,7 @@ impl MotionPlan {
             panic!("{}", message);
         }
         Self {
-            kind: value.get("kind").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            kind: value.get("kind").and_then(|v| v.as_str()).and_then(|s| MotionPlanKind::from_str_opt(s)).unwrap_or(MotionPlanKind::SubtlePush),
             keyframes: value.get("keyframes").map(|v| Self::load_keyframes(v, ctx)),
             rationale: value.get("rationale").and_then(|v| v.as_str()).map(|s| s.to_string()),
         }
@@ -82,7 +152,7 @@ impl MotionPlan {
     pub fn to_value(&self, ctx: &SaveContext) -> serde_json::Value {
         let mut result = serde_json::Map::new();
         // Write base fields
-        result.insert("kind".to_string(), serde_json::Value::String(self.kind.clone()));
+        result.insert("kind".to_string(), serde_json::Value::String(self.kind.to_string()));
         if let Some(items) = self.keyframes.as_ref() {
             result.insert("keyframes".to_string(), Self::save_keyframes(items, ctx));
         }

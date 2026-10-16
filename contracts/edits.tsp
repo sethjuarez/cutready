@@ -10,8 +10,8 @@ namespace CutReady.Contracts;
  * (see contracts/README.md, "Open policy questions").
  */
 model RowTextUpdate {
-  /** Zero-based, non-negative row index. */
-  row_index: int32;
+  /** Zero-based row index. */
+  row_index: uint32;
 
   time?: string;
   narrative?: string;
@@ -44,7 +44,7 @@ model SketchEditError {
   code: SketchEditErrorCode;
 
   /** Zero-based row position, for row-scoped errors. */
-  row_index?: int32;
+  row_index?: uint32;
 
   /** The locked cell, for `locked_cell`. */
   field?: PlanningCellField;
@@ -75,5 +75,5 @@ interface SketchDocument {
    */
   @sync
   @vector(ReorderRowsVectors)
-  reorderRows(sketch: Sketch, order: int32[], now: string): Sketch;
+  reorderRows(sketch: Sketch, order: uint32[], now: string): Sketch;
 }

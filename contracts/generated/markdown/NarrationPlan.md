@@ -35,7 +35,7 @@ classDiagram
         +string style
         +float32 style_degree
         +string emphasis
-        +int64 pause_after_ms
+        +uint32 pause_after_ms
     }
     NarrationPlan *-- NarrationBeat
 ```

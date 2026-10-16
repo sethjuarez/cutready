@@ -20,7 +20,7 @@ config:
 ---
 classDiagram
     class MotionPoint {
-        +int32 rank
+        +uint8 rank
         +float32 x
         +float32 y
         +string label
@@ -31,7 +31,7 @@ classDiagram
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
-| rank | int32 | 1, 2, or 3. |
+| rank | uint8 | 1, 2, or 3. |
 | x | float32 |  |
 | y | float32 |  |
 | label | string |  |

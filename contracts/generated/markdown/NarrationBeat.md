@@ -25,7 +25,7 @@ classDiagram
         +string style
         +float32 style_degree
         +string emphasis
-        +int64 pause_after_ms
+        +uint32 pause_after_ms
     }
 ```
 
@@ -38,4 +38,4 @@ classDiagram
 | style | string |  |
 | style_degree | float32 |  |
 | emphasis | string |  |
-| pause_after_ms | int64 |  |
+| pause_after_ms | uint32 |  |
