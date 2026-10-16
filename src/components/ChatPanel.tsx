@@ -1,4 +1,4 @@
-import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject, type UIEvent } from "react";
+import { Children, isValidElement, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject, type UIEvent } from "react";
 import { invoke, listen } from "../services/tauri";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { AgentRunInspector } from "./AgentRunInspector";
@@ -202,6 +202,33 @@ export function extractInlineToolActivity(message: ChatMessage, followingMessage
 
 function hasToolCalls(message: ChatMessage): boolean {
   return (message.tool_calls?.length ?? 0) > 0;
+}
+
+const NO_TOOL_ACTIVITY: ChatToolActivity[] = [];
+
+/**
+ * Inline tool activity for every message in one backward pass — equivalent to
+ * calling extractInlineToolActivity(messages[i], messages.slice(i + 1)) per row,
+ * without the per-render O(n²) slicing.
+ */
+export function buildInlineToolActivityIndex(messages: ChatMessage[]): ChatToolActivity[][] {
+  const index: ChatToolActivity[][] = new Array(messages.length);
+  const following = new Map<string, string>();
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    index[i] = hasToolCalls(message)
+      ? message.tool_calls!.map((toolCall) => ({
+        id: toolCall.id,
+        name: toolCall.function.name,
+        arguments: toolCall.function.arguments,
+        ...(following.has(toolCall.id) ? { result: following.get(toolCall.id) } : {}),
+      }))
+      : NO_TOOL_ACTIVITY;
+    if (message.role === "tool" && message.tool_call_id) {
+      following.set(message.tool_call_id, textContent(message.content));
+    }
+  }
+  return index;
 }
 
 export function shouldRequestChatMutationApproval(applyMode: string): boolean {
@@ -735,6 +762,14 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const activeNotePath = useAppStore((s) => s.activeNotePath);
   const messages = useAppStore((s) => s.chatMessages);
   const setChatMessages = useAppStore((s) => s.setChatMessages);
+  const inlineToolActivity = useMemo(() => buildInlineToolActivityIndex(messages), [messages]);
+  const deleteMessage = useCallback((index: number, message: ChatMessage) => {
+    const current = useAppStore.getState().chatMessages;
+    // The row's index can go stale if history changed after render; fall back to identity.
+    const target = current[index] === message ? index : current.indexOf(message);
+    if (target < 0) return;
+    setChatMessages(current.filter((_, idx) => idx !== target));
+  }, [setChatMessages]);
   const loading = useAppStore((s) => s.chatLoading);
   const setChatLoading = useAppStore((s) => s.setChatLoading);
   const error = useAppStore((s) => s.chatError);
@@ -865,7 +900,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           setChatStreamingState({ chatStreamingStatus: ev.message ?? "" });
           // Compaction status events get injected as visible system messages in chat
           if (ev.message && ev.message.startsWith("Compacting context")) {
-            setChatMessages([...messages, { role: "system", content: ev.message! }]);
+            setChatMessages([...useAppStore.getState().chatMessages, { role: "system", content: ev.message! }]);
           }
           addActivityEntries([{
             id: crypto.randomUUID(),
@@ -2004,13 +2039,11 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           <div key={i} className={chatFocusMode ? "mx-auto w-full max-w-5xl" : undefined}>
             <MessageRow
               message={msg}
-              inlineToolActivity={hasToolCalls(msg) ? extractInlineToolActivity(msg, messages.slice(i + 1)) : []}
+              index={i}
+              inlineToolActivity={inlineToolActivity[i]}
               agentName={selectedAgent.name}
               projectRoot={currentProject?.root}
-              onDelete={msg.role === "user" ? () => {
-                const updated = messages.filter((_, idx) => idx !== i);
-                setChatMessages(updated);
-              } : undefined}
+              onDelete={msg.role === "user" ? deleteMessage : undefined}
             />
           </div>
         ))}
@@ -2534,25 +2567,27 @@ function WebRefChip({ url }: { url: string }) {
 
 // ── Message Row (VS Code Copilot chat style) ────────────────────
 
-function MessageRow({
+const MessageRow = memo(function MessageRow({
   message,
-  inlineToolActivity = [],
+  index,
+  inlineToolActivity = NO_TOOL_ACTIVITY,
   agentName,
   projectRoot,
   onDelete,
 }: {
   message: ChatMessage;
+  index: number;
   inlineToolActivity?: ChatToolActivity[];
   agentName: string;
   projectRoot?: string;
-  onDelete?: () => void;
+  onDelete?: (index: number, message: ChatMessage) => void;
 }) {
   if (message.role === "user") {
     return (
       <div className="group px-3.5 py-2.5 flex justify-end items-start gap-1.5">
         {onDelete && (
           <button
-            onClick={onDelete}
+            onClick={() => onDelete(index, message)}
             className="shrink-0 mt-6 p-1 rounded opacity-0 group-hover:opacity-100 text-[rgb(var(--color-text-secondary))] hover:text-error hover:bg-error/10 transition-all"
             title="Remove message"
           >
@@ -2639,7 +2674,7 @@ function MessageRow({
   }
 
   return null;
-}
+});
 
 function RunDetailsPopover({
   details,
@@ -3024,7 +3059,7 @@ function hasTaskCheckbox(node: ReactNode): boolean {
   });
 }
 
-function MarkdownContent({ content, projectRoot }: { content: string; projectRoot?: string }) {
+const MarkdownContent = memo(function MarkdownContent({ content, projectRoot }: { content: string; projectRoot?: string }) {
   return (
     <SafeMarkdown
       components={{
@@ -3169,7 +3204,7 @@ function MarkdownContent({ content, projectRoot }: { content: string; projectRoo
       {content}
     </SafeMarkdown>
   );
-}
+});
 
 // ── Model list cache (module-level, survives re-renders) ─────────
 

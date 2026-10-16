@@ -89,6 +89,8 @@ import type {
 } from "../types/sketch";
 
 const suppressedEditorFlushPaths = new Set<string>();
+/** The Output panel keeps a rolling window; full history lives in telemetry/run state. */
+export const MAX_ACTIVITY_ENTRIES = 1000;
 export function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
@@ -2530,7 +2532,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   setChatFocusMode: (enabled) => set({ chatFocusMode: enabled }),
   addActivityEntries: (entries) => {
     recordActivityEntries(entries);
-    set((s) => ({ activityLog: [...s.activityLog, ...entries] }));
+    set((s) => ({ activityLog: [...s.activityLog, ...entries].slice(-MAX_ACTIVITY_ENTRIES) }));
   },
   clearActivityLog: () => set({ activityLog: [] }),
   addDebugEntry: (entry) => set((s) => ({ debugLog: [...s.debugLog.slice(-499), entry] })),
