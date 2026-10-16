@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { create } from "zustand";
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { invoke } from "../services/tauri";
+import type { TokenResponse } from "../types/auth";
 import {
   getProviderSecret,
   isSecretKey,
@@ -793,7 +794,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
       if (needsOAuth && result.aiRefreshToken) {
         try {
-          const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>(
+          const tokenResult = await invoke<TokenResponse>(
             "azure_token_refresh",
             {
               tenantId: result.aiTenantId || "",
@@ -801,24 +802,28 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
               clientId: result.aiClientId || null,
             },
           );
-          if (tokenResult.access_token) {
-            const updates: Partial<GlobalSettings> = { aiAccessToken: tokenResult.access_token };
-            if (tokenResult.refresh_token) {
-              updates.aiRefreshToken = tokenResult.refresh_token;
+          if (tokenResult.accessToken) {
+            const updates: Partial<GlobalSettings> = { aiAccessToken: tokenResult.accessToken };
+            if (tokenResult.refreshToken) {
+              updates.aiRefreshToken = tokenResult.refreshToken;
             }
-            set((state) => ({ settings: { ...state.settings, ...updates } }));
+            set((state) => ({
+              settings: state.settings.aiActiveProviderId === result.aiActiveProviderId
+                ? { ...state.settings, ...updates }
+                : state.settings,
+            }));
             // Save refreshed tokens to vault
             try {
-              await setProviderSecret(result.aiActiveProviderId, "accessToken", tokenResult.access_token);
-              if (tokenResult.refresh_token) {
-                await setProviderSecret(result.aiActiveProviderId, "refreshToken", tokenResult.refresh_token);
+              await setProviderSecret(result.aiActiveProviderId, "accessToken", tokenResult.accessToken);
+              if (tokenResult.refreshToken) {
+                await setProviderSecret(result.aiActiveProviderId, "refreshToken", tokenResult.refreshToken);
               }
             } catch {
-              // Vault unavailable — fall through
+              console.warn("[auth] Could not persist refreshed OAuth tokens to the credential vault.");
             }
           }
         } catch {
-          // Token refresh failed silently — user will re-auth when needed
+          console.warn("[auth] Startup OAuth refresh failed; keeping cached credentials.");
         } finally {
           set({ oauthRefreshPending: false });
         }

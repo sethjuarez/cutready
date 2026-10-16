@@ -1,4 +1,5 @@
 import type { AppSettings } from "../../hooks/useSettings";
+export type { TokenResponse } from "../../types/auth";
 
 export interface ModelInfo {
   id: string;
@@ -6,17 +7,6 @@ export interface ModelInfo {
   owned_by?: string;
   capabilities?: Record<string, string>;
   context_length?: number;
-}
-
-// Mirrors Prompty's canonical `OAuthToken` wire form (camelCase), which the
-// Tauri command returns verbatim over IPC. The Foundry OAuth wire (snake_case)
-// is remapped to this canonical shape inside prompty-foundry on load.
-export interface TokenResponse {
-  accessToken: string;
-  tokenType: string;
-  expiresIn: number;
-  refreshToken?: string;
-  scope?: string;
 }
 
 export interface AuthCodeFlowInit {

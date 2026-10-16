@@ -14,6 +14,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Channel, invoke } from "../services/tauri";
+import type { TokenResponse } from "../types/auth";
 import { ArrowRight, AtSign, ChevronDown, ChevronRight, Copy, FileInput, FileText, Film, FolderOpen, Pencil, Plus, SquareTerminal, Trash2 } from "lucide-react";
 import {
   clearSuppressedEditorFlush,
@@ -596,7 +597,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     let freshBearerToken = settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null;
     if (settings.aiAuthMode === "azure_oauth" && settings.aiRefreshToken) {
       try {
-        const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>(
+        const tokenResult = await invoke<TokenResponse>(
           "azure_token_refresh",
           {
             tenantId: settings.aiTenantId || "",
@@ -604,15 +605,15 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             clientId: settings.aiClientId || null,
           },
         );
-        if (tokenResult.access_token) {
-          freshBearerToken = tokenResult.access_token;
-          await updateSetting("aiAccessToken", tokenResult.access_token);
-          if (tokenResult.refresh_token) {
-            await updateSetting("aiRefreshToken", tokenResult.refresh_token);
+        if (tokenResult.accessToken) {
+          freshBearerToken = tokenResult.accessToken;
+          await updateSetting("aiAccessToken", tokenResult.accessToken);
+          if (tokenResult.refreshToken) {
+            await updateSetting("aiRefreshToken", tokenResult.refreshToken);
           }
         }
       } catch {
-        // The import request below will surface any auth failure with the current token.
+        console.warn("[auth] Video import OAuth refresh failed; trying cached credentials.");
       }
     }
 

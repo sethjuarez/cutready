@@ -2008,6 +2008,19 @@ mod tests {
     use super::*;
     use crate::engine::agent::llm::LlmProvider;
 
+    #[test]
+    fn oauth_token_ipc_matches_frontend_refresh_fixture() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../src/test/fixtures/oauth-token-response.json"
+        ))
+        .unwrap();
+        let token: TokenResponse = serde_json::from_value(fixture.clone()).unwrap();
+
+        assert_eq!(token.access_token, "fixture-access-token");
+        assert_eq!(token.refresh_token.as_deref(), Some("fixture-refresh-token"));
+        assert_eq!(serde_json::to_value(token).unwrap(), fixture);
+    }
+
     fn make_config(provider: &str) -> ProviderConfig {
         ProviderConfig {
             provider_id: Some("provider-test".into()),

@@ -1,4 +1,5 @@
 import { invoke } from "../services/tauri";
+import type { TokenResponse } from "../types/auth";
 import { loadProviderSecrets, setProviderSecret } from "../hooks/useSecretStore";
 import { useSettingsStore, type AgentPreset, type GlobalSettings } from "../hooks/useSettings";
 import {
@@ -156,7 +157,7 @@ export async function buildRefreshedProviderInput(
 
   if (provider.authMode === "azure_oauth" && secrets.refreshToken) {
     try {
-      const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>(
+      const tokenResult = await invoke<TokenResponse>(
         "azure_token_refresh",
         {
           tenantId: provider.tenantId || "",
@@ -164,18 +165,18 @@ export async function buildRefreshedProviderInput(
           clientId: provider.clientId || null,
         },
       );
-      if (tokenResult.access_token) {
-        accessToken = tokenResult.access_token;
+      if (tokenResult.accessToken) {
+        accessToken = tokenResult.accessToken;
         // Persist to the connection that owns these credentials, mirroring to
         // the flat projection only while it remains active.
         await persistConnectionTokens(
           provider.id,
-          { accessToken: tokenResult.access_token, refreshToken: tokenResult.refresh_token },
+          { accessToken: tokenResult.accessToken, refreshToken: tokenResult.refreshToken },
           updateSetting,
         );
       }
     } catch {
-      // Keep the existing token; the provider request surfaces any auth failure.
+      console.warn("[auth] OAuth refresh failed; trying the cached token for the selected connection.");
     }
   }
 

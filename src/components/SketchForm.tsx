@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Channel, convertFileSrc, invoke, listen } from "../services/tauri";
+import type { TokenResponse } from "../types/auth";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, Check, Film, Image as ImageIcon, Mic2 } from "lucide-react";
@@ -1598,21 +1599,21 @@ The Actions describe what happens on screen — use them as visual design hints.
       : await getProviderSecret(selectedProvider.id, "refreshToken");
     if (!refreshToken) throw new Error("Sign in to the selected narration connection before generating narration.");
     const speechEndpoint = inferSpeechEndpoint(selectedProvider.endpoint);
-    const token = await invoke<{ access_token: string; refresh_token?: string }>("azure_token_refresh", {
+    const token = await invoke<TokenResponse>("azure_token_refresh", {
       tenantId: selectedProvider.tenantId || settings.aiTenantId || "",
       refreshToken,
       clientId: selectedProvider.clientId || settings.aiClientId || null,
       scope: SPEECH_TOKEN_SCOPE,
     });
-    if (!token.access_token) throw new Error("Azure Speech token refresh did not return an access token.");
+    if (!token.accessToken) throw new Error("Azure Speech token refresh did not return an access token.");
     if (selectedProvider.id === settings.aiActiveProviderId) {
-      if (token.access_token) await updateSetting("aiAccessToken", token.access_token);
-      if (token.refresh_token) await updateSetting("aiRefreshToken", token.refresh_token);
+      if (token.accessToken) await updateSetting("aiAccessToken", token.accessToken);
+      if (token.refreshToken) await updateSetting("aiRefreshToken", token.refreshToken);
     } else {
-      await setProviderSecret(selectedProvider.id, "accessToken", token.access_token);
-      if (token.refresh_token) await setProviderSecret(selectedProvider.id, "refreshToken", token.refresh_token);
+      await setProviderSecret(selectedProvider.id, "accessToken", token.accessToken);
+      if (token.refreshToken) await setProviderSecret(selectedProvider.id, "refreshToken", token.refreshToken);
     }
-    return { accessToken: token.access_token, speechEndpoint };
+    return { accessToken: token.accessToken, speechEndpoint };
   }, [
     settings,
     updateSetting,
@@ -1620,14 +1621,14 @@ The Actions describe what happens on screen — use them as visual design hints.
 
   const refreshAgentAccessToken = useCallback(async () => {
     if (settings.aiAuthMode !== "azure_oauth" || !settings.aiRefreshToken) return settings.aiAccessToken;
-    const token = await invoke<{ access_token: string; refresh_token?: string }>("azure_token_refresh", {
+    const token = await invoke<TokenResponse>("azure_token_refresh", {
       tenantId: settings.aiTenantId || "",
       refreshToken: settings.aiRefreshToken,
       clientId: settings.aiClientId || null,
     });
-    if (token.access_token) await updateSetting("aiAccessToken", token.access_token);
-    if (token.refresh_token) await updateSetting("aiRefreshToken", token.refresh_token);
-    return token.access_token || settings.aiAccessToken;
+    if (token.accessToken) await updateSetting("aiAccessToken", token.accessToken);
+    if (token.refreshToken) await updateSetting("aiRefreshToken", token.refreshToken);
+    return token.accessToken || settings.aiAccessToken;
   }, [
     settings.aiAccessToken,
     settings.aiAuthMode,

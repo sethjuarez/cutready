@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "../services/tauri";
 import { RefreshCw } from "lucide-react";
 import type { AppSettings } from "../hooks/useSettings";
+import type { TokenResponse } from "../types/auth";
 import { inputClass } from "../styles";
 
 // Field names mirror Prompty's canonical model wire form (camelCase):
@@ -46,7 +47,7 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
   const fetchManagementToken = useCallback(async () => {
     if (!settings.aiRefreshToken) return null;
     try {
-      const result = await invoke<{ accessToken: string; refreshToken?: string }>(
+      const result = await invoke<TokenResponse>(
         "azure_token_refresh",
         {
           tenantId: settings.aiTenantId || "",
