@@ -30,7 +30,7 @@ pub struct PlanningRow {
     pub duration_seconds: Option<u32>,
     pub narrative: String,
     pub demo_actions: String,
-    /// Project-relative screenshot path. Canonical save writes `null` when absent.
+    /// Project-relative screenshot path. Legacy files may omit it; save writes `null` when unset.
     pub screenshot: Option<String>,
     /// Project-relative Elucim visual path (legacy files may inline the document). Opaque.
     pub visual: Option<serde_json::Value>,
@@ -158,6 +158,7 @@ impl PlanningRow {
         }
         result.insert("narrative".to_string(), serde_json::Value::String(self.narrative.clone()));
         result.insert("demo_actions".to_string(), serde_json::Value::String(self.demo_actions.clone()));
+        result.insert("screenshot".to_string(), serde_json::Value::Null);
         if let Some(val) = self.screenshot.as_ref() {
             result.insert("screenshot".to_string(), serde_json::Value::String(val.clone()));
         }

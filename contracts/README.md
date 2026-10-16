@@ -43,7 +43,7 @@ The `Contracts` workflow (`.github/workflows/contracts.yml`) runs `npm run check
 
 ## Canonical save form
 
-Desktop is the reference. Every runtime must save `.sk` files this way. Typra can't express explicit `null` or unknown-field passthrough yet, so the vectors pin these rules.
+Desktop is the reference. Every runtime must save `.sk` files this way. Fields that are always written but may be `null` use `T | null = null`: legacy files may omit the key, and save always writes it. The vectors pin the rest, including unknown-field passthrough.
 
 | Rule | Detail |
 | --- | --- |

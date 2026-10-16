@@ -10,7 +10,8 @@ use crate::context::{LoadContext, SaveContext};
 fn test_narration_asset_load_json() {
     let json = r####"
 {
-  "path": ".cutready/narration/row-1.wav"
+  "path": ".cutready/narration/row-1.wav",
+  "duration_ms": null
 }
 "####;
     let ctx = LoadContext::default();
@@ -24,6 +25,7 @@ fn test_narration_asset_load_json() {
 fn test_narration_asset_load_yaml() {
     let yaml = r####"
 path: .cutready/narration/row-1.wav
+duration_ms: null
 
 "####;
     let ctx = LoadContext::default();
@@ -37,7 +39,8 @@ path: .cutready/narration/row-1.wav
 fn test_narration_asset_roundtrip() {
     let json = r####"
 {
-  "path": ".cutready/narration/row-1.wav"
+  "path": ".cutready/narration/row-1.wav",
+  "duration_ms": null
 }
 "####;
     let load_ctx = LoadContext::default();
@@ -47,6 +50,7 @@ fn test_narration_asset_roundtrip() {
     let save_ctx = SaveContext::default();
     let json_output = instance.to_json(&save_ctx);
     assert!(json_output.is_ok(), "Failed to serialize to JSON: {:?}", json_output.err());
+    assert!(instance.to_value(&save_ctx).get("duration_ms").map_or(false, |value| value.is_null()), "Expected NarrationAsset to save duration_ms as null");
 }
 
 #[cfg(feature = "serde")]
@@ -54,7 +58,8 @@ fn test_narration_asset_roundtrip() {
 fn test_narration_asset_serde_roundtrip() {
     let json = r####"
 {
-  "path": ".cutready/narration/row-1.wav"
+  "path": ".cutready/narration/row-1.wav",
+  "duration_ms": null
 }
 "####;
     let instance: NarrationAsset = serde_json::from_str(json)

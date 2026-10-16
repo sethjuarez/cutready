@@ -11,7 +11,8 @@ final class PlanningRowTests: XCTestCase {
 {
   "time": "0:20",
   "narrative": "Welcome to CutReady.",
-  "demo_actions": "Open the workspace."
+  "demo_actions": "Open the workspace.",
+  "screenshot": null
 }
 """
     let instance = try PlanningRow.fromJSON(json)
@@ -22,6 +23,8 @@ final class PlanningRowTests: XCTestCase {
     XCTAssertEqual(reloaded.time, "0:20")
     XCTAssertEqual(reloaded.narrative, "Welcome to CutReady.")
     XCTAssertEqual(reloaded.demoActions, "Open the workspace.")
+    let savedNull = try instance.save()
+    XCTAssertTrue(savedNull.keys.contains("screenshot") && savedNull["screenshot"] is NSNull, "Expected PlanningRow to save screenshot as null")
   }
 
   func testYAMLRoundTrip1() throws {
@@ -29,6 +32,7 @@ final class PlanningRowTests: XCTestCase {
 time: "0:20"
 narrative: Welcome to CutReady.
 demo_actions: Open the workspace.
+screenshot: null
 
 """
     let instance = try PlanningRow.fromYAML(yaml)

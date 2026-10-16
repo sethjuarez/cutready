@@ -5,9 +5,9 @@ import "@typra/emitter";
  * `.sk`/`.sb` files are snake_case on disk; Typra derives idiomatic native
  * names (e.g. Swift `demoActions`) from them.
  *
- * Canonical save rules that Typra cannot express yet (explicit `null` and
- * unknown-field passthrough) are pinned by the @vector cases in vectors.tsp
- * and documented in contracts/README.md.
+ * Canonical save rules that Typra cannot express yet (unknown-field
+ * passthrough) are pinned by the @vector cases in vectors.tsp and documented
+ * in contracts/README.md.
  */
 namespace CutReady.Contracts;
 
@@ -37,8 +37,8 @@ model Sketch {
   /** Whether the whole sketch is protected from edits. Saved as `false` when unset. */
   locked?: boolean;
 
-  /** Rich-text description (Lexical JSON, Markdown string, or null). Opaque. */
-  description?: unknown;
+  /** Rich-text description (Lexical JSON or Markdown string). Opaque. Save writes `null` when unset. */
+  description: unknown | null = null;
 
   rows: PlanningRow[];
   metadata?: DocumentMetadata;
@@ -97,8 +97,8 @@ model PlanningRow {
   @sample(#{ demo_actions: "Open the workspace." })
   demo_actions: string;
 
-  /** Project-relative screenshot path. Canonical save writes `null` when absent. */
-  screenshot?: string;
+  /** Project-relative screenshot path. Legacy files may omit it; save writes `null` when unset. */
+  screenshot: string | null = null;
 
   /** Project-relative Elucim visual path (legacy files may inline the document). Opaque. */
   visual?: unknown;
@@ -127,8 +127,8 @@ model NarrationAsset {
 
   mime_type: string;
 
-  /** Canonical save writes `null` when unknown. */
-  duration_ms?: uint32;
+  /** Legacy files may omit it; save writes `null` when unknown. */
+  duration_ms: uint32 | null = null;
 
   leading_silence_ms?: uint32;
   trailing_silence_ms?: uint32;

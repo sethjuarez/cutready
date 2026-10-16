@@ -47,7 +47,7 @@ path: .cutready/narration/row-1.wav
 | source_text | string | Narrative text at the moment the audio was recorded or generated. |
 | source_text_hash | string | SHA-256 of `source_text`. |
 | mime_type | string |  |
-| duration_ms | uint32 | Canonical save writes `null` when unknown. |
+| duration_ms | uint32 | Legacy files may omit it; save writes `null` when unknown. |
 | leading_silence_ms | uint32 |  |
 | trailing_silence_ms | uint32 |  |
 | silence_threshold_db | float32 |  |

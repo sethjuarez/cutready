@@ -45,7 +45,7 @@ public struct NarrationAsset: TypraModel {
     if let value = object["mime_type"] {
       instance.mimeType = try TypraRuntime.string(value, field: "mime_type")
     }
-    if let value = object["duration_ms"] {
+    if let value = object["duration_ms"], !(value is NSNull) {
       instance.durationMs = try TypraRuntime.uint32(value, field: "duration_ms")
     }
     if let value = object["leading_silence_ms"] {
@@ -74,6 +74,9 @@ public struct NarrationAsset: TypraModel {
     result["mime_type"] = self.mimeType
     if let value = self.durationMs {
       result["duration_ms"] = value
+    }
+    else {
+      result["duration_ms"] = NSNull()
     }
     if let value = self.leadingSilenceMs {
       result["leading_silence_ms"] = value

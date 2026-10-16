@@ -12,7 +12,8 @@ fn test_planning_row_load_json() {
 {
   "time": "0:20",
   "narrative": "Welcome to CutReady.",
-  "demo_actions": "Open the workspace."
+  "demo_actions": "Open the workspace.",
+  "screenshot": null
 }
 "####;
     let ctx = LoadContext::default();
@@ -30,6 +31,7 @@ fn test_planning_row_load_yaml() {
 time: "0:20"
 narrative: Welcome to CutReady.
 demo_actions: Open the workspace.
+screenshot: null
 
 "####;
     let ctx = LoadContext::default();
@@ -47,7 +49,8 @@ fn test_planning_row_roundtrip() {
 {
   "time": "0:20",
   "narrative": "Welcome to CutReady.",
-  "demo_actions": "Open the workspace."
+  "demo_actions": "Open the workspace.",
+  "screenshot": null
 }
 "####;
     let load_ctx = LoadContext::default();
@@ -57,6 +60,7 @@ fn test_planning_row_roundtrip() {
     let save_ctx = SaveContext::default();
     let json_output = instance.to_json(&save_ctx);
     assert!(json_output.is_ok(), "Failed to serialize to JSON: {:?}", json_output.err());
+    assert!(instance.to_value(&save_ctx).get("screenshot").map_or(false, |value| value.is_null()), "Expected PlanningRow to save screenshot as null");
 }
 
 #[cfg(feature = "serde")]
@@ -66,7 +70,8 @@ fn test_planning_row_serde_roundtrip() {
 {
   "time": "0:20",
   "narrative": "Welcome to CutReady.",
-  "demo_actions": "Open the workspace."
+  "demo_actions": "Open the workspace.",
+  "screenshot": null
 }
 "####;
     let instance: PlanningRow = serde_json::from_str(json)

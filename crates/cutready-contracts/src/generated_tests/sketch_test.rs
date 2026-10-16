@@ -14,11 +14,13 @@ fn test_sketch_load_json() {
   "title": "Intro",
   "created_at": "2026-06-28T20:00:00Z",
   "updated_at": "2026-06-28T20:20:00Z",
+  "description": null,
   "rows": [
     {
       "time": "0:20",
       "narrative": "Welcome to CutReady.",
-      "demo_actions": "Open the workspace."
+      "demo_actions": "Open the workspace.",
+      "screenshot": null
     }
   ]
 }
@@ -38,10 +40,12 @@ fn test_sketch_load_yaml() {
 title: Intro
 created_at: "2026-06-28T20:00:00Z"
 updated_at: "2026-06-28T20:20:00Z"
+description: null
 rows:
   - time: "0:20"
     narrative: Welcome to CutReady.
     demo_actions: Open the workspace.
+    screenshot: null
 
 "####;
     let ctx = LoadContext::default();
@@ -60,11 +64,13 @@ fn test_sketch_roundtrip() {
   "title": "Intro",
   "created_at": "2026-06-28T20:00:00Z",
   "updated_at": "2026-06-28T20:20:00Z",
+  "description": null,
   "rows": [
     {
       "time": "0:20",
       "narrative": "Welcome to CutReady.",
-      "demo_actions": "Open the workspace."
+      "demo_actions": "Open the workspace.",
+      "screenshot": null
     }
   ]
 }
@@ -76,6 +82,7 @@ fn test_sketch_roundtrip() {
     let save_ctx = SaveContext::default();
     let json_output = instance.to_json(&save_ctx);
     assert!(json_output.is_ok(), "Failed to serialize to JSON: {:?}", json_output.err());
+    assert!(instance.to_value(&save_ctx).get("description").map_or(false, |value| value.is_null()), "Expected Sketch to save description as null");
 }
 
 #[cfg(feature = "serde")]
@@ -86,11 +93,13 @@ fn test_sketch_serde_roundtrip() {
   "title": "Intro",
   "created_at": "2026-06-28T20:00:00Z",
   "updated_at": "2026-06-28T20:20:00Z",
+  "description": null,
   "rows": [
     {
       "time": "0:20",
       "narrative": "Welcome to CutReady.",
-      "demo_actions": "Open the workspace."
+      "demo_actions": "Open the workspace.",
+      "screenshot": null
     }
   ]
 }

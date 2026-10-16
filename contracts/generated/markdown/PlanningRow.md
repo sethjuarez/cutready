@@ -117,7 +117,7 @@ demo_actions: Open the workspace.
 | duration_seconds | uint32 | Concrete duration in seconds. |
 | narrative | string |  |
 | demo_actions | string |  |
-| screenshot | string | Project-relative screenshot path. Canonical save writes `null` when absent. |
+| screenshot | string | Project-relative screenshot path. Legacy files may omit it; save writes `null` when unset. |
 | visual | unknown | Project-relative Elucim visual path (legacy files may inline the document). Opaque. |
 | motion_points | [MotionPoint[]](../motionpoint/) |  |
 | typing_spots | [TypingSpot[]](../typingspot/) |  |

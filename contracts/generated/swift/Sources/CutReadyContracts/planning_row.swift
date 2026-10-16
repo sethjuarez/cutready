@@ -59,7 +59,7 @@ public struct PlanningRow: TypraModel {
     if let value = object["demo_actions"] {
       instance.demoActions = try TypraRuntime.string(value, field: "demo_actions")
     }
-    if let value = object["screenshot"] {
+    if let value = object["screenshot"], !(value is NSNull) {
       instance.screenshot = try TypraRuntime.string(value, field: "screenshot")
     }
     if let value = object["visual"] {
@@ -102,6 +102,9 @@ public struct PlanningRow: TypraModel {
     result["demo_actions"] = self.demoActions
     if let value = self.screenshot {
       result["screenshot"] = value
+    }
+    else {
+      result["screenshot"] = NSNull()
     }
     if let value = self.visual {
       result["visual"] = value

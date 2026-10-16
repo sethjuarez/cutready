@@ -52,7 +52,7 @@ public struct Sketch: TypraModel {
     if let value = object["locked"] {
       instance.locked = try TypraRuntime.bool(value, field: "locked")
     }
-    if let value = object["description"] {
+    if let value = object["description"], !(value is NSNull) {
       instance.description = value
     }
     if let value = object["rows"] {
@@ -81,6 +81,9 @@ public struct Sketch: TypraModel {
     }
     if let value = self.description {
       result["description"] = value
+    }
+    else {
+      result["description"] = NSNull()
     }
     result["rows"] = try self.rows.map { try $0.save(context) }
     if let value = self.metadata {

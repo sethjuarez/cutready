@@ -12,11 +12,13 @@ final class SketchTests: XCTestCase {
   "title": "Intro",
   "created_at": "2026-06-28T20:00:00Z",
   "updated_at": "2026-06-28T20:20:00Z",
+  "description": null,
   "rows": [
     {
       "time": "0:20",
       "narrative": "Welcome to CutReady.",
-      "demo_actions": "Open the workspace."
+      "demo_actions": "Open the workspace.",
+      "screenshot": null
     }
   ]
 }
@@ -31,6 +33,8 @@ final class SketchTests: XCTestCase {
     XCTAssertEqual(reloaded.createdAt, "2026-06-28T20:00:00Z")
     XCTAssertEqual(reloaded.updatedAt, "2026-06-28T20:20:00Z")
     XCTAssertEqual(reloaded.rows.count, 1)
+    let savedNull = try instance.save()
+    XCTAssertTrue(savedNull.keys.contains("description") && savedNull["description"] is NSNull, "Expected Sketch to save description as null")
   }
 
   func testYAMLRoundTrip1() throws {
@@ -38,10 +42,12 @@ final class SketchTests: XCTestCase {
 title: Intro
 created_at: "2026-06-28T20:00:00Z"
 updated_at: "2026-06-28T20:20:00Z"
+description: null
 rows:
   - time: "0:20"
     narrative: Welcome to CutReady.
     demo_actions: Open the workspace.
+    screenshot: null
 
 """
     let instance = try Sketch.fromYAML(yaml)

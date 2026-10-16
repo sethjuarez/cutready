@@ -97,7 +97,7 @@ pub struct Sketch {
     pub title: String,
     /// Whether the whole sketch is protected from edits. Saved as `false` when unset.
     pub locked: Option<bool>,
-    /// Rich-text description (Lexical JSON, Markdown string, or null). Opaque.
+    /// Rich-text description (Lexical JSON or Markdown string). Opaque. Save writes `null` when unset.
     pub description: Option<serde_json::Value>,
     pub rows: Vec<PlanningRow>,
     pub metadata: Option<DocumentMetadata>,
@@ -187,6 +187,7 @@ impl Sketch {
         if let Some(val) = self.locked.as_ref() {
             result.insert("locked".to_string(), serde_json::Value::Bool(*val));
         }
+        result.insert("description".to_string(), serde_json::Value::Null);
         if let Some(val) = self.description.as_ref() {
             result.insert("description".to_string(), val.clone());
         }

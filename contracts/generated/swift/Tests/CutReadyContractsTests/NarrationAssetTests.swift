@@ -9,18 +9,22 @@ final class NarrationAssetTests: XCTestCase {
   func testJSONRoundTrip1() throws {
     let json = """
 {
-  "path": ".cutready/narration/row-1.wav"
+  "path": ".cutready/narration/row-1.wav",
+  "duration_ms": null
 }
 """
     let instance = try NarrationAsset.fromJSON(json)
     XCTAssertEqual(instance.path, ".cutready/narration/row-1.wav")
     let reloaded = try NarrationAsset.fromJSON(try instance.toJSON())
     XCTAssertEqual(reloaded.path, ".cutready/narration/row-1.wav")
+    let savedNull = try instance.save()
+    XCTAssertTrue(savedNull.keys.contains("duration_ms") && savedNull["duration_ms"] is NSNull, "Expected NarrationAsset to save duration_ms as null")
   }
 
   func testYAMLRoundTrip1() throws {
     let yaml = """
 path: .cutready/narration/row-1.wav
+duration_ms: null
 
 """
     let instance = try NarrationAsset.fromYAML(yaml)

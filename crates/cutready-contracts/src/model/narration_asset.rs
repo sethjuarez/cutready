@@ -14,7 +14,7 @@ pub struct NarrationAsset {
     /// SHA-256 of `source_text`.
     pub source_text_hash: String,
     pub mime_type: String,
-    /// Canonical save writes `null` when unknown.
+    /// Legacy files may omit it; save writes `null` when unknown.
     pub duration_ms: Option<u32>,
     pub leading_silence_ms: Option<u32>,
     pub trailing_silence_ms: Option<u32>,
@@ -94,6 +94,7 @@ impl NarrationAsset {
         result.insert("source_text".to_string(), serde_json::Value::String(self.source_text.clone()));
         result.insert("source_text_hash".to_string(), serde_json::Value::String(self.source_text_hash.clone()));
         result.insert("mime_type".to_string(), serde_json::Value::String(self.mime_type.clone()));
+        result.insert("duration_ms".to_string(), serde_json::Value::Null);
         if let Some(val) = self.duration_ms.as_ref() {
             result.insert("duration_ms".to_string(), serde_json::Value::Number(serde_json::Number::from(*val)));
         }

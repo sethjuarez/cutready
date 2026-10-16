@@ -67,7 +67,7 @@ updated_at: 2026-06-28T20:20:00Z
 | ---- | ---- | ----------- |
 | title | string |  |
 | locked | boolean | Whether the whole sketch is protected from edits. Saved as `false` when unset. |
-| description | unknown | Rich-text description (Lexical JSON, Markdown string, or null). Opaque. |
+| description | unknown | Rich-text description (Lexical JSON or Markdown string). Opaque. Save writes `null` when unset. |
 | rows | [PlanningRow[]](../planningrow/) |  |
 | metadata | [DocumentMetadata](../documentmetadata/) |  |
 | state | string |  |
