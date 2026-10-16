@@ -11,6 +11,6 @@
     "@typespec/compiler": "1.10.0",
     "@typespec/http": "1.10.0",
     "@typespec/json-schema": "1.10.0",
-    "@typra/emitter": "3.0.0"
+    "@typra/emitter": "4.0.0"
   }
 }
