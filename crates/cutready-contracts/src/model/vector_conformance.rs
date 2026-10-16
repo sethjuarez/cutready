@@ -15,6 +15,582 @@
 
 use serde_json::Value;
 
+/// Typed @vector conformance for PlanningTiming. Pass your real `impl PlanningTiming`; the
+/// `S: PlanningTiming` bound makes the compiler prove every op is implemented. Call
+/// from a test, e.g. `run_planning_timing_conformance(&PlanningTimingImpl).await;` (or without `.await` when sync).
+pub fn run_planning_timing_conformance<S: crate::model::PlanningTiming + ?Sized>(seam: &S) {
+    // vector: a fraction needs a leading digit
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"5 .5m"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "a fraction needs a leading digit", error));
+        let actual_value = serde_json::to_value(actual).expect("a fraction needs a leading digit: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+300
+"####,
+        )
+        .expect("a fraction needs a leading digit: expected parses");
+        assert_eq!(actual_value, expected, "a fraction needs a leading digit misrouted");
+    }
+    // vector: a second fraction is not part of the number
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"1.5.5m"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "a second fraction is not part of the number", error));
+        let actual_value = serde_json::to_value(actual).expect("a second fraction is not part of the number: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+330
+"####,
+        )
+        .expect("a second fraction is not part of the number: expected parses");
+        assert_eq!(actual_value, expected, "a second fraction is not part of the number misrouted");
+    }
+    // vector: a unit may be followed by a non-ASCII letter
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"5sα"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "a unit may be followed by a non-ASCII letter", error));
+        let actual_value = serde_json::to_value(actual).expect("a unit may be followed by a non-ASCII letter: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+5
+"####,
+        )
+        .expect("a unit may be followed by a non-ASCII letter: expected parses");
+        assert_eq!(actual_value, expected, "a unit may be followed by a non-ASCII letter misrouted");
+    }
+    // vector: a unit may not run into the next pair
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"5 m5s"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "a unit may not run into the next pair", error));
+        let actual_value = serde_json::to_value(actual).expect("a unit may not run into the next pair: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+5
+"####,
+        )
+        .expect("a unit may not run into the next pair: expected parses");
+        assert_eq!(actual_value, expected, "a unit may not run into the next pair misrouted");
+    }
+    // vector: approximate seconds
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"~25s"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "approximate seconds", error));
+        let actual_value = serde_json::to_value(actual).expect("approximate seconds: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+25
+"####,
+        )
+        .expect("approximate seconds: expected parses");
+        assert_eq!(actual_value, expected, "approximate seconds misrouted");
+    }
+    // vector: bare fraction rounds half up
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"2.5"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "bare fraction rounds half up", error));
+        let actual_value = serde_json::to_value(actual).expect("bare fraction rounds half up: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+3
+"####,
+        )
+        .expect("bare fraction rounds half up: expected parses");
+        assert_eq!(actual_value, expected, "bare fraction rounds half up misrouted");
+    }
+    // vector: bare number of seconds
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"90"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "bare number of seconds", error));
+        let actual_value = serde_json::to_value(actual).expect("bare number of seconds: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+90
+"####,
+        )
+        .expect("bare number of seconds: expected parses");
+        assert_eq!(actual_value, expected, "bare number of seconds misrouted");
+    }
+    // vector: clock hours, minutes, and seconds
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"1:02:03"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "clock hours, minutes, and seconds", error));
+        let actual_value = serde_json::to_value(actual).expect("clock hours, minutes, and seconds: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+3723
+"####,
+        )
+        .expect("clock hours, minutes, and seconds: expected parses");
+        assert_eq!(actual_value, expected, "clock hours, minutes, and seconds misrouted");
+    }
+    // vector: clock minutes and seconds
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"1:30"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "clock minutes and seconds", error));
+        let actual_value = serde_json::to_value(actual).expect("clock minutes and seconds: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+90
+"####,
+        )
+        .expect("clock minutes and seconds: expected parses");
+        assert_eq!(actual_value, expected, "clock minutes and seconds misrouted");
+    }
+    // vector: clock part may be one digit
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"0:5"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "clock part may be one digit", error));
+        let actual_value = serde_json::to_value(actual).expect("clock part may be one digit: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+5
+"####,
+        )
+        .expect("clock part may be one digit: expected parses");
+        assert_eq!(actual_value, expected, "clock part may be one digit misrouted");
+    }
+    // vector: clock part of 60 or more is not a clock
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"1:60"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "clock part of 60 or more is not a clock", error));
+        let actual_value = serde_json::to_value(actual).expect("clock part of 60 or more is not a clock: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+null
+"####,
+        )
+        .expect("clock part of 60 or more is not a clock: expected parses");
+        assert_eq!(actual_value, expected, "clock part of 60 or more is not a clock misrouted");
+    }
+    // vector: empty label
+    {
+        let time: String = serde_json::from_str(
+            r####"
+""
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "empty label", error));
+        let actual_value = serde_json::to_value(actual).expect("empty label: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+null
+"####,
+        )
+        .expect("empty label: expected parses");
+        assert_eq!(actual_value, expected, "empty label misrouted");
+    }
+    // vector: exponents are not numbers
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"1e3s"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "exponents are not numbers", error));
+        let actual_value = serde_json::to_value(actual).expect("exponents are not numbers: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+3
+"####,
+        )
+        .expect("exponents are not numbers: expected parses");
+        assert_eq!(actual_value, expected, "exponents are not numbers misrouted");
+    }
+    // vector: fractional seconds round half up
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"2.5s"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "fractional seconds round half up", error));
+        let actual_value = serde_json::to_value(actual).expect("fractional seconds round half up: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+3
+"####,
+        )
+        .expect("fractional seconds round half up: expected parses");
+        assert_eq!(actual_value, expected, "fractional seconds round half up misrouted");
+    }
+    // vector: fractional units
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"1.25m"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "fractional units", error));
+        let actual_value = serde_json::to_value(actual).expect("fractional units: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+75
+"####,
+        )
+        .expect("fractional units: expected parses");
+        assert_eq!(actual_value, expected, "fractional units misrouted");
+    }
+    // vector: label without a duration
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"TBD"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "label without a duration", error));
+        let actual_value = serde_json::to_value(actual).expect("label without a duration: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+null
+"####,
+        )
+        .expect("label without a duration: expected parses");
+        assert_eq!(actual_value, expected, "label without a duration misrouted");
+    }
+    // vector: largest uint32
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"4294967295"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "largest uint32", error));
+        let actual_value = serde_json::to_value(actual).expect("largest uint32: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+4294967295
+"####,
+        )
+        .expect("largest uint32: expected parses");
+        assert_eq!(actual_value, expected, "largest uint32 misrouted");
+    }
+    // vector: long unit names
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"2 minutes 15 seconds"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "long unit names", error));
+        let actual_value = serde_json::to_value(actual).expect("long unit names: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+135
+"####,
+        )
+        .expect("long unit names: expected parses");
+        assert_eq!(actual_value, expected, "long unit names misrouted");
+    }
+    // vector: non-breaking space separates a unit
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"5 s"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "non-breaking space separates a unit", error));
+        let actual_value = serde_json::to_value(actual).expect("non-breaking space separates a unit: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+5
+"####,
+        )
+        .expect("non-breaking space separates a unit: expected parses");
+        assert_eq!(actual_value, expected, "non-breaking space separates a unit misrouted");
+    }
+    // vector: only ASCII digits count
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"٣٠s"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "only ASCII digits count", error));
+        let actual_value = serde_json::to_value(actual).expect("only ASCII digits count: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+null
+"####,
+        )
+        .expect("only ASCII digits count: expected parses");
+        assert_eq!(actual_value, expected, "only ASCII digits count misrouted");
+    }
+    // vector: rounds down to the largest uint32
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"4294967295.4"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "rounds down to the largest uint32", error));
+        let actual_value = serde_json::to_value(actual).expect("rounds down to the largest uint32: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+4294967295
+"####,
+        )
+        .expect("rounds down to the largest uint32: expected parses");
+        assert_eq!(actual_value, expected, "rounds down to the largest uint32 misrouted");
+    }
+    // vector: rounds up past uint32
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"4294967295.5"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "rounds up past uint32", error));
+        let actual_value = serde_json::to_value(actual).expect("rounds up past uint32: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+null
+"####,
+        )
+        .expect("rounds up past uint32: expected parses");
+        assert_eq!(actual_value, expected, "rounds up past uint32 misrouted");
+    }
+    // vector: text around unit pairs is ignored
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"about 2 min"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "text around unit pairs is ignored", error));
+        let actual_value = serde_json::to_value(actual).expect("text around unit pairs is ignored: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+120
+"####,
+        )
+        .expect("text around unit pairs is ignored: expected parses");
+        assert_eq!(actual_value, expected, "text around unit pairs is ignored misrouted");
+    }
+    // vector: too large for uint32
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"4294967296"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "too large for uint32", error));
+        let actual_value = serde_json::to_value(actual).expect("too large for uint32: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+null
+"####,
+        )
+        .expect("too large for uint32: expected parses");
+        assert_eq!(actual_value, expected, "too large for uint32 misrouted");
+    }
+    // vector: Unicode lowercasing can expand a character
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"5 sİ"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "Unicode lowercasing can expand a character", error));
+        let actual_value = serde_json::to_value(actual).expect("Unicode lowercasing can expand a character: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+null
+"####,
+        )
+        .expect("Unicode lowercasing can expand a character: expected parses");
+        assert_eq!(actual_value, expected, "Unicode lowercasing can expand a character misrouted");
+    }
+    // vector: Unicode lowercasing can join a unit to a word
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"5sK"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "Unicode lowercasing can join a unit to a word", error));
+        let actual_value = serde_json::to_value(actual).expect("Unicode lowercasing can join a unit to a word: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+null
+"####,
+        )
+        .expect("Unicode lowercasing can join a unit to a word: expected parses");
+        assert_eq!(actual_value, expected, "Unicode lowercasing can join a unit to a word misrouted");
+    }
+    // vector: unit followed by a word character does not count
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"5sec2"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "unit followed by a word character does not count", error));
+        let actual_value = serde_json::to_value(actual).expect("unit followed by a word character does not count: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+null
+"####,
+        )
+        .expect("unit followed by a word character does not count: expected parses");
+        assert_eq!(actual_value, expected, "unit followed by a word character does not count misrouted");
+    }
+    // vector: unit pairs are rounded after summing
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"0.4s 0.4s"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "unit pairs are rounded after summing", error));
+        let actual_value = serde_json::to_value(actual).expect("unit pairs are rounded after summing: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+1
+"####,
+        )
+        .expect("unit pairs are rounded after summing: expected parses");
+        assert_eq!(actual_value, expected, "unit pairs are rounded after summing misrouted");
+    }
+    // vector: unit pairs are summed
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"1h 2m 3s"
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "unit pairs are summed", error));
+        let actual_value = serde_json::to_value(actual).expect("unit pairs are summed: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+3723
+"####,
+        )
+        .expect("unit pairs are summed: expected parses");
+        assert_eq!(actual_value, expected, "unit pairs are summed misrouted");
+    }
+    // vector: whitespace, case, and the approximate mark are ignored
+    {
+        let time: String = serde_json::from_str(
+            r####"
+"  ~ 45 SEC  "
+"####,
+        )
+        .expect("time parses");
+        let actual = seam.parse_duration_seconds(&time)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "whitespace, case, and the approximate mark are ignored", error));
+        let actual_value = serde_json::to_value(actual).expect("whitespace, case, and the approximate mark are ignored: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+45
+"####,
+        )
+        .expect("whitespace, case, and the approximate mark are ignored: expected parses");
+        assert_eq!(actual_value, expected, "whitespace, case, and the approximate mark are ignored misrouted");
+    }
+}
+
 /// Typed @vector conformance for SketchDocument. Pass your real `impl SketchDocument`; the
 /// `S: SketchDocument` bound makes the compiler prove every op is implemented. Call
 /// from a test, e.g. `run_sketch_document_conformance(&SketchDocumentImpl).await;` (or without `.await` when sync).
@@ -849,6 +1425,74 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         let result = seam.update_row_text(&sketch, &update, &now);
         assert!(result.is_err(), "{}: expected an error, got Ok", "locked cell rejects a change");
     }
+    // vector: locked cell rejects a differently composed value
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": true,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "Å 0:10",
+      "duration_seconds": 10,
+      "narrative": "Time locked.",
+      "demo_actions": ""
+    },
+    {
+      "locked": true,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Café.",
+      "demo_actions": ""
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let update = crate::model::RowTextUpdate::from_json(
+            r####"
+{
+  "row_index": 0,
+  "time": "Å 0:10"
+}
+"####,
+            &ctx,
+        )
+        .expect("update parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.update_row_text(&sketch, &update, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "locked cell rejects a differently composed value");
+    }
     // vector: locked cells are checked in column order
     {
         let sketch = crate::model::Sketch::from_json(
@@ -1081,6 +1725,74 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         .expect("now parses");
         let result = seam.update_row_text(&sketch, &update, &now);
         assert!(result.is_err(), "{}: expected an error, got Ok", "locked row rejects a change");
+    }
+    // vector: locked row rejects a differently composed value
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": true,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "Å 0:10",
+      "duration_seconds": 10,
+      "narrative": "Time locked.",
+      "demo_actions": ""
+    },
+    {
+      "locked": true,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Café.",
+      "demo_actions": ""
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let update = crate::model::RowTextUpdate::from_json(
+            r####"
+{
+  "row_index": 1,
+  "narrative": "Café."
+}
+"####,
+            &ctx,
+        )
+        .expect("update parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.update_row_text(&sketch, &update, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "locked row rejects a differently composed value");
     }
     // vector: locked sketch rejects every edit
     {
@@ -2394,7 +3106,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         let result = seam.reorder_rows(&sketch, &order, &now);
         assert!(result.is_err(), "{}: expected an error, got Ok", "screenshot lock also guards the visual");
     }
-    // vector: time edit leaves duration_seconds untouched
+    // vector: time edit recomputes duration_seconds
     {
         let sketch = crate::model::Sketch::from_json(
             r####"
@@ -2489,7 +3201,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         )
         .expect("now parses");
         let actual = seam.update_row_text(&sketch, &update, &now)
-            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "time edit leaves duration_seconds untouched", error));
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "time edit recomputes duration_seconds", error));
         let expected = crate::model::Sketch::from_json(
             r####"
 {
@@ -2509,7 +3221,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       },
       "screenshot": "screenshots/open.png",
       "time": "0:15",
-      "duration_seconds": 10,
+      "duration_seconds": 15,
       "narrative": "Open the app.",
       "demo_actions": "Click Open.",
       "motion_points": [
@@ -2565,8 +3277,8 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
 "####,
             &ctx,
         )
-        .expect("time edit leaves duration_seconds untouched: expected parses");
-        assert_eq!(actual, expected, "time edit leaves duration_seconds untouched misrouted");
+        .expect("time edit recomputes duration_seconds: expected parses");
+        assert_eq!(actual, expected, "time edit recomputes duration_seconds misrouted");
     }
     // vector: timestamps are saved as UTC
     {
@@ -2659,6 +3371,93 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         )
         .expect("timestamps are saved as UTC: expected parses");
         assert_eq!(actual, expected, "timestamps are saved as UTC misrouted");
+    }
+    // vector: unchanged time keeps duration_seconds
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:05 - 0:19",
+      "duration_seconds": 14,
+      "narrative": "Imported scene.",
+      "demo_actions": ""
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let update = crate::model::RowTextUpdate::from_json(
+            r####"
+{
+  "row_index": 0,
+  "time": "0:05 - 0:19",
+  "narrative": "Imported scene, edited."
+}
+"####,
+            &ctx,
+        )
+        .expect("update parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.update_row_text(&sketch, &update, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "unchanged time keeps duration_seconds", error));
+        let expected = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:05 - 0:19",
+      "duration_seconds": 14,
+      "narrative": "Imported scene, edited.",
+      "demo_actions": ""
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("unchanged time keeps duration_seconds: expected parses");
+        assert_eq!(actual, expected, "unchanged time keeps duration_seconds misrouted");
     }
     // vector: unknown sketch and row fields are preserved
     {
@@ -2961,7 +3760,8 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "screenshot": null,
       "time": "0:25",
       "narrative": "Locked narration.",
-      "demo_actions": "Type the project name."
+      "demo_actions": "Type the project name.",
+      "duration_seconds": 25
     },
     {
       "locked": true,
@@ -2992,6 +3792,179 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         )
         .expect("unlocked cells on a row with a locked cell are editable: expected parses");
         assert_eq!(actual, expected, "unlocked cells on a row with a locked cell are editable misrouted");
+    }
+    // vector: unparseable time edit removes duration_seconds
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/open.png",
+      "time": "0:10",
+      "duration_seconds": 10,
+      "narrative": "Open the app.",
+      "demo_actions": "Click Open.",
+      "motion_points": [
+        {
+          "rank": 1,
+          "x": 0.5,
+          "y": 0.25
+        }
+      ],
+      "future_row_field": {
+        "keep": true
+      }
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": true,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Locked narration.",
+      "demo_actions": "Type a name."
+    },
+    {
+      "locked": true,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:30",
+      "narrative": "Locked row.",
+      "demo_actions": "Close."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_document_field": [
+    "still",
+    "here"
+  ]
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let update = crate::model::RowTextUpdate::from_json(
+            r####"
+{
+  "row_index": 0,
+  "time": "TBD"
+}
+"####,
+            &ctx,
+        )
+        .expect("update parses");
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.update_row_text(&sketch, &update, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "unparseable time edit removes duration_seconds", error));
+        let expected = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/open.png",
+      "time": "TBD",
+      "narrative": "Open the app.",
+      "demo_actions": "Click Open.",
+      "motion_points": [
+        {
+          "rank": 1,
+          "x": 0.5,
+          "y": 0.25
+        }
+      ],
+      "future_row_field": {
+        "keep": true
+      }
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": true,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Locked narration.",
+      "demo_actions": "Type a name."
+    },
+    {
+      "locked": true,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:30",
+      "narrative": "Locked row.",
+      "demo_actions": "Close."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-07-01T09:30:00Z",
+  "future_document_field": [
+    "still",
+    "here"
+  ]
+}
+"####,
+            &ctx,
+        )
+        .expect("unparseable time edit removes duration_seconds: expected parses");
+        assert_eq!(actual, expected, "unparseable time edit removes duration_seconds misrouted");
     }
     // vector: visual lock also guards the screenshot
     {

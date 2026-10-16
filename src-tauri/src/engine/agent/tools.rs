@@ -392,7 +392,8 @@ pub fn all_tools(
                             "type": "object",
                             "properties": {
                                 "source_row": { "type": "integer", "minimum": 1, "description": "1-based row number (from read_sketch) of the existing row this row continues. Each existing row can be used once. Omit for a new row." },
-                                "time": { "type": "string", "description": "Duration (e.g. '~30s', '1:00'). Required for new rows; omit to keep the source row's value." },
+                                "time": { "type": "string", "description": "Duration (e.g. '~30s', '1:00'). Required for new rows; omit to keep the source row's value. A changed time recomputes duration_seconds." },
+                                "duration_seconds": { "type": "integer", "minimum": 0, "maximum": 4294967295u64, "description": "Optional exact length in seconds; overrides the value parsed from time. Omit to parse a changed time or keep the source row's value." },
                                 "narrative": { "type": "string", "description": "Voiceover/narration bullets. Required for new rows; omit to keep the source row's value." },
                                 "demo_actions": { "type": "string", "description": "On-screen action bullets. Required for new rows; omit to keep the source row's value." },
                                 "screenshot": { "type": "string", "description": "Optional path to a screenshot image (relative, from list_project_files with include_images: true). Empty string removes it; omit to keep the source row's screenshot." }
@@ -2323,11 +2324,7 @@ fn apply_write_sketch_row_fields(
     row_number: usize,
 ) -> Result<(), String> {
     if let Some(time) = item.get("time").and_then(Value::as_str) {
-        // A kept duration_seconds would outrank the edited time in totals.
-        if time != row.time && item.get("duration_seconds").is_none() {
-            row.duration_seconds = None;
-        }
-        row.time = time.into();
+        sketch_edits::set_row_time(row, time);
     }
     if let Some(narrative) = item.get("narrative").and_then(Value::as_str) {
         row.narrative = narrative.into();
@@ -2676,7 +2673,7 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> ToolOutput {
     {
         let row = &mut rows[index];
         if let Some(t) = args.get("time").and_then(|v| v.as_str()) {
-            row.time = t.into();
+            sketch_edits::set_row_time(row, t);
         }
         if let Some(n) = args.get("narrative").and_then(|v| v.as_str()) {
             row.narrative = n.into();
@@ -4677,6 +4674,23 @@ mod tests {
     }
 
     #[test]
+    fn write_sketch_schema_advertises_duration_override() {
+        let tool = all_tools(false, false, true)
+            .into_iter()
+            .map(|tool| serde_json::to_value(tool).unwrap())
+            .find(|tool| {
+                tool.pointer("/function/name").and_then(Value::as_str) == Some("write_sketch")
+            })
+            .expect("write_sketch tool should be registered");
+        let duration = tool
+            .pointer("/function/parameters/properties/rows/items/properties/duration_seconds")
+            .expect("write_sketch rows should advertise duration_seconds");
+        assert_eq!(duration["type"], "integer");
+        assert_eq!(duration["minimum"], 0);
+        assert_eq!(duration["maximum"], u64::from(u32::MAX));
+    }
+
+    #[test]
     fn row_visual_tools_touch_sketch_resources() {
         for name in [
             "review_row_visual",
@@ -5541,7 +5555,7 @@ mod tests {
     }
 
     #[test]
-    fn write_sketch_clears_kept_duration_only_when_time_changes() {
+    fn write_sketch_recomputes_duration_only_when_time_changes() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
         let rel = "demo.sk";
@@ -5550,8 +5564,9 @@ mod tests {
             rel,
             vec![
                 rich_row("~10s", "A", "a", json!({ "duration_seconds": 10 })),
-                rich_row("~20s", "B", "b", json!({ "duration_seconds": 20 })),
+                rich_row("~20s", "B", "b", json!({ "duration_seconds": 22 })),
                 rich_row("~30s", "C", "c", json!({ "duration_seconds": 30 })),
+                rich_row("~40s", "D", "d", json!({ "duration_seconds": 40 })),
             ],
         );
 
@@ -5562,7 +5577,9 @@ mod tests {
                 "rows": [
                     { "source_row": 1, "time": "~15s" },
                     { "source_row": 2, "time": "~20s", "narrative": "B edited" },
-                    { "source_row": 3, "time": "~45s", "duration_seconds": 45 }
+                    { "source_row": 3, "time": "~45s", "duration_seconds": 50 },
+                    { "source_row": 4, "time": "TBD" },
+                    { "time": "1:05", "narrative": "E", "demo_actions": "e" }
                 ]
             }),
         )
@@ -5572,9 +5589,11 @@ mod tests {
         assert!(!result.starts_with("Error"), "{result}");
         let saved = project::read_sketch(&root.join(rel)).unwrap();
         assert_eq!(saved.rows[0].time, "~15s");
-        assert_eq!(saved.rows[0].duration_seconds, None);
-        assert_eq!(saved.rows[1].duration_seconds, Some(20));
-        assert_eq!(saved.rows[2].duration_seconds, Some(45));
+        assert_eq!(saved.rows[0].duration_seconds, Some(15));
+        assert_eq!(saved.rows[1].duration_seconds, Some(22));
+        assert_eq!(saved.rows[2].duration_seconds, Some(50));
+        assert_eq!(saved.rows[3].duration_seconds, None);
+        assert_eq!(saved.rows[4].duration_seconds, Some(65));
     }
 
     #[test]

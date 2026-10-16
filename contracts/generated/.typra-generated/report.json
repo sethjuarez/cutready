@@ -3,7 +3,7 @@
   "version": 1,
   "generatedAt": "1970-01-01T00:00:00.000Z",
   "summary": {
-    "emittedFiles": 80,
+    "emittedFiles": 83,
     "skippedFiles": 0,
     "staleMarkerOwnedRemovals": 0,
     "preservedUnmarkedSkippedFiles": 0,
@@ -171,6 +171,11 @@
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/planning_timing.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
       "path": "../crates/cutready-contracts/src/model/row_text_update.rs",
       "marker": true
     },
@@ -266,6 +271,11 @@
     },
     {
       "outputRoot": "generated/markdown",
+      "path": "generated/markdown/PlanningTiming.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
       "path": "generated/markdown/RowTextUpdate.md",
       "marker": true
     },
@@ -337,6 +347,11 @@
     {
       "outputRoot": "generated/swift",
       "path": "generated/swift/Sources/CutReadyContracts/planning_row.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/planning_timing.swift",
       "marker": true
     },
     {

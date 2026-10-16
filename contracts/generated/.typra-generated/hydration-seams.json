@@ -5,6 +5,14 @@
   "hydrationZones": [],
   "seams": [
     {
+      "contract": "PlanningTiming",
+      "target": "markdown",
+      "group": "",
+      "symbol": "PlanningTiming",
+      "generatedSource": "PlanningTiming",
+      "seamKind": "protocol-adapter"
+    },
+    {
       "contract": "SketchDocument",
       "target": "markdown",
       "group": "",
@@ -13,11 +21,27 @@
       "seamKind": "protocol-adapter"
     },
     {
+      "contract": "PlanningTiming",
+      "target": "rust",
+      "group": "",
+      "symbol": "PlanningTiming",
+      "generatedSource": "planning_timing",
+      "seamKind": "protocol-adapter"
+    },
+    {
       "contract": "SketchDocument",
       "target": "rust",
       "group": "",
       "symbol": "SketchDocument",
       "generatedSource": "sketch_document",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "PlanningTiming",
+      "target": "swift",
+      "group": "",
+      "symbol": "PlanningTiming",
+      "generatedSource": "Sources/CutReadyContracts/planning_timing.swift",
       "seamKind": "protocol-adapter"
     },
     {

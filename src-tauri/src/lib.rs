@@ -23,7 +23,7 @@ mod util;
 /// `crates/cutready-contracts`.
 pub mod document {
     pub use crate::engine::sketch_edits::{
-        reorder_rows, update_row_text, RowTextUpdate, SketchEditError,
+        parse_duration_seconds, reorder_rows, update_row_text, RowTextUpdate, SketchEditError,
     };
     pub use crate::models::sketch::{PlanningRow, Sketch};
 }

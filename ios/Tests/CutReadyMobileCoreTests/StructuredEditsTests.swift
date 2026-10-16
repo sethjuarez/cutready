@@ -79,6 +79,25 @@ final class StructuredEditsTests: XCTestCase {
         XCTAssertEqual(sketch.rows[0].demoActions, "New")
     }
 
+    func testLockedRowComparesTextExactlyAndNumbersByValue() throws {
+        let locked = PlanningRow(
+            locked: true,
+            time: "0:00",
+            narrative: "Caf\u{E9}",
+            demoActions: "",
+            visual: .object(["x": .number(-0.0)])
+        )
+        var signedZero = locked
+        signedZero.visual = .object(["x": .number(0.0)])
+        XCTAssertNoThrow(try MobileEdits.checkRowsUpdate(existing: [locked], updated: [signedZero]))
+
+        var decomposed = locked
+        decomposed.narrative = "Cafe\u{301}"
+        XCTAssertThrowsError(try MobileEdits.checkRowsUpdate(existing: [locked], updated: [decomposed])) { error in
+            XCTAssertEqual(error as? MobileEditError, .lockedRow(index: 0))
+        }
+    }
+
     func testRejectsInvalidReorder() throws {
         var sketch = makeSketch()
 

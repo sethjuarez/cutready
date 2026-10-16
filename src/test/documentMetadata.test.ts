@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import contractVectorsSource from "../../contracts/vectors.tsp?raw";
 import type { Storyboard } from "../types/sketch";
 import {
   formatDuration,
@@ -8,6 +9,7 @@ import {
   parseDurationSeconds,
   parseNoteDocument,
   serializeNoteDocument,
+  setRowTime,
   summarizeSketchPathsDuration,
   summarizeSketchDuration,
   summarizeStoryboardDuration,
@@ -35,6 +37,23 @@ describe("duration helpers", () => {
     expect(parseDurationSeconds("1:30")).toBe(90);
     expect(parseDurationSeconds("2m 15s")).toBe(135);
     expect(parseDurationSeconds("not sure")).toBeNull();
+  });
+
+  it("matches the PlanningTiming contract vectors", () => {
+    const block = contractVectorsSource.match(/const ParseDurationSecondsVectors = """\r?\n([\s\S]*?)\r?\n"""/);
+    expect(block).not.toBeNull();
+    const vectors = JSON.parse(block![1]) as { name: string; input: { time: string }; expected: number | null }[];
+    expect(vectors.length).toBeGreaterThan(0);
+    for (const vector of vectors) {
+      expect(parseDurationSeconds(vector.input.time), vector.name).toBe(vector.expected);
+    }
+  });
+
+  it("recomputes duration_seconds only when the time label changes", () => {
+    const imported = { time: "0:05 - 0:19", duration_seconds: 14, narrative: "", demo_actions: "", screenshot: null };
+    expect(setRowTime(imported, "0:05 - 0:19")).toBe(imported);
+    expect(setRowTime(imported, "0:15")).toEqual({ ...imported, time: "0:15", duration_seconds: 15 });
+    expect(setRowTime(imported, "TBD")).toEqual({ ...imported, time: "TBD", duration_seconds: null });
   });
 
   it("formats duration totals", () => {

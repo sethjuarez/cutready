@@ -3,7 +3,7 @@
 
 import Foundation
 
-/// Text cells to replace on one planning row. Omitted cells are left untouched. Desktop's time-cell UI also recomputes `duration_seconds`; this edit does not (see contracts/README.md, "Open policy questions").
+/// Text cells to replace on one planning row. Omitted cells are left untouched. A `time` that differs from the current value also sets `duration_seconds` to `PlanningTiming.parseDurationSeconds(time)`, omitting it when that is null. An unchanged `time` keeps the current `duration_seconds`.
 public struct RowTextUpdate: TypraModel {
   public static let shorthandProperty: String? = nil
   public var rowIndex: UInt32 = 0

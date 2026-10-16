@@ -135,7 +135,7 @@ pub fn update_row_text(
             row_index: update.row_index,
         })?;
     if let Some(time) = &update.time {
-        row.time = time.clone();
+        set_row_time(row, time);
     }
     if let Some(narrative) = &update.narrative {
         row.narrative = narrative.clone();
@@ -144,6 +144,134 @@ pub fn update_row_text(
         row.demo_actions = demo_actions.clone();
     }
     replace_rows(sketch, rows, now)
+}
+
+/// Sets a row's `time` label. A changed label also recomputes
+/// `duration_seconds`; an unchanged one keeps it (`RowTextUpdate`).
+pub fn set_row_time(row: &mut PlanningRow, time: &str) {
+    if row.time != time {
+        row.time = time.to_string();
+        row.duration_seconds = parse_duration_seconds(time);
+    }
+}
+
+/// `PlanningTiming.parseDurationSeconds`: a `time` label in whole seconds.
+/// Same grammar as desktop's TypeScript `parseDurationSeconds` and the iOS
+/// `PlanningTiming`; the contract vectors pin all three.
+pub fn parse_duration_seconds(time: &str) -> Option<u32> {
+    let lowered = trim_js(time).to_lowercase();
+    let text = trim_js(lowered.strip_prefix('~').unwrap_or(&lowered));
+    if text.is_empty() {
+        return None;
+    }
+    let seconds = parse_clock(text)
+        .or_else(|| parse_unit_pairs(text))
+        .or_else(|| parse_decimal(text).map(f64::round))?;
+    (seconds <= f64::from(u32::MAX)).then_some(seconds as u32)
+}
+
+/// `M:SS` or `H:MM:SS`; parts after the first are `[0-5]?[0-9]`.
+fn parse_clock(text: &str) -> Option<f64> {
+    let parts: Vec<&str> = text.split(':').collect();
+    if !(2..=3).contains(&parts.len()) || !is_digits(parts[0]) {
+        return None;
+    }
+    let is_clock_part = |part: &str| match part.as_bytes() {
+        [d] => d.is_ascii_digit(),
+        [t, d] => (b'0'..=b'5').contains(t) && d.is_ascii_digit(),
+        _ => false,
+    };
+    if !parts[1..].iter().all(|part| is_clock_part(part)) {
+        return None;
+    }
+    let values: Vec<f64> = parts.iter().filter_map(|part| part.parse().ok()).collect();
+    Some(match values[..] {
+        [m, s] => m * 60.0 + s,
+        [h, m, s] => h * 3600.0 + m * 60.0 + s,
+        _ => return None,
+    })
+}
+
+/// Sums every `<number><whitespace?><unit>` pair, scanning like a global regex.
+fn parse_unit_pairs(text: &str) -> Option<f64> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut total = 0.0;
+    let mut matched = false;
+    let mut start = 0;
+    while start < chars.len() {
+        match unit_pair_at(&chars, start) {
+            Some((seconds, end)) => {
+                total += seconds;
+                matched = true;
+                start = end;
+            }
+            None => start += 1,
+        }
+    }
+    matched.then(|| total.round())
+}
+
+fn unit_pair_at(chars: &[char], start: usize) -> Option<(f64, usize)> {
+    let digits_end = |from: usize| {
+        (from..chars.len())
+            .find(|&i| !chars[i].is_ascii_digit())
+            .unwrap_or(chars.len())
+    };
+    let mut end = digits_end(start);
+    if end == start {
+        return None;
+    }
+    if chars.get(end) == Some(&'.') && chars.get(end + 1).is_some_and(char::is_ascii_digit) {
+        end = digits_end(end + 1);
+    }
+    let amount: f64 = chars[start..end].iter().collect::<String>().parse().ok()?;
+    let unit_start = (end..chars.len())
+        .find(|&i| !is_js_whitespace(chars[i]))
+        .unwrap_or(chars.len());
+    let unit_end = (unit_start..chars.len())
+        .find(|&i| !(chars[i].is_ascii_alphanumeric() || chars[i] == '_'))
+        .unwrap_or(chars.len());
+    let unit: String = chars[unit_start..unit_end].iter().collect();
+    let scale = match unit.as_str() {
+        "h" | "hr" | "hrs" | "hour" | "hours" => 3600.0,
+        "m" | "min" | "mins" | "minute" | "minutes" => 60.0,
+        "s" | "sec" | "secs" | "second" | "seconds" => 1.0,
+        _ => return None,
+    };
+    Some((amount * scale, unit_end))
+}
+
+/// `[0-9]+(\.[0-9]+)?`
+fn parse_decimal(text: &str) -> Option<f64> {
+    let (whole, fraction) = text.split_once('.').unwrap_or((text, "0"));
+    (is_digits(whole) && is_digits(fraction))
+        .then(|| text.parse().ok())
+        .flatten()
+}
+
+fn is_digits(text: &str) -> bool {
+    !text.is_empty() && text.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// JavaScript's `\s`, which `trim()` also strips.
+fn is_js_whitespace(c: char) -> bool {
+    matches!(
+        c,
+        '\t'..='\r'
+            | ' '
+            | '\u{00A0}'
+            | '\u{1680}'
+            | '\u{2000}'..='\u{200A}'
+            | '\u{2028}'..='\u{2029}'
+            | '\u{202F}'
+            | '\u{205F}'
+            | '\u{3000}'
+            | '\u{FEFF}'
+    )
+}
+
+fn trim_js(text: &str) -> &str {
+    text.trim_matches(is_js_whitespace)
 }
 
 /// `SketchDocument.reorderRows`. `order[i]` is the current index of the row

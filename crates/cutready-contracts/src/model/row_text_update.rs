@@ -5,7 +5,7 @@
 
 use super::context::{LoadContext, SaveContext};
 
-/// Text cells to replace on one planning row. Omitted cells are left untouched. Desktop's time-cell UI also recomputes `duration_seconds`; this edit does not (see contracts/README.md, "Open policy questions").
+/// Text cells to replace on one planning row. Omitted cells are left untouched. A `time` that differs from the current value also sets `duration_seconds` to `PlanningTiming.parseDurationSeconds(time)`, omitting it when that is null. An unchanged `time` keeps the current `duration_seconds`.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RowTextUpdate {
     /// Zero-based row index.

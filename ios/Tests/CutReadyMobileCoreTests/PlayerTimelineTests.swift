@@ -68,6 +68,17 @@ final class PlayerTimelineTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(timeline.beats[0].duration, 4)
     }
 
+    func testSketchTimelineReadsUntimedRowDurationFromTimeLabel() {
+        let labeled = PlanningRow(time: "~25s", narrative: "Show the dashboard.", demoActions: "")
+        let unparseable = PlanningRow(time: "TBD", narrative: "Wrap up.", demoActions: "")
+
+        let timeline = PlayerTimeline.sketch(path: "labels.sk", sketch: sketch(title: "Labels", rows: [labeled, unparseable]))
+
+        XCTAssertEqual(timeline.beats[0].duration, 25)
+        XCTAssertEqual(timeline.beats[0].timingSource, .rowDuration)
+        XCTAssertEqual(timeline.beats[1].timingSource, .estimated)
+    }
+
     func testStoryboardTimelineSequencesSectionsAndSketches() {
         let storyboard = Storyboard(
             title: "Launch Storyboard",

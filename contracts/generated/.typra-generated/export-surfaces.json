@@ -42,6 +42,7 @@
         "NarrationPlan",
         "PlanningCellLocks",
         "PlanningRow",
+        "PlanningTiming",
         "RowTextUpdate",
         "Sketch",
         "SketchDocument",
@@ -113,6 +114,13 @@
           "protocol": false
         },
         {
+          "name": "PlanningTiming",
+          "kind": "type",
+          "group": "",
+          "source": "PlanningTiming",
+          "protocol": true
+        },
+        {
           "name": "RowTextUpdate",
           "kind": "value",
           "group": "",
@@ -150,6 +158,26 @@
       ],
       "groups": [],
       "protocols": [
+        {
+          "name": "PlanningTiming",
+          "group": "",
+          "symbol": "PlanningTiming",
+          "source": "PlanningTiming",
+          "methods": [
+            {
+              "name": "parseDurationSeconds",
+              "returns": "uint32?",
+              "params": {
+                "time": "string"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            }
+          ]
+        },
         {
           "name": "SketchDocument",
           "group": "",
@@ -209,6 +237,7 @@
         "NarrationPlan",
         "PlanningCellLocks",
         "PlanningRow",
+        "PlanningTiming",
         "RowTextUpdate",
         "Sketch",
         "SketchDocument",
@@ -229,6 +258,7 @@
         "NarrationPlan",
         "PlanningCellLocks",
         "PlanningRow",
+        "PlanningTiming",
         "RowTextUpdate",
         "Sketch",
         "SketchDocument",
@@ -300,6 +330,13 @@
           "protocol": false
         },
         {
+          "name": "PlanningTiming",
+          "kind": "type",
+          "group": "",
+          "source": "planning_timing",
+          "protocol": true
+        },
+        {
           "name": "RowTextUpdate",
           "kind": "value",
           "group": "",
@@ -337,6 +374,26 @@
       ],
       "groups": [],
       "protocols": [
+        {
+          "name": "PlanningTiming",
+          "group": "",
+          "symbol": "PlanningTiming",
+          "source": "planning_timing",
+          "methods": [
+            {
+              "name": "parseDurationSeconds",
+              "returns": "uint32?",
+              "params": {
+                "time": "string"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            }
+          ]
+        },
         {
           "name": "SketchDocument",
           "group": "",
@@ -397,6 +454,7 @@
         "narration_plan",
         "planning_cell_locks",
         "planning_row",
+        "planning_timing",
         "row_text_update",
         "sketch",
         "sketch_document",
@@ -418,6 +476,7 @@
         "NarrationPlan",
         "PlanningCellLocks",
         "PlanningRow",
+        "PlanningTiming",
         "RowTextUpdate",
         "Sketch",
         "SketchDocument",
@@ -489,6 +548,13 @@
           "protocol": false
         },
         {
+          "name": "PlanningTiming",
+          "kind": "type",
+          "group": "",
+          "source": "Sources/CutReadyContracts/planning_timing.swift",
+          "protocol": true
+        },
+        {
           "name": "RowTextUpdate",
           "kind": "value",
           "group": "",
@@ -526,6 +592,26 @@
       ],
       "groups": [],
       "protocols": [
+        {
+          "name": "PlanningTiming",
+          "group": "",
+          "symbol": "PlanningTiming",
+          "source": "Sources/CutReadyContracts/planning_timing.swift",
+          "methods": [
+            {
+              "name": "parseDurationSeconds",
+              "returns": "uint32?",
+              "params": {
+                "time": "string"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            }
+          ]
+        },
         {
           "name": "SketchDocument",
           "group": "",
@@ -585,6 +671,7 @@
         "Sources/CutReadyContracts/narration_plan.swift",
         "Sources/CutReadyContracts/planning_cell_locks.swift",
         "Sources/CutReadyContracts/planning_row.swift",
+        "Sources/CutReadyContracts/planning_timing.swift",
         "Sources/CutReadyContracts/row_text_update.swift",
         "Sources/CutReadyContracts/sketch.swift",
         "Sources/CutReadyContracts/sketch_document.swift",

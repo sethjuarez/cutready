@@ -140,6 +140,11 @@ fn reorder_rows(input: &Value, _ctx: &Context) -> Result<Value, VectorError> {
     save(&sketch)
 }
 
+fn parse_duration_seconds(input: &Value, _ctx: &Context) -> Result<Value, VectorError> {
+    let time = text(input, "time").ok_or_else(|| VectorError::harness("time is required"))?;
+    Ok(document::parse_duration_seconds(&time).map_or(Value::Null, |seconds| json!(seconds)))
+}
+
 pub fn doubles() -> Value {
     json!({})
 }
@@ -156,5 +161,9 @@ pub fn adapters() -> HashMap<&'static str, Adapter> {
             Adapter::sync(update_row_text),
         ),
         ("SketchDocument.reorderRows", Adapter::sync(reorder_rows)),
+        (
+            "PlanningTiming.parseDurationSeconds",
+            Adapter::sync(parse_duration_seconds),
+        ),
     ])
 }

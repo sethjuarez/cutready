@@ -28,6 +28,431 @@ private func seamConformanceCanonicalJSON(_ value: Any) throws -> String {
   return String(data: data, encoding: .utf8) ?? ""
 }
 
+/// Typed @vector conformance for PlanningTiming. Pass your real `PlanningTiming` impl; the
+/// `S: PlanningTiming` constraint makes the compiler prove every op is implemented.
+public func runPlanningTimingConformance<S: PlanningTiming>(_ seam: S) async throws {
+  // vector: a fraction needs a leading digit
+  do {
+    let inputData = "{\"time\":\"5 .5m\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("a fraction needs a leading digit: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "300".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("a fraction needs a leading digit misrouted")
+    }
+  }
+  // vector: a second fraction is not part of the number
+  do {
+    let inputData = "{\"time\":\"1.5.5m\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("a second fraction is not part of the number: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "330".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("a second fraction is not part of the number misrouted")
+    }
+  }
+  // vector: a unit may be followed by a non-ASCII letter
+  do {
+    let inputData = "{\"time\":\"5s\u{3b1}\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("a unit may be followed by a non-ASCII letter: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "5".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("a unit may be followed by a non-ASCII letter misrouted")
+    }
+  }
+  // vector: a unit may not run into the next pair
+  do {
+    let inputData = "{\"time\":\"5 m5s\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("a unit may not run into the next pair: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "5".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("a unit may not run into the next pair misrouted")
+    }
+  }
+  // vector: approximate seconds
+  do {
+    let inputData = "{\"time\":\"~25s\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("approximate seconds: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "25".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("approximate seconds misrouted")
+    }
+  }
+  // vector: bare fraction rounds half up
+  do {
+    let inputData = "{\"time\":\"2.5\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("bare fraction rounds half up: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "3".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("bare fraction rounds half up misrouted")
+    }
+  }
+  // vector: bare number of seconds
+  do {
+    let inputData = "{\"time\":\"90\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("bare number of seconds: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "90".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("bare number of seconds misrouted")
+    }
+  }
+  // vector: clock hours, minutes, and seconds
+  do {
+    let inputData = "{\"time\":\"1:02:03\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("clock hours, minutes, and seconds: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "3723".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("clock hours, minutes, and seconds misrouted")
+    }
+  }
+  // vector: clock minutes and seconds
+  do {
+    let inputData = "{\"time\":\"1:30\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("clock minutes and seconds: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "90".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("clock minutes and seconds misrouted")
+    }
+  }
+  // vector: clock part may be one digit
+  do {
+    let inputData = "{\"time\":\"0:5\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("clock part may be one digit: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "5".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("clock part may be one digit misrouted")
+    }
+  }
+  // vector: clock part of 60 or more is not a clock
+  do {
+    let inputData = "{\"time\":\"1:60\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("clock part of 60 or more is not a clock: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "null".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("clock part of 60 or more is not a clock misrouted")
+    }
+  }
+  // vector: empty label
+  do {
+    let inputData = "{\"time\":\"\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("empty label: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "null".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("empty label misrouted")
+    }
+  }
+  // vector: exponents are not numbers
+  do {
+    let inputData = "{\"time\":\"1e3s\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("exponents are not numbers: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "3".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("exponents are not numbers misrouted")
+    }
+  }
+  // vector: fractional seconds round half up
+  do {
+    let inputData = "{\"time\":\"2.5s\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("fractional seconds round half up: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "3".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("fractional seconds round half up misrouted")
+    }
+  }
+  // vector: fractional units
+  do {
+    let inputData = "{\"time\":\"1.25m\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("fractional units: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "75".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("fractional units misrouted")
+    }
+  }
+  // vector: label without a duration
+  do {
+    let inputData = "{\"time\":\"TBD\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("label without a duration: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "null".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("label without a duration misrouted")
+    }
+  }
+  // vector: largest uint32
+  do {
+    let inputData = "{\"time\":\"4294967295\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("largest uint32: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "4294967295".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("largest uint32 misrouted")
+    }
+  }
+  // vector: long unit names
+  do {
+    let inputData = "{\"time\":\"2 minutes 15 seconds\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("long unit names: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "135".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("long unit names misrouted")
+    }
+  }
+  // vector: non-breaking space separates a unit
+  do {
+    let inputData = "{\"time\":\"5\u{a0}s\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("non-breaking space separates a unit: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "5".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("non-breaking space separates a unit misrouted")
+    }
+  }
+  // vector: only ASCII digits count
+  do {
+    let inputData = "{\"time\":\"\u{663}\u{660}s\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("only ASCII digits count: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "null".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("only ASCII digits count misrouted")
+    }
+  }
+  // vector: rounds down to the largest uint32
+  do {
+    let inputData = "{\"time\":\"4294967295.4\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("rounds down to the largest uint32: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "4294967295".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("rounds down to the largest uint32 misrouted")
+    }
+  }
+  // vector: rounds up past uint32
+  do {
+    let inputData = "{\"time\":\"4294967295.5\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("rounds up past uint32: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "null".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("rounds up past uint32 misrouted")
+    }
+  }
+  // vector: text around unit pairs is ignored
+  do {
+    let inputData = "{\"time\":\"about 2 min\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("text around unit pairs is ignored: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "120".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("text around unit pairs is ignored misrouted")
+    }
+  }
+  // vector: too large for uint32
+  do {
+    let inputData = "{\"time\":\"4294967296\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("too large for uint32: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "null".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("too large for uint32 misrouted")
+    }
+  }
+  // vector: Unicode lowercasing can expand a character
+  do {
+    let inputData = "{\"time\":\"5 s\u{130}\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("Unicode lowercasing can expand a character: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "null".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("Unicode lowercasing can expand a character misrouted")
+    }
+  }
+  // vector: Unicode lowercasing can join a unit to a word
+  do {
+    let inputData = "{\"time\":\"5s\u{212a}\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("Unicode lowercasing can join a unit to a word: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "null".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("Unicode lowercasing can join a unit to a word misrouted")
+    }
+  }
+  // vector: unit followed by a word character does not count
+  do {
+    let inputData = "{\"time\":\"5sec2\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("unit followed by a word character does not count: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "null".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("unit followed by a word character does not count misrouted")
+    }
+  }
+  // vector: unit pairs are rounded after summing
+  do {
+    let inputData = "{\"time\":\"0.4s 0.4s\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("unit pairs are rounded after summing: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "1".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("unit pairs are rounded after summing misrouted")
+    }
+  }
+  // vector: unit pairs are summed
+  do {
+    let inputData = "{\"time\":\"1h 2m 3s\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("unit pairs are summed: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "3723".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("unit pairs are summed misrouted")
+    }
+  }
+  // vector: whitespace, case, and the approximate mark are ignored
+  do {
+    let inputData = "{\"time\":\"  ~ 45 SEC  \"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("whitespace, case, and the approximate mark are ignored: failed to parse embedded vector input")
+    }
+    let time = input["time"] as! String
+    let actual = try seam.parseDurationSeconds(time: time)
+    let expectedData = "45".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("whitespace, case, and the approximate mark are ignored misrouted")
+    }
+  }
+}
+
 /// Typed @vector conformance for SketchDocument. Pass your real `SketchDocument` impl; the
 /// `S: SketchDocument` constraint makes the compiler prove every op is implemented.
 public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async throws {
@@ -129,6 +554,25 @@ public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async thr
       throw SeamConformanceError("locked cell rejects a change: expected an error")
     }
   }
+  // vector: locked cell rejects a differently composed value
+  do {
+    let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":true,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"\u{c5} 0:10\",\"duration_seconds\":10,\"narrative\":\"Time locked.\",\"demo_actions\":\"\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Caf\u{e9}.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":0,\"time\":\"A\u{30a} 0:10\"},\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("locked cell rejects a differently composed value: failed to parse embedded vector input")
+    }
+    let sketch = try Sketch.load(input["sketch"]!)
+    let update = try RowTextUpdate.load(input["update"]!)
+    let now = input["now"] as! String
+    var caught: Error? = nil
+    do {
+      _ = try seam.updateRowText(sketch: sketch, update: update, now: now)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("locked cell rejects a differently composed value: expected an error")
+    }
+  }
   // vector: locked cells are checked in column order
   do {
     let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Row lock wins.\",\"demo_actions\":\"Hold.\"},{\"locked\":false,\"locks\":{\"time\":true,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Two locked cells.\",\"demo_actions\":\"Hold.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":1,\"time\":\"0:25\",\"narrative\":\"Changed.\"},\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
@@ -184,6 +628,25 @@ public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async thr
     }
     guard let caughtError = caught else {
       throw SeamConformanceError("locked row rejects a change: expected an error")
+    }
+  }
+  // vector: locked row rejects a differently composed value
+  do {
+    let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":true,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"\u{c5} 0:10\",\"duration_seconds\":10,\"narrative\":\"Time locked.\",\"demo_actions\":\"\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Caf\u{e9}.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":1,\"narrative\":\"Cafe\u{301}.\"},\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("locked row rejects a differently composed value: failed to parse embedded vector input")
+    }
+    let sketch = try Sketch.load(input["sketch"]!)
+    let update = try RowTextUpdate.load(input["update"]!)
+    let now = input["now"] as! String
+    var caught: Error? = nil
+    do {
+      _ = try seam.updateRowText(sketch: sketch, update: update, now: now)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("locked row rejects a differently composed value: expected an error")
     }
   }
   // vector: locked sketch rejects every edit
@@ -419,20 +882,20 @@ public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async thr
       throw SeamConformanceError("screenshot lock also guards the visual: expected an error")
     }
   }
-  // vector: time edit leaves duration_seconds untouched
+  // vector: time edit recomputes duration_seconds
   do {
     let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":0,\"time\":\"0:15\"},\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
     guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
-      throw SeamConformanceError("time edit leaves duration_seconds untouched: failed to parse embedded vector input")
+      throw SeamConformanceError("time edit recomputes duration_seconds: failed to parse embedded vector input")
     }
     let sketch = try Sketch.load(input["sketch"]!)
     let update = try RowTextUpdate.load(input["update"]!)
     let now = input["now"] as! String
     let actual = try seam.updateRowText(sketch: sketch, update: update, now: now)
-    let expectedData = "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:15\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]}".data(using: .utf8)!
+    let expectedData = "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:15\",\"duration_seconds\":15,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]}".data(using: .utf8)!
     let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
     guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
-      throw SeamConformanceError("time edit leaves duration_seconds untouched misrouted")
+      throw SeamConformanceError("time edit recomputes duration_seconds misrouted")
     }
   }
   // vector: timestamps are saved as UTC
@@ -447,6 +910,22 @@ public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async thr
     let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
     guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
       throw SeamConformanceError("timestamps are saved as UTC misrouted")
+    }
+  }
+  // vector: unchanged time keeps duration_seconds
+  do {
+    let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05 - 0:19\",\"duration_seconds\":14,\"narrative\":\"Imported scene.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":0,\"time\":\"0:05 - 0:19\",\"narrative\":\"Imported scene, edited.\"},\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("unchanged time keeps duration_seconds: failed to parse embedded vector input")
+    }
+    let sketch = try Sketch.load(input["sketch"]!)
+    let update = try RowTextUpdate.load(input["update"]!)
+    let now = input["now"] as! String
+    let actual = try seam.updateRowText(sketch: sketch, update: update, now: now)
+    let expectedData = "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05 - 0:19\",\"duration_seconds\":14,\"narrative\":\"Imported scene, edited.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("unchanged time keeps duration_seconds misrouted")
     }
   }
   // vector: unknown sketch and row fields are preserved
@@ -473,10 +952,26 @@ public func runSketchDocumentConformance<S: SketchDocument>(_ seam: S) async thr
     let update = try RowTextUpdate.load(input["update"]!)
     let now = input["now"] as! String
     let actual = try seam.updateRowText(sketch: sketch, update: update, now: now)
-    let expectedData = "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:25\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type the project name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]}".data(using: .utf8)!
+    let expectedData = "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:25\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type the project name.\",\"duration_seconds\":25},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]}".data(using: .utf8)!
     let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
     guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
       throw SeamConformanceError("unlocked cells on a row with a locked cell are editable misrouted")
+    }
+  }
+  // vector: unparseable time edit removes duration_seconds
+  do {
+    let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":0,\"time\":\"TBD\"},\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("unparseable time edit removes duration_seconds: failed to parse embedded vector input")
+    }
+    let sketch = try Sketch.load(input["sketch"]!)
+    let update = try RowTextUpdate.load(input["update"]!)
+    let now = input["now"] as! String
+    let actual = try seam.updateRowText(sketch: sketch, update: update, now: now)
+    let expectedData = "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"TBD\",\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("unparseable time edit removes duration_seconds misrouted")
     }
   }
   // vector: visual lock also guards the screenshot

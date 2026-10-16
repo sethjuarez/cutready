@@ -55,7 +55,29 @@ export function serializeNoteDocument(metadata: DocumentMetadata, body: string):
   return `---\n${frontmatter}\n---\n${body}`;
 }
 
+/** Largest `duration_seconds` the contract allows (`uint32`). */
+const MAX_DURATION_SECONDS = 4_294_967_295;
+
+/**
+ * `PlanningTiming.parseDurationSeconds` (contracts/edits.tsp): a planning
+ * row's `time` label in whole seconds. The contract vectors pin this, the Rust
+ * backend, and iOS to the same grammar.
+ */
 export function parseDurationSeconds(value: string): number | null {
+  const seconds = parseDurationLabel(value);
+  return seconds !== null && seconds <= MAX_DURATION_SECONDS ? seconds : null;
+}
+
+/**
+ * Sets a row's `time` under the contract's time-edit policy: a changed label
+ * recomputes `duration_seconds`, an unchanged one keeps it.
+ */
+export function setRowTime(row: PlanningRow, time: string): PlanningRow {
+  if (time === row.time) return row;
+  return { ...row, time, duration_seconds: parseDurationSeconds(time) };
+}
+
+function parseDurationLabel(value: string): number | null {
   const text = value.trim().toLowerCase().replace(/^~/, "").trim();
   if (!text) return null;
 

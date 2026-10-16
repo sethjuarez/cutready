@@ -68,8 +68,9 @@ public enum MobileEdits {
                 throw MobileEditError.rowNotFound(index: index)
             }
             var rows = sketch.rows
-            if let time = update.time {
+            if let time = update.time, !same(time, rows[index].time) {
                 rows[index].time = time
+                rows[index].durationSeconds = PlanningTiming.parseDurationSeconds(time)
             }
             if let narrative = update.narrative {
                 rows[index].narrative = narrative
@@ -97,7 +98,7 @@ public enum MobileEdits {
     /// change to a locked row, then to a locked cell in column order, is reported.
     public static func checkRowsUpdate(existing: [PlanningRow], updated: [PlanningRow]) throws {
         for (index, (old, new)) in zip(existing, updated).enumerated() {
-            if old.isLocked && content(of: old) != content(of: new) {
+            if old.isLocked && !same(content(of: old), content(of: new)) {
                 throw MobileEditError.lockedRow(index: index)
             }
             for field in PlanningCellField.allCases where old.isCellLocked(field) && !matches(old, new, field) {
@@ -158,15 +159,49 @@ public enum MobileEdits {
     private static func matches(_ old: PlanningRow, _ new: PlanningRow, _ field: PlanningCellField) -> Bool {
         switch field {
         case .time:
-            return old.time == new.time
+            return same(old.time, new.time)
         case .narrative:
-            return old.narrative == new.narrative
+            return same(old.narrative, new.narrative)
         case .demoActions:
-            return old.demoActions == new.demoActions
+            return same(old.demoActions, new.demoActions)
         case .screenshot, .visual:
-            return old.screenshot == new.screenshot && old.visual == new.visual
+            return same(old.screenshot, new.screenshot) && same(old.visual, new.visual)
         case .designPlan:
-            return old.designPlan == new.designPlan
+            return same(old.designPlan, new.designPlan)
+        }
+    }
+
+    /// Exact equality, as on the desktop: compare as JSON, with text compared
+    /// by Unicode scalars. Swift's `String ==` treats canonically equivalent
+    /// text (`"\u{C5}"` and `"A\u{30A}"`) as equal; numbers still compare by
+    /// value, so `-0.0` matches `0.0` as it does in `serde_json`.
+    private static func same<Value: Encodable>(_ lhs: Value, _ rhs: Value) -> Bool {
+        guard let left = try? json(lhs), let right = try? json(rhs) else {
+            return false
+        }
+        return sameJSON(left, right)
+    }
+
+    private static func json<Value: Encodable>(_ value: Value) throws -> JSONValue {
+        try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(value))
+    }
+
+    private static func sameJSON(_ lhs: JSONValue, _ rhs: JSONValue) -> Bool {
+        switch (lhs, rhs) {
+        case let (.string(left), .string(right)):
+            return left.unicodeScalars.elementsEqual(right.unicodeScalars)
+        case let (.array(left), .array(right)):
+            return left.count == right.count && zip(left, right).allSatisfy { sameJSON($0.0, $0.1) }
+        case let (.object(left), .object(right)):
+            return left.count == right.count && left.allSatisfy { key, value in
+                guard let index = right.index(forKey: key),
+                      right[index].key.unicodeScalars.elementsEqual(key.unicodeScalars) else {
+                    return false
+                }
+                return sameJSON(value, right[index].value)
+            }
+        default:
+            return lhs == rhs
         }
     }
 }

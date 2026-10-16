@@ -36,6 +36,12 @@ enum VectorAdapters {
         try apply(.reorderRows(order), to: &document, input)
         return try save(document)
       }),
+      "PlanningTiming.parseDurationSeconds": VectorAdapter(sync: { input, _ in
+        guard let time = field(input, "time") as? String else {
+          throw VectorError("time is required")
+        }
+        return PlanningTiming.parseDurationSeconds(time).map { Int($0) as Any } ?? NSNull()
+      }),
     ]
   }
 

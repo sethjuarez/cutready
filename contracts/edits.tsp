@@ -6,8 +6,9 @@ namespace CutReady.Contracts;
 
 /**
  * Text cells to replace on one planning row. Omitted cells are left untouched.
- * Desktop's time-cell UI also recomputes `duration_seconds`; this edit does not
- * (see contracts/README.md, "Open policy questions").
+ * A `time` that differs from the current value also sets `duration_seconds` to
+ * `PlanningTiming.parseDurationSeconds(time)`, omitting it when that is null.
+ * An unchanged `time` keeps the current `duration_seconds`.
  */
 model RowTextUpdate {
   /** Zero-based row index. */
@@ -76,4 +77,28 @@ interface SketchDocument {
   @sync
   @vector(ReorderRowsVectors)
   reorderRows(sketch: Sketch, order: uint32[], now: string): Sketch;
+}
+
+/** How a planning row's `time` label becomes `duration_seconds`. */
+interface PlanningTiming {
+  /**
+   * Parse a time label into whole seconds. Trim whitespace, lowercase with the
+   * full Unicode mapping (the Kelvin sign U+212A becomes `k`), and drop one
+   * leading `~`, then accept the first form that matches:
+   *
+   * 1. A clock, `M:SS` or `H:MM:SS`; parts after the first are one or two
+   *    digits below 60.
+   * 2. The sum of every `<number> <unit>` pair, where the number is decimal
+   *    digits with an optional fraction, the space is optional, and the unit is
+   *    one of h, hr, hrs, hour, hours, m, min, mins, minute, minutes, s, sec,
+   *    secs, second, seconds, not followed by an ASCII letter, ASCII digit, or
+   *    underscore (JavaScript `\w`). Text around the pairs is ignored.
+   * 3. A bare decimal number of seconds.
+   *
+   * Fractions round half up. Returns null when nothing matches or the result
+   * does not fit in `uint32`. Digits are ASCII; whitespace is JavaScript's `\s`.
+   */
+  @sync
+  @vector(ParseDurationSecondsVectors)
+  parseDurationSeconds(time: string): uint32 | null;
 }

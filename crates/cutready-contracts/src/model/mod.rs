@@ -45,6 +45,9 @@ pub use row_text_update::*;
 pub mod sketch_edit_error;
 pub use sketch_edit_error::*;
 
+pub mod planning_timing;
+pub use planning_timing::*;
+
 pub mod sketch_document;
 pub use sketch_document::*;
 

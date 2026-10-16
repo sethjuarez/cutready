@@ -46,190 +46,428 @@ fn vc_seam() -> vector_runner::VectorSeam {
 }
 
 #[tokio::test]
-async fn test_vector_0_sketchdocument_reorderrows_earlier_locked_cell_fires_before_a_later_locked_row() {
+async fn test_vector_0_planningtiming_parsedurationseconds_a_fraction_needs_a_leading_digit() {
+    let vector: Value = serde_json::from_str("{\"name\":\"a fraction needs a leading digit\",\"input\":{\"time\":\"5 .5m\"},\"expected\":300,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_1_planningtiming_parsedurationseconds_a_second_fraction_is_not_part_of_the_number() {
+    let vector: Value = serde_json::from_str("{\"name\":\"a second fraction is not part of the number\",\"input\":{\"time\":\"1.5.5m\"},\"expected\":330,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_2_planningtiming_parsedurationseconds_a_unit_may_be_followed_by_a_non_ascii_letter() {
+    let vector: Value = serde_json::from_str("{\"name\":\"a unit may be followed by a non-ASCII letter\",\"input\":{\"time\":\"5s\u{3b1}\"},\"expected\":5,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_3_planningtiming_parsedurationseconds_a_unit_may_not_run_into_the_next_pair() {
+    let vector: Value = serde_json::from_str("{\"name\":\"a unit may not run into the next pair\",\"input\":{\"time\":\"5 m5s\"},\"expected\":5,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_4_planningtiming_parsedurationseconds_approximate_seconds() {
+    let vector: Value = serde_json::from_str("{\"name\":\"approximate seconds\",\"input\":{\"time\":\"~25s\"},\"expected\":25,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_5_planningtiming_parsedurationseconds_bare_fraction_rounds_half_up() {
+    let vector: Value = serde_json::from_str("{\"name\":\"bare fraction rounds half up\",\"input\":{\"time\":\"2.5\"},\"expected\":3,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_6_planningtiming_parsedurationseconds_bare_number_of_seconds() {
+    let vector: Value = serde_json::from_str("{\"name\":\"bare number of seconds\",\"input\":{\"time\":\"90\"},\"expected\":90,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_7_planningtiming_parsedurationseconds_clock_hours_minutes_and_seconds() {
+    let vector: Value = serde_json::from_str("{\"name\":\"clock hours, minutes, and seconds\",\"input\":{\"time\":\"1:02:03\"},\"expected\":3723,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_8_planningtiming_parsedurationseconds_clock_minutes_and_seconds() {
+    let vector: Value = serde_json::from_str("{\"name\":\"clock minutes and seconds\",\"input\":{\"time\":\"1:30\"},\"expected\":90,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_9_planningtiming_parsedurationseconds_clock_part_may_be_one_digit() {
+    let vector: Value = serde_json::from_str("{\"name\":\"clock part may be one digit\",\"input\":{\"time\":\"0:5\"},\"expected\":5,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_10_planningtiming_parsedurationseconds_clock_part_of_60_or_more_is_not_a_clock() {
+    let vector: Value = serde_json::from_str("{\"name\":\"clock part of 60 or more is not a clock\",\"input\":{\"time\":\"1:60\"},\"expected\":null,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_11_planningtiming_parsedurationseconds_empty_label() {
+    let vector: Value = serde_json::from_str("{\"name\":\"empty label\",\"input\":{\"time\":\"\"},\"expected\":null,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_12_planningtiming_parsedurationseconds_exponents_are_not_numbers() {
+    let vector: Value = serde_json::from_str("{\"name\":\"exponents are not numbers\",\"input\":{\"time\":\"1e3s\"},\"expected\":3,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_13_planningtiming_parsedurationseconds_fractional_seconds_round_half_up() {
+    let vector: Value = serde_json::from_str("{\"name\":\"fractional seconds round half up\",\"input\":{\"time\":\"2.5s\"},\"expected\":3,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_14_planningtiming_parsedurationseconds_fractional_units() {
+    let vector: Value = serde_json::from_str("{\"name\":\"fractional units\",\"input\":{\"time\":\"1.25m\"},\"expected\":75,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_15_planningtiming_parsedurationseconds_label_without_a_duration() {
+    let vector: Value = serde_json::from_str("{\"name\":\"label without a duration\",\"input\":{\"time\":\"TBD\"},\"expected\":null,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_16_planningtiming_parsedurationseconds_largest_uint32() {
+    let vector: Value = serde_json::from_str("{\"name\":\"largest uint32\",\"input\":{\"time\":\"4294967295\"},\"expected\":4294967295,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_17_planningtiming_parsedurationseconds_long_unit_names() {
+    let vector: Value = serde_json::from_str("{\"name\":\"long unit names\",\"input\":{\"time\":\"2 minutes 15 seconds\"},\"expected\":135,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_18_planningtiming_parsedurationseconds_non_breaking_space_separates_a_unit() {
+    let vector: Value = serde_json::from_str("{\"name\":\"non-breaking space separates a unit\",\"input\":{\"time\":\"5\u{a0}s\"},\"expected\":5,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_19_planningtiming_parsedurationseconds_only_ascii_digits_count() {
+    let vector: Value = serde_json::from_str("{\"name\":\"only ASCII digits count\",\"input\":{\"time\":\"\u{663}\u{660}s\"},\"expected\":null,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_20_planningtiming_parsedurationseconds_rounds_down_to_the_largest_uint32() {
+    let vector: Value = serde_json::from_str("{\"name\":\"rounds down to the largest uint32\",\"input\":{\"time\":\"4294967295.4\"},\"expected\":4294967295,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_21_planningtiming_parsedurationseconds_rounds_up_past_uint32() {
+    let vector: Value = serde_json::from_str("{\"name\":\"rounds up past uint32\",\"input\":{\"time\":\"4294967295.5\"},\"expected\":null,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_22_planningtiming_parsedurationseconds_text_around_unit_pairs_is_ignored() {
+    let vector: Value = serde_json::from_str("{\"name\":\"text around unit pairs is ignored\",\"input\":{\"time\":\"about 2 min\"},\"expected\":120,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_23_planningtiming_parsedurationseconds_too_large_for_uint32() {
+    let vector: Value = serde_json::from_str("{\"name\":\"too large for uint32\",\"input\":{\"time\":\"4294967296\"},\"expected\":null,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_24_planningtiming_parsedurationseconds_unicode_lowercasing_can_expand_a_character() {
+    let vector: Value = serde_json::from_str("{\"name\":\"Unicode lowercasing can expand a character\",\"input\":{\"time\":\"5 s\u{130}\"},\"expected\":null,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_25_planningtiming_parsedurationseconds_unicode_lowercasing_can_join_a_unit_to_a_word() {
+    let vector: Value = serde_json::from_str("{\"name\":\"Unicode lowercasing can join a unit to a word\",\"input\":{\"time\":\"5s\u{212a}\"},\"expected\":null,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_26_planningtiming_parsedurationseconds_unit_followed_by_a_word_character_does_not_count() {
+    let vector: Value = serde_json::from_str("{\"name\":\"unit followed by a word character does not count\",\"input\":{\"time\":\"5sec2\"},\"expected\":null,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_27_planningtiming_parsedurationseconds_unit_pairs_are_rounded_after_summing() {
+    let vector: Value = serde_json::from_str("{\"name\":\"unit pairs are rounded after summing\",\"input\":{\"time\":\"0.4s 0.4s\"},\"expected\":1,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_28_planningtiming_parsedurationseconds_unit_pairs_are_summed() {
+    let vector: Value = serde_json::from_str("{\"name\":\"unit pairs are summed\",\"input\":{\"time\":\"1h 2m 3s\"},\"expected\":3723,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_29_planningtiming_parsedurationseconds_whitespace_case_and_the_approximate_mark_are_ignored() {
+    let vector: Value = serde_json::from_str("{\"name\":\"whitespace, case, and the approximate mark are ignored\",\"input\":{\"time\":\"  ~ 45 SEC  \"},\"expected\":45,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("PlanningTiming", "parseDurationSeconds", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_30_sketchdocument_reorderrows_earlier_locked_cell_fires_before_a_later_locked_row() {
     let vector: Value = serde_json::from_str("{\"name\":\"earlier locked cell fires before a later locked row\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"order\":[0,2,1],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_cell\",\"row_index\":1,\"field\":\"narrative\"},\"operation\":\"reorderRows\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "reorderRows", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_1_sketchdocument_reorderrows_locked_row_protects_fields_a_runtime_does_not_model() {
+async fn test_vector_31_sketchdocument_reorderrows_locked_row_protects_fields_a_runtime_does_not_model() {
     let vector: Value = serde_json::from_str("{\"name\":\"locked row protects fields a runtime does not model\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Same.\",\"demo_actions\":\"Same.\",\"future_row_field\":\"a\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Same.\",\"demo_actions\":\"Same.\",\"future_row_field\":\"b\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"order\":[1,0],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_row\",\"row_index\":0},\"operation\":\"reorderRows\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "reorderRows", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_2_sketchdocument_reorderrows_locked_sketch_takes_precedence_over_an_invalid_order() {
+async fn test_vector_32_sketchdocument_reorderrows_locked_sketch_takes_precedence_over_an_invalid_order() {
     let vector: Value = serde_json::from_str("{\"name\":\"locked sketch takes precedence over an invalid order\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":true,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"order\":[0,0],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_document\"},\"operation\":\"reorderRows\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "reorderRows", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_3_sketchdocument_reorderrows_reorder_around_locked_rows_keeps_locks_in_place() {
+async fn test_vector_33_sketchdocument_reorderrows_reorder_around_locked_rows_keeps_locks_in_place() {
     let vector: Value = serde_json::from_str("{\"name\":\"reorder around locked rows keeps locks in place\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:40\",\"narrative\":\"Spare.\",\"demo_actions\":\"Wrap up.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"order\":[3,1,2,0],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:40\",\"narrative\":\"Spare.\",\"demo_actions\":\"Wrap up.\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"reorderRows\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "reorderRows", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_4_sketchdocument_reorderrows_reorder_moves_whole_rows_including_unknown_fields() {
+async fn test_vector_34_sketchdocument_reorderrows_reorder_moves_whole_rows_including_unknown_fields() {
     let vector: Value = serde_json::from_str("{\"name\":\"reorder moves whole rows including unknown fields\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"order\":[1,0],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"},\"operation\":\"reorderRows\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "reorderRows", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_5_sketchdocument_reorderrows_reorder_that_changes_a_locked_cell_is_rejected() {
+async fn test_vector_35_sketchdocument_reorderrows_reorder_that_changes_a_locked_cell_is_rejected() {
     let vector: Value = serde_json::from_str("{\"name\":\"reorder that changes a locked cell is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"order\":[1,0,2],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_cell\",\"row_index\":1,\"field\":\"narrative\"},\"operation\":\"reorderRows\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "reorderRows", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_6_sketchdocument_reorderrows_reorder_that_changes_a_locked_row_is_rejected() {
+async fn test_vector_36_sketchdocument_reorderrows_reorder_that_changes_a_locked_row_is_rejected() {
     let vector: Value = serde_json::from_str("{\"name\":\"reorder that changes a locked row is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"order\":[2,1,0],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_row\",\"row_index\":2},\"operation\":\"reorderRows\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "reorderRows", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_7_sketchdocument_reorderrows_reorder_that_is_not_a_permutation_is_rejected() {
+async fn test_vector_37_sketchdocument_reorderrows_reorder_that_is_not_a_permutation_is_rejected() {
     let vector: Value = serde_json::from_str("{\"name\":\"reorder that is not a permutation is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"order\":[0,0],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"invalid_reorder\"},\"operation\":\"reorderRows\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "reorderRows", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_8_sketchdocument_reorderrows_screenshot_lock_also_guards_the_visual() {
+async fn test_vector_38_sketchdocument_reorderrows_screenshot_lock_also_guards_the_visual() {
     let vector: Value = serde_json::from_str("{\"name\":\"screenshot lock also guards the visual\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":true,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/shared.png\",\"time\":\"0:10\",\"narrative\":\"A.\",\"demo_actions\":\"\",\"visual\":\".cutready/visuals/one.json\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/shared.png\",\"time\":\"0:10\",\"narrative\":\"A.\",\"demo_actions\":\"\",\"visual\":\".cutready/visuals/two.json\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"order\":[1,0],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_cell\",\"row_index\":0,\"field\":\"screenshot\"},\"operation\":\"reorderRows\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "reorderRows", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_9_sketchdocument_reorderrows_visual_lock_also_guards_the_screenshot() {
+async fn test_vector_39_sketchdocument_reorderrows_visual_lock_also_guards_the_screenshot() {
     let vector: Value = serde_json::from_str("{\"name\":\"visual lock also guards the screenshot\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":true,\"design_plan\":false},\"screenshot\":\"screenshots/one.png\",\"time\":\"0:10\",\"narrative\":\"A.\",\"demo_actions\":\"\",\"visual\":\".cutready/visuals/shared.json\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/two.png\",\"time\":\"0:10\",\"narrative\":\"A.\",\"demo_actions\":\"\",\"visual\":\".cutready/visuals/shared.json\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"order\":[1,0],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_cell\",\"row_index\":0,\"field\":\"visual\"},\"operation\":\"reorderRows\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "reorderRows", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_10_sketchdocument_roundtrip_canonical_desktop_sketch_is_unchanged() {
+async fn test_vector_40_sketchdocument_roundtrip_canonical_desktop_sketch_is_unchanged() {
     let vector: Value = serde_json::from_str("{\"name\":\"canonical desktop sketch is unchanged\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":{\"root\":{\"children\":[{\"type\":\"paragraph\",\"children\":[{\"text\":\"Intro scene\"}]}]}},\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:20\",\"duration_seconds\":20,\"narrative\":\"Open the workspace.\",\"demo_actions\":\"Click **Open**.\",\"visual\":\".cutready/visuals/abc123def456.json\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25,\"label\":\"Open button\"},{\"rank\":2,\"x\":0.75,\"y\":0.5}],\"typing_spots\":[{\"x\":0.25,\"y\":0.5,\"width\":0.5,\"height\":0.125,\"text\":\"demo-project\",\"start_offset_ms\":300,\"characters_per_second\":18.5,\"show_cursor\":true,\"font_family\":\"mono\",\"font_scale\":1.25}],\"motion_plan\":{\"kind\":\"wide_hold_then_push\",\"keyframes\":[{\"time_ms\":0,\"scale\":1.25,\"x\":0.5,\"y\":0.5,\"easing\":\"linear\"},{\"time_ms\":1500,\"scale\":1.75,\"x\":0.5,\"y\":0.25,\"easing\":\"ease_in_out\"}],\"rationale\":\"Hold wide, then push toward the Open button.\"},\"design_plan\":\"Title card with the product name.\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":4200,\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\"},\"narration_plan\":{\"source_text\":\"Open the workspace.\",\"voice\":\"en-US-Harper:MAI-Voice-2\",\"locale\":\"en-US\",\"ssml\":\"<speak>Open the workspace.</speak>\",\"baseline_style\":\"friendly\",\"pronunciation_overrides\":{\"CutReady\":\"cut ready\"},\"beats\":[{\"text\":\"Open the workspace.\",\"emphasis\":\"moderate\",\"style_degree\":1.5,\"pause_after_ms\":250}],\"generated_at\":\"2026-06-28T20:06:00Z\"}}],\"state\":\"refined\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"developers\"}}}},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":{\"root\":{\"children\":[{\"type\":\"paragraph\",\"children\":[{\"text\":\"Intro scene\"}]}]}},\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:20\",\"duration_seconds\":20,\"narrative\":\"Open the workspace.\",\"demo_actions\":\"Click **Open**.\",\"visual\":\".cutready/visuals/abc123def456.json\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25,\"label\":\"Open button\"},{\"rank\":2,\"x\":0.75,\"y\":0.5}],\"typing_spots\":[{\"x\":0.25,\"y\":0.5,\"width\":0.5,\"height\":0.125,\"text\":\"demo-project\",\"start_offset_ms\":300,\"characters_per_second\":18.5,\"show_cursor\":true,\"font_family\":\"mono\",\"font_scale\":1.25}],\"motion_plan\":{\"kind\":\"wide_hold_then_push\",\"keyframes\":[{\"time_ms\":0,\"scale\":1.25,\"x\":0.5,\"y\":0.5,\"easing\":\"linear\"},{\"time_ms\":1500,\"scale\":1.75,\"x\":0.5,\"y\":0.25,\"easing\":\"ease_in_out\"}],\"rationale\":\"Hold wide, then push toward the Open button.\"},\"design_plan\":\"Title card with the product name.\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":4200,\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\"},\"narration_plan\":{\"source_text\":\"Open the workspace.\",\"voice\":\"en-US-Harper:MAI-Voice-2\",\"locale\":\"en-US\",\"ssml\":\"<speak>Open the workspace.</speak>\",\"baseline_style\":\"friendly\",\"pronunciation_overrides\":{\"CutReady\":\"cut ready\"},\"beats\":[{\"text\":\"Open the workspace.\",\"emphasis\":\"moderate\",\"style_degree\":1.5,\"pause_after_ms\":250}],\"generated_at\":\"2026-06-28T20:06:00Z\"}}],\"state\":\"refined\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"developers\"}}},\"operation\":\"roundTrip\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "roundTrip", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_11_sketchdocument_roundtrip_legacy_minimal_sketch_gains_canonical_defaults() {
+async fn test_vector_41_sketchdocument_roundtrip_legacy_minimal_sketch_gains_canonical_defaults() {
     let vector: Value = serde_json::from_str("{\"name\":\"legacy minimal sketch gains canonical defaults\",\"input\":{\"sketch\":{\"title\":\"Legacy\",\"rows\":[{\"time\":\"~30s\",\"narrative\":\"Legacy row.\",\"demo_actions\":\"\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\"}}],\"state\":\"sketch\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}},\"expected\":{\"title\":\"Legacy\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"~30s\",\"narrative\":\"Legacy row.\",\"demo_actions\":\"\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\",\"duration_ms\":null}}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"roundTrip\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "roundTrip", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_12_sketchdocument_roundtrip_null_and_empty_optional_values_are_omitted() {
+async fn test_vector_42_sketchdocument_roundtrip_null_and_empty_optional_values_are_omitted() {
     let vector: Value = serde_json::from_str("{\"name\":\"null and empty optional values are omitted\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05\",\"duration_seconds\":null,\"narrative\":\"Sparse row.\",\"demo_actions\":\"Wait.\",\"visual\":null,\"design_plan\":null,\"motion_points\":null,\"typing_spots\":[],\"motion_plan\":{\"kind\":\"subtle_push\",\"keyframes\":[],\"rationale\":null},\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":null,\"leading_silence_ms\":null,\"trailing_silence_ms\":null,\"silence_threshold_db\":null,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\"},\"narration_plan\":{\"source_text\":\"Sparse row.\",\"voice\":\"en-US-Harper:MAI-Voice-2\",\"locale\":\"en-US\",\"ssml\":\"<speak>Sparse row.</speak>\",\"baseline_style\":null,\"pronunciation_overrides\":{},\"beats\":[],\"generated_at\":\"2026-06-28T20:06:00Z\"}}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{}}}},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05\",\"narrative\":\"Sparse row.\",\"demo_actions\":\"Wait.\",\"motion_plan\":{\"kind\":\"subtle_push\"},\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":null,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\"},\"narration_plan\":{\"source_text\":\"Sparse row.\",\"voice\":\"en-US-Harper:MAI-Voice-2\",\"locale\":\"en-US\",\"ssml\":\"<speak>Sparse row.</speak>\",\"generated_at\":\"2026-06-28T20:06:00Z\"}}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"roundTrip\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "roundTrip", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_13_sketchdocument_roundtrip_timestamps_are_saved_as_utc() {
+async fn test_vector_43_sketchdocument_roundtrip_timestamps_are_saved_as_utc() {
     let vector: Value = serde_json::from_str("{\"name\":\"timestamps are saved as UTC\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05\",\"narrative\":\"Offset.\",\"demo_actions\":\"\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":4200,\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T22:05:00.5+02:00\"}}],\"state\":\"draft\",\"created_at\":\"2026-06-28T22:00:00+02:00\",\"updated_at\":\"2026-06-28T20:20:00.123456789Z\"}},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05\",\"narrative\":\"Offset.\",\"demo_actions\":\"\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":4200,\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00.500Z\"}}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00.123456789Z\"},\"operation\":\"roundTrip\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "roundTrip", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_14_sketchdocument_roundtrip_unknown_sketch_and_row_fields_are_preserved() {
+async fn test_vector_44_sketchdocument_roundtrip_unknown_sketch_and_row_fields_are_preserved() {
     let vector: Value = serde_json::from_str("{\"name\":\"unknown sketch and row fields are preserved\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]}},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"roundTrip\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "roundTrip", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_15_sketchdocument_updaterowtext_edit_time_keeps_microseconds() {
+async fn test_vector_45_sketchdocument_updaterowtext_edit_time_keeps_microseconds() {
     let vector: Value = serde_json::from_str("{\"name\":\"edit time keeps microseconds\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":1,\"demo_actions\":\"Double-click.\"},\"now\":\"2026-07-01T09:30:00.123456Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Double-click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00.123456Z\"},\"operation\":\"updateRowText\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "updateRowText", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_16_sketchdocument_updaterowtext_locked_cell_accepts_an_unchanged_value() {
+async fn test_vector_46_sketchdocument_updaterowtext_locked_cell_accepts_an_unchanged_value() {
     let vector: Value = serde_json::from_str("{\"name\":\"locked cell accepts an unchanged value\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":1,\"narrative\":\"Locked narration.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"updateRowText\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "updateRowText", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_17_sketchdocument_updaterowtext_locked_cell_rejects_a_change() {
+async fn test_vector_47_sketchdocument_updaterowtext_locked_cell_rejects_a_change() {
     let vector: Value = serde_json::from_str("{\"name\":\"locked cell rejects a change\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":1,\"narrative\":\"Changed.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_cell\",\"row_index\":1,\"field\":\"narrative\"},\"operation\":\"updateRowText\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "updateRowText", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_18_sketchdocument_updaterowtext_locked_cells_are_checked_in_column_order() {
+async fn test_vector_48_sketchdocument_updaterowtext_locked_cell_rejects_a_differently_composed_value() {
+    let vector: Value = serde_json::from_str("{\"name\":\"locked cell rejects a differently composed value\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":true,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"\u{c5} 0:10\",\"duration_seconds\":10,\"narrative\":\"Time locked.\",\"demo_actions\":\"\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Caf\u{e9}.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":0,\"time\":\"A\u{30a} 0:10\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_cell\",\"row_index\":0,\"field\":\"time\"},\"operation\":\"updateRowText\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("SketchDocument", "updateRowText", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_49_sketchdocument_updaterowtext_locked_cells_are_checked_in_column_order() {
     let vector: Value = serde_json::from_str("{\"name\":\"locked cells are checked in column order\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Row lock wins.\",\"demo_actions\":\"Hold.\"},{\"locked\":false,\"locks\":{\"time\":true,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Two locked cells.\",\"demo_actions\":\"Hold.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":1,\"time\":\"0:25\",\"narrative\":\"Changed.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_cell\",\"row_index\":1,\"field\":\"time\"},\"operation\":\"updateRowText\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "updateRowText", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_19_sketchdocument_updaterowtext_locked_row_rejects_a_change() {
+async fn test_vector_50_sketchdocument_updaterowtext_locked_row_rejects_a_change() {
     let vector: Value = serde_json::from_str("{\"name\":\"locked row rejects a change\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":2,\"time\":\"0:45\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_row\",\"row_index\":2},\"operation\":\"updateRowText\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "updateRowText", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_20_sketchdocument_updaterowtext_locked_sketch_rejects_every_edit() {
+async fn test_vector_51_sketchdocument_updaterowtext_locked_row_rejects_a_differently_composed_value() {
+    let vector: Value = serde_json::from_str("{\"name\":\"locked row rejects a differently composed value\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":true,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"\u{c5} 0:10\",\"duration_seconds\":10,\"narrative\":\"Time locked.\",\"demo_actions\":\"\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Caf\u{e9}.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":1,\"narrative\":\"Cafe\u{301}.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_row\",\"row_index\":1},\"operation\":\"updateRowText\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("SketchDocument", "updateRowText", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_52_sketchdocument_updaterowtext_locked_sketch_rejects_every_edit() {
     let vector: Value = serde_json::from_str("{\"name\":\"locked sketch rejects every edit\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":true,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":0,\"narrative\":\"First.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_document\"},\"operation\":\"updateRowText\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "updateRowText", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_21_sketchdocument_updaterowtext_locked_sketch_takes_precedence_over_a_missing_row() {
+async fn test_vector_53_sketchdocument_updaterowtext_locked_sketch_takes_precedence_over_a_missing_row() {
     let vector: Value = serde_json::from_str("{\"name\":\"locked sketch takes precedence over a missing row\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":true,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":9,\"narrative\":\"Missing.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_document\"},\"operation\":\"updateRowText\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "updateRowText", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_22_sketchdocument_updaterowtext_narrative_edit_preserves_desktop_only_and_unknown_fields() {
+async fn test_vector_54_sketchdocument_updaterowtext_narrative_edit_preserves_desktop_only_and_unknown_fields() {
     let vector: Value = serde_json::from_str("{\"name\":\"narrative edit preserves desktop-only and unknown fields\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":0,\"narrative\":\"Open the CutReady app.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the CutReady app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"updateRowText\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "updateRowText", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_23_sketchdocument_updaterowtext_row_index_outside_the_table_is_rejected() {
+async fn test_vector_55_sketchdocument_updaterowtext_row_index_outside_the_table_is_rejected() {
     let vector: Value = serde_json::from_str("{\"name\":\"row index outside the table is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":3,\"narrative\":\"Missing.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"row_not_found\",\"row_index\":3},\"operation\":\"updateRowText\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "updateRowText", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_24_sketchdocument_updaterowtext_row_lock_takes_precedence_over_a_cell_lock() {
+async fn test_vector_56_sketchdocument_updaterowtext_row_lock_takes_precedence_over_a_cell_lock() {
     let vector: Value = serde_json::from_str("{\"name\":\"row lock takes precedence over a cell lock\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Row lock wins.\",\"demo_actions\":\"Hold.\"},{\"locked\":false,\"locks\":{\"time\":true,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Two locked cells.\",\"demo_actions\":\"Hold.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":0,\"narrative\":\"Changed.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_row\",\"row_index\":0},\"operation\":\"updateRowText\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "updateRowText", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_25_sketchdocument_updaterowtext_time_edit_leaves_duration_seconds_untouched() {
-    let vector: Value = serde_json::from_str("{\"name\":\"time edit leaves duration_seconds untouched\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":0,\"time\":\"0:15\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:15\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"updateRowText\",\"stage\":\"callable\"}")
+async fn test_vector_57_sketchdocument_updaterowtext_time_edit_recomputes_duration_seconds() {
+    let vector: Value = serde_json::from_str("{\"name\":\"time edit recomputes duration_seconds\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":0,\"time\":\"0:15\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:15\",\"duration_seconds\":15,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"updateRowText\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "updateRowText", vector, true, vc_seam()).await;
 }
 
 #[tokio::test]
-async fn test_vector_26_sketchdocument_updaterowtext_unlocked_cells_on_a_row_with_a_locked_cell_are_editable() {
-    let vector: Value = serde_json::from_str("{\"name\":\"unlocked cells on a row with a locked cell are editable\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":1,\"time\":\"0:25\",\"demo_actions\":\"Type the project name.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:25\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type the project name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"updateRowText\",\"stage\":\"callable\"}")
+async fn test_vector_58_sketchdocument_updaterowtext_unchanged_time_keeps_duration_seconds() {
+    let vector: Value = serde_json::from_str("{\"name\":\"unchanged time keeps duration_seconds\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05 - 0:19\",\"duration_seconds\":14,\"narrative\":\"Imported scene.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":0,\"time\":\"0:05 - 0:19\",\"narrative\":\"Imported scene, edited.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05 - 0:19\",\"duration_seconds\":14,\"narrative\":\"Imported scene, edited.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"},\"operation\":\"updateRowText\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("SketchDocument", "updateRowText", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_59_sketchdocument_updaterowtext_unlocked_cells_on_a_row_with_a_locked_cell_are_editable() {
+    let vector: Value = serde_json::from_str("{\"name\":\"unlocked cells on a row with a locked cell are editable\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":1,\"time\":\"0:25\",\"demo_actions\":\"Type the project name.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:25\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type the project name.\",\"duration_seconds\":25},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"updateRowText\",\"stage\":\"callable\"}")
+        .expect("failed to decode vector");
+    vector_runner::vc_run_vector("SketchDocument", "updateRowText", vector, true, vc_seam()).await;
+}
+
+#[tokio::test]
+async fn test_vector_60_sketchdocument_updaterowtext_unparseable_time_edit_removes_duration_seconds() {
+    let vector: Value = serde_json::from_str("{\"name\":\"unparseable time edit removes duration_seconds\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":0,\"time\":\"TBD\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"TBD\",\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"updateRowText\",\"stage\":\"callable\"}")
         .expect("failed to decode vector");
     vector_runner::vc_run_vector("SketchDocument", "updateRowText", vector, true, vc_seam()).await;
 }

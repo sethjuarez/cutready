@@ -7,7 +7,7 @@ Portable CutReady document contracts, written in TypeSpec and emitted by [Typra]
 | Path | Role |
 | --- | --- |
 | `sketch.tsp` | `.sk` document models: `Sketch`, `PlanningRow`, locks, narration, motion |
-| `edits.tsp` | `SketchDocument` operations and the shared edit error payload |
+| `edits.tsp` | `SketchDocument` operations, `PlanningTiming`, and the shared edit error payload |
 | `vectors/build.mjs` | Readable vector fixtures; writes `vectors.tsp` |
 | `generated/` | Swift model package and Markdown reference (do not edit) |
 
@@ -62,11 +62,16 @@ Desktop is the reference. Every runtime must save `.sk` files this way. Fields t
 | Row `locked` | Fails with `locked_row` only if that row's content changes, including unknown and desktop-only fields |
 | Cell lock | Fails with `locked_cell` only if that cell changes; screenshot and visual locks guard both cells |
 | Reorder | Checked position by position against the locks at each position |
+| Comparison | Exact: text that differs only in Unicode composition is a change |
+| Time edit | A changed `time` sets `duration_seconds` to `PlanningTiming.parseDurationSeconds(time)`, omitted when null; an unchanged `time` keeps it |
 | Success | `updated_at` is set to the edit time |
+
+## Timing
+
+`PlanningTiming.parseDurationSeconds` turns a `time` label (`1:30`, `~25s`, `2m 15s`) into whole seconds. Desktop Rust, desktop TypeScript, and iOS each implement it; the TypeScript copy is checked against the same vectors in `src/test/documentMetadata.test.ts`. An unchanged label keeps its duration, so imported ranges such as `0:05 - 0:19` keep theirs. The agent's `write_sketch` tool lets an explicit `duration_seconds` win over the parsed one.
 
 ## Open policy questions
 
-- Desktop's time-cell UI recomputes `duration_seconds`; the agent tool and iOS don't. The vectors pin today's shared behavior (unchanged) until the timing slice decides.
 - Desktop TypeScript types aren't generated yet.
 
 ## Typra workarounds

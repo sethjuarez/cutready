@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import type { PlanningCellField, PlanningRow } from "../types/sketch";
 import VisualCell from "./VisualCell";
 import { useProjectImage } from "../hooks/useProjectImage";
-import { parseDurationSeconds } from "../utils/documentMetadata";
+import { setRowTime } from "../utils/documentMetadata";
 import { invoke } from "../services/tauri";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { continueMarkdownList } from "../utils/markdownList";
@@ -636,7 +636,7 @@ function updateRowField(
   return rows.map((row, index) => {
     if (index !== rowIndex) return row;
     if (field === "time") {
-      return { ...row, time: value, duration_seconds: parseDurationSeconds(value) };
+      return setRowTime(row, value);
     }
     return { ...row, [field]: value };
   });

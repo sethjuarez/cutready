@@ -904,7 +904,7 @@ const UpdateRowTextVectors = """
     }
   },
   {
-    "name": "time edit leaves duration_seconds untouched",
+    "name": "time edit recomputes duration_seconds",
     "input": {
       "sketch": {
         "title": "Contract sketch",
@@ -999,7 +999,7 @@ const UpdateRowTextVectors = """
           },
           "screenshot": "screenshots/open.png",
           "time": "0:15",
-          "duration_seconds": 10,
+          "duration_seconds": 15,
           "narrative": "Open the app.",
           "demo_actions": "Click Open.",
           "motion_points": [
@@ -1051,6 +1051,218 @@ const UpdateRowTextVectors = """
         "still",
         "here"
       ]
+    }
+  },
+  {
+    "name": "unparseable time edit removes duration_seconds",
+    "input": {
+      "sketch": {
+        "title": "Contract sketch",
+        "locked": false,
+        "description": null,
+        "rows": [
+          {
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": "screenshots/open.png",
+            "time": "0:10",
+            "duration_seconds": 10,
+            "narrative": "Open the app.",
+            "demo_actions": "Click Open.",
+            "motion_points": [
+              {
+                "rank": 1,
+                "x": 0.5,
+                "y": 0.25
+              }
+            ],
+            "future_row_field": {
+              "keep": true
+            }
+          },
+          {
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": true,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:20",
+            "narrative": "Locked narration.",
+            "demo_actions": "Type a name."
+          },
+          {
+            "locked": true,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:30",
+            "narrative": "Locked row.",
+            "demo_actions": "Close."
+          }
+        ],
+        "state": "draft",
+        "created_at": "2026-06-28T20:00:00Z",
+        "updated_at": "2026-06-28T20:20:00Z",
+        "future_document_field": [
+          "still",
+          "here"
+        ]
+      },
+      "update": {
+        "row_index": 0,
+        "time": "TBD"
+      },
+      "now": "2026-07-01T09:30:00Z"
+    },
+    "expected": {
+      "title": "Contract sketch",
+      "locked": false,
+      "description": null,
+      "rows": [
+        {
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": "screenshots/open.png",
+          "time": "TBD",
+          "narrative": "Open the app.",
+          "demo_actions": "Click Open.",
+          "motion_points": [
+            {
+              "rank": 1,
+              "x": 0.5,
+              "y": 0.25
+            }
+          ],
+          "future_row_field": {
+            "keep": true
+          }
+        },
+        {
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": true,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": null,
+          "time": "0:20",
+          "narrative": "Locked narration.",
+          "demo_actions": "Type a name."
+        },
+        {
+          "locked": true,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": null,
+          "time": "0:30",
+          "narrative": "Locked row.",
+          "demo_actions": "Close."
+        }
+      ],
+      "state": "draft",
+      "created_at": "2026-06-28T20:00:00Z",
+      "updated_at": "2026-07-01T09:30:00Z",
+      "future_document_field": [
+        "still",
+        "here"
+      ]
+    }
+  },
+  {
+    "name": "unchanged time keeps duration_seconds",
+    "input": {
+      "sketch": {
+        "title": "Contract sketch",
+        "locked": false,
+        "description": null,
+        "rows": [
+          {
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:05 - 0:19",
+            "duration_seconds": 14,
+            "narrative": "Imported scene.",
+            "demo_actions": ""
+          }
+        ],
+        "state": "draft",
+        "created_at": "2026-06-28T20:00:00Z",
+        "updated_at": "2026-06-28T20:20:00Z"
+      },
+      "update": {
+        "row_index": 0,
+        "time": "0:05 - 0:19",
+        "narrative": "Imported scene, edited."
+      },
+      "now": "2026-07-01T09:30:00Z"
+    },
+    "expected": {
+      "title": "Contract sketch",
+      "locked": false,
+      "description": null,
+      "rows": [
+        {
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": null,
+          "time": "0:05 - 0:19",
+          "duration_seconds": 14,
+          "narrative": "Imported scene, edited.",
+          "demo_actions": ""
+        }
+      ],
+      "state": "draft",
+      "created_at": "2026-06-28T20:00:00Z",
+      "updated_at": "2026-07-01T09:30:00Z"
     }
   },
   {
@@ -1177,7 +1389,8 @@ const UpdateRowTextVectors = """
           "screenshot": null,
           "time": "0:25",
           "narrative": "Locked narration.",
-          "demo_actions": "Type the project name."
+          "demo_actions": "Type the project name.",
+          "duration_seconds": 25
         },
         {
           "locked": true,
@@ -1823,6 +2036,117 @@ const UpdateRowTextVectors = """
       "code": "locked_cell",
       "row_index": 1,
       "field": "time"
+    }
+  },
+  {
+    "name": "locked cell rejects a differently composed value",
+    "input": {
+      "sketch": {
+        "title": "Contract sketch",
+        "locked": false,
+        "description": null,
+        "rows": [
+          {
+            "locked": false,
+            "locks": {
+              "time": true,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "Å 0:10",
+            "duration_seconds": 10,
+            "narrative": "Time locked.",
+            "demo_actions": ""
+          },
+          {
+            "locked": true,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:20",
+            "narrative": "Café.",
+            "demo_actions": ""
+          }
+        ],
+        "state": "draft",
+        "created_at": "2026-06-28T20:00:00Z",
+        "updated_at": "2026-06-28T20:20:00Z"
+      },
+      "update": {
+        "row_index": 0,
+        "time": "Å 0:10"
+      },
+      "now": "2026-07-01T09:30:00Z"
+    },
+    "expectedError": {
+      "code": "locked_cell",
+      "row_index": 0,
+      "field": "time"
+    }
+  },
+  {
+    "name": "locked row rejects a differently composed value",
+    "input": {
+      "sketch": {
+        "title": "Contract sketch",
+        "locked": false,
+        "description": null,
+        "rows": [
+          {
+            "locked": false,
+            "locks": {
+              "time": true,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "Å 0:10",
+            "duration_seconds": 10,
+            "narrative": "Time locked.",
+            "demo_actions": ""
+          },
+          {
+            "locked": true,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:20",
+            "narrative": "Café.",
+            "demo_actions": ""
+          }
+        ],
+        "state": "draft",
+        "created_at": "2026-06-28T20:00:00Z",
+        "updated_at": "2026-06-28T20:20:00Z"
+      },
+      "update": {
+        "row_index": 1,
+        "narrative": "Café."
+      },
+      "now": "2026-07-01T09:30:00Z"
+    },
+    "expectedError": {
+      "code": "locked_row",
+      "row_index": 1
     }
   }
 ]
@@ -2638,6 +2962,221 @@ const ReorderRowsVectors = """
     "expectedError": {
       "code": "invalid_reorder"
     }
+  }
+]
+""";
+
+const ParseDurationSecondsVectors = """
+[
+  {
+    "name": "clock minutes and seconds",
+    "input": {
+      "time": "1:30"
+    },
+    "expected": 90
+  },
+  {
+    "name": "clock hours, minutes, and seconds",
+    "input": {
+      "time": "1:02:03"
+    },
+    "expected": 3723
+  },
+  {
+    "name": "clock part may be one digit",
+    "input": {
+      "time": "0:5"
+    },
+    "expected": 5
+  },
+  {
+    "name": "clock part of 60 or more is not a clock",
+    "input": {
+      "time": "1:60"
+    },
+    "expected": null
+  },
+  {
+    "name": "approximate seconds",
+    "input": {
+      "time": "~25s"
+    },
+    "expected": 25
+  },
+  {
+    "name": "whitespace, case, and the approximate mark are ignored",
+    "input": {
+      "time": "  ~ 45 SEC  "
+    },
+    "expected": 45
+  },
+  {
+    "name": "unit pairs are summed",
+    "input": {
+      "time": "1h 2m 3s"
+    },
+    "expected": 3723
+  },
+  {
+    "name": "long unit names",
+    "input": {
+      "time": "2 minutes 15 seconds"
+    },
+    "expected": 135
+  },
+  {
+    "name": "text around unit pairs is ignored",
+    "input": {
+      "time": "about 2 min"
+    },
+    "expected": 120
+  },
+  {
+    "name": "fractional units",
+    "input": {
+      "time": "1.25m"
+    },
+    "expected": 75
+  },
+  {
+    "name": "fractional seconds round half up",
+    "input": {
+      "time": "2.5s"
+    },
+    "expected": 3
+  },
+  {
+    "name": "non-breaking space separates a unit",
+    "input": {
+      "time": "5 s"
+    },
+    "expected": 5
+  },
+  {
+    "name": "unit followed by a word character does not count",
+    "input": {
+      "time": "5sec2"
+    },
+    "expected": null
+  },
+  {
+    "name": "a unit may not run into the next pair",
+    "input": {
+      "time": "5 m5s"
+    },
+    "expected": 5
+  },
+  {
+    "name": "a unit may be followed by a non-ASCII letter",
+    "input": {
+      "time": "5sα"
+    },
+    "expected": 5
+  },
+  {
+    "name": "a second fraction is not part of the number",
+    "input": {
+      "time": "1.5.5m"
+    },
+    "expected": 330
+  },
+  {
+    "name": "a fraction needs a leading digit",
+    "input": {
+      "time": "5 .5m"
+    },
+    "expected": 300
+  },
+  {
+    "name": "exponents are not numbers",
+    "input": {
+      "time": "1e3s"
+    },
+    "expected": 3
+  },
+  {
+    "name": "unit pairs are rounded after summing",
+    "input": {
+      "time": "0.4s 0.4s"
+    },
+    "expected": 1
+  },
+  {
+    "name": "bare number of seconds",
+    "input": {
+      "time": "90"
+    },
+    "expected": 90
+  },
+  {
+    "name": "bare fraction rounds half up",
+    "input": {
+      "time": "2.5"
+    },
+    "expected": 3
+  },
+  {
+    "name": "only ASCII digits count",
+    "input": {
+      "time": "٣٠s"
+    },
+    "expected": null
+  },
+  {
+    "name": "Unicode lowercasing can join a unit to a word",
+    "input": {
+      "time": "5sK"
+    },
+    "expected": null
+  },
+  {
+    "name": "Unicode lowercasing can expand a character",
+    "input": {
+      "time": "5 sİ"
+    },
+    "expected": null
+  },
+  {
+    "name": "empty label",
+    "input": {
+      "time": ""
+    },
+    "expected": null
+  },
+  {
+    "name": "label without a duration",
+    "input": {
+      "time": "TBD"
+    },
+    "expected": null
+  },
+  {
+    "name": "largest uint32",
+    "input": {
+      "time": "4294967295"
+    },
+    "expected": 4294967295
+  },
+  {
+    "name": "rounds down to the largest uint32",
+    "input": {
+      "time": "4294967295.4"
+    },
+    "expected": 4294967295
+  },
+  {
+    "name": "too large for uint32",
+    "input": {
+      "time": "4294967296"
+    },
+    "expected": null
+  },
+  {
+    "name": "rounds up past uint32",
+    "input": {
+      "time": "4294967295.5"
+    },
+    "expected": null
   }
 ]
 """;

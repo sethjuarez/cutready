@@ -48,7 +48,7 @@ import { normalizeDocument } from "@elucim/dsl";
 import type { CutReadyElucimDocument } from "../types/elucim";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { useProjectImage } from "../hooks/useProjectImage";
-import { parseDurationSeconds } from "../utils/documentMetadata";
+import { setRowTime } from "../utils/documentMetadata";
 import { useConfirmDialog } from "./ConfirmDialog";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { continueMarkdownList } from "../utils/markdownList";
@@ -347,7 +347,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
       const updated = rowsRef.current.map((r, i) => {
         if (i !== index) return r;
         if (field === "time") {
-          return { ...r, time: value, duration_seconds: parseDurationSeconds(value) };
+          return setRowTime(r, value);
         }
         if (field === "screenshot") {
           return { ...r, screenshot: value || null, motion_points: value ? r.motion_points : null, typing_spots: value ? r.typing_spots : null, motion_plan: null };

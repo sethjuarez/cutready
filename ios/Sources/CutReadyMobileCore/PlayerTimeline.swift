@@ -180,7 +180,7 @@ public struct PlayerTimelineBeat: Identifiable, Equatable, Sendable {
             return (max(1.0, Double(durationMs) / 1000.0), .narration)
         }
 
-        if let durationSeconds = row.durationSeconds, durationSeconds > 0 {
+        if let durationSeconds = row.durationSeconds ?? PlanningTiming.parseDurationSeconds(row.time), durationSeconds > 0 {
             return (Double(durationSeconds), .rowDuration)
         }
 

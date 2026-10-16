@@ -159,6 +159,17 @@ const hiddenFieldFixture = sketch([
   row({ time: "0:10", narrative: "Same.", demo_actions: "Same.", future_row_field: "b" }),
 ]);
 
+// A video-import row: its duration came from the scene, not the range label.
+const importedFixture = sketch([
+  row({ time: "0:05 - 0:19", duration_seconds: 14, narrative: "Imported scene.", demo_actions: "" }),
+]);
+
+// Text that only differs by Unicode composition: locks compare it exactly.
+const composedFixture = sketch([
+  row({ time: "\u00c5 0:10", duration_seconds: 10, narrative: "Time locked.", demo_actions: "" }, { time: true }),
+  { ...row({ time: "0:20", narrative: "Caf\u00e9.", demo_actions: "" }), locked: true },
+]);
+
 const edited = (base, mutate) => {
   const next = clone(base);
   mutate(next);
@@ -305,10 +316,30 @@ const updateRowTextVectors = [
     }),
   },
   {
-    name: "time edit leaves duration_seconds untouched",
+    name: "time edit recomputes duration_seconds",
     input: { sketch: lockedFixture, update: updateRow(0, { time: "0:15" }), now: NOW },
     expected: edited(lockedFixture, (s) => {
       s.rows[0].time = "0:15";
+      s.rows[0].duration_seconds = 15;
+    }),
+  },
+  {
+    name: "unparseable time edit removes duration_seconds",
+    input: { sketch: lockedFixture, update: updateRow(0, { time: "TBD" }), now: NOW },
+    expected: edited(lockedFixture, (s) => {
+      s.rows[0].time = "TBD";
+      delete s.rows[0].duration_seconds;
+    }),
+  },
+  {
+    name: "unchanged time keeps duration_seconds",
+    input: {
+      sketch: importedFixture,
+      update: updateRow(0, { time: "0:05 - 0:19", narrative: "Imported scene, edited." }),
+      now: NOW,
+    },
+    expected: edited(importedFixture, (s) => {
+      s.rows[0].narrative = "Imported scene, edited.";
     }),
   },
   {
@@ -320,6 +351,7 @@ const updateRowTextVectors = [
     },
     expected: edited(lockedFixture, (s) => {
       s.rows[1].time = "0:25";
+      s.rows[1].duration_seconds = 25;
       s.rows[1].demo_actions = "Type the project name.";
     }),
   },
@@ -362,6 +394,16 @@ const updateRowTextVectors = [
     name: "locked cells are checked in column order",
     input: { sketch: precedenceFixture, update: updateRow(1, { time: "0:25", narrative: "Changed." }), now: NOW },
     expectedError: { code: "locked_cell", row_index: 1, field: "time" },
+  },
+  {
+    name: "locked cell rejects a differently composed value",
+    input: { sketch: composedFixture, update: updateRow(0, { time: "A\u030a 0:10" }), now: NOW },
+    expectedError: { code: "locked_cell", row_index: 0, field: "time" },
+  },
+  {
+    name: "locked row rejects a differently composed value",
+    input: { sketch: composedFixture, update: updateRow(1, { narrative: "Cafe\u0301." }), now: NOW },
+    expectedError: { code: "locked_row", row_index: 1 },
   },
 ];
 
@@ -422,6 +464,41 @@ const reorderRowsVectors = [
   },
 ];
 
+const parseDuration = (name, time, expected) => ({ name, input: { time }, expected });
+
+const parseDurationSecondsVectors = [
+  parseDuration("clock minutes and seconds", "1:30", 90),
+  parseDuration("clock hours, minutes, and seconds", "1:02:03", 3723),
+  parseDuration("clock part may be one digit", "0:5", 5),
+  parseDuration("clock part of 60 or more is not a clock", "1:60", null),
+  parseDuration("approximate seconds", "~25s", 25),
+  parseDuration("whitespace, case, and the approximate mark are ignored", "  ~ 45 SEC  ", 45),
+  parseDuration("unit pairs are summed", "1h 2m 3s", 3723),
+  parseDuration("long unit names", "2 minutes 15 seconds", 135),
+  parseDuration("text around unit pairs is ignored", "about 2 min", 120),
+  parseDuration("fractional units", "1.25m", 75),
+  parseDuration("fractional seconds round half up", "2.5s", 3),
+  parseDuration("non-breaking space separates a unit", "5\u00a0s", 5),
+  parseDuration("unit followed by a word character does not count", "5sec2", null),
+  parseDuration("a unit may not run into the next pair", "5 m5s", 5),
+  parseDuration("a unit may be followed by a non-ASCII letter", "5s\u03b1", 5),
+  parseDuration("a second fraction is not part of the number", "1.5.5m", 330),
+  parseDuration("a fraction needs a leading digit", "5 .5m", 300),
+  parseDuration("exponents are not numbers", "1e3s", 3),
+  parseDuration("unit pairs are rounded after summing", "0.4s 0.4s", 1),
+  parseDuration("bare number of seconds", "90", 90),
+  parseDuration("bare fraction rounds half up", "2.5", 3),
+  parseDuration("only ASCII digits count", "\u0663\u0660s", null),
+  parseDuration("Unicode lowercasing can join a unit to a word", "5s\u212a", null),
+  parseDuration("Unicode lowercasing can expand a character", "5 s\u0130", null),
+  parseDuration("empty label", "", null),
+  parseDuration("label without a duration", "TBD", null),
+  parseDuration("largest uint32", "4294967295", 4294967295),
+  parseDuration("rounds down to the largest uint32", "4294967295.4", 4294967295),
+  parseDuration("too large for uint32", "4294967296", null),
+  parseDuration("rounds up past uint32", "4294967295.5", null),
+];
+
 const tspConst = (name, vectors) => `const ${name} = """\n${JSON.stringify(vectors, null, 2)}\n""";\n`;
 
 const contractsDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -435,5 +512,6 @@ writeFileSync(
     tspConst("RoundTripVectors", roundTripVectors),
     tspConst("UpdateRowTextVectors", updateRowTextVectors),
     tspConst("ReorderRowsVectors", reorderRowsVectors),
+    tspConst("ParseDurationSecondsVectors", parseDurationSecondsVectors),
   ].join("\n"),
 );
