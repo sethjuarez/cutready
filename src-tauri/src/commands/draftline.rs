@@ -1244,4 +1244,162 @@ mod tests {
         assert_eq!(profile.author.email.as_deref(), Some("grace@example.com"));
         assert_eq!(profile.saved_by.name, "CutReady");
     }
+
+    fn init_bare_remote(path: &Path) {
+        let output = git_command()
+            .args(["init", "--bare", "--initial-branch=main"])
+            .arg(path)
+            .output()
+            .expect("git init --bare");
+        assert!(output.status.success(), "{output:?}");
+    }
+
+    fn git_command() -> std::process::Command {
+        let mut command = std::process::Command::new("git");
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x08000000);
+        }
+        command
+    }
+
+    fn last_commit_author(root: &Path) -> String {
+        let output = git_command()
+            .current_dir(root)
+            .args(["log", "-1", "--format=%an <%ae>"])
+            .output()
+            .expect("git log");
+        assert!(output.status.success(), "{output:?}");
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    fn remote_request(root: &Path) -> contract::RemoteRequest {
+        contract::RemoteRequest {
+            workspace_path: root.to_path_buf(),
+            remote: "origin".to_string(),
+        }
+    }
+
+    fn context(root: &Path) -> contract::DraftlineCommandContext<'static> {
+        let name = root.file_name().unwrap().to_string_lossy().to_string();
+        let contributor = Contributor {
+            email: Some(format!("{name}@collab.test")),
+            name,
+        };
+        core_draftline_context(ContributorProfile::new(
+            contributor,
+            Contributor {
+                name: "CutReady".to_string(),
+                email: Some("app@cutready.local".to_string()),
+            },
+        ))
+        .unwrap()
+    }
+
+    fn save(root: &Path, label: &str) {
+        contract::save_with_context(
+            &mut context(root),
+            contract::SaveRequest {
+                workspace_path: root.to_path_buf(),
+                label: label.to_string(),
+            },
+        )
+        .unwrap_or_else(|error| panic!("save {label}: {error}"));
+    }
+
+    fn publish(root: &Path) {
+        contract::publish_current_variation_with_context(
+            &mut context(root),
+            contract::PublishCurrentVariationRequest {
+                workspace_path: root.to_path_buf(),
+                remote: "origin".to_string(),
+            },
+        )
+        .unwrap_or_else(|error| panic!("publish {}: {error}", root.display()));
+    }
+
+    fn fetch(root: &Path) {
+        contract::fetch_remote_with_context(&mut context(root), remote_request(root))
+            .unwrap_or_else(|error| panic!("fetch {}: {error}", root.display()));
+    }
+
+    /// Mirrors the desktop sync flow (appStore `syncWithRemote`): two
+    /// collaborators diverge, one fetches, merges incoming, and publishes; the
+    /// other applies the merged history.
+    #[test]
+    fn collaborators_merge_and_publish_diverged_saves_through_contract() {
+        let temp = tempfile::tempdir().unwrap();
+        let remote = temp.path().join("remote.git");
+        init_bare_remote(&remote);
+        let remote_url = remote.to_string_lossy().to_string();
+
+        let first = temp.path().join("first");
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::write(first.join("intro.sk"), r#"{"title":"Base"}"#).unwrap();
+        CutReadyDraftlineAdapter::open_project(&first)
+            .unwrap()
+            .add_remote("origin", &remote_url)
+            .unwrap();
+        save(&first, "Base");
+        publish(&first);
+
+        let second = temp.path().join("second");
+        contract::clone_workspace_with_context(
+            &mut context(&second),
+            contract::CloneWorkspaceRequest {
+                remote_url: remote_url.clone(),
+                workspace_path: second.clone(),
+            },
+        )
+        .expect("clone");
+
+        std::fs::write(second.join("remote.md"), "# From second\n").unwrap();
+        save(&second, "Second edit");
+        publish(&second);
+
+        std::fs::write(first.join("local.md"), "# From first\n").unwrap();
+        save(&first, "First edit");
+        fetch(&first);
+
+        let mut first_context = context(&first);
+        let preflight = contract::preflight_apply_incoming_with_context(
+            &mut first_context,
+            remote_request(&first),
+        )
+        .expect("preflight apply");
+        assert!(
+            !preflight.can_proceed,
+            "diverged history should need a merge: {preflight:?}"
+        );
+
+        let merge_report = contract::preflight_merge_incoming_with_context(
+            &mut first_context,
+            remote_request(&first),
+        )
+        .expect("preflight merge");
+        assert!(merge_report.can_merge_cleanly, "{merge_report:?}");
+
+        contract::merge_incoming_with_context(
+            &mut first_context,
+            contract::MergeIncomingRequest {
+                workspace_path: first.clone(),
+                remote: "origin".to_string(),
+                label: "Merge incoming saves".to_string(),
+            },
+        )
+        .expect("merge incoming");
+        assert!(first.join("remote.md").exists());
+        assert_eq!(
+            last_commit_author(&first),
+            "first <first@collab.test>",
+            "merge commits must carry the contributor identity"
+        );
+        publish(&first);
+
+        fetch(&second);
+        contract::apply_incoming_with_context(&mut context(&second), remote_request(&second))
+            .expect("apply incoming");
+        assert!(second.join("local.md").exists());
+    }
 }
