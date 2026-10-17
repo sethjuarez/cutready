@@ -150,16 +150,22 @@ function applySidebarOrder<T extends { path: string }>(items: T[], order: string
 
 function sectionBodyStyle(
   mode: "storyboards" | "sketches" | "notes" | "all",
-  weight: number,
   itemCount: number,
   expandedCount: number,
+  active: boolean,
   itemHeight = 34,
 ): CSSProperties {
   if (mode !== "all" || expandedCount === 1) return { flex: "1 1 0%", minHeight: 0 };
 
-  const estimatedHeight = Math.min(220, Math.max(56, itemCount * itemHeight + 8));
+  if (itemCount === 0) {
+    return { flex: "0 0 72px", minHeight: 0 };
+  }
+
+  const estimatedHeight = Math.min(240, Math.max(56, itemCount * itemHeight + 8));
+  const contentWeight = Math.min(2.4, 0.8 + Math.sqrt(itemCount) * 0.45);
+  const activeBoost = active ? 0.45 : 0;
   return {
-    flex: `${weight} 1 ${estimatedHeight}px`,
+    flex: `${contentWeight + activeBoost} 1 ${estimatedHeight}px`,
     minHeight: 0,
   };
 }
@@ -901,10 +907,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const orderedNotes = applySidebarOrder(notes, sidebarOrder?.notes ?? []);
   const sectionBodyClass = "min-h-0 overflow-y-auto py-1";
   const expandedSectionCount = [storyboardsExpanded, sketchesExpanded, notesExpanded, chatArtifactsExpanded].filter(Boolean).length;
-  const storyboardsBodyStyle = sectionBodyStyle(resolvedMode, 0.75, orderedStoryboards.length, expandedSectionCount, 42);
-  const sketchesBodyStyle = sectionBodyStyle(resolvedMode, 1.25, orderedSketches.length, expandedSectionCount, 42);
-  const notesBodyStyle = sectionBodyStyle(resolvedMode, 2, orderedNotes.length, expandedSectionCount, 30);
-  const chatArtifactsBodyStyle = sectionBodyStyle(resolvedMode, 1, chatArtifacts.length, expandedSectionCount, 30);
+  const storyboardsBodyStyle = sectionBodyStyle(resolvedMode, orderedStoryboards.length, expandedSectionCount, Boolean(activeStoryboardPath), 42);
+  const sketchesBodyStyle = sectionBodyStyle(resolvedMode, orderedSketches.length, expandedSectionCount, Boolean(activeSketchPath), 42);
+  const notesBodyStyle = sectionBodyStyle(resolvedMode, orderedNotes.length, expandedSectionCount, Boolean(activeNotePath), 30);
+  const chatArtifactsBodyStyle = sectionBodyStyle(resolvedMode, chatArtifacts.length, expandedSectionCount, Boolean(activeChatArtifactPath), 30);
   const storyboardTone = contentTypeTones.storyboard;
   const sketchTone = contentTypeTones.sketch;
   const noteTone = contentTypeTones.note;
