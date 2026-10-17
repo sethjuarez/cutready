@@ -49,7 +49,12 @@ enum VectorAdapters {
     let viewOnlyStoryboards =
       "The companion is view-only for storyboards today; desktop upgrades .sb files on read "
       + "and saves them in the canonical shape. Bind these when iOS writes storyboards."
+    let desktopOnlyChatArtifacts =
+      "Saved chat documents are authored by the desktop chat promotion flow today; "
+      + "bind these vectors when the companion can create or edit .cv chat documents."
     return [
+      "ChatArtifactDocument.promote": desktopOnlyChatArtifacts,
+      "ChatArtifactDocument.roundTrip": desktopOnlyChatArtifacts,
       "StoryboardDocument.roundTrip": viewOnlyStoryboards,
       "StoryboardDocument.upgrade": viewOnlyStoryboards,
     ]
