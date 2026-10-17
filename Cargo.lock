@@ -1627,6 +1627,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "comrak",
+ "cutready-contracts",
  "dirs 6.0.0",
  "draftline",
  "futures-util",
@@ -1970,7 +1971,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.2",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2403,7 +2404,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3685,7 +3686,7 @@ dependencies = [
  "tokio",
  "tower-service",
  "tracing",
- "windows-registry 0.6.1",
+ "windows-registry",
 ]
 
 [[package]]
@@ -5030,7 +5031,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5629,7 +5630,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -6188,9 +6189,9 @@ dependencies = [
 
 [[package]]
 name = "prompty"
-version = "2.0.0"
+version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca87616ea37738b4097b4fcbb60ad8ba84fce6a178ca460af135c06993be668d"
+checksum = "4abaed5776864d59f6de90250666cd956e825cac07cdede7ac6cda9ff056a811"
 dependencies = [
  "async-trait",
  "chrono",
@@ -6208,9 +6209,9 @@ dependencies = [
 
 [[package]]
 name = "prompty-anthropic"
-version = "2.0.0"
+version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb79864e3a1ab0db7d9ce288633a69e21e245bada66363455f2b5b1a2b2f8fad"
+checksum = "74837e1ab2c716d49d5a513298b0a239adc08baa8cf3aff532b161debd5d8fdb"
 dependencies = [
  "async-trait",
  "bytes",
@@ -6224,9 +6225,9 @@ dependencies = [
 
 [[package]]
 name = "prompty-foundry"
-version = "2.0.0"
+version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d63d784b3c416246db341a9eebc409421057338594a480cf97e7c1a71523062"
+checksum = "f8c600d733d23994b4c4c7d47deb04fa165de9544d9ace71eadc1ab3d290bfee"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -6244,9 +6245,9 @@ dependencies = [
 
 [[package]]
 name = "prompty-openai"
-version = "2.0.0"
+version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be5c628170d3c76e002d25b1473b8a641d4cf91246322b3cd03a51f3cbdd61c9"
+checksum = "f33d5ecfbeeef99e9b75e8debe3a0fa3c0b3cf8fdb7dfe135af32ba727dadbc4"
 dependencies = [
  "async-trait",
  "bytes",
@@ -6399,7 +6400,7 @@ dependencies = [
  "once_cell",
  "socket2 0.6.5",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6977,7 +6978,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -7035,7 +7036,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -8322,7 +8323,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tracing",
  "url",
- "windows-registry 0.5.3",
+ "windows-registry",
  "windows-result 0.3.4",
 ]
 
@@ -8647,7 +8648,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -8688,7 +8689,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -9889,7 +9890,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -10106,17 +10107,6 @@ dependencies = [
  "windows-link 0.1.3",
  "windows-result 0.3.4",
  "windows-strings 0.4.2",
-]
-
-[[package]]
-name = "windows-registry"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02752bf7fbdcce7f2a27a742f798510f3e5ad88dbe84871e5168e2120c3d5720"
-dependencies = [
- "windows-link 0.2.1",
- "windows-result 0.4.1",
- "windows-strings 0.5.1",
 ]
 
 [[package]]

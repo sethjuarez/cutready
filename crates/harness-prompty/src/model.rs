@@ -1495,7 +1495,7 @@ mod tests {
     fn prompty_production_dependencies_remain_pinned_to_a_single_revision() {
         // Production Prompty crates are pinned to one immutable crates.io release.
         // Bump this constant whenever the pin moves.
-        const VERSION: &str = "2.0.0";
+        const VERSION: &str = "2.0.2";
         let manifest = include_str!("../Cargo.toml");
         // The lockfile lives at the workspace root, three directories above
         // this crate source file (crates/harness-prompty/src/model.rs).
