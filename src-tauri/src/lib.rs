@@ -562,12 +562,20 @@ pub fn run() {
 
             let shortcut = Shortcut::new(Some(primary_mod | Modifiers::SHIFT), Code::KeyR);
 
-            app.global_shortcut()
-                .on_shortcut(shortcut, |app_handle, _shortcut, event| {
-                    if event.state == ShortcutState::Pressed {
-                        let _ = app_handle.emit("toggle-recording", ());
-                    }
-                })?;
+            if let Err(error) =
+                app.global_shortcut()
+                    .on_shortcut(shortcut, |app_handle, _shortcut, event| {
+                        if event.state == ShortcutState::Pressed {
+                            let _ = app_handle.emit("toggle-recording", ());
+                        }
+                    })
+            {
+                tracing::warn!(
+                    target: "cutready::hotkeys",
+                    error = %error,
+                    "Failed to register recording toggle hotkey",
+                );
+            }
 
             let prompter_shortcuts = [
                 (
@@ -589,14 +597,21 @@ pub fn run() {
             ];
 
             for (shortcut, event_name) in prompter_shortcuts {
-                app.global_shortcut().on_shortcut(
+                if let Err(error) = app.global_shortcut().on_shortcut(
                     shortcut,
                     move |app_handle, _shortcut, event| {
                         if event.state == ShortcutState::Pressed {
                             let _ = app_handle.emit(event_name, ());
                         }
                     },
-                )?;
+                ) {
+                    tracing::warn!(
+                        target: "cutready::hotkeys",
+                        event_name,
+                        error = %error,
+                        "Failed to register recording prompter hotkey",
+                    );
+                }
             }
 
             // Windows/Linux still use the React titlebar for deterministic custom chrome.
