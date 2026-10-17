@@ -17,6 +17,10 @@ function formatDate(value: string | undefined): string {
   return date.toLocaleString();
 }
 
+function titleFromPath(path: string): string {
+  return (path.split("/").pop() ?? path).replace(/\.cv$/, "");
+}
+
 function parseArtifact(content: string): ChatArtifact {
   const raw = JSON.parse(content) as Record<string, unknown>;
   return ChatArtifact.load(raw);
@@ -73,7 +77,7 @@ export function ChatArtifactViewer({ path }: ChatArtifactViewerProps) {
     return (
       <div className="flex flex-1 items-center justify-center bg-[rgb(var(--color-surface))] p-6">
         <div className="max-w-md rounded-xl border border-[rgb(var(--color-error))]/30 bg-[rgb(var(--color-error))]/10 p-4 text-sm text-[rgb(var(--color-text))]">
-          <div className="font-semibold">Could not open promoted chat</div>
+          <div className="font-semibold">Could not open chat</div>
           <div className="mt-1 text-[rgb(var(--color-text-secondary))]">{error}</div>
         </div>
       </div>
@@ -83,7 +87,7 @@ export function ChatArtifactViewer({ path }: ChatArtifactViewerProps) {
   if (!artifact) {
     return (
       <div className="flex flex-1 items-center justify-center bg-[rgb(var(--color-surface))] text-sm text-[rgb(var(--color-text-secondary))]">
-        Loading promoted chat...
+        Loading chat...
       </div>
     );
   }
@@ -98,10 +102,10 @@ export function ChatArtifactViewer({ path }: ChatArtifactViewerProps) {
             </span>
             <div className="min-w-0 flex-1">
               <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
-                Promoted chat
+                Chat
               </div>
               <h1 className="mt-1 truncate text-2xl font-semibold text-[rgb(var(--color-text))]">
-                {artifact.title || path}
+                {artifact.title || titleFromPath(path)}
               </h1>
               {artifact.summary && (
                 <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[rgb(var(--color-text-secondary))]">

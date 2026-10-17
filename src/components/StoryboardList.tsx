@@ -399,12 +399,14 @@ function DocumentItemText({ title, meta, active, tone }: { title: string; meta?:
   );
 }
 
-function displayChatArtifactPath(path: string): string {
-  return path.replace(/^chat-artifacts\//, "");
+function chatArtifactMeta(artifact: NoteSummary): string {
+  const date = new Date(artifact.updated_at);
+  if (Number.isNaN(date.getTime())) return "Saved chat";
+  return `Saved ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
 }
 
 function deleteAssetLabel(type: "storyboard" | "sketch" | "note" | "chat-artifact"): string {
-  return type === "chat-artifact" ? "promoted chat" : type;
+  return type === "chat-artifact" ? "chat" : type;
 }
 
 /** Wrapper that makes a sidebar list item draggable. */
@@ -1779,7 +1781,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
       {(resolvedMode === "all" || resolvedMode === "notes") && (
         <>
           <SidebarSectionHeader
-            title="Promoted Chats"
+            title="Chats"
             count={chatArtifacts.length}
             expanded={chatArtifactsExpanded}
             onToggle={() => setChatArtifactsExpanded(!chatArtifactsExpanded)}
@@ -1789,7 +1791,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
           {chatArtifactsExpanded && <div className={sectionBodyClass} style={chatArtifactsBodyStyle}>
             {chatArtifacts.length === 0 ? (
               <div className="px-4 py-6 text-center text-xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
-                Promote a chat to save it as a reusable conversation view.
+                Promote a chat to save it here.
               </div>
             ) : (
               <div className="space-y-0.5 px-1">
@@ -1821,14 +1823,14 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                           }}
                           onBlur={commitRename}
                           onClick={(e) => e.stopPropagation()}
-                          aria-label="Rename promoted chat file"
+                          aria-label="Rename chat"
                           title="Rename file. Spaces become hyphens."
                           className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
                         />
                       ) : (
                         <DocumentItemText
                           title={artifact.title}
-                          meta={displayChatArtifactPath(artifact.path)}
+                          meta={chatArtifactMeta(artifact)}
                           active={artifact.path === activeChatArtifactPath}
                           tone={chatArtifactTone}
                         />
@@ -1842,7 +1844,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                             startRename("chat-artifact", artifact.path);
                           }}
                           className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
-                          title="Rename promoted chat"
+                          title="Rename chat"
                           aria-label={`Rename ${artifact.title}`}
                         >
                           <Pencil className="w-3 h-3" />
@@ -1853,7 +1855,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                             requestDelete("chat-artifact", artifact.path, artifact.title);
                           }}
                           className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
-                          title="Delete promoted chat"
+                          title="Delete chat"
                           aria-label={`Delete ${artifact.title}`}
                         >
                           <Trash2 className="w-3 h-3" />

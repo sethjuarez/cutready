@@ -2034,7 +2034,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
             disabled={loading || promotingChat || messages.length === 0}
             className="flex h-[26px] items-center justify-center gap-1.5 rounded px-2 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-toolbar))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
             onClick={promoteCurrentChat}
-            title={messages.length === 0 ? "Start a chat before promoting it" : "Promote this chat into a project .cv file"}
+            title={messages.length === 0 ? "Start a chat before promoting it" : "Promote this chat into a project chat document"}
             aria-label="Promote chat"
           >
             <FileText className="h-3.5 w-3.5" />

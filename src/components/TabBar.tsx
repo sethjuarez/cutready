@@ -17,8 +17,12 @@ export function getClampedPopoverPosition(position: { x: number; y: number }, wi
   };
 }
 
-function getTabDisplayPath(tab: Pick<EditorTab, "type" | "path">): string {
-  return tab.type === "chat-artifact" ? tab.path.replace(/^chat-artifacts\//, "") : tab.path;
+function getTabDisplayMeta(tab: Pick<EditorTab, "type" | "path">): string {
+  return tab.type === "chat-artifact" ? "Chat document" : tab.path;
+}
+
+function getTabTooltip(tab: Pick<EditorTab, "type" | "path" | "title">, typeLabel: string): string {
+  return tab.type === "chat-artifact" ? `${typeLabel}: ${tab.title}` : `${typeLabel}: ${tab.path}`;
 }
 
 /**
@@ -321,7 +325,7 @@ function TabMenuItem({
     : tab.type === "diff" ? "Diff"
     : tab.type === "agent-run" ? "Agent Run"
     : tab.type === "database" ? "Database"
-    : tab.type === "chat-artifact" ? "Promoted Chat"
+    : tab.type === "chat-artifact" ? "Chat"
     : isImage ? "Image"
     : isVisual ? "Visual"
     : "Note";
@@ -346,7 +350,7 @@ function TabMenuItem({
     >
       <button className="min-w-0 flex-1 text-left" onClick={onSelect}>
         <div className="truncate text-[12px] font-medium text-[rgb(var(--color-text))]">{tab.title}</div>
-        <div className="mt-0.5 truncate font-mono text-[10px] text-[rgb(var(--color-text-secondary))]">{getTabDisplayPath(tab)}</div>
+        <div className="mt-0.5 truncate font-mono text-[10px] text-[rgb(var(--color-text-secondary))]">{getTabDisplayMeta(tab)}</div>
       </button>
       <span
         className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
@@ -406,7 +410,7 @@ function Tab({
     : tab.type === "diff" ? "Diff"
     : tab.type === "agent-run" ? "Agent Run"
     : tab.type === "database" ? "Database"
-    : tab.type === "chat-artifact" ? "Promoted Chat"
+    : tab.type === "chat-artifact" ? "Chat"
     : isImage ? "Image"
     : isNarration ? "Narration"
     : isVisual ? "Visual"
@@ -457,7 +461,7 @@ function Tab({
       }`}
       onClick={onSelect}
       onContextMenu={onContextMenu}
-      title={`${typeLabel}: ${getTabDisplayPath(tab)}`}
+      title={getTabTooltip(tab, typeLabel)}
     >
       {/* Active tab: colored bar on top — dimmed when group is not focused */}
       {isActive && (
