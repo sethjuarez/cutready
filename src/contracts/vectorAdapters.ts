@@ -13,12 +13,17 @@ export const vectorAdapters: Record<string, VectorAdapter> = {
   "ChatArtifactDocument.promote": {
     invoke: (input) => {
       const value = input as { session: unknown; request: unknown };
-      return promoteChatArtifact(value.session, value.request);
+      return promoteChatArtifact(
+        value.session as Parameters<typeof promoteChatArtifact>[0],
+        value.request as Parameters<typeof promoteChatArtifact>[1],
+      );
     },
   },
   "ChatArtifactDocument.roundTrip": {
     invoke: (input) =>
-      roundTripChatArtifact((input as { artifact: unknown }).artifact as never),
+      roundTripChatArtifact(
+        (input as { artifact: unknown }).artifact as Parameters<typeof roundTripChatArtifact>[0],
+      ),
   },
   "PlanningTiming.parseDurationSeconds": {
     invoke: (input) => parseDurationSeconds((input as { time: string }).time),
