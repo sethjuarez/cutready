@@ -926,18 +926,19 @@ pub async fn rename_project(
     // Helper: unwind a completed path move (content + runtime state) so a later
     // failure leaves the project fully recoverable under its original path. Any
     // reverse step that itself fails is reported so a split layout is not hidden.
-    let rollback_move = |relocated: &Option<(std::path::PathBuf, std::path::PathBuf)>| -> Vec<String> {
-        let mut stranded = Vec::new();
-        if let Some((old_dir, new_dir)) = relocated {
-            if new_dir.exists() && std::fs::rename(new_dir, old_dir).is_err() {
-                stranded.push(format!("content at {}", new_dir.display()));
+    let rollback_move =
+        |relocated: &Option<(std::path::PathBuf, std::path::PathBuf)>| -> Vec<String> {
+            let mut stranded = Vec::new();
+            if let Some((old_dir, new_dir)) = relocated {
+                if new_dir.exists() && std::fs::rename(new_dir, old_dir).is_err() {
+                    stranded.push(format!("content at {}", new_dir.display()));
+                }
+                if let Err(state_err) = project::relocate_project_state(&root, new_dir, old_dir) {
+                    stranded.push(format!("runtime state ({state_err})"));
+                }
             }
-            if let Err(state_err) = project::relocate_project_state(&root, new_dir, old_dir) {
-                stranded.push(format!("runtime state ({state_err})"));
-            }
-        }
-        stranded
-    };
+            stranded
+        };
 
     // Update manifest: both name and path
     if let Some(mut manifest) = manifest.take() {

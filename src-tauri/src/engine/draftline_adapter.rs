@@ -132,7 +132,8 @@ impl CutReadyDraftlineAdapter {
         I: IntoIterator<Item = P>,
         P: AsRef<Path>,
     {
-        self.workspace.save_files_with_profile(paths, label, profile)
+        self.workspace
+            .save_files_with_profile(paths, label, profile)
     }
 
     pub fn versions(&self) -> DraftlineResult<Vec<Version>> {
@@ -408,7 +409,10 @@ pub enum StructureSnapshot {
     /// Nothing to record.
     Clean,
     /// Left in pending changes; the user's next save records it.
-    Deferred { reason: DeferReason, message: String },
+    Deferred {
+        reason: DeferReason,
+        message: String,
+    },
 }
 
 /// A workspace-structure edit (projects, manifest, settings) that CutReady saves
@@ -427,7 +431,11 @@ pub struct StructureChange {
 }
 
 impl StructureChange {
-    pub fn begin<I, P>(repo_root: &Path, message: impl Into<String>, scope: I) -> Result<Self, String>
+    pub fn begin<I, P>(
+        repo_root: &Path,
+        message: impl Into<String>,
+        scope: I,
+    ) -> Result<Self, String>
     where
         I: IntoIterator<Item = P>,
         P: Into<PathBuf>,
@@ -480,15 +488,27 @@ impl StructureChange {
         }
         let message = &self.message;
         let author = match author {
-            Ok(author) if !author.needs_setup => author,
-            Ok(_) => {
-                return Ok(StructureSnapshot::Deferred {
-                    reason: DeferReason::Identity,
-                    message: format!(
-                        "\"{message}\" is in your pending changes. {STRUCTURE_SNAPSHOT_DEFERRED_HINT}"
-                    ),
-                })
+            Ok(author)
+                if !author.needs_setup
+                    && author.name_source == crate::engine::identity::IdentitySource::Profile
+                    && author.email_source
+                        == Some(crate::engine::identity::IdentitySource::Profile)
+                    && author.profile.as_ref().is_some_and(|profile| {
+                        !profile.name.trim().is_empty()
+                            && profile
+                                .email
+                                .as_deref()
+                                .is_some_and(|email| !email.trim().is_empty())
+                    }) =>
+            {
+                author
             }
+            Ok(_) => return Ok(StructureSnapshot::Deferred {
+                reason: DeferReason::Identity,
+                message: format!(
+                    "\"{message}\" is in your pending changes. {STRUCTURE_SNAPSHOT_DEFERRED_HINT}"
+                ),
+            }),
             Err(reason) => {
                 let reason = reason.trim().trim_end_matches('.');
                 return Ok(StructureSnapshot::Deferred {
@@ -1458,13 +1478,16 @@ mod tests {
     }
 
     fn acting_as(name: &str, email: Option<&str>) -> ResolvedIdentity {
-        use crate::engine::identity::IdentitySource;
+        use crate::engine::identity::{Identity, IdentitySource};
         ResolvedIdentity {
             name: name.into(),
             email: email.map(str::to_string),
             name_source: IdentitySource::Profile,
             email_source: email.map(|_| IdentitySource::Profile),
-            profile: None,
+            profile: email.map(|email| Identity {
+                name: name.into(),
+                email: Some(email.into()),
+            }),
             needs_setup: email.is_none(),
         }
     }
@@ -1495,7 +1518,11 @@ mod tests {
         let result = Head {
             id: commit.id(),
             author: format!("{} <{}>", author.name().unwrap(), author.email().unwrap()),
-            committer: format!("{} <{}>", committer.name().unwrap(), committer.email().unwrap()),
+            committer: format!(
+                "{} <{}>",
+                committer.name().unwrap(),
+                committer.email().unwrap()
+            ),
             paths,
         };
         result
@@ -1516,7 +1543,10 @@ mod tests {
 
     /// A saved workspace with a manifest and one project, attributed to Ada.
     fn structure_repo(root: &Path) -> CutReadyDraftlineAdapter {
-        write(root.join(MANIFEST), r#"{"projects":[{"path":"demo","name":"Demo"}]}"#);
+        write(
+            root.join(MANIFEST),
+            r#"{"projects":[{"path":"demo","name":"Demo"}]}"#,
+        );
         write(root.join("demo/intro.sk"), "{}");
         let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
         configure_identity(root, "Git Config", "git-config@example.com");
@@ -1549,7 +1579,10 @@ mod tests {
         assert_eq!(result, StructureSnapshot::Saved);
         assert!(pending(&adapter).is_empty());
         let head = head(root);
-        assert_eq!(head.author, "Grace Hopper <grace@example.com>", "profile beats git config");
+        assert_eq!(
+            head.author, "Grace Hopper <grace@example.com>",
+            "profile beats git config"
+        );
         assert_eq!(head.committer, "CutReady <app@cutready.local>");
     }
 
@@ -1608,7 +1641,10 @@ mod tests {
 
         assert!(matches!(
             result,
-            StructureSnapshot::Deferred { reason: DeferReason::UnsavedEdits, .. }
+            StructureSnapshot::Deferred {
+                reason: DeferReason::UnsavedEdits,
+                ..
+            }
         ));
         assert_eq!(head(root).id, before);
     }
@@ -1622,7 +1658,10 @@ mod tests {
         let change =
             StructureChange::begin(root, "Rename workspace project", [MANIFEST, "demo"]).unwrap();
         std::fs::rename(root.join("demo"), root.join("renamed")).unwrap();
-        write(root.join(MANIFEST), r#"{"projects":[{"path":"renamed","name":"Renamed"}]}"#);
+        write(
+            root.join(MANIFEST),
+            r#"{"projects":[{"path":"renamed","name":"Renamed"}]}"#,
+        );
         let result = change.touching("renamed").finish(root, grace()).unwrap();
 
         assert_eq!(result, StructureSnapshot::Saved);
@@ -1655,9 +1694,11 @@ mod tests {
         let adapter = structure_repo(root);
         write(root.join("demo/intro.sk"), r#"{"title":"unsaved"}"#);
 
-        let change =
-            StructureChange::begin(root, "Rename workspace project", [MANIFEST]).unwrap();
-        write(root.join(MANIFEST), r#"{"projects":[{"path":"demo","name":"Renamed"}]}"#);
+        let change = StructureChange::begin(root, "Rename workspace project", [MANIFEST]).unwrap();
+        write(
+            root.join(MANIFEST),
+            r#"{"projects":[{"path":"demo","name":"Renamed"}]}"#,
+        );
         let result = change.finish(root, grace()).unwrap();
 
         assert_eq!(result, StructureSnapshot::Saved);
@@ -1689,6 +1730,71 @@ mod tests {
     }
 
     #[test]
+    fn structure_change_defers_when_only_git_config_identity_is_available() {
+        use crate::engine::identity::IdentitySource;
+
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+
+        let change = StructureChange::begin(root, "Add Extra to workspace", [MANIFEST]).unwrap();
+        add_project(root);
+        let author = ResolvedIdentity {
+            name: "Git Config".into(),
+            email: Some("git-config@example.com".into()),
+            name_source: IdentitySource::GitConfig,
+            email_source: Some(IdentitySource::GitConfig),
+            profile: None,
+            needs_setup: false,
+        };
+        let result = change.finish(root, Ok(author)).unwrap();
+
+        assert!(matches!(
+            result,
+            StructureSnapshot::Deferred {
+                reason: DeferReason::Identity,
+                ..
+            }
+        ));
+        assert_eq!(head(root).author, "Ada Lovelace <ada@example.com>");
+        assert_eq!(pending(&adapter), vec![MANIFEST.to_string()]);
+    }
+
+    #[test]
+    fn structure_change_defers_when_profile_email_would_fall_back_to_git_config() {
+        use crate::engine::identity::{Identity, IdentitySource};
+
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+
+        let change = StructureChange::begin(root, "Add Extra to workspace", [MANIFEST]).unwrap();
+        add_project(root);
+        let author = ResolvedIdentity {
+            name: "Grace Hopper".into(),
+            email: Some("git-config@example.com".into()),
+            name_source: IdentitySource::Profile,
+            email_source: Some(IdentitySource::GitConfig),
+            profile: Some(Identity {
+                name: "Grace Hopper".into(),
+                email: None,
+            }),
+            needs_setup: false,
+        };
+        let result = change.finish(root, Ok(author)).unwrap();
+
+        assert!(matches!(
+            result,
+            StructureSnapshot::Deferred {
+                reason: DeferReason::Identity,
+                ..
+            }
+        ));
+        assert_eq!(head(root).author, "Ada Lovelace <ada@example.com>");
+        assert_eq!(pending(&adapter), vec![MANIFEST.to_string()]);
+    }
+
+    #[test]
     fn structure_change_defers_when_the_profile_is_unreadable() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
@@ -1698,7 +1804,10 @@ mod tests {
         let change = StructureChange::begin(root, "Add Extra to workspace", [MANIFEST]).unwrap();
         add_project(root);
         let result = change
-            .finish(root, Err("Couldn't read your saved profile: bad json.".into()))
+            .finish(
+                root,
+                Err("Couldn't read your saved profile: bad json.".into()),
+            )
             .unwrap();
 
         assert_eq!(
@@ -1720,12 +1829,16 @@ mod tests {
         let adapter = structure_repo(root);
         write(root.join("demo/notes.md"), "draft");
 
-        let change =
-            StructureChange::begin(root, "Update workspace settings", [".cutready/settings.json"])
-                .unwrap();
+        let change = StructureChange::begin(
+            root,
+            "Update workspace settings",
+            [".cutready/settings.json"],
+        )
+        .unwrap();
         write(root.join(".cutready/settings.json"), r#"{"theme":"dark"}"#);
         let result = change.finish(root, Err("no profile".into())).unwrap();
 
         assert_eq!(result, StructureSnapshot::Clean);
         assert_eq!(pending(&adapter), vec!["demo/notes.md".to_string()]);
-    }}
+    }
+}

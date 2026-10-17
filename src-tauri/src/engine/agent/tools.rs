@@ -5065,7 +5065,10 @@ mod tests {
             email: Some("grace@example.com".into()),
             name_source: identity::IdentitySource::Profile,
             email_source: Some(identity::IdentitySource::Profile),
-            profile: None,
+            profile: Some(identity::Identity {
+                name: "Grace Hopper".into(),
+                email: Some("grace@example.com".into()),
+            }),
             needs_setup: false,
         }
     }
@@ -5073,9 +5076,8 @@ mod tests {
     fn head_people(repo_root: &Path) -> (String, String, String) {
         let repo = git2::Repository::open(repo_root).unwrap();
         let commit = repo.head().unwrap().peel_to_commit().unwrap();
-        let person = |sig: git2::Signature| {
-            format!("{} <{}>", sig.name().unwrap(), sig.email().unwrap())
-        };
+        let person =
+            |sig: git2::Signature| format!("{} <{}>", sig.name().unwrap(), sig.email().unwrap());
         (
             commit.summary().unwrap().to_string(),
             person(commit.author()),
