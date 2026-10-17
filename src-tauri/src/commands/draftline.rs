@@ -7,9 +7,9 @@ use draftline::tauri_contract as contract;
 use draftline::VersionId;
 use draftline::{
     ApplyIncomingReport, ChangeSet, Contributor, ContributorProfile, HistoryEntry,
-    MergeIncomingReport, PreflightReport, PreviewFile, RemoteCredential, RemoteCredentialRequest,
-    RemoteEndpoint, Shelf, Variation, VariationId, VariationRenamePreflight, VariationSummary,
-    Version, VersionDiff, VersionPreview,
+    MergeIncomingReport, MilestoneMergeReport, PreflightReport, PreviewFile, RemoteCredential,
+    RemoteCredentialRequest, RemoteEndpoint, Shelf, Variation, VariationId, VariationRenamePreflight,
+    VariationSummary, Version, VersionDiff, VersionPreview,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
@@ -1218,6 +1218,40 @@ pub async fn merge_incoming(
         .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_commit(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::merge_incoming_with_context(&mut context, request))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn preflight_milestone_merge(
+    request: contract::RemoteRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<MilestoneMergeReport> {
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::preflight_milestone_merge_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn create_milestone_merge(
+    request: contract::MilestoneMergeRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::MilestoneMergeCommandResult> {
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
+    let mut context = context_for_commit(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::create_milestone_merge_with_context(
+        &mut context,
+        request,
+    ))
 }
 
 #[auditaur_command(skip_all)]

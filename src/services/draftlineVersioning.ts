@@ -14,6 +14,8 @@ import {
   type MergeConflictViewModel,
   type MergeIncomingReport,
   type MergeIncomingToken,
+  type MilestoneMergeCommandResult,
+  type MilestoneMergeReport,
   type PreflightReport,
   type RemoteVariation,
   type RenameVariationResult,
@@ -69,6 +71,8 @@ export type DraftlinePendingHistoryCleanup = PendingHistoryCleanup;
 export type DraftlineHistoryCleanupBlockedError = HistoryCleanupBlockedError;
 export type DraftlineHistoryCompactionCandidate = HistoryCompactionCandidate;
 export type DraftlineHistoryCompactionCandidates = HistoryCompactionCandidates;
+export type DraftlineMilestoneMergeReport = MilestoneMergeReport;
+export type DraftlineMilestoneMergeCommandResult = MilestoneMergeCommandResult;
 
 export class DraftlineVariationCreateConflictError extends Error {
   readonly preflight: VariationCreatePreflight;
@@ -444,6 +448,17 @@ export async function preflightDraftlineMergeIncoming(remote: string): Promise<D
 export async function mergeDraftlineIncoming(remote: string, label: string): Promise<string> {
   const result = await facade().mergeIncoming(label, remote);
   return result.merge.version.id;
+}
+
+export async function preflightDraftlineMilestoneMerge(remote: string): Promise<DraftlineMilestoneMergeReport> {
+  return facade().preflightMilestoneMerge(remote);
+}
+
+export async function createDraftlineMilestoneMerge(
+  remote: string,
+  label: string,
+): Promise<DraftlineMilestoneMergeCommandResult> {
+  return facade().createMilestoneMerge(label, remote);
 }
 
 export async function mergeDraftlineIncomingWithResolutions(

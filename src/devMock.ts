@@ -515,6 +515,73 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "preview_version_file":
     case "preview_workspace_file":
       return { path: (args as { request?: { path?: string } })?.request?.path ?? "sketches/demo-introduction.sk", content: JSON.stringify(MOCK_SKETCH), is_binary: false };
+    case "preflight_milestone_merge":
+      return {
+        sync_status: {
+          remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
+          variation: "main",
+          ahead: 2,
+          behind: 0,
+          state: "LocalAhead",
+          incoming: [],
+        },
+        dirty_files: [],
+        token: {
+          remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
+          variation: "main",
+          local_oid: "def456def456def456def456def456def456def4",
+          remote_oid: "abc123abc123abc123abc123abc123abc123abc1",
+          merge_base_oid: "abc123abc123abc123abc123abc123abc123abc1",
+        },
+        can_create_milestone: true,
+        unpublished_versions: 2,
+        first_parent: "abc123abc123abc123abc123abc123abc123abc1",
+        second_parent: "def456def456def456def456def456def456def4",
+        changed_workspace: false,
+      };
+    case "create_milestone_merge":
+      return {
+        preflight: {
+          sync_status: {
+            remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
+            variation: "main",
+            ahead: 2,
+            behind: 0,
+            state: "LocalAhead",
+            incoming: [],
+          },
+          dirty_files: [],
+          token: {
+            remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
+            variation: "main",
+            local_oid: "def456def456def456def456def456def456def4",
+            remote_oid: "abc123abc123abc123abc123abc123abc123abc1",
+            merge_base_oid: "abc123abc123abc123abc123abc123abc123abc1",
+          },
+          can_create_milestone: true,
+          unpublished_versions: 2,
+          first_parent: "abc123abc123abc123abc123abc123abc123abc1",
+          second_parent: "def456def456def456def456def456def456def4",
+          changed_workspace: false,
+        },
+        merge: {
+          version: {
+            id: "merge456merge456merge456merge456merge456merge456",
+            label: (args as { request?: { label?: string } })?.request?.label ?? "Shared milestone",
+            author: { name: "CutReady", email: "app@cutready.local" },
+            committer: { name: "CutReady", email: "app@cutready.local" },
+            time_seconds: Math.floor(Date.now() / 1000),
+            parent_ids: [
+              "abc123abc123abc123abc123abc123abc123abc1",
+              "def456def456def456def456def456def456def4",
+            ],
+          },
+          first_parent: "abc123abc123abc123abc123abc123abc123abc1",
+          second_parent: "def456def456def456def456def456def456def4",
+          preserved_versions: 2,
+        },
+        postconditions: { workspace_changed: false, active_variation: "main", dirty_files: [] },
+      };
     case "preview_history_cleanup": {
       const request = (args as { request?: { cleanup?: { mode?: { milestones?: Array<{ title?: string; include_range?: { start?: string; end?: string } }> } } } })?.request;
       const milestone = request?.cleanup?.mode?.milestones?.[0];

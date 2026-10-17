@@ -25,8 +25,10 @@ import {
   listDraftlineSnapshotCleanupCandidates,
   listDraftlineTimelines,
   listDraftlineVersions,
+  createDraftlineMilestoneMerge,
   hasDraftlineShelf,
   popDraftlineShelf,
+  preflightDraftlineMilestoneMerge,
   preflightDraftlineUndoSnapshotCleanup,
   preflightDraftlinePublishSnapshotCleanup,
   preflightDraftlineSnapshotCleanupRemoteImpact,
@@ -334,6 +336,45 @@ describe("draftlineVersioning", () => {
       request: { workspace_path: WORKSPACE, remote: "origin" },
     });
     expect(mockInvoke).not.toHaveBeenCalledWith("preflight_apply_incoming", expect.anything());
+  });
+
+  it("preflights and creates additive milestone merges through Draftline commands", async () => {
+    const preflight = {
+      sync_status: { remote: "origin", variation: "main", ahead: 2, behind: 0, state: "LocalAhead", incoming: [] },
+      dirty_files: [],
+      token: {
+        remote: "origin",
+        variation: "main",
+        local_oid: "local",
+        remote_oid: "remote",
+        merge_base_oid: "remote",
+      },
+      can_create_milestone: true,
+      unpublished_versions: 2,
+      first_parent: "remote",
+      second_parent: "local",
+      changed_workspace: false,
+    };
+    const result = {
+      preflight,
+      merge: {
+        version: version("merge", "Shared milestone", 1_700_000_001),
+        first_parent: "remote",
+        second_parent: "local",
+        preserved_versions: 2,
+      },
+    };
+    mockInvoke.mockResolvedValueOnce(preflight).mockResolvedValueOnce(result);
+
+    await expect(preflightDraftlineMilestoneMerge("origin")).resolves.toEqual(preflight);
+    await expect(createDraftlineMilestoneMerge("origin", "Shared milestone")).resolves.toEqual(result);
+
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "preflight_milestone_merge", {
+      request: { workspace_path: WORKSPACE, remote: "origin" },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "create_milestone_merge", {
+      request: { workspace_path: WORKSPACE, remote: "origin", label: "Shared milestone" },
+    });
   });
 
   it("creates a Draftline variation through remote-aware preflight and guarded create", async () => {

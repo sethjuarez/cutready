@@ -24,8 +24,10 @@ import {
   listDraftlineSnapshotCleanupCandidates,
   listDraftlineTimelines,
   listDraftlineVersions,
+  createDraftlineMilestoneMerge,
   preflightDraftlineIncoming,
   preflightDraftlineMergeIncoming,
+  preflightDraftlineMilestoneMerge,
   preflightDraftlinePublishSnapshotCleanup,
   preflightDraftlineSwitchVariation,
   mergeDraftlineIncoming,
@@ -163,18 +165,6 @@ function localPrePushMilestoneRange(nodes: GraphNode[], ahead: number | null | u
   if (activeNodes.length < ahead) return null;
   const range = activeNodes.slice(0, ahead);
   return range[0]?.is_head ? range : null;
-}
-
-function hasCompactableCleanupRange(
-  candidates: DraftlineHistoryCompactionCandidates,
-  oldestCommitId: string,
-  newestCommitId: string,
-): boolean {
-  return candidates.candidates.some((candidate) =>
-    candidate.can_compact
-    && candidate.include_range.start === oldestCommitId
-    && candidate.include_range.end === newestCommitId
-  );
 }
 
 function suggestedMilestoneLabel(nodes: GraphNode[]): string {
@@ -3379,15 +3369,15 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       if (milestoneRange && get().syncStatus?.behind === 0) {
         const newest = milestoneRange[0];
         const oldest = milestoneRange[milestoneRange.length - 1];
-        let canCompactMilestoneRange = false;
+        let canCreateMilestoneMerge = false;
         try {
-          const candidates = await get().findSnapshotCleanupCandidates(newest.id);
-          canCompactMilestoneRange = hasCompactableCleanupRange(candidates, oldest.id, newest.id);
+          const preflight = await preflightDraftlineMilestoneMerge(currentRemote.name);
+          canCreateMilestoneMerge = preflight.can_create_milestone;
         } catch (err) {
-          console.warn("Could not validate automatic pre-push milestone range; pushing snapshots as-is.", err);
+          console.warn("Could not validate automatic pre-push milestone merge; pushing snapshots as-is.", err);
         }
 
-        if (canCompactMilestoneRange) {
+        if (canCreateMilestoneMerge) {
           const decision = await get().requestPrePushMilestone({
             snapshotCount: milestoneRange.length,
             newestCommitId: newest.id,
@@ -3402,23 +3392,18 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
           if (decision.type === "milestone") {
             const label = decision.label.trim();
             if (!label) {
-              throw new Error("Milestone label is required before compacting local snapshots.");
+              throw new Error("Milestone label is required before sharing local snapshots.");
             }
-            const preview = await get().previewSnapshotCleanup(
-              oldest.id,
-              newest.id,
-              label,
-              milestoneRange.map((node) => node.id),
-            );
-            await get().applySnapshotCleanup(preview.plan_id);
-            const published = await get().publishSnapshotCleanup(preview.plan_id, currentRemote.name);
-            if (published) {
-              return;
-            }
-            const pendingAfterCleanup = await get().loadPendingHistoryCleanup();
-            if (pendingAfterCleanup) {
-              return;
-            }
+            await createDraftlineMilestoneMerge(currentRemote.name, label);
+            await publishDraftlineChanges(currentRemote.name);
+            await get().refreshSyncStatus();
+            await get().checkDirty();
+            await get().refreshChangedFiles();
+            await get().loadGraphData();
+            await get().loadTimelines();
+            await get().loadVersions();
+            useToastStore.getState().show("Milestone history shared without rewriting your saves.", 5000, "success");
+            return;
           }
         }
       }
