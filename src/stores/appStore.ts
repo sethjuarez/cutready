@@ -818,6 +818,8 @@ interface AppStoreState {
   loadChatArtifacts: () => Promise<void>;
   /** Open a promoted chat artifact by path. */
   openChatArtifact: (artifactPath: string) => Promise<void>;
+  /** Delete a promoted chat artifact. */
+  deleteChatArtifact: (artifactPath: string) => Promise<void>;
 
   // ── Asset actions ──────────────────────────────────────────
 
@@ -2456,6 +2458,22 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activeNoteLocked: false,
     });
     get().openTab({ type: "chat-artifact", path: artifactPath, title });
+  },
+
+  deleteChatArtifact: async (artifactPath) => {
+    try {
+      await invoke("delete_note", { relativePath: artifactPath });
+      const { activeChatArtifactPath, openTabs } = get();
+      if (activeChatArtifactPath === artifactPath) {
+        set({ activeChatArtifactPath: null });
+      }
+      const tab = openTabs.find((t) => t.path === artifactPath && t.type === "chat-artifact");
+      if (tab) get().closeTab(tab.id);
+      get()._removeSplitTabByPath("chat-artifact", artifactPath);
+      await get().loadChatArtifacts();
+    } catch (err) {
+      console.error("Failed to delete promoted chat:", err);
+    }
   },
 
   // ── Asset actions ──────────────────────────────────────────

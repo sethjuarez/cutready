@@ -399,6 +399,14 @@ function DocumentItemText({ title, meta, active, tone }: { title: string; meta?:
   );
 }
 
+function displayChatArtifactPath(path: string): string {
+  return path.replace(/^chat-artifacts\//, "");
+}
+
+function deleteAssetLabel(type: "storyboard" | "sketch" | "note" | "chat-artifact"): string {
+  return type === "chat-artifact" ? "promoted chat" : type;
+}
+
 /** Wrapper that makes a sidebar list item draggable. */
 function SortableSidebarItem({ id, children }: { id: string; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
@@ -506,6 +514,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const openNote = useAppStore((s) => s.openNote);
   const openChatArtifact = useAppStore((s) => s.openChatArtifact);
   const deleteNote = useAppStore((s) => s.deleteNote);
+  const deleteChatArtifact = useAppStore((s) => s.deleteChatArtifact);
   const closeStoryboard = useAppStore((s) => s.closeStoryboard);
   const sidebarOrder = useAppStore((s) => s.sidebarOrder);
   const saveSidebarOrder = useAppStore((s) => s.saveSidebarOrder);
@@ -532,7 +541,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const [sketchesExpanded, setSketchesExpanded] = useState(true);
   const [notesExpanded, setNotesExpanded] = useState(true);
   const [chatArtifactsExpanded, setChatArtifactsExpanded] = useState(true);
-  const [pendingDelete, setPendingDelete] = useState<{ type: "storyboard" | "sketch" | "note"; path: string; title: string; usedBy?: string[] } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ type: "storyboard" | "sketch" | "note" | "chat-artifact"; path: string; title: string; usedBy?: string[] } | null>(null);
   const [drmConfirm, setDrmConfirm] = useState<{ resolve: (ok: boolean) => void } | null>(null);
   const [renameConfirm, setRenameConfirm] = useState<RenameConfirmation | null>(null);
   const [importing, setImporting] = useState(false);
@@ -769,7 +778,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     return () => window.removeEventListener("keydown", handleEsc);
   }, [isCreatingSb, isCreatingSk, isCreatingNote]);
 
-  const requestDelete = useCallback(async (type: "storyboard" | "sketch" | "note", path: string, title: string) => {
+  const requestDelete = useCallback(async (type: "storyboard" | "sketch" | "note" | "chat-artifact", path: string, title: string) => {
     let usedBy: string[] | undefined;
     if (type === "sketch") {
       try {
@@ -1819,7 +1828,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                       ) : (
                         <DocumentItemText
                           title={artifact.title}
-                          meta={artifact.path}
+                          meta={displayChatArtifactPath(artifact.path)}
                           active={artifact.path === activeChatArtifactPath}
                           tone={chatArtifactTone}
                         />
@@ -1838,6 +1847,17 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                         >
                           <Pencil className="w-3 h-3" />
                         </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            requestDelete("chat-artifact", artifact.path, artifact.title);
+                          }}
+                          className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+                          title="Delete promoted chat"
+                          aria-label={`Delete ${artifact.title}`}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
                       </div>
                     )}
                   </div>
@@ -1852,7 +1872,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
       {pendingDelete && (
         <div className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center">
           <div className="cr-modal-surface rounded-xl p-5 max-w-sm mx-4">
-            <p className="text-sm text-[rgb(var(--color-text))] mb-1 font-medium">Delete {pendingDelete.type}?</p>
+            <p className="text-sm text-[rgb(var(--color-text))] mb-1 font-medium">Delete {deleteAssetLabel(pendingDelete.type)}?</p>
             <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-2">
               "{pendingDelete.title}" will be permanently deleted.
             </p>
@@ -1878,6 +1898,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                   setPendingDelete(null);
                   if (type === "sketch") deleteSketch(path);
                   else if (type === "storyboard") deleteStoryboard(path);
+                  else if (type === "chat-artifact") deleteChatArtifact(path);
                   else deleteNote(path);
                 }}
                 className="px-3 py-1.5 text-xs rounded-lg bg-error text-accent-fg hover:bg-error/80 transition-colors"

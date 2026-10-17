@@ -17,6 +17,10 @@ export function getClampedPopoverPosition(position: { x: number; y: number }, wi
   };
 }
 
+function getTabDisplayPath(tab: Pick<EditorTab, "type" | "path">): string {
+  return tab.type === "chat-artifact" ? tab.path.replace(/^chat-artifacts\//, "") : tab.path;
+}
+
 /**
  * Return the project-relative path that should be copied for a tab, or null
  * if the tab is not file-backed (e.g. the synthetic History tab).
@@ -342,7 +346,7 @@ function TabMenuItem({
     >
       <button className="min-w-0 flex-1 text-left" onClick={onSelect}>
         <div className="truncate text-[12px] font-medium text-[rgb(var(--color-text))]">{tab.title}</div>
-        <div className="mt-0.5 truncate font-mono text-[10px] text-[rgb(var(--color-text-secondary))]">{tab.path}</div>
+        <div className="mt-0.5 truncate font-mono text-[10px] text-[rgb(var(--color-text-secondary))]">{getTabDisplayPath(tab)}</div>
       </button>
       <span
         className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
@@ -453,7 +457,7 @@ function Tab({
       }`}
       onClick={onSelect}
       onContextMenu={onContextMenu}
-      title={`${typeLabel}: ${tab.path}`}
+      title={`${typeLabel}: ${getTabDisplayPath(tab)}`}
     >
       {/* Active tab: colored bar on top — dimmed when group is not focused */}
       {isActive && (
