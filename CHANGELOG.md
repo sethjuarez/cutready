@@ -10,6 +10,18 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.37.0](https://github.com/sethjuarez/cutready/compare/v1.36.1...v1.37.0) (2026-10-17)
+
+
+### Features
+
+* add saved chat documents and harden agent workflows ([#294](https://github.com/sethjuarez/cutready/issues/294)) ([2e29614](https://github.com/sethjuarez/cutready/commit/2e296147fd98878da6e98adae61daf2964b37f58))
+
+
+### Bug Fixes
+
+* **agent:** update prompty responses handling ([82be55a](https://github.com/sethjuarez/cutready/commit/82be55afa3a8d6199d6a5379deed799879b6b388))
+
 ## [1.36.1](https://github.com/sethjuarez/cutready/compare/v1.36.0...v1.36.1) (2026-10-08)
 
 
