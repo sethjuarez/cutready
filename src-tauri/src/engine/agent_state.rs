@@ -651,6 +651,23 @@ impl AgentStateStore {
             .ok_or_else(|| "Saved chat session could not be reloaded".to_string())
     }
 
+    pub fn delete_chat_session(
+        repo_root: &Path,
+        project_root: &Path,
+        session_id: &str,
+    ) -> Result<bool, String> {
+        let Some(conn) = Self::connect_existing_project_database(repo_root, project_root)? else {
+            return Ok(false);
+        };
+        let deleted = conn
+            .execute(
+                "DELETE FROM chat_sessions WHERE session_id = ?1",
+                params![session_id],
+            )
+            .map_err(|e| format!("Could not delete chat session: {e}"))?;
+        Ok(deleted > 0)
+    }
+
     pub fn clear_project_context_assets(
         repo_root: &Path,
         project_root: &Path,

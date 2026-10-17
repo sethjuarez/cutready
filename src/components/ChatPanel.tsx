@@ -784,11 +784,13 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const newChatSession = useAppStore((s) => s.newChatSession);
   const loadSketches = useAppStore((s) => s.loadSketches);
   const loadNotes = useAppStore((s) => s.loadNotes);
+  const loadChatArtifacts = useAppStore((s) => s.loadChatArtifacts);
   const loadStoryboards = useAppStore((s) => s.loadStoryboards);
   const checkDirty = useAppStore((s) => s.checkDirty);
   const refreshChangedFiles = useAppStore((s) => s.refreshChangedFiles);
   const openSketch = useAppStore((s) => s.openSketch);
   const openNote = useAppStore((s) => s.openNote);
+  const openChatArtifact = useAppStore((s) => s.openChatArtifact);
   const openStoryboard = useAppStore((s) => s.openStoryboard);
   const pendingChatPrompt = useAppStore((s) => s.pendingChatPrompt);
   const showToast = useToastStore((s) => s.show);
@@ -1923,8 +1925,14 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       const content = `${JSON.stringify(artifact, null, 2)}\n`;
 
       await invoke("update_note", { relativePath, content });
+      await loadChatArtifacts();
       await refreshChangedFiles();
-      await openNote(relativePath);
+      await openChatArtifact(relativePath);
+      if (chatSessionPath) {
+        await invoke("delete_chat_session", { sessionId: chatSessionPath });
+        window.dispatchEvent(new CustomEvent("cutready:chat-sessions-updated"));
+      }
+      newChatSession();
       addActivityEntries([{
         id: crypto.randomUUID(),
         timestamp: new Date(),
@@ -1946,7 +1954,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     } finally {
       setPromotingChat(false);
     }
-  }, [addActivityEntries, chatSessionPath, messages, openNote, promotingChat, refreshChangedFiles, showToast]);
+  }, [addActivityEntries, chatSessionPath, loadChatArtifacts, messages, newChatSession, openChatArtifact, promotingChat, refreshChangedFiles, showToast]);
 
   const isConfigured = providerConfigured === true;
 
@@ -2649,7 +2657,7 @@ function WebRefChip({ url }: { url: string }) {
 
 // ── Message Row (VS Code Copilot chat style) ────────────────────
 
-const MessageRow = memo(function MessageRow({
+export const MessageRow = memo(function MessageRow({
   message,
   index,
   inlineToolActivity = NO_TOOL_ACTIVITY,

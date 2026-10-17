@@ -1897,11 +1897,23 @@ pub fn storyboards_referencing_sketch(
 
 /// Recursively scan a project folder for all `.md` files.
 pub fn scan_notes(project_root: &Path) -> Result<Vec<NoteSummary>, ProjectError> {
+    scan_document_summaries(project_root, "md")
+}
+
+/// Recursively scan a project folder for all promoted chat `.cv` files.
+pub fn scan_chat_artifacts(project_root: &Path) -> Result<Vec<NoteSummary>, ProjectError> {
+    scan_document_summaries(project_root, "cv")
+}
+
+fn scan_document_summaries(
+    project_root: &Path,
+    extension: &str,
+) -> Result<Vec<NoteSummary>, ProjectError> {
     let mut summaries = Vec::new();
     scan_files_recursive(
         project_root,
         project_root,
-        "md",
+        extension,
         &mut |rel_path, abs_path| {
             if let Ok(meta) = std::fs::metadata(abs_path) {
                 let updated_at = meta

@@ -109,6 +109,12 @@ pub async fn list_notes(state: State<'_, AppState>) -> Result<Vec<NoteSummary>, 
     project::scan_notes(&root).map_err(|e| e.to_string())
 }
 
+#[auditaur_command(skip_all, err)]
+pub async fn list_chat_artifacts(state: State<'_, AppState>) -> Result<Vec<NoteSummary>, String> {
+    let root = project_root(&state)?;
+    project::scan_chat_artifacts(&root).map_err(|e| e.to_string())
+}
+
 /// Save a base64-encoded image to the project's screenshots directory.
 /// Returns the relative path (e.g. ".cutready/screenshots/pasted-1234.png").
 #[tauri::command]

@@ -1,4 +1,4 @@
-export type ContentTypeToneName = "storyboard" | "sketch" | "note";
+export type ContentTypeToneName = "storyboard" | "sketch" | "note" | "chat-artifact";
 
 export interface ContentTypeTone {
   bg: string;
@@ -38,10 +38,19 @@ export const contentTypeTones: Record<ContentTypeToneName, ContentTypeTone> = {
     metaText: "text-[rgb(var(--color-content-note))]/70",
     border: "border-[rgb(var(--color-content-note))]/30",
   },
+  "chat-artifact": {
+    bg: "bg-[rgb(var(--color-accent))]",
+    text: "text-[rgb(var(--color-accent))]",
+    hoverText: "hover:text-[rgb(var(--color-accent))]",
+    activeBg: "bg-[rgb(var(--color-accent))]/10",
+    hoverBg: "hover:bg-[rgb(var(--color-accent))]/10",
+    metaText: "text-[rgb(var(--color-accent))]/70",
+    border: "border-[rgb(var(--color-accent))]/30",
+  },
 };
 
 export function contentTypeTone(type: string): ContentTypeTone | null {
-  if (type === "storyboard" || type === "sketch" || type === "note") {
+  if (type === "storyboard" || type === "sketch" || type === "note" || type === "chat-artifact") {
     return contentTypeTones[type];
   }
   return null;

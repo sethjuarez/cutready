@@ -1,7 +1,7 @@
 import { useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
-import { AgentRunIcon, DatabaseIcon, SketchIcon, StoryboardIcon, NoteIcon, HistoryIcon, ImageIcon, NarrationIcon, VisualIcon, DiffIcon } from "./Icons";
+import { AgentRunIcon, ChatArtifactIcon, DatabaseIcon, SketchIcon, StoryboardIcon, NoteIcon, HistoryIcon, ImageIcon, NarrationIcon, VisualIcon, DiffIcon } from "./Icons";
 import { usePopover } from "../hooks/usePopover";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -317,6 +317,7 @@ function TabMenuItem({
     : tab.type === "diff" ? "Diff"
     : tab.type === "agent-run" ? "Agent Run"
     : tab.type === "database" ? "Database"
+    : tab.type === "chat-artifact" ? "Promoted Chat"
     : isImage ? "Image"
     : isVisual ? "Visual"
     : "Note";
@@ -328,6 +329,7 @@ function TabMenuItem({
     : tab.type === "diff" ? DiffIcon
     : tab.type === "agent-run" ? AgentRunIcon
     : tab.type === "database" ? DatabaseIcon
+    : tab.type === "chat-artifact" ? ChatArtifactIcon
     : isImage ? ImageIcon
     : isVisual ? VisualIcon
     : NoteIcon;
@@ -400,6 +402,7 @@ function Tab({
     : tab.type === "diff" ? "Diff"
     : tab.type === "agent-run" ? "Agent Run"
     : tab.type === "database" ? "Database"
+    : tab.type === "chat-artifact" ? "Promoted Chat"
     : isImage ? "Image"
     : isNarration ? "Narration"
     : isVisual ? "Visual"
@@ -427,6 +430,7 @@ function Tab({
     : tab.type === "diff" ? DiffIcon
     : tab.type === "agent-run" ? AgentRunIcon
     : tab.type === "database" ? DatabaseIcon
+    : tab.type === "chat-artifact" ? ChatArtifactIcon
     : isImage ? ImageIcon
     : isNarration ? NarrationIcon
     : isVisual ? VisualIcon

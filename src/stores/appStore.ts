@@ -247,8 +247,8 @@ function clearSuppressedEditorFlushes(relativePaths: string[]) {
   }
 }
 
-function isDocumentTab(tab: EditorTab): tab is EditorTab & { type: "sketch" | "storyboard" | "note" } {
-  return tab.type === "sketch" || tab.type === "storyboard" || tab.type === "note";
+function isDocumentTab(tab: EditorTab): tab is EditorTab & { type: "sketch" | "storyboard" | "note" | "chat-artifact" } {
+  return tab.type === "sketch" || tab.type === "storyboard" || tab.type === "note" || tab.type === "chat-artifact";
 }
 
 function isDatabasePath(path: string): boolean {
@@ -323,7 +323,7 @@ export interface SidebarOrder {
 /** An open tab in the editor area. */
 export interface EditorTab {
   id: string;
-  type: "sketch" | "storyboard" | "note" | "history" | "snapshot-preview" | "asset" | "diff" | "agent-run" | "database";
+  type: "sketch" | "storyboard" | "note" | "chat-artifact" | "history" | "snapshot-preview" | "asset" | "diff" | "agent-run" | "database";
   path: string;
   title: string;
 }
@@ -536,6 +536,10 @@ interface AppStoreState {
   activeNoteLocked: boolean;
   /** Note paths currently in preview mode (persists across tab switches). */
   notePreviewPaths: Set<string>;
+  /** Promoted chat artifact summaries for the current project. */
+  chatArtifacts: NoteSummary[];
+  /** The currently active promoted chat artifact path (relative). */
+  activeChatArtifactPath: string | null;
 
   // ── Asset state ──────────────────────────────────────────
   /** All project assets (screenshots + visuals) with reference info. */
@@ -810,6 +814,10 @@ interface AppStoreState {
   closeNote: () => void;
   /** Set preview mode for a note path. */
   setNotePreview: (notePath: string, preview: boolean) => void;
+  /** Load promoted chat artifacts for current project. */
+  loadChatArtifacts: () => Promise<void>;
+  /** Open a promoted chat artifact by path. */
+  openChatArtifact: (artifactPath: string) => Promise<void>;
 
   // ── Asset actions ──────────────────────────────────────────
 
@@ -1088,13 +1096,14 @@ type PersistedWorkspaceState = {
 async function restoreWorkspaceState(get: () => AppStoreState, set: (partial: Partial<AppStoreState>) => void) {
   try {
     const ws = await invoke<PersistedWorkspaceState>("get_workspace_state");
-    const { sketches, storyboards, notes } = get();
+    const { sketches, storyboards, notes, chatArtifacts } = get();
     const validTabs: EditorTab[] = (ws.open_tabs ?? [])
       .map((t) => ({ id: t.id, type: t.type as EditorTab["type"], path: t.path, title: t.title }))
       .filter((t) => {
         if (t.type === "sketch") return sketches.some((s) => s.path === t.path);
         if (t.type === "storyboard") return storyboards.some((s) => s.path === t.path);
         if (t.type === "note") return notes.some((n) => n.path === t.path);
+        if (t.type === "chat-artifact") return chatArtifacts.some((artifact) => artifact.path === t.path);
         if (t.type === "database") return isDatabasePath(t.path);
         return false;
       });
@@ -1108,6 +1117,7 @@ async function restoreWorkspaceState(get: () => AppStoreState, set: (partial: Pa
       if (active?.type === "sketch") await get().openSketch(active.path);
       else if (active?.type === "storyboard") await get().openStoryboard(active.path);
       else if (active?.type === "note") await get().openNote(active.path);
+      else if (active?.type === "chat-artifact") await get().openChatArtifact(active.path);
     }
 
     set({
@@ -1229,6 +1239,7 @@ function clearActiveDocumentState(): Pick<AppStoreState,
   | "activeNotePath"
   | "activeNoteContent"
   | "activeNoteLocked"
+  | "activeChatArtifactPath"
 > {
   return {
     activeSketchPath: null,
@@ -1238,6 +1249,7 @@ function clearActiveDocumentState(): Pick<AppStoreState,
     activeNotePath: null,
     activeNoteContent: null,
     activeNoteLocked: false,
+    activeChatArtifactPath: null,
   };
 }
 
@@ -1251,6 +1263,7 @@ function loadingDocumentStateForTab(tab: EditorTab): Partial<AppStoreState> {
       activeNotePath: null,
       activeNoteContent: null,
       activeNoteLocked: false,
+      activeChatArtifactPath: null,
     };
   }
   if (tab.type === "storyboard") {
@@ -1262,6 +1275,7 @@ function loadingDocumentStateForTab(tab: EditorTab): Partial<AppStoreState> {
       activeNotePath: null,
       activeNoteContent: null,
       activeNoteLocked: false,
+      activeChatArtifactPath: null,
     };
   }
   if (tab.type === "note") {
@@ -1273,6 +1287,19 @@ function loadingDocumentStateForTab(tab: EditorTab): Partial<AppStoreState> {
       activeNotePath: tab.path,
       activeNoteContent: null,
       activeNoteLocked: false,
+      activeChatArtifactPath: null,
+    };
+  }
+  if (tab.type === "chat-artifact") {
+    return {
+      activeSketchPath: null,
+      activeSketch: null,
+      activeStoryboardPath: null,
+      activeStoryboard: null,
+      activeNotePath: null,
+      activeNoteContent: null,
+      activeNoteLocked: false,
+      activeChatArtifactPath: tab.path,
     };
   }
   return clearActiveDocumentState();
@@ -1282,6 +1309,7 @@ function tabExistsInLoadedProject(tab: EditorTab, state: AppStoreState): boolean
   if (tab.type === "sketch") return state.sketches.some((sketch) => sketch.path === tab.path);
   if (tab.type === "storyboard") return state.storyboards.some((storyboard) => storyboard.path === tab.path);
   if (tab.type === "note") return state.notes.some((note) => note.path === tab.path);
+  if (tab.type === "chat-artifact") return state.chatArtifacts.some((artifact) => artifact.path === tab.path);
   return true;
 }
 
@@ -1320,6 +1348,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   activeNoteContent: null,
   activeNoteLocked: false,
   notePreviewPaths: new Set(),
+  chatArtifacts: [],
+  activeChatArtifactPath: null,
   assets: [],
   narrationAssets: [],
   chatMessages: [],
@@ -1473,6 +1503,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         get().openStoryboard(nextTab.path);
       } else if (nextTab?.type === "note") {
         get().openNote(nextTab.path);
+      } else if (nextTab?.type === "chat-artifact") {
+        get().openChatArtifact(nextTab.path);
       }
     }
     get()._persistTabs();
@@ -1485,6 +1517,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (keep.type === "sketch") get().openSketch(keep.path);
     else if (keep.type === "storyboard") get().openStoryboard(keep.path);
     else if (keep.type === "note") get().openNote(keep.path);
+    else if (keep.type === "chat-artifact") get().openChatArtifact(keep.path);
     get()._persistTabs();
   },
   closeTabsToRight: (tabId) => {
@@ -1537,6 +1570,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       get().openStoryboard(tab.path);
     } else if (tab.type === "note") {
       get().openNote(tab.path);
+    } else if (tab.type === "chat-artifact") {
+      get().openChatArtifact(tab.path);
     }
     get()._persistTabs();
   },
@@ -1729,6 +1764,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeNotePath: null,
         activeNoteContent: null,
         activeNoteLocked: false,
+        activeChatArtifactPath: null,
         chatMessages: [],
         chatSessionPath: null,
       });
@@ -1738,6 +1774,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadChatArtifacts();
       await get().loadSidebarOrder();
       await get().loadVersions();
       await get().loadTimelines();
@@ -1775,6 +1812,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeNotePath: null,
         activeNoteContent: null,
         activeNoteLocked: false,
+        activeChatArtifactPath: null,
         chatMessages: [],
         chatSessionPath: null,
         chatLoading: false,
@@ -1790,6 +1828,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadChatArtifacts();
       await get().loadSidebarOrder();
       await restoreWorkspaceState(get, set);
       await get().loadVersions();
@@ -1836,6 +1875,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activeNotePath: null,
       activeNoteContent: null,
       activeNoteLocked: false,
+      chatArtifacts: [],
+      activeChatArtifactPath: null,
       assets: [],
       narrationAssets: [],
       chatMessages: [],
@@ -1905,12 +1946,14 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeNotePath: null,
         activeNoteContent: null,
         activeNoteLocked: false,
+        activeChatArtifactPath: null,
         chatMessages: [],
         chatSessionPath: null,
       });
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadChatArtifacts();
       await get().loadSidebarOrder();
       await restoreWorkspaceState(get, set);
       await get().loadVersions();
@@ -2391,6 +2434,30 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     set({ notePreviewPaths: next });
   },
 
+  loadChatArtifacts: async () => {
+    try {
+      const chatArtifacts = await invoke<NoteSummary[]>("list_chat_artifacts");
+      set({ chatArtifacts });
+    } catch (err) {
+      console.error("Failed to load promoted chats:", err);
+    }
+  },
+
+  openChatArtifact: async (artifactPath) => {
+    const title = artifactPath.replace(/\.cv$/, "").split("/").pop() ?? artifactPath;
+    set({
+      activeChatArtifactPath: artifactPath,
+      activeSketchPath: null,
+      activeSketch: null,
+      activeStoryboardPath: null,
+      activeStoryboard: null,
+      activeNotePath: null,
+      activeNoteContent: null,
+      activeNoteLocked: false,
+    });
+    get().openTab({ type: "chat-artifact", path: artifactPath, title });
+  },
+
   // ── Asset actions ──────────────────────────────────────────
 
   loadAssets: async () => {
@@ -2640,6 +2707,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       get().activeSketchPath,
       get().activeStoryboardPath,
       get().activeNotePath,
+      get().activeChatArtifactPath,
     ].filter((path): path is string => !!path)));
     try {
       for (const path of suppressedPaths) suppressEditorFlush(path);
@@ -2651,11 +2719,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeNotePath: null,
         activeNoteContent: null,
         activeNoteLocked: false,
+        activeChatArtifactPath: null,
       });
       await discardDraftlineChanges();
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadChatArtifacts();
       set({
         openTabs: [],
         activeTabId: null,
@@ -2689,13 +2759,16 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadChatArtifacts();
       const {
         activeSketchPath,
         activeStoryboardPath,
         activeNotePath,
+        activeChatArtifactPath,
         sketches,
         storyboards,
         notes,
+        chatArtifacts,
         openTabs,
         activeTabId,
         splitTabs,
@@ -2706,7 +2779,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         if (!pathMatchesDiscard(tab.path) || !isDocumentTab(tab)) return true;
         if (tab.type === "sketch") return sketches.some((sketch) => sketch.path === projectPath);
         if (tab.type === "storyboard") return storyboards.some((storyboard) => storyboard.path === projectPath);
-        return notes.some((note) => note.path === projectPath);
+        if (tab.type === "note") return notes.some((note) => note.path === projectPath);
+        return chatArtifacts.some((artifact) => artifact.path === projectPath);
       };
       const nextOpenTabs = openTabs.filter(fileExistsForTab);
       const nextSplitTabs = splitTabs.filter(fileExistsForTab);
@@ -2716,7 +2790,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         || splitTabs.some((tab) => isDocumentTab(tab) && pathMatchesDiscard(tab.path))
         || pathMatchesDiscard(activeSketchPath)
         || pathMatchesDiscard(activeStoryboardPath)
-        || pathMatchesDiscard(activeNotePath);
+        || pathMatchesDiscard(activeNotePath)
+        || pathMatchesDiscard(activeChatArtifactPath);
       set((state) => ({
         openTabs: nextOpenTabs,
         activeTabId: nextActiveTabId,
@@ -2760,6 +2835,14 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
           set({ activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
           if (nextActiveTabId) get().setActiveTab(nextActiveTabId);
         }
+      } else if (pathMatchesDiscard(activeChatArtifactPath)) {
+        set({ activeChatArtifactPath: null });
+        if (chatArtifacts.some((artifact) => artifact.path === projectPath)) {
+          await get().openChatArtifact(projectPath);
+        } else {
+          set({ activeChatArtifactPath: null });
+          if (nextActiveTabId) get().setActiveTab(nextActiveTabId);
+        }
       } else if (nextActiveTabId !== activeTabId) {
         if (nextActiveTabId) get().setActiveTab(nextActiveTabId);
         else set({
@@ -2770,6 +2853,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
           activeNotePath: null,
           activeNoteContent: null,
           activeNoteLocked: false,
+          activeChatArtifactPath: null,
         });
       }
       get()._persistTabs();
@@ -2841,6 +2925,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadChatArtifacts();
       await get().loadVersions();
       await get().loadTimelines();
       await get().loadGraphData();
@@ -2859,6 +2944,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadChatArtifacts();
       await get().loadVersions();
       await get().loadTimelines();
       await get().loadGraphData();
@@ -2935,6 +3021,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadChatArtifacts();
 
       const state = get();
       const openTabs = state.openTabs.filter((tab) => tabExistsInLoadedProject(tab, state));
@@ -3522,6 +3609,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadChatArtifacts();
       await get().refreshSyncStatus();
       await get().refreshIncomingCommits();
       await get().loadVersions();

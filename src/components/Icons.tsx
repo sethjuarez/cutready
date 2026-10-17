@@ -14,6 +14,7 @@ import {
   FileDiff,
   Bot,
   Database,
+  MessageSquareText,
 } from "lucide-react";
 
 interface IconProps {
@@ -74,4 +75,9 @@ export function AgentRunIcon({ size = 14, className = "" }: IconProps) {
 /** Database icon — cylinder, representing an inspectable SQLite store. */
 export function DatabaseIcon({ size = 14, className = "" }: IconProps) {
   return <Database width={size} height={size} className={className} />;
+}
+
+/** Chat artifact icon — chat transcript promoted into a portable document. */
+export function ChatArtifactIcon({ size = 14, className = "" }: IconProps) {
+  return <MessageSquareText width={size} height={size} className={className} />;
 }

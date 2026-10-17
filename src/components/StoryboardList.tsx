@@ -25,7 +25,7 @@ import {
   type SidebarOrder,
 } from "../stores/appStore";
 import type { ProjectEntry } from "../types/project";
-import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
+import { ChatArtifactIcon, SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { useToastStore } from "../stores/toastStore";
@@ -474,6 +474,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const storyboards = useAppStore((s) => s.storyboards);
   const sketches = useAppStore((s) => s.sketches);
   const notes = useAppStore((s) => s.notes);
+  const chatArtifacts = useAppStore((s) => s.chatArtifacts);
   const activeStoryboardPath = useAppStore((s) => {
     const tab = s.openTabs.find((t) => t.id === s.activeTabId);
     return tab?.type === "storyboard" ? tab.path : null;
@@ -486,9 +487,14 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     const tab = s.openTabs.find((t) => t.id === s.activeTabId);
     return tab?.type === "note" ? tab.path : null;
   });
+  const activeChatArtifactPath = useAppStore((s) => {
+    const tab = s.openTabs.find((t) => t.id === s.activeTabId);
+    return tab?.type === "chat-artifact" ? tab.path : null;
+  });
   const loadStoryboards = useAppStore((s) => s.loadStoryboards);
   const loadSketches = useAppStore((s) => s.loadSketches);
   const loadNotes = useAppStore((s) => s.loadNotes);
+  const loadChatArtifacts = useAppStore((s) => s.loadChatArtifacts);
   const loadAssets = useAppStore((s) => s.loadAssets);
   const createStoryboard = useAppStore((s) => s.createStoryboard);
   const openStoryboard = useAppStore((s) => s.openStoryboard);
@@ -498,6 +504,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const deleteSketch = useAppStore((s) => s.deleteSketch);
   const createNote = useAppStore((s) => s.createNote);
   const openNote = useAppStore((s) => s.openNote);
+  const openChatArtifact = useAppStore((s) => s.openChatArtifact);
   const deleteNote = useAppStore((s) => s.deleteNote);
   const closeStoryboard = useAppStore((s) => s.closeStoryboard);
   const sidebarOrder = useAppStore((s) => s.sidebarOrder);
@@ -524,6 +531,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const [storyboardsExpanded, setStoryboardsExpanded] = useState(true);
   const [sketchesExpanded, setSketchesExpanded] = useState(true);
   const [notesExpanded, setNotesExpanded] = useState(true);
+  const [chatArtifactsExpanded, setChatArtifactsExpanded] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<{ type: "storyboard" | "sketch" | "note"; path: string; title: string; usedBy?: string[] } | null>(null);
   const [drmConfirm, setDrmConfirm] = useState<{ resolve: (ok: boolean) => void } | null>(null);
   const [renameConfirm, setRenameConfirm] = useState<RenameConfirmation | null>(null);
@@ -571,7 +579,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   }, [transferConflict]);
 
   // ── Inline rename state ──────────────────────────────────────────
-  const [renamingItem, setRenamingItem] = useState<{ type: "storyboard" | "sketch" | "note"; path: string } | null>(null);
+  const [renamingItem, setRenamingItem] = useState<{ type: "storyboard" | "sketch" | "note" | "chat-artifact"; path: string } | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renameInFlightRef = useRef(false);
@@ -625,10 +633,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   }, [settings, settingsLoaded, updateSetting]);
 
   /** Enter rename mode for a sidebar item. */
-  const startRename = useCallback((type: "storyboard" | "sketch" | "note", path: string) => {
+  const startRename = useCallback((type: "storyboard" | "sketch" | "note" | "chat-artifact", path: string) => {
     // Extract current stem from the path for the initial value
     const filename = path.split("/").pop() ?? path;
-    const stem = filename.replace(/\.(sk|sb|md)$/, "");
+    const stem = filename.replace(/\.(sk|sb|md|cv)$/, "");
     setRenamingItem({ type, path });
     setRenameValue(stem);
   }, []);
@@ -653,7 +661,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     }
 
     const { type, path: oldPath } = renamingItem;
-    const ext = type === "sketch" ? ".sk" : type === "storyboard" ? ".sb" : ".md";
+    const ext = type === "sketch" ? ".sk" : type === "storyboard" ? ".sb" : type === "chat-artifact" ? ".cv" : ".md";
     const dir = oldPath.includes("/") ? oldPath.substring(0, oldPath.lastIndexOf("/") + 1) : "";
     const newPath = `${dir}${slug}${ext}`;
 
@@ -702,6 +710,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
         activeTabId: store.activeTabId === oldMainId ? newMainId : store.activeTabId,
         splitTabs: updatedSplitTabs,
         splitActiveTabId: store.splitActiveTabId === oldSplitId ? newSplitId : store.splitActiveTabId,
+        ...(type === "chat-artifact" && store.activeChatArtifactPath === oldPath ? { activeChatArtifactPath: newPath } : {}),
       });
 
       // Reload file lists
@@ -710,6 +719,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
         await loadSketches();
         if (result.updatedReferences.length > 0) await loadStoryboards();
       }
+      else if (type === "chat-artifact") await loadChatArtifacts();
       else await loadNotes();
 
       const updated = result.updatedReferences.reduce((sum, ref) => sum + ref.count, 0);
@@ -727,7 +737,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
       window.setTimeout(() => suppressedPaths.forEach(clearSuppressedEditorFlush), 150);
       setRenamingItem(null);
     }
-  }, [renamingItem, renameValue, loadStoryboards, loadSketches, loadNotes, showToast]);
+  }, [renamingItem, renameValue, loadStoryboards, loadSketches, loadNotes, loadChatArtifacts, showToast]);
 
   const cancelRename = useCallback(() => setRenamingItem(null), []);
 
@@ -868,20 +878,23 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     loadStoryboards();
     loadSketches();
     loadNotes();
-  }, [loadStoryboards, loadSketches, loadNotes]);
+    loadChatArtifacts();
+  }, [loadStoryboards, loadSketches, loadNotes, loadChatArtifacts]);
 
   // Apply sidebar order
   const orderedStoryboards = applySidebarOrder(storyboards, sidebarOrder?.storyboards ?? []);
   const orderedSketches = applySidebarOrder(sketches, sidebarOrder?.sketches ?? []);
   const orderedNotes = applySidebarOrder(notes, sidebarOrder?.notes ?? []);
   const sectionBodyClass = "min-h-0 overflow-y-auto py-1";
-  const expandedSectionCount = [storyboardsExpanded, sketchesExpanded, notesExpanded].filter(Boolean).length;
+  const expandedSectionCount = [storyboardsExpanded, sketchesExpanded, notesExpanded, chatArtifactsExpanded].filter(Boolean).length;
   const storyboardsBodyStyle = sectionBodyStyle(resolvedMode, 0.75, orderedStoryboards.length, expandedSectionCount, 42);
   const sketchesBodyStyle = sectionBodyStyle(resolvedMode, 1.25, orderedSketches.length, expandedSectionCount, 42);
   const notesBodyStyle = sectionBodyStyle(resolvedMode, 2, orderedNotes.length, expandedSectionCount, 30);
+  const chatArtifactsBodyStyle = sectionBodyStyle(resolvedMode, 1, chatArtifacts.length, expandedSectionCount, 30);
   const storyboardTone = contentTypeTones.storyboard;
   const sketchTone = contentTypeTones.sketch;
   const noteTone = contentTypeTones.note;
+  const chatArtifactTone = contentTypeTones["chat-artifact"];
   const videoImportReferenceOptions: VideoImportPlanningContextReference[] = [
     ...orderedStoryboards.map((storyboard: StoryboardSummary) => ({
       kind: "storyboard" as const,
@@ -1748,6 +1761,88 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                   ))}
                 </SortableContext>
               </DndContext>
+            )}
+          </div>}
+        </>
+      )}
+
+      {/* ── Promoted chats section─────────────────────────────── */}
+      {(resolvedMode === "all" || resolvedMode === "notes") && (
+        <>
+          <SidebarSectionHeader
+            title="Promoted Chats"
+            count={chatArtifacts.length}
+            expanded={chatArtifactsExpanded}
+            onToggle={() => setChatArtifactsExpanded(!chatArtifactsExpanded)}
+            tone={chatArtifactTone}
+          />
+
+          {chatArtifactsExpanded && <div className={sectionBodyClass} style={chatArtifactsBodyStyle}>
+            {chatArtifacts.length === 0 ? (
+              <div className="px-4 py-6 text-center text-xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
+                Promote a chat to save it as a reusable conversation view.
+              </div>
+            ) : (
+              <div className="space-y-0.5 px-1">
+                {chatArtifacts.map((artifact) => (
+                  <div
+                    key={artifact.path}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => { if (!renamingItem) openChatArtifact(artifact.path); }}
+                    onDoubleClick={(e) => { e.stopPropagation(); startRename("chat-artifact", artifact.path); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "F2") { e.preventDefault(); startRename("chat-artifact", artifact.path); }
+                      else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openChatArtifact(artifact.path); }
+                    }}
+                    className={`${documentItemClass(artifact.path === activeChatArtifactPath, chatArtifactTone)} group/item`}
+                  >
+                    <ActiveDocumentMarker active={artifact.path === activeChatArtifactPath} tone={chatArtifactTone} />
+                    <ChatArtifactIcon className={`shrink-0 opacity-90 ${chatArtifactTone.text}`} />
+                    <div className="min-w-0 flex-1">
+                      {renamingItem?.path === artifact.path ? (
+                        <input
+                          ref={renameInputRef}
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === "Enter") commitRename();
+                            if (e.key === "Escape") cancelRename();
+                          }}
+                          onBlur={commitRename}
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label="Rename promoted chat file"
+                          title="Rename file. Spaces become hyphens."
+                          className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
+                        />
+                      ) : (
+                        <DocumentItemText
+                          title={artifact.title}
+                          meta={artifact.path}
+                          active={artifact.path === activeChatArtifactPath}
+                          tone={chatArtifactTone}
+                        />
+                      )}
+                    </div>
+                    {renamingItem?.path !== artifact.path && (
+                      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/item:opacity-100">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startRename("chat-artifact", artifact.path);
+                          }}
+                          className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+                          title="Rename promoted chat"
+                          aria-label={`Rename ${artifact.title}`}
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
           </div>}
         </>

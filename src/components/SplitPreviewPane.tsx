@@ -9,7 +9,7 @@ import type { PlanningRow } from "../types/sketch";
 import { ScriptTable } from "./ScriptTable";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { SafeMarkdown } from "./SafeMarkdown";
-import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
+import { ChatArtifactIcon, SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import { contentTypeTone } from "../utils/contentTypeTheme";
 import { usePopover } from "../hooks/usePopover";
 import { getClampedPopoverPosition } from "./TabBar";
@@ -18,6 +18,7 @@ import { FieldAiButton } from "./FieldAiButton";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
 import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
 import { InlineDescriptionEditor } from "./InlineDescriptionEditor";
+import { ChatArtifactViewer } from "./ChatArtifactViewer";
 
 /**
  * SplitTabBar — compact tab bar for the split pane, rendered beside the main TabBar.
@@ -197,6 +198,7 @@ export function SplitPaneContent() {
             >
               {tab.type === "sketch" && <SketchSplitEditor path={tab.path} />}
               {tab.type === "note" && <NoteSplitEditor path={tab.path} />}
+              {tab.type === "chat-artifact" && <ChatArtifactViewer path={tab.path} />}
               {tab.type === "storyboard" && <StoryboardPreviewContent path={tab.path} />}
             </div>
           );
@@ -234,6 +236,7 @@ function SplitTab({
   const TabIcon =
     tab.type === "sketch" ? SketchIcon
     : tab.type === "storyboard" ? StoryboardIcon
+    : tab.type === "chat-artifact" ? ChatArtifactIcon
     : NoteIcon;
 
   useEffect(() => {
