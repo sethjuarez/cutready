@@ -15,6 +15,1010 @@
 
 use serde_json::Value;
 
+/// Typed @vector conformance for ChatArtifactDocument. Pass your real `impl ChatArtifactDocument`; the
+/// `S: ChatArtifactDocument` bound makes the compiler prove every op is implemented. Call
+/// from a test, e.g. `run_chat_artifact_document_conformance(&ChatArtifactDocumentImpl).await;` (or without `.await` when sync).
+pub fn run_chat_artifact_document_conformance<S: crate::model::ChatArtifactDocument + ?Sized>(seam: &S) {
+    let ctx = crate::model::context::LoadContext::default();
+    // vector: agent run is curated into turns
+    {
+        let session = crate::model::ChatTranscript::from_json(
+            r####"
+{
+  "session_id": "chat-1",
+  "created_at": "2026-06-30T18:00:00Z",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are the planner."
+    },
+    {
+      "role": "user",
+      "content": "  Draft an intro sketch for the launch demo.\n[References: @note:launch-brief.md]  "
+    },
+    {
+      "role": "assistant",
+      "content": "Let me read the brief first.",
+      "tool_calls": [
+        {
+          "id": "call-1",
+          "type": "function",
+          "function": {
+            "name": "read_note",
+            "arguments": "{\"path\":\"launch-brief.md\"}"
+          }
+        }
+      ],
+      "cutready": {
+        "workingNotes": {
+          "drafts": [
+            "Private draft"
+          ],
+          "thinking": "Private reasoning"
+        }
+      }
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call-1",
+      "content": "# Launch brief\nPrivate numbers."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call-2",
+          "type": "function",
+          "function": {
+            "name": "write_sketch",
+            "arguments": "{\"path\":\"intro.sk\",\"title\":\"Intro\",\"rows\":[]}"
+          }
+        },
+        {
+          "id": "call-3",
+          "type": "function",
+          "function": {
+            "name": "fetch_url",
+            "arguments": "{\"url\":\"https://example.com/launch\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call-2",
+      "content": "Saved intro.sk"
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call-3",
+      "content": "<html></html>"
+    },
+    {
+      "role": "assistant",
+      "content": "I drafted **Intro** with three rows.",
+      "cutready": {
+        "runDetails": {
+          "provider": "foundry",
+          "model": "gpt-5.4",
+          "execution_engine": "prompty",
+          "agent_id": "planner",
+          "run_id": "run-1",
+          "elapsed_ms": 1250
+        }
+      }
+    },
+    {
+      "role": "user",
+      "content": "Thanks!"
+    },
+    {
+      "role": "assistant",
+      "content": "Anytime.",
+      "cutready": {
+        "runDetails": {
+          "provider": "foundry",
+          "model": "gpt-5.4-mini",
+          "execution_engine": "prompty",
+          "agent_id": "writer",
+          "run_id": "run-1",
+          "elapsed_ms": 1250
+        }
+      }
+    }
+  ]
+}
+"####,
+            &ctx,
+        )
+        .expect("session parses");
+        let request = crate::model::ChatPromotion::from_json(
+            r####"
+{
+  "title": "Plan the launch demo",
+  "author": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com"
+  },
+  "promoted_by": {
+    "name": "Grace Hopper"
+  },
+  "promoted_at": "2026-07-01T09:30:00Z",
+  "summary": "  Agreed on a three-row intro.\n"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.promote(&session, &request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "agent run is curated into turns", error));
+        let expected = crate::model::ChatArtifact::from_json(
+            r####"
+{
+  "title": "Plan the launch demo",
+  "author": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com"
+  },
+  "promoted_by": {
+    "name": "Grace Hopper"
+  },
+  "promoted_at": "2026-07-01T09:30:00Z",
+  "source": {
+    "session_id": "chat-1",
+    "started_at": "2026-06-30T18:00:00Z"
+  },
+  "turns": [
+    {
+      "role": "user",
+      "text": "Draft an intro sketch for the launch demo.\n[References: @note:launch-brief.md]"
+    },
+    {
+      "role": "assistant",
+      "text": "Let me read the brief first.\n\nI drafted **Intro** with three rows.",
+      "tool_uses": [
+        {
+          "name": "read_note",
+          "target": "launch-brief.md"
+        },
+        {
+          "name": "write_sketch",
+          "target": "intro.sk"
+        },
+        {
+          "name": "fetch_url",
+          "target": "https://example.com/launch"
+        }
+      ],
+      "agent": "planner",
+      "model": "gpt-5.4"
+    },
+    {
+      "role": "user",
+      "text": "Thanks!"
+    },
+    {
+      "role": "assistant",
+      "text": "Anytime.",
+      "agent": "writer",
+      "model": "gpt-5.4-mini"
+    }
+  ],
+  "updated_at": "2026-07-01T09:30:00Z",
+  "summary": "Agreed on a three-row intro."
+}
+"####,
+            &ctx,
+        )
+        .expect("agent run is curated into turns: expected parses");
+        assert_eq!(actual, expected, "agent run is curated into turns misrouted");
+    }
+    // vector: canonical chat artifact is unchanged
+    {
+        let artifact = crate::model::ChatArtifact::from_json(
+            r####"
+{
+  "title": "Plan the launch demo",
+  "author": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com"
+  },
+  "promoted_by": {
+    "name": "Grace Hopper"
+  },
+  "promoted_at": "2026-07-01T09:30:00Z",
+  "source": {
+    "session_id": "chat-1",
+    "started_at": "2026-06-30T18:00:00Z"
+  },
+  "turns": [
+    {
+      "role": "user",
+      "text": "Draft an intro sketch for the launch demo.\n[References: @note:launch-brief.md]"
+    },
+    {
+      "role": "assistant",
+      "text": "I read the brief and drafted **Intro** with three rows.",
+      "tool_uses": [
+        {
+          "name": "read_note",
+          "target": "launch-brief.md"
+        },
+        {
+          "name": "write_sketch",
+          "target": "intro.sk"
+        },
+        {
+          "name": "list_project_files"
+        }
+      ],
+      "agent": "planner",
+      "model": "gpt-5.4",
+      "future_turn_field": {
+        "confidence": 0.75
+      }
+    }
+  ],
+  "updated_at": "2026-07-01T09:30:00Z",
+  "summary": "Agreed on a three-row intro.",
+  "future_chat_field": {
+    "reviewers": [
+      "grace"
+    ]
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("artifact parses");
+        let actual = seam.round_trip(&artifact)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "canonical chat artifact is unchanged", error));
+        let expected = crate::model::ChatArtifact::from_json(
+            r####"
+{
+  "title": "Plan the launch demo",
+  "author": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com"
+  },
+  "promoted_by": {
+    "name": "Grace Hopper"
+  },
+  "promoted_at": "2026-07-01T09:30:00Z",
+  "source": {
+    "session_id": "chat-1",
+    "started_at": "2026-06-30T18:00:00Z"
+  },
+  "turns": [
+    {
+      "role": "user",
+      "text": "Draft an intro sketch for the launch demo.\n[References: @note:launch-brief.md]"
+    },
+    {
+      "role": "assistant",
+      "text": "I read the brief and drafted **Intro** with three rows.",
+      "tool_uses": [
+        {
+          "name": "read_note",
+          "target": "launch-brief.md"
+        },
+        {
+          "name": "write_sketch",
+          "target": "intro.sk"
+        },
+        {
+          "name": "list_project_files"
+        }
+      ],
+      "agent": "planner",
+      "model": "gpt-5.4",
+      "future_turn_field": {
+        "confidence": 0.75
+      }
+    }
+  ],
+  "updated_at": "2026-07-01T09:30:00Z",
+  "summary": "Agreed on a three-row intro.",
+  "future_chat_field": {
+    "reviewers": [
+      "grace"
+    ]
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("canonical chat artifact is unchanged: expected parses");
+        assert_eq!(actual, expected, "canonical chat artifact is unchanged misrouted");
+    }
+    // vector: images, pending, and empty messages are dropped before folding
+    {
+        let session = crate::model::ChatTranscript::from_json(
+            r####"
+{
+  "session_id": "chat-1",
+  "created_at": "2026-06-30T18:00:00Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "What is on this slide?"
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "data:image/png;base64,AAAA"
+          }
+        },
+        {
+          "type": "text",
+          "text": "Keep it short."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "A launch timeline."
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "data:image/png;base64,BBBB"
+          }
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "It shows three milestones."
+    },
+    {
+      "role": "user",
+      "content": "   "
+    },
+    {
+      "role": "assistant",
+      "content": ""
+    },
+    {
+      "role": "user",
+      "content": "Queued question",
+      "pending": true
+    },
+    {
+      "role": "developer",
+      "content": "Unknown roles are dropped."
+    }
+  ]
+}
+"####,
+            &ctx,
+        )
+        .expect("session parses");
+        let request = crate::model::ChatPromotion::from_json(
+            r####"
+{
+  "title": "Plan the launch demo",
+  "author": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com"
+  },
+  "promoted_by": {
+    "name": "Grace Hopper"
+  },
+  "promoted_at": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.promote(&session, &request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "images, pending, and empty messages are dropped before folding", error));
+        let expected = crate::model::ChatArtifact::from_json(
+            r####"
+{
+  "title": "Plan the launch demo",
+  "author": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com"
+  },
+  "promoted_by": {
+    "name": "Grace Hopper"
+  },
+  "promoted_at": "2026-07-01T09:30:00Z",
+  "source": {
+    "session_id": "chat-1",
+    "started_at": "2026-06-30T18:00:00Z"
+  },
+  "turns": [
+    {
+      "role": "user",
+      "text": "What is on this slide?\nKeep it short."
+    },
+    {
+      "role": "assistant",
+      "text": "A launch timeline.\n\nIt shows three milestones."
+    }
+  ],
+  "updated_at": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("images, pending, and empty messages are dropped before folding: expected parses");
+        assert_eq!(actual, expected, "images, pending, and empty messages are dropped before folding misrouted");
+    }
+    // vector: minimal chat artifact is unchanged
+    {
+        let artifact = crate::model::ChatArtifact::from_json(
+            r####"
+{
+  "title": "Plan the launch demo",
+  "author": {
+    "name": "Grace Hopper"
+  },
+  "promoted_by": {
+    "name": "Grace Hopper"
+  },
+  "promoted_at": "2026-07-01T09:30:00Z",
+  "source": {
+    "session_id": "chat-2"
+  },
+  "turns": [
+    {
+      "role": "user",
+      "text": "Hello."
+    },
+    {
+      "role": "assistant",
+      "text": "Hi."
+    }
+  ],
+  "updated_at": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("artifact parses");
+        let actual = seam.round_trip(&artifact)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "minimal chat artifact is unchanged", error));
+        let expected = crate::model::ChatArtifact::from_json(
+            r####"
+{
+  "title": "Plan the launch demo",
+  "author": {
+    "name": "Grace Hopper"
+  },
+  "promoted_by": {
+    "name": "Grace Hopper"
+  },
+  "promoted_at": "2026-07-01T09:30:00Z",
+  "source": {
+    "session_id": "chat-2"
+  },
+  "turns": [
+    {
+      "role": "user",
+      "text": "Hello."
+    },
+    {
+      "role": "assistant",
+      "text": "Hi."
+    }
+  ],
+  "updated_at": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("minimal chat artifact is unchanged: expected parses");
+        assert_eq!(actual, expected, "minimal chat artifact is unchanged misrouted");
+    }
+    // vector: null, blank, and empty optional values are omitted
+    {
+        let artifact = crate::model::ChatArtifact::from_json(
+            r####"
+{
+  "title": "Plan the launch demo",
+  "author": {
+    "name": "Ada Lovelace",
+    "email": null
+  },
+  "promoted_by": {
+    "name": "Grace Hopper"
+  },
+  "promoted_at": "2026-07-01T09:30:00Z",
+  "source": {
+    "session_id": "chat-1",
+    "started_at": null
+  },
+  "turns": [
+    {
+      "role": "user",
+      "text": "Hello.",
+      "tool_uses": null,
+      "agent": null,
+      "model": null
+    },
+    {
+      "role": "assistant",
+      "text": "Hi.",
+      "tool_uses": []
+    },
+    {
+      "role": "assistant",
+      "text": "Saved.",
+      "tool_uses": [
+        {
+          "name": "write_note",
+          "target": null
+        }
+      ]
+    }
+  ],
+  "updated_at": "2026-07-01T09:30:00Z",
+  "summary": "  \n"
+}
+"####,
+            &ctx,
+        )
+        .expect("artifact parses");
+        let actual = seam.round_trip(&artifact)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "null, blank, and empty optional values are omitted", error));
+        let expected = crate::model::ChatArtifact::from_json(
+            r####"
+{
+  "title": "Plan the launch demo",
+  "author": {
+    "name": "Ada Lovelace"
+  },
+  "promoted_by": {
+    "name": "Grace Hopper"
+  },
+  "promoted_at": "2026-07-01T09:30:00Z",
+  "source": {
+    "session_id": "chat-1"
+  },
+  "turns": [
+    {
+      "role": "user",
+      "text": "Hello."
+    },
+    {
+      "role": "assistant",
+      "text": "Hi."
+    },
+    {
+      "role": "assistant",
+      "text": "Saved.",
+      "tool_uses": [
+        {
+          "name": "write_note"
+        }
+      ]
+    }
+  ],
+  "updated_at": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("null, blank, and empty optional values are omitted: expected parses");
+        assert_eq!(actual, expected, "null, blank, and empty optional values are omitted misrouted");
+    }
+    // vector: omitted selection keeps every turn
+    {
+        let session = crate::model::ChatTranscript::from_json(
+            r####"
+{
+  "session_id": "chat-1",
+  "created_at": "2026-06-30T18:00:00Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "One"
+    },
+    {
+      "role": "assistant",
+      "content": "Two"
+    },
+    {
+      "role": "user",
+      "content": "Three"
+    },
+    {
+      "role": "assistant",
+      "content": "Four"
+    }
+  ]
+}
+"####,
+            &ctx,
+        )
+        .expect("session parses");
+        let request = crate::model::ChatPromotion::from_json(
+            r####"
+{
+  "title": "Plan the launch demo",
+  "author": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com"
+  },
+  "promoted_by": {
+    "name": "Grace Hopper"
+  },
+  "promoted_at": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.promote(&session, &request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "omitted selection keeps every turn", error));
+        let expected = crate::model::ChatArtifact::from_json(
+            r####"
+{
+  "title": "Plan the launch demo",
+  "author": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com"
+  },
+  "promoted_by": {
+    "name": "Grace Hopper"
+  },
+  "promoted_at": "2026-07-01T09:30:00Z",
+  "source": {
+    "session_id": "chat-1",
+    "started_at": "2026-06-30T18:00:00Z"
+  },
+  "turns": [
+    {
+      "role": "user",
+      "text": "One"
+    },
+    {
+      "role": "assistant",
+      "text": "Two"
+    },
+    {
+      "role": "user",
+      "text": "Three"
+    },
+    {
+      "role": "assistant",
+      "text": "Four"
+    }
+  ],
+  "updated_at": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("omitted selection keeps every turn: expected parses");
+        assert_eq!(actual, expected, "omitted selection keeps every turn misrouted");
+    }
+    // vector: selected turns keep transcript order and ignore bad indices
+    {
+        let session = crate::model::ChatTranscript::from_json(
+            r####"
+{
+  "session_id": "chat-1",
+  "created_at": "2026-06-30T18:00:00Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "One"
+    },
+    {
+      "role": "assistant",
+      "content": "Two"
+    },
+    {
+      "role": "user",
+      "content": "Three"
+    },
+    {
+      "role": "assistant",
+      "content": "Four"
+    }
+  ]
+}
+"####,
+            &ctx,
+        )
+        .expect("session parses");
+        let request = crate::model::ChatPromotion::from_json(
+            r####"
+{
+  "title": "Plan the launch demo",
+  "author": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com"
+  },
+  "promoted_by": {
+    "name": "Grace Hopper"
+  },
+  "promoted_at": "2026-07-01T09:30:00Z",
+  "selected_turns": [
+    3,
+    0,
+    3,
+    9
+  ]
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.promote(&session, &request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "selected turns keep transcript order and ignore bad indices", error));
+        let expected = crate::model::ChatArtifact::from_json(
+            r####"
+{
+  "title": "Plan the launch demo",
+  "author": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com"
+  },
+  "promoted_by": {
+    "name": "Grace Hopper"
+  },
+  "promoted_at": "2026-07-01T09:30:00Z",
+  "source": {
+    "session_id": "chat-1",
+    "started_at": "2026-06-30T18:00:00Z"
+  },
+  "turns": [
+    {
+      "role": "user",
+      "text": "One"
+    },
+    {
+      "role": "assistant",
+      "text": "Four"
+    }
+  ],
+  "updated_at": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("selected turns keep transcript order and ignore bad indices: expected parses");
+        assert_eq!(actual, expected, "selected turns keep transcript order and ignore bad indices misrouted");
+    }
+    // vector: tool targets come from path or url arguments
+    {
+        let session = crate::model::ChatTranscript::from_json(
+            r####"
+{
+  "session_id": "chat-1",
+  "created_at": "2026-06-30T18:00:00Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Tidy the project."
+    },
+    {
+      "role": "assistant",
+      "content": "Working on it.",
+      "tool_calls": [
+        {
+          "id": "c1",
+          "type": "function",
+          "function": {
+            "name": "list_project_files",
+            "arguments": "{}"
+          }
+        },
+        {
+          "id": "c2",
+          "type": "function",
+          "function": {
+            "name": "read_sketch",
+            "arguments": "{\"path\":\"  \",\"url\":\" https://example.com/spec \"}"
+          }
+        },
+        {
+          "id": "c3",
+          "type": "function",
+          "function": {
+            "name": "write_note",
+            "arguments": "{not json"
+          }
+        },
+        {
+          "id": "c4",
+          "type": "function",
+          "function": {
+            "name": "read_note",
+            "arguments": "{\"path\":42}"
+          }
+        },
+        {
+          "id": "c5",
+          "type": "function",
+          "function": {
+            "name": "read_storyboard"
+          }
+        },
+        {
+          "id": "c6",
+          "type": "function",
+          "function": {
+            "name": "  ",
+            "arguments": "{}"
+          }
+        },
+        {
+          "id": "c7",
+          "type": "function",
+          "function": {
+            "name": "write_sketch",
+            "arguments": "{\"path\":\" flows/login.sk \"}"
+          }
+        }
+      ]
+    }
+  ]
+}
+"####,
+            &ctx,
+        )
+        .expect("session parses");
+        let request = crate::model::ChatPromotion::from_json(
+            r####"
+{
+  "title": "Plan the launch demo",
+  "author": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com"
+  },
+  "promoted_by": {
+    "name": "Grace Hopper"
+  },
+  "promoted_at": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.promote(&session, &request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "tool targets come from path or url arguments", error));
+        let expected = crate::model::ChatArtifact::from_json(
+            r####"
+{
+  "title": "Plan the launch demo",
+  "author": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com"
+  },
+  "promoted_by": {
+    "name": "Grace Hopper"
+  },
+  "promoted_at": "2026-07-01T09:30:00Z",
+  "source": {
+    "session_id": "chat-1",
+    "started_at": "2026-06-30T18:00:00Z"
+  },
+  "turns": [
+    {
+      "role": "user",
+      "text": "Tidy the project."
+    },
+    {
+      "role": "assistant",
+      "text": "Working on it.",
+      "tool_uses": [
+        {
+          "name": "list_project_files"
+        },
+        {
+          "name": "read_sketch",
+          "target": "https://example.com/spec"
+        },
+        {
+          "name": "write_note"
+        },
+        {
+          "name": "read_note"
+        },
+        {
+          "name": "read_storyboard"
+        },
+        {
+          "name": "write_sketch",
+          "target": "flows/login.sk"
+        }
+      ]
+    }
+  ],
+  "updated_at": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("tool targets come from path or url arguments: expected parses");
+        assert_eq!(actual, expected, "tool targets come from path or url arguments misrouted");
+    }
+    // vector: unknown session start and blank summary are omitted
+    {
+        let session = crate::model::ChatTranscript::from_json(
+            r####"
+{
+  "session_id": "chat-9",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hello."
+    }
+  ]
+}
+"####,
+            &ctx,
+        )
+        .expect("session parses");
+        let request = crate::model::ChatPromotion::from_json(
+            r####"
+{
+  "title": "  Quick question  ",
+  "author": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com"
+  },
+  "promoted_by": {
+    "name": "Grace Hopper"
+  },
+  "promoted_at": "2026-07-01T09:30:00Z",
+  "summary": " \n "
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.promote(&session, &request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "unknown session start and blank summary are omitted", error));
+        let expected = crate::model::ChatArtifact::from_json(
+            r####"
+{
+  "title": "Quick question",
+  "author": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com"
+  },
+  "promoted_by": {
+    "name": "Grace Hopper"
+  },
+  "promoted_at": "2026-07-01T09:30:00Z",
+  "source": {
+    "session_id": "chat-9"
+  },
+  "turns": [
+    {
+      "role": "user",
+      "text": "Hello."
+    }
+  ],
+  "updated_at": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("unknown session start and blank summary are omitted: expected parses");
+        assert_eq!(actual, expected, "unknown session start and blank summary are omitted misrouted");
+    }
+}
+
 /// Typed @vector conformance for PlanningTiming. Pass your real `impl PlanningTiming`; the
 /// `S: PlanningTiming` bound makes the compiler prove every op is implemented. Call
 /// from a test, e.g. `run_planning_timing_conformance(&PlanningTimingImpl).await;` (or without `.await` when sync).

@@ -5,6 +5,14 @@
   "hydrationZones": [],
   "seams": [
     {
+      "contract": "ChatArtifactDocument",
+      "target": "markdown",
+      "group": "",
+      "symbol": "ChatArtifactDocument",
+      "generatedSource": "ChatArtifactDocument",
+      "seamKind": "protocol-adapter"
+    },
+    {
       "contract": "PlanningTiming",
       "target": "markdown",
       "group": "",
@@ -26,6 +34,14 @@
       "group": "",
       "symbol": "StoryboardDocument",
       "generatedSource": "StoryboardDocument",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "ChatArtifactDocument",
+      "target": "rust",
+      "group": "",
+      "symbol": "ChatArtifactDocument",
+      "generatedSource": "chat_artifact_document",
       "seamKind": "protocol-adapter"
     },
     {
@@ -53,6 +69,14 @@
       "seamKind": "protocol-adapter"
     },
     {
+      "contract": "ChatArtifactDocument",
+      "target": "swift",
+      "group": "",
+      "symbol": "ChatArtifactDocument",
+      "generatedSource": "Sources/CutReadyContracts/chat_artifact_document.swift",
+      "seamKind": "protocol-adapter"
+    },
+    {
       "contract": "PlanningTiming",
       "target": "swift",
       "group": "",
@@ -74,6 +98,14 @@
       "group": "",
       "symbol": "StoryboardDocument",
       "generatedSource": "Sources/CutReadyContracts/storyboard_document.swift",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "ChatArtifactDocument",
+      "target": "typescript",
+      "group": "",
+      "symbol": "ChatArtifactDocument",
+      "generatedSource": "./chat-artifact-document",
       "seamKind": "protocol-adapter"
     },
     {

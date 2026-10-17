@@ -1,6 +1,7 @@
 // Binds the generated @vector harness (src/contracts/generated/tests) to the
 // frontend's production code. Hand-authored: generation never touches it.
 import { parseDurationSeconds } from "../utils/documentMetadata";
+import { promoteChatArtifact, roundTripChatArtifact } from "./chatPromotion";
 import type { VectorAdapter } from "./generated/tests/vector-runner";
 
 const backendOwnsDocuments =
@@ -9,6 +10,16 @@ const backendOwnsDocuments =
   "crates/cutready-contracts.";
 
 export const vectorAdapters: Record<string, VectorAdapter> = {
+  "ChatArtifactDocument.promote": {
+    invoke: (input) => {
+      const value = input as { session: unknown; request: unknown };
+      return promoteChatArtifact(value.session, value.request);
+    },
+  },
+  "ChatArtifactDocument.roundTrip": {
+    invoke: (input) =>
+      roundTripChatArtifact((input as { artifact: unknown }).artifact as never),
+  },
   "PlanningTiming.parseDurationSeconds": {
     invoke: (input) => parseDurationSeconds((input as { time: string }).time),
   },

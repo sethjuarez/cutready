@@ -8,7 +8,8 @@
 // - empty collections and unset optional values are omitted;
 // - unknown fields on sketches and rows are preserved;
 // - storyboards always carry `description` and `locked`, sections omit an empty
-//   `description`; older storyboard shapes are covered by the upgrade vectors.
+//   `description`; older storyboard shapes are covered by the upgrade vectors;
+// - chat artifacts omit a blank `summary` and empty `tool_uses`.
 // Floats are non-integral binary fractions so every runtime prints them identically.
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -671,7 +672,254 @@ const storyboardUpgradeVectors = [
   },
 ];
 
-const tspConst = (name, vectors) => `const ${name} = """\n${JSON.stringify(vectors, null, 2)}\n""";\n`;
+// Chat artifacts omit a blank `summary` and empty `tool_uses`. Promotion keeps
+// what the user saw: message text, tool names and targets, and who answered.
+const STARTED = "2026-06-30T18:00:00Z";
+const ada = { name: "Ada Lovelace", email: "ada@example.com" };
+const grace = { name: "Grace Hopper" };
+const chatArtifact = (turns, extra = {}) => ({
+  title: "Plan the launch demo",
+  author: ada,
+  promoted_by: grace,
+  promoted_at: NOW,
+  source: { session_id: "chat-1", started_at: STARTED },
+  turns,
+  updated_at: NOW,
+  ...extra,
+});
+const userTurn = (text, extra = {}) => ({ role: "user", text, ...extra });
+const assistantTurn = (text, extra = {}) => ({ role: "assistant", text, ...extra });
+
+const desktopChatArtifact = chatArtifact(
+  [
+    userTurn("Draft an intro sketch for the launch demo.\n[References: @note:launch-brief.md]"),
+    assistantTurn("I read the brief and drafted **Intro** with three rows.", {
+      tool_uses: [
+        { name: "read_note", target: "launch-brief.md" },
+        { name: "write_sketch", target: "intro.sk" },
+        { name: "list_project_files" },
+      ],
+      agent: "planner",
+      model: "gpt-5.4",
+      future_turn_field: { confidence: 0.75 },
+    }),
+  ],
+  {
+    summary: "Agreed on a three-row intro.",
+    future_chat_field: { reviewers: ["grace"] },
+  },
+);
+
+const chatArtifactRoundTripVectors = [
+  {
+    name: "canonical chat artifact is unchanged",
+    input: { artifact: desktopChatArtifact },
+    expected: desktopChatArtifact,
+  },
+  {
+    name: "minimal chat artifact is unchanged",
+    input: {
+      artifact: chatArtifact([userTurn("Hello."), assistantTurn("Hi.")], {
+        author: grace,
+        source: { session_id: "chat-2" },
+      }),
+    },
+    expected: chatArtifact([userTurn("Hello."), assistantTurn("Hi.")], {
+      author: grace,
+      source: { session_id: "chat-2" },
+    }),
+  },
+  {
+    name: "null, blank, and empty optional values are omitted",
+    input: {
+      artifact: chatArtifact(
+        [
+          userTurn("Hello.", { tool_uses: null, agent: null, model: null }),
+          assistantTurn("Hi.", { tool_uses: [] }),
+          assistantTurn("Saved.", { tool_uses: [{ name: "write_note", target: null }] }),
+        ],
+        {
+          summary: "  \n",
+          author: { name: "Ada Lovelace", email: null },
+          source: { session_id: "chat-1", started_at: null },
+        },
+      ),
+    },
+    expected: chatArtifact(
+      [userTurn("Hello."), assistantTurn("Hi."), assistantTurn("Saved.", { tool_uses: [{ name: "write_note" }] })],
+      { author: { name: "Ada Lovelace" }, source: { session_id: "chat-1" } },
+    ),
+  },
+];
+
+const toolCall = (id, name, args) => ({
+  id,
+  type: "function",
+  function: { name, arguments: typeof args === "string" ? args : JSON.stringify(args) },
+});
+const runDetails = (agent_id, model) => ({
+  provider: "foundry",
+  model,
+  execution_engine: "prompty",
+  agent_id,
+  run_id: "run-1",
+  elapsed_ms: 1250,
+});
+const transcript = (messages, extra = {}) => ({ session_id: "chat-1", created_at: STARTED, messages, ...extra });
+const promotion = (extra = {}) => ({
+  title: "Plan the launch demo",
+  author: ada,
+  promoted_by: grace,
+  promoted_at: NOW,
+  ...extra,
+});
+const fourTurns = transcript([
+  { role: "user", content: "One" },
+  { role: "assistant", content: "Two" },
+  { role: "user", content: "Three" },
+  { role: "assistant", content: "Four" },
+]);
+
+const chatArtifactPromoteVectors = [
+  {
+    name: "agent run is curated into turns",
+    input: {
+      session: transcript([
+        { role: "system", content: "You are the planner." },
+        { role: "user", content: "  Draft an intro sketch for the launch demo.\n[References: @note:launch-brief.md]  " },
+        {
+          role: "assistant",
+          content: "Let me read the brief first.",
+          tool_calls: [toolCall("call-1", "read_note", { path: "launch-brief.md" })],
+          cutready: { workingNotes: { drafts: ["Private draft"], thinking: "Private reasoning" } },
+        },
+        { role: "tool", tool_call_id: "call-1", content: "# Launch brief\nPrivate numbers." },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            toolCall("call-2", "write_sketch", { path: "intro.sk", title: "Intro", rows: [] }),
+            toolCall("call-3", "fetch_url", { url: "https://example.com/launch" }),
+          ],
+        },
+        { role: "tool", tool_call_id: "call-2", content: "Saved intro.sk" },
+        { role: "tool", tool_call_id: "call-3", content: "<html></html>" },
+        {
+          role: "assistant",
+          content: "I drafted **Intro** with three rows.",
+          cutready: { runDetails: runDetails("planner", "gpt-5.4") },
+        },
+        { role: "user", content: "Thanks!" },
+        { role: "assistant", content: "Anytime.", cutready: { runDetails: runDetails("writer", "gpt-5.4-mini") } },
+      ]),
+      request: promotion({ summary: "  Agreed on a three-row intro.\n" }),
+    },
+    expected: chatArtifact(
+      [
+        userTurn("Draft an intro sketch for the launch demo.\n[References: @note:launch-brief.md]"),
+        assistantTurn("Let me read the brief first.\n\nI drafted **Intro** with three rows.", {
+          tool_uses: [
+            { name: "read_note", target: "launch-brief.md" },
+            { name: "write_sketch", target: "intro.sk" },
+            { name: "fetch_url", target: "https://example.com/launch" },
+          ],
+          agent: "planner",
+          model: "gpt-5.4",
+        }),
+        userTurn("Thanks!"),
+        assistantTurn("Anytime.", { agent: "writer", model: "gpt-5.4-mini" }),
+      ],
+      { summary: "Agreed on a three-row intro." },
+    ),
+  },
+  {
+    name: "images, pending, and empty messages are dropped before folding",
+    input: {
+      session: transcript([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "What is on this slide?" },
+            { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
+            { type: "text", text: "Keep it short." },
+          ],
+        },
+        { role: "assistant", content: [{ type: "text", text: "A launch timeline." }] },
+        { role: "user", content: [{ type: "image_url", image_url: { url: "data:image/png;base64,BBBB" } }] },
+        { role: "assistant", content: "It shows three milestones." },
+        { role: "user", content: "   " },
+        { role: "assistant", content: "" },
+        { role: "user", content: "Queued question", pending: true },
+        { role: "developer", content: "Unknown roles are dropped." },
+      ]),
+      request: promotion(),
+    },
+    expected: chatArtifact([
+      userTurn("What is on this slide?\nKeep it short."),
+      assistantTurn("A launch timeline.\n\nIt shows three milestones."),
+    ]),
+  },
+  {
+    name: "tool targets come from path or url arguments",
+    input: {
+      session: transcript([
+        { role: "user", content: "Tidy the project." },
+        {
+          role: "assistant",
+          content: "Working on it.",
+          tool_calls: [
+            toolCall("c1", "list_project_files", {}),
+            toolCall("c2", "read_sketch", { path: "  ", url: " https://example.com/spec " }),
+            toolCall("c3", "write_note", "{not json"),
+            toolCall("c4", "read_note", { path: 42 }),
+            { id: "c5", type: "function", function: { name: "read_storyboard" } },
+            { id: "c6", type: "function", function: { name: "  ", arguments: "{}" } },
+            toolCall("c7", "write_sketch", { path: " flows/login.sk " }),
+          ],
+        },
+      ]),
+      request: promotion(),
+    },
+    expected: chatArtifact([
+      userTurn("Tidy the project."),
+      assistantTurn("Working on it.", {
+        tool_uses: [
+          { name: "list_project_files" },
+          { name: "read_sketch", target: "https://example.com/spec" },
+          { name: "write_note" },
+          { name: "read_note" },
+          { name: "read_storyboard" },
+          { name: "write_sketch", target: "flows/login.sk" },
+        ],
+      }),
+    ]),
+  },
+  {
+    name: "selected turns keep transcript order and ignore bad indices",
+    input: { session: fourTurns, request: promotion({ selected_turns: [3, 0, 3, 9] }) },
+    expected: chatArtifact([userTurn("One"), assistantTurn("Four")]),
+  },
+  {
+    name: "omitted selection keeps every turn",
+    input: { session: fourTurns, request: promotion() },
+    expected: chatArtifact([userTurn("One"), assistantTurn("Two"), userTurn("Three"), assistantTurn("Four")]),
+  },
+  {
+    name: "unknown session start and blank summary are omitted",
+    input: {
+      session: { session_id: "chat-9", messages: [{ role: "user", content: "Hello." }] },
+      request: promotion({ title: "  Quick question  ", summary: " \n " }),
+    },
+    expected: chatArtifact([userTurn("Hello.")], {
+      title: "Quick question",
+      source: { session_id: "chat-9" },
+    }),
+  },
+];
+
+// TypeSpec strings interpret backslash escapes, so JSON's own escapes are doubled.
+const tspConst = (name, vectors) =>
+  `const ${name} = """\n${JSON.stringify(vectors, null, 2).replaceAll("\\", "\\\\")}\n""";\n`;
 
 const contractsDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 writeFileSync(
@@ -687,5 +935,7 @@ writeFileSync(
     tspConst("ParseDurationSecondsVectors", parseDurationSecondsVectors),
     tspConst("StoryboardRoundTripVectors", storyboardRoundTripVectors),
     tspConst("StoryboardUpgradeVectors", storyboardUpgradeVectors),
+    tspConst("ChatArtifactRoundTripVectors", chatArtifactRoundTripVectors),
+    tspConst("ChatArtifactPromoteVectors", chatArtifactPromoteVectors),
   ].join("\n"),
 );

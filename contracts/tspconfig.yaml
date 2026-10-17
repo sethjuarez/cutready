@@ -10,6 +10,9 @@ options:
       - "CutReady.Contracts.RowTextUpdate"
       - "CutReady.Contracts.SketchEditError"
       - "CutReady.Contracts.Storyboard"
+      - "CutReady.Contracts.ChatArtifact"
+      - "CutReady.Contracts.ChatTranscript"
+      - "CutReady.Contracts.ChatPromotion"
     deterministic-output: true
     emit-targets:
       # Desktop (Rust). Models + sample tests compile inside the

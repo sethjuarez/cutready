@@ -51,6 +51,30 @@ pub use row_text_update::*;
 pub mod sketch_edit_error;
 pub use sketch_edit_error::*;
 
+pub mod chat_participant;
+pub use chat_participant::*;
+
+pub mod chat_artifact_source;
+pub use chat_artifact_source::*;
+
+pub mod chat_tool_use;
+pub use chat_tool_use::*;
+
+pub mod chat_turn;
+pub use chat_turn::*;
+
+pub mod chat_artifact;
+pub use chat_artifact::*;
+
+pub mod chat_transcript;
+pub use chat_transcript::*;
+
+pub mod chat_promotion;
+pub use chat_promotion::*;
+
+pub mod chat_artifact_document;
+pub use chat_artifact_document::*;
+
 pub mod planning_timing;
 pub use planning_timing::*;
 

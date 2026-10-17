@@ -3757,3 +3757,857 @@ const StoryboardUpgradeVectors = """
   }
 ]
 """;
+
+const ChatArtifactRoundTripVectors = """
+[
+  {
+    "name": "canonical chat artifact is unchanged",
+    "input": {
+      "artifact": {
+        "title": "Plan the launch demo",
+        "author": {
+          "name": "Ada Lovelace",
+          "email": "ada@example.com"
+        },
+        "promoted_by": {
+          "name": "Grace Hopper"
+        },
+        "promoted_at": "2026-07-01T09:30:00Z",
+        "source": {
+          "session_id": "chat-1",
+          "started_at": "2026-06-30T18:00:00Z"
+        },
+        "turns": [
+          {
+            "role": "user",
+            "text": "Draft an intro sketch for the launch demo.\\n[References: @note:launch-brief.md]"
+          },
+          {
+            "role": "assistant",
+            "text": "I read the brief and drafted **Intro** with three rows.",
+            "tool_uses": [
+              {
+                "name": "read_note",
+                "target": "launch-brief.md"
+              },
+              {
+                "name": "write_sketch",
+                "target": "intro.sk"
+              },
+              {
+                "name": "list_project_files"
+              }
+            ],
+            "agent": "planner",
+            "model": "gpt-5.4",
+            "future_turn_field": {
+              "confidence": 0.75
+            }
+          }
+        ],
+        "updated_at": "2026-07-01T09:30:00Z",
+        "summary": "Agreed on a three-row intro.",
+        "future_chat_field": {
+          "reviewers": [
+            "grace"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "title": "Plan the launch demo",
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.com"
+      },
+      "promoted_by": {
+        "name": "Grace Hopper"
+      },
+      "promoted_at": "2026-07-01T09:30:00Z",
+      "source": {
+        "session_id": "chat-1",
+        "started_at": "2026-06-30T18:00:00Z"
+      },
+      "turns": [
+        {
+          "role": "user",
+          "text": "Draft an intro sketch for the launch demo.\\n[References: @note:launch-brief.md]"
+        },
+        {
+          "role": "assistant",
+          "text": "I read the brief and drafted **Intro** with three rows.",
+          "tool_uses": [
+            {
+              "name": "read_note",
+              "target": "launch-brief.md"
+            },
+            {
+              "name": "write_sketch",
+              "target": "intro.sk"
+            },
+            {
+              "name": "list_project_files"
+            }
+          ],
+          "agent": "planner",
+          "model": "gpt-5.4",
+          "future_turn_field": {
+            "confidence": 0.75
+          }
+        }
+      ],
+      "updated_at": "2026-07-01T09:30:00Z",
+      "summary": "Agreed on a three-row intro.",
+      "future_chat_field": {
+        "reviewers": [
+          "grace"
+        ]
+      }
+    }
+  },
+  {
+    "name": "minimal chat artifact is unchanged",
+    "input": {
+      "artifact": {
+        "title": "Plan the launch demo",
+        "author": {
+          "name": "Grace Hopper"
+        },
+        "promoted_by": {
+          "name": "Grace Hopper"
+        },
+        "promoted_at": "2026-07-01T09:30:00Z",
+        "source": {
+          "session_id": "chat-2"
+        },
+        "turns": [
+          {
+            "role": "user",
+            "text": "Hello."
+          },
+          {
+            "role": "assistant",
+            "text": "Hi."
+          }
+        ],
+        "updated_at": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expected": {
+      "title": "Plan the launch demo",
+      "author": {
+        "name": "Grace Hopper"
+      },
+      "promoted_by": {
+        "name": "Grace Hopper"
+      },
+      "promoted_at": "2026-07-01T09:30:00Z",
+      "source": {
+        "session_id": "chat-2"
+      },
+      "turns": [
+        {
+          "role": "user",
+          "text": "Hello."
+        },
+        {
+          "role": "assistant",
+          "text": "Hi."
+        }
+      ],
+      "updated_at": "2026-07-01T09:30:00Z"
+    }
+  },
+  {
+    "name": "null, blank, and empty optional values are omitted",
+    "input": {
+      "artifact": {
+        "title": "Plan the launch demo",
+        "author": {
+          "name": "Ada Lovelace",
+          "email": null
+        },
+        "promoted_by": {
+          "name": "Grace Hopper"
+        },
+        "promoted_at": "2026-07-01T09:30:00Z",
+        "source": {
+          "session_id": "chat-1",
+          "started_at": null
+        },
+        "turns": [
+          {
+            "role": "user",
+            "text": "Hello.",
+            "tool_uses": null,
+            "agent": null,
+            "model": null
+          },
+          {
+            "role": "assistant",
+            "text": "Hi.",
+            "tool_uses": []
+          },
+          {
+            "role": "assistant",
+            "text": "Saved.",
+            "tool_uses": [
+              {
+                "name": "write_note",
+                "target": null
+              }
+            ]
+          }
+        ],
+        "updated_at": "2026-07-01T09:30:00Z",
+        "summary": "  \\n"
+      }
+    },
+    "expected": {
+      "title": "Plan the launch demo",
+      "author": {
+        "name": "Ada Lovelace"
+      },
+      "promoted_by": {
+        "name": "Grace Hopper"
+      },
+      "promoted_at": "2026-07-01T09:30:00Z",
+      "source": {
+        "session_id": "chat-1"
+      },
+      "turns": [
+        {
+          "role": "user",
+          "text": "Hello."
+        },
+        {
+          "role": "assistant",
+          "text": "Hi."
+        },
+        {
+          "role": "assistant",
+          "text": "Saved.",
+          "tool_uses": [
+            {
+              "name": "write_note"
+            }
+          ]
+        }
+      ],
+      "updated_at": "2026-07-01T09:30:00Z"
+    }
+  }
+]
+""";
+
+const ChatArtifactPromoteVectors = """
+[
+  {
+    "name": "agent run is curated into turns",
+    "input": {
+      "session": {
+        "session_id": "chat-1",
+        "created_at": "2026-06-30T18:00:00Z",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are the planner."
+          },
+          {
+            "role": "user",
+            "content": "  Draft an intro sketch for the launch demo.\\n[References: @note:launch-brief.md]  "
+          },
+          {
+            "role": "assistant",
+            "content": "Let me read the brief first.",
+            "tool_calls": [
+              {
+                "id": "call-1",
+                "type": "function",
+                "function": {
+                  "name": "read_note",
+                  "arguments": "{\\"path\\":\\"launch-brief.md\\"}"
+                }
+              }
+            ],
+            "cutready": {
+              "workingNotes": {
+                "drafts": [
+                  "Private draft"
+                ],
+                "thinking": "Private reasoning"
+              }
+            }
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "call-1",
+            "content": "# Launch brief\\nPrivate numbers."
+          },
+          {
+            "role": "assistant",
+            "content": null,
+            "tool_calls": [
+              {
+                "id": "call-2",
+                "type": "function",
+                "function": {
+                  "name": "write_sketch",
+                  "arguments": "{\\"path\\":\\"intro.sk\\",\\"title\\":\\"Intro\\",\\"rows\\":[]}"
+                }
+              },
+              {
+                "id": "call-3",
+                "type": "function",
+                "function": {
+                  "name": "fetch_url",
+                  "arguments": "{\\"url\\":\\"https://example.com/launch\\"}"
+                }
+              }
+            ]
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "call-2",
+            "content": "Saved intro.sk"
+          },
+          {
+            "role": "tool",
+            "tool_call_id": "call-3",
+            "content": "<html></html>"
+          },
+          {
+            "role": "assistant",
+            "content": "I drafted **Intro** with three rows.",
+            "cutready": {
+              "runDetails": {
+                "provider": "foundry",
+                "model": "gpt-5.4",
+                "execution_engine": "prompty",
+                "agent_id": "planner",
+                "run_id": "run-1",
+                "elapsed_ms": 1250
+              }
+            }
+          },
+          {
+            "role": "user",
+            "content": "Thanks!"
+          },
+          {
+            "role": "assistant",
+            "content": "Anytime.",
+            "cutready": {
+              "runDetails": {
+                "provider": "foundry",
+                "model": "gpt-5.4-mini",
+                "execution_engine": "prompty",
+                "agent_id": "writer",
+                "run_id": "run-1",
+                "elapsed_ms": 1250
+              }
+            }
+          }
+        ]
+      },
+      "request": {
+        "title": "Plan the launch demo",
+        "author": {
+          "name": "Ada Lovelace",
+          "email": "ada@example.com"
+        },
+        "promoted_by": {
+          "name": "Grace Hopper"
+        },
+        "promoted_at": "2026-07-01T09:30:00Z",
+        "summary": "  Agreed on a three-row intro.\\n"
+      }
+    },
+    "expected": {
+      "title": "Plan the launch demo",
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.com"
+      },
+      "promoted_by": {
+        "name": "Grace Hopper"
+      },
+      "promoted_at": "2026-07-01T09:30:00Z",
+      "source": {
+        "session_id": "chat-1",
+        "started_at": "2026-06-30T18:00:00Z"
+      },
+      "turns": [
+        {
+          "role": "user",
+          "text": "Draft an intro sketch for the launch demo.\\n[References: @note:launch-brief.md]"
+        },
+        {
+          "role": "assistant",
+          "text": "Let me read the brief first.\\n\\nI drafted **Intro** with three rows.",
+          "tool_uses": [
+            {
+              "name": "read_note",
+              "target": "launch-brief.md"
+            },
+            {
+              "name": "write_sketch",
+              "target": "intro.sk"
+            },
+            {
+              "name": "fetch_url",
+              "target": "https://example.com/launch"
+            }
+          ],
+          "agent": "planner",
+          "model": "gpt-5.4"
+        },
+        {
+          "role": "user",
+          "text": "Thanks!"
+        },
+        {
+          "role": "assistant",
+          "text": "Anytime.",
+          "agent": "writer",
+          "model": "gpt-5.4-mini"
+        }
+      ],
+      "updated_at": "2026-07-01T09:30:00Z",
+      "summary": "Agreed on a three-row intro."
+    }
+  },
+  {
+    "name": "images, pending, and empty messages are dropped before folding",
+    "input": {
+      "session": {
+        "session_id": "chat-1",
+        "created_at": "2026-06-30T18:00:00Z",
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "What is on this slide?"
+              },
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "data:image/png;base64,AAAA"
+                }
+              },
+              {
+                "type": "text",
+                "text": "Keep it short."
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "A launch timeline."
+              }
+            ]
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "data:image/png;base64,BBBB"
+                }
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": "It shows three milestones."
+          },
+          {
+            "role": "user",
+            "content": "   "
+          },
+          {
+            "role": "assistant",
+            "content": ""
+          },
+          {
+            "role": "user",
+            "content": "Queued question",
+            "pending": true
+          },
+          {
+            "role": "developer",
+            "content": "Unknown roles are dropped."
+          }
+        ]
+      },
+      "request": {
+        "title": "Plan the launch demo",
+        "author": {
+          "name": "Ada Lovelace",
+          "email": "ada@example.com"
+        },
+        "promoted_by": {
+          "name": "Grace Hopper"
+        },
+        "promoted_at": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expected": {
+      "title": "Plan the launch demo",
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.com"
+      },
+      "promoted_by": {
+        "name": "Grace Hopper"
+      },
+      "promoted_at": "2026-07-01T09:30:00Z",
+      "source": {
+        "session_id": "chat-1",
+        "started_at": "2026-06-30T18:00:00Z"
+      },
+      "turns": [
+        {
+          "role": "user",
+          "text": "What is on this slide?\\nKeep it short."
+        },
+        {
+          "role": "assistant",
+          "text": "A launch timeline.\\n\\nIt shows three milestones."
+        }
+      ],
+      "updated_at": "2026-07-01T09:30:00Z"
+    }
+  },
+  {
+    "name": "tool targets come from path or url arguments",
+    "input": {
+      "session": {
+        "session_id": "chat-1",
+        "created_at": "2026-06-30T18:00:00Z",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Tidy the project."
+          },
+          {
+            "role": "assistant",
+            "content": "Working on it.",
+            "tool_calls": [
+              {
+                "id": "c1",
+                "type": "function",
+                "function": {
+                  "name": "list_project_files",
+                  "arguments": "{}"
+                }
+              },
+              {
+                "id": "c2",
+                "type": "function",
+                "function": {
+                  "name": "read_sketch",
+                  "arguments": "{\\"path\\":\\"  \\",\\"url\\":\\" https://example.com/spec \\"}"
+                }
+              },
+              {
+                "id": "c3",
+                "type": "function",
+                "function": {
+                  "name": "write_note",
+                  "arguments": "{not json"
+                }
+              },
+              {
+                "id": "c4",
+                "type": "function",
+                "function": {
+                  "name": "read_note",
+                  "arguments": "{\\"path\\":42}"
+                }
+              },
+              {
+                "id": "c5",
+                "type": "function",
+                "function": {
+                  "name": "read_storyboard"
+                }
+              },
+              {
+                "id": "c6",
+                "type": "function",
+                "function": {
+                  "name": "  ",
+                  "arguments": "{}"
+                }
+              },
+              {
+                "id": "c7",
+                "type": "function",
+                "function": {
+                  "name": "write_sketch",
+                  "arguments": "{\\"path\\":\\" flows/login.sk \\"}"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "title": "Plan the launch demo",
+        "author": {
+          "name": "Ada Lovelace",
+          "email": "ada@example.com"
+        },
+        "promoted_by": {
+          "name": "Grace Hopper"
+        },
+        "promoted_at": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expected": {
+      "title": "Plan the launch demo",
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.com"
+      },
+      "promoted_by": {
+        "name": "Grace Hopper"
+      },
+      "promoted_at": "2026-07-01T09:30:00Z",
+      "source": {
+        "session_id": "chat-1",
+        "started_at": "2026-06-30T18:00:00Z"
+      },
+      "turns": [
+        {
+          "role": "user",
+          "text": "Tidy the project."
+        },
+        {
+          "role": "assistant",
+          "text": "Working on it.",
+          "tool_uses": [
+            {
+              "name": "list_project_files"
+            },
+            {
+              "name": "read_sketch",
+              "target": "https://example.com/spec"
+            },
+            {
+              "name": "write_note"
+            },
+            {
+              "name": "read_note"
+            },
+            {
+              "name": "read_storyboard"
+            },
+            {
+              "name": "write_sketch",
+              "target": "flows/login.sk"
+            }
+          ]
+        }
+      ],
+      "updated_at": "2026-07-01T09:30:00Z"
+    }
+  },
+  {
+    "name": "selected turns keep transcript order and ignore bad indices",
+    "input": {
+      "session": {
+        "session_id": "chat-1",
+        "created_at": "2026-06-30T18:00:00Z",
+        "messages": [
+          {
+            "role": "user",
+            "content": "One"
+          },
+          {
+            "role": "assistant",
+            "content": "Two"
+          },
+          {
+            "role": "user",
+            "content": "Three"
+          },
+          {
+            "role": "assistant",
+            "content": "Four"
+          }
+        ]
+      },
+      "request": {
+        "title": "Plan the launch demo",
+        "author": {
+          "name": "Ada Lovelace",
+          "email": "ada@example.com"
+        },
+        "promoted_by": {
+          "name": "Grace Hopper"
+        },
+        "promoted_at": "2026-07-01T09:30:00Z",
+        "selected_turns": [
+          3,
+          0,
+          3,
+          9
+        ]
+      }
+    },
+    "expected": {
+      "title": "Plan the launch demo",
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.com"
+      },
+      "promoted_by": {
+        "name": "Grace Hopper"
+      },
+      "promoted_at": "2026-07-01T09:30:00Z",
+      "source": {
+        "session_id": "chat-1",
+        "started_at": "2026-06-30T18:00:00Z"
+      },
+      "turns": [
+        {
+          "role": "user",
+          "text": "One"
+        },
+        {
+          "role": "assistant",
+          "text": "Four"
+        }
+      ],
+      "updated_at": "2026-07-01T09:30:00Z"
+    }
+  },
+  {
+    "name": "omitted selection keeps every turn",
+    "input": {
+      "session": {
+        "session_id": "chat-1",
+        "created_at": "2026-06-30T18:00:00Z",
+        "messages": [
+          {
+            "role": "user",
+            "content": "One"
+          },
+          {
+            "role": "assistant",
+            "content": "Two"
+          },
+          {
+            "role": "user",
+            "content": "Three"
+          },
+          {
+            "role": "assistant",
+            "content": "Four"
+          }
+        ]
+      },
+      "request": {
+        "title": "Plan the launch demo",
+        "author": {
+          "name": "Ada Lovelace",
+          "email": "ada@example.com"
+        },
+        "promoted_by": {
+          "name": "Grace Hopper"
+        },
+        "promoted_at": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expected": {
+      "title": "Plan the launch demo",
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.com"
+      },
+      "promoted_by": {
+        "name": "Grace Hopper"
+      },
+      "promoted_at": "2026-07-01T09:30:00Z",
+      "source": {
+        "session_id": "chat-1",
+        "started_at": "2026-06-30T18:00:00Z"
+      },
+      "turns": [
+        {
+          "role": "user",
+          "text": "One"
+        },
+        {
+          "role": "assistant",
+          "text": "Two"
+        },
+        {
+          "role": "user",
+          "text": "Three"
+        },
+        {
+          "role": "assistant",
+          "text": "Four"
+        }
+      ],
+      "updated_at": "2026-07-01T09:30:00Z"
+    }
+  },
+  {
+    "name": "unknown session start and blank summary are omitted",
+    "input": {
+      "session": {
+        "session_id": "chat-9",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Hello."
+          }
+        ]
+      },
+      "request": {
+        "title": "  Quick question  ",
+        "author": {
+          "name": "Ada Lovelace",
+          "email": "ada@example.com"
+        },
+        "promoted_by": {
+          "name": "Grace Hopper"
+        },
+        "promoted_at": "2026-07-01T09:30:00Z",
+        "summary": " \\n "
+      }
+    },
+    "expected": {
+      "title": "Quick question",
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.com"
+      },
+      "promoted_by": {
+        "name": "Grace Hopper"
+      },
+      "promoted_at": "2026-07-01T09:30:00Z",
+      "source": {
+        "session_id": "chat-9"
+      },
+      "turns": [
+        {
+          "role": "user",
+          "text": "Hello."
+        }
+      ],
+      "updated_at": "2026-07-01T09:30:00Z"
+    }
+  }
+]
+""";

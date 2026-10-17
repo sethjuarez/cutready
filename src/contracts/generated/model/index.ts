@@ -23,6 +23,14 @@ export {
 export { Storyboard } from "./storyboard";
 export { RowTextUpdate } from "./row-text-update";
 export { SketchEditError } from "./sketch-edit-error";
+export { ChatParticipant } from "./chat-participant";
+export { ChatArtifactSource } from "./chat-artifact-source";
+export { ChatToolUse } from "./chat-tool-use";
+export { ChatTurn } from "./chat-turn";
+export { ChatArtifact } from "./chat-artifact";
+export { ChatTranscript } from "./chat-transcript";
+export { ChatPromotion } from "./chat-promotion";
+export type { ChatArtifactDocument } from "./chat-artifact-document";
 export type { PlanningTiming } from "./planning-timing";
 export type { SketchDocument } from "./sketch-document";
 export type { StoryboardDocument } from "./storyboard-document";

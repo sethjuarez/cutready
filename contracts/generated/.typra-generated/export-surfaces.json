@@ -33,6 +33,14 @@
       "target": "markdown",
       "outputRoot": "generated/markdown",
       "rootExports": [
+        "ChatArtifact",
+        "ChatArtifactDocument",
+        "ChatArtifactSource",
+        "ChatParticipant",
+        "ChatPromotion",
+        "ChatToolUse",
+        "ChatTranscript",
+        "ChatTurn",
         "DocumentMetadata",
         "MotionPlan",
         "MotionPlanKeyframe",
@@ -55,6 +63,62 @@
         "TypingSpot"
       ],
       "exports": [
+        {
+          "name": "ChatArtifact",
+          "kind": "value",
+          "group": "",
+          "source": "ChatArtifact",
+          "protocol": false
+        },
+        {
+          "name": "ChatArtifactDocument",
+          "kind": "type",
+          "group": "",
+          "source": "ChatArtifactDocument",
+          "protocol": true
+        },
+        {
+          "name": "ChatArtifactSource",
+          "kind": "value",
+          "group": "",
+          "source": "ChatArtifactSource",
+          "protocol": false
+        },
+        {
+          "name": "ChatParticipant",
+          "kind": "value",
+          "group": "",
+          "source": "ChatParticipant",
+          "protocol": false
+        },
+        {
+          "name": "ChatPromotion",
+          "kind": "value",
+          "group": "",
+          "source": "ChatPromotion",
+          "protocol": false
+        },
+        {
+          "name": "ChatToolUse",
+          "kind": "value",
+          "group": "",
+          "source": "ChatToolUse",
+          "protocol": false
+        },
+        {
+          "name": "ChatTranscript",
+          "kind": "value",
+          "group": "",
+          "source": "ChatTranscript",
+          "protocol": false
+        },
+        {
+          "name": "ChatTurn",
+          "kind": "value",
+          "group": "",
+          "source": "ChatTurn",
+          "protocol": false
+        },
         {
           "name": "DocumentMetadata",
           "kind": "value",
@@ -199,6 +263,39 @@
       "groups": [],
       "protocols": [
         {
+          "name": "ChatArtifactDocument",
+          "group": "",
+          "symbol": "ChatArtifactDocument",
+          "source": "ChatArtifactDocument",
+          "methods": [
+            {
+              "name": "promote",
+              "returns": "ChatArtifact",
+              "params": {
+                "request": "ChatPromotion",
+                "session": "ChatTranscript"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "roundTrip",
+              "returns": "ChatArtifact",
+              "params": {
+                "artifact": "ChatArtifact"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            }
+          ]
+        },
+        {
           "name": "PlanningTiming",
           "group": "",
           "symbol": "PlanningTiming",
@@ -300,6 +397,14 @@
         }
       ],
       "modules": [
+        "ChatArtifact",
+        "ChatArtifactDocument",
+        "ChatArtifactSource",
+        "ChatParticipant",
+        "ChatPromotion",
+        "ChatToolUse",
+        "ChatTranscript",
+        "ChatTurn",
         "DocumentMetadata",
         "MotionPlan",
         "MotionPlanKeyframe",
@@ -324,6 +429,14 @@
       "target": "rust",
       "outputRoot": "../crates/cutready-contracts/src/model",
       "rootExports": [
+        "ChatArtifact",
+        "ChatArtifactDocument",
+        "ChatArtifactSource",
+        "ChatParticipant",
+        "ChatPromotion",
+        "ChatToolUse",
+        "ChatTranscript",
+        "ChatTurn",
         "DocumentMetadata",
         "MotionPlan",
         "MotionPlanKeyframe",
@@ -346,6 +459,62 @@
         "TypingSpot"
       ],
       "exports": [
+        {
+          "name": "ChatArtifact",
+          "kind": "value",
+          "group": "",
+          "source": "chat_artifact",
+          "protocol": false
+        },
+        {
+          "name": "ChatArtifactDocument",
+          "kind": "type",
+          "group": "",
+          "source": "chat_artifact_document",
+          "protocol": true
+        },
+        {
+          "name": "ChatArtifactSource",
+          "kind": "value",
+          "group": "",
+          "source": "chat_artifact_source",
+          "protocol": false
+        },
+        {
+          "name": "ChatParticipant",
+          "kind": "value",
+          "group": "",
+          "source": "chat_participant",
+          "protocol": false
+        },
+        {
+          "name": "ChatPromotion",
+          "kind": "value",
+          "group": "",
+          "source": "chat_promotion",
+          "protocol": false
+        },
+        {
+          "name": "ChatToolUse",
+          "kind": "value",
+          "group": "",
+          "source": "chat_tool_use",
+          "protocol": false
+        },
+        {
+          "name": "ChatTranscript",
+          "kind": "value",
+          "group": "",
+          "source": "chat_transcript",
+          "protocol": false
+        },
+        {
+          "name": "ChatTurn",
+          "kind": "value",
+          "group": "",
+          "source": "chat_turn",
+          "protocol": false
+        },
         {
           "name": "DocumentMetadata",
           "kind": "value",
@@ -490,6 +659,39 @@
       "groups": [],
       "protocols": [
         {
+          "name": "ChatArtifactDocument",
+          "group": "",
+          "symbol": "ChatArtifactDocument",
+          "source": "chat_artifact_document",
+          "methods": [
+            {
+              "name": "promote",
+              "returns": "ChatArtifact",
+              "params": {
+                "request": "ChatPromotion",
+                "session": "ChatTranscript"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "roundTrip",
+              "returns": "ChatArtifact",
+              "params": {
+                "artifact": "ChatArtifact"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            }
+          ]
+        },
+        {
           "name": "PlanningTiming",
           "group": "",
           "symbol": "PlanningTiming",
@@ -591,6 +793,14 @@
         }
       ],
       "modules": [
+        "chat_artifact",
+        "chat_artifact_document",
+        "chat_artifact_source",
+        "chat_participant",
+        "chat_promotion",
+        "chat_tool_use",
+        "chat_transcript",
+        "chat_turn",
         "context",
         "document_metadata",
         "motion_plan",
@@ -617,6 +827,14 @@
       "outputRoot": "generated/swift",
       "packageName": "CutReadyContracts",
       "rootExports": [
+        "ChatArtifact",
+        "ChatArtifactDocument",
+        "ChatArtifactSource",
+        "ChatParticipant",
+        "ChatPromotion",
+        "ChatToolUse",
+        "ChatTranscript",
+        "ChatTurn",
         "DocumentMetadata",
         "MotionPlan",
         "MotionPlanKeyframe",
@@ -639,6 +857,62 @@
         "TypingSpot"
       ],
       "exports": [
+        {
+          "name": "ChatArtifact",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/chat_artifact.swift",
+          "protocol": false
+        },
+        {
+          "name": "ChatArtifactDocument",
+          "kind": "type",
+          "group": "",
+          "source": "Sources/CutReadyContracts/chat_artifact_document.swift",
+          "protocol": true
+        },
+        {
+          "name": "ChatArtifactSource",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/chat_artifact_source.swift",
+          "protocol": false
+        },
+        {
+          "name": "ChatParticipant",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/chat_participant.swift",
+          "protocol": false
+        },
+        {
+          "name": "ChatPromotion",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/chat_promotion.swift",
+          "protocol": false
+        },
+        {
+          "name": "ChatToolUse",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/chat_tool_use.swift",
+          "protocol": false
+        },
+        {
+          "name": "ChatTranscript",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/chat_transcript.swift",
+          "protocol": false
+        },
+        {
+          "name": "ChatTurn",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/chat_turn.swift",
+          "protocol": false
+        },
         {
           "name": "DocumentMetadata",
           "kind": "value",
@@ -783,6 +1057,39 @@
       "groups": [],
       "protocols": [
         {
+          "name": "ChatArtifactDocument",
+          "group": "",
+          "symbol": "ChatArtifactDocument",
+          "source": "Sources/CutReadyContracts/chat_artifact_document.swift",
+          "methods": [
+            {
+              "name": "promote",
+              "returns": "ChatArtifact",
+              "params": {
+                "request": "ChatPromotion",
+                "session": "ChatTranscript"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "roundTrip",
+              "returns": "ChatArtifact",
+              "params": {
+                "artifact": "ChatArtifact"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            }
+          ]
+        },
+        {
           "name": "PlanningTiming",
           "group": "",
           "symbol": "PlanningTiming",
@@ -884,6 +1191,14 @@
         }
       ],
       "modules": [
+        "Sources/CutReadyContracts/chat_artifact.swift",
+        "Sources/CutReadyContracts/chat_artifact_document.swift",
+        "Sources/CutReadyContracts/chat_artifact_source.swift",
+        "Sources/CutReadyContracts/chat_participant.swift",
+        "Sources/CutReadyContracts/chat_promotion.swift",
+        "Sources/CutReadyContracts/chat_tool_use.swift",
+        "Sources/CutReadyContracts/chat_transcript.swift",
+        "Sources/CutReadyContracts/chat_turn.swift",
         "Sources/CutReadyContracts/document_metadata.swift",
         "Sources/CutReadyContracts/motion_plan.swift",
         "Sources/CutReadyContracts/motion_plan_keyframe.swift",
@@ -909,6 +1224,14 @@
       "outputRoot": "../src/contracts/generated/model",
       "namespace": "CutReady.Contracts",
       "rootExports": [
+        "ChatArtifact",
+        "ChatArtifactDocument",
+        "ChatArtifactSource",
+        "ChatParticipant",
+        "ChatPromotion",
+        "ChatToolUse",
+        "ChatTranscript",
+        "ChatTurn",
         "DocumentMetadata",
         "MotionPlan",
         "MotionPlanKeyframe",
@@ -931,6 +1254,62 @@
         "TypingSpot"
       ],
       "exports": [
+        {
+          "name": "ChatArtifact",
+          "kind": "value",
+          "group": "",
+          "source": "./chat-artifact",
+          "protocol": false
+        },
+        {
+          "name": "ChatArtifactDocument",
+          "kind": "type",
+          "group": "",
+          "source": "./chat-artifact-document",
+          "protocol": true
+        },
+        {
+          "name": "ChatArtifactSource",
+          "kind": "value",
+          "group": "",
+          "source": "./chat-artifact-source",
+          "protocol": false
+        },
+        {
+          "name": "ChatParticipant",
+          "kind": "value",
+          "group": "",
+          "source": "./chat-participant",
+          "protocol": false
+        },
+        {
+          "name": "ChatPromotion",
+          "kind": "value",
+          "group": "",
+          "source": "./chat-promotion",
+          "protocol": false
+        },
+        {
+          "name": "ChatToolUse",
+          "kind": "value",
+          "group": "",
+          "source": "./chat-tool-use",
+          "protocol": false
+        },
+        {
+          "name": "ChatTranscript",
+          "kind": "value",
+          "group": "",
+          "source": "./chat-transcript",
+          "protocol": false
+        },
+        {
+          "name": "ChatTurn",
+          "kind": "value",
+          "group": "",
+          "source": "./chat-turn",
+          "protocol": false
+        },
         {
           "name": "DocumentMetadata",
           "kind": "value",
@@ -1075,6 +1454,39 @@
       "groups": [],
       "protocols": [
         {
+          "name": "ChatArtifactDocument",
+          "group": "",
+          "symbol": "ChatArtifactDocument",
+          "source": "./chat-artifact-document",
+          "methods": [
+            {
+              "name": "promote",
+              "returns": "ChatArtifact",
+              "params": {
+                "request": "ChatPromotion",
+                "session": "ChatTranscript"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "roundTrip",
+              "returns": "ChatArtifact",
+              "params": {
+                "artifact": "ChatArtifact"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            }
+          ]
+        },
+        {
           "name": "PlanningTiming",
           "group": "",
           "symbol": "PlanningTiming",
@@ -1176,6 +1588,14 @@
         }
       ],
       "modules": [
+        "./chat-artifact",
+        "./chat-artifact-document",
+        "./chat-artifact-source",
+        "./chat-participant",
+        "./chat-promotion",
+        "./chat-tool-use",
+        "./chat-transcript",
+        "./chat-turn",
         "./document-metadata",
         "./motion-plan",
         "./motion-plan-keyframe",
