@@ -190,6 +190,7 @@ export interface NoteSummary {
   title: string;
   size: number;
   updated_at: string;
+  turn_count?: number;
 }
 
 // ── Chat types ────────────────────────────────────────────────

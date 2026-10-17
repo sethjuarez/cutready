@@ -1935,17 +1935,29 @@ fn scan_document_summaries(
                     .file_stem()
                     .map(|s| s.to_string_lossy().into_owned())
                     .unwrap_or_else(|| rel_path.to_string());
+                let turn_count = if extension == "cv" {
+                    chat_artifact_turn_count(abs_path)
+                } else {
+                    None
+                };
                 summaries.push(NoteSummary {
                     path: rel_path.to_string(),
                     title,
                     size: meta.len(),
                     updated_at,
+                    turn_count,
                 });
             }
         },
     )?;
     summaries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
     Ok(summaries)
+}
+
+fn chat_artifact_turn_count(path: &Path) -> Option<usize> {
+    let content = std::fs::read_to_string(path).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&content).ok()?;
+    value.get("turns")?.as_array().map(Vec::len)
 }
 
 /// Entry for the flat file listing returned by `scan_all_files`.
@@ -3262,6 +3274,24 @@ mod tests {
         assert!(!root.join("chat-artifacts/old.cv").exists());
         assert!(root.join("chat-artifacts/renamed.cv").exists());
         assert!(result.updated_references.is_empty());
+    }
+
+    #[test]
+    fn scan_chat_artifacts_includes_turn_count() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join("chat-artifacts")).unwrap();
+        std::fs::write(
+            root.join("chat-artifacts/demo.cv"),
+            r#"{"title":"Demo","turns":[{"role":"user"},{"role":"assistant"}]}"#,
+        )
+        .unwrap();
+
+        let summaries = scan_chat_artifacts(root).unwrap();
+
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].title, "demo");
+        assert_eq!(summaries[0].turn_count, Some(2));
     }
 
     #[test]

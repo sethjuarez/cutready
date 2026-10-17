@@ -400,6 +400,9 @@ function DocumentItemText({ title, meta, active, tone }: { title: string; meta?:
 }
 
 function chatArtifactMeta(artifact: NoteSummary): string {
+  if (typeof artifact.turn_count === "number") {
+    return `${artifact.turn_count} ${artifact.turn_count === 1 ? "turn" : "turns"}`;
+  }
   const date = new Date(artifact.updated_at);
   if (Number.isNaN(date.getTime())) return "Saved chat";
   return `Saved ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;

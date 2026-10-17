@@ -708,6 +708,9 @@ pub struct NoteSummary {
     pub size: u64,
     /// Last modified timestamp.
     pub updated_at: DateTime<Utc>,
+    /// Number of turns for chat documents.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub turn_count: Option<usize>,
 }
 
 #[cfg(test)]
