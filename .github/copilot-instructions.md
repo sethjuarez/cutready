@@ -55,7 +55,7 @@ my-demo-project/
 | Backend | **Rust** (2021 edition) | Async via Tokio, native Windows API via windows-rs |
 | State management | **Zustand** | appStore, toastStore, updateStore |
 | Drag-and-drop | **dnd-kit** | Sketch reordering in storyboards, tab reordering |
-| Versioning | **Draftline** 0.2.5 | Content versioning, collaboration, branch graph helpers, sync, merge |
+| Versioning | **Draftline** 0.4.0 | Content versioning, collaboration, branch graph helpers, sync, merge |
 | Screen recording | **FFmpeg** (sidecar) | FFV1 lossless codec in MKV, multi-track audio |
 | Browser automation | **Playwright** (Node.js sidecar) | Headful browser observation and replay automation |
 | LLM | **Microsoft Foundry** | Chat Completions + Responses API, multi-agent system |

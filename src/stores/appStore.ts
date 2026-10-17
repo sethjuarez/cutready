@@ -47,6 +47,7 @@ import {
   switchDraftlineVariation,
   undoDraftlineSnapshotCleanup,
   undoDraftlinePendingSnapshotCleanup,
+  abandonDraftlinePendingSnapshotCleanup,
   type DraftlineRestoreVersionTarget,
   type DraftlineMergeIncomingToken,
   type DraftlineHistoryCleanupPreview,
@@ -207,6 +208,36 @@ export function remoteSyncErrorMessage(error: unknown): string {
 
 const PENDING_CLEANUP_INCOMING_MESSAGE =
   "Publish or undo milestone history before getting incoming remote saves. Pulling first would change the local timeline and invalidate the milestone publish.";
+
+export const PENDING_CLEANUP_STALE_MESSAGE =
+  "Compacted history can't be published because snapshots were saved after it. Open the history graph and choose Stop sharing to keep syncing.";
+
+export function hasDraftlineErrorCode(error: unknown, code: string): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === code;
+}
+
+export const HISTORY_CLEANUP_BUSY_MESSAGE =
+  "Another milestone history operation is still running. Wait for it to finish, then try again.";
+
+export const SYNC_IN_PROGRESS_MESSAGE = "A sync is already running. Wait for it to finish, then try again.";
+
+function isHistoryCleanupBusyError(error: unknown): boolean {
+  return error instanceof Error && error.message === HISTORY_CLEANUP_BUSY_MESSAGE;
+}
+
+let historyCleanupOperationRunning = false;
+
+// Publish, undo and abandon act on the same pending plan; the check-and-set
+// runs before any await so callers that are still awaiting auth can't interleave.
+async function exclusiveHistoryCleanupOperation<T>(operation: () => Promise<T>): Promise<T> {
+  if (historyCleanupOperationRunning) throw new Error(HISTORY_CLEANUP_BUSY_MESSAGE);
+  historyCleanupOperationRunning = true;
+  try {
+    return await operation();
+  } finally {
+    historyCleanupOperationRunning = false;
+  }
+}
 
 export function suppressEditorFlush(relativePath: string) {
   suppressedEditorFlushPaths.add(normalizeRelativePath(relativePath));
@@ -912,6 +943,8 @@ interface AppStoreState {
   publishSnapshotCleanup: (planId: string, remote: string) => Promise<DraftlineHistoryCleanupPublishResult | null>;
   /** Undo a previously applied Draftline cleanup plan using Draftline's guarded backup token. */
   undoSnapshotCleanup: (planId?: string) => Promise<DraftlineTimelineCleanupResult>;
+  /** Forget a pending cleanup without moving any snapshots, unblocking sync when publish/undo are no longer possible. */
+  abandonSnapshotCleanup: (planId: string) => Promise<void>;
 
   // ── Remote sync actions ────────────────────────────────────
   /** Detect configured remote for the project. */
@@ -3134,7 +3167,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
-  publishSnapshotCleanup: async (planId, remote) => {
+  publishSnapshotCleanup: (planId, remote) => exclusiveHistoryCleanupOperation(async () => {
     const pendingCleanup = get().pendingHistoryCleanup;
     if (pendingCleanup?.plan_id === planId) {
       const result = await publishDraftlinePendingSnapshotCleanup(planId, remote);
@@ -3164,9 +3197,31 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     await get().loadVersions();
     useToastStore.getState().show("Milestone history published safely.", 5000, "success");
     return result;
-  },
+  }),
 
-  undoSnapshotCleanup: async (planId) => {
+  abandonSnapshotCleanup: (planId) => exclusiveHistoryCleanupOperation(async () => {
+    // isSyncing only disables the sync buttons; the exclusive lock prevents a racing publish.
+    if (get().isSyncing) {
+      throw new Error(SYNC_IN_PROGRESS_MESSAGE);
+    }
+    if (get().pendingHistoryCleanup?.plan_id !== planId) {
+      throw new Error("This compacted history is no longer pending. Refresh and try again.");
+    }
+    set({ isSyncing: true });
+    try {
+      await abandonDraftlinePendingSnapshotCleanup(planId);
+      set({ lastHistoryCleanup: null, pendingHistoryCleanup: null });
+      await get().loadPendingHistoryCleanup();
+      await get().refreshSyncStatus();
+      await get().refreshIncomingCommits();
+      await get().loadGraphData();
+    } finally {
+      set({ isSyncing: false });
+    }
+    useToastStore.getState().show("Compacted history won't be shared. Your next sync merges collaborators' snapshots back in.", 6000, "info");
+  }),
+
+  undoSnapshotCleanup: (planId) => exclusiveHistoryCleanupOperation(async () => {
     const pendingCleanup = get().pendingHistoryCleanup;
     const targetPlanId = planId ?? pendingCleanup?.plan_id ?? get().lastHistoryCleanup?.plan_id;
     if (!targetPlanId) {
@@ -3200,7 +3255,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
     useToastStore.getState().show("Milestone history restored from Draftline backup.", 5000, "success");
     return result;
-  },
+  }),
 
   requestPrePushMilestone: (prompt) => {
     cancelPendingPrePushMilestonePrompt();
@@ -3281,6 +3336,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
     const active = timelines.find((t) => t.is_active);
     if (!active) return;
+    // Another sync or cleanup operation may have started while credentials were checked.
+    if (get().isSyncing) {
+      useToastStore.getState().show(SYNC_IN_PROGRESS_MESSAGE, 5000, "info");
+      return;
+    }
     set({ isSyncing: true, syncError: null });
     try {
       // Large-file check before push
@@ -3294,7 +3354,23 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       }
       const pendingCleanup = get().pendingHistoryCleanup;
       if (pendingCleanup) {
-        const published = await get().publishSnapshotCleanup(pendingCleanup.plan_id, currentRemote.name);
+        let published: DraftlineHistoryCleanupPublishResult | null;
+        try {
+          published = await get().publishSnapshotCleanup(pendingCleanup.plan_id, currentRemote.name);
+        } catch (err) {
+          // The compact sync bar only shows errors in a tooltip, so these also toast.
+          if (hasDraftlineErrorCode(err, "local_state_changed")) {
+            set({ syncError: PENDING_CLEANUP_STALE_MESSAGE });
+            useToastStore.getState().show(PENDING_CLEANUP_STALE_MESSAGE, 8000, "warning");
+            return;
+          }
+          if (isHistoryCleanupBusyError(err)) {
+            set({ syncError: HISTORY_CLEANUP_BUSY_MESSAGE });
+            useToastStore.getState().show(HISTORY_CLEANUP_BUSY_MESSAGE, 6000, "warning");
+            return;
+          }
+          throw err;
+        }
         if (published) {
           return;
         }

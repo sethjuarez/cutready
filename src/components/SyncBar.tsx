@@ -76,6 +76,9 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
   const ahead = syncStatus?.ahead ?? 0;
   const behind = syncStatus?.behind ?? 0;
   const isUpToDate = ahead === 0 && behind === 0 && syncStatus !== null;
+  // A pending milestone cleanup must stay publishable even when sync status
+  // could not be read.
+  const showPrimaryAction = pendingHistoryCleanup !== null || (!isUpToDate && syncStatus !== null);
 
   // Determine primary action label
   let actionLabel = "Sync";
@@ -119,7 +122,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
   if (variant === "compact") {
     return (
       <div className="relative flex min-w-0 shrink-0 items-center gap-1.5">
-        {!isUpToDate && syncStatus && (
+        {showPrimaryAction && (
           <button
             onClick={() => actionFn()}
             disabled={isSyncing}
@@ -220,7 +223,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
         </button>
 
         {/* Primary action: Sync / Push / Pull */}
-        {!isUpToDate && syncStatus && (
+        {showPrimaryAction && (
           <button
             onClick={() => actionFn()}
             disabled={isSyncing}

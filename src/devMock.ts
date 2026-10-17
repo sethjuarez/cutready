@@ -1594,6 +1594,15 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         },
         merged_files: [],
       };
+    case "get_sync_status":
+      return {
+        remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
+        variation: "main",
+        ahead: 0,
+        behind: 0,
+        state: "UpToDate",
+        incoming: [],
+      };
     case "preflight_apply_incoming":
       return {
         sync_status: {

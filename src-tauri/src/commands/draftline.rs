@@ -1162,6 +1162,19 @@ pub async fn preflight_apply_incoming(
     ))
 }
 
+/// Ahead/behind counts for the current variation. Unlike the apply-incoming
+/// preflight, Draftline does not block this while a history cleanup is
+/// pending, so the sync bar can still offer to publish it.
+#[auditaur_command(skip_all)]
+pub async fn get_sync_status(
+    request: contract::RemoteRequest,
+) -> contract::TauriCommandResult<draftline::SyncStatus> {
+    let adapter = contract::into_tauri_result(CutReadyDraftlineAdapter::open_project(
+        &request.workspace_path,
+    ))?;
+    contract::into_tauri_result(adapter.sync_status(&request.remote))
+}
+
 #[auditaur_command(skip_all)]
 pub async fn apply_incoming(
     request: contract::RemoteRequest,

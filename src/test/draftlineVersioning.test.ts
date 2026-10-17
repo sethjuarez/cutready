@@ -13,11 +13,13 @@ import {
   createDraftlineVariation,
   diffDraftlineVersions,
   discardDraftlineChanges,
+  getDraftlineSyncStatus,
   hasDraftlineChanges,
   deleteDraftlineVariation,
   isDraftlineVariationCreateConflictError,
   listDraftlineChangedFiles,
   listDraftlineGraphNodes,
+  listDraftlineIncomingCommits,
   listDraftlineLargeChangedFiles,
   listDraftlineRemoteBranches,
   listDraftlineSnapshotCleanupCandidates,
@@ -303,6 +305,35 @@ describe("draftlineVersioning", () => {
     expect(mockInvoke).toHaveBeenCalledWith("delete_variation", {
       request: { workspace_path: WORKSPACE, variation: "alt" },
     });
+  });
+
+  it("reads sync status without the apply-incoming preflight that pending cleanups block", async () => {
+    const status = {
+      remote: "origin",
+      variation: "main",
+      ahead: 2,
+      behind: 1,
+      state: "needs_merge",
+      incoming: [{ id: "abc", label: "Remote save", author: { name: "Jess", email: null }, time_seconds: 1_700_000_000 }],
+    };
+    mockInvoke.mockResolvedValueOnce(status).mockResolvedValueOnce(status);
+
+    await expect(getDraftlineSyncStatus("origin")).resolves.toEqual({ ahead: 2, behind: 1 });
+    await expect(listDraftlineIncomingCommits("origin")).resolves.toEqual([
+      {
+        id: "abc",
+        message: "Remote save",
+        author: "Jess",
+        timestamp: new Date(1_700_000_000 * 1000).toISOString(),
+        changed_files: [],
+        projects: ["main"],
+      },
+    ]);
+    expect(mockInvoke).toHaveBeenCalledTimes(2);
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "get_sync_status", {
+      request: { workspace_path: WORKSPACE, remote: "origin" },
+    });
+    expect(mockInvoke).not.toHaveBeenCalledWith("preflight_apply_incoming", expect.anything());
   });
 
   it("creates a Draftline variation through remote-aware preflight and guarded create", async () => {

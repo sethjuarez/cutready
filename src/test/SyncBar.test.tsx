@@ -90,6 +90,30 @@ describe("SyncBar", () => {
     expect(syncWithRemote).not.toHaveBeenCalled();
   });
 
+  it("keeps pending milestone history publishable when sync status is unavailable", async () => {
+    const pushToRemote = vi.fn(() => Promise.resolve());
+
+    act(() => {
+      useAppStore.setState({
+        currentRemote: { name: "origin", url: "https://github.com/example/repo.git" },
+        syncStatus: null,
+        timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 1, color_index: 0 }],
+        pendingHistoryCleanup: pendingCleanup,
+        detectRemote: vi.fn(() => Promise.resolve()),
+        fetchFromRemote: vi.fn(() => Promise.resolve()),
+        pushToRemote,
+      });
+    });
+
+    render(<SyncBar />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /share milestone history/i }));
+    });
+
+    expect(pushToRemote).toHaveBeenCalledTimes(1);
+  });
+
   it("shows GitHub sign-in guidance for remote auth failures", () => {
     act(() => {
       useAppStore.setState({

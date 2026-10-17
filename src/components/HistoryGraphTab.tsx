@@ -34,7 +34,11 @@ import type {
   DraftlineHistoryCompactionCandidate,
   DraftlineHistoryCompactionCandidates,
 } from "../services/draftlineVersioning";
-import { errorMessage } from "../stores/appStore";
+import {
+  errorMessage,
+  hasDraftlineErrorCode,
+  PENDING_CLEANUP_STALE_MESSAGE,
+} from "../stores/appStore";
 import {
   firstParentTimelineIds,
   firstParentTimelineNodes,
@@ -61,6 +65,8 @@ export function HistoryGraphTab() {
   );
   const applySnapshotCleanup = useAppStore((s) => s.applySnapshotCleanup);
   const undoSnapshotCleanup = useAppStore((s) => s.undoSnapshotCleanup);
+  const abandonSnapshotCleanup = useAppStore((s) => s.abandonSnapshotCleanup);
+  const isSyncing = useAppStore((s) => s.isSyncing);
   const lastHistoryCleanup = useAppStore((s) => s.lastHistoryCleanup);
   const pendingHistoryCleanup = useAppStore((s) => s.pendingHistoryCleanup);
   const currentRemote = useAppStore((s) => s.currentRemote);
@@ -92,6 +98,7 @@ export function HistoryGraphTab() {
   const [previewingCleanup, setPreviewingCleanup] = useState(false);
   const [applyingCleanup, setApplyingCleanup] = useState(false);
   const [undoingCleanup, setUndoingCleanup] = useState(false);
+  const [abandoningCleanup, setAbandoningCleanup] = useState(false);
   const [graphZoom, setGraphZoom] = useState(1);
   const [graphFiltersOpen, setGraphFiltersOpen] = useState(false);
   const [showSideAncestry, setShowSideAncestry] = useState(false);
@@ -572,7 +579,11 @@ export function HistoryGraphTab() {
       await checkRewound();
     } catch (err) {
       setCleanupMode(true);
-      setCleanupError(errorMessage(err));
+      setCleanupError(
+        pendingHistoryCleanup && hasDraftlineErrorCode(err, "local_state_changed")
+          ? PENDING_CLEANUP_STALE_MESSAGE
+          : errorMessage(err),
+      );
     } finally {
       setUndoingCleanup(false);
     }
@@ -586,6 +597,35 @@ export function HistoryGraphTab() {
     pendingHistoryCleanup,
     undoingCleanup,
     undoSnapshotCleanup,
+  ]);
+
+  const handleAbandonCleanup = useCallback(async () => {
+    const cleanupPlanId = pendingHistoryCleanup?.plan_id;
+    if (!cleanupPlanId || abandoningCleanup) return;
+    const confirmed = await confirm({
+      title: "Stop sharing compacted history?",
+      message:
+        "Your snapshots stay exactly as they are. The compacted history will not be published, and the next sync merges your collaborators' original snapshots back in. Use this when publishing or undoing the compaction keeps failing.",
+      confirmLabel: "Stop sharing",
+      cancelLabel: "Cancel",
+      variant: "warning",
+    });
+    if (!confirmed) return;
+
+    setAbandoningCleanup(true);
+    try {
+      await abandonSnapshotCleanup(cleanupPlanId);
+    } catch (err) {
+      setCleanupMode(true);
+      setCleanupError(errorMessage(err));
+    } finally {
+      setAbandoningCleanup(false);
+    }
+  }, [
+    abandonSnapshotCleanup,
+    abandoningCleanup,
+    confirm,
+    pendingHistoryCleanup,
   ]);
 
   if (graphNodes.length === 0) {
@@ -764,7 +804,7 @@ export function HistoryGraphTab() {
               <button
                 type="button"
                 onClick={handleUndoCleanup}
-                disabled={undoingCleanup}
+                disabled={undoingCleanup || abandoningCleanup}
                 className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] disabled:pointer-events-none disabled:opacity-40"
                 aria-label="Undo the last history compaction"
                 title="Undo the last history compaction"
@@ -772,6 +812,21 @@ export function HistoryGraphTab() {
                 <RotateCcw className="h-3.5 w-3.5" />
                 <span className="history-graph-toolbar-label">
                   {undoingCleanup ? "Undoing" : "Undo compaction"}
+                </span>
+              </button>
+            )}
+            {pendingHistoryCleanup && (
+              <button
+                type="button"
+                onClick={handleAbandonCleanup}
+                disabled={abandoningCleanup || undoingCleanup || isSyncing}
+                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] disabled:pointer-events-none disabled:opacity-40"
+                aria-label="Stop sharing the compacted history"
+                title="Stop sharing the compacted history"
+              >
+                <X className="h-3.5 w-3.5" />
+                <span className="history-graph-toolbar-label">
+                  {abandoningCleanup ? "Stopping" : "Stop sharing"}
                 </span>
               </button>
             )}
