@@ -2029,6 +2029,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           >
             <IconPlus size={14} />
           </button>
+          <div className="flex-1" />
           <button
             disabled={loading || promotingChat || messages.length === 0}
             className="flex h-[26px] items-center justify-center gap-1.5 rounded px-2 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-toolbar))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
@@ -2039,7 +2040,6 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
             <FileText className="h-3.5 w-3.5" />
             <span>{promotingChat ? "Promoting..." : "Promote"}</span>
           </button>
-          <div className="flex-1" />
           <button
             className={`flex h-[26px] items-center justify-center rounded transition-colors ${
               chatFocusMode

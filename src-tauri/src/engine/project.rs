@@ -1052,6 +1052,7 @@ enum RenameAssetKind {
     Sketch,
     Storyboard,
     Note,
+    ChatArtifact,
     Screenshot,
     Visual,
 }
@@ -1062,6 +1063,7 @@ impl RenameAssetKind {
             Self::Sketch => "sketch",
             Self::Storyboard => "storyboard",
             Self::Note => "note",
+            Self::ChatArtifact => "chat-artifact",
             Self::Screenshot => "screenshot",
             Self::Visual => "visual",
         }
@@ -1194,6 +1196,9 @@ fn classify_rename_asset_path(path: &str) -> Result<RenameAssetKind, ProjectErro
     if lower.ends_with(".md") {
         return Ok(RenameAssetKind::Note);
     }
+    if lower.ends_with(".cv") {
+        return Ok(RenameAssetKind::ChatArtifact);
+    }
     if lower.starts_with(".cutready/screenshots/") {
         return Ok(RenameAssetKind::Screenshot);
     }
@@ -1201,7 +1206,7 @@ fn classify_rename_asset_path(path: &str) -> Result<RenameAssetKind, ProjectErro
         return Ok(RenameAssetKind::Visual);
     }
     Err(ProjectError::Io(format!(
-        "Renaming is only supported for sketches, storyboards, notes, screenshots, and visual assets: {path}"
+        "Renaming is only supported for sketches, storyboards, notes, promoted chats, screenshots, and visual assets: {path}"
     )))
 }
 
@@ -1273,7 +1278,7 @@ fn validate_renamed_file_unlocked(
             ensure_storyboard_unlocked(&storyboard)?;
         }
         RenameAssetKind::Note => ensure_note_unlocked(project_root, old_rel)?,
-        RenameAssetKind::Screenshot | RenameAssetKind::Visual => {}
+        RenameAssetKind::ChatArtifact | RenameAssetKind::Screenshot | RenameAssetKind::Visual => {}
     }
     Ok(())
 }
@@ -1315,7 +1320,9 @@ fn plan_reference_rewrites(
             new_rel,
             RenameAssetKind::Visual,
         ),
-        RenameAssetKind::Storyboard | RenameAssetKind::Note => Ok(Vec::new()),
+        RenameAssetKind::Storyboard | RenameAssetKind::Note | RenameAssetKind::ChatArtifact => {
+            Ok(Vec::new())
+        }
     }
 }
 
@@ -3236,6 +3243,25 @@ mod tests {
         assert!(read_storyboard(&root.join("locked.sb"))
             .unwrap()
             .references_sketch("old.sk"));
+    }
+
+    #[test]
+    fn rename_project_asset_renames_chat_artifact() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join("chat-artifacts")).unwrap();
+        std::fs::write(root.join("chat-artifacts/old.cv"), "{}").unwrap();
+
+        let result = rename_project_asset(
+            root,
+            "chat-artifacts/old.cv",
+            "chat-artifacts/renamed.cv",
+        )
+        .unwrap();
+
+        assert!(!root.join("chat-artifacts/old.cv").exists());
+        assert!(root.join("chat-artifacts/renamed.cv").exists());
+        assert!(result.updated_references.is_empty());
     }
 
     #[test]
