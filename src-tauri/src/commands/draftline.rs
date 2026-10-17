@@ -286,7 +286,10 @@ pub async fn clone_workspace(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::WorkspaceOpenResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::clone_workspace_with_context(
         &mut context,
@@ -300,7 +303,10 @@ pub async fn adopt_workspace(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::AdoptWorkspaceResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::adopt_workspace_with_context(
         &mut context,
@@ -352,7 +358,10 @@ pub async fn rename_variation(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::RenameVariationResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::rename_variation_with_context(
         &mut context,
@@ -365,7 +374,7 @@ pub async fn delete_variation(
     request: DraftlineVariationRequest,
     lock: State<'_, ProjectLock>,
 ) -> Result<(), String> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock.0.lock().map_err(|error| error.to_string())?;
     let adapter = CutReadyDraftlineAdapter::open_project(&request.workspace_path)
         .map_err(|error| error.to_string())?;
     adapter
@@ -390,7 +399,7 @@ pub async fn switch_variation(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> Result<Variation, String> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock.0.lock().map_err(|error| error.to_string())?;
     let adapter = CutReadyDraftlineAdapter::open_project(&request.workspace_path)
         .map_err(|error| error.to_string())?;
     let policy = match request.policy {
@@ -422,7 +431,7 @@ pub async fn add_remote(
     lock: State<'_, ProjectLock>,
 ) -> Result<DraftlineRemoteEndpointDto, String> {
     reject_remote_url_credentials(&request.url)?;
-    let _guard = lock.0.lock().await;
+    let _guard = lock.0.lock().map_err(|error| error.to_string())?;
     let adapter = CutReadyDraftlineAdapter::open_project(&request.workspace_path)
         .map_err(|error| error.to_string())?;
     adapter
@@ -437,7 +446,7 @@ pub async fn squash_versions(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> Result<Version, String> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock.0.lock().map_err(|error| error.to_string())?;
     require_contributor_profile(&request.workspace_path, &app).map_err(|error| error.message)?;
     let adapter = CutReadyDraftlineAdapter::open_project(&request.workspace_path)
         .map_err(|error| error.to_string())?;
@@ -511,7 +520,10 @@ pub async fn apply_history_cleanup(
     lock: State<'_, ProjectLock>,
     state: State<'_, AppState>,
 ) -> contract::TauriCommandResult<draftline::TimelineCleanupResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let workspace_path = request.workspace_path.clone();
     let mut context = context_for_commit(&request.workspace_path, app)?;
     let result = contract::into_tauri_result(contract::apply_history_cleanup_with_context(
@@ -562,7 +574,10 @@ pub async fn publish_history_cleanup(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<draftline::HistoryCleanupPublishResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::publish_history_cleanup_with_context(
         &mut context,
@@ -599,7 +614,10 @@ pub async fn undo_history_cleanup(
     lock: State<'_, ProjectLock>,
     state: State<'_, AppState>,
 ) -> contract::TauriCommandResult<draftline::TimelineCleanupResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let workspace_path = request.workspace_path.clone();
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     let result = contract::into_tauri_result(contract::undo_history_cleanup_with_context(
@@ -639,7 +657,10 @@ pub async fn publish_pending_history_cleanup(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<draftline::HistoryCleanupPublishResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::publish_pending_history_cleanup_with_context(
         &mut context,
@@ -654,7 +675,10 @@ pub async fn undo_pending_history_cleanup(
     lock: State<'_, ProjectLock>,
     state: State<'_, AppState>,
 ) -> contract::TauriCommandResult<draftline::TimelineCleanupResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let workspace_path = request.workspace_path.clone();
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     let result = contract::into_tauri_result(contract::undo_pending_history_cleanup_with_context(
@@ -683,7 +707,10 @@ pub async fn abandon_pending_history_cleanup(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<draftline::PendingHistoryCleanup> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::abandon_pending_history_cleanup_with_context(
         &context, request,
@@ -901,7 +928,10 @@ pub async fn restore_version_as_new_save(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::RestoreVersionResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_commit(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::restore_version_as_new_save_with_context(
         &mut context,
@@ -915,7 +945,10 @@ pub async fn restore_version_as_new_save_to_variation(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::TargetedRestoreVersionCommandResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_commit(&request.workspace_path, app)?;
     contract::into_tauri_result(
         contract::restore_version_as_new_save_to_variation_with_context(&mut context, request),
@@ -928,7 +961,10 @@ pub async fn save(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::SaveResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_commit(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::save_with_context(&mut context, request))
 }
@@ -948,7 +984,10 @@ pub async fn apply_shelf(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::ApplyShelfCommandResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::apply_shelf_with_context(&mut context, request))
 }
@@ -959,7 +998,10 @@ pub async fn delete_shelf(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::DeleteShelfResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::delete_shelf_with_context(&mut context, request))
 }
@@ -970,7 +1012,10 @@ pub async fn selected_save(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::SelectedSaveResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_commit(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::selected_save_with_context(&mut context, request))
 }
@@ -981,7 +1026,10 @@ pub async fn selected_shelve(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::SelectedShelveResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::selected_shelve_with_context(
         &mut context,
@@ -995,7 +1043,10 @@ pub async fn selected_discard(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::SelectedDiscardResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::selected_discard_with_context(
         &mut context,
@@ -1018,7 +1069,10 @@ pub async fn list_remote_variations(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<Vec<draftline::RemoteVariation>> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::list_remote_variations_with_context(
         &mut context,
@@ -1032,7 +1086,10 @@ pub async fn remote_variation_diagnostics(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<draftline::RemoteVariationDiagnostics> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::remote_variation_diagnostics_with_context(
         &mut context,
@@ -1046,7 +1103,10 @@ pub async fn adopt_remote_variation(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::AdoptRemoteVariationResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::adopt_remote_variation_with_context(
         &mut context,
@@ -1060,7 +1120,10 @@ pub async fn fetch_remote(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::FetchRemoteResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::fetch_remote_with_context(&mut context, request))
 }
@@ -1071,7 +1134,10 @@ pub async fn publish_current_variation(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::PublishCurrentVariationResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::publish_current_variation_with_context(
         &mut context,
@@ -1085,7 +1151,10 @@ pub async fn preflight_apply_incoming(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<ApplyIncomingReport> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::preflight_apply_incoming_with_context(
         &mut context,
@@ -1099,7 +1168,10 @@ pub async fn apply_incoming(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::ApplyIncomingCommandResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::apply_incoming_with_context(&mut context, request))
 }
@@ -1110,7 +1182,10 @@ pub async fn preflight_merge_incoming(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<MergeIncomingReport> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::preflight_merge_incoming_with_context(
         &mut context,
@@ -1124,7 +1199,10 @@ pub async fn merge_incoming(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::MergeIncomingCommandResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_commit(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::merge_incoming_with_context(&mut context, request))
 }
@@ -1135,7 +1213,10 @@ pub async fn merge_incoming_with_resolutions(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::MergeIncomingCommandResult> {
-    let _guard = lock.0.lock().await;
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_commit(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::merge_incoming_with_resolutions_with_context(
         &mut context,

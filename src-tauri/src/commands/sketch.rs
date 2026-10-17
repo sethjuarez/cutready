@@ -27,6 +27,7 @@ pub async fn create_sketch(
     title: String,
     state: State<'_, AppState>,
 ) -> Result<Sketch, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
@@ -48,6 +49,7 @@ pub async fn update_sketch(
     metadata: Option<DocumentMetadata>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
@@ -78,6 +80,7 @@ pub async fn update_sketch_title(
     title: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
@@ -95,6 +98,7 @@ pub async fn delete_sketch(
     relative_path: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
@@ -122,6 +126,7 @@ pub async fn get_sketch(
     relative_path: String,
     state: State<'_, AppState>,
 ) -> Result<Sketch, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
@@ -135,6 +140,7 @@ pub async fn set_sketch_lock(
     locked: bool,
     state: State<'_, AppState>,
 ) -> Result<Sketch, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
@@ -152,6 +158,7 @@ pub async fn set_planning_row_lock(
     locked: bool,
     state: State<'_, AppState>,
 ) -> Result<Sketch, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
@@ -173,6 +180,7 @@ pub async fn set_planning_cell_lock(
     locked: bool,
     state: State<'_, AppState>,
 ) -> Result<Sketch, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
@@ -208,6 +216,7 @@ pub async fn write_visual_doc(
     document: serde_json::Value,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let abs = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
     let document = normalize_visual_document_for_save(&document)?;
@@ -222,6 +231,7 @@ pub async fn rename_sketch(
     new_path: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     project::rename_project_asset(&root, &old_path, &new_path).map_err(|e| e.to_string())?;
     Ok(())

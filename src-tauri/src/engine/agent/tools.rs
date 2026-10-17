@@ -900,6 +900,17 @@ pub fn execute_tool(
         ));
     }
 
+    let _write_guard = if call.function.name == "create_project"
+        || (is_read_only_tool(&call.function.name) && call.function.name != "read_sketch")
+    {
+        None
+    } else {
+        match crate::engine::workspace_write_lock::lock() {
+            Ok(guard) => Some(guard),
+            Err(error) => return ToolOutput::failed(error),
+        }
+    };
+
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         match call.function.name.as_str() {
             "list_project_files" => ToolOutput::from(exec_list_project_files(project_root, &args)),

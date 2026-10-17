@@ -113,6 +113,7 @@ pub async fn capture_region(
     height: u32,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     screenshot::capture_region(&root, monitor_id, x, y, width, height)
 }
@@ -123,6 +124,7 @@ pub async fn capture_fullscreen(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     eprintln!("[CAPTURE] capture_fullscreen: monitor_id={}", monitor_id);
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let result = screenshot::capture_fullscreen(&root, monitor_id);
     match &result {
@@ -140,6 +142,7 @@ pub async fn capture_all_monitors(
     state: State<'_, AppState>,
 ) -> Result<std::collections::HashMap<u32, String>, String> {
     eprintln!("[CAPTURE] capture_all_monitors: {:?}", monitor_ids);
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let result = screenshot::capture_all_monitors(&root, &monitor_ids);
     match &result {
@@ -907,6 +910,7 @@ pub async fn crop_screenshot(
     height: u32,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     screenshot::crop_screenshot(&root, &source_path, x, y, width, height)
 }

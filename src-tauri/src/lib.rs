@@ -207,7 +207,7 @@ pub type AgentChatCancellationRegistry = Arc<Mutex<HashMap<String, AgentChatCanc
 
 /// Serializes access to project-level operations that mutate the filesystem or git state.
 /// Prevents concurrent git operations, snapshot + checkout races, and write-during-read corruption.
-pub struct ProjectLock(pub tokio::sync::Mutex<()>);
+pub struct ProjectLock(pub &'static std::sync::Mutex<()>);
 
 /// Tracks configurable app-wide shortcuts used by presentation preview windows.
 #[derive(Debug, Clone)]
@@ -440,7 +440,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(app_state)
         .manage(auditaur_policy)
-        .manage(ProjectLock(tokio::sync::Mutex::new(())))
+        .manage(ProjectLock(engine::workspace_write_lock::mutex()))
         .manage(PresentationHotkeyState(Mutex::new(Vec::new())))
         .manage(commands::screenshot::CaptureState(Mutex::new(None)))
         .manage(commands::screenshot::RecordingCountdownState(Mutex::new(

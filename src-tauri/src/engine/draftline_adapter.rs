@@ -424,6 +424,7 @@ pub enum StructureSnapshot {
 /// deferred instead when CutReady doesn't know who is acting, or when those
 /// paths already had unsaved edits that the version would otherwise sweep in.
 pub struct StructureChange {
+    _write_guard: std::sync::MutexGuard<'static, ()>,
     message: String,
     scope: Vec<PathBuf>,
     removed: Vec<PathBuf>,
@@ -440,6 +441,20 @@ impl StructureChange {
         I: IntoIterator<Item = P>,
         P: Into<PathBuf>,
     {
+        let write_guard = crate::engine::workspace_write_lock::lock()?;
+        Self::begin_with_guard(repo_root, message, scope, write_guard)
+    }
+
+    pub fn begin_with_guard<I, P>(
+        repo_root: &Path,
+        message: impl Into<String>,
+        scope: I,
+        write_guard: std::sync::MutexGuard<'static, ()>,
+    ) -> Result<Self, String>
+    where
+        I: IntoIterator<Item = P>,
+        P: Into<PathBuf>,
+    {
         let adapter =
             CutReadyDraftlineAdapter::open_project(repo_root).map_err(|e| e.to_string())?;
         let pending_before = adapter
@@ -449,6 +464,7 @@ impl StructureChange {
             .map(|file| file.path)
             .collect();
         Ok(Self {
+            _write_guard: write_guard,
             message: message.into(),
             scope: scope.into_iter().map(Into::into).collect(),
             removed: Vec::new(),
@@ -503,12 +519,14 @@ impl StructureChange {
             {
                 author
             }
-            Ok(_) => return Ok(StructureSnapshot::Deferred {
-                reason: DeferReason::Identity,
-                message: format!(
+            Ok(_) => {
+                return Ok(StructureSnapshot::Deferred {
+                    reason: DeferReason::Identity,
+                    message: format!(
                     "\"{message}\" is in your pending changes. {STRUCTURE_SNAPSHOT_DEFERRED_HINT}"
                 ),
-            }),
+                })
+            }
             Err(reason) => {
                 let reason = reason.trim().trim_end_matches('.');
                 return Ok(StructureSnapshot::Deferred {
@@ -1584,6 +1602,32 @@ mod tests {
             "profile beats git config"
         );
         assert_eq!(head.committer, "CutReady <app@cutready.local>");
+    }
+
+    #[test]
+    fn structure_change_holds_the_shared_write_lock() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        structure_repo(root);
+        let change = StructureChange::begin(root, "Add Extra to workspace", [MANIFEST]).unwrap();
+
+        let (started_tx, started_rx) = mpsc::channel();
+        let (acquired_tx, acquired_rx) = mpsc::channel();
+        let writer = std::thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            let _guard = crate::engine::workspace_write_lock::lock().unwrap();
+            acquired_tx.send(()).unwrap();
+        });
+
+        started_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert!(acquired_rx.recv_timeout(Duration::from_millis(50)).is_err());
+
+        drop(change);
+        acquired_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        writer.join().unwrap();
     }
 
     #[test]

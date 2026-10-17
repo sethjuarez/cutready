@@ -84,6 +84,7 @@ pub async fn create_project_folder(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<ProjectView, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = PathBuf::from(&path);
     let view = project::init_project_folder(&root).map_err(|e| e.to_string())?;
 
@@ -376,6 +377,7 @@ pub async fn rename_project_asset(
     new_path: String,
     state: State<'_, AppState>,
 ) -> Result<project::RenameProjectAssetPlan, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     project::rename_project_asset(&root, &old_path, &new_path).map_err(|e| e.to_string())
 }
@@ -782,6 +784,8 @@ pub async fn delete_project(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = repo_root(&state)?;
+    let change =
+        StructureChange::begin(&root, "Delete workspace project", [project::MANIFEST_PATH])?;
     let safe_path = safe_project_manifest_path(&project_path)?;
 
     let mut manifest = project::read_manifest_result(&root).map_err(|e| e.to_string())?;
@@ -797,8 +801,6 @@ pub async fn delete_project(
     }
 
     let removed = delete_files && project_path != ".";
-    let change =
-        StructureChange::begin(&root, "Delete workspace project", [project::MANIFEST_PATH])?;
     let change = if removed {
         change.removing(&project_path)
     } else {
@@ -850,10 +852,16 @@ pub async fn rename_project(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let root = repo_root(&state)?;
+    let write_guard = crate::engine::workspace_write_lock::lock()?;
 
     // Single-project mode: renaming the sole project triggers migration
     if project_path == "." && !project::is_multi_project(&root) {
-        let change = StructureChange::begin(&root, "Organize workspace projects", ["."])?;
+        let change = StructureChange::begin_with_guard(
+            &root,
+            "Organize workspace projects",
+            ["."],
+            write_guard,
+        )?;
         let entry =
             project::migrate_to_multi_project(&root, &new_name).map_err(|e| e.to_string())?;
         finish_structure_change(&app, &root, change)?;
@@ -889,8 +897,12 @@ pub async fn rename_project(
         return Err(format!("Project '{}' not found in repo", project_path));
     }
 
-    let mut change =
-        StructureChange::begin(&root, "Rename workspace project", [project::MANIFEST_PATH])?;
+    let mut change = StructureChange::begin_with_guard(
+        &root,
+        "Rename workspace project",
+        [project::MANIFEST_PATH],
+        write_guard,
+    )?;
     if new_path != project_path {
         change = change.touching(&project_path).touching(&new_path);
     }
