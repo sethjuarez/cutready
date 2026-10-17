@@ -862,8 +862,7 @@ fn ensure_sketch_has_no_locked_content(sketch: &Sketch) -> Result<(), ProjectErr
     Ok(())
 }
 
-pub use sketch_edits::apply_locked_row_metadata;
-
+#[cfg(test)]
 pub fn validate_rows_update_allowed(
     existing: &[crate::models::sketch::PlanningRow],
     updated: &[crate::models::sketch::PlanningRow],

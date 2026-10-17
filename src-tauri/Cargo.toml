@@ -60,6 +60,9 @@ harness-agentive = { path = "../crates/harness-agentive", optional = true }
 # `copilot_sdk::*` type leaks past the harness boundary.
 harness-copilot-sdk = { path = "../crates/harness-copilot-sdk", optional = true }
 harness-prompty = { path = "../crates/harness-prompty" }
+# Typra-generated document contracts (contracts/*.tsp). The app uses the
+# generated types directly where it has adopted them, such as `.cv` chat artifacts.
+cutready-contracts = { path = "../crates/cutready-contracts" }
 draftline = "0.5.0"
 # Already in the tree through Draftline; used directly to read the git config
 # identity that contributor attribution falls back to.

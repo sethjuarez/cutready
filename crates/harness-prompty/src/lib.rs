@@ -112,10 +112,7 @@ pub trait DurableRunStore: Send + Sync {
     ) -> Result<ContextAssetExcerpt, String>;
 
     /// Record a native memory-promotion candidate produced during the run.
-    fn record_native_memory_promotion(
-        &self,
-        candidate: &serde_json::Value,
-    ) -> Result<(), String>;
+    fn record_native_memory_promotion(&self, candidate: &serde_json::Value) -> Result<(), String>;
 }
 
 mod adapter;

@@ -9,9 +9,9 @@
 //! honestly (see [`static_capabilities`]). `AVAILABLE` is `true` because this
 //! adapter can execute a run end-to-end.
 
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
-use std::collections::{HashMap, VecDeque};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -131,7 +131,10 @@ impl AgentHarness for AgentiveHarness {
 
         let model = config.llm.model.trim().to_string();
         if model.is_empty() {
-            return fail(&emit, "Agentive harness requires a model to be configured.".to_string());
+            return fail(
+                &emit,
+                "Agentive harness requires a model to be configured.".to_string(),
+            );
         }
 
         let provider = match build_agentive_provider(&config.llm, &model) {
@@ -221,10 +224,9 @@ impl AgentHarness for AgentiveHarness {
                 };
                 // The host executor is synchronous and may touch the filesystem,
                 // so run it off the async runtime.
-                let output = tokio::task::spawn_blocking(move || {
-                    host_executor.execute(&host_call, &ctx)
-                })
-                .await;
+                let output =
+                    tokio::task::spawn_blocking(move || host_executor.execute(&host_call, &ctx))
+                        .await;
                 match output {
                     Ok(output) => {
                         // Fill our reserved slot with the explicit outcome, if any.
@@ -376,7 +378,11 @@ fn build_agentive_provider(
             // Entra); fall back to the classic api-key header otherwise. agentive
             // would auto-pick api-key for azure.com endpoints, which is wrong for
             // Entra, so the auth strategy is always chosen explicitly here.
-            let auth = match llm.bearer_token.as_deref().filter(|token| !token.is_empty()) {
+            let auth = match llm
+                .bearer_token
+                .as_deref()
+                .filter(|token| !token.is_empty())
+            {
                 Some(token) => agentive::AuthStrategy::Bearer(token.to_string()),
                 None => agentive::AuthStrategy::ApiKey(llm.api_key.clone()),
             };
@@ -421,7 +427,9 @@ fn foundry_openai_v1_chat_url(raw: &str) -> Result<String, String> {
         .unwrap_or(endpoint);
     let base = base.replace(".services.ai.azure.com", ".openai.azure.com");
     if base.is_empty() {
-        return Err("Foundry providers require a resource endpoint for the agentive harness.".into());
+        return Err(
+            "Foundry providers require a resource endpoint for the agentive harness.".into(),
+        );
     }
     Ok(format!("{base}/openai/v1/chat/completions"))
 }
@@ -465,7 +473,8 @@ fn to_agentive_tools(tools: &[ToolDefinition]) -> Result<Vec<agentive::Tool>, St
     tools
         .iter()
         .map(|tool| {
-            reserialize(tool).map_err(|error| format!("Failed to convert tool for agentive: {error}"))
+            reserialize(tool)
+                .map_err(|error| format!("Failed to convert tool for agentive: {error}"))
         })
         .collect()
 }
@@ -476,8 +485,10 @@ fn to_agentive_tool_output(output: &ToolOutput) -> agentive::ToolOutput {
     let text = output.text().to_string();
     match output.images() {
         Some(images) if !images.is_empty() => {
-            let converted: Vec<agentive::ContentPart> =
-                images.iter().filter_map(|part| reserialize(part).ok()).collect();
+            let converted: Vec<agentive::ContentPart> = images
+                .iter()
+                .filter_map(|part| reserialize(part).ok())
+                .collect();
             if converted.is_empty() {
                 agentive::ToolOutput::from(text)
             } else {
@@ -554,9 +565,7 @@ fn context_items_to_system_prompt(items: &[ContextItem]) -> Option<String> {
     if items.is_empty() {
         return None;
     }
-    let mut block = String::from(
-        "Relevant context gathered for this task. Use it when helpful.\n",
-    );
+    let mut block = String::from("Relevant context gathered for this task. Use it when helpful.\n");
     let mut wrote_any = false;
     for item in items {
         let body = item
@@ -631,7 +640,11 @@ mod tests {
         let seen = executor.seen.lock().unwrap().clone();
         assert_eq!(
             seen,
-            Some(("demo_tool".to_string(), PathBuf::from("/repo/project"), true)),
+            Some((
+                "demo_tool".to_string(),
+                PathBuf::from("/repo/project"),
+                true
+            )),
             "the injected executor must receive the call and context unchanged"
         );
         match output {
@@ -646,14 +659,14 @@ mod tests {
         // mapper must surface exactly that on AgentEvent::ToolResult.
         let status_map: Arc<Mutex<HashMap<String, VecDeque<Option<ToolExecutionStatus>>>>> =
             Arc::new(Mutex::new(HashMap::new()));
-        status_map
-            .lock()
-            .unwrap()
-            .insert("call-ok".to_string(), VecDeque::from([Some(ToolExecutionStatus::Success)]));
-        status_map
-            .lock()
-            .unwrap()
-            .insert("call-bad".to_string(), VecDeque::from([Some(ToolExecutionStatus::Failure)]));
+        status_map.lock().unwrap().insert(
+            "call-ok".to_string(),
+            VecDeque::from([Some(ToolExecutionStatus::Success)]),
+        );
+        status_map.lock().unwrap().insert(
+            "call-bad".to_string(),
+            VecDeque::from([Some(ToolExecutionStatus::Failure)]),
+        );
 
         let ok = map_runner_event(
             agentive::RunnerEvent::ToolResult {
@@ -722,10 +735,10 @@ mod tests {
         // inherit the prior success — it resolves to failure like any unrecorded call.
         let status_map: Arc<Mutex<HashMap<String, VecDeque<Option<ToolExecutionStatus>>>>> =
             Arc::new(Mutex::new(HashMap::new()));
-        status_map
-            .lock()
-            .unwrap()
-            .insert("call-1".to_string(), VecDeque::from([Some(ToolExecutionStatus::Success)]));
+        status_map.lock().unwrap().insert(
+            "call-1".to_string(),
+            VecDeque::from([Some(ToolExecutionStatus::Success)]),
+        );
 
         let make_event = || agentive::RunnerEvent::ToolResult {
             run_id: "run".into(),
@@ -860,7 +873,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn foundry_project_endpoint_rewrites_to_openai_v1_host() {
         let url = foundry_openai_v1_chat_url(
@@ -868,8 +880,7 @@ mod tests {
         )
         .expect("foundry endpoint should rewrite");
         assert_eq!(
-            url,
-            "https://seth-foundry-dev.openai.azure.com/openai/v1/chat/completions",
+            url, "https://seth-foundry-dev.openai.azure.com/openai/v1/chat/completions",
             "Foundry inference must target the .openai.azure.com host, not .services.ai.azure.com"
         );
     }
@@ -878,17 +889,18 @@ mod tests {
     fn foundry_endpoint_without_project_path_still_rewrites_host() {
         let url = foundry_openai_v1_chat_url("https://res.services.ai.azure.com/")
             .expect("host-only endpoint should rewrite");
-        assert_eq!(url, "https://res.openai.azure.com/openai/v1/chat/completions");
+        assert_eq!(
+            url,
+            "https://res.openai.azure.com/openai/v1/chat/completions"
+        );
     }
 
     #[test]
     fn foundry_url_is_fully_qualified_so_agentive_uses_it_verbatim() {
         // agentive treats an endpoint containing "/chat/completions" as a
         // complete URL; the rewrite must therefore include that suffix.
-        let url = foundry_openai_v1_chat_url(
-            "https://x.services.ai.azure.com/api/projects/p",
-        )
-        .unwrap();
+        let url =
+            foundry_openai_v1_chat_url("https://x.services.ai.azure.com/api/projects/p").unwrap();
         assert!(url.contains("/chat/completions"));
         assert!(!url.contains("/api/projects"));
         assert!(!url.contains(".services.ai.azure.com"));
@@ -908,4 +920,3 @@ fn fail(emit: &HarnessEventEmitter, message: String) -> Result<AgentRunResult, S
     });
     Err(message)
 }
-

@@ -100,7 +100,10 @@ impl std::fmt::Display for RouteError {
                 write!(f, "Model '{model}' does not support agent tool calling")
             }
             Self::VisionUnsupported(model) => {
-                write!(f, "Model '{model}' does not support the requested vision input")
+                write!(
+                    f,
+                    "Model '{model}' does not support the requested vision input"
+                )
             }
             Self::RouteUnsupported(route) => write!(f, "Selected harness cannot run {route}"),
         }
@@ -455,7 +458,10 @@ mod tests {
 
         assert_eq!(route.identity.requested_model, "demo-deployment");
         assert_eq!(route.identity.base_model, "gpt-6-astra");
-        assert_eq!(route.identity.deployment_id.as_deref(), Some("demo-deployment"));
+        assert_eq!(
+            route.identity.deployment_id.as_deref(),
+            Some("demo-deployment")
+        );
         assert_eq!(route.api_route, ModelApiRoute::Responses);
         assert_eq!(route.effective_reasoning_effort.as_deref(), Some("high"));
     }

@@ -75,9 +75,11 @@ struct Layer {
 
 /// Resolve the acting identity for a project (or for no project).
 pub fn resolve(project_root: Option<&Path>, profile: Option<Identity>) -> ResolvedIdentity {
-    resolve_with(profile, |key| std::env::var(key).ok(), || {
-        git_config_identity(project_root)
-    })
+    resolve_with(
+        profile,
+        |key| std::env::var(key).ok(),
+        || git_config_identity(project_root),
+    )
 }
 
 fn resolve_with(
@@ -145,10 +147,10 @@ pub fn validate_profile(name: &str, email: &str) -> Result<Identity, String> {
     if clean_name(Some(name)).is_none() {
         return Err(format!("\"{name}\" is a placeholder; enter your own name."));
     }
-    let valid_email = email
-        .split_once('@')
-        .is_some_and(|(local, domain)| !local.is_empty() && !domain.is_empty() && !domain.contains('@'))
-        && !email.contains(|ch: char| ch.is_whitespace() || ch == '<' || ch == '>');
+    let valid_email = email.split_once('@').is_some_and(|(local, domain)| {
+        !local.is_empty() && !domain.is_empty() && !domain.contains('@')
+    }) && !email
+        .contains(|ch: char| ch.is_whitespace() || ch == '<' || ch == '>');
     if !valid_email {
         return Err("Enter an email like you@example.com.".into());
     }
@@ -209,7 +211,10 @@ mod tests {
         move |key| vars.get(key).cloned()
     }
 
-    fn git(name: Option<&str>, email: Option<&str>) -> impl FnOnce() -> (Option<String>, Option<String>) {
+    fn git(
+        name: Option<&str>,
+        email: Option<&str>,
+    ) -> impl FnOnce() -> (Option<String>, Option<String>) {
         let name = name.map(str::to_string);
         let email = email.map(str::to_string);
         move || (name, email)
@@ -226,7 +231,10 @@ mod tests {
     fn profile_wins_over_every_other_layer() {
         let resolved = resolve_with(
             Some(ada()),
-            env(&[("GIT_AUTHOR_NAME", "Env"), ("GIT_AUTHOR_EMAIL", "env@example.com")]),
+            env(&[
+                ("GIT_AUTHOR_NAME", "Env"),
+                ("GIT_AUTHOR_EMAIL", "env@example.com"),
+            ]),
             git(Some("Git"), Some("git@example.com")),
         );
         assert_eq!(resolved.name, "Ada Lovelace");
@@ -359,7 +367,11 @@ mod tests {
     fn git_config_reads_repository_local_identity() {
         let dir = tempfile::tempdir().unwrap();
         let repo = git2::Repository::init(dir.path()).unwrap();
-        let mut config = repo.config().unwrap().open_level(git2::ConfigLevel::Local).unwrap();
+        let mut config = repo
+            .config()
+            .unwrap()
+            .open_level(git2::ConfigLevel::Local)
+            .unwrap();
         config.set_str("user.name", "Local Name").unwrap();
         config.set_str("user.email", "local@example.com").unwrap();
         let nested = dir.path().join("project");

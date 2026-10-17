@@ -390,7 +390,9 @@ mod tests {
         // EOF after the single action yields a transport-closed terminal event.
         assert!(matches!(
             rx.recv().await,
-            Some(SidecarStreamEvent::Terminated(SidecarTermination::TransportClosed))
+            Some(SidecarStreamEvent::Terminated(
+                SidecarTermination::TransportClosed
+            ))
         ));
         assert!(rx.recv().await.is_none());
     }
@@ -405,12 +407,16 @@ mod tests {
 
         assert!(matches!(
             rx.recv().await,
-            Some(SidecarStreamEvent::Terminated(SidecarTermination::BrowserDisconnected))
+            Some(SidecarStreamEvent::Terminated(
+                SidecarTermination::BrowserDisconnected
+            ))
         ));
         // The trailing EOF still emits a transport-closed terminal event.
         assert!(matches!(
             rx.recv().await,
-            Some(SidecarStreamEvent::Terminated(SidecarTermination::TransportClosed))
+            Some(SidecarStreamEvent::Terminated(
+                SidecarTermination::TransportClosed
+            ))
         ));
     }
 
@@ -431,7 +437,9 @@ mod tests {
         assert!(pending.lock().await.is_empty());
         assert!(matches!(
             rx.recv().await,
-            Some(SidecarStreamEvent::Terminated(SidecarTermination::TransportClosed))
+            Some(SidecarStreamEvent::Terminated(
+                SidecarTermination::TransportClosed
+            ))
         ));
     }
 }

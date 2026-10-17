@@ -209,7 +209,6 @@ pub async fn sign_in() -> Result<(), String> {
         .kill_on_drop(true);
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::process::CommandExt;
         command.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
 
@@ -782,7 +781,11 @@ fn build_provider_config(llm: &LlmConfig) -> Option<copilot_sdk::ProviderConfig>
                 wire_api: Some("openai".to_string()),
                 // Prefer an Entra bearer token when present; fall back to the
                 // classic api-key header otherwise.
-                api_key: if bearer_token.is_some() { None } else { api_key },
+                api_key: if bearer_token.is_some() {
+                    None
+                } else {
+                    api_key
+                },
                 bearer_token,
                 azure: Some(copilot_sdk::AzureOptions { api_version: None }),
             })
@@ -958,7 +961,10 @@ mod tests {
             "boom".to_string()
         );
         // Falls back to stdout when stderr is blank.
-        assert_eq!(sign_in_error_tail(b"   ", b" fallback "), "fallback".to_string());
+        assert_eq!(
+            sign_in_error_tail(b"   ", b" fallback "),
+            "fallback".to_string()
+        );
         // Long output is truncated to a bounded tail with a leading ellipsis.
         let long = "x".repeat(1000);
         let tail = sign_in_error_tail(long.as_bytes(), b"");

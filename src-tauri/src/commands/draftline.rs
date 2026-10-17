@@ -6,10 +6,10 @@ use draftline::tauri_contract as contract;
 #[cfg(test)]
 use draftline::VersionId;
 use draftline::{
-    ApplyIncomingReport, ChangeSet, Contributor, ContributorProfile, HistoryEntry,
-    MergeIncomingReport, MilestoneMergeReport, PreflightReport, PreviewFile, RemoteCredential,
-    RemoteCredentialRequest, RemoteEndpoint, Shelf, Variation, VariationId, VariationRenamePreflight,
-    VariationSummary, Version, VersionDiff, VersionPreview,
+    ApplyIncomingReport, ChangeSet, ContributorProfile, HistoryEntry, MergeIncomingReport,
+    MilestoneMergeReport, PreflightReport, PreviewFile, RemoteCredential, RemoteCredentialRequest,
+    RemoteEndpoint, Shelf, Variation, VariationId, VariationRenamePreflight, VariationSummary,
+    Version, VersionDiff, VersionPreview,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
@@ -18,8 +18,8 @@ use tauri_plugin_auditaur::auditaur_command;
 use crate::commands::github::github_credential_token;
 use crate::engine::agent_state::{AgentStateStore, HistoryCleanupLedgerOperation};
 use crate::engine::draftline_adapter::{
-    cutready_content_policy, cutready_remote_options, is_github_remote_url,
-    CutReadyDraftlineAdapter,
+    contributor_profile_for, cutready_content_policy, cutready_remote_options,
+    is_github_remote_url, CutReadyDraftlineAdapter,
 };
 use crate::{AppState, ProjectLock};
 
@@ -80,19 +80,6 @@ fn draftline_root_from_project_view(view: &crate::models::script::ProjectView) -
 pub const CONTRIBUTOR_IDENTITY_REQUIRED: &str = "contributor_identity_required";
 const CONTRIBUTOR_IDENTITY_REQUIRED_MESSAGE: &str =
     "Add your name and email in Settings › Profile so collaborators can see who made this change.";
-
-fn contributor_profile_for(author: crate::engine::identity::ResolvedIdentity) -> ContributorProfile {
-    ContributorProfile::new(
-        Contributor {
-            name: author.name,
-            email: author.email,
-        },
-        Contributor {
-            name: "CutReady".to_string(),
-            email: Some("app@cutready.local".to_string()),
-        },
-    )
-}
 
 fn cutready_contributor_profile(
     project_root: &Path,
@@ -1289,6 +1276,7 @@ fn redact_remote_url_credentials(url: &str) -> String {
 mod tests {
     use super::*;
     use crate::models::script::ProjectView;
+    use draftline::Contributor;
 
     #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
     #[serde(rename_all = "camelCase")]

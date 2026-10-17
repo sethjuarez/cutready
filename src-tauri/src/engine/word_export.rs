@@ -208,9 +208,8 @@ pub fn export_markdown_to_word(
             output_path.display()
         ));
     }
-    let (bytes, report) =
-        render_markdown_to_docx(root, markdown, orientation, max_image_width_px)
-            .map_err(|e| e.to_string())?;
+    let (bytes, report) = render_markdown_to_docx(root, markdown, orientation, max_image_width_px)
+        .map_err(|e| e.to_string())?;
     std::fs::write(output_path, bytes)
         .map_err(|e| format!("Could not write {}: {e}", output_path.display()))?;
     Ok(report)
@@ -303,7 +302,10 @@ mod tests {
             600,
         )
         .unwrap_err();
-        assert!(matches!(err, WordExportError::UnsupportedImageUrl(_)), "{err}");
+        assert!(
+            matches!(err, WordExportError::UnsupportedImageUrl(_)),
+            "{err}"
+        );
     }
 
     #[test]
@@ -334,7 +336,10 @@ mod tests {
             600,
         )
         .unwrap_err();
-        assert!(matches!(err, WordExportError::EmbedFailed { count: 1, .. }), "{err}");
+        assert!(
+            matches!(err, WordExportError::EmbedFailed { count: 1, .. }),
+            "{err}"
+        );
     }
 
     #[test]
@@ -372,9 +377,12 @@ mod tests {
         )
         .unwrap();
         let md = "![x](.cutready/screenshots/bad.png)\n\n[^unused]: ![r](https://example.invalid/r.png)\n";
-        let err = render_markdown_to_docx(dir.path(), md, WordOrientation::Portrait, 600)
-            .unwrap_err();
-        assert!(matches!(err, WordExportError::EmbedFailed { count: 1, .. }), "{err}");
+        let err =
+            render_markdown_to_docx(dir.path(), md, WordOrientation::Portrait, 600).unwrap_err();
+        assert!(
+            matches!(err, WordExportError::EmbedFailed { count: 1, .. }),
+            "{err}"
+        );
     }
 
     #[test]
@@ -412,8 +420,7 @@ mod tests {
         assert!(err.contains("absolute .docx"));
 
         let out = dir.path().join("out.docx");
-        export_markdown_to_word(dir.path(), "# Hi", &out, WordOrientation::Portrait, 600)
-            .unwrap();
+        export_markdown_to_word(dir.path(), "# Hi", &out, WordOrientation::Portrait, 600).unwrap();
         assert!(out.is_file());
     }
 }

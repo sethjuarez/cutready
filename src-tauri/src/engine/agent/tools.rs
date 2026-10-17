@@ -8,7 +8,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::engine::agent::execution::{
@@ -25,10 +24,10 @@ use crate::engine::visual_document::{
 };
 use crate::models::sketch::{PlanningRow, Sketch};
 
-// `ToolDefinition` / `ToolFunctionDefinition` (the wire shape of the tool
-// contract) now live in the `harness-contract` crate. Re-exported here so the
-// concrete tool implementations below and external call sites are unchanged.
-pub use harness_contract::tools::{ToolDefinition, ToolFunctionDefinition};
+// `ToolDefinition` (the wire shape of the tool contract) now lives in the
+// `harness-contract` crate. Re-exported here so the concrete tool
+// implementations below and external call sites are unchanged.
+pub use harness_contract::tools::ToolDefinition;
 
 type Tool = ToolDefinition;
 
@@ -1443,7 +1442,9 @@ fn exec_create_project_as(
     });
     if let StructureSnapshot::Deferred { reason, message } = snapshot {
         let next = match reason {
-            DeferReason::Identity => "Tell the user this so they can finish setting up their profile.",
+            DeferReason::Identity => {
+                "Tell the user this so they can finish setting up their profile."
+            }
             DeferReason::UnsavedEdits => "Tell the user this so they can save a version.",
         };
         result["versioning"] = json!("deferred");
@@ -2812,7 +2813,9 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> ToolOutput {
     };
 
     if sketch.locked {
-        return ToolOutput::failed("Error: This sketch is locked. Unlock it before editing with AI.");
+        return ToolOutput::failed(
+            "Error: This sketch is locked. Unlock it before editing with AI.",
+        );
     }
     if sketch.rows[index].locked {
         return ToolOutput::failed(format!(
@@ -3067,7 +3070,9 @@ fn exec_apply_row_visual_nudge(root: &Path, args: &Value) -> ToolOutput {
     };
     let changed = count_changed_paths(&before, &updated);
     if let Err(e) = validate_agentic_visual(&updated) {
-        return ToolOutput::failed(format!("Nudge produced an invalid visual; nothing saved:\n  • {e}"));
+        return ToolOutput::failed(format!(
+            "Nudge produced an invalid visual; nothing saved:\n  • {e}"
+        ));
     }
     match save_row_visual(root, &path, &mut sketch, index, &updated) {
         Ok(rel_path) => ToolOutput::from(format!(
@@ -3102,7 +3107,9 @@ fn exec_apply_row_visual_command(root: &Path, args: &Value) -> ToolOutput {
     };
     let changed = count_changed_paths(&before, &updated);
     if let Err(e) = validate_agentic_visual(&updated) {
-        return ToolOutput::failed(format!("Command produced an invalid visual; nothing saved:\n  • {e}"));
+        return ToolOutput::failed(format!(
+            "Command produced an invalid visual; nothing saved:\n  • {e}"
+        ));
     }
     let op = command
         .get("op")
@@ -4478,8 +4485,7 @@ mod tests {
         std::fs::create_dir_all(&outside).unwrap();
         std::fs::write(outside.join("leak.png"), b"not really an image").unwrap();
 
-        let (_text, image_parts) =
-            extract_and_encode_images("![leak](../outside/leak.png)", &root);
+        let (_text, image_parts) = extract_and_encode_images("![leak](../outside/leak.png)", &root);
 
         assert!(
             image_parts.is_empty(),
@@ -4921,7 +4927,10 @@ mod tests {
 
         // Success: write a note with mutations enabled.
         let ok = execute_tool(
-            &tool_call("write_note", json!({ "path": "notes/a.md", "content": "hi" })),
+            &tool_call(
+                "write_note",
+                json!({ "path": "notes/a.md", "content": "hi" }),
+            ),
             root,
             root,
             false,
@@ -5005,7 +5014,10 @@ mod tests {
 
         // review_row_visual on a row that has no visual fails via load_row_visual.
         let bad_review = execute_tool(
-            &tool_call("review_row_visual", json!({ "path": "demo.sk", "row_number": 1 })),
+            &tool_call(
+                "review_row_visual",
+                json!({ "path": "demo.sk", "row_number": 1 }),
+            ),
             root,
             root,
             false,
