@@ -28,13 +28,14 @@ export const THEME_COLOR_TOKEN_MAP: Record<keyof ThemeColorTokens, string> = {
 
 /**
  * Content-type colours are derived from each palette's accent rather than
- * authored per palette, so every theme gets its own sketch/storyboard/note hues
+ * authored per palette, so every theme gets its own sketch/storyboard/note/chat hues
  * without maintaining 90 hand-picked values.
  */
 const CONTENT_TOKEN_MAP: Record<ContentTypeTokenKey, string> = {
   storyboard: "--color-content-storyboard",
   sketch: "--color-content-sketch",
   note: "--color-content-note",
+  chat: "--color-content-chat",
 };
 
 function toCssVariables(colors: ThemeColorTokens): Record<string, string> {

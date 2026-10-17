@@ -65,11 +65,12 @@ describe("derived content type tokens", () => {
     const palette = THEME_PALETTES.find((entry) => entry.id === "cutready")!;
 
     expect(deriveContentTokens(palette.dark).sketch).toBe("170 160 255");
-    // Original light values were 111 99 232 / 15 118 110 / 194 105 17.
+    // Original light values were 111 99 232 / 15 118 110 / 194 105 17; chat is the fourth derived document lane.
     expect(deriveContentTokens(palette.light)).toEqual({
       sketch: "105 94 216",
       storyboard: "7 129 111",
       note: "181 87 0",
+      chat: "182 60 143",
     });
   });
 });

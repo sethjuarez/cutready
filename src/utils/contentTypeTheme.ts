@@ -39,13 +39,13 @@ export const contentTypeTones: Record<ContentTypeToneName, ContentTypeTone> = {
     border: "border-[rgb(var(--color-content-note))]/30",
   },
   "chat-artifact": {
-    bg: "bg-[rgb(var(--color-accent))]",
-    text: "text-[rgb(var(--color-accent))]",
-    hoverText: "hover:text-[rgb(var(--color-accent))]",
-    activeBg: "bg-[rgb(var(--color-accent))]/10",
-    hoverBg: "hover:bg-[rgb(var(--color-accent))]/10",
-    metaText: "text-[rgb(var(--color-accent))]/70",
-    border: "border-[rgb(var(--color-accent))]/30",
+    bg: "bg-[rgb(var(--color-content-chat))]",
+    text: "text-[rgb(var(--color-content-chat))]",
+    hoverText: "hover:text-[rgb(var(--color-content-chat))]",
+    activeBg: "bg-[rgb(var(--color-content-chat))]/10",
+    hoverBg: "hover:bg-[rgb(var(--color-content-chat))]/10",
+    metaText: "text-[rgb(var(--color-content-chat))]/70",
+    border: "border-[rgb(var(--color-content-chat))]/30",
   },
 };
 
