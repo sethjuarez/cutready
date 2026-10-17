@@ -9,7 +9,7 @@ import type { PlanningRow } from "../types/sketch";
 import { ScriptTable } from "./ScriptTable";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { SafeMarkdown } from "./SafeMarkdown";
-import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
+import { ChatArtifactIcon, SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import { contentTypeTone } from "../utils/contentTypeTheme";
 import { usePopover } from "../hooks/usePopover";
 import { getClampedPopoverPosition } from "./TabBar";
@@ -18,6 +18,7 @@ import { FieldAiButton } from "./FieldAiButton";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
 import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
 import { InlineDescriptionEditor } from "./InlineDescriptionEditor";
+import { ChatArtifactViewer } from "./ChatArtifactViewer";
 
 /**
  * SplitTabBar — compact tab bar for the split pane, rendered beside the main TabBar.
@@ -197,6 +198,7 @@ export function SplitPaneContent() {
             >
               {tab.type === "sketch" && <SketchSplitEditor path={tab.path} />}
               {tab.type === "note" && <NoteSplitEditor path={tab.path} />}
+              {tab.type === "chat-artifact" && <ChatArtifactViewer path={tab.path} />}
               {tab.type === "storyboard" && <StoryboardPreviewContent path={tab.path} />}
             </div>
           );
@@ -234,6 +236,7 @@ function SplitTab({
   const TabIcon =
     tab.type === "sketch" ? SketchIcon
     : tab.type === "storyboard" ? StoryboardIcon
+    : tab.type === "chat-artifact" ? ChatArtifactIcon
     : NoteIcon;
 
   useEffect(() => {
@@ -446,6 +449,7 @@ function SketchSplitEditor({ path }: { path: string }) {
 
   if (error) return <div className="p-4 text-sm text-[rgb(var(--color-error))]">Failed to load sketch</div>;
   if (!sketch) return <LoadingSpinner />;
+  const locked = sketch.locked ?? false;
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -458,12 +462,12 @@ function SketchSplitEditor({ path }: { path: string }) {
               type="text"
               value={localTitle}
               onChange={(e) => handleTitleChange(e.target.value)}
-              readOnly={sketch.locked}
+              readOnly={locked}
               placeholder="Sketch title..."
               title={localTitle}
-              className={`min-w-0 w-full truncate border-none bg-transparent text-2xl font-semibold text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/40 ${localTitle && !sketch.locked ? "pr-8" : ""} ${sketch.locked ? "cursor-default" : ""}`}
+              className={`min-w-0 w-full truncate border-none bg-transparent text-2xl font-semibold text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/40 ${localTitle && !locked ? "pr-8" : ""} ${locked ? "cursor-default" : ""}`}
             />
-            {localTitle && !sketch.locked && (
+            {localTitle && !locked && (
               <FieldAiButton
                 onClick={() => void runBackgroundAgentAction(
                   `Improve the title of sketch "${path}". Current title: "${localTitle}". Suggest a more compelling, concise title. IMPORTANT: Only update the title — do NOT change the description or any rows.`,
@@ -478,7 +482,7 @@ function SketchSplitEditor({ path }: { path: string }) {
           }
         />
 
-        {sketch.locked && (
+        {locked && (
           <LockedDocumentBanner message="Sketch is locked. Unlock it to edit fields, rows, media, or AI suggestions." />
         )}
 
@@ -486,14 +490,14 @@ function SketchSplitEditor({ path }: { path: string }) {
           <InlineDescriptionEditor
             value={localDesc}
             placeholder="Describe what this sketch covers..."
-            disabled={sketch.locked}
+            disabled={locked}
             rows={4}
             className="mb-8"
-            previewClassName={`min-h-[2rem] rounded-lg border border-transparent px-3 py-2 text-sm transition-colors hover:border-[rgb(var(--color-border))] ${!sketch.locked ? "cursor-text pr-10" : "cursor-default"} prose-desc leading-relaxed text-[rgb(var(--color-text))]`}
+            previewClassName={`min-h-[2rem] rounded-lg border border-transparent px-3 py-2 text-sm transition-colors hover:border-[rgb(var(--color-border))] ${!locked ? "cursor-text pr-10" : "cursor-default"} prose-desc leading-relaxed text-[rgb(var(--color-text))]`}
             textareaClassName="w-full text-sm bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border border-[rgb(var(--color-border))] rounded-lg px-3 py-2 resize-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 transition-colors"
             onDraftChange={handleDescChange}
             onSave={handleDescSave}
-            action={!sketch.locked ? (
+            action={!locked ? (
             <FieldAiButton
               onClick={() => void runBackgroundAgentAction(
                 localDesc
@@ -513,7 +517,7 @@ function SketchSplitEditor({ path }: { path: string }) {
         <ScriptTable
           rows={localRows}
           onChange={handleRowsChange}
-          readOnly={sketch.locked}
+          readOnly={locked}
           projectRoot={projectRoot}
           sketchPath={path}
         />

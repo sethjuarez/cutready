@@ -4,6 +4,7 @@ import {
   askModeApprovedSystemInstruction,
   askModeCancelledMessage,
   buildChatWorkingNotes,
+  buildInlineToolActivityIndex,
   buildLiveChatWorkingNotes,
   canUseChatMutationTools,
   cancelAgentChatRun,
@@ -96,6 +97,7 @@ describe("extractMentionReferences", () => {
     { type: "sketch" as const, path: "intro.sk", title: "Intro" },
     { type: "note" as const, path: "notes/setup.md", title: "Setup Notes" },
     { type: "storyboard" as const, path: "demo.sb", title: "Demo Storyboard" },
+    { type: "chat-artifact" as const, path: "chat-artifacts/design-review.cv", title: "Design Review" },
   ];
 
   it("resolves pasted @ mentions into file references", () => {
@@ -105,6 +107,14 @@ describe("extractMentionReferences", () => {
       "sketch:intro.sk",
       "note:notes/setup.md",
       "storyboard:demo.sb",
+    ]);
+  });
+
+  it("resolves saved chat mentions", () => {
+    const refs = extractMentionReferences('Use @"Design Review" and @chat:design-review', files);
+
+    expect(refs.map((ref) => `${ref.type}:${ref.path}`)).toEqual([
+      "chat-artifact:chat-artifacts/design-review.cv",
     ]);
   });
 
@@ -449,6 +459,33 @@ describe("Ask Mode chat mutation gating", () => {
     expect(message).toContain("Ask Mode is active");
     expect(message).toContain("Settings > AI apply behavior");
     expect(message).toContain("Auto-apply AI changes");
+  });
+});
+
+describe("buildInlineToolActivityIndex", () => {
+  it("matches per-row extraction, including reused tool call ids", () => {
+    const call = (id: string, name: string) => ({
+      id,
+      call_type: "function",
+      function: { name, arguments: "{}" },
+    });
+    const messages: ChatMessage[] = [
+      { role: "user", content: "go" },
+      { role: "assistant", content: null, tool_calls: [call("c1", "read_sketch"), call("c2", "write_sketch")] },
+      { role: "tool", content: "second", tool_call_id: "c2" },
+      { role: "tool", content: "first", tool_call_id: "c1" },
+      { role: "assistant", content: "again", tool_calls: [call("c1", "read_note")] },
+      { role: "tool", content: "reused", tool_call_id: "c1" },
+      { role: "assistant", content: null, tool_calls: [call("c9", "list_files")] },
+    ];
+    const index = buildInlineToolActivityIndex(messages);
+    expect(index).toHaveLength(messages.length);
+    messages.forEach((message, i) => {
+      expect(index[i]).toEqual(extractInlineToolActivity(message, messages.slice(i + 1)));
+    });
+    expect(index[1].map((a) => a.result)).toEqual(["first", "second"]);
+    expect(index[4][0].result).toBe("reused");
+    expect(index[6][0]).not.toHaveProperty("result");
   });
 });
 

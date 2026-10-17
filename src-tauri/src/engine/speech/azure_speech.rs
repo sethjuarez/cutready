@@ -7,7 +7,9 @@
 
 use async_trait::async_trait;
 
-use super::{SpeechSynthesizer, SynthesisRequest, SynthesisResult, TtsCapabilities, AZURE_SPEECH_ID};
+use super::{
+    SpeechSynthesizer, SynthesisRequest, SynthesisResult, TtsCapabilities, AZURE_SPEECH_ID,
+};
 
 /// Entra scope for the Cognitive Services Speech API.
 pub const SPEECH_TOKEN_SCOPE: &str = "https://cognitiveservices.azure.com/.default";

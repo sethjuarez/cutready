@@ -20,7 +20,13 @@ export const useToastStore = create<ToastState>((set) => ({
   toasts: [],
   show: (message, durationMs = 3000, type = "success") => {
     const id = ++nextId;
-    set((s) => ({ toasts: [...s.toasts, { id, message, type }] }));
+    // Repeating a visible toast restarts it instead of stacking a copy.
+    set((s) => ({
+      toasts: [
+        ...s.toasts.filter((t) => t.message !== message || t.type !== type),
+        { id, message, type },
+      ],
+    }));
     setTimeout(() => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), durationMs);
   },
   dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),

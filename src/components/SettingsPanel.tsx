@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { X, MessageSquare, Download, Search, MonitorCog, Palette, Bot, Brain, Mic2, MessageCircleWarning, GitBranch, DownloadCloud, FlaskConical, Keyboard, SlidersHorizontal, Plug, AudioLines, Eye, Captions } from "lucide-react";
+import { X, MessageSquare, Download, Search, MonitorCog, Palette, Bot, Brain, Mic2, MessageCircleWarning, GitBranch, DownloadCloud, FlaskConical, Keyboard, SlidersHorizontal, Plug, AudioLines, Eye, Captions, UserRound } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
 import { invoke } from "../services/tauri";
@@ -16,6 +16,7 @@ import { NarrationTab } from "./settings/NarrationTab";
 import { PresentationTab } from "./settings/PresentationTab";
 import { RecordingTab } from "./settings/RecordingTab";
 import { RepositoryTab } from "./settings/RepositoryTab";
+import { ProfileTab } from "./settings/ProfileTab";
 import { ThemesTab } from "./settings/ThemesTab";
 import { UpdatesTab } from "./settings/UpdatesTab";
 import { VoiceTab } from "./settings/VoiceTab";
@@ -25,7 +26,7 @@ import type { AiInnerTab, AuthCodeFlowInit, ModelInfo, SettingsTab, TokenRespons
 export { CUTREADY_FEEDBACK_REPO, HarnessPicker };
 
 const REQUESTED_SETTINGS_TAB_KEY = "cutready:requested-settings-tab";
-const SETTINGS_TABS: SettingsTab[] = ["ai", "agents", "memory", "display", "themes", "presentation", "narration", "recording", "export", "feedback", "repository", "updates", "experimental"];
+const SETTINGS_TABS: SettingsTab[] = ["profile", "ai", "agents", "memory", "display", "themes", "presentation", "narration", "recording", "export", "feedback", "repository", "updates", "experimental"];
 
 function consumeRequestedSettingsTab(): SettingsTab | null {
   const requested = localStorage.getItem(REQUESTED_SETTINGS_TAB_KEY);
@@ -71,8 +72,8 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
   }, [currentProject, onClose, setView]);
 
   const globalTabs: SettingsTab[] = settings.featureRecording
-    ? ["display", "themes", "presentation", "narration", "recording", "export", "ai", "feedback", "updates", "experimental"]
-    : ["display", "themes", "presentation", "narration", "export", "ai", "feedback", "updates", "experimental"];
+    ? ["profile", "display", "themes", "presentation", "narration", "recording", "export", "ai", "feedback", "updates", "experimental"]
+    : ["profile", "display", "themes", "presentation", "narration", "export", "ai", "feedback", "updates", "experimental"];
   const workspaceTabs: SettingsTab[] = ["repository", "display", "themes", "export", "ai"];
   const tabs: SettingsTab[] = scope === "workspace" ? workspaceTabs : globalTabs;
 
@@ -254,6 +255,13 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
     icon: ReactNode;
     keywords: string;
   }> = {
+    profile: {
+      label: "Profile",
+      eyebrow: "Your identity",
+      description: "Choose the name and email CutReady signs your snapshots and shared chats with.",
+      icon: <UserRound className="h-4 w-4" />,
+      keywords: "profile identity name email author attribution snapshot git user",
+    },
     display: {
       label: "Display",
       eyebrow: "Studio ergonomics",
@@ -505,6 +513,9 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
 
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
             <div className="mx-auto max-w-5xl">
+              {activeTab === "profile" && (
+                <ProfileTab />
+              )}
               {activeTab === "display" && (
                 <DisplayTab settings={settings} updateSetting={updateSetting} />
               )}

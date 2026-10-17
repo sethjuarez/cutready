@@ -19,6 +19,15 @@ mod engine;
 mod models;
 mod util;
 
+/// Portable `.sk` document API, exposed for the contract conformance suite in
+/// `crates/cutready-contracts`.
+pub mod document {
+    pub use crate::engine::sketch_edits::{
+        parse_duration_seconds, reorder_rows, update_row_text, RowTextUpdate, SketchEditError,
+    };
+    pub use crate::models::sketch::{PlanningRow, Sketch, Storyboard};
+}
+
 const CUTREADY_DIAGNOSTICS_ENV: &str = "CUTREADY_DIAGNOSTICS";
 const AUDITAUR_ENV: &str = "AUDITAUR";
 const SETTINGS_FILE: &str = "settings.json";
@@ -198,7 +207,7 @@ pub type AgentChatCancellationRegistry = Arc<Mutex<HashMap<String, AgentChatCanc
 
 /// Serializes access to project-level operations that mutate the filesystem or git state.
 /// Prevents concurrent git operations, snapshot + checkout races, and write-during-read corruption.
-pub struct ProjectLock(pub tokio::sync::Mutex<()>);
+pub struct ProjectLock(pub &'static std::sync::Mutex<()>);
 
 /// Tracks configurable app-wide shortcuts used by presentation preview windows.
 #[derive(Debug, Clone)]
@@ -431,7 +440,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(app_state)
         .manage(auditaur_policy)
-        .manage(ProjectLock(tokio::sync::Mutex::new(())))
+        .manage(ProjectLock(engine::workspace_write_lock::mutex()))
         .manage(PresentationHotkeyState(Mutex::new(Vec::new())))
         .manage(commands::screenshot::CaptureState(Mutex::new(None)))
         .manage(commands::screenshot::RecordingCountdownState(Mutex::new(
@@ -487,6 +496,15 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            // Agent tools have no app handle; let them read the saved profile
+            // so their automatic saves are attributed to the acting user.
+            {
+                let handle = app.handle().clone();
+                engine::identity::install_profile_source(move || {
+                    commands::identity::saved_profile(&handle)
+                })?;
+            }
+
             // Deep link: register URL scheme handler on Windows/Linux
             #[cfg(any(target_os = "linux", target_os = "windows"))]
             {
@@ -544,12 +562,20 @@ pub fn run() {
 
             let shortcut = Shortcut::new(Some(primary_mod | Modifiers::SHIFT), Code::KeyR);
 
-            app.global_shortcut()
-                .on_shortcut(shortcut, |app_handle, _shortcut, event| {
-                    if event.state == ShortcutState::Pressed {
-                        let _ = app_handle.emit("toggle-recording", ());
-                    }
-                })?;
+            if let Err(error) =
+                app.global_shortcut()
+                    .on_shortcut(shortcut, |app_handle, _shortcut, event| {
+                        if event.state == ShortcutState::Pressed {
+                            let _ = app_handle.emit("toggle-recording", ());
+                        }
+                    })
+            {
+                tracing::warn!(
+                    target: "cutready::hotkeys",
+                    error = %error,
+                    "Failed to register recording toggle hotkey",
+                );
+            }
 
             let prompter_shortcuts = [
                 (
@@ -571,14 +597,21 @@ pub fn run() {
             ];
 
             for (shortcut, event_name) in prompter_shortcuts {
-                app.global_shortcut().on_shortcut(
+                if let Err(error) = app.global_shortcut().on_shortcut(
                     shortcut,
                     move |app_handle, _shortcut, event| {
                         if event.state == ShortcutState::Pressed {
                             let _ = app_handle.emit(event_name, ());
                         }
                     },
-                )?;
+                ) {
+                    tracing::warn!(
+                        target: "cutready::hotkeys",
+                        event_name,
+                        error = %error,
+                        "Failed to register recording prompter hotkey",
+                    );
+                }
             }
 
             // Windows/Linux still use the React titlebar for deterministic custom chrome.
@@ -624,6 +657,7 @@ pub fn run() {
             commands::project::get_workspace_settings,
             commands::project::set_workspace_settings,
             commands::project::resolve_deep_link,
+            commands::export::export_markdown_to_word,
             commands::export::export_sketch_video,
             commands::diagnostics::dump_diagnostics,
             commands::diagnostics::get_diagnostics_policy,
@@ -719,9 +753,12 @@ pub fn run() {
             commands::draftline::fetch_remote,
             commands::draftline::publish_current_variation,
             commands::draftline::preflight_apply_incoming,
+            commands::draftline::get_sync_status,
             commands::draftline::apply_incoming,
             commands::draftline::preflight_merge_incoming,
             commands::draftline::merge_incoming,
+            commands::draftline::preflight_milestone_merge,
+            commands::draftline::create_milestone_merge,
             commands::draftline::merge_incoming_with_resolutions,
             commands::draftline::clone_from_url,
             commands::interaction::detect_browser_profiles,
@@ -778,6 +815,7 @@ pub fn run() {
             commands::note::delete_note,
             commands::note::rename_note,
             commands::note::list_notes,
+            commands::note::list_chat_artifacts,
             commands::note::save_pasted_image,
             commands::note::list_project_images,
             commands::note::delete_project_image,
@@ -803,6 +841,7 @@ pub fn run() {
             commands::agent::list_chat_sessions,
             commands::agent::get_chat_session,
             commands::agent::save_chat_session,
+            commands::agent::delete_chat_session,
             commands::agent::has_active_agent_run,
             commands::agent::delete_agent_run,
             commands::agent::prune_agent_runs,
@@ -846,6 +885,9 @@ pub fn run() {
             commands::github::github_device_code_poll,
             commands::github::github_auth_status,
             commands::github::github_sign_out,
+            commands::identity::get_contributor_identity,
+            commands::identity::set_contributor_identity,
+            commands::identity::clear_contributor_identity,
             commands::terminal::terminal_open,
             commands::terminal::terminal_write,
             commands::terminal::terminal_is_alive,

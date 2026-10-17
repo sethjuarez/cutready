@@ -55,6 +55,7 @@ pub async fn import_docx(
     conflict: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let conflict = conflict.as_deref().unwrap_or("check");
     let data = fs::read(&file_path).map_err(|e| format!("Failed to read file: {e}"))?;
@@ -88,6 +89,7 @@ pub async fn import_pdf(
     conflict: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let conflict = conflict.as_deref().unwrap_or("check");
     let data = fs::read(&file_path).map_err(|e| format!("Failed to read file: {e}"))?;
@@ -121,6 +123,7 @@ pub async fn import_pptx(
     conflict: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let conflict = conflict.as_deref().unwrap_or("check");
     let data = fs::read(&file_path).map_err(|e| format!("Failed to read file: {e}"))?;
@@ -154,6 +157,7 @@ pub async fn import_markdown(
     conflict: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let conflict = conflict.as_deref().unwrap_or("check");
     let overwrite = conflict == "overwrite";
@@ -194,6 +198,7 @@ pub async fn import_sketch(
     conflict: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let conflict = conflict.as_deref().unwrap_or("check");
     let overwrite = conflict == "overwrite";
@@ -236,13 +241,14 @@ pub async fn import_storyboard(
     conflict: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let conflict = conflict.as_deref().unwrap_or("check");
     let source_path = Path::new(&file_path);
     let data = fs::read_to_string(source_path).map_err(|e| format!("Failed to read file: {e}"))?;
 
-    let storyboard: crate::models::sketch::Storyboard =
-        serde_json::from_str(&data).map_err(|e| format!("Invalid storyboard file: {e}"))?;
+    let (storyboard, _) = crate::models::sketch::Storyboard::from_json_upgraded(&data)
+        .map_err(|e| format!("Invalid storyboard file: {e}"))?;
 
     let filename = source_path
         .file_stem()

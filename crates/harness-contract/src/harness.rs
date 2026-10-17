@@ -455,7 +455,10 @@ mod tests {
     fn requires_and_augments_forward_host_agent_prompts_unchanged() {
         for ownership in [Ownership::Requires, Ownership::Augments] {
             let out = contract_with_personas(ownership).host_agent_prompts(sample_prompts());
-            assert_eq!(out.get("writer").map(String::as_str), Some("You are the writer."));
+            assert_eq!(
+                out.get("writer").map(String::as_str),
+                Some("You are the writer.")
+            );
         }
     }
 }

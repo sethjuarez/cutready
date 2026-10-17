@@ -1,0 +1,7 @@
+{
+  "accessToken": "fixture-access-token",
+  "tokenType": "Bearer",
+  "expiresIn": 3600,
+  "refreshToken": "fixture-refresh-token",
+  "scope": "https://cognitiveservices.azure.com/.default offline_access"
+}

@@ -549,7 +549,11 @@ async fn prompty_persistence_failures_resume_without_duplicate_model_or_tool_eff
     assert_eq!(checkpoint.session_id, "resume-session");
     assert_eq!(checkpoint.turn_id, "resume-turn");
     assert_eq!(
-        checkpoint.completed_tool_results.as_deref().unwrap_or(&[]).len(),
+        checkpoint
+            .completed_tool_results
+            .as_deref()
+            .unwrap_or(&[])
+            .len(),
         1
     );
     assert!(checkpoint.pending_model_response.is_some());

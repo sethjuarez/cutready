@@ -62,8 +62,8 @@ final class StoryboardDocumentTests: XCTestCase {
         let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let decoded = try JSONDecoder().decode(Storyboard.self, from: data)
 
-        XCTAssertEqual(object?["created_at"] as? String, "2026-01-01T00:00:00.000Z")
-        XCTAssertEqual(object?["updated_at"] as? String, "2026-01-01T01:00:00.000Z")
+        XCTAssertEqual(object?["created_at"] as? String, "2026-01-01T00:00:00Z")
+        XCTAssertEqual(object?["updated_at"] as? String, "2026-01-01T01:00:00Z")
         XCTAssertEqual(decoded.title, storyboard.title)
         XCTAssertEqual(decoded.items, storyboard.items)
     }

@@ -17,8 +17,15 @@
 //   { expectText: "..." , timeoutMs }
 //   { forbidText: ["..."] }
 //   { telemetry: "errors|failed-ipc|explain", maxCount }
-//   { trace: "logs|traces", contains: ["..."], notContains: ["..."], timeoutMs }
+//   { trace: "logs|traces|ipc", contains: ["..."], notContains: ["..."], timeoutMs }
+//   { git: ["log", ...], expectContains: "...", timeoutMs }  // polls git in the fixture
 //   { manual: "instruction", gateFile: "target/...ok", timeoutMs }  // human gate
+//
+// Definition-level options:
+//   env: { NAME: "value" }            extra environment for the app under test
+//   appStores: [{ file, clear }]       app-data store files to back up (and
+//                                      optionally remove) before the run; always
+//                                      restored afterwards
 //
 // Requires: auditaur 0.4.1+ on PATH.
 
@@ -55,7 +62,7 @@ const projectRoot = mkdtempSync(join(tmpdir(), fixturePrefix));
 const sessionFile = join(projectRoot, ".auditaur-session.json");
 const appCommand =
   process.platform === "win32" ? ["cmd", "/c", "npm run debug"] : ["npm", "run", "debug"];
-const env = { ...process.env, CUTREADY_PROJECT: projectRoot };
+const env = { ...process.env, ...(definition.env ?? {}), CUTREADY_PROJECT: projectRoot };
 
 const report = {
   app: appName,
@@ -73,6 +80,7 @@ let appPid;
 let processPid;
 // { path, existed, original } — captured so finally can always restore.
 let settingsBackup = null;
+let appStoreBackups = [];
 
 mkdirSync(dirname(reportPath), { recursive: true });
 writeProjectFixture();
@@ -80,6 +88,7 @@ writeProjectFixture();
 try {
   ensureNoActiveCutReady();
   seedGlobalSettings();
+  protectAppStores();
 
   console.log(`Starting CutReady under Auditaur observation (${drillLabel} drill)...`);
   launcher = spawn(
@@ -129,6 +138,7 @@ try {
   // restore them, then restore, then clean the project fixture.
   stopSpawnedApp();
   restoreGlobalSettings();
+  restoreAppStores();
   removeProjectFromRecents();
   rmSync(projectRoot, { recursive: true, force: true });
 }
@@ -160,6 +170,7 @@ async function runStep(step) {
   }
   if (step.telemetry) return runTelemetryStep(step);
   if (step.trace) return runTraceStep(step);
+  if (step.git) return runGitStep(step);
   if (step.manual) return runManualStep(step);
   throw new Error(`Unsupported drill step: ${JSON.stringify(step)}`);
 }
@@ -195,7 +206,7 @@ async function runManualStep(step) {
 // switched harness actually executed a run (the run-start trace names the
 // resolved execution_engine) without depending on a fully healthy LLM call.
 async function runTraceStep(step) {
-  const stream = step.trace === "traces" ? "traces" : "logs";
+  const stream = ["traces", "ipc"].includes(step.trace) ? step.trace : "logs";
   const contains = step.contains ?? [];
   const notContains = step.notContains ?? [];
   const timeoutMs = step.timeoutMs ?? 60_000;
@@ -229,6 +240,28 @@ async function runTraceStep(step) {
     await delay(1_500);
   }
   return recordAssertion(step.id, "failed", { items: lastItems.length }, `timed out waiting for ${stream} matching ${JSON.stringify(contains)}`);
+}
+
+// Polls a git command inside the fixture project until its stdout contains
+// `expectContains`, e.g. to prove who a snapshot commit was authored by.
+async function runGitStep(step) {
+  const timeoutMs = step.timeoutMs ?? 30_000;
+  const deadline = Date.now() + timeoutMs;
+  let last = "";
+  while (Date.now() < deadline) {
+    const result = spawnSync("git", step.git.map(expandValue), {
+      cwd: projectRoot,
+      encoding: "utf8",
+      shell: false,
+      windowsHide: true,
+    });
+    last = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+    if (result.status === 0 && last.includes(step.expectContains)) {
+      return recordAssertion(step.id, "passed", { output: last });
+    }
+    await delay(1_000);
+  }
+  return recordAssertion(step.id, "failed", { output: last }, `expected git ${step.git.join(" ")} to contain ${JSON.stringify(step.expectContains)}`);
 }
 
 async function runDriveStep(step) {
@@ -328,18 +361,57 @@ function drivePayloadValue(json) {
 
 // ── Global settings seed / restore ───────────────────────────────────────────
 
-function globalSettingsPath() {
-  if (process.env.CUTREADY_GLOBAL_SETTINGS_STORE) return process.env.CUTREADY_GLOBAL_SETTINGS_STORE;
+function appDataDir() {
   if (process.platform === "win32" && process.env.APPDATA) {
-    return join(process.env.APPDATA, "com.cutready.app", "settings.json");
+    return join(process.env.APPDATA, "com.cutready.app");
   }
   if (process.platform === "darwin" && process.env.HOME) {
-    return join(process.env.HOME, "Library", "Application Support", "com.cutready.app", "settings.json");
+    return join(process.env.HOME, "Library", "Application Support", "com.cutready.app");
   }
   if (process.env.HOME) {
-    return join(process.env.HOME, ".config", "com.cutready.app", "settings.json");
+    return join(process.env.HOME, ".config", "com.cutready.app");
   }
   return null;
+}
+
+function globalSettingsPath() {
+  if (process.env.CUTREADY_GLOBAL_SETTINGS_STORE) return process.env.CUTREADY_GLOBAL_SETTINGS_STORE;
+  const dir = appDataDir();
+  return dir ? join(dir, "settings.json") : null;
+}
+
+// Per-user store files (e.g. identity.json) that a drill mutates. Each one is
+// backed up byte-for-byte and restored in `finally`, so the user's real store is
+// never left changed. `clear: true` starts the run without the file.
+function protectAppStores() {
+  const stores = definition.appStores ?? [];
+  if (stores.length === 0) return;
+  const dir = appDataDir();
+  if (!dir) throw new Error("Could not resolve the app data directory for appStores.");
+  for (const store of stores) {
+    const path = join(dir, store.file);
+    const existed = existsSync(path);
+    appStoreBackups.push({ path, existed, original: existed ? readFileSync(path) : null });
+    if (store.clear && existed) rmSync(path, { force: true });
+  }
+  console.log(`Protected app stores: ${stores.map((s) => s.file).join(", ")} (backup captured).`);
+}
+
+function restoreAppStores() {
+  for (const { path, existed, original } of appStoreBackups) {
+    try {
+      if (existed && original) {
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(path, original);
+      } else if (existsSync(path)) {
+        rmSync(path, { force: true });
+      }
+    } catch (error) {
+      console.error(`FAILED to restore app store at ${path}: ${error}`);
+    }
+  }
+  if (appStoreBackups.length > 0) console.log("Restored app stores.");
+  appStoreBackups = [];
 }
 
 function seedGlobalSettings() {

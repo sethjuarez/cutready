@@ -8,6 +8,7 @@ import {
   parseDurationSeconds,
   parseNoteDocument,
   serializeNoteDocument,
+  setRowTime,
   summarizeSketchPathsDuration,
   summarizeSketchDuration,
   summarizeStoryboardDuration,
@@ -18,6 +19,11 @@ describe("document metadata helpers", () => {
     expect(normalizeMetadata({ fields: { owner: " Demo team ", "": "ignored", status: "" } })).toEqual({
       fields: { owner: "Demo team" },
     });
+  });
+
+  it("treats contract null metadata fields as absent", () => {
+    expect(normalizeMetadata({ fields: null })).toEqual({});
+    expect(serializeNoteDocument({ fields: null }, "# Notes")).toBe("# Notes");
   });
 
   it("round-trips note metadata as portable frontmatter", () => {
@@ -35,6 +41,13 @@ describe("duration helpers", () => {
     expect(parseDurationSeconds("1:30")).toBe(90);
     expect(parseDurationSeconds("2m 15s")).toBe(135);
     expect(parseDurationSeconds("not sure")).toBeNull();
+  });
+
+  it("recomputes duration_seconds only when the time label changes", () => {
+    const imported = { time: "0:05 - 0:19", duration_seconds: 14, narrative: "", demo_actions: "", screenshot: null };
+    expect(setRowTime(imported, "0:05 - 0:19")).toBe(imported);
+    expect(setRowTime(imported, "0:15")).toEqual({ ...imported, time: "0:15", duration_seconds: 15 });
+    expect(setRowTime(imported, "TBD")).toEqual({ ...imported, time: "TBD", duration_seconds: null });
   });
 
   it("formats duration totals", () => {

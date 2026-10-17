@@ -2258,21 +2258,21 @@ fn effective_source_duration_seconds(
 fn run_ffmpeg(args: Vec<String>) -> anyhow::Result<()> {
     let diagnostics = FfmpegFilterDiagnostics::from_args(&args);
     let mut args = args;
-    let _filter_scripts = match offload_large_filter_arguments(&mut args, FilterFileSyntax::detect())
-    {
-        Ok(scripts) => scripts,
-        Err(error) => {
-            log_ffmpeg_failure(
-                None,
-                &error.to_string(),
-                "",
-                "",
-                &diagnostics,
-                "FFmpeg filter script preparation failed",
-            );
-            return Err(error);
-        }
-    };
+    let _filter_scripts =
+        match offload_large_filter_arguments(&mut args, FilterFileSyntax::detect()) {
+            Ok(scripts) => scripts,
+            Err(error) => {
+                log_ffmpeg_failure(
+                    None,
+                    &error.to_string(),
+                    "",
+                    "",
+                    &diagnostics,
+                    "FFmpeg filter script preparation failed",
+                );
+                return Err(error);
+            }
+        };
     let output = match ffmpeg::run_ffmpeg(&args) {
         Ok(output) => output,
         Err(error) => {
@@ -2748,8 +2748,7 @@ mod tests {
         let filter = "null,".repeat(FFMPEG_FILTER_SCRIPT_THRESHOLD_BYTES / 4 + 1);
         let mut args = vec!["-vf".to_string(), filter.clone()];
 
-        let scripts =
-            offload_large_filter_arguments(&mut args, FilterFileSyntax::Legacy).unwrap();
+        let scripts = offload_large_filter_arguments(&mut args, FilterFileSyntax::Legacy).unwrap();
 
         assert_eq!(args[0], "-filter_script:v");
         assert_eq!(scripts.len(), 1);
@@ -2761,8 +2760,7 @@ mod tests {
         let filter = "null,".repeat(FFMPEG_FILTER_SCRIPT_THRESHOLD_BYTES / 4 + 1);
         let mut args = vec!["-vf".to_string(), filter.clone()];
 
-        let scripts =
-            offload_large_filter_arguments(&mut args, FilterFileSyntax::Generic).unwrap();
+        let scripts = offload_large_filter_arguments(&mut args, FilterFileSyntax::Generic).unwrap();
 
         // FFmpeg 9.0 removed `-filter_script`, so modern builds must receive the
         // generic read-option-from-file flag instead.

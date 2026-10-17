@@ -4,12 +4,14 @@ use std::path::{Component, Path, PathBuf};
 
 use chrono::Utc;
 use rusqlite::{types::ValueRef, Connection, OpenFlags};
-use tauri::State;
+use tauri::{Emitter, State};
 use tauri_plugin_auditaur::auditaur_command;
 use tauri_plugin_store::StoreExt;
 
 use crate::engine::{
-    agent_state::AgentStateStore, draftline_adapter::CutReadyDraftlineAdapter, project,
+    agent_state::AgentStateStore,
+    draftline_adapter::{CutReadyDraftlineAdapter, StructureChange, StructureSnapshot},
+    project,
 };
 use crate::models::script::{ProjectEntry, ProjectView, RecentProject, RepoView};
 use crate::AppState;
@@ -82,6 +84,7 @@ pub async fn create_project_folder(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<ProjectView, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = PathBuf::from(&path);
     let view = project::init_project_folder(&root).map_err(|e| e.to_string())?;
 
@@ -374,6 +377,7 @@ pub async fn rename_project_asset(
     new_path: String,
     state: State<'_, AppState>,
 ) -> Result<project::RenameProjectAssetPlan, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     project::rename_project_asset(&root, &old_path, &new_path).map_err(|e| e.to_string())
 }
@@ -605,17 +609,23 @@ fn repo_root(state: &AppState) -> Result<PathBuf, String> {
     Ok(view.root.clone())
 }
 
-fn snapshot_workspace_structure(repo_root: &std::path::Path, message: &str) -> Result<(), String> {
-    let adapter = CutReadyDraftlineAdapter::open_project(repo_root).map_err(|e| e.to_string())?;
-    if !adapter
-        .inspect_changes()
-        .map_err(|e| e.to_string())?
-        .is_empty()
-    {
-        adapter
-            .save_version(message)
-            .map(|_| ())
-            .map_err(|e| e.to_string())?;
+/// Event the UI shows when an automatic workspace save stays in pending
+/// changes, either because CutReady doesn't know who is acting or because the
+/// change touched files with unsaved edits.
+pub const WORKSPACE_SNAPSHOT_DEFERRED_EVENT: &str = "workspace-snapshot-deferred";
+
+fn finish_structure_change(
+    app: &tauri::AppHandle,
+    repo_root: &Path,
+    change: StructureChange,
+) -> Result<(), String> {
+    let author = crate::commands::identity::try_resolve_identity(Some(app), Some(repo_root));
+    if let StructureSnapshot::Deferred { reason, message } = change.finish(repo_root, author)? {
+        tracing::info!(?reason, "Deferred workspace structure snapshot");
+        let _ = app.emit(
+            WORKSPACE_SNAPSHOT_DEFERRED_EVENT,
+            serde_json::json!({ "reason": reason, "message": message }),
+        );
     }
     Ok(())
 }
@@ -651,11 +661,14 @@ pub async fn inspect_workspace_manifest(
 /// Explicitly repair the current repo's workspace manifest from inspection output.
 #[auditaur_command(skip_all, err)]
 pub async fn repair_workspace_manifest(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<project::WorkspaceManifestRepair, String> {
     let root = repo_root(&state)?;
+    let change =
+        StructureChange::begin(&root, "Repair workspace manifest", [project::MANIFEST_PATH])?;
     let repair = project::repair_workspace_manifest(&root).map_err(|e| e.to_string())?;
-    snapshot_workspace_structure(&root, "Repair workspace manifest")?;
+    finish_structure_change(&app, &root, change)?;
     Ok(repair)
 }
 
@@ -746,12 +759,18 @@ fn reconcile_abandoned_agent_runs(state: &AppState, view: &ProjectView) {
 pub async fn create_project_in_repo(
     name: String,
     description: Option<String>,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<ProjectEntry, String> {
     let root = repo_root(&state)?;
+    let change = StructureChange::begin(
+        &root,
+        format!("Add {} to workspace", name.trim()),
+        [project::MANIFEST_PATH],
+    )?;
     let entry = project::create_project_in_repo(&root, &name, description.as_deref())
         .map_err(|e| e.to_string())?;
-    snapshot_workspace_structure(&root, &format!("Add {} to workspace", entry.name))?;
+    finish_structure_change(&app, &root, change.touching(&entry.path))?;
     Ok(entry)
 }
 
@@ -761,9 +780,12 @@ pub async fn create_project_in_repo(
 pub async fn delete_project(
     project_path: String,
     delete_files: bool,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = repo_root(&state)?;
+    let change =
+        StructureChange::begin(&root, "Delete workspace project", [project::MANIFEST_PATH])?;
     let safe_path = safe_project_manifest_path(&project_path)?;
 
     let mut manifest = project::read_manifest_result(&root).map_err(|e| e.to_string())?;
@@ -778,9 +800,16 @@ pub async fn delete_project(
         return Err(format!("Project '{}' not found in repo", project_path));
     }
 
+    let removed = delete_files && project_path != ".";
+    let change = if removed {
+        change.removing(&project_path)
+    } else {
+        change
+    };
+
     // Delete files before mutating the manifest so a filesystem failure does not
     // leave an orphaned project directory that is no longer listed.
-    if delete_files && project_path != "." {
+    if removed {
         let dir = root.join(safe_path);
         if dir.exists() {
             std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -810,7 +839,7 @@ pub async fn delete_project(
         }
     }
 
-    snapshot_workspace_structure(&root, "Delete workspace project")
+    finish_structure_change(&app, &root, change)
 }
 
 /// Rename a project. In single-project mode (path == "."), this migrates the
@@ -819,15 +848,23 @@ pub async fn delete_project(
 pub async fn rename_project(
     project_path: String,
     new_name: String,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let root = repo_root(&state)?;
+    let write_guard = crate::engine::workspace_write_lock::lock()?;
 
     // Single-project mode: renaming the sole project triggers migration
     if project_path == "." && !project::is_multi_project(&root) {
+        let change = StructureChange::begin_with_guard(
+            &root,
+            "Organize workspace projects",
+            ["."],
+            write_guard,
+        )?;
         let entry =
             project::migrate_to_multi_project(&root, &new_name).map_err(|e| e.to_string())?;
-        snapshot_workspace_structure(&root, "Organize workspace projects")?;
+        finish_structure_change(&app, &root, change)?;
 
         // Update current project to point at the new subdirectory
         let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
@@ -858,6 +895,16 @@ pub async fn rename_project(
         .any(|p| p.path == project_path)
     {
         return Err(format!("Project '{}' not found in repo", project_path));
+    }
+
+    let mut change = StructureChange::begin_with_guard(
+        &root,
+        "Rename workspace project",
+        [project::MANIFEST_PATH],
+        write_guard,
+    )?;
+    if new_path != project_path {
+        change = change.touching(&project_path).touching(&new_path);
     }
 
     // Rename the folder on disk if the path changed
@@ -891,18 +938,19 @@ pub async fn rename_project(
     // Helper: unwind a completed path move (content + runtime state) so a later
     // failure leaves the project fully recoverable under its original path. Any
     // reverse step that itself fails is reported so a split layout is not hidden.
-    let rollback_move = |relocated: &Option<(std::path::PathBuf, std::path::PathBuf)>| -> Vec<String> {
-        let mut stranded = Vec::new();
-        if let Some((old_dir, new_dir)) = relocated {
-            if new_dir.exists() && std::fs::rename(new_dir, old_dir).is_err() {
-                stranded.push(format!("content at {}", new_dir.display()));
+    let rollback_move =
+        |relocated: &Option<(std::path::PathBuf, std::path::PathBuf)>| -> Vec<String> {
+            let mut stranded = Vec::new();
+            if let Some((old_dir, new_dir)) = relocated {
+                if new_dir.exists() && std::fs::rename(new_dir, old_dir).is_err() {
+                    stranded.push(format!("content at {}", new_dir.display()));
+                }
+                if let Err(state_err) = project::relocate_project_state(&root, new_dir, old_dir) {
+                    stranded.push(format!("runtime state ({state_err})"));
+                }
             }
-            if let Err(state_err) = project::relocate_project_state(&root, new_dir, old_dir) {
-                stranded.push(format!("runtime state ({state_err})"));
-            }
-        }
-        stranded
-    };
+            stranded
+        };
 
     // Update manifest: both name and path
     if let Some(mut manifest) = manifest.take() {
@@ -928,7 +976,7 @@ pub async fn rename_project(
         }
     }
 
-    snapshot_workspace_structure(&root, "Rename workspace project")?;
+    finish_structure_change(&app, &root, change)?;
 
     // Update current project view if this is the active project
     {
@@ -948,12 +996,14 @@ pub async fn rename_project(
 #[tauri::command]
 pub async fn migrate_to_multi_project(
     existing_name: String,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<ProjectEntry, String> {
     let root = repo_root(&state)?;
+    let change = StructureChange::begin(&root, "Organize workspace projects", ["."])?;
     let entry =
         project::migrate_to_multi_project(&root, &existing_name).map_err(|e| e.to_string())?;
-    snapshot_workspace_structure(&root, "Organize workspace projects")?;
+    finish_structure_change(&app, &root, change)?;
 
     // Update current project to point at the new subdirectory
     let view = ProjectView::in_repo(root, &entry.path, entry.name.clone());
@@ -1169,14 +1219,14 @@ pub async fn get_workspace_settings(
 }
 
 /// Write workspace settings to the current repo's .cutready/settings.json.
+/// The file is local runtime state, not versioned content, so this never saves.
 #[tauri::command]
 pub async fn set_workspace_settings(
     settings: serde_json::Value,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = repo_root(&state)?;
-    project::write_repo_settings(&root, &settings).map_err(|e| e.to_string())?;
-    snapshot_workspace_structure(&root, "Update workspace settings")
+    project::write_repo_settings(&root, &settings).map_err(|e| e.to_string())
 }
 
 /// Check if any recent project was cloned from a given GitHub repo.

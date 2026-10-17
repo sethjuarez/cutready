@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Channel, convertFileSrc, invoke, listen } from "../services/tauri";
+import type { TokenResponse } from "../types/auth";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, Check, Film, Image as ImageIcon, Mic2 } from "lucide-react";
@@ -20,7 +21,7 @@ import { DurationBadge, MetadataEditor } from "./MetadataEditor";
 import { InlineDescriptionEditor } from "./InlineDescriptionEditor";
 import type { PresentationMode } from "./presentation/types";
 import VisualCell from "./VisualCell";
-import { exportSketchToWord, type WordOrientation } from "../utils/exportToWord";
+import { describeWordExport, exportSketchToWord, type WordOrientation } from "../utils/exportToWord";
 import { exportSketchToPowerPoint, type PowerPointExportContent } from "../utils/exportToPowerPoint";
 import type {
   MotionPlan,
@@ -1598,21 +1599,21 @@ The Actions describe what happens on screen — use them as visual design hints.
       : await getProviderSecret(selectedProvider.id, "refreshToken");
     if (!refreshToken) throw new Error("Sign in to the selected narration connection before generating narration.");
     const speechEndpoint = inferSpeechEndpoint(selectedProvider.endpoint);
-    const token = await invoke<{ access_token: string; refresh_token?: string }>("azure_token_refresh", {
+    const token = await invoke<TokenResponse>("azure_token_refresh", {
       tenantId: selectedProvider.tenantId || settings.aiTenantId || "",
       refreshToken,
       clientId: selectedProvider.clientId || settings.aiClientId || null,
       scope: SPEECH_TOKEN_SCOPE,
     });
-    if (!token.access_token) throw new Error("Azure Speech token refresh did not return an access token.");
+    if (!token.accessToken) throw new Error("Azure Speech token refresh did not return an access token.");
     if (selectedProvider.id === settings.aiActiveProviderId) {
-      if (token.access_token) await updateSetting("aiAccessToken", token.access_token);
-      if (token.refresh_token) await updateSetting("aiRefreshToken", token.refresh_token);
+      if (token.accessToken) await updateSetting("aiAccessToken", token.accessToken);
+      if (token.refreshToken) await updateSetting("aiRefreshToken", token.refreshToken);
     } else {
-      await setProviderSecret(selectedProvider.id, "accessToken", token.access_token);
-      if (token.refresh_token) await setProviderSecret(selectedProvider.id, "refreshToken", token.refresh_token);
+      await setProviderSecret(selectedProvider.id, "accessToken", token.accessToken);
+      if (token.refreshToken) await setProviderSecret(selectedProvider.id, "refreshToken", token.refreshToken);
     }
-    return { accessToken: token.access_token, speechEndpoint };
+    return { accessToken: token.accessToken, speechEndpoint };
   }, [
     settings,
     updateSetting,
@@ -1620,14 +1621,14 @@ The Actions describe what happens on screen — use them as visual design hints.
 
   const refreshAgentAccessToken = useCallback(async () => {
     if (settings.aiAuthMode !== "azure_oauth" || !settings.aiRefreshToken) return settings.aiAccessToken;
-    const token = await invoke<{ access_token: string; refresh_token?: string }>("azure_token_refresh", {
+    const token = await invoke<TokenResponse>("azure_token_refresh", {
       tenantId: settings.aiTenantId || "",
       refreshToken: settings.aiRefreshToken,
       clientId: settings.aiClientId || null,
     });
-    if (token.access_token) await updateSetting("aiAccessToken", token.access_token);
-    if (token.refresh_token) await updateSetting("aiRefreshToken", token.refresh_token);
-    return token.access_token || settings.aiAccessToken;
+    if (token.accessToken) await updateSetting("aiAccessToken", token.accessToken);
+    if (token.refreshToken) await updateSetting("aiRefreshToken", token.refreshToken);
+    return token.accessToken || settings.aiAccessToken;
   }, [
     settings.aiAccessToken,
     settings.aiAuthMode,
@@ -2129,12 +2130,16 @@ Rules:
 
   const handleExportWord = useCallback((orientation: WordOrientation = "landscape") => {
     if (!activeSketch) return;
-    exportSketchToWord(activeSketch, projectRoot, orientation).then((exported) => {
-      if (!exported) return;
-      useToastStore.getState().show("Export complete");
+    exportSketchToWord(activeSketch, orientation).then((report) => {
+      if (!report) return;
+      const { message, type } = describeWordExport(report);
+      useToastStore.getState().show(message, 4000, type);
       useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "export", content: `Exported "${activeSketch.title}" to Word`, level: "success" }]);
-    }).catch(err => console.error("Word export failed:", err));
-  }, [activeSketch, projectRoot]);
+    }).catch(err => {
+      console.error("Word export failed:", err);
+      useToastStore.getState().show(`Word export failed: ${err instanceof Error ? err.message : String(err)}`, 6000, "error");
+    });
+  }, [activeSketch]);
 
   const handleExportPowerPoint = useCallback((content: PowerPointExportContent) => {
     if (!activeSketch) return;
@@ -2404,7 +2409,7 @@ Rules:
       onSelect: () => void runBackgroundAgentAction(
         localRows.length === 0
           ? `Generate a complete sketch plan for "${activeSketch?.title ?? "this sketch"}". ${activeSketch?.description && typeof activeSketch.description === "string" ? `Description: ${activeSketch.description}. ` : ""}Create well-structured planning rows with time, narrative, and demo_actions.`
-          : `Review and improve the entire sketch "${activeSketchPath ?? "current"}". Refine the narrative flow, tighten timing, and make demo actions more specific. Use write_sketch to apply changes.`,
+          : `Review and improve the entire sketch "${activeSketchPath ?? "current"}". Refine the narrative flow, tighten timing, and make demo actions more specific. Use write_sketch to apply changes, passing source_row on every row that keeps or edits an existing row.`,
         { label: localRows.length === 0 ? "Generate plan" : "Improve sketch" },
       ),
     },
@@ -2549,7 +2554,7 @@ Rules:
             {localTitle && !sketchLocked && (
               <FieldAiButton
                 onClick={() => void runBackgroundAgentAction(
-                  `Improve the title of sketch "${activeSketchPath ?? "current"}". Current title: "${localTitle}". Suggest a more compelling, concise title. IMPORTANT: Only update the title — do NOT change the description or any rows. Use write_sketch with the improved title but keep the existing description and all rows exactly as they are.`,
+                  `Improve the title of sketch "${activeSketchPath ?? "current"}". Current title: "${localTitle}". Suggest a more compelling, concise title. IMPORTANT: Only update the title — do NOT change the description or any rows. Call write_sketch with only path and title; omit description and rows so they stay unchanged.`,
                   { label: "Improve sketch title" }
                 )}
                 className="absolute right-0 top-1/2 -translate-y-1/2 group-hover/title:opacity-100"
@@ -2579,8 +2584,8 @@ Rules:
             <FieldAiButton
               onClick={() => void runBackgroundAgentAction(
                 localDesc
-                  ? `Improve the description of sketch "${activeSketchPath ?? "current"}". Current description: "${localDesc}". Make it clearer and more informative. IMPORTANT: Only update the description — do NOT change the title or any rows. Use write_sketch with the improved description but keep the existing title and all rows exactly as they are.`
-                  : `Write a description for sketch "${activeSketchPath ?? "current"}" titled "${localTitle}". Look at the planning rows to understand what the sketch covers and write a concise description. IMPORTANT: Only update the description — do NOT change the title or any rows. Use write_sketch with the new description but keep the existing title and all rows exactly as they are.`,
+                  ? `Improve the description of sketch "${activeSketchPath ?? "current"}". Current description: "${localDesc}". Make it clearer and more informative. IMPORTANT: Only update the description — do NOT change the title or any rows. Call write_sketch with only path and description; omit title and rows so they stay unchanged.`
+                  : `Write a description for sketch "${activeSketchPath ?? "current"}" titled "${localTitle}". Look at the planning rows to understand what the sketch covers and write a concise description. IMPORTANT: Only update the description — do NOT change the title or any rows. Call write_sketch with only path and description; omit title and rows so they stay unchanged.`,
                 { label: localDesc ? "Improve sketch description" : "Generate sketch description" }
               )}
               className="absolute right-2 top-2 group-hover/desc:opacity-100 group-focus-within/desc:opacity-100"

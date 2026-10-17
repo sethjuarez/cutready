@@ -178,8 +178,9 @@ impl ModelPort for ScriptedModelPort {
                 let assistant = ChatMessage::assistant_with_tool_calls(vec![tool_call.clone()]);
                 Ok(ModelInvocationResponse {
                     output: None,
-                    assistant_messages: Some(vec![native_to_prompty_message(&assistant)
-                        .map_err(PortError::configuration)?]),
+                    assistant_messages: Some(vec![
+                        native_to_prompty_message(&assistant).map_err(PortError::configuration)?
+                    ]),
                     tool_requests: Some(vec![EngineToolRequest {
                         id: tool_call.id,
                         name: tool_call.function.name,
@@ -399,9 +400,9 @@ async fn delegate_to_agent_runs_nested_child_and_persists_run_identity() {
         AgentEvent::AgentStart { agent_id, task }
             if agent_id == "writer" && task == "Draft the intro sketch"
     )));
-    assert!(events.iter().any(
-        |event| matches!(event, AgentEvent::AgentDone { agent_id } if agent_id == "writer")
-    ));
+    assert!(events
+        .iter()
+        .any(|event| matches!(event, AgentEvent::AgentDone { agent_id } if agent_id == "writer")));
     let done_count = events
         .iter()
         .filter(|event| matches!(event, AgentEvent::Done { .. }))
@@ -419,10 +420,9 @@ async fn delegate_to_agent_runs_nested_child_and_persists_run_identity() {
 
     // Durable run identity: the whole delegation tree shares one journal (session =
     // parent run_id), child events carry runId/parentRunId/delegationDepth in camelCase.
-    let detail =
-        AgentStateStore::get_run_detail(project.path(), project.path(), "prompty-deleg")
-            .unwrap()
-            .unwrap();
+    let detail = AgentStateStore::get_run_detail(project.path(), project.path(), "prompty-deleg")
+        .unwrap()
+        .unwrap();
     let child_events = detail
         .trajectory_events
         .iter()
@@ -555,9 +555,7 @@ async fn unavailable_agent_state_uses_noop_durability_and_completes() {
         AgentEvent::Status { message }
             if message == "Agent run state unavailable; continuing without durable checkpoints"
     )));
-    assert!(
-        !AgentStateStore::database_path_for_project(project.path(), project.path()).exists()
-    );
+    assert!(!AgentStateStore::database_path_for_project(project.path(), project.path()).exists());
 }
 
 #[tokio::test]
@@ -654,10 +652,9 @@ async fn tool_round_reuses_cutready_executor_and_preserves_call_id() {
     assert!(tool_events[0].0 < tool_events[1].0);
     drop(events);
 
-    let detail =
-        AgentStateStore::get_run_detail(project.path(), project.path(), "prompty-tool")
-            .unwrap()
-            .unwrap();
+    let detail = AgentStateStore::get_run_detail(project.path(), project.path(), "prompty-tool")
+        .unwrap()
+        .unwrap();
     let event_types = detail
         .trajectory_events
         .iter()
@@ -759,10 +756,9 @@ async fn cancellation_stops_native_model_port() {
 
     let error = task.await.unwrap().unwrap_err();
     assert_eq!(error, "Agent run cancelled");
-    let detail =
-        AgentStateStore::get_run_detail(project.path(), project.path(), "prompty-cancel")
-            .unwrap()
-            .unwrap();
+    let detail = AgentStateStore::get_run_detail(project.path(), project.path(), "prompty-cancel")
+        .unwrap()
+        .unwrap();
     assert!(detail
         .trajectory_events
         .iter()
@@ -777,8 +773,7 @@ async fn cancellation_stops_native_model_port() {
 #[tokio::test]
 async fn context_items_are_injected_and_audited() {
     let project = tempfile::tempdir().unwrap();
-    let provider =
-        ScriptedModelPort::new([ScriptedReply::Completion("Used the brief.".into())]);
+    let provider = ScriptedModelPort::new([ScriptedReply::Completion("Used the brief.".into())]);
     let context = ContextItem::new(
         "brief",
         ContextSource::User,
@@ -826,10 +821,9 @@ async fn context_items_are_injected_and_audited() {
             .text()
             .is_some_and(|text| text.contains("Launch with the reliability story."))
     }));
-    let detail =
-        AgentStateStore::get_run_detail(project.path(), project.path(), "prompty-context")
-            .unwrap()
-            .unwrap();
+    let detail = AgentStateStore::get_run_detail(project.path(), project.path(), "prompty-context")
+        .unwrap()
+        .unwrap();
     let prepared = detail
         .trajectory_events
         .iter()
@@ -903,10 +897,9 @@ async fn canonical_events_and_checkpoints_persist_as_json() {
     .await
     .unwrap();
 
-    let detail =
-        AgentStateStore::get_run_detail(project.path(), project.path(), "prompty-durable")
-            .unwrap()
-            .unwrap();
+    let detail = AgentStateStore::get_run_detail(project.path(), project.path(), "prompty-durable")
+        .unwrap()
+        .unwrap();
     assert!(detail
         .trajectory_events
         .iter()
@@ -948,8 +941,8 @@ async fn canonical_events_and_checkpoints_persist_as_json() {
     // A delegated child run must round-trip all three identity fields in
     // camelCase through CutReady's durability store: runId, parentRunId, and a
     // non-zero delegationDepth.
-    let store = AgentStateStore::for_project(project.path(), project.path(), "prompty-durable")
-        .unwrap();
+    let store =
+        AgentStateStore::for_project(project.path(), project.path(), "prompty-durable").unwrap();
     let delegated_event = EngineEvent {
         sequence: 999,
         id: "delegated-event-1".into(),
@@ -1167,8 +1160,8 @@ async fn reconciliation_required_checkpoint_round_trips_into_a_resumable_context
 
     // Promote into the generated ResumeContext and round-trip through CutReady's store.
     let journal_tail = restored_cp.last_sequence + 2;
-    let resume = ResumeContext::resuming(restored_cp.clone(), 8, 5)
-        .with_last_journal_sequence(journal_tail);
+    let resume =
+        ResumeContext::resuming(restored_cp.clone(), 8, 5).with_last_journal_sequence(journal_tail);
     store.save_resume_context(&resume).unwrap();
     let resume_detail = AgentStateStore::get_run_detail(project.path(), project.path(), run_id)
         .unwrap()

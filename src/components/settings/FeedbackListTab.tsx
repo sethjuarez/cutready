@@ -3,6 +3,7 @@ import { Check, ClipboardList, Image, Info, LayoutGrid, MessageSquare, Trash2, X
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { useSettings, useSettingsStore } from "../../hooks/useSettings";
 import { invoke } from "../../services/tauri";
+import type { TokenResponse } from "../../types/auth";
 import { useToastStore } from "../../stores/toastStore";
 import { agentChat } from "../../services/agentChat";
 import { buildProviderConfig, isAiProviderConfigured } from "../../utils/providerConfig";
@@ -391,12 +392,14 @@ export function FeedbackListTab() {
         let bearerToken = s.aiAuthMode === "azure_oauth" ? s.aiAccessToken : null;
         if (s.aiAuthMode === "azure_oauth" && s.aiRefreshToken) {
           try {
-            const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>(
+            const tokenResult = await invoke<TokenResponse>(
               "azure_token_refresh",
               { tenantId: s.aiTenantId || "", refreshToken: s.aiRefreshToken, clientId: s.aiClientId || null },
             );
-            if (tokenResult.access_token) bearerToken = tokenResult.access_token;
-          } catch { /* use existing token */ }
+            if (tokenResult.accessToken) bearerToken = tokenResult.accessToken;
+          } catch {
+            console.warn("[auth] Feedback formatting OAuth refresh failed; trying cached credentials.");
+          }
         }
 
         const config = {

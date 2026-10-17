@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { errorMessage, useAppStore } from "../stores/appStore";
+import { errorMessage, MAX_ACTIVITY_ENTRIES, useAppStore } from "../stores/appStore";
 
 describe("errorMessage", () => {
   it("uses the message field from structured command errors", () => {
@@ -8,6 +8,21 @@ describe("errorMessage", () => {
       message: "remote has incoming changes that need an explicit merge plan",
       details: { ahead: 7, behind: 2 },
     })).toBe("remote has incoming changes that need an explicit merge plan");
+  });
+});
+
+describe("activity log", () => {
+  it("keeps a bounded rolling window of the newest entries", () => {
+    useAppStore.setState({ activityLog: [] });
+    const entry = (n: number) => ({ id: `e${n}`, timestamp: new Date(0), source: "t", content: `${n}`, level: "info" as const });
+    const { addActivityEntries } = useAppStore.getState();
+    addActivityEntries(Array.from({ length: MAX_ACTIVITY_ENTRIES }, (_, n) => entry(n)));
+    addActivityEntries([entry(MAX_ACTIVITY_ENTRIES), entry(MAX_ACTIVITY_ENTRIES + 1)]);
+
+    const log = useAppStore.getState().activityLog;
+    expect(log).toHaveLength(MAX_ACTIVITY_ENTRIES);
+    expect(log[0].id).toBe("e2");
+    expect(log[log.length - 1].id).toBe(`e${MAX_ACTIVITY_ENTRIES + 1}`);
   });
 });
 

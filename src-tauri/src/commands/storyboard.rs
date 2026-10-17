@@ -50,6 +50,7 @@ pub async fn create_storyboard(
     title: String,
     state: State<'_, AppState>,
 ) -> Result<Storyboard, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
@@ -82,6 +83,7 @@ pub async fn update_storyboard(
     metadata: Option<DocumentMetadata>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
@@ -109,6 +111,7 @@ pub async fn set_storyboard_lock(
     locked: bool,
     state: State<'_, AppState>,
 ) -> Result<Storyboard, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
@@ -125,6 +128,7 @@ pub async fn delete_storyboard(
     relative_path: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
@@ -138,6 +142,7 @@ pub async fn rename_storyboard(
     new_path: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     project::rename_project_asset(&root, &old_path, &new_path).map_err(|e| e.to_string())?;
     Ok(())
@@ -158,6 +163,7 @@ pub async fn add_sketch_to_storyboard(
     position: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let sb_abs = project::safe_resolve(&root, &storyboard_path).map_err(|e| e.to_string())?;
     // Validate sketch_path too (even though it's stored as a reference)
@@ -189,6 +195,7 @@ pub async fn remove_sketch_from_storyboard(
     position: usize,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let sb_abs = project::safe_resolve(&root, &storyboard_path).map_err(|e| e.to_string())?;
 
@@ -214,6 +221,7 @@ pub async fn add_section_to_storyboard(
     position: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let sb_abs = project::safe_resolve(&root, &storyboard_path).map_err(|e| e.to_string())?;
 
@@ -243,6 +251,7 @@ pub async fn reorder_storyboard_items(
     items: Vec<StoryboardItem>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let sb_abs = project::safe_resolve(&root, &storyboard_path).map_err(|e| e.to_string())?;
 
@@ -280,6 +289,7 @@ mod tests {
             }],
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            unknown_fields: Default::default(),
         };
 
         set_referenced_sketches_lock(root, &storyboard, true).unwrap();

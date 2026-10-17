@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import tokenResponseJson from "./fixtures/oauth-token-response.json?raw";
 
 // Controllable secret layer: loadAllSecrets / getProviderSecret can be told to
 // return blanks (simulating a transient vault miss) while we assert the loader
@@ -7,6 +8,7 @@ let loadAllSecretsCalls = 0;
 let secretsToReturn = { aiApiKey: "", aiAccessToken: "", aiRefreshToken: "" };
 let providerSecretValue = "";
 let lazyStoreConstructions = 0;
+let storedSettings: Record<string, unknown> = {};
 
 vi.mock("../hooks/useSecretStore", async () => {
   const actual = await vi.importActual<typeof import("../hooks/useSecretStore")>(
@@ -30,8 +32,8 @@ vi.mock("@tauri-apps/plugin-store", () => ({
     constructor() {
       lazyStoreConstructions += 1;
     }
-    async get() {
-      return null;
+    async get(key: string) {
+      return storedSettings[key] ?? null;
     }
     async set() {}
     async save() {}
@@ -41,6 +43,8 @@ vi.mock("@tauri-apps/plugin-store", () => ({
 vi.mock("../services/tauri", () => ({ invoke: vi.fn(async () => ({})) }));
 
 import { useSettingsStore } from "../hooks/useSettings";
+import { setProviderSecret } from "../hooks/useSecretStore";
+import { invoke } from "../services/tauri";
 
 describe("settings load coordinator", () => {
   beforeEach(() => {
@@ -48,6 +52,9 @@ describe("settings load coordinator", () => {
     lazyStoreConstructions = 0;
     secretsToReturn = { aiApiKey: "", aiAccessToken: "", aiRefreshToken: "" };
     providerSecretValue = "";
+    storedSettings = {};
+    vi.mocked(invoke).mockReset().mockResolvedValue({});
+    vi.mocked(setProviderSecret).mockClear();
     useSettingsStore.setState({ loaded: false });
   });
 
@@ -87,5 +94,59 @@ describe("settings load coordinator", () => {
     await useSettingsStore.getState()._loadSettings();
 
     expect(useSettingsStore.getState().settings.aiApiKey).toBe("fresh-from-vault");
+  });
+
+  it("persists the canonical OAuth refresh response at startup", async () => {
+    storedSettings = { aiProvider: "microsoft_foundry", aiAuthMode: "azure_oauth" };
+    providerSecretValue = "expired-cached-token";
+    const response = JSON.parse(tokenResponseJson);
+    vi.mocked(invoke).mockResolvedValue(response);
+
+    await useSettingsStore.getState()._loadSettings();
+
+    const { settings, oauthRefreshPending } = useSettingsStore.getState();
+    expect(invoke).toHaveBeenCalledWith("azure_token_refresh", expect.objectContaining({
+      refreshToken: "expired-cached-token",
+    }));
+    expect(settings.aiAccessToken).toBe(response.accessToken);
+    expect(settings.aiRefreshToken).toBe(response.refreshToken);
+    expect(setProviderSecret).toHaveBeenCalledWith(settings.aiActiveProviderId, "accessToken", response.accessToken);
+    expect(setProviderSecret).toHaveBeenCalledWith(settings.aiActiveProviderId, "refreshToken", response.refreshToken);
+    expect(oauthRefreshPending).toBe(false);
+  });
+
+  it("keeps startup refresh tokens with their connection after an active-connection switch", async () => {
+    storedSettings = { aiProvider: "microsoft_foundry", aiAuthMode: "azure_oauth" };
+    providerSecretValue = "expired-cached-token";
+    const response = JSON.parse(tokenResponseJson);
+    let finishRefresh: (value: unknown) => void = () => {};
+    const refresh = new Promise((resolve) => { finishRefresh = resolve; });
+    let signalStarted: () => void = () => {};
+    const started = new Promise<void>((resolve) => { signalStarted = resolve; });
+    vi.mocked(invoke).mockImplementation(async () => {
+      signalStarted();
+      return refresh;
+    });
+
+    const loading = useSettingsStore.getState()._loadSettings();
+    await started;
+    const originalProviderId = useSettingsStore.getState().settings.aiActiveProviderId;
+    useSettingsStore.setState((state) => ({
+      settings: {
+        ...state.settings,
+        aiActiveProviderId: "connection-b",
+        aiAccessToken: "access-b",
+        aiRefreshToken: "refresh-b",
+      },
+    }));
+    finishRefresh(response);
+    await loading;
+
+    const { settings } = useSettingsStore.getState();
+    expect(settings.aiAccessToken).toBe("access-b");
+    expect(settings.aiRefreshToken).toBe("refresh-b");
+    expect(setProviderSecret).toHaveBeenCalledWith(originalProviderId, "accessToken", response.accessToken);
+    expect(setProviderSecret).toHaveBeenCalledWith(originalProviderId, "refreshToken", response.refreshToken);
+    expect(setProviderSecret).not.toHaveBeenCalledWith("connection-b", "accessToken", response.accessToken);
   });
 });

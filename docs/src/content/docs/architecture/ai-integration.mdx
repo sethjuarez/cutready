@@ -64,7 +64,7 @@ them as needed during conversation.
 | --- | --- | --- |
 | `list_project_files` | optional image flag | List sketches, notes, storyboards, and optionally screenshots |
 | `read_note` / `write_note` | note path, content | Read or write markdown notes |
-| `read_sketch` / `write_sketch` | sketch path, rows | Read a sketch or replace all planning rows |
+| `read_sketch` / `write_sketch` | sketch path, rows (optional `source_row` each) | Read a sketch or replace its planning rows; a row with `source_row` keeps that row's narration, visual, and other data |
 | `update_planning_row` | index, row data | Update a single planning row |
 | `read_storyboard` / `write_storyboard` | storyboard path, items | Read or update storyboard metadata and sequence |
 | `design_plan` | sketch path, row index, plan | Save the Designer agent's plain-English visual brief |

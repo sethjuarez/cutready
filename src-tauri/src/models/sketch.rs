@@ -13,7 +13,11 @@ use std::collections::BTreeMap;
 /// User-defined key/value metadata stored with portable documents.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct DocumentMetadata {
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(
+        default,
+        deserialize_with = "null_as_default",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
     pub fields: BTreeMap<String, String>,
 }
 
@@ -23,28 +27,29 @@ impl DocumentMetadata {
     }
 }
 
-fn deserialize_vec_or_default<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+/// Treats explicit null like an absent optional field without accepting other invalid values.
+fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
     D: Deserializer<'de>,
-    T: Deserialize<'de>,
+    T: Default + Deserialize<'de>,
 {
-    Ok(Option::<Vec<T>>::deserialize(deserializer)?.unwrap_or_default())
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 /// Lock state for editable planning row cells.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct PlanningCellLocks {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub time: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub narrative: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub demo_actions: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub screenshot: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub visual: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub design_plan: bool,
 }
 
@@ -154,9 +159,17 @@ pub struct NarrationPlan {
     pub ssml: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub baseline_style: Option<String>,
-    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    #[serde(
+        default,
+        deserialize_with = "null_as_default",
+        skip_serializing_if = "std::collections::BTreeMap::is_empty"
+    )]
     pub pronunciation_overrides: std::collections::BTreeMap<String, String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(
+        default,
+        deserialize_with = "null_as_default",
+        skip_serializing_if = "Vec::is_empty"
+    )]
     pub beats: Vec<NarrationBeat>,
     pub generated_at: DateTime<Utc>,
 }
@@ -199,7 +212,11 @@ pub struct TypingSpot {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MotionPlan {
     pub kind: MotionPlanKind,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(
+        default,
+        deserialize_with = "null_as_default",
+        skip_serializing_if = "Vec::is_empty"
+    )]
     pub keyframes: Vec<MotionPlanKeyframe>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rationale: Option<String>,
@@ -237,10 +254,10 @@ pub enum MotionPlanEasing {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanningRow {
     /// Whether the entire row is protected from edits.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub locked: bool,
     /// Per-cell lock state for targeted protection.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub locks: PlanningCellLocks,
     /// Approximate duration (e.g., "~30s", "1:00", "2m").
     pub time: String,
@@ -259,14 +276,14 @@ pub struct PlanningRow {
     /// Ranked normalized screenshot points used by the Motion Director for camera moves.
     #[serde(
         default,
-        deserialize_with = "deserialize_vec_or_default",
+        deserialize_with = "null_as_default",
         skip_serializing_if = "Vec::is_empty"
     )]
     pub motion_points: Vec<MotionPoint>,
     /// Positioned text overlays that are rendered in source coordinates before camera motion.
     #[serde(
         default,
-        deserialize_with = "deserialize_vec_or_default",
+        deserialize_with = "null_as_default",
         skip_serializing_if = "Vec::is_empty"
     )]
     pub typing_spots: Vec<TypingSpot>,
@@ -283,6 +300,10 @@ pub struct PlanningRow {
     /// Durable SSML and creative direction for generated narration.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub narration_plan: Option<NarrationPlan>,
+    /// Fields this version does not model (written by newer desktop or iOS builds).
+    /// Preserved verbatim so a save never drops them.
+    #[serde(flatten)]
+    pub unknown_fields: serde_json::Map<String, serde_json::Value>,
 }
 
 impl PlanningRow {
@@ -302,6 +323,7 @@ impl PlanningRow {
             design_plan: None,
             narration: None,
             narration_plan: None,
+            unknown_fields: serde_json::Map::new(),
         }
     }
 
@@ -325,7 +347,7 @@ impl Default for PlanningRow {
 pub struct Sketch {
     pub title: String,
     /// Whether the whole sketch is protected from edits.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub locked: bool,
     /// Rich-text description — stored as JSON value. Null if empty.
     #[serde(default)]
@@ -333,11 +355,19 @@ pub struct Sketch {
     /// Planning table rows.
     #[serde(default)]
     pub rows: Vec<PlanningRow>,
-    #[serde(default, skip_serializing_if = "DocumentMetadata::is_empty")]
+    #[serde(
+        default,
+        deserialize_with = "null_as_default",
+        skip_serializing_if = "DocumentMetadata::is_empty"
+    )]
     pub metadata: DocumentMetadata,
     pub state: SketchState,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Fields this version does not model (written by newer desktop or iOS builds).
+    /// Preserved verbatim so a save never drops them.
+    #[serde(flatten)]
+    pub unknown_fields: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Sketch {
@@ -352,6 +382,7 @@ impl Sketch {
             state: SketchState::Draft,
             created_at: now,
             updated_at: now,
+            unknown_fields: serde_json::Map::new(),
         }
     }
 
@@ -392,21 +423,24 @@ impl SketchSummary {
 /// A storyboard — an ordered sequence of sketches with optional sections.
 ///
 /// Stored as a `.sb` file. The file path is the identity (no internal ID).
-#[derive(Debug, Clone, Serialize)]
+///
+/// Decoding is strict: read files through [`Storyboard::from_json_upgraded`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Storyboard {
     pub title: String,
-    #[serde(default)]
     pub description: String,
     /// Whether the whole storyboard is protected from edits.
-    #[serde(default)]
     pub locked: bool,
     #[serde(default, skip_serializing_if = "DocumentMetadata::is_empty")]
     pub metadata: DocumentMetadata,
     /// Ordered items: loose sketch refs and/or named sections.
-    #[serde(default)]
     pub items: Vec<StoryboardItem>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Fields this version does not model (written by newer desktop or iOS builds).
+    /// Preserved verbatim so a save never drops them.
+    #[serde(flatten)]
+    pub unknown_fields: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Storyboard {
@@ -420,6 +454,7 @@ impl Storyboard {
             items: Vec::new(),
             created_at: now,
             updated_at: now,
+            unknown_fields: serde_json::Map::new(),
         }
     }
 
@@ -479,48 +514,78 @@ impl Storyboard {
     }
 }
 
-impl<'de> Deserialize<'de> for Storyboard {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        struct StoryboardShape {
-            title: String,
-            #[serde(default)]
-            description: String,
-            #[serde(default)]
-            locked: bool,
-            #[serde(default)]
-            metadata: DocumentMetadata,
-            items: Option<Vec<StoryboardItem>>,
-            #[serde(default)]
-            sketches: Vec<String>,
-            created_at: DateTime<Utc>,
-            updated_at: DateTime<Utc>,
-        }
+impl Storyboard {
+    /// Parse `.sb` JSON, upgrading older shapes first.
+    /// Returns whether the upgrade changed anything, so callers can save the canonical form.
+    pub fn from_json_upgraded(text: &str) -> Result<(Self, bool), serde_json::Error> {
+        Self::from_json_bytes_upgraded(text.as_bytes())
+    }
 
-        let shape = StoryboardShape::deserialize(deserializer)?;
-        let items = shape.items.unwrap_or_else(|| {
-            shape
-                .sketches
-                .into_iter()
-                .map(|path| StoryboardItem::SketchRef { path })
-                .collect()
-        });
-
-        Ok(Self {
-            title: shape.title,
-            description: shape.description,
-            locked: shape.locked,
-            metadata: shape.metadata,
-            items,
-            created_at: shape.created_at,
-            updated_at: shape.updated_at,
-        })
+    /// Parse bytes directly so invalid UTF-8 is reported instead of replaced.
+    pub fn from_json_bytes_upgraded(bytes: &[u8]) -> Result<(Self, bool), serde_json::Error> {
+        let mut value: serde_json::Value = serde_json::from_slice(bytes)?;
+        let upgraded = upgrade_storyboard_json(&mut value);
+        Ok((serde_json::from_value(value)?, upgraded))
     }
 }
 
+/// Convert an older `.sb` shape to the canonical one (`StoryboardDocument.upgrade`
+/// in contracts/storyboard.tsp). Returns whether anything changed.
+pub fn upgrade_storyboard_json(value: &mut serde_json::Value) -> bool {
+    use serde_json::{json, Value};
+
+    let Some(doc) = value.as_object_mut() else {
+        return false;
+    };
+    let before = doc.clone();
+
+    let legacy = doc.remove("sketches");
+    if doc.get("items").map_or(true, Value::is_null) {
+        let items = legacy
+            .as_ref()
+            .and_then(Value::as_array)
+            .map(|paths| {
+                paths
+                    .iter()
+                    .map(|path| json!({ "type": "sketch_ref", "path": path }))
+                    .collect()
+            })
+            .unwrap_or_default();
+        doc.insert("items".into(), Value::Array(items));
+    }
+    if let Some(items) = doc.get_mut("items").and_then(Value::as_array_mut) {
+        for item in items.iter_mut().filter_map(Value::as_object_mut) {
+            match item.get("type").and_then(Value::as_str) {
+                Some("sketch") => {
+                    item.insert("type".into(), json!("sketch_ref"));
+                }
+                Some("section") => {
+                    if item
+                        .get("description")
+                        .is_some_and(|d| d.is_null() || d.as_str() == Some(""))
+                    {
+                        item.remove("description");
+                    }
+                    if item.get("sketches").map_or(true, Value::is_null) {
+                        item.insert("sketches".into(), json!([]));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    if doc.get("description").map_or(true, Value::is_null) {
+        doc.insert("description".into(), json!(""));
+    }
+    if doc.get("locked").map_or(true, Value::is_null) {
+        doc.insert("locked".into(), json!(false));
+    }
+    if doc.get("metadata").is_some_and(Value::is_null) {
+        doc.remove("metadata");
+    }
+
+    *doc != before
+}
 /// An item in a storyboard's sequence.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -643,6 +708,9 @@ pub struct NoteSummary {
     pub size: u64,
     /// Last modified timestamp.
     pub updated_at: DateTime<Utc>,
+    /// Number of turns for chat documents.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub turn_count: Option<usize>,
 }
 
 #[cfg(test)]
@@ -699,6 +767,7 @@ mod tests {
             design_plan: None,
             narration: None,
             narration_plan: None,
+            unknown_fields: Default::default(),
         });
         sketch
             .metadata
@@ -792,6 +861,114 @@ mod tests {
     }
 
     #[test]
+    fn planning_cell_locks_treat_null_as_absent() {
+        let locks: PlanningCellLocks = serde_json::from_value(serde_json::json!({
+            "time": null,
+            "narrative": null,
+            "demo_actions": null,
+            "screenshot": null,
+            "visual": null,
+            "design_plan": null
+        }))
+        .unwrap();
+
+        assert_eq!(locks, PlanningCellLocks::default());
+    }
+
+    #[test]
+    fn optional_null_defaults_do_not_accept_malformed_values() {
+        let valid = serde_json::json!({
+            "title": "Strict optional fields",
+            "locked": true,
+            "rows": [{
+                "time": "0:05",
+                "narrative": "Keep valid values.",
+                "demo_actions": "Wait.",
+                "locked": true,
+                "locks": {
+                    "time": true, "narrative": false, "demo_actions": false,
+                    "screenshot": false, "visual": false, "design_plan": false
+                },
+                "motion_points": [],
+                "typing_spots": [],
+                "motion_plan": { "kind": "subtle_push", "keyframes": [] },
+                "narration_plan": {
+                    "source_text": "Keep valid values.",
+                    "voice": "en-US-AvaMultilingualNeural",
+                    "locale": "en-US",
+                    "ssml": "<speak>Keep valid values.</speak>",
+                    "pronunciation_overrides": { "CutReady": "cut ready" },
+                    "beats": [],
+                    "generated_at": "2026-06-28T20:00:00Z"
+                }
+            }],
+            "metadata": { "fields": { "owner": "Demo team" } },
+            "state": "draft",
+            "created_at": "2026-06-28T20:00:00Z",
+            "updated_at": "2026-06-28T20:00:00Z"
+        });
+        let sketch: Sketch = serde_json::from_value(valid.clone()).unwrap();
+        assert!(sketch.locked);
+        assert!(sketch.rows[0].locked);
+        assert!(sketch.rows[0].locks.time);
+        assert!(!sketch.rows[0].locks.narrative);
+        assert_eq!(sketch.metadata.fields["owner"], "Demo team");
+        assert_eq!(
+            sketch.rows[0]
+                .narration_plan
+                .as_ref()
+                .unwrap()
+                .pronunciation_overrides["CutReady"],
+            "cut ready"
+        );
+
+        for pointer in [
+            "/locked",
+            "/metadata",
+            "/metadata/fields",
+            "/rows/0/locked",
+            "/rows/0/locks",
+            "/rows/0/locks/time",
+            "/rows/0/locks/narrative",
+            "/rows/0/locks/demo_actions",
+            "/rows/0/locks/screenshot",
+            "/rows/0/locks/visual",
+            "/rows/0/locks/design_plan",
+            "/rows/0/motion_points",
+            "/rows/0/typing_spots",
+            "/rows/0/motion_plan/keyframes",
+            "/rows/0/narration_plan/pronunciation_overrides",
+            "/rows/0/narration_plan/beats",
+        ] {
+            let mut malformed = valid.clone();
+            *malformed.pointer_mut(pointer).unwrap() = serde_json::json!("invalid");
+            assert!(
+                serde_json::from_value::<Sketch>(malformed).is_err(),
+                "must reject an invalid value at {pointer}"
+            );
+        }
+
+        for (pointer, value) in [
+            ("/metadata/fields", serde_json::json!({ "owner": null })),
+            (
+                "/rows/0/narration_plan/pronunciation_overrides",
+                serde_json::json!({ "CutReady": null }),
+            ),
+            ("/rows/0/narration_plan/beats", serde_json::json!([null])),
+            ("/rows/0/motion_plan/keyframes", serde_json::json!([null])),
+            ("/rows/0/motion_points", serde_json::json!([null])),
+            ("/rows/0/typing_spots", serde_json::json!([null])),
+        ] {
+            let mut malformed = valid.clone();
+            *malformed.pointer_mut(pointer).unwrap() = value;
+            assert!(
+                serde_json::from_value::<Sketch>(malformed).is_err(),
+                "null entries must not be discarded at {pointer}"
+            );
+        }
+    }
+
+    #[test]
     fn planning_row_roundtrips_narration_plan() {
         let mut row = PlanningRow::new();
         row.narration_plan = Some(NarrationPlan {
@@ -882,6 +1059,7 @@ mod tests {
             design_plan: None,
             narration: None,
             narration_plan: None,
+            unknown_fields: Default::default(),
         };
         let json = serde_json::to_string(&row).unwrap();
         let parsed: PlanningRow = serde_json::from_str(&json).unwrap();
@@ -963,6 +1141,7 @@ mod tests {
             ],
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            unknown_fields: Default::default(),
         };
 
         let json = serde_json::to_string_pretty(&sb).unwrap();
@@ -1046,8 +1225,9 @@ mod tests {
             "updated_at": "2025-01-01T00:00:00Z"
         }"#;
 
-        let storyboard: Storyboard = serde_json::from_str(json).unwrap();
+        let (storyboard, upgraded) = Storyboard::from_json_upgraded(json).unwrap();
 
+        assert!(upgraded);
         assert_eq!(storyboard.title, "Legacy Board");
         assert_eq!(storyboard.sketch_paths(), vec!["intro.sk", "demo.sk"]);
         assert_eq!(storyboard.sketch_count(), 2);
@@ -1105,6 +1285,7 @@ mod tests {
             ],
             created_at: now,
             updated_at: now,
+            unknown_fields: Default::default(),
         };
 
         let removed = storyboard.remove_sketch_references("delete-me.sk");

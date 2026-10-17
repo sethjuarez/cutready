@@ -173,10 +173,7 @@ impl harness_prompty::DurableRunStore for AgentStateStore {
         })
     }
 
-    fn record_native_memory_promotion(
-        &self,
-        candidate: &serde_json::Value,
-    ) -> Result<(), String> {
+    fn record_native_memory_promotion(&self, candidate: &serde_json::Value) -> Result<(), String> {
         AgentStateStore::record_native_memory_promotion(self, candidate)
     }
 }
@@ -373,10 +370,7 @@ mod tests {
         );
         let harness = registry().resolve(Some("  agentive  "), None).unwrap();
         assert_eq!(harness.id(), AGENTIVE_HARNESS_ID);
-        assert_eq!(
-            harness.capabilities(),
-            agentive::static_capabilities()
-        );
+        assert_eq!(harness.capabilities(), agentive::static_capabilities());
     }
 
     #[test]
@@ -626,7 +620,10 @@ mod tests {
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].function.name, "read_sketch");
         let prompts = contract.host_agent_prompts(sample_host_prompts());
-        assert_eq!(prompts.get("writer").map(String::as_str), Some("You are the writer."));
+        assert_eq!(
+            prompts.get("writer").map(String::as_str),
+            Some("You are the writer.")
+        );
     }
 
     #[test]

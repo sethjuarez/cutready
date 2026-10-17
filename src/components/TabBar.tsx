@@ -1,7 +1,7 @@
 import { useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
-import { AgentRunIcon, DatabaseIcon, SketchIcon, StoryboardIcon, NoteIcon, HistoryIcon, ImageIcon, NarrationIcon, VisualIcon, DiffIcon } from "./Icons";
+import { AgentRunIcon, ChatArtifactIcon, DatabaseIcon, SketchIcon, StoryboardIcon, NoteIcon, HistoryIcon, ImageIcon, NarrationIcon, VisualIcon, DiffIcon } from "./Icons";
 import { usePopover } from "../hooks/usePopover";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -15,6 +15,14 @@ export function getClampedPopoverPosition(position: { x: number; y: number }, wi
     x: Math.min(Math.max(margin, position.x), maxX),
     y: Math.max(margin, position.y),
   };
+}
+
+function getTabDisplayMeta(tab: Pick<EditorTab, "type" | "path">): string {
+  return tab.type === "chat-artifact" ? "Chat document" : tab.path;
+}
+
+function getTabTooltip(tab: Pick<EditorTab, "type" | "path" | "title">, typeLabel: string): string {
+  return tab.type === "chat-artifact" ? `${typeLabel}: ${tab.title}` : `${typeLabel}: ${tab.path}`;
 }
 
 /**
@@ -317,6 +325,7 @@ function TabMenuItem({
     : tab.type === "diff" ? "Diff"
     : tab.type === "agent-run" ? "Agent Run"
     : tab.type === "database" ? "Database"
+    : tab.type === "chat-artifact" ? "Chat"
     : isImage ? "Image"
     : isVisual ? "Visual"
     : "Note";
@@ -328,6 +337,7 @@ function TabMenuItem({
     : tab.type === "diff" ? DiffIcon
     : tab.type === "agent-run" ? AgentRunIcon
     : tab.type === "database" ? DatabaseIcon
+    : tab.type === "chat-artifact" ? ChatArtifactIcon
     : isImage ? ImageIcon
     : isVisual ? VisualIcon
     : NoteIcon;
@@ -340,7 +350,7 @@ function TabMenuItem({
     >
       <button className="min-w-0 flex-1 text-left" onClick={onSelect}>
         <div className="truncate text-[12px] font-medium text-[rgb(var(--color-text))]">{tab.title}</div>
-        <div className="mt-0.5 truncate font-mono text-[10px] text-[rgb(var(--color-text-secondary))]">{tab.path}</div>
+        <div className="mt-0.5 truncate font-mono text-[10px] text-[rgb(var(--color-text-secondary))]">{getTabDisplayMeta(tab)}</div>
       </button>
       <span
         className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
@@ -400,6 +410,7 @@ function Tab({
     : tab.type === "diff" ? "Diff"
     : tab.type === "agent-run" ? "Agent Run"
     : tab.type === "database" ? "Database"
+    : tab.type === "chat-artifact" ? "Chat"
     : isImage ? "Image"
     : isNarration ? "Narration"
     : isVisual ? "Visual"
@@ -427,6 +438,7 @@ function Tab({
     : tab.type === "diff" ? DiffIcon
     : tab.type === "agent-run" ? AgentRunIcon
     : tab.type === "database" ? DatabaseIcon
+    : tab.type === "chat-artifact" ? ChatArtifactIcon
     : isImage ? ImageIcon
     : isNarration ? NarrationIcon
     : isVisual ? VisualIcon
@@ -449,7 +461,7 @@ function Tab({
       }`}
       onClick={onSelect}
       onContextMenu={onContextMenu}
-      title={`${typeLabel}: ${tab.path}`}
+      title={getTabTooltip(tab, typeLabel)}
     >
       {/* Active tab: colored bar on top — dimmed when group is not focused */}
       {isActive && (

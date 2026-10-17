@@ -85,9 +85,12 @@ pub async fn synthesize_narration_voice_preview(
     let dir = app_data_dir(&app)?;
 
     if !request.force {
-        if let Some(path) =
-            narration_preview::cached_voice_preview(&dir, &request.voice_name, &request.output_format)
-                .map_err(|e| e.to_string())?
+        if let Some(path) = narration_preview::cached_voice_preview(
+            &dir,
+            &request.voice_name,
+            &request.output_format,
+        )
+        .map_err(|e| e.to_string())?
         {
             return Ok(NarrationVoicePreviewResult {
                 path,

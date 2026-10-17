@@ -933,6 +933,8 @@ impl ConversationPort for CutReadyConversationPort {
 
         let mut messages = response.assistant_messages.clone().unwrap_or_default();
         let mut generated_messages = Vec::new();
+        let mut image_messages = Vec::new();
+        let mut generated_image_messages = Vec::new();
         for request in response.tool_requests.as_deref().unwrap_or(&[]) {
             let result = results
                 .iter()
@@ -982,12 +984,14 @@ impl ConversationPort for CutReadyConversationPort {
                         "tool_call_id": request.id,
                     }),
                 };
-                generated_messages.push(
+                generated_image_messages.push(
                     prompty_to_native_message(&image_message).map_err(PortError::configuration)?,
                 );
-                messages.push(image_message);
+                image_messages.push(image_message);
             }
         }
+        messages.extend(image_messages);
+        generated_messages.extend(generated_image_messages);
         self.new_messages
             .lock()
             .map_err(|error| PortError::new(format!("New-message tracking failed: {error}")))?

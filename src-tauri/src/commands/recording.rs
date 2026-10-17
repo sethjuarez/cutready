@@ -141,6 +141,7 @@ pub async fn list_project_narration_assets(
 
 #[auditaur_command(skip_all, err)]
 pub async fn delete_orphaned_narration_assets(state: State<'_, AppState>) -> Result<u32, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let narration_root = root.join(".cutready").join("narration");
     let mut assets = Vec::new();
@@ -222,6 +223,7 @@ pub async fn save_narration_recording(
     narration_plan: Option<NarrationPlan>,
     state: State<'_, AppState>,
 ) -> Result<Sketch, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     const MAX_NARRATION_BYTES: usize = 50 * 1024 * 1024;
 
     if audio_data.is_empty() {

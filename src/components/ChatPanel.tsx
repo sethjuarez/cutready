@@ -1,4 +1,4 @@
-import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject, type UIEvent } from "react";
+import { Children, isValidElement, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject, type UIEvent } from "react";
 import { invoke, listen } from "../services/tauri";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { AgentRunInspector } from "./AgentRunInspector";
@@ -10,7 +10,10 @@ import { contentTypeTone } from "../utils/contentTypeTheme";
 
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useAiApplyGateStore } from "../stores/aiApplyGateStore";
+import { useToastStore } from "../stores/toastStore";
 import { loadProviderSecrets } from "../hooks/useSecretStore";
+import { getContributorIdentity } from "../services/identity";
+import { promoteChatArtifact } from "../contracts/chatPromotion";
 import { useSettings, type AgentPreset, type AiReasoningEffort } from "../hooks/useSettings";
 import { BUILT_IN_AGENTS, resolveAgentPrompt } from "../agents/builtInAgents";
 import {
@@ -31,7 +34,7 @@ import {
   resolveEffectiveProvider,
   resolveAgentModelOverride,
 } from "../utils/agentProvider";
-import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
+import { ChatArtifactIcon, SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import type { ChatMessage, ChatRunDetails, ChatToolActivity, ChatWorkingNotes } from "../types/sketch";
 import {
   Sparkles,
@@ -202,6 +205,33 @@ export function extractInlineToolActivity(message: ChatMessage, followingMessage
 
 function hasToolCalls(message: ChatMessage): boolean {
   return (message.tool_calls?.length ?? 0) > 0;
+}
+
+const NO_TOOL_ACTIVITY: ChatToolActivity[] = [];
+
+/**
+ * Inline tool activity for every message in one backward pass — equivalent to
+ * calling extractInlineToolActivity(messages[i], messages.slice(i + 1)) per row,
+ * without the per-render O(n²) slicing.
+ */
+export function buildInlineToolActivityIndex(messages: ChatMessage[]): ChatToolActivity[][] {
+  const index: ChatToolActivity[][] = new Array(messages.length);
+  const following = new Map<string, string>();
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    index[i] = hasToolCalls(message)
+      ? message.tool_calls!.map((toolCall) => ({
+        id: toolCall.id,
+        name: toolCall.function.name,
+        arguments: toolCall.function.arguments,
+        ...(following.has(toolCall.id) ? { result: following.get(toolCall.id) } : {}),
+      }))
+      : NO_TOOL_ACTIVITY;
+    if (message.role === "tool" && message.tool_call_id) {
+      following.set(message.tool_call_id, textContent(message.content));
+    }
+  }
+  return index;
 }
 
 export function shouldRequestChatMutationApproval(applyMode: string): boolean {
@@ -518,7 +548,7 @@ export function reconcileMessagesForDisplay(
 }
 
 export interface FileReference {
-  type: "sketch" | "note" | "storyboard" | "web";
+  type: "sketch" | "note" | "storyboard" | "chat-artifact" | "web";
   path: string;
   title: string;
   /** Cached web content (only for type: "web"). */
@@ -529,7 +559,13 @@ export interface FileReference {
   persist?: boolean;
 }
 
-const FILE_REFERENCE_TYPES = new Set<FileReference["type"]>(["sketch", "note", "storyboard"]);
+const FILE_REFERENCE_ALIASES: Record<string, Exclude<FileReference["type"], "web">> = {
+  chat: "chat-artifact",
+  "chat-artifact": "chat-artifact",
+  note: "note",
+  sketch: "sketch",
+  storyboard: "storyboard",
+};
 
 function normalizeMentionToken(value: string): string {
   return value.trim().replace(/[),.;!?]+$/g, "");
@@ -540,13 +576,19 @@ function pathBaseName(path: string): string {
   return name.replace(/\.[^.]+$/, "");
 }
 
+function referenceTypeLabel(type: FileReference["type"] | string): string {
+  return type === "chat-artifact" ? "chat" : type;
+}
+
 function sameReference(a: Pick<FileReference, "type" | "path">, b: Pick<FileReference, "type" | "path">): boolean {
   return a.type === b.type && a.path === b.path;
 }
 
 function findMentionFileReference(token: string, files: FileReference[]): FileReference | null {
-  const prefixed = token.match(/^(sketch|note|storyboard):(.+)$/i);
-  const requestedType = prefixed?.[1].toLowerCase() as FileReference["type"] | undefined;
+  const prefixed = token.match(/^([^:]+):(.+)$/i);
+  const requestedType = prefixed
+    ? FILE_REFERENCE_ALIASES[prefixed[1].toLowerCase()]
+    : undefined;
   const query = normalizeMentionToken(prefixed?.[2] ?? token).toLowerCase();
   if (!query) return null;
 
@@ -579,7 +621,7 @@ export function extractMentionReferences(
     const token = normalizeMentionToken(match[1] ?? match[2] ?? "");
     if (!token || /^(?:web:)?https?:\/\//i.test(token)) continue;
     const prefix = token.match(/^([^:]+):/)?.[1].toLowerCase();
-    if (prefix && !FILE_REFERENCE_TYPES.has(prefix as FileReference["type"])) continue;
+    if (prefix && !FILE_REFERENCE_ALIASES[prefix]) continue;
     const file = findMentionFileReference(token, files);
     if (file) addReference(file);
   }
@@ -730,11 +772,20 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const sketches = useAppStore((s) => s.sketches);
   const notes = useAppStore((s) => s.notes);
   const storyboards = useAppStore((s) => s.storyboards);
+  const chatArtifacts = useAppStore((s) => s.chatArtifacts);
   const activeSketchPath = useAppStore((s) => s.activeSketchPath);
   const activeStoryboardPath = useAppStore((s) => s.activeStoryboardPath);
   const activeNotePath = useAppStore((s) => s.activeNotePath);
   const messages = useAppStore((s) => s.chatMessages);
   const setChatMessages = useAppStore((s) => s.setChatMessages);
+  const inlineToolActivity = useMemo(() => buildInlineToolActivityIndex(messages), [messages]);
+  const deleteMessage = useCallback((index: number, message: ChatMessage) => {
+    const current = useAppStore.getState().chatMessages;
+    // The row's index can go stale if history changed after render; fall back to identity.
+    const target = current[index] === message ? index : current.indexOf(message);
+    if (target < 0) return;
+    setChatMessages(current.filter((_, idx) => idx !== target));
+  }, [setChatMessages]);
   const loading = useAppStore((s) => s.chatLoading);
   const setChatLoading = useAppStore((s) => s.setChatLoading);
   const error = useAppStore((s) => s.chatError);
@@ -746,13 +797,16 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const newChatSession = useAppStore((s) => s.newChatSession);
   const loadSketches = useAppStore((s) => s.loadSketches);
   const loadNotes = useAppStore((s) => s.loadNotes);
+  const loadChatArtifacts = useAppStore((s) => s.loadChatArtifacts);
   const loadStoryboards = useAppStore((s) => s.loadStoryboards);
   const checkDirty = useAppStore((s) => s.checkDirty);
   const refreshChangedFiles = useAppStore((s) => s.refreshChangedFiles);
   const openSketch = useAppStore((s) => s.openSketch);
   const openNote = useAppStore((s) => s.openNote);
+  const openChatArtifact = useAppStore((s) => s.openChatArtifact);
   const openStoryboard = useAppStore((s) => s.openStoryboard);
   const pendingChatPrompt = useAppStore((s) => s.pendingChatPrompt);
+  const showToast = useToastStore((s) => s.show);
 
   const [references, setReferences] = useState<FileReference[]>([]);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
@@ -763,6 +817,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showReasoningPicker, setShowReasoningPicker] = useState(false);
   const [showAgentPicker, setShowAgentPicker] = useState(false);
+  const [promotingChat, setPromotingChat] = useState(false);
   const [expandedWebRef, setExpandedWebRef] = useState<string | null>(null);
   const streamingText = useAppStore((s) => s.chatStreamingText);
   const streamingThinking = useAppStore((s) => s.chatStreamingThinking);
@@ -865,7 +920,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           setChatStreamingState({ chatStreamingStatus: ev.message ?? "" });
           // Compaction status events get injected as visible system messages in chat
           if (ev.message && ev.message.startsWith("Compacting context")) {
-            setChatMessages([...messages, { role: "system", content: ev.message! }]);
+            setChatMessages([...useAppStore.getState().chatMessages, { role: "system", content: ev.message! }]);
           }
           addActivityEntries([{
             id: crypto.randomUUID(),
@@ -1130,8 +1185,9 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     for (const s of sketches) files.push({ type: "sketch", path: s.path, title: s.title });
     for (const n of notes) files.push({ type: "note", path: n.path, title: n.title });
     for (const sb of storyboards) files.push({ type: "storyboard", path: sb.path, title: sb.title });
+    for (const chat of chatArtifacts) files.push({ type: "chat-artifact", path: chat.path, title: chat.title });
     return files;
-  }, [sketches, notes, storyboards]);
+  }, [sketches, notes, storyboards, chatArtifacts]);
 
   // Filtered autocomplete options
   const autocompleteOptions = useMemo(() => {
@@ -1841,6 +1897,79 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     setReferences([]);
   }, [newChatSession]);
 
+  const promoteCurrentChat = useCallback(async () => {
+    if (promotingChat || messages.length === 0) return;
+    setPromotingChat(true);
+    try {
+      let identity = {
+        name: "CutReady User",
+        email: null as string | null,
+      };
+      try {
+        identity = await getContributorIdentity();
+      } catch (identityError) {
+        console.warn("Could not resolve contributor identity for chat promotion:", identityError);
+      }
+
+      const promotedAt = new Date().toISOString();
+      const title = chatSessionTitle(messages);
+      const slug = title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 64) || "chat";
+      const stamp = promotedAt.replace(/\D/g, "").slice(0, 14);
+      const relativePath = `chat-artifacts/${slug}-${stamp}.cv`;
+      const participant = {
+        name: identity.name || "CutReady User",
+        ...(identity.email ? { email: identity.email } : {}),
+      };
+      const artifact = promoteChatArtifact(
+        {
+          session_id: chatSessionPath ?? `chat-${stamp}`,
+          messages,
+        },
+        {
+          title,
+          author: participant,
+          promoted_by: participant,
+          promoted_at: promotedAt,
+        },
+      );
+      const content = `${JSON.stringify(artifact, null, 2)}\n`;
+
+      await invoke("update_note", { relativePath, content });
+      await loadChatArtifacts();
+      await refreshChangedFiles();
+      await openChatArtifact(relativePath);
+      if (chatSessionPath) {
+        await invoke("delete_chat_session", { sessionId: chatSessionPath });
+        window.dispatchEvent(new CustomEvent("cutready:chat-sessions-updated"));
+      }
+      newChatSession();
+      addActivityEntries([{
+        id: crypto.randomUUID(),
+        timestamp: new Date(),
+        source: "chat",
+        content: `Promoted chat to ${relativePath}`,
+        level: "success",
+      }]);
+      showToast(`Promoted chat to ${relativePath}`, 5000, "success");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      addActivityEntries([{
+        id: crypto.randomUUID(),
+        timestamp: new Date(),
+        source: "chat",
+        content: `Could not promote chat: ${message}`,
+        level: "error",
+      }]);
+      showToast(`Could not promote chat: ${message}`, 7000, "error");
+    } finally {
+      setPromotingChat(false);
+    }
+  }, [addActivityEntries, chatSessionPath, loadChatArtifacts, messages, newChatSession, openChatArtifact, promotingChat, refreshChangedFiles, showToast]);
+
   const isConfigured = providerConfigured === true;
 
   if (!currentProject) {
@@ -1916,6 +2045,16 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           </button>
           <div className="flex-1" />
           <button
+            disabled={loading || promotingChat || messages.length === 0}
+            className="flex h-[26px] items-center justify-center gap-1.5 rounded px-2 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-toolbar))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={promoteCurrentChat}
+            title={messages.length === 0 ? "Start a chat before promoting it" : "Promote this chat into a project chat document"}
+            aria-label="Promote chat"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            <span>{promotingChat ? "Promoting..." : "Promote"}</span>
+          </button>
+          <button
             className={`flex h-[26px] items-center justify-center rounded transition-colors ${
               chatFocusMode
                 ? "gap-1.5 px-2 text-[11px] font-medium text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10"
@@ -1963,7 +2102,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                 chatFocusMode ? "max-w-sm" : "max-w-[220px]"
               }`}
             >
-              I can help plan your demo, generate sketches, or refine your script. Use <kbd className="px-1 py-0.5 text-[10px] bg-[rgb(var(--color-surface-alt))] rounded border border-[rgb(var(--color-border))]">@</kbd> to reference files and websites.
+              I can help plan your demo, generate sketches, or refine your script. Use <kbd className="px-1 py-0.5 text-[10px] bg-[rgb(var(--color-surface-alt))] rounded border border-[rgb(var(--color-border))]">@</kbd> to reference project documents and websites.
             </p>
             <div className="flex flex-wrap gap-1.5 justify-center max-w-[260px]">
               {(() => {
@@ -2004,13 +2143,11 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           <div key={i} className={chatFocusMode ? "mx-auto w-full max-w-5xl" : undefined}>
             <MessageRow
               message={msg}
-              inlineToolActivity={hasToolCalls(msg) ? extractInlineToolActivity(msg, messages.slice(i + 1)) : []}
+              index={i}
+              inlineToolActivity={inlineToolActivity[i]}
               agentName={selectedAgent.name}
               projectRoot={currentProject?.root}
-              onDelete={msg.role === "user" ? () => {
-                const updated = messages.filter((_, idx) => idx !== i);
-                setChatMessages(updated);
-              } : undefined}
+              onDelete={msg.role === "user" ? deleteMessage : undefined}
             />
           </div>
         ))}
@@ -2132,7 +2269,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                 >
                   <FileTypeIcon type={file.type} />
                   <span className="flex-1 truncate">{file.title}</span>
-                  <span className="text-[10px] text-[rgb(var(--color-text-secondary))] opacity-50">{file.type}</span>
+                  <span className="text-[10px] text-[rgb(var(--color-text-secondary))] opacity-50">{referenceTypeLabel(file.type)}</span>
                 </button>
               ))}
             </div>
@@ -2143,7 +2280,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
             className="w-full resize-none bg-transparent px-2.5 py-2 text-[13px] text-[rgb(var(--color-text))] placeholder-[rgb(var(--color-text-secondary))]/60 focus:outline-none leading-[1.5]"
             style={{ maxHeight: 300 }}
             rows={3}
-            placeholder={loading ? "Add guidance for the current response..." : "Ask about your demo plan… (@ to reference files)"}
+            placeholder={loading ? "Add guidance for the current response..." : "Ask about your demo plan… (@ to reference documents)"}
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
@@ -2172,7 +2309,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                 <div className="px-2.5 pt-2 pb-1 shrink-0">
                   <input
                     className="w-full px-2 py-1 text-[11px] bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] rounded text-[rgb(var(--color-text))] placeholder-[rgb(var(--color-text-secondary))] focus:outline-none focus:border-[rgb(var(--color-accent))]"
-                    placeholder="Search files…"
+                    placeholder="Search documents…"
                     value={contextFilter}
                     onChange={(e) => setContextFilter(e.target.value)}
                     autoFocus
@@ -2181,7 +2318,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                 <div className="flex-1 overflow-y-auto">
                   {contextPickerOptions.length === 0 ? (
                     <div className="px-3 py-2 text-[11px] text-[rgb(var(--color-text-secondary))]">
-                      No matching files
+                      No matching documents
                     </div>
                   ) : (
                     contextPickerOptions.map((file) => (
@@ -2196,7 +2333,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                       >
                         <FileTypeIcon type={file.type} />
                         <span className="flex-1 truncate">{file.title}</span>
-                        <span className="text-[10px] opacity-40">{file.type}</span>
+                        <span className="text-[10px] opacity-40">{referenceTypeLabel(file.type)}</span>
                       </button>
                     ))
                   )}
@@ -2443,7 +2580,7 @@ function UserContent({ content }: { content: string }) {
       const refStr = match[2].trim();
       const refs = refStr.split(/,\s*/);
       refs.forEach((ref, i) => {
-        const refMatch = ref.match(/^@(note|sketch|storyboard):(.+)$/);
+        const refMatch = ref.match(/^@(note|sketch|storyboard|chat-artifact):(.+)$/);
         if (refMatch) {
           const [, type, path] = refMatch;
           const c = typeColors(type);
@@ -2534,25 +2671,27 @@ function WebRefChip({ url }: { url: string }) {
 
 // ── Message Row (VS Code Copilot chat style) ────────────────────
 
-function MessageRow({
+export const MessageRow = memo(function MessageRow({
   message,
-  inlineToolActivity = [],
+  index,
+  inlineToolActivity = NO_TOOL_ACTIVITY,
   agentName,
   projectRoot,
   onDelete,
 }: {
   message: ChatMessage;
+  index: number;
   inlineToolActivity?: ChatToolActivity[];
   agentName: string;
   projectRoot?: string;
-  onDelete?: () => void;
+  onDelete?: (index: number, message: ChatMessage) => void;
 }) {
   if (message.role === "user") {
     return (
       <div className="group px-3.5 py-2.5 flex justify-end items-start gap-1.5">
         {onDelete && (
           <button
-            onClick={onDelete}
+            onClick={() => onDelete(index, message)}
             className="shrink-0 mt-6 p-1 rounded opacity-0 group-hover:opacity-100 text-[rgb(var(--color-text-secondary))] hover:text-error hover:bg-error/10 transition-all"
             title="Remove message"
           >
@@ -2639,7 +2778,7 @@ function MessageRow({
   }
 
   return null;
-}
+});
 
 function RunDetailsPopover({
   details,
@@ -3024,7 +3163,7 @@ function hasTaskCheckbox(node: ReactNode): boolean {
   });
 }
 
-function MarkdownContent({ content, projectRoot }: { content: string; projectRoot?: string }) {
+const MarkdownContent = memo(function MarkdownContent({ content, projectRoot }: { content: string; projectRoot?: string }) {
   return (
     <SafeMarkdown
       components={{
@@ -3169,7 +3308,7 @@ function MarkdownContent({ content, projectRoot }: { content: string; projectRoo
       {content}
     </SafeMarkdown>
   );
-}
+});
 
 // ── Model list cache (module-level, survives re-renders) ─────────
 
@@ -3394,6 +3533,8 @@ function FileTypeIcon({ type }: { type: string }) {
       return <span className={cls}><NoteIcon size={12} /></span>;
     case "storyboard":
       return <span className={cls}><StoryboardIcon size={12} /></span>;
+    case "chat-artifact":
+      return <span className={cls}><ChatArtifactIcon size={12} /></span>;
     case "web":
       return <span className={cls}><IconGlobe /></span>;
     default:

@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { AgentPreset, AiProviderConfig, GlobalSettings } from "../hooks/useSettings";
+import tokenResponseJson from "./fixtures/oauth-token-response.json?raw";
+
+const tokenResponse = JSON.parse(tokenResponseJson);
 
 const mockInvoke = vi.fn();
 vi.mock("../services/tauri", () => ({
@@ -79,7 +82,7 @@ describe("agent credential resolution binds to the effective connection (#262)",
   it("active A / default B uses B's endpoint, model, and refreshed credentials — not A's", async () => {
     const settings = makeSettings();
     mockLoadProviderSecrets.mockResolvedValue(secrets({ apiKey: "key-B", accessToken: "token-B", refreshToken: "refresh-B" }));
-    mockInvoke.mockResolvedValue({ access_token: "fresh-B", refresh_token: "new-refresh-B" });
+    mockInvoke.mockResolvedValue({ ...tokenResponse, accessToken: "fresh-B", refreshToken: "new-refresh-B" });
     const updateSetting = vi.fn();
 
     const input = await buildRefreshedProviderInput(settings, AGENT, updateSetting);
@@ -108,7 +111,7 @@ describe("agent credential resolution binds to the effective connection (#262)",
       aiAgentProviderOverrides: { planner: "C" },
     });
     mockLoadProviderSecrets.mockResolvedValue(secrets({ apiKey: "key-C", accessToken: "token-C", refreshToken: "refresh-C" }));
-    mockInvoke.mockResolvedValue({ access_token: "fresh-C" });
+    mockInvoke.mockResolvedValue({ ...tokenResponse, accessToken: "fresh-C", refreshToken: undefined });
     const updateSetting = vi.fn();
 
     const input = await buildRefreshedProviderInput(settings, AGENT, updateSetting);
@@ -130,14 +133,14 @@ describe("agent credential resolution binds to the effective connection (#262)",
     // Effective == active A at call time; A is oauth and uses the flat refresh token.
     const settings = makeSettings({ aiDefaultProviderId: "A" });
     mockLoadProviderSecrets.mockResolvedValue(secrets());
-    let resolveRefresh: (v: { access_token: string; refresh_token?: string }) => void = () => {};
+    let resolveRefresh: (v: { accessToken: string; refreshToken?: string }) => void = () => {};
     mockInvoke.mockReturnValue(new Promise((resolve) => { resolveRefresh = resolve; }));
     const updateSetting = vi.fn();
 
     const pending = buildRefreshedProviderInput(settings, AGENT, updateSetting);
     // User switches the active connection to B before the refresh resolves.
     liveActiveProviderId = "B";
-    resolveRefresh({ access_token: "fresh-A", refresh_token: "new-refresh-A" });
+    resolveRefresh({ ...tokenResponse, accessToken: "fresh-A", refreshToken: "new-refresh-A" });
     const input = await pending;
 
     // A owns the credentials, so its vault entries are updated…
@@ -150,7 +153,7 @@ describe("agent credential resolution binds to the effective connection (#262)",
   it("updates the flat active projection when the effective connection is still active", async () => {
     const settings = makeSettings({ aiDefaultProviderId: "A" });
     mockLoadProviderSecrets.mockResolvedValue(secrets());
-    mockInvoke.mockResolvedValue({ access_token: "fresh-A", refresh_token: "new-refresh-A" });
+    mockInvoke.mockResolvedValue({ ...tokenResponse, accessToken: "fresh-A", refreshToken: "new-refresh-A" });
     const updateSetting = vi.fn();
 
     await buildRefreshedProviderInput(settings, AGENT, updateSetting);

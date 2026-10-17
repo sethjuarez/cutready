@@ -24,8 +24,10 @@ import {
   listDraftlineSnapshotCleanupCandidates,
   listDraftlineTimelines,
   listDraftlineVersions,
+  createDraftlineMilestoneMerge,
   preflightDraftlineIncoming,
   preflightDraftlineMergeIncoming,
+  preflightDraftlineMilestoneMerge,
   preflightDraftlinePublishSnapshotCleanup,
   preflightDraftlineSwitchVariation,
   mergeDraftlineIncoming,
@@ -47,6 +49,7 @@ import {
   switchDraftlineVariation,
   undoDraftlineSnapshotCleanup,
   undoDraftlinePendingSnapshotCleanup,
+  abandonDraftlinePendingSnapshotCleanup,
   type DraftlineRestoreVersionTarget,
   type DraftlineMergeIncomingToken,
   type DraftlineHistoryCleanupPreview,
@@ -89,6 +92,8 @@ import type {
 } from "../types/sketch";
 
 const suppressedEditorFlushPaths = new Set<string>();
+/** The Output panel keeps a rolling window; full history lives in telemetry/run state. */
+export const MAX_ACTIVITY_ENTRIES = 1000;
 export function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
@@ -162,18 +167,6 @@ function localPrePushMilestoneRange(nodes: GraphNode[], ahead: number | null | u
   return range[0]?.is_head ? range : null;
 }
 
-function hasCompactableCleanupRange(
-  candidates: DraftlineHistoryCompactionCandidates,
-  oldestCommitId: string,
-  newestCommitId: string,
-): boolean {
-  return candidates.candidates.some((candidate) =>
-    candidate.can_compact
-    && candidate.include_range.start === oldestCommitId
-    && candidate.include_range.end === newestCommitId
-  );
-}
-
 function suggestedMilestoneLabel(nodes: GraphNode[]): string {
   const meaningful = nodes
     .map((node) => node.message.trim())
@@ -206,6 +199,36 @@ export function remoteSyncErrorMessage(error: unknown): string {
 const PENDING_CLEANUP_INCOMING_MESSAGE =
   "Publish or undo milestone history before getting incoming remote saves. Pulling first would change the local timeline and invalidate the milestone publish.";
 
+export const PENDING_CLEANUP_STALE_MESSAGE =
+  "Compacted history can't be published because snapshots were saved after it. Open the history graph and choose Stop sharing to keep syncing.";
+
+export function hasDraftlineErrorCode(error: unknown, code: string): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === code;
+}
+
+export const HISTORY_CLEANUP_BUSY_MESSAGE =
+  "Another milestone history operation is still running. Wait for it to finish, then try again.";
+
+export const SYNC_IN_PROGRESS_MESSAGE = "A sync is already running. Wait for it to finish, then try again.";
+
+function isHistoryCleanupBusyError(error: unknown): boolean {
+  return error instanceof Error && error.message === HISTORY_CLEANUP_BUSY_MESSAGE;
+}
+
+let historyCleanupOperationRunning = false;
+
+// Publish, undo and abandon act on the same pending plan; the check-and-set
+// runs before any await so callers that are still awaiting auth can't interleave.
+async function exclusiveHistoryCleanupOperation<T>(operation: () => Promise<T>): Promise<T> {
+  if (historyCleanupOperationRunning) throw new Error(HISTORY_CLEANUP_BUSY_MESSAGE);
+  historyCleanupOperationRunning = true;
+  try {
+    return await operation();
+  } finally {
+    historyCleanupOperationRunning = false;
+  }
+}
+
 export function suppressEditorFlush(relativePath: string) {
   suppressedEditorFlushPaths.add(normalizeRelativePath(relativePath));
 }
@@ -224,8 +247,8 @@ function clearSuppressedEditorFlushes(relativePaths: string[]) {
   }
 }
 
-function isDocumentTab(tab: EditorTab): tab is EditorTab & { type: "sketch" | "storyboard" | "note" } {
-  return tab.type === "sketch" || tab.type === "storyboard" || tab.type === "note";
+function isDocumentTab(tab: EditorTab): tab is EditorTab & { type: "sketch" | "storyboard" | "note" | "chat-artifact" } {
+  return tab.type === "sketch" || tab.type === "storyboard" || tab.type === "note" || tab.type === "chat-artifact";
 }
 
 function isDatabasePath(path: string): boolean {
@@ -300,7 +323,7 @@ export interface SidebarOrder {
 /** An open tab in the editor area. */
 export interface EditorTab {
   id: string;
-  type: "sketch" | "storyboard" | "note" | "history" | "snapshot-preview" | "asset" | "diff" | "agent-run" | "database";
+  type: "sketch" | "storyboard" | "note" | "chat-artifact" | "history" | "snapshot-preview" | "asset" | "diff" | "agent-run" | "database";
   path: string;
   title: string;
 }
@@ -513,6 +536,10 @@ interface AppStoreState {
   activeNoteLocked: boolean;
   /** Note paths currently in preview mode (persists across tab switches). */
   notePreviewPaths: Set<string>;
+  /** Promoted chat artifact summaries for the current project. */
+  chatArtifacts: NoteSummary[];
+  /** The currently active promoted chat artifact path (relative). */
+  activeChatArtifactPath: string | null;
 
   // ── Asset state ──────────────────────────────────────────
   /** All project assets (screenshots + visuals) with reference info. */
@@ -787,6 +814,12 @@ interface AppStoreState {
   closeNote: () => void;
   /** Set preview mode for a note path. */
   setNotePreview: (notePath: string, preview: boolean) => void;
+  /** Load promoted chat artifacts for current project. */
+  loadChatArtifacts: () => Promise<void>;
+  /** Open a promoted chat artifact by path. */
+  openChatArtifact: (artifactPath: string) => Promise<void>;
+  /** Delete a promoted chat artifact. */
+  deleteChatArtifact: (artifactPath: string) => Promise<void>;
 
   // ── Asset actions ──────────────────────────────────────────
 
@@ -910,6 +943,8 @@ interface AppStoreState {
   publishSnapshotCleanup: (planId: string, remote: string) => Promise<DraftlineHistoryCleanupPublishResult | null>;
   /** Undo a previously applied Draftline cleanup plan using Draftline's guarded backup token. */
   undoSnapshotCleanup: (planId?: string) => Promise<DraftlineTimelineCleanupResult>;
+  /** Forget a pending cleanup without moving any snapshots, unblocking sync when publish/undo are no longer possible. */
+  abandonSnapshotCleanup: (planId: string) => Promise<void>;
 
   // ── Remote sync actions ────────────────────────────────────
   /** Detect configured remote for the project. */
@@ -1063,13 +1098,14 @@ type PersistedWorkspaceState = {
 async function restoreWorkspaceState(get: () => AppStoreState, set: (partial: Partial<AppStoreState>) => void) {
   try {
     const ws = await invoke<PersistedWorkspaceState>("get_workspace_state");
-    const { sketches, storyboards, notes } = get();
+    const { sketches, storyboards, notes, chatArtifacts } = get();
     const validTabs: EditorTab[] = (ws.open_tabs ?? [])
       .map((t) => ({ id: t.id, type: t.type as EditorTab["type"], path: t.path, title: t.title }))
       .filter((t) => {
         if (t.type === "sketch") return sketches.some((s) => s.path === t.path);
         if (t.type === "storyboard") return storyboards.some((s) => s.path === t.path);
         if (t.type === "note") return notes.some((n) => n.path === t.path);
+        if (t.type === "chat-artifact") return chatArtifacts.some((artifact) => artifact.path === t.path);
         if (t.type === "database") return isDatabasePath(t.path);
         return false;
       });
@@ -1083,6 +1119,7 @@ async function restoreWorkspaceState(get: () => AppStoreState, set: (partial: Pa
       if (active?.type === "sketch") await get().openSketch(active.path);
       else if (active?.type === "storyboard") await get().openStoryboard(active.path);
       else if (active?.type === "note") await get().openNote(active.path);
+      else if (active?.type === "chat-artifact") await get().openChatArtifact(active.path);
     }
 
     set({
@@ -1204,6 +1241,7 @@ function clearActiveDocumentState(): Pick<AppStoreState,
   | "activeNotePath"
   | "activeNoteContent"
   | "activeNoteLocked"
+  | "activeChatArtifactPath"
 > {
   return {
     activeSketchPath: null,
@@ -1213,6 +1251,7 @@ function clearActiveDocumentState(): Pick<AppStoreState,
     activeNotePath: null,
     activeNoteContent: null,
     activeNoteLocked: false,
+    activeChatArtifactPath: null,
   };
 }
 
@@ -1226,6 +1265,7 @@ function loadingDocumentStateForTab(tab: EditorTab): Partial<AppStoreState> {
       activeNotePath: null,
       activeNoteContent: null,
       activeNoteLocked: false,
+      activeChatArtifactPath: null,
     };
   }
   if (tab.type === "storyboard") {
@@ -1237,6 +1277,7 @@ function loadingDocumentStateForTab(tab: EditorTab): Partial<AppStoreState> {
       activeNotePath: null,
       activeNoteContent: null,
       activeNoteLocked: false,
+      activeChatArtifactPath: null,
     };
   }
   if (tab.type === "note") {
@@ -1248,6 +1289,19 @@ function loadingDocumentStateForTab(tab: EditorTab): Partial<AppStoreState> {
       activeNotePath: tab.path,
       activeNoteContent: null,
       activeNoteLocked: false,
+      activeChatArtifactPath: null,
+    };
+  }
+  if (tab.type === "chat-artifact") {
+    return {
+      activeSketchPath: null,
+      activeSketch: null,
+      activeStoryboardPath: null,
+      activeStoryboard: null,
+      activeNotePath: null,
+      activeNoteContent: null,
+      activeNoteLocked: false,
+      activeChatArtifactPath: tab.path,
     };
   }
   return clearActiveDocumentState();
@@ -1257,6 +1311,7 @@ function tabExistsInLoadedProject(tab: EditorTab, state: AppStoreState): boolean
   if (tab.type === "sketch") return state.sketches.some((sketch) => sketch.path === tab.path);
   if (tab.type === "storyboard") return state.storyboards.some((storyboard) => storyboard.path === tab.path);
   if (tab.type === "note") return state.notes.some((note) => note.path === tab.path);
+  if (tab.type === "chat-artifact") return state.chatArtifacts.some((artifact) => artifact.path === tab.path);
   return true;
 }
 
@@ -1295,6 +1350,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   activeNoteContent: null,
   activeNoteLocked: false,
   notePreviewPaths: new Set(),
+  chatArtifacts: [],
+  activeChatArtifactPath: null,
   assets: [],
   narrationAssets: [],
   chatMessages: [],
@@ -1448,6 +1505,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         get().openStoryboard(nextTab.path);
       } else if (nextTab?.type === "note") {
         get().openNote(nextTab.path);
+      } else if (nextTab?.type === "chat-artifact") {
+        get().openChatArtifact(nextTab.path);
       }
     }
     get()._persistTabs();
@@ -1460,6 +1519,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (keep.type === "sketch") get().openSketch(keep.path);
     else if (keep.type === "storyboard") get().openStoryboard(keep.path);
     else if (keep.type === "note") get().openNote(keep.path);
+    else if (keep.type === "chat-artifact") get().openChatArtifact(keep.path);
     get()._persistTabs();
   },
   closeTabsToRight: (tabId) => {
@@ -1512,6 +1572,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       get().openStoryboard(tab.path);
     } else if (tab.type === "note") {
       get().openNote(tab.path);
+    } else if (tab.type === "chat-artifact") {
+      get().openChatArtifact(tab.path);
     }
     get()._persistTabs();
   },
@@ -1704,6 +1766,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeNotePath: null,
         activeNoteContent: null,
         activeNoteLocked: false,
+        activeChatArtifactPath: null,
         chatMessages: [],
         chatSessionPath: null,
       });
@@ -1713,6 +1776,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadChatArtifacts();
       await get().loadSidebarOrder();
       await get().loadVersions();
       await get().loadTimelines();
@@ -1750,6 +1814,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeNotePath: null,
         activeNoteContent: null,
         activeNoteLocked: false,
+        activeChatArtifactPath: null,
         chatMessages: [],
         chatSessionPath: null,
         chatLoading: false,
@@ -1765,6 +1830,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadChatArtifacts();
       await get().loadSidebarOrder();
       await restoreWorkspaceState(get, set);
       await get().loadVersions();
@@ -1811,6 +1877,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activeNotePath: null,
       activeNoteContent: null,
       activeNoteLocked: false,
+      chatArtifacts: [],
+      activeChatArtifactPath: null,
       assets: [],
       narrationAssets: [],
       chatMessages: [],
@@ -1880,12 +1948,14 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeNotePath: null,
         activeNoteContent: null,
         activeNoteLocked: false,
+        activeChatArtifactPath: null,
         chatMessages: [],
         chatSessionPath: null,
       });
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadChatArtifacts();
       await get().loadSidebarOrder();
       await restoreWorkspaceState(get, set);
       await get().loadVersions();
@@ -2366,6 +2436,46 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     set({ notePreviewPaths: next });
   },
 
+  loadChatArtifacts: async () => {
+    try {
+      const chatArtifacts = await invoke<NoteSummary[]>("list_chat_artifacts");
+      set({ chatArtifacts });
+    } catch (err) {
+      console.error("Failed to load promoted chats:", err);
+    }
+  },
+
+  openChatArtifact: async (artifactPath) => {
+    const title = artifactPath.replace(/\.cv$/, "").split("/").pop() ?? artifactPath;
+    set({
+      activeChatArtifactPath: artifactPath,
+      activeSketchPath: null,
+      activeSketch: null,
+      activeStoryboardPath: null,
+      activeStoryboard: null,
+      activeNotePath: null,
+      activeNoteContent: null,
+      activeNoteLocked: false,
+    });
+    get().openTab({ type: "chat-artifact", path: artifactPath, title });
+  },
+
+  deleteChatArtifact: async (artifactPath) => {
+    try {
+      await invoke("delete_note", { relativePath: artifactPath });
+      const { activeChatArtifactPath, openTabs } = get();
+      if (activeChatArtifactPath === artifactPath) {
+        set({ activeChatArtifactPath: null });
+      }
+      const tab = openTabs.find((t) => t.path === artifactPath && t.type === "chat-artifact");
+      if (tab) get().closeTab(tab.id);
+      get()._removeSplitTabByPath("chat-artifact", artifactPath);
+      await get().loadChatArtifacts();
+    } catch (err) {
+      console.error("Failed to delete promoted chat:", err);
+    }
+  },
+
   // ── Asset actions ──────────────────────────────────────────
 
   loadAssets: async () => {
@@ -2530,7 +2640,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   setChatFocusMode: (enabled) => set({ chatFocusMode: enabled }),
   addActivityEntries: (entries) => {
     recordActivityEntries(entries);
-    set((s) => ({ activityLog: [...s.activityLog, ...entries] }));
+    set((s) => ({ activityLog: [...s.activityLog, ...entries].slice(-MAX_ACTIVITY_ENTRIES) }));
   },
   clearActivityLog: () => set({ activityLog: [] }),
   addDebugEntry: (entry) => set((s) => ({ debugLog: [...s.debugLog.slice(-499), entry] })),
@@ -2577,8 +2687,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   saveVersion: async (label, _forkLabel?) => {
+    // Let save failures reach the caller so the snapshot dialog can stay open and explain why.
+    await saveDraftlineVersion(label);
     try {
-      await saveDraftlineVersion(label);
       const activeTimeline = get().timelines.find((timeline) => timeline.is_active);
       const startedBranch = get().startedBranchFromSnapshot;
       set({
@@ -2594,7 +2705,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().checkRewound();
       await get().refreshSyncStatus();
     } catch (err) {
-      console.error("Failed to save version:", err);
+      console.error("Failed to refresh after saving version:", err);
     }
   },
 
@@ -2614,6 +2725,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       get().activeSketchPath,
       get().activeStoryboardPath,
       get().activeNotePath,
+      get().activeChatArtifactPath,
     ].filter((path): path is string => !!path)));
     try {
       for (const path of suppressedPaths) suppressEditorFlush(path);
@@ -2625,11 +2737,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeNotePath: null,
         activeNoteContent: null,
         activeNoteLocked: false,
+        activeChatArtifactPath: null,
       });
       await discardDraftlineChanges();
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadChatArtifacts();
       set({
         openTabs: [],
         activeTabId: null,
@@ -2663,13 +2777,16 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadChatArtifacts();
       const {
         activeSketchPath,
         activeStoryboardPath,
         activeNotePath,
+        activeChatArtifactPath,
         sketches,
         storyboards,
         notes,
+        chatArtifacts,
         openTabs,
         activeTabId,
         splitTabs,
@@ -2680,7 +2797,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         if (!pathMatchesDiscard(tab.path) || !isDocumentTab(tab)) return true;
         if (tab.type === "sketch") return sketches.some((sketch) => sketch.path === projectPath);
         if (tab.type === "storyboard") return storyboards.some((storyboard) => storyboard.path === projectPath);
-        return notes.some((note) => note.path === projectPath);
+        if (tab.type === "note") return notes.some((note) => note.path === projectPath);
+        return chatArtifacts.some((artifact) => artifact.path === projectPath);
       };
       const nextOpenTabs = openTabs.filter(fileExistsForTab);
       const nextSplitTabs = splitTabs.filter(fileExistsForTab);
@@ -2690,7 +2808,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         || splitTabs.some((tab) => isDocumentTab(tab) && pathMatchesDiscard(tab.path))
         || pathMatchesDiscard(activeSketchPath)
         || pathMatchesDiscard(activeStoryboardPath)
-        || pathMatchesDiscard(activeNotePath);
+        || pathMatchesDiscard(activeNotePath)
+        || pathMatchesDiscard(activeChatArtifactPath);
       set((state) => ({
         openTabs: nextOpenTabs,
         activeTabId: nextActiveTabId,
@@ -2734,6 +2853,14 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
           set({ activeNotePath: null, activeNoteContent: null, activeNoteLocked: false });
           if (nextActiveTabId) get().setActiveTab(nextActiveTabId);
         }
+      } else if (pathMatchesDiscard(activeChatArtifactPath)) {
+        set({ activeChatArtifactPath: null });
+        if (chatArtifacts.some((artifact) => artifact.path === projectPath)) {
+          await get().openChatArtifact(projectPath);
+        } else {
+          set({ activeChatArtifactPath: null });
+          if (nextActiveTabId) get().setActiveTab(nextActiveTabId);
+        }
       } else if (nextActiveTabId !== activeTabId) {
         if (nextActiveTabId) get().setActiveTab(nextActiveTabId);
         else set({
@@ -2744,6 +2871,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
           activeNotePath: null,
           activeNoteContent: null,
           activeNoteLocked: false,
+          activeChatArtifactPath: null,
         });
       }
       get()._persistTabs();
@@ -2815,6 +2943,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadChatArtifacts();
       await get().loadVersions();
       await get().loadTimelines();
       await get().loadGraphData();
@@ -2822,7 +2951,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       useToastStore.getState().show("Restored snapshot as a new save.", 4000, "success");
     } catch (err) {
       console.error("Failed to restore snapshot:", err);
-      useToastStore.getState().show(`Restore failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Restore failed: ${errorMessage(err)}`, 5000, "error");
     }
   },
 
@@ -2833,6 +2962,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadChatArtifacts();
       await get().loadVersions();
       await get().loadTimelines();
       await get().loadGraphData();
@@ -2841,7 +2971,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       useToastStore.getState().show(`Restored snapshot on ${targetLabel}.`, 4000, "success");
     } catch (err) {
       console.error("Failed to restore snapshot:", err);
-      useToastStore.getState().show(`Restore failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Restore failed: ${errorMessage(err)}`, 5000, "error");
       throw err;
     }
   },
@@ -2909,6 +3039,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadChatArtifacts();
 
       const state = get();
       const openTabs = state.openTabs.filter((tab) => tabExistsInLoadedProject(tab, state));
@@ -2947,7 +3078,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().checkDirty();
     } catch (err) {
       console.error("Failed to switch timeline:", err);
-      useToastStore.getState().show(`Switch failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Switch failed: ${errorMessage(err)}`, 5000, "error");
       throw err;
     } finally {
       set({ loading: false });
@@ -3036,7 +3167,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().applySnapshotCleanup(preview.plan_id);
     } catch (err) {
       console.error("Failed to compact snapshots:", err);
-      useToastStore.getState().show(`Compaction failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Compaction failed: ${errorMessage(err)}`, 5000, "error");
     }
   },
 
@@ -3131,7 +3262,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
-  publishSnapshotCleanup: async (planId, remote) => {
+  publishSnapshotCleanup: (planId, remote) => exclusiveHistoryCleanupOperation(async () => {
     const pendingCleanup = get().pendingHistoryCleanup;
     if (pendingCleanup?.plan_id === planId) {
       const result = await publishDraftlinePendingSnapshotCleanup(planId, remote);
@@ -3161,9 +3292,31 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     await get().loadVersions();
     useToastStore.getState().show("Milestone history published safely.", 5000, "success");
     return result;
-  },
+  }),
 
-  undoSnapshotCleanup: async (planId) => {
+  abandonSnapshotCleanup: (planId) => exclusiveHistoryCleanupOperation(async () => {
+    // isSyncing only disables the sync buttons; the exclusive lock prevents a racing publish.
+    if (get().isSyncing) {
+      throw new Error(SYNC_IN_PROGRESS_MESSAGE);
+    }
+    if (get().pendingHistoryCleanup?.plan_id !== planId) {
+      throw new Error("This compacted history is no longer pending. Refresh and try again.");
+    }
+    set({ isSyncing: true });
+    try {
+      await abandonDraftlinePendingSnapshotCleanup(planId);
+      set({ lastHistoryCleanup: null, pendingHistoryCleanup: null });
+      await get().loadPendingHistoryCleanup();
+      await get().refreshSyncStatus();
+      await get().refreshIncomingCommits();
+      await get().loadGraphData();
+    } finally {
+      set({ isSyncing: false });
+    }
+    useToastStore.getState().show("Compacted history won't be shared. Your next sync merges collaborators' snapshots back in.", 6000, "info");
+  }),
+
+  undoSnapshotCleanup: (planId) => exclusiveHistoryCleanupOperation(async () => {
     const pendingCleanup = get().pendingHistoryCleanup;
     const targetPlanId = planId ?? pendingCleanup?.plan_id ?? get().lastHistoryCleanup?.plan_id;
     if (!targetPlanId) {
@@ -3197,7 +3350,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
     useToastStore.getState().show("Milestone history restored from Draftline backup.", 5000, "success");
     return result;
-  },
+  }),
 
   requestPrePushMilestone: (prompt) => {
     cancelPendingPrePushMilestonePrompt();
@@ -3278,6 +3431,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
     const active = timelines.find((t) => t.is_active);
     if (!active) return;
+    // Another sync or cleanup operation may have started while credentials were checked.
+    if (get().isSyncing) {
+      useToastStore.getState().show(SYNC_IN_PROGRESS_MESSAGE, 5000, "info");
+      return;
+    }
     set({ isSyncing: true, syncError: null });
     try {
       // Large-file check before push
@@ -3291,7 +3449,23 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       }
       const pendingCleanup = get().pendingHistoryCleanup;
       if (pendingCleanup) {
-        const published = await get().publishSnapshotCleanup(pendingCleanup.plan_id, currentRemote.name);
+        let published: DraftlineHistoryCleanupPublishResult | null;
+        try {
+          published = await get().publishSnapshotCleanup(pendingCleanup.plan_id, currentRemote.name);
+        } catch (err) {
+          // The compact sync bar only shows errors in a tooltip, so these also toast.
+          if (hasDraftlineErrorCode(err, "local_state_changed")) {
+            set({ syncError: PENDING_CLEANUP_STALE_MESSAGE });
+            useToastStore.getState().show(PENDING_CLEANUP_STALE_MESSAGE, 8000, "warning");
+            return;
+          }
+          if (isHistoryCleanupBusyError(err)) {
+            set({ syncError: HISTORY_CLEANUP_BUSY_MESSAGE });
+            useToastStore.getState().show(HISTORY_CLEANUP_BUSY_MESSAGE, 6000, "warning");
+            return;
+          }
+          throw err;
+        }
         if (published) {
           return;
         }
@@ -3300,15 +3474,15 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       if (milestoneRange && get().syncStatus?.behind === 0) {
         const newest = milestoneRange[0];
         const oldest = milestoneRange[milestoneRange.length - 1];
-        let canCompactMilestoneRange = false;
+        let canCreateMilestoneMerge = false;
         try {
-          const candidates = await get().findSnapshotCleanupCandidates(newest.id);
-          canCompactMilestoneRange = hasCompactableCleanupRange(candidates, oldest.id, newest.id);
+          const preflight = await preflightDraftlineMilestoneMerge(currentRemote.name);
+          canCreateMilestoneMerge = preflight.can_create_milestone;
         } catch (err) {
-          console.warn("Could not validate automatic pre-push milestone range; pushing snapshots as-is.", err);
+          console.warn("Could not validate automatic pre-push milestone merge; pushing snapshots as-is.", err);
         }
 
-        if (canCompactMilestoneRange) {
+        if (canCreateMilestoneMerge) {
           const decision = await get().requestPrePushMilestone({
             snapshotCount: milestoneRange.length,
             newestCommitId: newest.id,
@@ -3323,23 +3497,18 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
           if (decision.type === "milestone") {
             const label = decision.label.trim();
             if (!label) {
-              throw new Error("Milestone label is required before compacting local snapshots.");
+              throw new Error("Milestone label is required before sharing local snapshots.");
             }
-            const preview = await get().previewSnapshotCleanup(
-              oldest.id,
-              newest.id,
-              label,
-              milestoneRange.map((node) => node.id),
-            );
-            await get().applySnapshotCleanup(preview.plan_id);
-            const published = await get().publishSnapshotCleanup(preview.plan_id, currentRemote.name);
-            if (published) {
-              return;
-            }
-            const pendingAfterCleanup = await get().loadPendingHistoryCleanup();
-            if (pendingAfterCleanup) {
-              return;
-            }
+            await createDraftlineMilestoneMerge(currentRemote.name, label);
+            await publishDraftlineChanges(currentRemote.name);
+            await get().refreshSyncStatus();
+            await get().checkDirty();
+            await get().refreshChangedFiles();
+            await get().loadGraphData();
+            await get().loadTimelines();
+            await get().loadVersions();
+            useToastStore.getState().show("Milestone history shared without rewriting your saves.", 5000, "success");
+            return;
           }
         }
       }
@@ -3458,6 +3627,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
+      await get().loadChatArtifacts();
       await get().refreshSyncStatus();
       await get().refreshIncomingCommits();
       await get().loadVersions();

@@ -7,6 +7,7 @@ import { AssetViewer } from "./AssetViewer";
 import { DiffViewer } from "./DiffViewer";
 import { ChatPanel } from "./ChatPanel";
 import { DatabaseViewer } from "./DatabaseViewer";
+import { ChatArtifactViewer } from "./ChatArtifactViewer";
 import { ResizeHandle } from "./ResizeHandle";
 import { TabBar } from "./TabBar";
 import { HistoryGraphTab } from "./HistoryGraphTab";
@@ -43,11 +44,13 @@ export function StoryboardPanel() {
   const isDiffTab = activeTab?.type === "diff";
   const isAgentRunTab = activeTab?.type === "agent-run";
   const isDatabaseTab = activeTab?.type === "database";
+  const isChatArtifactTab = activeTab?.type === "chat-artifact";
   const activeEditorReloadKey = activeTab?.path === editorReloadPath ? editorReloadKey : 0;
   const isEditorTabLoading =
     activeTab?.type === "sketch" ||
     activeTab?.type === "storyboard" ||
     activeTab?.type === "note" ||
+    activeTab?.type === "chat-artifact" ||
     (openTabs.length > 0 && !activeTab);
 
   const [splitWidth, setSplitWidth] = useState<number | null>(null);
@@ -120,6 +123,8 @@ export function StoryboardPanel() {
               <AgentRunTab runId={agentRunIdFromTabPath(activeTab.path)} />
             ) : isDatabaseTab && activeTab ? (
               <DatabaseViewer path={activeTab.path} />
+            ) : isChatArtifactTab && activeTab ? (
+              <ChatArtifactViewer path={activeTab.path} />
             ) : isAssetTab && activeTab ? (
               <AssetViewer assetPath={activeTab.path} />
             ) : activeSketch ? (

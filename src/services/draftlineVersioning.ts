@@ -14,12 +14,15 @@ import {
   type MergeConflictViewModel,
   type MergeIncomingReport,
   type MergeIncomingToken,
+  type MilestoneMergeCommandResult,
+  type MilestoneMergeReport,
   type PreflightReport,
   type RemoteVariation,
   type RenameVariationResult,
   type RestoreVersionTarget,
   type SwitchVariationResult,
   type SyncState,
+  type SyncStatus as DraftlineSyncStatusDto,
   type TargetedRestoreVersionResult,
   type VariationRenamePreflight,
   type VariationRenameToken,
@@ -68,6 +71,8 @@ export type DraftlinePendingHistoryCleanup = PendingHistoryCleanup;
 export type DraftlineHistoryCleanupBlockedError = HistoryCleanupBlockedError;
 export type DraftlineHistoryCompactionCandidate = HistoryCompactionCandidate;
 export type DraftlineHistoryCompactionCandidates = HistoryCompactionCandidates;
+export type DraftlineMilestoneMergeReport = MilestoneMergeReport;
+export type DraftlineMilestoneMergeCommandResult = MilestoneMergeCommandResult;
 
 export class DraftlineVariationCreateConflictError extends Error {
   readonly preflight: VariationCreatePreflight;
@@ -445,6 +450,17 @@ export async function mergeDraftlineIncoming(remote: string, label: string): Pro
   return result.merge.version.id;
 }
 
+export async function preflightDraftlineMilestoneMerge(remote: string): Promise<DraftlineMilestoneMergeReport> {
+  return facade().preflightMilestoneMerge(remote);
+}
+
+export async function createDraftlineMilestoneMerge(
+  remote: string,
+  label: string,
+): Promise<DraftlineMilestoneMergeCommandResult> {
+  return facade().createMilestoneMerge(label, remote);
+}
+
 export async function mergeDraftlineIncomingWithResolutions(
   token: MergeIncomingToken,
   label: string,
@@ -462,16 +478,24 @@ export function createDraftlineWholeFileUseContentResolutions(
   return createWholeFileUseContentResolutions(report, source);
 }
 
+async function readDraftlineSyncStatus(remote: string): Promise<DraftlineSyncStatusDto> {
+  // Not facade().preflightApplyIncoming: Draftline blocks that while a history
+  // cleanup is pending, which would hide the publish/undo/abandon actions.
+  return invoke<DraftlineSyncStatusDto>("get_sync_status", {
+    request: { workspace_path: requireWorkspacePath(), remote },
+  });
+}
+
 export async function getDraftlineSyncStatus(remote: string): Promise<SyncStatus> {
-  const status = await facade().preflightApplyIncoming(remote);
+  const status = await readDraftlineSyncStatus(remote);
   return {
-    ahead: status.sync_status.ahead,
-    behind: status.sync_status.behind,
+    ahead: status.ahead,
+    behind: status.behind,
   };
 }
 
 export async function listDraftlineIncomingCommits(remote: string): Promise<IncomingCommit[]> {
-  const status = (await facade().preflightApplyIncoming(remote)).sync_status;
+  const status = await readDraftlineSyncStatus(remote);
   return status.incoming.map((version) => ({
     id: version.id,
     message: version.label,

@@ -84,7 +84,8 @@ The app uses a **VS Code-inspired** layout:
 - Import window-specific APIs such as `getCurrentWindow`, `LogicalPosition`, and `LogicalSize` directly from `@tauri-apps/api/window`.
 - Use `invoke()` for Commands, `Channel` for streaming data, `listen()` for events, and the telemetry-aware wrappers for frontend Tauri events.
 - Type all IPC payloads with TypeScript interfaces.
-- Do not send token-returning or secret-returning commands through Auditaur invoke instrumentation. Route them through raw Tauri invoke in `src/services/tauri.ts` so IPC `resultSummary` cannot capture credential-shaped values. Current sensitive commands include `azure_browser_auth_complete`, `azure_device_code_poll`, `azure_token_refresh`, and `get_github_token`.
+- OAuth sign-in and refresh return Prompty's camelCase wire shape. Use `TokenResponse` from `src/types/auth.ts`, not Azure's snake_case HTTP fields. The shared `src/test/fixtures/oauth-token-response.json` fixture is checked against Rust serialization and frontend refresh consumers.
+- Do not send token-returning or secret-returning commands through Auditaur invoke instrumentation. Route them through raw Tauri invoke in `src/services/tauri.ts` so IPC `resultSummary` cannot capture credential-shaped values. Current sensitive commands include `azure_browser_auth_complete`, `azure_device_code_poll`, `azure_token_refresh`, and `get_github_token`. The contributor identity commands (`get_`/`set_`/`clear_contributor_identity`) are also raw because they carry names and emails.
 
 ## Telemetry
 

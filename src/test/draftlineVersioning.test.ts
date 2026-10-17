@@ -13,18 +13,22 @@ import {
   createDraftlineVariation,
   diffDraftlineVersions,
   discardDraftlineChanges,
+  getDraftlineSyncStatus,
   hasDraftlineChanges,
   deleteDraftlineVariation,
   isDraftlineVariationCreateConflictError,
   listDraftlineChangedFiles,
   listDraftlineGraphNodes,
+  listDraftlineIncomingCommits,
   listDraftlineLargeChangedFiles,
   listDraftlineRemoteBranches,
   listDraftlineSnapshotCleanupCandidates,
   listDraftlineTimelines,
   listDraftlineVersions,
+  createDraftlineMilestoneMerge,
   hasDraftlineShelf,
   popDraftlineShelf,
+  preflightDraftlineMilestoneMerge,
   preflightDraftlineUndoSnapshotCleanup,
   preflightDraftlinePublishSnapshotCleanup,
   preflightDraftlineSnapshotCleanupRemoteImpact,
@@ -302,6 +306,74 @@ describe("draftlineVersioning", () => {
     await expect(deleteDraftlineVariation("alt")).resolves.toBeUndefined();
     expect(mockInvoke).toHaveBeenCalledWith("delete_variation", {
       request: { workspace_path: WORKSPACE, variation: "alt" },
+    });
+  });
+
+  it("reads sync status without the apply-incoming preflight that pending cleanups block", async () => {
+    const status = {
+      remote: "origin",
+      variation: "main",
+      ahead: 2,
+      behind: 1,
+      state: "needs_merge",
+      incoming: [{ id: "abc", label: "Remote save", author: { name: "Jess", email: null }, time_seconds: 1_700_000_000 }],
+    };
+    mockInvoke.mockResolvedValueOnce(status).mockResolvedValueOnce(status);
+
+    await expect(getDraftlineSyncStatus("origin")).resolves.toEqual({ ahead: 2, behind: 1 });
+    await expect(listDraftlineIncomingCommits("origin")).resolves.toEqual([
+      {
+        id: "abc",
+        message: "Remote save",
+        author: "Jess",
+        timestamp: new Date(1_700_000_000 * 1000).toISOString(),
+        changed_files: [],
+        projects: ["main"],
+      },
+    ]);
+    expect(mockInvoke).toHaveBeenCalledTimes(2);
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "get_sync_status", {
+      request: { workspace_path: WORKSPACE, remote: "origin" },
+    });
+    expect(mockInvoke).not.toHaveBeenCalledWith("preflight_apply_incoming", expect.anything());
+  });
+
+  it("preflights and creates additive milestone merges through Draftline commands", async () => {
+    const preflight = {
+      sync_status: { remote: "origin", variation: "main", ahead: 2, behind: 0, state: "LocalAhead", incoming: [] },
+      dirty_files: [],
+      token: {
+        remote: "origin",
+        variation: "main",
+        local_oid: "local",
+        remote_oid: "remote",
+        merge_base_oid: "remote",
+      },
+      can_create_milestone: true,
+      unpublished_versions: 2,
+      first_parent: "remote",
+      second_parent: "local",
+      changed_workspace: false,
+    };
+    const result = {
+      preflight,
+      merge: {
+        version: version("merge", "Shared milestone", 1_700_000_001),
+        first_parent: "remote",
+        second_parent: "local",
+        preserved_versions: 2,
+      },
+    };
+    mockInvoke.mockResolvedValueOnce(preflight).mockResolvedValueOnce(result);
+
+    await expect(preflightDraftlineMilestoneMerge("origin")).resolves.toEqual(preflight);
+    await expect(createDraftlineMilestoneMerge("origin", "Shared milestone")).resolves.toEqual(result);
+
+    expect(mockInvoke).toHaveBeenNthCalledWith(1, "preflight_milestone_merge", {
+      request: { workspace_path: WORKSPACE, remote: "origin" },
+    });
+    expect(mockInvoke).toHaveBeenNthCalledWith(2, "create_milestone_merge", {
+      request: { workspace_path: WORKSPACE, remote: "origin", label: "Shared milestone" },
     });
   });
 

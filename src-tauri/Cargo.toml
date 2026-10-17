@@ -60,7 +60,13 @@ harness-agentive = { path = "../crates/harness-agentive", optional = true }
 # `copilot_sdk::*` type leaks past the harness boundary.
 harness-copilot-sdk = { path = "../crates/harness-copilot-sdk", optional = true }
 harness-prompty = { path = "../crates/harness-prompty" }
-draftline = "0.2.15"
+# Typra-generated document contracts (contracts/*.tsp). The app uses the
+# generated types directly where it has adopted them, such as `.cv` chat artifacts.
+cutready-contracts = { path = "../crates/cutready-contracts" }
+draftline = "0.5.0"
+# Already in the tree through Draftline; used directly to read the git config
+# identity that contributor attribution falls back to.
+git2 = { version = "0.20", default-features = false }
 keyring = "4.1.2"
 xcap = "0.8"
 image = "0.25"
@@ -94,6 +100,8 @@ prompty-openai = { version = "=2.0.2" }
 prompty-foundry = { version = "=2.0.2" }
 prompty-anthropic = { version = "=2.0.2" }
 portable-pty = "0.9.0"
+quilldown = "1.5.0"
+comrak = { version = "0.54", default-features = false }
 
 # Vendor OpenSSL on macOS to support cross-compilation (ARM → Intel)
 [target.'cfg(target_os = "macos")'.dependencies]

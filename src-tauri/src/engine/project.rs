@@ -16,6 +16,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 use crate::engine::draftline_adapter::CutReadyDraftlineAdapter;
+use crate::engine::sketch_edits;
 use crate::models::script::{ProjectEntry, ProjectManifest, ProjectView, RepoView};
 use crate::models::sketch::{NoteSummary, Sketch, SketchSummary, Storyboard, StoryboardSummary};
 
@@ -117,7 +118,7 @@ pub fn init_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
 
 // ── Multi-project manifest ────────────────────────────────────────
 
-const MANIFEST_PATH: &str = ".cutready/projects.json";
+pub const MANIFEST_PATH: &str = ".cutready/projects.json";
 
 /// Workspace manifest health state.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -847,12 +848,7 @@ pub fn write_sketch(
 }
 
 pub fn ensure_sketch_unlocked(sketch: &Sketch) -> Result<(), ProjectError> {
-    if sketch.locked {
-        return Err(ProjectError::Locked(
-            "This sketch is locked. Unlock it before editing.".into(),
-        ));
-    }
-    Ok(())
+    sketch_edits::ensure_unlocked(sketch).map_err(ProjectError::from)
 }
 
 fn ensure_sketch_has_no_locked_content(sketch: &Sketch) -> Result<(), ProjectError> {
@@ -866,90 +862,12 @@ fn ensure_sketch_has_no_locked_content(sketch: &Sketch) -> Result<(), ProjectErr
     Ok(())
 }
 
-pub fn apply_locked_row_metadata(
-    existing: &[crate::models::sketch::PlanningRow],
-    updated: &mut [crate::models::sketch::PlanningRow],
-) {
-    for (old, new) in existing.iter().zip(updated.iter_mut()) {
-        new.locked = old.locked;
-        new.locks = old.locks.clone();
-    }
-}
-
+#[cfg(test)]
 pub fn validate_rows_update_allowed(
     existing: &[crate::models::sketch::PlanningRow],
     updated: &[crate::models::sketch::PlanningRow],
 ) -> Result<(), ProjectError> {
-    let has_locks = existing.iter().any(|row| row.locked || row.locks.any());
-    if has_locks && existing.len() != updated.len() {
-        return Err(ProjectError::Locked(
-            "Cannot add, remove, or reorder planning rows while a row or cell is locked.".into(),
-        ));
-    }
-
-    for (idx, (old, new)) in existing.iter().zip(updated.iter()).enumerate() {
-        if old.locked && !row_content_matches(old, new) {
-            return Err(ProjectError::Locked(format!(
-                "Planning row {} is locked. Unlock it before editing.",
-                idx + 1
-            )));
-        }
-        for field in locked_fields(old) {
-            if !field_matches(old, new, field) {
-                return Err(ProjectError::Locked(format!(
-                    "Planning row {} {} cell is locked. Unlock it before editing.",
-                    idx + 1,
-                    field.replace('_', " ")
-                )));
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn locked_fields(row: &crate::models::sketch::PlanningRow) -> Vec<&'static str> {
-    let mut fields = Vec::new();
-    for field in [
-        "time",
-        "narrative",
-        "demo_actions",
-        "screenshot",
-        "visual",
-        "design_plan",
-    ] {
-        if row.locks.is_locked(field) {
-            fields.push(field);
-        }
-    }
-    fields
-}
-
-fn row_content_matches(
-    old: &crate::models::sketch::PlanningRow,
-    new: &crate::models::sketch::PlanningRow,
-) -> bool {
-    old.time == new.time
-        && old.narrative == new.narrative
-        && old.demo_actions == new.demo_actions
-        && old.screenshot == new.screenshot
-        && old.visual == new.visual
-        && old.design_plan == new.design_plan
-}
-
-fn field_matches(
-    old: &crate::models::sketch::PlanningRow,
-    new: &crate::models::sketch::PlanningRow,
-    field: &str,
-) -> bool {
-    match field {
-        "time" => old.time == new.time,
-        "narrative" => old.narrative == new.narrative,
-        "demo_actions" => old.demo_actions == new.demo_actions,
-        "screenshot" | "visual" => old.screenshot == new.screenshot && old.visual == new.visual,
-        "design_plan" => old.design_plan == new.design_plan,
-        _ => true,
-    }
+    sketch_edits::check_rows_update(existing, updated).map_err(ProjectError::from)
 }
 
 /// Read a sketch from a `.sk` file, migrating any inline visuals to external files.
@@ -1035,7 +953,7 @@ fn storyboards_with_sketch_removed(
         "sb",
         &mut |_rel_path, abs_path| {
             if let Ok(data) = std::fs::read_to_string(abs_path) {
-                if let Ok(mut storyboard) = serde_json::from_str::<Storyboard>(&data) {
+                if let Ok((mut storyboard, _)) = Storyboard::from_json_upgraded(&data) {
                     if storyboard.remove_sketch_references(sketch_rel_path) > 0 {
                         if storyboard.locked {
                             locked_error = Some(ProjectError::Locked(format!(
@@ -1133,6 +1051,7 @@ enum RenameAssetKind {
     Sketch,
     Storyboard,
     Note,
+    ChatArtifact,
     Screenshot,
     Visual,
 }
@@ -1143,6 +1062,7 @@ impl RenameAssetKind {
             Self::Sketch => "sketch",
             Self::Storyboard => "storyboard",
             Self::Note => "note",
+            Self::ChatArtifact => "chat-artifact",
             Self::Screenshot => "screenshot",
             Self::Visual => "visual",
         }
@@ -1275,6 +1195,9 @@ fn classify_rename_asset_path(path: &str) -> Result<RenameAssetKind, ProjectErro
     if lower.ends_with(".md") {
         return Ok(RenameAssetKind::Note);
     }
+    if lower.ends_with(".cv") {
+        return Ok(RenameAssetKind::ChatArtifact);
+    }
     if lower.starts_with(".cutready/screenshots/") {
         return Ok(RenameAssetKind::Screenshot);
     }
@@ -1282,7 +1205,7 @@ fn classify_rename_asset_path(path: &str) -> Result<RenameAssetKind, ProjectErro
         return Ok(RenameAssetKind::Visual);
     }
     Err(ProjectError::Io(format!(
-        "Renaming is only supported for sketches, storyboards, notes, screenshots, and visual assets: {path}"
+        "Renaming is only supported for sketches, storyboards, notes, promoted chats, screenshots, and visual assets: {path}"
     )))
 }
 
@@ -1354,7 +1277,7 @@ fn validate_renamed_file_unlocked(
             ensure_storyboard_unlocked(&storyboard)?;
         }
         RenameAssetKind::Note => ensure_note_unlocked(project_root, old_rel)?,
-        RenameAssetKind::Screenshot | RenameAssetKind::Visual => {}
+        RenameAssetKind::ChatArtifact | RenameAssetKind::Screenshot | RenameAssetKind::Visual => {}
     }
     Ok(())
 }
@@ -1396,7 +1319,9 @@ fn plan_reference_rewrites(
             new_rel,
             RenameAssetKind::Visual,
         ),
-        RenameAssetKind::Storyboard | RenameAssetKind::Note => Ok(Vec::new()),
+        RenameAssetKind::Storyboard | RenameAssetKind::Note | RenameAssetKind::ChatArtifact => {
+            Ok(Vec::new())
+        }
     }
 }
 
@@ -1418,7 +1343,7 @@ fn plan_storyboard_sketch_reference_rewrites(
             match std::fs::read(abs_path)
                 .map_err(|e| ProjectError::Io(e.to_string()))
                 .and_then(|original| {
-                    let mut storyboard: Storyboard = serde_json::from_slice(&original)
+                    let (mut storyboard, _) = Storyboard::from_json_bytes_upgraded(&original)
                         .map_err(|e| ProjectError::Deserialize(e.to_string()))?;
                     let count = storyboard.replace_sketch_references(old_rel, new_rel);
                     if count == 0 {
@@ -1870,7 +1795,28 @@ pub fn read_storyboard(path: &Path) -> Result<Storyboard, ProjectError> {
         return Err(ProjectError::NotFound(path.to_string_lossy().into_owned()));
     }
     let data = std::fs::read_to_string(path).map_err(|e| ProjectError::Io(e.to_string()))?;
-    serde_json::from_str(&data).map_err(|e| ProjectError::Deserialize(e.to_string()))
+    let (storyboard, upgraded) = Storyboard::from_json_upgraded(&data)
+        .map_err(|e| ProjectError::Deserialize(e.to_string()))?;
+    if upgraded {
+        save_upgraded_storyboard(&storyboard, path);
+    }
+    Ok(storyboard)
+}
+
+/// Persist a storyboard whose older on-disk shape was just upgraded on read.
+/// Best effort: a failed write leaves the old file, which upgrades again next read.
+fn save_upgraded_storyboard(storyboard: &Storyboard, path: &Path) {
+    match serde_json::to_string_pretty(storyboard) {
+        Ok(json) => {
+            if let Err(err) = std::fs::write(path, json) {
+                log::warn!(
+                    "could not save upgraded storyboard {}: {err}",
+                    path.display()
+                );
+            }
+        }
+        Err(err) => log::warn!("could not serialize upgraded storyboard: {err}"),
+    }
 }
 
 /// Delete a storyboard file and auto-commit.
@@ -1917,7 +1863,10 @@ pub fn scan_storyboards(project_root: &Path) -> Result<Vec<StoryboardSummary>, P
         "sb",
         &mut |rel_path, abs_path| {
             if let Ok(data) = std::fs::read_to_string(abs_path) {
-                if let Ok(sb) = serde_json::from_str::<Storyboard>(&data) {
+                if let Ok((sb, upgraded)) = Storyboard::from_json_upgraded(&data) {
+                    if upgraded {
+                        save_upgraded_storyboard(&sb, abs_path);
+                    }
                     summaries.push(StoryboardSummary::from_storyboard(&sb, rel_path));
                 }
             }
@@ -1939,7 +1888,7 @@ pub fn storyboards_referencing_sketch(
         "sb",
         &mut |_rel_path, abs_path| {
             if let Ok(data) = std::fs::read_to_string(abs_path) {
-                if let Ok(sb) = serde_json::from_str::<Storyboard>(&data) {
+                if let Ok((sb, _)) = Storyboard::from_json_upgraded(&data) {
                     if sb.references_sketch(sketch_rel_path) {
                         titles.push(sb.title.clone());
                     }
@@ -1954,11 +1903,23 @@ pub fn storyboards_referencing_sketch(
 
 /// Recursively scan a project folder for all `.md` files.
 pub fn scan_notes(project_root: &Path) -> Result<Vec<NoteSummary>, ProjectError> {
+    scan_document_summaries(project_root, "md")
+}
+
+/// Recursively scan a project folder for all promoted chat `.cv` files.
+pub fn scan_chat_artifacts(project_root: &Path) -> Result<Vec<NoteSummary>, ProjectError> {
+    scan_document_summaries(project_root, "cv")
+}
+
+fn scan_document_summaries(
+    project_root: &Path,
+    extension: &str,
+) -> Result<Vec<NoteSummary>, ProjectError> {
     let mut summaries = Vec::new();
     scan_files_recursive(
         project_root,
         project_root,
-        "md",
+        extension,
         &mut |rel_path, abs_path| {
             if let Ok(meta) = std::fs::metadata(abs_path) {
                 let updated_at = meta
@@ -1973,17 +1934,29 @@ pub fn scan_notes(project_root: &Path) -> Result<Vec<NoteSummary>, ProjectError>
                     .file_stem()
                     .map(|s| s.to_string_lossy().into_owned())
                     .unwrap_or_else(|| rel_path.to_string());
+                let turn_count = if extension == "cv" {
+                    chat_artifact_turn_count(abs_path)
+                } else {
+                    None
+                };
                 summaries.push(NoteSummary {
                     path: rel_path.to_string(),
                     title,
                     size: meta.len(),
                     updated_at,
+                    turn_count,
                 });
             }
         },
     )?;
     summaries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
     Ok(summaries)
+}
+
+fn chat_artifact_turn_count(path: &Path) -> Option<usize> {
+    let content = std::fs::read_to_string(path).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&content).ok()?;
+    value.get("turns")?.as_array().map(Vec::len)
 }
 
 /// Entry for the flat file listing returned by `scan_all_files`.
@@ -2494,7 +2467,7 @@ pub fn migrate_legacy_chat_sessions(
 // Only user content (sketches, visuals, screenshots, etc.) stays in the working tree.
 const GIT_STATE_DIR: &str = ".git/cutready";
 
-const REPO_SETTINGS_FILE: &str = ".cutready/settings.json";
+pub const REPO_SETTINGS_FILE: &str = ".cutready/settings.json";
 
 /// Resolve the per-project state directory inside .git/cutready/.
 /// For single-project repos: `.git/cutready/`
@@ -2831,6 +2804,12 @@ pub enum ProjectError {
     Locked(String),
 }
 
+impl From<sketch_edits::SketchEditError> for ProjectError {
+    fn from(err: sketch_edits::SketchEditError) -> Self {
+        ProjectError::Locked(err.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3111,6 +3090,7 @@ mod tests {
             ],
             created_at: now,
             updated_at: now,
+            unknown_fields: Default::default(),
         };
         write_storyboard(&storyboard, &storyboard_path, root).unwrap();
 
@@ -3274,6 +3254,43 @@ mod tests {
         assert!(read_storyboard(&root.join("locked.sb"))
             .unwrap()
             .references_sketch("old.sk"));
+    }
+
+    #[test]
+    fn rename_project_asset_renames_chat_artifact() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join("chat-artifacts")).unwrap();
+        std::fs::write(root.join("chat-artifacts/old.cv"), "{}").unwrap();
+
+        let result = rename_project_asset(
+            root,
+            "chat-artifacts/old.cv",
+            "chat-artifacts/renamed.cv",
+        )
+        .unwrap();
+
+        assert!(!root.join("chat-artifacts/old.cv").exists());
+        assert!(root.join("chat-artifacts/renamed.cv").exists());
+        assert!(result.updated_references.is_empty());
+    }
+
+    #[test]
+    fn scan_chat_artifacts_includes_turn_count() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join("chat-artifacts")).unwrap();
+        std::fs::write(
+            root.join("chat-artifacts/demo.cv"),
+            r#"{"title":"Demo","turns":[{"role":"user"},{"role":"assistant"}]}"#,
+        )
+        .unwrap();
+
+        let summaries = scan_chat_artifacts(root).unwrap();
+
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].title, "demo");
+        assert_eq!(summaries[0].turn_count, Some(2));
     }
 
     #[test]
@@ -3486,6 +3503,47 @@ mod tests {
         write_storyboard(&sb, &path, root).unwrap();
         let loaded = read_storyboard(&path).unwrap();
         assert_eq!(loaded.title, "Full Demo");
+    }
+
+    #[test]
+    fn read_storyboard_upgrades_and_rewrites_legacy_file() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("legacy.sb");
+        std::fs::write(
+            &path,
+            r#"{"title":"Legacy","sketches":["intro.sk"],"created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z"}"#,
+        )
+        .unwrap();
+
+        let storyboard = read_storyboard(&path).unwrap();
+
+        assert_eq!(storyboard.description, "");
+        assert_eq!(storyboard.sketch_paths(), vec!["intro.sk"]);
+        let saved: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(saved.get("sketches").is_none());
+        assert_eq!(saved["items"][0]["type"], "sketch_ref");
+    }
+
+    #[test]
+    fn scan_storyboards_upgrades_and_rewrites_legacy_file() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let path = root.join("legacy.sb");
+        std::fs::write(
+            &path,
+            r#"{"title":"Legacy","sketches":["intro.sk"],"created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z"}"#,
+        )
+        .unwrap();
+
+        let summaries = scan_storyboards(root).unwrap();
+
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].title, "Legacy");
+        let saved: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        assert!(saved.get("sketches").is_none());
+        assert_eq!(saved["items"][0]["path"], "intro.sk");
     }
 
     #[test]
@@ -4125,7 +4183,10 @@ Some text
             read_workspace_state(root, &beta).active_tab_id.as_deref(),
             Some("tab-1")
         );
-        assert_eq!(read_sidebar_order(root, &beta).sketches, vec!["b.sk", "a.sk"]);
+        assert_eq!(
+            read_sidebar_order(root, &beta).sketches,
+            vec!["b.sk", "a.sk"]
+        );
     }
 
     #[test]

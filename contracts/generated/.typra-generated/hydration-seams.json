@@ -1,0 +1,136 @@
+{
+  "emitter": "typra-emitter",
+  "version": 1,
+  "protectedPaths": [],
+  "hydrationZones": [],
+  "seams": [
+    {
+      "contract": "ChatArtifactDocument",
+      "target": "markdown",
+      "group": "",
+      "symbol": "ChatArtifactDocument",
+      "generatedSource": "ChatArtifactDocument",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "PlanningTiming",
+      "target": "markdown",
+      "group": "",
+      "symbol": "PlanningTiming",
+      "generatedSource": "PlanningTiming",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "SketchDocument",
+      "target": "markdown",
+      "group": "",
+      "symbol": "SketchDocument",
+      "generatedSource": "SketchDocument",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "StoryboardDocument",
+      "target": "markdown",
+      "group": "",
+      "symbol": "StoryboardDocument",
+      "generatedSource": "StoryboardDocument",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "ChatArtifactDocument",
+      "target": "rust",
+      "group": "",
+      "symbol": "ChatArtifactDocument",
+      "generatedSource": "chat_artifact_document",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "PlanningTiming",
+      "target": "rust",
+      "group": "",
+      "symbol": "PlanningTiming",
+      "generatedSource": "planning_timing",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "SketchDocument",
+      "target": "rust",
+      "group": "",
+      "symbol": "SketchDocument",
+      "generatedSource": "sketch_document",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "StoryboardDocument",
+      "target": "rust",
+      "group": "",
+      "symbol": "StoryboardDocument",
+      "generatedSource": "storyboard_document",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "ChatArtifactDocument",
+      "target": "swift",
+      "group": "",
+      "symbol": "ChatArtifactDocument",
+      "generatedSource": "Sources/CutReadyContracts/chat_artifact_document.swift",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "PlanningTiming",
+      "target": "swift",
+      "group": "",
+      "symbol": "PlanningTiming",
+      "generatedSource": "Sources/CutReadyContracts/planning_timing.swift",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "SketchDocument",
+      "target": "swift",
+      "group": "",
+      "symbol": "SketchDocument",
+      "generatedSource": "Sources/CutReadyContracts/sketch_document.swift",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "StoryboardDocument",
+      "target": "swift",
+      "group": "",
+      "symbol": "StoryboardDocument",
+      "generatedSource": "Sources/CutReadyContracts/storyboard_document.swift",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "ChatArtifactDocument",
+      "target": "typescript",
+      "group": "",
+      "symbol": "ChatArtifactDocument",
+      "generatedSource": "./chat-artifact-document",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "PlanningTiming",
+      "target": "typescript",
+      "group": "",
+      "symbol": "PlanningTiming",
+      "generatedSource": "./planning-timing",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "SketchDocument",
+      "target": "typescript",
+      "group": "",
+      "symbol": "SketchDocument",
+      "generatedSource": "./sketch-document",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "StoryboardDocument",
+      "target": "typescript",
+      "group": "",
+      "symbol": "StoryboardDocument",
+      "generatedSource": "./storyboard-document",
+      "seamKind": "protocol-adapter"
+    }
+  ]
+}

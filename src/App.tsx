@@ -11,9 +11,11 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AppCloseGuard } from "./components/AppCloseGuard";
 import { invoke, listen } from "./services/tauri";
 import { commandRegistry } from "./services/commandRegistry";
+import { onWorkspaceSnapshotDeferred } from "./services/identity";
 import { isMac } from "./utils/platform";
 
 import { useAppStore } from "./stores/appStore";
+import { useToastStore } from "./stores/toastStore";
 import { useUpdateStore } from "./stores/updateStore";
 
 function App() {
@@ -115,9 +117,24 @@ function App() {
       // Explicit command refreshes remain authoritative if event subscription is unavailable.
     });
 
+    let unlistenDeferred: (() => void) | undefined;
+    onWorkspaceSnapshotDeferred((message, reason) => {
+      useToastStore.getState().show(message, 10000, reason === "identity" ? "warning" : "info");
+      void refreshFromDraftlineEvent();
+    }).then((off) => {
+      if (disposed) {
+        off();
+      } else {
+        unlistenDeferred = off;
+      }
+    }).catch(() => {
+      // The pending change still shows in the changes list; the next save asks for a profile.
+    });
+
     return () => {
       disposed = true;
       unlisten?.();
+      unlistenDeferred?.();
     };
   }, []);
 

@@ -244,20 +244,21 @@ function rotateHue(rgb: Rgb, degrees: number, minimumChroma: number): Rgb {
 /**
  * Hue offsets from the palette accent, in OKLCh degrees. Measured from the
  * original hand-picked CutReady content colours so the default theme keeps its
- * indigo/teal/amber identity. Every pair sits at least 100 degrees apart, so the
- * three content types stay distinguishable in every palette -- unlike reusing
+ * indigo/teal/amber/rose identity. The offsets keep content types distinguishable
+ * in every palette -- unlike reusing
  * `warning`/`success`, which collide with `accent` outright in some palettes.
  */
 const CONTENT_HUE_OFFSETS: Record<ContentTypeTokenKey, number> = {
   sketch: 0,
   storyboard: -100,
   note: 145,
+  chat: 60,
 };
 
 /** Keeps near-greyscale accents (Ink Mono) faintly tinted rather than identical. */
 const CONTENT_MINIMUM_CHROMA = 0.06;
 
-export type ContentTypeTokenKey = "storyboard" | "sketch" | "note";
+export type ContentTypeTokenKey = "storyboard" | "sketch" | "note" | "chat";
 
 export function deriveContentTokens(
   tokens: ThemeColorTokens

@@ -9,7 +9,7 @@ import {
 } from "../utils/documentMetadata";
 
 interface MetadataEditorProps {
-  metadata?: DocumentMetadata;
+  metadata?: DocumentMetadata | null;
   onChange: (metadata: DocumentMetadata) => void;
   disabled?: boolean;
 }

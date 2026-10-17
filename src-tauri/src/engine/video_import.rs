@@ -382,6 +382,7 @@ where
         total_steps,
         format!("Extracting {} representative screenshots", scenes.len()),
     );
+    let _write_guard = crate::engine::workspace_write_lock::lock().map_err(anyhow::Error::msg)?;
     extract_scene_screenshots(project_root, video_path, &import_id, &mut scenes)?;
 
     emit_progress(

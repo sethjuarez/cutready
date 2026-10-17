@@ -11,7 +11,6 @@
 
 use serde_json::{json, Value};
 
-
 // Valid elucim DSL root node types
 const VALID_ROOT_TYPES: &[&str] = &["scene", "player", "presentation"];
 

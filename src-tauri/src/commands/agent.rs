@@ -809,6 +809,19 @@ pub async fn save_chat_session(
 }
 
 #[auditaur_command(skip_all, err)]
+pub async fn delete_chat_session(
+    state: tauri::State<'_, AppState>,
+    session_id: String,
+) -> Result<bool, String> {
+    let (repo_root, root) = {
+        let guard = state.current_project.lock().unwrap();
+        let view = guard.as_ref().ok_or("No project open")?;
+        (view.repo_root.clone(), view.root.clone())
+    };
+    AgentStateStore::delete_chat_session(&repo_root, &root, &session_id)
+}
+
+#[auditaur_command(skip_all, err)]
 pub async fn has_active_agent_run(state: tauri::State<'_, AppState>) -> Result<bool, String> {
     let active_count = state
         .active_agent_runs
@@ -2007,6 +2020,22 @@ pub async fn list_foundry_projects(
 mod tests {
     use super::*;
     use crate::engine::agent::llm::LlmProvider;
+
+    #[test]
+    fn oauth_token_ipc_matches_frontend_refresh_fixture() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../src/test/fixtures/oauth-token-response.json"
+        ))
+        .unwrap();
+        let token: TokenResponse = serde_json::from_value(fixture.clone()).unwrap();
+
+        assert_eq!(token.access_token, "fixture-access-token");
+        assert_eq!(
+            token.refresh_token.as_deref(),
+            Some("fixture-refresh-token")
+        );
+        assert_eq!(serde_json::to_value(token).unwrap(), fixture);
+    }
 
     fn make_config(provider: &str) -> ProviderConfig {
         ProviderConfig {

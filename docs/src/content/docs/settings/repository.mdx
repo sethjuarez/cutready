@@ -1,6 +1,6 @@
 ---
 title: Workspace Remote
-description: Configure remote sync, authentication, and git identity for your workspace.
+description: Configure remote sync and authentication for your workspace.
 sidebar:
   order: 3
 ---
@@ -11,8 +11,8 @@ import Screenshot from '../../../components/Screenshot.astro';
 <Badge text="Available" variant="success" />
 
 The **Git Remote** tab in Workspace Settings configures remote sync for your
-workspace. This is where you connect to a GitHub repository, set authentication,
-and configure your git identity.
+workspace. This is where you connect to a GitHub repository and set
+authentication.
 
 <Aside type="note">
   Remote settings are per-workspace, not global. Open them from the **monitor
@@ -52,47 +52,11 @@ CutReady uses Draftline remote support with your system SSH keys. Make sure
 your SSH key is added to your GitHub account and available in your system's SSH
 agent.
 
-## Git Identity
+## Snapshot Identity
 
-Set the **name** and **email** that appear on your snapshots. This is
-especially useful when collaborating — your identity shows on the
-snapshots you create.
-
-<Aside type="note">
-  The git identity is per-workspace. If you work on multiple workspaces with
-  different identities (personal vs. work), each can have its own settings.
-</Aside>
-
-### Automatic Resolution
-
-If you don't set an identity in Settings, CutReady resolves it automatically
-using a priority chain — the first source that provides a name and email wins:
-
-1. **Workspace settings** — the name and email saved in this Settings panel
-   (stored in `.cutready/settings.json`).
-2. **Local git config** — if a previous resolution already wrote to the
-   workspace's `.git/config`, that's reused.
-3. **Global git config** — if you've run `git config --global user.name`
-   and `git config --global user.email`, those are used.
-4. **GitHub CLI** — if you're signed in via `gh auth login`, CutReady
-   queries your GitHub profile (`gh api user`) for your name and email.
-   If your GitHub email is private, the `username@users.noreply.github.com`
-   address is used.
-5. **Identity prompt** — if none of the above sources have your identity,
-   CutReady shows a one-time dialog asking for your name and email before
-   your first snapshot.
-6. **Fallback** — as a last resort, "CutReady" / "app@cutready.local" is
-   used so snapshots are never blocked.
-
-Once resolved, the identity is persisted to both the workspace's local git
-config and workspace settings, so subsequent saves are instant — you're
-never asked again.
-
-<Aside type="tip">
-  On a fresh machine, install the GitHub CLI and run `gh auth login` before
-  opening CutReady. Your GitHub identity will be picked up automatically
-  with zero configuration.
-</Aside>
+Snapshots show who saved them. The name and email come from
+**Settings** → **Profile**, which is per person rather than per workspace.
+See [Profile](/settings/overview/#profile) for how CutReady picks them.
 
 ## When to Configure
 

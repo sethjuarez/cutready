@@ -99,6 +99,7 @@ pub struct TtsCapabilities {
 
 /// A pluggable text-to-speech runtime behind the CutReady host boundary.
 #[async_trait]
+#[allow(dead_code)]
 pub trait SpeechSynthesizer: Send + Sync {
     /// Canonical, stable identifier for this synthesizer.
     fn id(&self) -> &str;
@@ -174,7 +175,10 @@ mod tests {
     #[test]
     fn default_resolves_to_azure_speech() {
         assert_eq!(TtsRegistry::canonical_id(None).unwrap(), AZURE_SPEECH_ID);
-        assert_eq!(TtsRegistry::canonical_id(Some("   ")).unwrap(), AZURE_SPEECH_ID);
+        assert_eq!(
+            TtsRegistry::canonical_id(Some("   ")).unwrap(),
+            AZURE_SPEECH_ID
+        );
         assert_eq!(TtsRegistry::resolve(None).unwrap().id(), AZURE_SPEECH_ID);
     }
 

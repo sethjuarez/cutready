@@ -670,6 +670,91 @@ fn multimodal_and_tool_metadata_round_trip_without_losing_ids() {
 }
 
 #[test]
+fn tool_exchange_keeps_parallel_tool_results_adjacent_before_image_followups() {
+    let call = |id: &str, name: &str| ToolCall {
+        id: id.into(),
+        call_type: "function".into(),
+        function: FunctionCall {
+            name: name.into(),
+            arguments: "{}".into(),
+        },
+    };
+    let assistant = ChatMessage::assistant_with_tool_calls(vec![
+        call("call-1", "read_storyboard"),
+        call("call-2", "read_sketch"),
+    ]);
+    let response = ModelInvocationResponse {
+        output: None,
+        assistant_messages: Some(vec![native_to_prompty_message(&assistant).unwrap()]),
+        tool_requests: Some(vec![
+            EngineToolRequest {
+                id: "call-1".into(),
+                name: "read_storyboard".into(),
+                arguments: Some(json!({})),
+                metadata: Value::Null,
+            },
+            EngineToolRequest {
+                id: "call-2".into(),
+                name: "read_sketch".into(),
+                arguments: Some(json!({})),
+                metadata: Value::Null,
+            },
+        ]),
+        next_context_state: None,
+        usage: None,
+        metadata: Value::Null,
+    };
+    let image_metadata = json!({
+        "images": [{
+            "type": "image_url",
+            "image_url": {
+                "url": "data:image/png;base64,abc",
+                "detail": "low"
+            }
+        }]
+    });
+    let results = vec![
+        EngineToolResult {
+            request_id: "call-1".into(),
+            name: "read_storyboard".into(),
+            outcome: ToolOutcome::Success,
+            output: Some(Value::String("storyboard".into())),
+            error_kind: None,
+            metadata: image_metadata.clone(),
+        },
+        EngineToolResult {
+            request_id: "call-2".into(),
+            name: "read_sketch".into(),
+            outcome: ToolOutcome::Success,
+            output: Some(Value::String("sketch".into())),
+            error_kind: None,
+            metadata: image_metadata,
+        },
+    ];
+    let port = CutReadyConversationPort {
+        new_messages: Arc::new(Mutex::new(Vec::new())),
+    };
+
+    let messages = port.format_tool_exchange(&response, &results).unwrap();
+
+    assert_eq!(
+        messages
+            .iter()
+            .map(|message| message.role)
+            .collect::<Vec<_>>(),
+        [Role::Assistant, Role::Tool, Role::Tool, Role::User, Role::User]
+    );
+    assert_eq!(
+        messages
+            .iter()
+            .filter(|message| message.role == Role::Tool)
+            .filter_map(|message| message.metadata.get("tool_call_id").and_then(Value::as_str))
+            .collect::<Vec<_>>(),
+        ["call-1", "call-2"]
+    );
+}
+
+#[test]
 fn prompty_steering_tracks_active_runner_and_drains_messages() {
     let steering = PromptySteering::new();
     assert!(!steering.is_active());

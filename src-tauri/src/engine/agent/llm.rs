@@ -67,7 +67,6 @@ pub fn supported_reasoning_efforts(model: &str) -> Vec<&'static str> {
     Vec::new()
 }
 
-
 // ---------------------------------------------------------------------------
 // CutReady-specific provider configuration
 // ---------------------------------------------------------------------------
@@ -76,9 +75,7 @@ pub fn supported_reasoning_efforts(model: &str) -> Vec<&'static str> {
 /// `harness-contract` crate — the harness boundary vocabulary. Re-exported
 /// here so existing call sites and the discovery functions below resolve them
 /// at this path unchanged.
-pub use harness_contract::llm::{
-    context_budget, needs_responses_api, LlmConfig, LlmProvider,
-};
+pub use harness_contract::llm::{context_budget, needs_responses_api, LlmConfig, LlmProvider};
 
 // ---------------------------------------------------------------------------
 // Model discovery (Prompty provider crates)

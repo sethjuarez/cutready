@@ -14,6 +14,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Channel, invoke } from "../services/tauri";
+import type { TokenResponse } from "../types/auth";
 import { ArrowRight, AtSign, ChevronDown, ChevronRight, Copy, FileInput, FileText, Film, FolderOpen, Pencil, Plus, SquareTerminal, Trash2 } from "lucide-react";
 import {
   clearSuppressedEditorFlush,
@@ -24,7 +25,7 @@ import {
   type SidebarOrder,
 } from "../stores/appStore";
 import type { ProjectEntry } from "../types/project";
-import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
+import { ChatArtifactIcon, SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { useToastStore } from "../stores/toastStore";
@@ -149,16 +150,22 @@ function applySidebarOrder<T extends { path: string }>(items: T[], order: string
 
 function sectionBodyStyle(
   mode: "storyboards" | "sketches" | "notes" | "all",
-  weight: number,
   itemCount: number,
   expandedCount: number,
+  active: boolean,
   itemHeight = 34,
 ): CSSProperties {
   if (mode !== "all" || expandedCount === 1) return { flex: "1 1 0%", minHeight: 0 };
 
-  const estimatedHeight = Math.min(220, Math.max(56, itemCount * itemHeight + 8));
+  if (itemCount === 0) {
+    return { flex: "0 0 72px", minHeight: 0 };
+  }
+
+  const estimatedHeight = Math.min(240, Math.max(56, itemCount * itemHeight + 8));
+  const contentWeight = Math.min(2.4, 0.8 + Math.sqrt(itemCount) * 0.45);
+  const activeBoost = active ? 0.45 : 0;
   return {
-    flex: `${weight} 1 ${estimatedHeight}px`,
+    flex: `${contentWeight + activeBoost} 1 ${estimatedHeight}px`,
     minHeight: 0,
   };
 }
@@ -398,6 +405,19 @@ function DocumentItemText({ title, meta, active, tone }: { title: string; meta?:
   );
 }
 
+function chatArtifactMeta(artifact: NoteSummary): string {
+  if (typeof artifact.turn_count === "number") {
+    return `${artifact.turn_count} ${artifact.turn_count === 1 ? "turn" : "turns"}`;
+  }
+  const date = new Date(artifact.updated_at);
+  if (Number.isNaN(date.getTime())) return "Saved chat";
+  return `Saved ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+}
+
+function deleteAssetLabel(type: "storyboard" | "sketch" | "note" | "chat-artifact"): string {
+  return type === "chat-artifact" ? "chat" : type;
+}
+
 /** Wrapper that makes a sidebar list item draggable. */
 function SortableSidebarItem({ id, children }: { id: string; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
@@ -473,6 +493,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const storyboards = useAppStore((s) => s.storyboards);
   const sketches = useAppStore((s) => s.sketches);
   const notes = useAppStore((s) => s.notes);
+  const chatArtifacts = useAppStore((s) => s.chatArtifacts);
   const activeStoryboardPath = useAppStore((s) => {
     const tab = s.openTabs.find((t) => t.id === s.activeTabId);
     return tab?.type === "storyboard" ? tab.path : null;
@@ -485,9 +506,14 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     const tab = s.openTabs.find((t) => t.id === s.activeTabId);
     return tab?.type === "note" ? tab.path : null;
   });
+  const activeChatArtifactPath = useAppStore((s) => {
+    const tab = s.openTabs.find((t) => t.id === s.activeTabId);
+    return tab?.type === "chat-artifact" ? tab.path : null;
+  });
   const loadStoryboards = useAppStore((s) => s.loadStoryboards);
   const loadSketches = useAppStore((s) => s.loadSketches);
   const loadNotes = useAppStore((s) => s.loadNotes);
+  const loadChatArtifacts = useAppStore((s) => s.loadChatArtifacts);
   const loadAssets = useAppStore((s) => s.loadAssets);
   const createStoryboard = useAppStore((s) => s.createStoryboard);
   const openStoryboard = useAppStore((s) => s.openStoryboard);
@@ -497,7 +523,9 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const deleteSketch = useAppStore((s) => s.deleteSketch);
   const createNote = useAppStore((s) => s.createNote);
   const openNote = useAppStore((s) => s.openNote);
+  const openChatArtifact = useAppStore((s) => s.openChatArtifact);
   const deleteNote = useAppStore((s) => s.deleteNote);
+  const deleteChatArtifact = useAppStore((s) => s.deleteChatArtifact);
   const closeStoryboard = useAppStore((s) => s.closeStoryboard);
   const sidebarOrder = useAppStore((s) => s.sidebarOrder);
   const saveSidebarOrder = useAppStore((s) => s.saveSidebarOrder);
@@ -523,7 +551,8 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const [storyboardsExpanded, setStoryboardsExpanded] = useState(true);
   const [sketchesExpanded, setSketchesExpanded] = useState(true);
   const [notesExpanded, setNotesExpanded] = useState(true);
-  const [pendingDelete, setPendingDelete] = useState<{ type: "storyboard" | "sketch" | "note"; path: string; title: string; usedBy?: string[] } | null>(null);
+  const [chatArtifactsExpanded, setChatArtifactsExpanded] = useState(true);
+  const [pendingDelete, setPendingDelete] = useState<{ type: "storyboard" | "sketch" | "note" | "chat-artifact"; path: string; title: string; usedBy?: string[] } | null>(null);
   const [drmConfirm, setDrmConfirm] = useState<{ resolve: (ok: boolean) => void } | null>(null);
   const [renameConfirm, setRenameConfirm] = useState<RenameConfirmation | null>(null);
   const [importing, setImporting] = useState(false);
@@ -570,7 +599,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   }, [transferConflict]);
 
   // ── Inline rename state ──────────────────────────────────────────
-  const [renamingItem, setRenamingItem] = useState<{ type: "storyboard" | "sketch" | "note"; path: string } | null>(null);
+  const [renamingItem, setRenamingItem] = useState<{ type: "storyboard" | "sketch" | "note" | "chat-artifact"; path: string } | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renameInFlightRef = useRef(false);
@@ -596,7 +625,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     let freshBearerToken = settings.aiAuthMode === "azure_oauth" ? settings.aiAccessToken : null;
     if (settings.aiAuthMode === "azure_oauth" && settings.aiRefreshToken) {
       try {
-        const tokenResult = await invoke<{ access_token: string; refresh_token?: string }>(
+        const tokenResult = await invoke<TokenResponse>(
           "azure_token_refresh",
           {
             tenantId: settings.aiTenantId || "",
@@ -604,15 +633,15 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             clientId: settings.aiClientId || null,
           },
         );
-        if (tokenResult.access_token) {
-          freshBearerToken = tokenResult.access_token;
-          await updateSetting("aiAccessToken", tokenResult.access_token);
-          if (tokenResult.refresh_token) {
-            await updateSetting("aiRefreshToken", tokenResult.refresh_token);
+        if (tokenResult.accessToken) {
+          freshBearerToken = tokenResult.accessToken;
+          await updateSetting("aiAccessToken", tokenResult.accessToken);
+          if (tokenResult.refreshToken) {
+            await updateSetting("aiRefreshToken", tokenResult.refreshToken);
           }
         }
       } catch {
-        // The import request below will surface any auth failure with the current token.
+        console.warn("[auth] Video import OAuth refresh failed; trying cached credentials.");
       }
     }
 
@@ -624,10 +653,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   }, [settings, settingsLoaded, updateSetting]);
 
   /** Enter rename mode for a sidebar item. */
-  const startRename = useCallback((type: "storyboard" | "sketch" | "note", path: string) => {
+  const startRename = useCallback((type: "storyboard" | "sketch" | "note" | "chat-artifact", path: string) => {
     // Extract current stem from the path for the initial value
     const filename = path.split("/").pop() ?? path;
-    const stem = filename.replace(/\.(sk|sb|md)$/, "");
+    const stem = filename.replace(/\.(sk|sb|md|cv)$/, "");
     setRenamingItem({ type, path });
     setRenameValue(stem);
   }, []);
@@ -652,7 +681,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     }
 
     const { type, path: oldPath } = renamingItem;
-    const ext = type === "sketch" ? ".sk" : type === "storyboard" ? ".sb" : ".md";
+    const ext = type === "sketch" ? ".sk" : type === "storyboard" ? ".sb" : type === "chat-artifact" ? ".cv" : ".md";
     const dir = oldPath.includes("/") ? oldPath.substring(0, oldPath.lastIndexOf("/") + 1) : "";
     const newPath = `${dir}${slug}${ext}`;
 
@@ -701,6 +730,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
         activeTabId: store.activeTabId === oldMainId ? newMainId : store.activeTabId,
         splitTabs: updatedSplitTabs,
         splitActiveTabId: store.splitActiveTabId === oldSplitId ? newSplitId : store.splitActiveTabId,
+        ...(type === "chat-artifact" && store.activeChatArtifactPath === oldPath ? { activeChatArtifactPath: newPath } : {}),
       });
 
       // Reload file lists
@@ -709,6 +739,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
         await loadSketches();
         if (result.updatedReferences.length > 0) await loadStoryboards();
       }
+      else if (type === "chat-artifact") await loadChatArtifacts();
       else await loadNotes();
 
       const updated = result.updatedReferences.reduce((sum, ref) => sum + ref.count, 0);
@@ -726,7 +757,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
       window.setTimeout(() => suppressedPaths.forEach(clearSuppressedEditorFlush), 150);
       setRenamingItem(null);
     }
-  }, [renamingItem, renameValue, loadStoryboards, loadSketches, loadNotes, showToast]);
+  }, [renamingItem, renameValue, loadStoryboards, loadSketches, loadNotes, loadChatArtifacts, showToast]);
 
   const cancelRename = useCallback(() => setRenamingItem(null), []);
 
@@ -758,7 +789,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     return () => window.removeEventListener("keydown", handleEsc);
   }, [isCreatingSb, isCreatingSk, isCreatingNote]);
 
-  const requestDelete = useCallback(async (type: "storyboard" | "sketch" | "note", path: string, title: string) => {
+  const requestDelete = useCallback(async (type: "storyboard" | "sketch" | "note" | "chat-artifact", path: string, title: string) => {
     let usedBy: string[] | undefined;
     if (type === "sketch") {
       try {
@@ -867,20 +898,23 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     loadStoryboards();
     loadSketches();
     loadNotes();
-  }, [loadStoryboards, loadSketches, loadNotes]);
+    loadChatArtifacts();
+  }, [loadStoryboards, loadSketches, loadNotes, loadChatArtifacts]);
 
   // Apply sidebar order
   const orderedStoryboards = applySidebarOrder(storyboards, sidebarOrder?.storyboards ?? []);
   const orderedSketches = applySidebarOrder(sketches, sidebarOrder?.sketches ?? []);
   const orderedNotes = applySidebarOrder(notes, sidebarOrder?.notes ?? []);
   const sectionBodyClass = "min-h-0 overflow-y-auto py-1";
-  const expandedSectionCount = [storyboardsExpanded, sketchesExpanded, notesExpanded].filter(Boolean).length;
-  const storyboardsBodyStyle = sectionBodyStyle(resolvedMode, 0.75, orderedStoryboards.length, expandedSectionCount, 42);
-  const sketchesBodyStyle = sectionBodyStyle(resolvedMode, 1.25, orderedSketches.length, expandedSectionCount, 42);
-  const notesBodyStyle = sectionBodyStyle(resolvedMode, 2, orderedNotes.length, expandedSectionCount, 30);
+  const expandedSectionCount = [storyboardsExpanded, sketchesExpanded, notesExpanded, chatArtifactsExpanded].filter(Boolean).length;
+  const storyboardsBodyStyle = sectionBodyStyle(resolvedMode, orderedStoryboards.length, expandedSectionCount, Boolean(activeStoryboardPath), 42);
+  const sketchesBodyStyle = sectionBodyStyle(resolvedMode, orderedSketches.length, expandedSectionCount, Boolean(activeSketchPath), 42);
+  const notesBodyStyle = sectionBodyStyle(resolvedMode, orderedNotes.length, expandedSectionCount, Boolean(activeNotePath), 30);
+  const chatArtifactsBodyStyle = sectionBodyStyle(resolvedMode, chatArtifacts.length, expandedSectionCount, Boolean(activeChatArtifactPath), 30);
   const storyboardTone = contentTypeTones.storyboard;
   const sketchTone = contentTypeTones.sketch;
   const noteTone = contentTypeTones.note;
+  const chatArtifactTone = contentTypeTones["chat-artifact"];
   const videoImportReferenceOptions: VideoImportPlanningContextReference[] = [
     ...orderedStoryboards.map((storyboard: StoryboardSummary) => ({
       kind: "storyboard" as const,
@@ -1752,11 +1786,104 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
         </>
       )}
 
+      {/* ── Promoted chats section─────────────────────────────── */}
+      {(resolvedMode === "all" || resolvedMode === "notes") && (
+        <>
+          <SidebarSectionHeader
+            title="Chats"
+            count={chatArtifacts.length}
+            expanded={chatArtifactsExpanded}
+            onToggle={() => setChatArtifactsExpanded(!chatArtifactsExpanded)}
+            tone={chatArtifactTone}
+          />
+
+          {chatArtifactsExpanded && <div className={sectionBodyClass} style={chatArtifactsBodyStyle}>
+            {chatArtifacts.length === 0 ? (
+              <div className="px-4 py-6 text-center text-xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
+                Promote a chat to save it here.
+              </div>
+            ) : (
+              <div className="space-y-0.5 px-1">
+                {chatArtifacts.map((artifact) => (
+                  <div
+                    key={artifact.path}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => { if (!renamingItem) openChatArtifact(artifact.path); }}
+                    onDoubleClick={(e) => { e.stopPropagation(); startRename("chat-artifact", artifact.path); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "F2") { e.preventDefault(); startRename("chat-artifact", artifact.path); }
+                      else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openChatArtifact(artifact.path); }
+                    }}
+                    className={`${documentItemClass(artifact.path === activeChatArtifactPath, chatArtifactTone)} group/item`}
+                  >
+                    <ActiveDocumentMarker active={artifact.path === activeChatArtifactPath} tone={chatArtifactTone} />
+                    <ChatArtifactIcon className={`shrink-0 opacity-90 ${chatArtifactTone.text}`} />
+                    <div className="min-w-0 flex-1">
+                      {renamingItem?.path === artifact.path ? (
+                        <input
+                          ref={renameInputRef}
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === "Enter") commitRename();
+                            if (e.key === "Escape") cancelRename();
+                          }}
+                          onBlur={commitRename}
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label="Rename chat"
+                          title="Rename file. Spaces become hyphens."
+                          className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
+                        />
+                      ) : (
+                        <DocumentItemText
+                          title={artifact.title}
+                          meta={chatArtifactMeta(artifact)}
+                          active={artifact.path === activeChatArtifactPath}
+                          tone={chatArtifactTone}
+                        />
+                      )}
+                    </div>
+                    {renamingItem?.path !== artifact.path && (
+                      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/item:opacity-100">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startRename("chat-artifact", artifact.path);
+                          }}
+                          className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+                          title="Rename chat"
+                          aria-label={`Rename ${artifact.title}`}
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            requestDelete("chat-artifact", artifact.path, artifact.title);
+                          }}
+                          className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+                          title="Delete chat"
+                          aria-label={`Delete ${artifact.title}`}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>}
+        </>
+      )}
+
       {/* Delete confirmation overlay */}
       {pendingDelete && (
         <div className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center">
           <div className="cr-modal-surface rounded-xl p-5 max-w-sm mx-4">
-            <p className="text-sm text-[rgb(var(--color-text))] mb-1 font-medium">Delete {pendingDelete.type}?</p>
+            <p className="text-sm text-[rgb(var(--color-text))] mb-1 font-medium">Delete {deleteAssetLabel(pendingDelete.type)}?</p>
             <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-2">
               "{pendingDelete.title}" will be permanently deleted.
             </p>
@@ -1782,6 +1909,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                   setPendingDelete(null);
                   if (type === "sketch") deleteSketch(path);
                   else if (type === "storyboard") deleteStoryboard(path);
+                  else if (type === "chat-artifact") deleteChatArtifact(path);
                   else deleteNote(path);
                 }}
                 className="px-3 py-1.5 text-xs rounded-lg bg-error text-accent-fg hover:bg-error/80 transition-colors"

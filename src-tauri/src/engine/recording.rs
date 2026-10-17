@@ -2960,7 +2960,10 @@ mod tests {
     fn directshow_resolver_maps_wasapi_id_to_friendly_name() {
         let devices = vec![
             camera_device("cam-0", "HD Webcam"),
-            mic_device("{0.0.1.00000000}.{endpoint}", "Microphone (RODECaster Pro II)"),
+            mic_device(
+                "{0.0.1.00000000}.{endpoint}",
+                "Microphone (RODECaster Pro II)",
+            ),
         ];
 
         let selector =
@@ -2971,7 +2974,10 @@ mod tests {
 
     #[test]
     fn directshow_resolver_accepts_selection_already_stored_as_friendly_name() {
-        let devices = vec![mic_device("{0.0.1.00000000}.{endpoint}", "Studio Microphone")];
+        let devices = vec![mic_device(
+            "{0.0.1.00000000}.{endpoint}",
+            "Studio Microphone",
+        )];
 
         let selector = resolve_directshow_microphone("Studio Microphone", &devices).unwrap();
 
@@ -2991,7 +2997,10 @@ mod tests {
 
         let err = resolve_directshow_microphone("id-missing", &devices).unwrap_err();
 
-        assert_eq!(err, MicrophoneResolveError::Unavailable("id-missing".into()));
+        assert_eq!(
+            err,
+            MicrophoneResolveError::Unavailable("id-missing".into())
+        );
     }
 
     #[test]

@@ -1,7 +1,8 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
-import { Check, ArrowUp, ArrowDown, AlertTriangle, Globe, RefreshCw } from "lucide-react";
+import { Check, ArrowUp, ArrowDown, AlertTriangle, Globe, RefreshCw, UserRound } from "lucide-react";
+import { isContributorIdentityRequired } from "../services/identity";
 
 /**
  * SyncBar — shown at the top of the Snapshots panel when a remote is configured.
@@ -75,6 +76,9 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
   const ahead = syncStatus?.ahead ?? 0;
   const behind = syncStatus?.behind ?? 0;
   const isUpToDate = ahead === 0 && behind === 0 && syncStatus !== null;
+  // A pending milestone cleanup must stay publishable even when sync status
+  // could not be read.
+  const showPrimaryAction = pendingHistoryCleanup !== null || (!isUpToDate && syncStatus !== null);
 
   // Determine primary action label
   let actionLabel = "Sync";
@@ -118,7 +122,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
   if (variant === "compact") {
     return (
       <div className="relative flex min-w-0 shrink-0 items-center gap-1.5">
-        {!isUpToDate && syncStatus && (
+        {showPrimaryAction && (
           <button
             onClick={() => actionFn()}
             disabled={isSyncing}
@@ -219,7 +223,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
         </button>
 
         {/* Primary action: Sync / Push / Pull */}
-        {!isUpToDate && syncStatus && (
+        {showPrimaryAction && (
           <button
             onClick={() => actionFn()}
             disabled={isSyncing}
@@ -262,7 +266,12 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
       {/* General error message (non-diverge) */}
       {syncError && !syncError.includes("can't be merged") && (
         <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-error" title={syncError}>
-          {(syncError.includes("network") || syncError.includes("resolve host") || syncError.includes("Could not resolve") || syncError.includes("timed out")) ? (
+          {isContributorIdentityRequired(syncError) ? (
+            <>
+              <UserRound className="shrink-0 w-2.5 h-2.5" />
+              <span className="truncate">Add your name and email in Settings › Profile</span>
+            </>
+          ) : (syncError.includes("network") || syncError.includes("resolve host") || syncError.includes("Could not resolve") || syncError.includes("timed out")) ? (
             <>
               <Globe className="shrink-0 w-2.5 h-2.5" />
               <span className="truncate">Offline — changes saved locally</span>
