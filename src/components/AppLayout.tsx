@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore, type AppView } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
+import { useContributorIdentity } from "../hooks/useContributorIdentity";
 import { HomePanel } from "./HomePanel";
 import { RecordingPanel } from "./RecordingPanel";
 import { SettingsPanel } from "./SettingsPanel";
@@ -42,7 +43,14 @@ import {
   Download,
   Terminal,
   Bookmark,
+  AlertCircle,
+  UserRound,
+  X,
 } from "lucide-react";
+
+const REQUESTED_SETTINGS_TAB_KEY = "cutready:requested-settings-tab";
+const PROFILE_NUDGE_DISMISSED_KEY = "cutready:profile-nudge-dismissed-v1";
+const PROFILE_NUDGE_DISMISS_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function AppLayout() {
   const view = useAppStore((s) => s.view);
@@ -415,6 +423,11 @@ export function AppLayout() {
     [outputHeight, setOutputHeight],
   );
   const contentView = view === "settings" ? settingsBackgroundView : view;
+  const openProfileSettings = useCallback(() => {
+    localStorage.setItem(REQUESTED_SETTINGS_TAB_KEY, "profile");
+    setSettingsBackgroundView(contentView);
+    setView("settings");
+  }, [contentView, setView]);
   const outputPanelAvailable = contentView !== "home" && contentView !== "chat" && !projectSwitching;
   const outputPanelVisible = outputPanelAvailable && outputVisible;
 
@@ -485,6 +498,11 @@ export function AppLayout() {
         </div>
       )}
 
+      <ProfileSetupNudge
+        visible={view !== "settings"}
+        onOpenProfile={openProfileSettings}
+      />
+
       {chatFocusMode && (
         <div
           data-testid="chat-focus-shell"
@@ -517,6 +535,73 @@ export function AppLayout() {
       <FeedbackDialog isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </div>
   );
+}
+
+function ProfileSetupNudge({
+  visible,
+  onOpenProfile,
+}: {
+  visible: boolean;
+  onOpenProfile: () => void;
+}) {
+  const { identity, error } = useContributorIdentity(visible);
+  const [dismissed, setDismissed] = useState(() => isProfileNudgeDismissed());
+  const dismiss = useCallback(() => {
+    localStorage.setItem(PROFILE_NUDGE_DISMISSED_KEY, Date.now().toString());
+    setDismissed(true);
+  }, []);
+
+  if (!visible || dismissed || error || !identity?.needs_setup) return null;
+
+  return (
+    <div
+      className="fixed left-1/2 z-dropdown w-[min(520px,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-[rgb(var(--color-accent))]/25 bg-[rgb(var(--color-surface))]/95 p-3 shadow-xl shadow-[rgb(var(--color-overlay-scrim))]/10 backdrop-blur-md"
+      style={{ top: "calc(var(--titlebar-height) + 0.75rem)" }}
+      role="status"
+      aria-live="polite"
+    >
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+          <UserRound className="h-4 w-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 text-sm font-semibold text-[rgb(var(--color-text))]">
+            <AlertCircle className="h-3.5 w-3.5 text-[rgb(var(--color-accent))]" />
+            Set your profile
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
+            Add your name and email so snapshots, generated docs, and saved chats are attributed correctly.
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              onClick={onOpenProfile}
+              className="rounded-lg bg-[rgb(var(--color-accent))] px-3 py-1.5 text-xs font-medium text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))]"
+            >
+              Set profile
+            </button>
+            <button
+              onClick={dismiss}
+              className="rounded-lg px-2.5 py-1.5 text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+            >
+              Not now
+            </button>
+          </div>
+        </div>
+        <button
+          onClick={dismiss}
+          className="rounded-lg p-1 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+          aria-label="Dismiss profile reminder"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function isProfileNudgeDismissed() {
+  const dismissedAt = Number(localStorage.getItem(PROFILE_NUDGE_DISMISSED_KEY));
+  return Number.isFinite(dismissedAt) && Date.now() - dismissedAt < PROFILE_NUDGE_DISMISS_MS;
 }
 
 function ProjectSwitchingState() {
