@@ -67,6 +67,21 @@ fn resolve_project_reference(
         }
     }
 
+    if let Ok(chats) = project::scan_chat_artifacts(root) {
+        for chat in &chats {
+            if matches_ref(reference, &chat.path, &chat.title) {
+                let content = project::read_note(&root.join(&chat.path)).ok()?;
+                return Some(ResolvedProjectReference {
+                    id,
+                    reference: reference.to_string(),
+                    name: chat.title.clone(),
+                    content: format_chat_artifact_for_ref(&content),
+                    content_type: "text/markdown".into(),
+                });
+            }
+        }
+    }
+
     if let Ok(storyboards) = project::scan_storyboards(root) {
         for storyboard_summary in &storyboards {
             if matches_ref(
@@ -167,6 +182,8 @@ fn normalize_ref_name(name: &str) -> String {
         .strip_prefix("sketch:")
         .or_else(|| trimmed.strip_prefix("note:"))
         .or_else(|| trimmed.strip_prefix("storyboard:"))
+        .or_else(|| trimmed.strip_prefix("chat-artifact:"))
+        .or_else(|| trimmed.strip_prefix("chat:"))
         .unwrap_or(trimmed);
     without_type
         .trim()
@@ -189,4 +206,68 @@ fn format_sketch_for_ref(sketch: &crate::models::sketch::Sketch) -> String {
         ));
     }
     out
+}
+
+fn format_chat_artifact_for_ref(content: &str) -> String {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(content) else {
+        return content.to_string();
+    };
+
+    let title = value
+        .get("title")
+        .and_then(|item| item.as_str())
+        .unwrap_or("Chat");
+    let mut out = format!("# {title}\n\n");
+
+    if let Some(summary) = value.get("summary").and_then(|item| item.as_str()) {
+        if !summary.trim().is_empty() {
+            out.push_str(summary.trim());
+            out.push_str("\n\n");
+        }
+    }
+
+    if let Some(turns) = value.get("turns").and_then(|item| item.as_array()) {
+        for (index, turn) in turns.iter().enumerate() {
+            let role = turn
+                .get("role")
+                .and_then(|item| item.as_str())
+                .unwrap_or("turn");
+            let text = turn
+                .get("text")
+                .and_then(|item| item.as_str())
+                .unwrap_or("")
+                .trim();
+            if !text.is_empty() {
+                out.push_str(&format!("## Turn {} ({role})\n{text}\n\n", index + 1));
+            }
+        }
+    }
+
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use tempfile::TempDir;
+
+    use super::*;
+
+    #[test]
+    fn resolves_chat_artifact_references() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::create_dir_all(root.join("chat-artifacts")).unwrap();
+        std::fs::write(
+            root.join("chat-artifacts/demo.cv"),
+            r#"{"title":"Demo","turns":[{"role":"user","text":"What should we show?"},{"role":"assistant","text":"Show the payoff."}]}"#,
+        )
+        .unwrap();
+
+        let refs = resolve_project_references(root, &["Use @chat:demo for context".into()]);
+
+        assert_eq!(refs.len(), 1);
+        assert_eq!(refs[0].name, "demo");
+        assert!(refs[0].content.contains("What should we show?"));
+        assert!(refs[0].content.contains("Show the payoff."));
+    }
 }

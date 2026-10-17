@@ -97,6 +97,7 @@ describe("extractMentionReferences", () => {
     { type: "sketch" as const, path: "intro.sk", title: "Intro" },
     { type: "note" as const, path: "notes/setup.md", title: "Setup Notes" },
     { type: "storyboard" as const, path: "demo.sb", title: "Demo Storyboard" },
+    { type: "chat-artifact" as const, path: "chat-artifacts/design-review.cv", title: "Design Review" },
   ];
 
   it("resolves pasted @ mentions into file references", () => {
@@ -106,6 +107,14 @@ describe("extractMentionReferences", () => {
       "sketch:intro.sk",
       "note:notes/setup.md",
       "storyboard:demo.sb",
+    ]);
+  });
+
+  it("resolves saved chat mentions", () => {
+    const refs = extractMentionReferences('Use @"Design Review" and @chat:design-review', files);
+
+    expect(refs.map((ref) => `${ref.type}:${ref.path}`)).toEqual([
+      "chat-artifact:chat-artifacts/design-review.cv",
     ]);
   });
 

@@ -34,7 +34,7 @@ import {
   resolveEffectiveProvider,
   resolveAgentModelOverride,
 } from "../utils/agentProvider";
-import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
+import { ChatArtifactIcon, SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import type { ChatMessage, ChatRunDetails, ChatToolActivity, ChatWorkingNotes } from "../types/sketch";
 import {
   Sparkles,
@@ -548,7 +548,7 @@ export function reconcileMessagesForDisplay(
 }
 
 export interface FileReference {
-  type: "sketch" | "note" | "storyboard" | "web";
+  type: "sketch" | "note" | "storyboard" | "chat-artifact" | "web";
   path: string;
   title: string;
   /** Cached web content (only for type: "web"). */
@@ -559,7 +559,13 @@ export interface FileReference {
   persist?: boolean;
 }
 
-const FILE_REFERENCE_TYPES = new Set<FileReference["type"]>(["sketch", "note", "storyboard"]);
+const FILE_REFERENCE_ALIASES: Record<string, Exclude<FileReference["type"], "web">> = {
+  chat: "chat-artifact",
+  "chat-artifact": "chat-artifact",
+  note: "note",
+  sketch: "sketch",
+  storyboard: "storyboard",
+};
 
 function normalizeMentionToken(value: string): string {
   return value.trim().replace(/[),.;!?]+$/g, "");
@@ -570,13 +576,19 @@ function pathBaseName(path: string): string {
   return name.replace(/\.[^.]+$/, "");
 }
 
+function referenceTypeLabel(type: FileReference["type"] | string): string {
+  return type === "chat-artifact" ? "chat" : type;
+}
+
 function sameReference(a: Pick<FileReference, "type" | "path">, b: Pick<FileReference, "type" | "path">): boolean {
   return a.type === b.type && a.path === b.path;
 }
 
 function findMentionFileReference(token: string, files: FileReference[]): FileReference | null {
-  const prefixed = token.match(/^(sketch|note|storyboard):(.+)$/i);
-  const requestedType = prefixed?.[1].toLowerCase() as FileReference["type"] | undefined;
+  const prefixed = token.match(/^([^:]+):(.+)$/i);
+  const requestedType = prefixed
+    ? FILE_REFERENCE_ALIASES[prefixed[1].toLowerCase()]
+    : undefined;
   const query = normalizeMentionToken(prefixed?.[2] ?? token).toLowerCase();
   if (!query) return null;
 
@@ -609,7 +621,7 @@ export function extractMentionReferences(
     const token = normalizeMentionToken(match[1] ?? match[2] ?? "");
     if (!token || /^(?:web:)?https?:\/\//i.test(token)) continue;
     const prefix = token.match(/^([^:]+):/)?.[1].toLowerCase();
-    if (prefix && !FILE_REFERENCE_TYPES.has(prefix as FileReference["type"])) continue;
+    if (prefix && !FILE_REFERENCE_ALIASES[prefix]) continue;
     const file = findMentionFileReference(token, files);
     if (file) addReference(file);
   }
@@ -760,6 +772,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const sketches = useAppStore((s) => s.sketches);
   const notes = useAppStore((s) => s.notes);
   const storyboards = useAppStore((s) => s.storyboards);
+  const chatArtifacts = useAppStore((s) => s.chatArtifacts);
   const activeSketchPath = useAppStore((s) => s.activeSketchPath);
   const activeStoryboardPath = useAppStore((s) => s.activeStoryboardPath);
   const activeNotePath = useAppStore((s) => s.activeNotePath);
@@ -1172,8 +1185,9 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     for (const s of sketches) files.push({ type: "sketch", path: s.path, title: s.title });
     for (const n of notes) files.push({ type: "note", path: n.path, title: n.title });
     for (const sb of storyboards) files.push({ type: "storyboard", path: sb.path, title: sb.title });
+    for (const chat of chatArtifacts) files.push({ type: "chat-artifact", path: chat.path, title: chat.title });
     return files;
-  }, [sketches, notes, storyboards]);
+  }, [sketches, notes, storyboards, chatArtifacts]);
 
   // Filtered autocomplete options
   const autocompleteOptions = useMemo(() => {
@@ -2088,7 +2102,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                 chatFocusMode ? "max-w-sm" : "max-w-[220px]"
               }`}
             >
-              I can help plan your demo, generate sketches, or refine your script. Use <kbd className="px-1 py-0.5 text-[10px] bg-[rgb(var(--color-surface-alt))] rounded border border-[rgb(var(--color-border))]">@</kbd> to reference files and websites.
+              I can help plan your demo, generate sketches, or refine your script. Use <kbd className="px-1 py-0.5 text-[10px] bg-[rgb(var(--color-surface-alt))] rounded border border-[rgb(var(--color-border))]">@</kbd> to reference project documents and websites.
             </p>
             <div className="flex flex-wrap gap-1.5 justify-center max-w-[260px]">
               {(() => {
@@ -2255,7 +2269,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                 >
                   <FileTypeIcon type={file.type} />
                   <span className="flex-1 truncate">{file.title}</span>
-                  <span className="text-[10px] text-[rgb(var(--color-text-secondary))] opacity-50">{file.type}</span>
+                  <span className="text-[10px] text-[rgb(var(--color-text-secondary))] opacity-50">{referenceTypeLabel(file.type)}</span>
                 </button>
               ))}
             </div>
@@ -2266,7 +2280,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
             className="w-full resize-none bg-transparent px-2.5 py-2 text-[13px] text-[rgb(var(--color-text))] placeholder-[rgb(var(--color-text-secondary))]/60 focus:outline-none leading-[1.5]"
             style={{ maxHeight: 300 }}
             rows={3}
-            placeholder={loading ? "Add guidance for the current response..." : "Ask about your demo plan… (@ to reference files)"}
+            placeholder={loading ? "Add guidance for the current response..." : "Ask about your demo plan… (@ to reference documents)"}
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
@@ -2295,7 +2309,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                 <div className="px-2.5 pt-2 pb-1 shrink-0">
                   <input
                     className="w-full px-2 py-1 text-[11px] bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] rounded text-[rgb(var(--color-text))] placeholder-[rgb(var(--color-text-secondary))] focus:outline-none focus:border-[rgb(var(--color-accent))]"
-                    placeholder="Search files…"
+                    placeholder="Search documents…"
                     value={contextFilter}
                     onChange={(e) => setContextFilter(e.target.value)}
                     autoFocus
@@ -2304,7 +2318,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                 <div className="flex-1 overflow-y-auto">
                   {contextPickerOptions.length === 0 ? (
                     <div className="px-3 py-2 text-[11px] text-[rgb(var(--color-text-secondary))]">
-                      No matching files
+                      No matching documents
                     </div>
                   ) : (
                     contextPickerOptions.map((file) => (
@@ -2319,7 +2333,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                       >
                         <FileTypeIcon type={file.type} />
                         <span className="flex-1 truncate">{file.title}</span>
-                        <span className="text-[10px] opacity-40">{file.type}</span>
+                        <span className="text-[10px] opacity-40">{referenceTypeLabel(file.type)}</span>
                       </button>
                     ))
                   )}
@@ -2566,7 +2580,7 @@ function UserContent({ content }: { content: string }) {
       const refStr = match[2].trim();
       const refs = refStr.split(/,\s*/);
       refs.forEach((ref, i) => {
-        const refMatch = ref.match(/^@(note|sketch|storyboard):(.+)$/);
+        const refMatch = ref.match(/^@(note|sketch|storyboard|chat-artifact):(.+)$/);
         if (refMatch) {
           const [, type, path] = refMatch;
           const c = typeColors(type);
@@ -3519,6 +3533,8 @@ function FileTypeIcon({ type }: { type: string }) {
       return <span className={cls}><NoteIcon size={12} /></span>;
     case "storyboard":
       return <span className={cls}><StoryboardIcon size={12} /></span>;
+    case "chat-artifact":
+      return <span className={cls}><ChatArtifactIcon size={12} /></span>;
     case "web":
       return <span className={cls}><IconGlobe /></span>;
     default:
