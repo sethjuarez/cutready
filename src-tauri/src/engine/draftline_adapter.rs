@@ -30,8 +30,8 @@ const EXCLUDED_RUNTIME_PATHS: &[&str] = &[
 ];
 
 const CUTREADY_CONTENT_EXTENSIONS: &[&str] = &[
-    "sk", "sb", "md", "png", "jpg", "jpeg", "webp", "webm", "ogg", "oga", "mp3", "wav", "m4a",
-    "flac",
+    "sk", "sb", "md", "cv", "png", "jpg", "jpeg", "webp", "webm", "ogg", "oga", "mp3", "wav",
+    "m4a", "flac",
 ];
 const CUTREADY_INCLUDED_PATHS: &[&str] = &[
     ".cutready/projects.json",

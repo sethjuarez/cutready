@@ -10,7 +10,10 @@ import { contentTypeTone } from "../utils/contentTypeTheme";
 
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useAiApplyGateStore } from "../stores/aiApplyGateStore";
+import { useToastStore } from "../stores/toastStore";
 import { loadProviderSecrets } from "../hooks/useSecretStore";
+import { getContributorIdentity } from "../services/identity";
+import { promoteChatArtifact } from "../contracts/chatPromotion";
 import { useSettings, type AgentPreset, type AiReasoningEffort } from "../hooks/useSettings";
 import { BUILT_IN_AGENTS, resolveAgentPrompt } from "../agents/builtInAgents";
 import {
@@ -788,6 +791,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const openNote = useAppStore((s) => s.openNote);
   const openStoryboard = useAppStore((s) => s.openStoryboard);
   const pendingChatPrompt = useAppStore((s) => s.pendingChatPrompt);
+  const showToast = useToastStore((s) => s.show);
 
   const [references, setReferences] = useState<FileReference[]>([]);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
@@ -798,6 +802,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showReasoningPicker, setShowReasoningPicker] = useState(false);
   const [showAgentPicker, setShowAgentPicker] = useState(false);
+  const [promotingChat, setPromotingChat] = useState(false);
   const [expandedWebRef, setExpandedWebRef] = useState<string | null>(null);
   const streamingText = useAppStore((s) => s.chatStreamingText);
   const streamingThinking = useAppStore((s) => s.chatStreamingThinking);
@@ -1876,6 +1881,73 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     setReferences([]);
   }, [newChatSession]);
 
+  const promoteCurrentChat = useCallback(async () => {
+    if (promotingChat || messages.length === 0) return;
+    setPromotingChat(true);
+    try {
+      let identity = {
+        name: "CutReady User",
+        email: null as string | null,
+      };
+      try {
+        identity = await getContributorIdentity();
+      } catch (identityError) {
+        console.warn("Could not resolve contributor identity for chat promotion:", identityError);
+      }
+
+      const promotedAt = new Date().toISOString();
+      const title = chatSessionTitle(messages);
+      const slug = title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 64) || "chat";
+      const stamp = promotedAt.replace(/\D/g, "").slice(0, 14);
+      const relativePath = `chat-artifacts/${slug}-${stamp}.cv`;
+      const participant = {
+        name: identity.name || "CutReady User",
+        ...(identity.email ? { email: identity.email } : {}),
+      };
+      const artifact = promoteChatArtifact(
+        {
+          session_id: chatSessionPath ?? `chat-${stamp}`,
+          messages,
+        },
+        {
+          title,
+          author: participant,
+          promoted_by: participant,
+          promoted_at: promotedAt,
+        },
+      );
+      const content = `${JSON.stringify(artifact, null, 2)}\n`;
+
+      await invoke("update_note", { relativePath, content });
+      await refreshChangedFiles();
+      await openNote(relativePath);
+      addActivityEntries([{
+        id: crypto.randomUUID(),
+        timestamp: new Date(),
+        source: "chat",
+        content: `Promoted chat to ${relativePath}`,
+        level: "success",
+      }]);
+      showToast(`Promoted chat to ${relativePath}`, 5000, "success");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      addActivityEntries([{
+        id: crypto.randomUUID(),
+        timestamp: new Date(),
+        source: "chat",
+        content: `Could not promote chat: ${message}`,
+        level: "error",
+      }]);
+      showToast(`Could not promote chat: ${message}`, 7000, "error");
+    } finally {
+      setPromotingChat(false);
+    }
+  }, [addActivityEntries, chatSessionPath, messages, openNote, promotingChat, refreshChangedFiles, showToast]);
+
   const isConfigured = providerConfigured === true;
 
   if (!currentProject) {
@@ -1948,6 +2020,16 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
             aria-label="New Chat"
           >
             <IconPlus size={14} />
+          </button>
+          <button
+            disabled={loading || promotingChat || messages.length === 0}
+            className="flex h-[26px] items-center justify-center gap-1.5 rounded px-2 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-toolbar))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={promoteCurrentChat}
+            title={messages.length === 0 ? "Start a chat before promoting it" : "Promote this chat into a project .cv file"}
+            aria-label="Promote chat"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            <span>{promotingChat ? "Promoting..." : "Promote"}</span>
           </button>
           <div className="flex-1" />
           <button
