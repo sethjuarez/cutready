@@ -30,6 +30,7 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
   const providers = settings.aiProviders?.length ? settings.aiProviders : [];
   const selectedProvider = activeProvider(settings);
   const defaultProvider = providers.find((provider) => provider.id === settings.aiDefaultProviderId) ?? selectedProvider;
+  const selectedIsDefault = !!selectedProvider && selectedProvider.id === settings.aiDefaultProviderId;
   const activeModel = selectedProvider?.model || settings.aiModel || "";
   const activeBaseModel = selectedProvider?.modelBaseModel || settings.aiModelBaseModel || "";
   const reasoningEfforts = useMemo(
@@ -122,6 +123,10 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
     }
     setModels([]);
   };
+  const makeSelectedDefault = async () => {
+    if (!selectedProvider || selectedIsDefault) return;
+    await updateSetting("aiDefaultProviderId", selectedProvider.id);
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -149,7 +154,7 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
           <div className="max-w-xl">
             <h3 className="text-sm font-semibold text-[rgb(var(--color-text))]">Connections</h3>
             <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
-              Manage provider connections here. Selecting a card only edits that connection; the Default badge controls runtime routing for chat, notes, and agents.
+              Manage provider connections here. Selecting a card edits that connection; the Chat & agents badge shows which connection actually runs AI turns.
             </p>
           </div>
           <div className="flex flex-col gap-2 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-2 sm:flex-row sm:items-center">
@@ -194,8 +199,8 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
                 <div className="flex items-start gap-2">
                   <span className="truncate text-sm font-medium text-[rgb(var(--color-text))]">{provider.name}</span>
                   <div className="flex-1" />
-                  {selected && <span className="rounded-full bg-[rgb(var(--color-accent))]/15 px-1.5 py-0.5 text-[10px] font-medium text-[rgb(var(--color-accent))]">Editing</span>}
-                  {defaultProvider && <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))]">Default</span>}
+                  {selected && <span className="rounded-full bg-[rgb(var(--color-accent))]/15 px-1.5 py-0.5 text-[10px] font-medium text-[rgb(var(--color-accent))]">Editing settings</span>}
+                  {defaultProvider && <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))]">Chat & agents</span>}
                 </div>
                 <div className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
                   {providerLabel(provider.provider)} · {provider.model || "No model selected"}
@@ -211,6 +216,23 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
 
         {selectedProvider && (
           <div className="mt-4 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-3">
+            {!selectedIsDefault && (
+              <div className="mb-3 flex flex-col gap-3 rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="font-semibold text-[rgb(var(--color-text))]">This connection is not used for chat yet.</div>
+                  <p className="mt-1 text-[rgb(var(--color-text-secondary))]">
+                    You are editing {selectedProvider.name}, but chat and agents still use {defaultProvider?.name ?? "the current default"}.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void makeSelectedDefault()}
+                  className="rounded-lg bg-[rgb(var(--color-accent))] px-3 py-2 text-xs font-semibold text-[rgb(var(--color-accent-fg))] transition-opacity hover:opacity-90"
+                >
+                  Use for chat and agents
+                </button>
+              </div>
+            )}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
               <label className="block flex-1 space-y-1.5">
                 <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))]">Connection name</span>
@@ -222,11 +244,15 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
               </label>
               <button
                 type="button"
-                onClick={() => updateSetting("aiDefaultProviderId", selectedProvider.id)}
-                disabled={settings.aiDefaultProviderId === selectedProvider.id}
-                className="rounded-lg border border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] disabled:opacity-50"
+                onClick={() => void makeSelectedDefault()}
+                disabled={selectedIsDefault}
+                className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors disabled:opacity-50 ${
+                  selectedIsDefault
+                    ? "border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))]"
+                    : "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:opacity-90"
+                }`}
               >
-                {settings.aiDefaultProviderId === selectedProvider.id ? "Default provider" : "Set as default"}
+                {selectedIsDefault ? "Used by chat & agents" : "Use for chat & agents"}
               </button>
               <button
                 type="button"
@@ -251,7 +277,7 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
 
       {defaultProvider && (
         <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">Runtime default</div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">Chat and agents use</div>
           <div className="mt-1 text-sm text-[rgb(var(--color-text))]">
             {defaultProvider.name} <span className="text-[rgb(var(--color-text-secondary))]">· {defaultProvider.model || "No model selected"}</span>
           </div>
