@@ -895,6 +895,70 @@ fn responses_replay_history_drops_orphan_tool_results() {
 }
 
 #[tokio::test]
+async fn responses_continuation_sanitizes_persisted_replay_history() {
+    let project = tempfile::tempdir().unwrap();
+    let provider = ScriptedModelPort::new([ScriptedReply::Completion("next answer".into())]);
+    let model: Arc<dyn ModelPort> = provider.clone();
+    let assistant = ChatMessage::assistant_with_tool_calls(vec![ToolCall {
+        id: "call-1".into(),
+        call_type: "function".into(),
+        function: FunctionCall {
+            name: "inspect".into(),
+            arguments: "{}".into(),
+        },
+    }]);
+
+    let result = run(
+        model,
+        "scripted".into(),
+        "scripted-model".into(),
+        20_000,
+        HistoryStrategy::ResponsesContinuation,
+        vec![
+            ChatMessage::user("first turn"),
+            assistant,
+            ChatMessage::tool_result("call-1", "tool output"),
+            ChatMessage::assistant("Final answer."),
+            ChatMessage::user("next turn"),
+        ],
+        project.path(),
+        project.path(),
+        "planner",
+        &HashMap::new(),
+        PromptySteering::new(),
+        &VisionConfig { enabled: true },
+        &WebAccessConfig {
+            search_enabled: false,
+        },
+        false,
+        3,
+        Vec::new(),
+        Some("responses-continuation-replay".into()),
+        fake_host(),
+        None,
+        RunCancellation::new(),
+        |_event| {},
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(result.response, "next answer");
+    let requests = provider.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0]
+            .iter()
+            .map(|message| (message.role.as_str(), message.text().unwrap_or("")))
+            .collect::<Vec<_>>(),
+        [
+            ("user", "first turn"),
+            ("assistant", "Final answer."),
+            ("user", "next turn")
+        ]
+    );
+}
+
+#[tokio::test]
 async fn prompty_host_event_callback_panics_cannot_change_committed_result() {
     let project = tempfile::tempdir().unwrap();
     let provider = ScriptedModelPort::new([ScriptedReply::Completion("durably complete".into())]);

@@ -10,6 +10,7 @@ import { ToastContainer } from "./components/ToastContainer";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AppCloseGuard } from "./components/AppCloseGuard";
 import { invoke, listen } from "./services/tauri";
+import { commandRegistry } from "./services/commandRegistry";
 import { onWorkspaceSnapshotDeferred } from "./services/identity";
 import { isMac } from "./utils/platform";
 
@@ -158,7 +159,7 @@ function App() {
       <div className={`h-full bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]${isMac ? " mac-window-shell" : ""}`}>
         <AppLayout />
         <AppCloseGuard />
-        <StatusBar />
+        <StatusBar onFeedback={() => commandRegistry.execute("view.sendFeedback")} />
         <ToastContainer />
       </div>
     </ErrorBoundary>

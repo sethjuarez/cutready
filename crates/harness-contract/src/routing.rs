@@ -100,10 +100,7 @@ impl std::fmt::Display for RouteError {
                 write!(f, "Model '{model}' does not support agent tool calling")
             }
             Self::VisionUnsupported(model) => {
-                write!(
-                    f,
-                    "Model '{model}' does not support the requested vision input"
-                )
+                write!(f, "Model '{model}' does not support the requested vision input")
             }
             Self::RouteUnsupported(route) => write!(f, "Selected harness cannot run {route}"),
         }
@@ -135,6 +132,18 @@ pub fn harness_route_capabilities(harness_id: &str) -> HarnessRouteCapabilities 
             reasoning_effort: true,
             sanitized_replay: true,
             stateful_continuation: false,
+        },
+        "prompty" => HarnessRouteCapabilities {
+            provider_owned: false,
+            external_model_selection: true,
+            chat_completions: true,
+            responses: true,
+            anthropic_messages: true,
+            tool_calling: true,
+            vision: true,
+            reasoning_effort: true,
+            sanitized_replay: true,
+            stateful_continuation: true,
         },
         _ => HarnessRouteCapabilities {
             provider_owned: false,
@@ -402,7 +411,27 @@ mod tests {
         assert_eq!(route.api_route, ModelApiRoute::Responses);
         assert_eq!(
             route.history_strategy,
-            HistoryStrategy::ResponsesSanitizedReplay
+            HistoryStrategy::ResponsesContinuation
+        );
+        assert_eq!(route.effective_reasoning_effort.as_deref(), Some("high"));
+    }
+
+    #[test]
+    fn routes_gpt5_pro_to_responses_continuation_for_prompty() {
+        let route = resolve_agent_model_route(
+            LlmProvider::Openai,
+            "gpt-5.5-pro",
+            "prompty",
+            requirements(),
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(route.api_route, ModelApiRoute::Responses);
+        assert_eq!(
+            route.history_strategy,
+            HistoryStrategy::ResponsesContinuation
         );
         assert_eq!(route.effective_reasoning_effort.as_deref(), Some("high"));
     }
@@ -458,10 +487,7 @@ mod tests {
 
         assert_eq!(route.identity.requested_model, "demo-deployment");
         assert_eq!(route.identity.base_model, "gpt-6-astra");
-        assert_eq!(
-            route.identity.deployment_id.as_deref(),
-            Some("demo-deployment")
-        );
+        assert_eq!(route.identity.deployment_id.as_deref(), Some("demo-deployment"));
         assert_eq!(route.api_route, ModelApiRoute::Responses);
         assert_eq!(route.effective_reasoning_effort.as_deref(), Some("high"));
     }

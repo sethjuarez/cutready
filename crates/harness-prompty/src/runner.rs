@@ -475,7 +475,9 @@ async fn run_turn(turn: PromptyTurn) -> Result<RunResult, String> {
     );
 
     let (messages, sanitized_history_messages) = match history_strategy {
-        HistoryStrategy::ResponsesSanitizedReplay => sanitize_responses_replay_history(messages),
+        HistoryStrategy::ResponsesSanitizedReplay | HistoryStrategy::ResponsesContinuation => {
+            sanitize_responses_replay_history(messages)
+        }
         _ => (messages, 0),
     };
     if sanitized_history_messages > 0 {
