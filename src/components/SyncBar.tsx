@@ -3,6 +3,7 @@ import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
 import { Check, ArrowUp, ArrowDown, AlertTriangle, GitMerge, Globe, RefreshCw, UserRound } from "lucide-react";
 import { isContributorIdentityRequired } from "../services/identity";
+import { isDraftlineGuidanceMessage } from "../services/draftlineErrors";
 
 /**
  * SyncBar — shown at the top of the Snapshots panel when a remote is configured.
@@ -87,7 +88,8 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
   let actionFn = syncWithRemote;
   if (ahead > 0 && behind === 0) {
     actionLabel = "Push";
-    compactActionLabel = "Share changes";
+    // Hybrid projects never push directly: this opens the Send for review prompt.
+    compactActionLabel = isHybrid ? "Send for review" : "Share changes";
     compactButtonLabel = "Send";
     actionFn = pushToRemote;
   } else if (behind > 0 && ahead === 0) {
@@ -103,7 +105,11 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
       : actionLabel === "Pull"
         ? ArrowDown
         : RefreshCw;
-  const actionTitle = isSyncing ? "Syncing with collaborators" : `${compactActionLabel} with collaborators`;
+  const actionTitle = isSyncing
+    ? "Syncing with collaborators"
+    : isHybrid && actionFn === pushToRemote
+      ? "Send for review"
+      : `${compactActionLabel} with collaborators`;
 
   // Hybrid projects on a review branch: offer the base's new commits (e.g. from developers on main).
   const baseBehind = isHybrid && baseStatus ? baseStatus.behind : 0;
@@ -298,7 +304,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
               <UserRound className="shrink-0 w-2.5 h-2.5" />
               <span className="truncate">Add your name and email in Settings › Profile</span>
             </>
-          ) : syncError.startsWith("A developer needs to bring") ? (
+          ) : isDraftlineGuidanceMessage(syncError) ? (
             <>
               <AlertTriangle className="shrink-0 w-2.5 h-2.5" />
               <span className="truncate">{syncError}</span>

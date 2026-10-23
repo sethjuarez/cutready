@@ -22,7 +22,7 @@ import {
   type DraftlinePreviewFile,
   type DraftlineVariationCreatePreflight,
 } from "../services/draftlineVersioning";
-import { useAppStore } from "../stores/appStore";
+import { errorMessage, useAppStore } from "../stores/appStore";
 import type { DiffEntry } from "../types/sketch";
 import type { ProjectEntry, ProjectView } from "../types/project";
 import { draftlineToRepoPath, hybridVariationName } from "../utils/draftlinePaths";
@@ -174,7 +174,7 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
         setRestoreMenuOpen(true);
         return;
       }
-      setRestoreError(`Restore failed: ${err}`);
+      setRestoreError(`Restore failed: ${errorMessage(err)}`);
     } finally {
       setRestoring(false);
     }
@@ -196,7 +196,7 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
       setRestoreConflict(null);
       setRestoreMenuOpen(false);
     } catch (err) {
-      setRestoreError(`Adopt failed: ${err}`);
+      setRestoreError(`Adopt failed: ${errorMessage(err)}`);
     } finally {
       setRestoring(false);
     }

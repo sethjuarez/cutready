@@ -2099,7 +2099,7 @@ dependencies = [
 [[package]]
 name = "draftline"
 version = "0.5.0"
-source = "git+https://github.com/sethjuarez/draftline?rev=c217025#c21702584d0ebd27d6e3e00fc8aceef12b7e0582"
+source = "git+https://github.com/sethjuarez/draftline?rev=b3b63fa#b3b63faa42b7f980d8c9586a4229235f8244ac98"
 dependencies = [
  "git2",
  "serde",
@@ -8645,7 +8645,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.4",
  "windows-sys 0.59.0",

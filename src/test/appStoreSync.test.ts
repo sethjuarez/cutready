@@ -30,6 +30,7 @@ vi.mock("../services/githubSetup", () => ({
 }));
 
 import { mergeNeedsDeveloperMessage, remoteSyncErrorMessage, useAppStore } from "../stores/appStore";
+import { GIT_INDEX_LOCKED_MESSAGE, SEND_OUTSIDE_NAMESPACE_MESSAGE } from "../services/draftlineErrors";
 import { useToastStore } from "../stores/toastStore";
 describe("appStore remote sync status", () => {
   afterEach(() => {
@@ -379,6 +380,93 @@ describe("appStore remote sync status", () => {
     // Send may have switched branches before failing, so state is refreshed anyway.
     expect(loadTimelines).toHaveBeenCalled();
     expect(useToastStore.getState().toasts).toEqual([]);
+    expect(useAppStore.getState().isSyncing).toBe(false);
+  });
+
+  it("explains coded send-for-review failures in plain language", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    mockSendForReview.mockRejectedValueOnce({
+      code: "send_outside_namespace",
+      message: "branch `feature/login` is not a variation; switch to one or to the base branch to send",
+    });
+    useAppStore.setState({
+      currentProject: { root: "D:\\contoso-app\\cutready", name: "cutready", repo_root: "D:\\contoso-app\\cutready", hybrid: true },
+      currentRemote: { name: "origin", url: "https://github.com/contoso/app.git" },
+      checkLargeFiles: async () => [],
+      loadTimelines: async () => {},
+      checkDirty: async () => {},
+      refreshChangedFiles: async () => {},
+      loadGraphData: async () => {},
+      loadVersions: async () => {},
+    });
+
+    await useAppStore.getState().sendForReview("Launch demo");
+
+    expect(useAppStore.getState().syncError).toBe(SEND_OUTSIDE_NAMESPACE_MESSAGE);
+  });
+
+  it("routes a hybrid publishTimeline through the Send for review prompt", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    useAppStore.setState({
+      currentProject: { root: "D:\\contoso-app\\cutready", name: "cutready", repo_root: "D:\\contoso-app\\cutready", hybrid: true },
+      currentRemote: { name: "origin", url: "https://github.com/contoso/app.git" },
+      timelines: [{ name: "cutready/intro", label: "intro", is_active: true, snapshot_count: 2, color_index: 0 }],
+      versions: [{ id: "abc", message: "Tighten intro narration", timestamp: "", summary: "" }],
+    });
+
+    await useAppStore.getState().publishTimeline();
+
+    expect(mockPublishDraftlineChanges).not.toHaveBeenCalled();
+    expect(useAppStore.getState().sendForReviewPrompt).toEqual({ defaultTitle: "Tighten intro narration" });
+  });
+
+  it("routes a hybrid shareChanges through the Send for review prompt without a branch link", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    useAppStore.setState({
+      currentProject: { root: "D:\\contoso-app\\cutready", name: "cutready", repo_root: "D:\\contoso-app\\cutready", hybrid: true },
+      currentRemote: { name: "origin", url: "https://github.com/contoso/app.git" },
+      timelines: [{ name: "cutready/intro", label: "intro", is_active: true, snapshot_count: 2, color_index: 0 }],
+      versions: [{ id: "abc", message: "Tighten intro narration", timestamp: "", summary: "" }],
+    });
+
+    await useAppStore.getState().shareChanges();
+
+    expect(mockPublishDraftlineChanges).not.toHaveBeenCalled();
+    expect(useAppStore.getState().sendForReviewPrompt).toEqual({ defaultTitle: "Tighten intro narration" });
+    expect(useAppStore.getState().shareUrl).toBeNull();
+  });
+
+  it("publishes a standalone timeline directly", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    mockPublishDraftlineChanges.mockResolvedValueOnce(undefined);
+    mockGetDraftlineSyncStatus.mockResolvedValueOnce({ ahead: 0, behind: 0 });
+    useAppStore.setState({
+      currentProject: { root: "D:\\demo", name: "demo", repo_root: "D:\\demo" },
+      currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
+      timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 2, color_index: 0 }],
+    });
+
+    await useAppStore.getState().publishTimeline();
+
+    expect(mockPublishDraftlineChanges).toHaveBeenCalledWith("origin");
+    expect(useAppStore.getState().sendForReviewPrompt).toBeNull();
+  });
+
+  it("explains a refused publish while Git holds the index", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    mockPublishDraftlineChanges.mockRejectedValueOnce({
+      code: "git_index_locked",
+      message: "Git is busy in this repository (.git/index.lock exists); try again when it finishes",
+    });
+    useAppStore.setState({
+      currentProject: { root: "D:\\demo", name: "demo", repo_root: "D:\\demo" },
+      currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
+      timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 2, color_index: 0 }],
+    });
+
+    await useAppStore.getState().publishTimeline();
+
+    expect(useAppStore.getState().syncError).toBe(GIT_INDEX_LOCKED_MESSAGE);
     expect(useAppStore.getState().isSyncing).toBe(false);
   });
 

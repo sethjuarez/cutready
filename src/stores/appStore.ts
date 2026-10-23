@@ -43,6 +43,12 @@ import {
   type DraftlineRestoreVersionTarget,
   type DraftlineMergeIncomingToken,
 } from "../services/draftlineVersioning";
+import {
+  DraftlineErrorCode,
+  draftlineErrorCode,
+  friendlyDraftlineErrorMessage,
+  mergeNeedsDeveloperMessage,
+} from "../services/draftlineErrors";
 import { recordActivityEntries } from "../services/telemetry";
 import { getGitHubAuthStatus } from "../services/githubSetup";
 import { useToastStore } from "./toastStore";
@@ -81,6 +87,8 @@ const suppressedEditorFlushPaths = new Set<string>();
 /** The Output panel keeps a rolling window; full history lives in telemetry/run state. */
 export const MAX_ACTIVITY_ENTRIES = 1000;
 export function errorMessage(error: unknown): string {
+  const friendly = friendlyDraftlineErrorMessage(error);
+  if (friendly) return friendly;
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   if (error && typeof error === "object") {
@@ -143,14 +151,12 @@ export function remoteSyncErrorMessage(error: unknown): string {
 export const SYNC_IN_PROGRESS_MESSAGE = "A sync is already running. Wait for it to finish, then try again.";
 
 /** Draftline error code: bringing in the base conflicts in files outside the CutReady folder. */
-export const MERGE_NEEDS_DEVELOPER = "merge_needs_developer";
+export const MERGE_NEEDS_DEVELOPER = DraftlineErrorCode.MergeNeedsDeveloper;
 
-export function mergeNeedsDeveloperMessage(base: string): string {
-  return `A developer needs to bring ${base} into this branch: files outside the CutReady folder conflict.`;
-}
+export { mergeNeedsDeveloperMessage };
 
 function isMergeNeedsDeveloperError(error: unknown): boolean {
-  if (error && typeof error === "object" && (error as { code?: unknown }).code === MERGE_NEEDS_DEVELOPER) return true;
+  if (draftlineErrorCode(error) === MERGE_NEEDS_DEVELOPER) return true;
   return errorMessage(error).toLowerCase().includes("merge needs a developer");
 }
 
@@ -2490,7 +2496,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       get().refreshChangedFiles();
     } catch (err) {
       console.error("Failed to check dirty state:", err);
-      useToastStore.getState().show(`Could not check project changes: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Could not check project changes: ${errorMessage(err)}`, 5000, "error");
     }
   },
 
@@ -2578,7 +2584,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } catch (err) {
       clearSuppressedEditorFlushes(suppressedPaths);
       console.error("Failed to discard changes:", err);
-      useToastStore.getState().show(`Discard failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Discard failed: ${errorMessage(err)}`, 5000, "error");
       await get().checkDirty();
     }
   },
@@ -2700,7 +2706,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } catch (err) {
       clearSuppressedEditorFlushes(suppressedPaths);
       console.error("Failed to discard file:", err);
-      useToastStore.getState().show(`Discard failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Discard failed: ${errorMessage(err)}`, 5000, "error");
       await get().checkDirty();
     }
   },
@@ -2752,7 +2758,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       });
     } catch (err) {
       console.error("Failed to preview snapshot:", err);
-      useToastStore.getState().show(`Snapshot preview failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Snapshot preview failed: ${errorMessage(err)}`, 5000, "error");
     }
   },
 
@@ -2805,7 +2811,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } catch (err) {
       console.error("Failed to create timeline:", err);
       if (!isDraftlineVariationCreateConflictError(err)) {
-        useToastStore.getState().show(`Branch creation failed: ${err}`, 5000, "error");
+        useToastStore.getState().show(`Branch creation failed: ${errorMessage(err)}`, 5000, "error");
       }
       throw err;
     }
@@ -2826,7 +2832,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       ));
       console.error("Failed to start branch from snapshot:", err);
       if (!isDraftlineVariationCreateConflictError(err)) {
-        useToastStore.getState().show(`Start branch failed: ${err}`, 5000, "error");
+        useToastStore.getState().show(`Start branch failed: ${errorMessage(err)}`, 5000, "error");
       }
       throw err;
     }
@@ -2924,7 +2930,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       useToastStore.getState().show("Renamed Draftline branch master to main.", 5000, "success");
     } catch (err) {
       console.error("Failed to rename Draftline branch:", err);
-      useToastStore.getState().show(`Rename failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Rename failed: ${errorMessage(err)}`, 5000, "error");
     }
   },
 
@@ -2942,7 +2948,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       useToastStore.getState().show("Branch deleted.", 4000, "success");
     } catch (err) {
       console.error("Failed to delete timeline:", err);
-      useToastStore.getState().show(`Delete failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Delete failed: ${errorMessage(err)}`, 5000, "error");
     }
   },
 
@@ -3364,6 +3370,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   publishTimeline: async () => {
+    // Hybrid projects never publish directly; they go through Send for review.
+    if (get().currentProject?.hybrid) {
+      await get().pushToRemote();
+      return;
+    }
     const { currentRemote, timelines } = get();
     if (!currentRemote) return;
     if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
@@ -3374,7 +3385,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await publishDraftlineChanges(currentRemote.name);
       await get().refreshSyncStatus();
     } catch (err) {
-      set({ syncError: errorMessage(err) });
+      set({ syncError: remoteSyncErrorMessage(err) });
     } finally {
       set({ isSyncing: false });
     }
@@ -3455,7 +3466,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } catch (err) {
       console.error("Failed to diff snapshots:", err);
       if (generation === workspaceGeneration) set({ diffResult: null, diffSelection: null });
-      useToastStore.getState().show(`Could not compare snapshots: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Could not compare snapshots: ${errorMessage(err)}`, 5000, "error");
       return [];
     }
   },

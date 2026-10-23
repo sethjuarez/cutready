@@ -155,4 +155,46 @@ describe("SyncBar", () => {
 
     expect(screen.queryByRole("button", { name: /get updates from main/i })).not.toBeInTheDocument();
   });
+
+  it("labels the hybrid primary action as Send for review", async () => {
+    const pushToRemote = vi.fn(() => Promise.resolve());
+    act(() => {
+      useAppStore.setState({
+        currentProject: { root: "D:\\app\\cutready", name: "cutready", repo_root: "D:\\app\\cutready", hybrid: true },
+        currentRemote: { name: "origin", url: "https://github.com/example/repo.git" },
+        syncStatus: { ahead: 2, behind: 0 },
+        timelines: [{ name: "cutready/launch", label: "cutready/launch", is_active: true, snapshot_count: 1, color_index: 0 }],
+        detectRemote: vi.fn(() => Promise.resolve()),
+        fetchFromRemote: vi.fn(() => Promise.resolve()),
+        pushToRemote,
+      });
+    });
+
+    render(<SyncBar />);
+
+    const button = screen.getByRole("button", { name: /send for review/i });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    expect(pushToRemote).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows plain-language Draftline guidance as-is even when it mentions a GitHub path", () => {
+    const message = "An interrupted change has to be finished in the other project that started it (D:\\github\\deck). Open that project in CutReady to finish it, then try again.";
+    act(() => {
+      useAppStore.setState({
+        currentRemote: { name: "origin", url: "https://github.com/example/repo.git" },
+        syncStatus: { ahead: 1, behind: 0 },
+        syncError: message,
+        timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 1, color_index: 0 }],
+        detectRemote: vi.fn(() => Promise.resolve()),
+        fetchFromRemote: vi.fn(() => Promise.resolve()),
+      });
+    });
+
+    render(<SyncBar />);
+
+    expect(screen.getByText(message)).toBeInTheDocument();
+    expect(screen.queryByText("GitHub sign-in required — reconnect in Settings")).not.toBeInTheDocument();
+  });
 });
