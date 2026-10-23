@@ -357,7 +357,7 @@ describe("draftlineVersioning", () => {
         postconditions: { workspace_changed: true, active_variation: "main", dirty_files: [] },
       });
 
-    await expect(createDraftlineVariation(token.from_version, "feature", "origin")).resolves.toBeUndefined();
+    await expect(createDraftlineVariation(token.from_version, "feature", "origin")).resolves.toBe("feature");
     expect(mockInvoke).toHaveBeenNthCalledWith(1, "preflight_create_variation_from_version", {
       request: {
         workspace_path: WORKSPACE,

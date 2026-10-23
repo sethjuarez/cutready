@@ -696,6 +696,8 @@ pub fn run() {
             commands::draftline::list_variations,
             commands::draftline::preflight_rename_variation,
             commands::draftline::rename_variation,
+            commands::draftline::preflight_create_variation_from_version,
+            commands::draftline::create_variation_from_version_guarded,
             commands::draftline::delete_variation,
             commands::draftline::preflight_switch_variation,
             commands::draftline::switch_variation,

@@ -25,6 +25,7 @@ import { TimelineSelector } from "./TimelineSelector";
 import { useConfirmDialog } from "./ConfirmDialog";
 import type { DiffEntry } from "../types/sketch";
 import { firstParentTimelineNodes } from "../utils/timelineNodes";
+import { draftlineToRepoPath } from "../utils/draftlinePaths";
 
 export function ChangesPanel() {
   const changedFiles = useAppStore((s) => s.changedFiles);
@@ -124,7 +125,9 @@ export function ChangesPanel() {
     && head?.id === startedBranchFromSnapshot.snapshotId
     ? startedBranchFromSnapshot
     : null;
-  const hasLegacyMasterTimeline = timelines.some((timeline) => timeline.name === "master")
+  // A hybrid project's `master` is the developer's own branch; leave it alone.
+  const hasLegacyMasterTimeline = !currentProject?.hybrid
+    && timelines.some((timeline) => timeline.name === "master")
     && !timelines.some((timeline) => timeline.name === "main");
   const activeNodes = firstParentTimelineNodes(graphNodes);
 
@@ -215,7 +218,7 @@ export function ChangesPanel() {
     ? null
     : projects.find((project) => project.path === projectFilter) ?? null;
   const filteredChangedFiles = selectedProjectFilter
-    ? changedFiles.filter((file) => fileBelongsToProject(file.path, selectedProjectFilter.path))
+    ? changedFiles.filter((file) => fileBelongsToProject(draftlineToRepoPath(file.path, currentProject), selectedProjectFilter.path))
     : changedFiles;
   const added = filteredChangedFiles.filter((f) => f.status === "added");
   const modified = filteredChangedFiles.filter((f) => f.status === "modified");
@@ -266,7 +269,7 @@ export function ChangesPanel() {
         </button>
         {selectableProjects.map((project) => {
           const selected = projectFilter === project.path;
-          const projectChangeCount = changedFiles.filter((file) => fileBelongsToProject(file.path, project.path)).length;
+          const projectChangeCount = changedFiles.filter((file) => fileBelongsToProject(draftlineToRepoPath(file.path, currentProject), project.path)).length;
           return (
             <button
               key={project.path}
@@ -708,6 +711,7 @@ function isDatabasePath(path: string): boolean {
 function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; icon: ReactNode }) {
   const openTab = useAppStore((s) => s.openTab);
   const openDatabase = useAppStore((s) => s.openDatabase);
+  const currentProject = useAppStore((s) => s.currentProject);
   const discardFile = useAppStore((s) => s.discardFile);
   const { confirm, confirmationDialog } = useConfirmDialog();
 
@@ -729,7 +733,7 @@ function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; 
               <button
                 onClick={() => {
                   if (isDatabasePath(file.path) && file.status !== "deleted") {
-                    openDatabase(file.path);
+                    openDatabase(draftlineToRepoPath(file.path, currentProject));
                   } else {
                     openTab({ type: "diff", path: file.path, title: `${filename} (diff)` });
                   }

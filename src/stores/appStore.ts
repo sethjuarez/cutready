@@ -43,6 +43,7 @@ import { recordActivityEntries } from "../services/telemetry";
 import { getGitHubAuthStatus } from "../services/githubSetup";
 import { useToastStore } from "./toastStore";
 import { getStoryboardSketchPaths } from "../utils/storyboard";
+import { draftlinePathVariants } from "../utils/draftlinePaths";
 import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
 import type {
   BrowserProfile,
@@ -175,34 +176,9 @@ function normalizeRelativePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\.\/+/, "").replace(/^\/+/, "").replace(/\/+$/, "");
 }
 
-function normalizeAbsolutePath(path: string): string {
-  return path.replace(/\\/g, "/").replace(/\/+$/, "");
-}
-
-function activeProjectScope(currentProject: ProjectView | null): string | null {
-  if (!currentProject) return null;
-  const root = normalizeAbsolutePath(currentProject.root);
-  const repoRoot = normalizeAbsolutePath(currentProject.repo_root);
-  if (root.toLowerCase() === repoRoot.toLowerCase()) return null;
-  const repoPrefix = `${repoRoot}/`;
-  if (!root.toLowerCase().startsWith(repoPrefix.toLowerCase())) return null;
-  return normalizeRelativePath(root.slice(repoPrefix.length));
-}
-
 function scopedPathVariants(filePath: string, currentProject: ProjectView | null) {
-  const normalized = normalizeRelativePath(filePath);
-  const scope = activeProjectScope(currentProject);
-  if (!scope) {
-    return { repoPath: normalized, projectPath: normalized };
-  }
-  if (normalized === scope) {
-    return { repoPath: normalized, projectPath: "" };
-  }
-  const scopePrefix = `${scope}/`;
-  if (normalized.startsWith(scopePrefix)) {
-    return { repoPath: normalized, projectPath: normalized.slice(scopePrefix.length) };
-  }
-  return { repoPath: `${scopePrefix}${normalized}`, projectPath: normalized };
+  const { draftlinePath, projectPath } = draftlinePathVariants(filePath, currentProject);
+  return { repoPath: draftlinePath, projectPath };
 }
 
 /** The panels / views available in the app. */
@@ -2795,14 +2771,15 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   startTimelineFromSnapshot: async (fromCommitId, name) => {
+    let createdName = name;
     try {
-      await createDraftlineVariation(fromCommitId, name, get().currentRemote?.name ?? null);
-      set({ startedBranchFromSnapshot: { branchName: name, snapshotId: fromCommitId } });
-      await get().switchTimeline(name);
-      useToastStore.getState().show(`Started branch ${name} from the previewed snapshot.`, 4000, "success");
+      createdName = await createDraftlineVariation(fromCommitId, name, get().currentRemote?.name ?? null) || name;
+      set({ startedBranchFromSnapshot: { branchName: createdName, snapshotId: fromCommitId } });
+      await get().switchTimeline(createdName);
+      useToastStore.getState().show(`Started branch ${createdName} from the previewed snapshot.`, 4000, "success");
     } catch (err) {
       set((state) => (
-        state.startedBranchFromSnapshot?.branchName === name
+        state.startedBranchFromSnapshot?.branchName === createdName
           ? { startedBranchFromSnapshot: null }
           : {}
       ));

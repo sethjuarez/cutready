@@ -25,6 +25,7 @@ import {
 import { useAppStore } from "../stores/appStore";
 import type { DiffEntry } from "../types/sketch";
 import type { ProjectEntry, ProjectView } from "../types/project";
+import { draftlineToRepoPath, hybridVariationName } from "../utils/draftlinePaths";
 
 interface SnapshotPreviewTabProps {
   snapshotId: string;
@@ -133,16 +134,16 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
   const filteredEntries = useMemo(() => {
     if (!entries) return [];
     if (!selectedProject) return entries;
-    return entries.filter((entry) => fileBelongsToProject(entry.path, selectedProject.path, activeProjectPath, projects));
-  }, [activeProjectPath, entries, projects, selectedProject]);
+    return entries.filter((entry) => fileBelongsToProject(draftlineToRepoPath(entry.path, currentProject), selectedProject.path, activeProjectPath, projects));
+  }, [activeProjectPath, currentProject, entries, projects, selectedProject]);
 
   const groups = useMemo(() => groupEntries(filteredEntries), [filteredEntries]);
   const projectCounts = useMemo(
     () => projects.map((project) => ({
       project,
-      count: entries?.filter((entry) => fileBelongsToProject(entry.path, project.path, activeProjectPath, projects)).length ?? 0,
+      count: entries?.filter((entry) => fileBelongsToProject(draftlineToRepoPath(entry.path, currentProject), project.path, activeProjectPath, projects)).length ?? 0,
     })),
-    [activeProjectPath, entries, projects],
+    [activeProjectPath, currentProject, entries, projects],
   );
 
   const totalAdded = filteredEntries.reduce((sum, entry) => sum + entry.additions, 0);
@@ -155,7 +156,8 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
     setRestoreError(null);
     try {
       const name = newTimelineName.trim();
-      const collides = timelines.some((timeline) => timeline.name === name || timeline.label === name);
+      const candidates = currentProject?.hybrid ? [name, hybridVariationName(name)] : [name];
+      const collides = timelines.some((timeline) => candidates.includes(timeline.name) || candidates.includes(timeline.label));
       if (collides) {
         setRestoreError(`Branch "${name}" already exists. Choose a different branch name.`);
         return;
@@ -177,6 +179,7 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
       setRestoring(false);
     }
   }, [
+    currentProject?.hybrid,
     newTimelineName,
     restoreDisabled,
     startTimelineFromSnapshot,
@@ -349,6 +352,7 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
                   onToggleFile={handleToggleFile}
                   activeProjectPath={activeProjectPath}
                   projects={projects}
+                  currentProject={currentProject}
                   snapshotId={snapshotId}
                 />
               )
@@ -555,6 +559,7 @@ function SemanticGroup({
   onToggleFile,
   activeProjectPath,
   projects,
+  currentProject,
   snapshotId,
 }: {
   kind: ChangeKind;
@@ -565,6 +570,7 @@ function SemanticGroup({
   onToggleFile: (entry: DiffEntry) => void;
   activeProjectPath: string | null;
   projects: ProjectEntry[];
+  currentProject: ProjectView | null;
   snapshotId: string;
 }) {
   const Icon = KIND_ICONS[kind];
@@ -581,7 +587,7 @@ function SemanticGroup({
       </div>
       <div className="divide-y divide-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]">
         {entries.map((entry) => {
-          const project = projectForPath(entry.path, projects, activeProjectPath);
+          const project = projectForPath(draftlineToRepoPath(entry.path, currentProject), projects, activeProjectPath);
           const expanded = expandedPath === entry.path;
           const detail = fileDetails[fileDetailKey(snapshotId, entry.path)];
           const detailsId = detailPanelId(snapshotId, entry.path);
@@ -1016,7 +1022,7 @@ function businessSummary(path: string, kind: ChangeKind): string {
     case "asset":
       return "Referenced media asset changed in the project workspace.";
     default:
-      return path.startsWith(".cutready/")
+      return path.startsWith(".cutready/") || path.includes("/.cutready/")
         ? "CutReady project metadata changed."
         : "Workspace file changed outside a recognized CutReady document type.";
   }

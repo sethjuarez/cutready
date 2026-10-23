@@ -2503,6 +2503,23 @@ pub fn git_state_dir(repo_root: &Path, project_root: &Path) -> std::path::PathBu
     git_state_location(repo_root, project_root).dir
 }
 
+/// The canonical git work-tree root when `root` is a CutReady folder inside a
+/// larger repository (a hybrid project). `None` for standalone projects, including
+/// linked-worktree roots, whose folder is the work-tree root itself.
+pub fn hybrid_git_root(root: &Path) -> Option<PathBuf> {
+    let (_, rel) = enclosing_git_dir(root)?;
+    if rel.as_os_str().is_empty() {
+        return None;
+    }
+    // Walk up from the caller's path (not the canonical one) so the result keeps
+    // the same spelling as `root` and Windows `\\?\` prefixes never reach the UI.
+    let mut work_tree = root;
+    for _ in rel.components() {
+        work_tree = work_tree.parent()?;
+    }
+    Some(work_tree.to_path_buf())
+}
+
 /// For a CutReady folder without its own `.git` directory, find the enclosing
 /// repository's git dir (per-worktree for linked worktrees) and the folder's path
 /// relative to the work tree. `None` keeps the standalone `<root>/.git` layout.

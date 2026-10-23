@@ -6,6 +6,21 @@ export interface ProjectView {
   name: string;
   /** The repo root that contains this project. Same as `root` for single-project repos. */
   repo_root: string;
+  /**
+   * Git work-tree root that Draftline paths are relative to. Equals `repo_root`
+   * unless the CutReady folder lives inside a larger code repository (hybrid).
+   */
+  git_root?: string;
+  /** True when `repo_root` is a folder inside an enclosing code repository. */
+  hybrid?: boolean;
+}
+
+/** The folder CutReady opened (mirrors the Rust `RepoView`). */
+export interface RepoView {
+  root: string;
+  name: string;
+  git_root?: string;
+  hybrid?: boolean;
 }
 
 /** A recently opened project (stored in app data). */

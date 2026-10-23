@@ -249,7 +249,7 @@ export async function createDraftlineVariation(
   fromVersion: string,
   name: string,
   remote?: string | null,
-): Promise<void> {
+): Promise<string> {
   const workspacePath = requireWorkspacePath();
 
   const metadata = { label: name, slug: name };
@@ -264,11 +264,14 @@ export async function createDraftlineVariation(
   }
 
   try {
-    await draftlineClient.createVariationFromVersionGuarded({
+    const result = await draftlineClient.createVariationFromVersionGuarded({
       workspace_path: workspacePath,
       token: preflight.token,
       metadata,
     });
+    // Hybrid projects namespace new branches (`cutready/<name>`) on the backend,
+    // so report the name that was actually created.
+    return result?.variation?.name ?? preflight.token.variation ?? name;
   } catch (error) {
     const failedPreflight = variationCreatePreflightFromError(error);
     if (failedPreflight) {

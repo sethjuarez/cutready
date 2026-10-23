@@ -14,6 +14,8 @@ const MOCK_PROJECT: ProjectView = {
   root: "C:/mock-project",
   name: "Demo Project",
   repo_root: "C:/mock-project",
+  git_root: "C:/mock-project",
+  hybrid: false,
 };
 
 const MOCK_SKETCH: Sketch = {

@@ -18,7 +18,8 @@ use tauri_plugin_auditaur::auditaur_command;
 use crate::commands::github::github_credential_token;
 use crate::engine::draftline_adapter::{
     contributor_profile_for, cutready_content_policy, cutready_remote_options,
-    is_github_remote_url, CutReadyDraftlineAdapter,
+    is_github_remote_url, namespaced_variation_name, CutReadyDraftlineAdapter,
+    CUTREADY_VARIATION_NAMESPACE,
 };
 use crate::ProjectLock;
 
@@ -146,13 +147,57 @@ fn resolve_remote_credential(
 
 /// Policy and credentials shared by every Draftline command, without any Tauri
 /// handle so tests can drive the contract directly.
+/// Hybrid projects (a folder inside a code repository) only see CutReady's
+/// `cutready/*` variations plus the default and current branch.
 fn core_draftline_context(
+    workspace_path: &Path,
     profile: ContributorProfile,
 ) -> Result<contract::DraftlineCommandContext<'static>, String> {
-    Ok(contract::DraftlineCommandContext::new()
+    let context = contract::DraftlineCommandContext::new()
         .with_content_policy(cutready_content_policy().map_err(|error| error.to_string())?)
         .with_contributor_profile(profile)
-        .with_credentials(resolve_remote_credential))
+        .with_credentials(resolve_remote_credential);
+    if is_hybrid_workspace(workspace_path) {
+        context
+            .with_variation_namespace(CUTREADY_VARIATION_NAMESPACE)
+            .map_err(|error| error.to_string())
+    } else {
+        Ok(context)
+    }
+}
+
+fn is_hybrid_workspace(workspace_path: &Path) -> bool {
+    crate::engine::project::hybrid_git_root(workspace_path).is_some()
+}
+
+/// Names for new or renamed variations land under `cutready/` in hybrid
+/// projects so they stay visible and never collide with developer branches.
+fn hybrid_variation_name(workspace_path: &Path, name: &str) -> String {
+    namespaced_variation_name(is_hybrid_workspace(workspace_path), name)
+}
+
+fn namespace_rename_request(
+    mut request: contract::RenameVariationRequest,
+) -> contract::RenameVariationRequest {
+    request.target_variation_id =
+        hybrid_variation_name(&request.workspace_path, &request.target_variation_id);
+    request
+}
+
+fn namespace_create_request(
+    mut request: contract::PreflightCreateVariationFromVersionRequest,
+) -> contract::PreflightCreateVariationFromVersionRequest {
+    request.name = hybrid_variation_name(&request.workspace_path, &request.name);
+    request
+}
+
+fn namespace_restore_request(
+    mut request: contract::TargetedRestoreVersionRequest,
+) -> contract::TargetedRestoreVersionRequest {
+    if let draftline::RestoreVersionTarget::New { name, .. } = &mut request.target {
+        *name = hybrid_variation_name(&request.workspace_path, name);
+    }
+    request
 }
 
 fn build_draftline_context(
@@ -160,7 +205,10 @@ fn build_draftline_context(
     app: Option<AppHandle>,
 ) -> Result<contract::DraftlineCommandContext<'static>, String> {
     let profile = cutready_contributor_profile(project_root, app.as_ref());
-    Ok(with_workspace_events(core_draftline_context(profile)?, app))
+    Ok(with_workspace_events(
+        core_draftline_context(project_root, profile)?,
+        app,
+    ))
 }
 
 fn with_workspace_events(
@@ -229,7 +277,7 @@ fn context_for_commit(
     app: AppHandle,
 ) -> contract::TauriCommandResult<contract::DraftlineCommandContext<'static>> {
     let profile = require_contributor_profile(workspace_path, &app)?;
-    core_draftline_context(profile)
+    core_draftline_context(workspace_path, profile)
         .map(|context| with_workspace_events(context, Some(app)))
         .map_err(context_error)
 }
@@ -317,6 +365,7 @@ pub async fn preflight_rename_variation(
     request: contract::RenameVariationRequest,
     app: AppHandle,
 ) -> contract::TauriCommandResult<VariationRenamePreflight> {
+    let request = namespace_rename_request(request);
     let context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::preflight_rename_variation_with_context(
         &context, request,
@@ -329,6 +378,7 @@ pub async fn rename_variation(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::RenameVariationResult> {
+    let request = namespace_rename_request(request);
     let _guard = lock
         .0
         .lock()
@@ -338,6 +388,37 @@ pub async fn rename_variation(
         &mut context,
         request,
     ))
+}
+
+/// Preflights a new branch from a version. In hybrid projects the requested
+/// name is prefixed with `cutready/`; the returned token carries that name so
+/// the guarded create below needs no further rewriting.
+#[auditaur_command(skip_all)]
+pub async fn preflight_create_variation_from_version(
+    request: contract::PreflightCreateVariationFromVersionRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<draftline::VariationCreatePreflight> {
+    let request = namespace_create_request(request);
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(
+        contract::preflight_create_variation_from_version_with_context(&mut context, request),
+    )
+}
+
+#[auditaur_command(skip_all)]
+pub async fn create_variation_from_version_guarded(
+    request: contract::GuardedCreateVariationFromVersionRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::GuardedCreateVariationFromVersionResult> {
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(
+        contract::create_variation_from_version_guarded_with_context(&mut context, request),
+    )
 }
 
 #[auditaur_command(skip_all, err)]
@@ -675,6 +756,7 @@ pub async fn restore_version_as_new_save_to_variation(
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::TargetedRestoreVersionCommandResult> {
+    let request = namespace_restore_request(request);
     let _guard = lock
         .0
         .lock()
@@ -1112,13 +1194,16 @@ mod tests {
             email: Some(format!("{name}@collab.test")),
             name,
         };
-        core_draftline_context(ContributorProfile::new(
-            contributor,
-            Contributor {
-                name: "CutReady".to_string(),
-                email: Some("app@cutready.local".to_string()),
-            },
-        ))
+        core_draftline_context(
+            root,
+            ContributorProfile::new(
+                contributor,
+                Contributor {
+                    name: "CutReady".to_string(),
+                    email: Some("app@cutready.local".to_string()),
+                },
+            ),
+        )
         .unwrap()
     }
 
@@ -1147,6 +1232,103 @@ mod tests {
     fn fetch(root: &Path) {
         contract::fetch_remote_with_context(&mut context(root), remote_request(root))
             .unwrap_or_else(|error| panic!("fetch {}: {error}", root.display()));
+    }
+
+    #[test]
+    fn hybrid_contract_namespaces_listing_and_new_variations() {
+        let temp = tempfile::tempdir().unwrap();
+        let code = temp.path().join("contoso-app");
+        std::fs::create_dir_all(code.join("cutready")).unwrap();
+        let mut options = git2::RepositoryInitOptions::new();
+        options.initial_head("main");
+        let repo = git2::Repository::init_opts(&code, &options).unwrap();
+        std::fs::write(code.join("README.md"), "# Contoso\n").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("README.md")).unwrap();
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let signature = git2::Signature::now("Dev", "dev@example.com").unwrap();
+        let tip = repo
+            .commit(Some("HEAD"), &signature, &signature, "Code", &tree, &[])
+            .unwrap();
+        repo.branch("feature/x", &repo.find_commit(tip).unwrap(), false)
+            .unwrap();
+
+        let folder = code.join("cutready");
+        std::fs::write(folder.join("intro.sk"), r#"{"title":"Intro"}"#).unwrap();
+        save(&folder, "Intro");
+        assert!(!folder.join(".git").exists());
+
+        let names = |root: &Path| -> Vec<String> {
+            contract::list_variations_with_context(
+                &context(root),
+                contract::WorkspaceRequest {
+                    workspace_path: root.to_path_buf(),
+                },
+            )
+            .unwrap()
+            .into_iter()
+            .map(|summary| summary.variation.name)
+            .collect()
+        };
+        assert_eq!(names(&folder), vec!["main".to_string()]);
+
+        let version = CutReadyDraftlineAdapter::open_project(&folder)
+            .unwrap()
+            .versions()
+            .unwrap()[0]
+            .id()
+            .to_string();
+        let preflight = contract::preflight_create_variation_from_version_with_context(
+            &mut context(&folder),
+            namespace_create_request(contract::PreflightCreateVariationFromVersionRequest {
+                workspace_path: folder.clone(),
+                version_id: version,
+                name: "alt".to_string(),
+                remote: None,
+            }),
+        )
+        .unwrap();
+        assert!(preflight.can_create, "{preflight:?}");
+        let created = contract::create_variation_from_version_guarded_with_context(
+            &mut context(&folder),
+            contract::GuardedCreateVariationFromVersionRequest {
+                workspace_path: folder.clone(),
+                token: preflight.token.unwrap(),
+                metadata: Default::default(),
+            },
+        )
+        .unwrap();
+        assert_eq!(created.variation.name, "cutready/alt");
+        let listed = names(&folder);
+        assert!(listed.contains(&"cutready/alt".to_string()), "{listed:?}");
+        assert!(!listed.contains(&"feature/x".to_string()), "{listed:?}");
+
+        let renamed = namespace_rename_request(contract::RenameVariationRequest {
+            workspace_path: folder.clone(),
+            source_variation_id: "cutready/alt".to_string(),
+            target_variation_id: "beta".to_string(),
+            token: None,
+        });
+        assert_eq!(renamed.target_variation_id, "cutready/beta");
+    }
+
+    #[test]
+    fn standalone_contract_keeps_unprefixed_names() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("demo");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("intro.sk"), "{}").unwrap();
+        CutReadyDraftlineAdapter::open_project(&root).unwrap();
+        assert!(!is_hybrid_workspace(&root));
+        let request =
+            namespace_create_request(contract::PreflightCreateVariationFromVersionRequest {
+                workspace_path: root.clone(),
+                version_id: String::new(),
+                name: "alt".to_string(),
+                remote: None,
+            });
+        assert_eq!(request.name, "alt");
     }
 
     /// Mirrors the desktop sync flow (appStore `syncWithRemote`): two
