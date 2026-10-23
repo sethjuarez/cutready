@@ -740,6 +740,7 @@ pub fn run() {
             commands::draftline::adopt_remote_variation,
             commands::draftline::fetch_remote,
             commands::draftline::publish_current_variation,
+            commands::draftline::send_for_review,
             commands::draftline::preflight_apply_incoming,
             commands::draftline::get_sync_status,
             commands::draftline::apply_incoming,

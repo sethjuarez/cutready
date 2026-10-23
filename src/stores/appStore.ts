@@ -27,6 +27,7 @@ import {
   mergeDraftlineIncoming,
   mergeDraftlineIncomingWithResolutions,
   publishDraftlineChanges,
+  sendForReview as sendDraftlineForReview,
   popDraftlineShelf,
   preflightDraftlineRenameVariation,
   restoreDraftlineVersionAsNewSave,
@@ -229,6 +230,14 @@ function buildShareUrl(remoteUrl: string, branch: string): string | null {
   return `https://github.com/${repo}/compare/${branch}?expand=1`;
 }
 
+function largeFilesSyncError(largeFiles: [string, number][]): string | null {
+  if (largeFiles.length === 0) return null;
+  const names = largeFiles
+    .map(([p, s]) => s > 0 ? `${p} (${(s / 1024 / 1024).toFixed(1)} MB)` : p)
+    .join(", ");
+  return `Large files detected: ${names}. Remove or add to .gitignore before pushing.`;
+}
+
 const GITHUB_REMOTE_AUTH_MESSAGE =
   "This project has a GitHub remote. Connect GitHub in Settings > Repository before syncing.";
 const GITHUB_REMOTE_AUTH_FAILED_MESSAGE =
@@ -400,6 +409,8 @@ interface AppStoreState {
   showSecondaryPanel: boolean;
   /** Whether the snapshot name prompt should be shown (triggered by Ctrl+S). */
   snapshotPromptOpen: boolean;
+  /** Hybrid projects: pending "Send for review" prompt (pull request title). */
+  sendForReviewPrompt: { defaultTitle: string } | null;
   /** After saving a snapshot, navigate to this commit ID (used by nav-save flow). */
   pendingNavAfterSave: string | null;
   /** After saving a snapshot, switch to this branch. */
@@ -744,8 +755,12 @@ interface AppStoreState {
   detectRemote: () => Promise<void>;
   /** Fetch from the remote. */
   fetchFromRemote: (options?: { notifyAuthRequired?: boolean }) => Promise<void>;
-  /** Push current timeline to the remote. */
+  /** Push current timeline to the remote (hybrid projects: opens the Send for review prompt). */
   pushToRemote: () => Promise<void>;
+  /** Hybrid projects: push the CutReady branch and open/update a pull request. */
+  sendForReview: (title: string, body?: string) => Promise<void>;
+  /** Dismiss the Send for review prompt without sending. */
+  cancelSendForReview: () => void;
   /** Pull from remote (fast-forward merge). */
   pullFromRemote: () => Promise<void>;
   /** Sync: fetch then push (or pull if behind). */
@@ -960,6 +975,7 @@ function resetPersistenceState(): Pick<AppStoreState,
   | "timelines"
   | "graphNodes"
   | "snapshotPromptOpen"
+  | "sendForReviewPrompt"
   | "pendingNavAfterSave"
   | "pendingTimelineAfterSave"
   | "startedBranchFromSnapshot"
@@ -989,6 +1005,7 @@ function resetPersistenceState(): Pick<AppStoreState,
     timelines: [],
     graphNodes: [],
     snapshotPromptOpen: false,
+    sendForReviewPrompt: null,
     pendingNavAfterSave: null,
     pendingTimelineAfterSave: null,
     startedBranchFromSnapshot: null,
@@ -1154,6 +1171,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   graphNodes: [],
   showSecondaryPanel: savedLayout.showSecondaryPanel ?? true,
   snapshotPromptOpen: false,
+  sendForReviewPrompt: null,
   pendingNavAfterSave: null,
   pendingTimelineAfterSave: null,
   startedBranchFromSnapshot: null,
@@ -3006,15 +3024,23 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       useToastStore.getState().show(SYNC_IN_PROGRESS_MESSAGE, 5000, "info");
       return;
     }
+    const project = get().currentProject;
+    if (project?.hybrid) {
+      // Hybrid projects send for review (branch + pull request) instead of
+      // pushing directly; ask for the pull request title first.
+      set({
+        sendForReviewPrompt: {
+          defaultTitle: get().versions[0]?.message?.trim() || `Update ${project.name}`,
+        },
+      });
+      return;
+    }
     set({ isSyncing: true, syncError: null });
     try {
       // Large-file check before push
-      const largeFiles = await get().checkLargeFiles();
-      if (largeFiles.length > 0) {
-        const names = largeFiles
-          .map(([p, s]) => s > 0 ? `${p} (${(s / 1024 / 1024).toFixed(1)} MB)` : p)
-          .join(", ");
-        set({ syncError: `Large files detected: ${names}. Remove or add to .gitignore before pushing.`, isSyncing: false });
+      const largeFileError = largeFilesSyncError(await get().checkLargeFiles());
+      if (largeFileError) {
+        set({ syncError: largeFileError, isSyncing: false });
         return;
       }
       await publishDraftlineChanges(currentRemote.name);
@@ -3030,6 +3056,68 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       set({ isSyncing: false });
     }
   },
+
+  sendForReview: async (title, body) => {
+    const { currentRemote } = get();
+    set({ sendForReviewPrompt: null });
+    if (!currentRemote || !get().currentProject?.hybrid) return;
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) return;
+    if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
+    if (get().isSyncing) {
+      useToastStore.getState().show(SYNC_IN_PROGRESS_MESSAGE, 5000, "info");
+      return;
+    }
+    set({ isSyncing: true, syncError: null });
+    let sendAttempted = false;
+    let sendError: string | null = null;
+    try {
+      const largeFileError = largeFilesSyncError(await get().checkLargeFiles());
+      if (largeFileError) {
+        set({ syncError: largeFileError, isSyncing: false });
+        return;
+      }
+      sendAttempted = true;
+      const result = await sendDraftlineForReview({
+        remote: currentRemote.name,
+        title: trimmedTitle,
+        body,
+      });
+      const { number, url } = result.pull_request;
+      useToastStore.getState().show(
+        result.created_pull_request
+          ? `Pull request #${number} opened for review.`
+          : `Pull request #${number} updated.`,
+        10000,
+        "success",
+        { label: "Open", url },
+      );
+      set({ shareUrl: url });
+    } catch (err) {
+      sendError = remoteSyncErrorMessage(err);
+      set({ syncError: sendError });
+    } finally {
+      // Send can switch branches and push before the pull request step fails,
+      // so refresh even on error to show the real current variation.
+      if (sendAttempted) {
+        try {
+          await get().refreshSyncStatus();
+          await get().checkDirty();
+          await get().refreshChangedFiles();
+          await get().loadGraphData();
+          await get().loadTimelines();
+          await get().loadVersions();
+        } catch {
+          // Refresh failures must not mask the send result.
+        }
+        // A successful status refresh clears syncError; keep the send failure visible.
+        if (sendError) set({ syncError: sendError });
+      }
+      set({ isSyncing: false });
+    }
+  },
+
+  cancelSendForReview: () => set({ sendForReviewPrompt: null }),
 
   syncWithRemote: async () => {
     // Fetch first to get latest state
@@ -3053,6 +3141,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const active = timelines.find((t) => t.is_active);
     if (!active) return;
     await get().pushToRemote();
+    // Hybrid projects share via the Send for review prompt (pull request), not a branch link.
+    if (get().currentProject?.hybrid) return;
     const url = buildShareUrl(currentRemote.url, active.name);
     set({ shareUrl: url });
     if (url) {

@@ -12,9 +12,10 @@ use draftline::{
     ApplyIncomingReport, ApplyIncomingResult, ChangeSet, ContentPolicy, Contributor,
     ContributorProfile, HistoryEntry, MergeConflictResolution, MergeIncomingReport,
     MergeIncomingResult, MergeIncomingToken, PreflightReport, PreviewFile, PublishResult,
-    RemoteCredential, RemoteEndpoint, RemoteOptions, Result as DraftlineResult, Shelf,
-    SwitchPolicy, SyncStatus, Variation, VariationId, VariationMetadata, VariationSummary, Version,
-    VersionDiff, VersionId, VersionPreview, Workspace, WorkspaceSummary,
+    PullRequestProvider, RemoteCredential, RemoteEndpoint, RemoteOptions,
+    Result as DraftlineResult, SendRequest, SendResult, Shelf, SwitchPolicy, SyncStatus, Variation,
+    VariationId, VariationMetadata, VariationSummary, Version, VersionDiff, VersionId,
+    VersionPreview, Workspace, WorkspaceSummary,
 };
 
 use serde::Serialize;
@@ -352,6 +353,18 @@ impl CutReadyDraftlineAdapter {
         options: &mut RemoteOptions<'_>,
     ) -> DraftlineResult<PublishResult> {
         self.workspace.publish_changes_with_options(remote, options)
+    }
+
+    /// Push the current branch and open (or reuse) a pull request. Blocks on
+    /// network I/O through `provider`; run it off the async runtime.
+    pub fn send_for_review(
+        &self,
+        remote: &str,
+        request: &SendRequest,
+        provider: &mut dyn PullRequestProvider,
+        options: &mut RemoteOptions<'_>,
+    ) -> DraftlineResult<SendResult> {
+        self.workspace.send(remote, request, provider, options)
     }
 }
 

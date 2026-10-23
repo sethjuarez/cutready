@@ -378,6 +378,47 @@ export async function publishDraftlineChanges(remote: string): Promise<void> {
   await facade().publishCurrentVariation(remote);
 }
 
+export interface DraftlinePullRequest {
+  number: number;
+  url: string;
+}
+
+/** Mirrors Draftline's `SendResult` (hybrid "Send for review"). */
+export interface DraftlineSendResult {
+  remote: string;
+  variation: string;
+  base: string;
+  created_variation: boolean;
+  published_versions: number;
+  pull_request: DraftlinePullRequest;
+  created_pull_request: boolean;
+}
+
+export interface DraftlineSendForReviewOptions {
+  remote: string;
+  title: string;
+  body?: string;
+  base?: string;
+}
+
+/**
+ * Hybrid projects only: push the CutReady variation to its own branch and
+ * open (or reuse) a pull request on the code host.
+ */
+export async function sendForReview(
+  options: DraftlineSendForReviewOptions,
+): Promise<DraftlineSendResult> {
+  return invoke<DraftlineSendResult>("send_for_review", {
+    request: {
+      workspace_path: requireWorkspacePath(),
+      remote: options.remote,
+      title: options.title,
+      body: options.body?.trim() ? options.body : null,
+      base: options.base?.trim() ? options.base : null,
+    },
+  });
+}
+
 export async function listDraftlineRemoteBranches(remote: string): Promise<RemoteBranchInfo[]> {
   return (await facade().remoteVariations(remote)).map(remoteVariationToBranchInfo);
 }

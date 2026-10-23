@@ -7,9 +7,9 @@ use draftline::tauri_contract as contract;
 use draftline::VersionId;
 use draftline::{
     ApplyIncomingReport, ChangeSet, ContributorProfile, HistoryEntry, MergeIncomingReport,
-    PreflightReport, PreviewFile, RemoteCredential, RemoteCredentialRequest, RemoteEndpoint, Shelf,
-    Variation, VariationId, VariationRenamePreflight, VariationSummary, VersionDiff,
-    VersionPreview,
+    PreflightReport, PreviewFile, PullRequestProvider, RemoteCredential, RemoteCredentialRequest,
+    RemoteEndpoint, RemoteOptions, SendRequest, SendResult, Shelf, Variation, VariationId,
+    VariationRenamePreflight, VariationSummary, VersionDiff, VersionPreview,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
@@ -21,6 +21,7 @@ use crate::engine::draftline_adapter::{
     is_github_remote_url, namespaced_variation_name, CutReadyDraftlineAdapter,
     CUTREADY_VARIATION_NAMESPACE,
 };
+use crate::engine::github_pull_requests::GitHubPullRequestProvider;
 use crate::ProjectLock;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -957,6 +958,111 @@ pub async fn publish_current_variation(
     ))
 }
 
+/// Send for review (hybrid projects only): push the current `cutready/*`
+/// branch, or move saves off the base branch onto a new one, and open or reuse
+/// a GitHub pull request.
+#[derive(Debug, Deserialize)]
+pub struct SendForReviewRequest {
+    pub workspace_path: PathBuf,
+    pub remote: String,
+    pub title: String,
+    #[serde(default)]
+    pub body: Option<String>,
+    #[serde(default)]
+    pub base: Option<String>,
+}
+
+pub const SEND_REQUIRES_HYBRID: &str = "send_requires_hybrid";
+
+fn send_error(code: &str, message: impl Into<String>) -> contract::TauriCommandError {
+    contract::TauriCommandError {
+        code: code.into(),
+        message: message.into(),
+        details: None,
+    }
+}
+
+/// Runs Send with an injectable pull request provider so tests can avoid the
+/// network. Blocks on git and HTTP I/O.
+fn send_for_review_with(
+    request: SendForReviewRequest,
+    provider_for: impl FnOnce(&str) -> draftline::Result<Box<dyn PullRequestProvider>>,
+    options: &mut RemoteOptions<'_>,
+) -> contract::TauriCommandResult<SendResult> {
+    let title = request.title.trim();
+    if title.is_empty() {
+        return Err(send_error(
+            "invalid_request",
+            "A pull request title is required.",
+        ));
+    }
+    let adapter = contract::into_tauri_result(CutReadyDraftlineAdapter::open_project(
+        &request.workspace_path,
+    ))?;
+    if !adapter.is_hybrid() {
+        return Err(send_error(
+            SEND_REQUIRES_HYBRID,
+            "Send for review is only available for CutReady projects inside a code repository.",
+        ));
+    }
+    let remote_url = contract::into_tauri_result(adapter.remotes())?
+        .into_iter()
+        .find(|remote| remote.name == request.remote)
+        .map(|remote| remote.url)
+        .ok_or_else(|| {
+            send_error(
+                "remote_not_found",
+                format!("Remote `{}` is not configured.", request.remote),
+            )
+        })?;
+    let mut provider = contract::into_tauri_result(provider_for(&remote_url))?;
+    let send_request = SendRequest {
+        title: title.to_string(),
+        body: request.body.unwrap_or_default(),
+        base: request
+            .base
+            .map(|base| base.trim().to_string())
+            .filter(|base| !base.is_empty()),
+        branch: None,
+    };
+    contract::into_tauri_result(adapter.send_for_review(
+        &request.remote,
+        &send_request,
+        provider.as_mut(),
+        options,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn send_for_review(
+    request: SendForReviewRequest,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<SendResult> {
+    let mutex = lock.0;
+    // The GitHub provider uses a blocking HTTP client, which must not run on
+    // the async runtime.
+    tokio::task::spawn_blocking(move || {
+        let _guard = mutex
+            .lock()
+            .map_err(|error| context_error(error.to_string()))?;
+        let mut options = RemoteOptions::new().with_credentials(resolve_remote_credential);
+        send_for_review_with(
+            request,
+            |remote_url| {
+                let token = is_github_remote_url(remote_url)
+                    .then(github_credential_token)
+                    .flatten()
+                    .map(|credential| credential.token);
+                GitHubPullRequestProvider::for_remote_url(remote_url, token)
+                    .map(|provider| Box::new(provider) as Box<dyn PullRequestProvider>)
+            },
+            &mut options,
+        )
+    })
+    .await
+    .map_err(|error| context_error(format!("Send for review stopped unexpectedly: {error}")))?
+}
+
 #[auditaur_command(skip_all)]
 pub async fn preflight_apply_incoming(
     request: contract::RemoteRequest,
@@ -1409,5 +1515,120 @@ mod tests {
         contract::apply_incoming_with_context(&mut context(&second), remote_request(&second))
             .expect("apply incoming");
         assert!(second.join("local.md").exists());
+    }
+
+    #[derive(Default)]
+    struct FakeHost {
+        requests: std::sync::Arc<std::sync::Mutex<Vec<draftline::PullRequestRequest>>>,
+    }
+
+    impl PullRequestProvider for FakeHost {
+        fn find_open(
+            &mut self,
+            _request: &draftline::PullRequestRequest,
+        ) -> draftline::Result<Option<draftline::PullRequest>> {
+            Ok(None)
+        }
+
+        fn create(
+            &mut self,
+            request: &draftline::PullRequestRequest,
+        ) -> draftline::Result<draftline::PullRequest> {
+            self.requests.lock().unwrap().push(request.clone());
+            Ok(draftline::PullRequest {
+                number: 9,
+                url: "https://github.com/contoso/app/pull/9".to_string(),
+            })
+        }
+    }
+
+    fn send_request(root: &Path, title: &str) -> SendForReviewRequest {
+        SendForReviewRequest {
+            workspace_path: root.to_path_buf(),
+            remote: "origin".to_string(),
+            title: title.to_string(),
+            body: Some("Please review".to_string()),
+            base: Some("main".to_string()),
+        }
+    }
+
+    #[test]
+    fn send_for_review_rejects_standalone_projects() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("demo");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("intro.sk"), "{}").unwrap();
+        CutReadyDraftlineAdapter::open_project(&root).unwrap();
+
+        let error = send_for_review_with(
+            send_request(&root, "Ship it"),
+            |_| panic!("standalone projects must not reach the provider"),
+            &mut RemoteOptions::new(),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, SEND_REQUIRES_HYBRID);
+
+        let error = send_for_review_with(
+            send_request(&root, "   "),
+            |_| panic!("blank titles must not reach the provider"),
+            &mut RemoteOptions::new(),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "invalid_request");
+    }
+
+    #[test]
+    fn send_for_review_pushes_a_cutready_branch_and_opens_a_pull_request() {
+        let temp = tempfile::tempdir().unwrap();
+        let remote = temp.path().join("remote.git");
+        init_bare_remote(&remote);
+        let code = temp.path().join("contoso-app");
+        std::fs::create_dir_all(code.join("cutready")).unwrap();
+        let mut options = git2::RepositoryInitOptions::new();
+        options.initial_head("main");
+        let repo = git2::Repository::init_opts(&code, &options).unwrap();
+        std::fs::write(code.join("README.md"), "# Contoso\n").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("README.md")).unwrap();
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let signature = git2::Signature::now("Dev", "dev@example.com").unwrap();
+        repo.commit(Some("HEAD"), &signature, &signature, "Code", &tree, &[])
+            .unwrap();
+        repo.remote("origin", remote.to_str().unwrap())
+            .unwrap()
+            .push(&["refs/heads/main:refs/heads/main"], None)
+            .unwrap();
+
+        let folder = code.join("cutready");
+        std::fs::write(folder.join("intro.sk"), r#"{"title":"Intro"}"#).unwrap();
+        save(&folder, "Intro");
+
+        let host = FakeHost::default();
+        let requests = host.requests.clone();
+        let mut seen_url = None;
+        let result = send_for_review_with(
+            send_request(&folder, "Launch demo"),
+            |url| {
+                seen_url = Some(url.to_string());
+                Ok(Box::new(host))
+            },
+            &mut RemoteOptions::new(),
+        )
+        .unwrap();
+
+        assert_eq!(seen_url.as_deref(), remote.to_str());
+        assert_eq!(result.variation, "cutready/launch-demo");
+        assert_eq!(result.base, "main");
+        assert!(result.created_variation && result.created_pull_request);
+        assert_eq!(result.pull_request.number, 9);
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].head, "cutready/launch-demo");
+        assert_eq!(requests[0].body, "Please review");
+        assert!(git2::Repository::open_bare(&remote)
+            .unwrap()
+            .find_branch("cutready/launch-demo", git2::BranchType::Local)
+            .is_ok());
     }
 }

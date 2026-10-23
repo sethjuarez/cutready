@@ -16,6 +16,7 @@ import { OutputPanel } from "./OutputPanel";
 import { CommandPalette } from "./CommandPalette";
 import { TitleBar } from "./TitleBar";
 import { SnapshotDialog } from "./SnapshotDialog";
+import { SendForReviewDialog } from "./SendForReviewDialog";
 import { AiApplyGateDialog } from "./AiApplyGateDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { MergeConflictPanel } from "./MergeConflictPanel";
@@ -528,6 +529,7 @@ export function AppLayout() {
         recentCommands={recentCommands}
       />
       <SnapshotDialog />
+      <SendForReviewDialog />
       <AiApplyGateDialog />
       <KeyboardShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <FeedbackDialog isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} />

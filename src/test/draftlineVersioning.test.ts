@@ -31,6 +31,7 @@ import {
   previewDraftlineVersion,
   renameDraftlineVariation,
   saveDraftlineVersion,
+  sendForReview,
   setDraftlineWorkspacePath,
   shelveDraftlineChanges,
   switchDraftlineVariation,
@@ -88,6 +89,46 @@ describe("draftlineVersioning", () => {
     mockInvoke.mockReset();
     mockUnlisten.mockReset();
     localStorage.clear();
+  });
+
+  it("sends a hybrid project for review with the workspace-bound request", async () => {
+    const result = {
+      remote: "origin",
+      variation: "cutready/launch-demo",
+      base: "main",
+      created_variation: true,
+      published_versions: 2,
+      pull_request: { number: 7, url: "https://github.com/contoso/app/pull/7" },
+      created_pull_request: true,
+    };
+    mockInvoke.mockResolvedValueOnce(result);
+
+    await expect(sendForReview({ remote: "origin", title: "Launch demo", body: "Please review" })).resolves.toEqual(result);
+    expect(mockInvoke).toHaveBeenCalledWith("send_for_review", {
+      request: {
+        workspace_path: WORKSPACE,
+        remote: "origin",
+        title: "Launch demo",
+        body: "Please review",
+        base: null,
+      },
+    });
+  });
+
+  it("omits blank optional send-for-review fields", async () => {
+    mockInvoke.mockResolvedValueOnce({});
+
+    await sendForReview({ remote: "origin", title: "Launch demo", body: "  ", base: "release" });
+
+    expect(mockInvoke).toHaveBeenCalledWith("send_for_review", {
+      request: {
+        workspace_path: WORKSPACE,
+        remote: "origin",
+        title: "Launch demo",
+        body: null,
+        base: "release",
+      },
+    });
   });
 
   it("maps Draftline versions onto existing version entries", async () => {

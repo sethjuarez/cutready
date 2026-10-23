@@ -1454,6 +1454,18 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "fetch_remote":
     case "publish_current_variation":
       return null;
+    case "send_for_review": {
+      const request = (args as { request?: { remote?: string; base?: string | null } })?.request;
+      return {
+        remote: request?.remote ?? "origin",
+        variation: "cutready/main",
+        base: request?.base ?? "main",
+        created_variation: false,
+        published_versions: 1,
+        pull_request: { number: 42, url: "https://github.com/demo/contoso-app/pull/42" },
+        created_pull_request: true,
+      };
+    }
     case "apply_incoming":
       return { applied_count: 0 };
     case "merge_incoming":

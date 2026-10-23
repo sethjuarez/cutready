@@ -4,6 +4,7 @@ const mockGetDraftlineSyncStatus = vi.hoisted(() => vi.fn());
 const mockListDraftlineRemotes = vi.hoisted(() => vi.fn());
 const mockFetchDraftlineRemote = vi.hoisted(() => vi.fn());
 const mockPublishDraftlineChanges = vi.hoisted(() => vi.fn());
+const mockSendForReview = vi.hoisted(() => vi.fn());
 const mockGetGitHubAuthStatus = vi.hoisted(() => vi.fn());
 
 vi.mock("../services/draftlineVersioning", async (importOriginal) => {
@@ -14,6 +15,7 @@ vi.mock("../services/draftlineVersioning", async (importOriginal) => {
     getDraftlineSyncStatus: (...args: unknown[]) => mockGetDraftlineSyncStatus(...args),
     listDraftlineRemotes: (...args: unknown[]) => mockListDraftlineRemotes(...args),
     publishDraftlineChanges: (...args: unknown[]) => mockPublishDraftlineChanges(...args),
+    sendForReview: (...args: unknown[]) => mockSendForReview(...args),
   };
 });
 
@@ -30,7 +32,12 @@ describe("appStore remote sync status", () => {
     mockGetDraftlineSyncStatus.mockReset();
     mockListDraftlineRemotes.mockReset();
     mockPublishDraftlineChanges.mockReset();
+    mockSendForReview.mockReset();
     useAppStore.setState({
+      currentProject: null,
+      versions: [],
+      sendForReviewPrompt: null,
+      shareUrl: null,
       currentRemote: null,
       timelines: [],
       syncStatus: null,
@@ -242,6 +249,116 @@ describe("appStore remote sync status", () => {
     expect(loadGraphData).toHaveBeenCalled();
     expect(loadTimelines).toHaveBeenCalled();
     expect(loadVersions).toHaveBeenCalled();
+    expect(useAppStore.getState().isSyncing).toBe(false);
+  });
+
+  it("prompts for a pull request title instead of pushing a hybrid project", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    const checkLargeFiles = vi.fn(async () => [] as Array<[string, number]>);
+    useAppStore.setState({
+      currentProject: { root: "D:\\contoso-app\\cutready", name: "cutready", repo_root: "D:\\contoso-app\\cutready", hybrid: true },
+      currentRemote: { name: "origin", url: "https://github.com/contoso/app.git" },
+      timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 2, color_index: 0 }],
+      versions: [{ id: "abc", message: "Tighten intro narration", timestamp: "", summary: "" }],
+      checkLargeFiles,
+    });
+
+    await useAppStore.getState().pushToRemote();
+
+    expect(useAppStore.getState().sendForReviewPrompt).toEqual({ defaultTitle: "Tighten intro narration" });
+    expect(mockPublishDraftlineChanges).not.toHaveBeenCalled();
+    expect(mockSendForReview).not.toHaveBeenCalled();
+    expect(checkLargeFiles).not.toHaveBeenCalled();
+    expect(useAppStore.getState().isSyncing).toBe(false);
+  });
+
+  it("sends a hybrid project for review, links the pull request, and refreshes state", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    mockGetDraftlineSyncStatus.mockResolvedValueOnce({ ahead: 0, behind: 0 });
+    mockSendForReview.mockResolvedValueOnce({
+      remote: "origin",
+      variation: "cutready/main",
+      base: "main",
+      created_variation: true,
+      published_versions: 2,
+      pull_request: { number: 12, url: "https://github.com/contoso/app/pull/12" },
+      created_pull_request: true,
+    });
+    const checkDirty = vi.fn(async () => {});
+    const refreshChangedFiles = vi.fn(async () => {});
+    const loadGraphData = vi.fn(async () => {});
+    const loadTimelines = vi.fn(async () => {});
+    const loadVersions = vi.fn(async () => {});
+    useAppStore.setState({
+      currentProject: { root: "D:\\contoso-app\\cutready", name: "cutready", repo_root: "D:\\contoso-app\\cutready", hybrid: true },
+      currentRemote: { name: "origin", url: "https://github.com/contoso/app.git" },
+      sendForReviewPrompt: { defaultTitle: "Update cutready" },
+      checkLargeFiles: async () => [],
+      checkDirty,
+      refreshChangedFiles,
+      loadGraphData,
+      loadTimelines,
+      loadVersions,
+    });
+
+    await useAppStore.getState().sendForReview("  Launch demo  ", "Please review");
+
+    expect(mockSendForReview).toHaveBeenCalledWith({ remote: "origin", title: "Launch demo", body: "Please review" });
+    expect(mockPublishDraftlineChanges).not.toHaveBeenCalled();
+    expect(useAppStore.getState().sendForReviewPrompt).toBeNull();
+    expect(useToastStore.getState().toasts).toEqual([
+      expect.objectContaining({
+        message: "Pull request #12 opened for review.",
+        type: "success",
+        link: { label: "Open", url: "https://github.com/contoso/app/pull/12" },
+      }),
+    ]);
+    expect(checkDirty).toHaveBeenCalled();
+    expect(refreshChangedFiles).toHaveBeenCalled();
+    expect(loadGraphData).toHaveBeenCalled();
+    expect(loadTimelines).toHaveBeenCalled();
+    expect(loadVersions).toHaveBeenCalled();
+    expect(useAppStore.getState().isSyncing).toBe(false);
+  });
+
+  it("blocks send for review when large files are pending", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    useAppStore.setState({
+      currentProject: { root: "D:\\contoso-app\\cutready", name: "cutready", repo_root: "D:\\contoso-app\\cutready", hybrid: true },
+      currentRemote: { name: "origin", url: "https://github.com/contoso/app.git" },
+      checkLargeFiles: async () => [["screenshots/huge.png", 120 * 1024 * 1024]],
+    });
+
+    await useAppStore.getState().sendForReview("Launch demo");
+
+    expect(mockSendForReview).not.toHaveBeenCalled();
+    expect(useAppStore.getState().syncError).toBe(
+      "Large files detected: screenshots/huge.png (120.0 MB). Remove or add to .gitignore before pushing.",
+    );
+    expect(useAppStore.getState().isSyncing).toBe(false);
+  });
+
+  it("surfaces send-for-review failures as sync errors", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    mockSendForReview.mockRejectedValueOnce(new Error("pull request provider failed: GitHub returned 422"));
+    const loadTimelines = vi.fn(async () => {});
+    useAppStore.setState({
+      currentProject: { root: "D:\\contoso-app\\cutready", name: "cutready", repo_root: "D:\\contoso-app\\cutready", hybrid: true },
+      currentRemote: { name: "origin", url: "https://github.com/contoso/app.git" },
+      checkLargeFiles: async () => [],
+      loadTimelines,
+      checkDirty: async () => {},
+      refreshChangedFiles: async () => {},
+      loadGraphData: async () => {},
+      loadVersions: async () => {},
+    });
+
+    await useAppStore.getState().sendForReview("Launch demo");
+
+    expect(useAppStore.getState().syncError).toBe("pull request provider failed: GitHub returned 422");
+    // Send may have switched branches before failing, so state is refreshed anyway.
+    expect(loadTimelines).toHaveBeenCalled();
+    expect(useToastStore.getState().toasts).toEqual([]);
     expect(useAppStore.getState().isSyncing).toBe(false);
   });
 
