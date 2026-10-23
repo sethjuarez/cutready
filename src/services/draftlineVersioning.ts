@@ -3,19 +3,14 @@ import {
   createDraftlineHostFacade,
   createMergeConflictViewModel,
   createWholeFileUseContentResolutions,
-  isHistoryCleanupBlockedError,
   type ApplyIncomingReport,
   type ChangedFile,
   type ConflictContentSource,
   type DraftlineHostFacade,
-  type HistoryCompactionCandidate,
-  type HistoryCompactionCandidates,
   type MergeConflictResolution,
   type MergeConflictViewModel,
   type MergeIncomingReport,
   type MergeIncomingToken,
-  type MilestoneMergeCommandResult,
-  type MilestoneMergeReport,
   type PreflightReport,
   type RemoteVariation,
   type RenameVariationResult,
@@ -28,17 +23,6 @@ import {
   type VariationRenameToken,
   type VariationCreatePreflight,
   type VariationCreateToken,
-  type HistoryCleanupPreview,
-  type HistoryCleanupPublishPreflight,
-  type HistoryCleanupPublishResult,
-  type HistoryCleanupPublishToken,
-  type HistoryCleanupRemoteImpact,
-  type HistoryCleanupUndoPreflight,
-  type HistoryCleanupUndoToken,
-  type HistoryCleanupBlockedError,
-  type StaleVersionResolution,
-  type TimelineCleanupResult,
-  type PendingHistoryCleanup,
   type VariationSummary,
   type Version,
   type VersionDiff,
@@ -58,21 +42,6 @@ export type DraftlineSwitchVariationPreflight = PreflightReport;
 export type DraftlineSwitchVariationResult = SwitchVariationResult;
 export type DraftlineVariationCreatePreflight = VariationCreatePreflight;
 export type DraftlineVariationCreateToken = VariationCreateToken;
-export type DraftlineHistoryCleanupPreview = HistoryCleanupPreview;
-export type DraftlineHistoryCleanupPublishPreflight = HistoryCleanupPublishPreflight;
-export type DraftlineHistoryCleanupPublishResult = HistoryCleanupPublishResult;
-export type DraftlineHistoryCleanupPublishToken = HistoryCleanupPublishToken;
-export type DraftlineHistoryCleanupRemoteImpact = HistoryCleanupRemoteImpact;
-export type DraftlineHistoryCleanupUndoPreflight = HistoryCleanupUndoPreflight;
-export type DraftlineHistoryCleanupUndoToken = HistoryCleanupUndoToken;
-export type DraftlineStaleVersionResolution = StaleVersionResolution;
-export type DraftlineTimelineCleanupResult = TimelineCleanupResult;
-export type DraftlinePendingHistoryCleanup = PendingHistoryCleanup;
-export type DraftlineHistoryCleanupBlockedError = HistoryCleanupBlockedError;
-export type DraftlineHistoryCompactionCandidate = HistoryCompactionCandidate;
-export type DraftlineHistoryCompactionCandidates = HistoryCompactionCandidates;
-export type DraftlineMilestoneMergeReport = MilestoneMergeReport;
-export type DraftlineMilestoneMergeCommandResult = MilestoneMergeCommandResult;
 
 export class DraftlineVariationCreateConflictError extends Error {
   readonly preflight: VariationCreatePreflight;
@@ -88,12 +57,6 @@ export function isDraftlineVariationCreateConflictError(
   error: unknown,
 ): error is DraftlineVariationCreateConflictError {
   return error instanceof DraftlineVariationCreateConflictError;
-}
-
-export function isDraftlineHistoryCleanupBlockedError(
-  error: unknown,
-): error is HistoryCleanupBlockedError {
-  return isHistoryCleanupBlockedError(error);
 }
 
 export interface DraftlineMergeIncomingReport {
@@ -235,19 +198,7 @@ export async function listDraftlineTimelines(): Promise<TimelineInfo[]> {
 }
 
 export async function previewDraftlineVersion(version: string): Promise<DiffEntry[]> {
-  const f = facade();
-  try {
-    return versionDiffToDiffEntries(await f.diffVersionToWorkspace(version));
-  } catch (error) {
-    const resolution = await f.resolveRewrittenVersion(version);
-    if (
-      (resolution.disposition.kind === "live" || resolution.disposition.kind === "squashed_into")
-      && resolution.disposition.version !== version
-    ) {
-      return versionDiffToDiffEntries(await f.diffVersionToWorkspace(resolution.disposition.version));
-    }
-    throw error;
-  }
+  return versionDiffToDiffEntries(await facade().diffVersionToWorkspace(version));
 }
 
 export async function previewDraftlineVersionFile(version: string, path: string): Promise<DraftlinePreviewFile | null> {
@@ -450,17 +401,6 @@ export async function mergeDraftlineIncoming(remote: string, label: string): Pro
   return result.merge.version.id;
 }
 
-export async function preflightDraftlineMilestoneMerge(remote: string): Promise<DraftlineMilestoneMergeReport> {
-  return facade().preflightMilestoneMerge(remote);
-}
-
-export async function createDraftlineMilestoneMerge(
-  remote: string,
-  label: string,
-): Promise<DraftlineMilestoneMergeCommandResult> {
-  return facade().createMilestoneMerge(label, remote);
-}
-
 export async function mergeDraftlineIncomingWithResolutions(
   token: MergeIncomingToken,
   label: string,
@@ -479,8 +419,6 @@ export function createDraftlineWholeFileUseContentResolutions(
 }
 
 async function readDraftlineSyncStatus(remote: string): Promise<DraftlineSyncStatusDto> {
-  // Not facade().preflightApplyIncoming: Draftline blocks that while a history
-  // cleanup is pending, which would hide the publish/undo/abandon actions.
   return invoke<DraftlineSyncStatusDto>("get_sync_status", {
     request: { workspace_path: requireWorkspacePath(), remote },
   });
@@ -573,125 +511,6 @@ export async function popDraftlineShelf(): Promise<boolean> {
     request: { workspace_path: workspacePath, shelf_id: shelf.id },
   });
   return true;
-}
-
-export async function squashDraftlineVersions(count: number, label: string): Promise<string> {
-  if (!draftlineWorkspacePath) {
-    throw new Error("No Draftline workspace is currently open");
-  }
-  const version = await invoke<Version>("squash_versions", {
-    request: { workspace_path: draftlineWorkspacePath, count, label },
-  });
-  return version.id;
-}
-
-export async function listDraftlineSnapshotCleanupCandidates(
-  selectedVersion: string,
-  targetVariation?: string | null,
-  remote?: string | null,
-): Promise<HistoryCompactionCandidates> {
-  if (!draftlineWorkspacePath) {
-    throw new Error("No Draftline workspace is currently open");
-  }
-  return draftlineClient.getHistoryCompactionCandidates({
-    workspace_path: draftlineWorkspacePath,
-    request: {
-      target_variation: targetVariation ?? null,
-      selected_version: selectedVersion,
-      remote: remote ?? null,
-      preserve_named_branches: true,
-      preserve_merge_boundaries: true,
-    },
-  });
-}
-
-export async function previewDraftlineSnapshotCleanup(
-  oldestVersion: string,
-  newestVersion: string,
-  label: string,
-  targetVariation?: string | null,
-  remote?: string | null,
-): Promise<HistoryCleanupPreview> {
-  const remotePolicy = remote && targetVariation
-    ? { kind: "push_with_lease" as const, remote, branch: targetVariation }
-    : { kind: "local_only" as const };
-  return facade().previewHistoryCleanup({
-    target_variation: targetVariation ?? null,
-    base: { kind: "auto" },
-    mode: {
-      kind: "compact_milestones",
-      milestones: [{
-        title: label,
-        description: null,
-        include_range: { start: oldestVersion, end: newestVersion },
-      }],
-      preserve_named_branches: true,
-      preserve_merge_boundaries: true,
-    },
-    safety: {
-      create_backup_ref: true,
-      backup_ref_name: null,
-      require_clean_worktree: true,
-    },
-    remote_policy: remotePolicy,
-  });
-}
-
-export async function applyDraftlineSnapshotCleanup(planId: string): Promise<TimelineCleanupResult> {
-  return facade().applyHistoryCleanup(planId);
-}
-
-export async function preflightDraftlineSnapshotCleanupRemoteImpact(
-  planId: string,
-  remote: string,
-): Promise<HistoryCleanupRemoteImpact> {
-  return facade().preflightHistoryCleanupRemoteImpact(planId, remote);
-}
-
-export async function preflightDraftlinePublishSnapshotCleanup(
-  planId: string,
-  remote: string,
-): Promise<HistoryCleanupPublishPreflight> {
-  return facade().preflightPublishHistoryCleanup(planId, remote);
-}
-
-export async function publishDraftlineSnapshotCleanup(
-  token: HistoryCleanupPublishToken,
-): Promise<HistoryCleanupPublishResult> {
-  return facade().publishHistoryCleanup(token);
-}
-
-export async function listDraftlinePendingSnapshotCleanups(
-  targetVariation?: string | null,
-): Promise<PendingHistoryCleanup[]> {
-  return facade().pendingHistoryCleanups(targetVariation ?? undefined);
-}
-
-export async function publishDraftlinePendingSnapshotCleanup(
-  planId: string,
-  remote?: string | null,
-): Promise<HistoryCleanupPublishResult> {
-  return facade().publishPendingHistoryCleanup(planId, remote ?? undefined);
-}
-
-export async function undoDraftlinePendingSnapshotCleanup(planId: string): Promise<TimelineCleanupResult> {
-  return facade().undoPendingHistoryCleanup(planId);
-}
-
-export async function abandonDraftlinePendingSnapshotCleanup(planId: string): Promise<PendingHistoryCleanup> {
-  return facade().abandonPendingHistoryCleanup(planId);
-}
-
-export async function resolveDraftlineRewrittenVersion(versionId: string): Promise<StaleVersionResolution> {
-  return facade().resolveRewrittenVersion(versionId);
-}
-
-export async function preflightDraftlineUndoSnapshotCleanup(planId: string): Promise<HistoryCleanupUndoPreflight> {
-  return facade().preflightUndoHistoryCleanup(planId);
-}
-
-export async function undoDraftlineSnapshotCleanup(token: HistoryCleanupUndoToken): Promise<TimelineCleanupResult> {
-  return facade().undoHistoryCleanup(token);
 }
 
 function refsByTargetVersion(refs: WorkspaceGraphRef[]): Map<string, WorkspaceGraphRef[]> {

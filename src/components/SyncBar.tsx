@@ -20,7 +20,6 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
   const pushToRemote = useAppStore((s) => s.pushToRemote);
   const pullFromRemote = useAppStore((s) => s.pullFromRemote);
   const syncWithRemote = useAppStore((s) => s.syncWithRemote);
-  const pendingHistoryCleanup = useAppStore((s) => s.pendingHistoryCleanup);
   const { settings } = useSettings();
   const [showIncoming, setShowIncoming] = useState(false);
   const timelines = useAppStore((s) => s.timelines);
@@ -76,21 +75,14 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
   const ahead = syncStatus?.ahead ?? 0;
   const behind = syncStatus?.behind ?? 0;
   const isUpToDate = ahead === 0 && behind === 0 && syncStatus !== null;
-  // A pending milestone cleanup must stay publishable even when sync status
-  // could not be read.
-  const showPrimaryAction = pendingHistoryCleanup !== null || (!isUpToDate && syncStatus !== null);
+  const showPrimaryAction = !isUpToDate && syncStatus !== null;
 
   // Determine primary action label
   let actionLabel = "Sync";
   let compactActionLabel = "Sync";
   let compactButtonLabel = "Sync";
   let actionFn = syncWithRemote;
-  if (pendingHistoryCleanup) {
-    actionLabel = "Push";
-    compactActionLabel = behind > 0 ? "Publish milestone history" : "Share milestone history";
-    compactButtonLabel = "Send";
-    actionFn = pushToRemote;
-  } else if (ahead > 0 && behind === 0) {
+  if (ahead > 0 && behind === 0) {
     actionLabel = "Push";
     compactActionLabel = "Share changes";
     compactButtonLabel = "Send";

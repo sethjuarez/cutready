@@ -24,7 +24,7 @@ import { IncomingPreview, SyncBar } from "./SyncBar";
 import { TimelineSelector } from "./TimelineSelector";
 import { useConfirmDialog } from "./ConfirmDialog";
 import type { DiffEntry } from "../types/sketch";
-import { firstParentTimelineNodes } from "../utils/historyCleanupSelection";
+import { firstParentTimelineNodes } from "../utils/timelineNodes";
 
 export function ChangesPanel() {
   const changedFiles = useAppStore((s) => s.changedFiles);

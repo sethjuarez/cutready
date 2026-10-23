@@ -12,34 +12,23 @@ import {
   getDraftlineSyncStatus,
   hasDraftlineShelf,
   hasDraftlineChanges,
-  isDraftlineHistoryCleanupBlockedError,
   isDraftlineVariationCreateConflictError,
   listDraftlineIncomingCommits,
   listDraftlineChangedFiles,
   listDraftlineGraphNodes,
-  listDraftlinePendingSnapshotCleanups,
   listDraftlineLargeChangedFiles,
   listDraftlineRemoteBranches,
   listDraftlineRemotes,
-  listDraftlineSnapshotCleanupCandidates,
   listDraftlineTimelines,
   listDraftlineVersions,
-  createDraftlineMilestoneMerge,
   preflightDraftlineIncoming,
   preflightDraftlineMergeIncoming,
-  preflightDraftlineMilestoneMerge,
-  preflightDraftlinePublishSnapshotCleanup,
   preflightDraftlineSwitchVariation,
   mergeDraftlineIncoming,
   mergeDraftlineIncomingWithResolutions,
   publishDraftlineChanges,
-  publishDraftlinePendingSnapshotCleanup,
-  publishDraftlineSnapshotCleanup,
   popDraftlineShelf,
   preflightDraftlineRenameVariation,
-  applyDraftlineSnapshotCleanup,
-  preflightDraftlineUndoSnapshotCleanup,
-  previewDraftlineSnapshotCleanup,
   restoreDraftlineVersionAsNewSave,
   restoreDraftlineVersionAsNewSaveToVariation,
   renameDraftlineVariation,
@@ -47,21 +36,12 @@ import {
   setDraftlineWorkspacePath,
   shelveDraftlineChanges,
   switchDraftlineVariation,
-  undoDraftlineSnapshotCleanup,
-  undoDraftlinePendingSnapshotCleanup,
-  abandonDraftlinePendingSnapshotCleanup,
   type DraftlineRestoreVersionTarget,
   type DraftlineMergeIncomingToken,
-  type DraftlineHistoryCleanupPreview,
-  type DraftlineHistoryCleanupPublishResult,
-  type DraftlineHistoryCompactionCandidates,
-  type DraftlineTimelineCleanupResult,
-  type DraftlinePendingHistoryCleanup,
 } from "../services/draftlineVersioning";
 import { recordActivityEntries } from "../services/telemetry";
 import { getGitHubAuthStatus } from "../services/githubSetup";
 import { useToastStore } from "./toastStore";
-import { cleanupRange, firstParentTimelineNodes } from "../utils/historyCleanupSelection";
 import { getStoryboardSketchPaths } from "../utils/storyboard";
 import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
 import type {
@@ -111,21 +91,6 @@ export function errorMessage(error: unknown): string {
   return String(error);
 }
 
-export interface PrePushMilestonePrompt {
-  snapshotCount: number;
-  newestCommitId: string;
-  oldestCommitId: string;
-  latestSnapshotLabel: string;
-  suggestedLabel: string;
-  remoteName: string;
-}
-
-export type PrePushMilestoneDecision =
-  | { type: "milestone"; label: string }
-  | { type: "pushAsIs" }
-  | { type: "cancel" };
-
-let prePushMilestoneResolve: ((decision: PrePushMilestoneDecision) => void) | null = null;
 let remoteDetectionGeneration = 0;
 
 /**
@@ -155,34 +120,7 @@ function beginWorkspaceGeneration(path: string | null): void {
   setDraftlineWorkspacePath(path);
 }
 
-function isGeneratedSnapshotLabel(label: string): boolean {
-  return /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) (morning|afternoon|evening) \d{1,2}:\d{2}$/.test(label.trim());
-}
-
-function localPrePushMilestoneRange(nodes: GraphNode[], ahead: number | null | undefined): GraphNode[] | null {
-  if (!ahead || ahead < 2) return null;
-  const activeNodes = firstParentTimelineNodes(nodes);
-  if (activeNodes.length < ahead) return null;
-  const range = activeNodes.slice(0, ahead);
-  return range[0]?.is_head ? range : null;
-}
-
-function suggestedMilestoneLabel(nodes: GraphNode[]): string {
-  const meaningful = nodes
-    .map((node) => node.message.trim())
-    .find((label) => label && !isGeneratedSnapshotLabel(label));
-  return meaningful ?? "Shared milestone";
-}
-
-function cancelPendingPrePushMilestonePrompt() {
-  prePushMilestoneResolve?.({ type: "cancel" });
-  prePushMilestoneResolve = null;
-}
-
 export function remoteSyncErrorMessage(error: unknown): string {
-  if (isDraftlineHistoryCleanupBlockedError(error)) {
-    return PENDING_CLEANUP_INCOMING_MESSAGE;
-  }
   const message = errorMessage(error);
   const lower = message.toLowerCase();
   if (
@@ -196,38 +134,7 @@ export function remoteSyncErrorMessage(error: unknown): string {
   return message;
 }
 
-const PENDING_CLEANUP_INCOMING_MESSAGE =
-  "Publish or undo milestone history before getting incoming remote saves. Pulling first would change the local timeline and invalidate the milestone publish.";
-
-export const PENDING_CLEANUP_STALE_MESSAGE =
-  "Compacted history can't be published because snapshots were saved after it. Open the history graph and choose Stop sharing to keep syncing.";
-
-export function hasDraftlineErrorCode(error: unknown, code: string): boolean {
-  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === code;
-}
-
-export const HISTORY_CLEANUP_BUSY_MESSAGE =
-  "Another milestone history operation is still running. Wait for it to finish, then try again.";
-
 export const SYNC_IN_PROGRESS_MESSAGE = "A sync is already running. Wait for it to finish, then try again.";
-
-function isHistoryCleanupBusyError(error: unknown): boolean {
-  return error instanceof Error && error.message === HISTORY_CLEANUP_BUSY_MESSAGE;
-}
-
-let historyCleanupOperationRunning = false;
-
-// Publish, undo and abandon act on the same pending plan; the check-and-set
-// runs before any await so callers that are still awaiting auth can't interleave.
-async function exclusiveHistoryCleanupOperation<T>(operation: () => Promise<T>): Promise<T> {
-  if (historyCleanupOperationRunning) throw new Error(HISTORY_CLEANUP_BUSY_MESSAGE);
-  historyCleanupOperationRunning = true;
-  try {
-    return await operation();
-  } finally {
-    historyCleanupOperationRunning = false;
-  }
-}
 
 export function suppressEditorFlush(relativePath: string) {
   suppressedEditorFlushPaths.add(normalizeRelativePath(relativePath));
@@ -371,74 +278,6 @@ async function ensureGitHubRemoteCredential(remote: RemoteInfo | null, notify = 
     console.warn("Could not confirm GitHub auth status before sync; continuing remote operation.", error);
     return true;
   }
-}
-
-function snapshotIdFromPreviewPath(path: string): string | null {
-  return path.startsWith("snapshot:") ? path.slice("snapshot:".length) : null;
-}
-
-function cleanupRewriteTarget(result: DraftlineTimelineCleanupResult, versionId: string): string | null | undefined {
-  const entry = result.snapshot_map.find((candidate) => candidate.old === versionId)
-    ?? result.commit_map.find((candidate) => candidate.old === versionId);
-  if (!entry) return undefined;
-
-  switch (entry.disposition.kind) {
-    case "preserved":
-    case "squashed_into":
-      return entry.disposition.new_id || entry.new || null;
-    case "dropped_as_noise":
-    case "orphaned_but_backed_up":
-    case "conflict_requires_user_choice":
-      return null;
-  }
-}
-
-function rewriteSnapshotPreviewTabs(
-  tabs: EditorTab[],
-  result: DraftlineTimelineCleanupResult,
-  idForPath: (type: EditorTab["type"], path: string) => string,
-): { tabs: EditorTab[]; remappedIds: Map<string, string | null>; changed: boolean } {
-  const remappedIds = new Map<string, string | null>();
-  const seen = new Set<string>();
-  const next: EditorTab[] = [];
-  let changed = false;
-
-  for (const tab of tabs) {
-    const snapshotId = tab.type === "snapshot-preview" ? snapshotIdFromPreviewPath(tab.path) : null;
-    const target = snapshotId ? cleanupRewriteTarget(result, snapshotId) : undefined;
-    if (target === null) {
-      remappedIds.set(tab.id, null);
-      changed = true;
-      continue;
-    }
-
-    const path = target && target !== snapshotId ? `snapshot:${target}` : tab.path;
-    const id = path === tab.path ? tab.id : idForPath(tab.type, path);
-    const title = path === tab.path || !target ? tab.title : `Snapshot: ${target.slice(0, 7)}`;
-    const key = `${tab.type}\u0000${path}`;
-    if (seen.has(key)) {
-      remappedIds.set(tab.id, id);
-      changed = true;
-      continue;
-    }
-    seen.add(key);
-    next.push(path === tab.path ? tab : { ...tab, id, path, title });
-    if (id !== tab.id) {
-      remappedIds.set(tab.id, id);
-      changed = true;
-    }
-  }
-
-  return { tabs: next, remappedIds, changed };
-}
-
-function remapActiveTabId(activeId: string | null, tabs: EditorTab[], remappedIds: Map<string, string | null>): string | null {
-  if (!activeId) return null;
-  if (!remappedIds.has(activeId)) {
-    return tabs.some((tab) => tab.id === activeId) ? activeId : tabs[0]?.id ?? null;
-  }
-  const mapped = remappedIds.get(activeId) ?? null;
-  return mapped && tabs.some((tab) => tab.id === mapped) ? mapped : tabs[0]?.id ?? null;
 }
 
 /** A project asset (screenshot or visual) with reference info. */
@@ -591,12 +430,6 @@ interface AppStoreState {
   pendingTimelineAfterSave: string | null;
   /** Branch created from a historical snapshot that has not recorded its first new save yet. */
   startedBranchFromSnapshot: { branchName: string; snapshotId: string } | null;
-  /** Most recent Draftline history cleanup result, used for guarded undo. */
-  lastHistoryCleanup: DraftlineTimelineCleanupResult | null;
-  /** Durable Draftline pending cleanup that blocks normal remote operations until resolved. */
-  pendingHistoryCleanup: DraftlinePendingHistoryCleanup | null;
-  /** Pre-push prompt for compressing unpublished local snapshots into one milestone. */
-  prePushMilestonePrompt: PrePushMilestonePrompt | null;
   /** Whether there are unsaved changes since the last snapshot. */
   isDirty: boolean;
   /** List of changed files since last snapshot (for Changes panel). */
@@ -929,22 +762,6 @@ interface AppStoreState {
   quickSave: () => Promise<void>;
   /** Open snapshot name prompt (and ensure panel is visible). */
   promptSnapshot: () => Promise<void>;
-  /** Compact a HEAD-anchored range of snapshots into one named milestone. */
-  squashSnapshots: (oldestCommitId: string, newestCommitId: string, label: string) => Promise<void>;
-  /** Load Draftline's valid compact-range endpoint candidates for one selected snapshot. */
-  findSnapshotCleanupCandidates: (selectedCommitId: string) => Promise<DraftlineHistoryCompactionCandidates>;
-  /** Preview compacting a contiguous range of snapshots through Draftline cleanup. */
-  previewSnapshotCleanup: (oldestCommitId: string, newestCommitId: string, label: string, selectedRangeCommitIds?: string[]) => Promise<DraftlineHistoryCleanupPreview>;
-  /** Apply a previously previewed Draftline cleanup plan. */
-  applySnapshotCleanup: (planId: string) => Promise<DraftlineTimelineCleanupResult>;
-  /** Refresh Draftline's durable pending history-cleanup state for the active timeline. */
-  loadPendingHistoryCleanup: () => Promise<DraftlinePendingHistoryCleanup | null>;
-  /** Publish an applied Draftline cleanup plan to the remote with Draftline's lease-protected token. */
-  publishSnapshotCleanup: (planId: string, remote: string) => Promise<DraftlineHistoryCleanupPublishResult | null>;
-  /** Undo a previously applied Draftline cleanup plan using Draftline's guarded backup token. */
-  undoSnapshotCleanup: (planId?: string) => Promise<DraftlineTimelineCleanupResult>;
-  /** Forget a pending cleanup without moving any snapshots, unblocking sync when publish/undo are no longer possible. */
-  abandonSnapshotCleanup: (planId: string) => Promise<void>;
 
   // ── Remote sync actions ────────────────────────────────────
   /** Detect configured remote for the project. */
@@ -969,10 +786,6 @@ interface AppStoreState {
   checkoutRemoteTimeline: (branch: string) => Promise<void>;
   /** Publish (push) the current local-only timeline to the remote. */
   publishTimeline: () => Promise<void>;
-  /** Ask the user whether to compact unpublished local snapshots before push. */
-  requestPrePushMilestone: (prompt: PrePushMilestonePrompt) => Promise<PrePushMilestoneDecision>;
-  /** Resolve the active pre-push milestone prompt. */
-  resolvePrePushMilestone: (decision: PrePushMilestoneDecision) => void;
 
   // ── Diff ──────────────────────────────────────────────────
   /** Compare two snapshots and return file-level diffs. */
@@ -1174,9 +987,6 @@ function resetPersistenceState(): Pick<AppStoreState,
   | "pendingNavAfterSave"
   | "pendingTimelineAfterSave"
   | "startedBranchFromSnapshot"
-  | "lastHistoryCleanup"
-  | "pendingHistoryCleanup"
-  | "prePushMilestonePrompt"
   | "isDirty"
   | "changedFiles"
   | "hasStash"
@@ -1198,7 +1008,6 @@ function resetPersistenceState(): Pick<AppStoreState,
   | "diffResult"
   | "diffSelection"
 > {
-  cancelPendingPrePushMilestonePrompt();
   return {
     versions: [],
     timelines: [],
@@ -1207,9 +1016,6 @@ function resetPersistenceState(): Pick<AppStoreState,
     pendingNavAfterSave: null,
     pendingTimelineAfterSave: null,
     startedBranchFromSnapshot: null,
-    lastHistoryCleanup: null,
-    pendingHistoryCleanup: null,
-    prePushMilestonePrompt: null,
     isDirty: false,
     changedFiles: [],
     hasStash: false,
@@ -1375,9 +1181,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   pendingNavAfterSave: null,
   pendingTimelineAfterSave: null,
   startedBranchFromSnapshot: null,
-  lastHistoryCleanup: null,
-  pendingHistoryCleanup: null,
-  prePushMilestonePrompt: null,
   isDirty: false,
   changedFiles: [],
   saving: false,
@@ -3017,7 +2820,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const timelines = await listDraftlineTimelines();
       if (generation !== workspaceGeneration) return;
       set({ timelines });
-      await get().loadPendingHistoryCleanup();
     } catch (err) {
       console.error("Failed to load timelines:", err);
     }
@@ -3161,212 +2963,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     set({ snapshotPromptOpen: true });
   },
 
-  squashSnapshots: async (oldestCommitId, newestCommitId, label) => {
-    try {
-      const preview = await get().previewSnapshotCleanup(oldestCommitId, newestCommitId, label);
-      await get().applySnapshotCleanup(preview.plan_id);
-    } catch (err) {
-      console.error("Failed to compact snapshots:", err);
-      useToastStore.getState().show(`Compaction failed: ${errorMessage(err)}`, 5000, "error");
-    }
-  },
-
-  findSnapshotCleanupCandidates: async (selectedCommitId) => {
-    const { currentRemote, timelines } = get();
-    const targetVariation = timelines.find((timeline) => timeline.is_active)?.name ?? null;
-    if (!currentRemote) {
-      return listDraftlineSnapshotCleanupCandidates(selectedCommitId, targetVariation, null);
-    }
-    try {
-      return await listDraftlineSnapshotCleanupCandidates(selectedCommitId, targetVariation, currentRemote.name);
-    } catch (err) {
-      if (!errorMessage(err).includes("401")) throw err;
-      return listDraftlineSnapshotCleanupCandidates(selectedCommitId, targetVariation, null);
-    }
-  },
-
-  previewSnapshotCleanup: async (oldestCommitId, newestCommitId, label, selectedRangeCommitIds) => {
-    const { currentRemote, graphNodes, timelines } = get();
-    const range = cleanupRange(graphNodes, newestCommitId, oldestCommitId);
-    if (selectedRangeCommitIds) {
-      const selected = new Set(selectedRangeCommitIds);
-      const allKnown = selectedRangeCommitIds.every((id) => graphNodes.some((node) => node.id === id));
-      const rangeIds = range?.map((node) => node.id) ?? [];
-      if (
-        selectedRangeCommitIds.length < 2
-        || selected.size !== selectedRangeCommitIds.length
-        || selectedRangeCommitIds[0] !== newestCommitId
-        || selectedRangeCommitIds[selectedRangeCommitIds.length - 1] !== oldestCommitId
-        || !allKnown
-        || rangeIds.length !== selectedRangeCommitIds.length
-        || !rangeIds.every((id, index) => id === selectedRangeCommitIds[index])
-      ) {
-        throw new Error("Select a contiguous range of snapshots to compact.");
-      }
-    } else if (!range) {
-      throw new Error("Select a contiguous range of snapshots to compact.");
-    }
-    const targetVariation = timelines.find((timeline) => timeline.is_active)?.name ?? null;
-    return previewDraftlineSnapshotCleanup(
-      oldestCommitId,
-      newestCommitId,
-      label,
-      targetVariation,
-      currentRemote?.name ?? null,
-    );
-  },
-
-  applySnapshotCleanup: async (planId) => {
-    const result = await applyDraftlineSnapshotCleanup(planId);
-    set({ diffResult: null, diffSelection: null, isDirty: false, changedFiles: [], lastHistoryCleanup: result });
-    await get().loadVersions();
-    await get().loadGraphData();
-    await get().loadTimelines();
-    await get().loadPendingHistoryCleanup();
-    await get().checkDirty();
-    const mainTabs = rewriteSnapshotPreviewTabs(get().openTabs, result, makeMainTabId);
-    const splitTabs = rewriteSnapshotPreviewTabs(get().splitTabs, result, makeSplitTabId);
-    if (mainTabs.changed || splitTabs.changed) {
-      set((state) => ({
-        openTabs: mainTabs.tabs,
-        activeTabId: remapActiveTabId(state.activeTabId, mainTabs.tabs, mainTabs.remappedIds),
-        splitTabs: splitTabs.tabs,
-        splitActiveTabId: remapActiveTabId(state.splitActiveTabId, splitTabs.tabs, splitTabs.remappedIds),
-        activeEditorGroup: splitTabs.tabs.length === 0 && state.activeEditorGroup === "split" ? "main" : state.activeEditorGroup,
-      }));
-      get()._persistTabs();
-    }
-    const squashed = result.commit_map.filter((entry) => entry.disposition.kind === "squashed_into").length;
-    useToastStore.getState().show(
-      squashed > 0 ? `History compacted. ${squashed} old snapshots are mapped to the compacted snapshot.` : "History compacted.",
-      5000,
-      "success",
-    );
-    return result;
-  },
-
-  loadPendingHistoryCleanup: async () => {
-    const generation = workspaceGeneration;
-    const targetVariation = get().timelines.find((timeline) => timeline.is_active)?.name ?? null;
-    try {
-      const pending = await listDraftlinePendingSnapshotCleanups(targetVariation);
-      const activePending = pending[0] ?? null;
-      if (generation === workspaceGeneration) set({ pendingHistoryCleanup: activePending });
-      return activePending;
-    } catch (err) {
-      if (!errorMessage(err).toLowerCase().includes("no draftline workspace")) {
-        console.error("Failed to load pending history cleanup:", err);
-      }
-      if (generation === workspaceGeneration) set({ pendingHistoryCleanup: null });
-      return null;
-    }
-  },
-
-  publishSnapshotCleanup: (planId, remote) => exclusiveHistoryCleanupOperation(async () => {
-    const pendingCleanup = get().pendingHistoryCleanup;
-    if (pendingCleanup?.plan_id === planId) {
-      const result = await publishDraftlinePendingSnapshotCleanup(planId, remote);
-      set({ lastHistoryCleanup: null, pendingHistoryCleanup: null });
-      await get().refreshSyncStatus();
-      await get().refreshIncomingCommits();
-      await get().loadGraphData();
-      await get().loadTimelines();
-      await get().loadVersions();
-      useToastStore.getState().show("Milestone history published safely.", 5000, "success");
-      return result;
-    }
-
-    const preflight = await preflightDraftlinePublishSnapshotCleanup(planId, remote);
-    if (preflight.remote_impact.publish_status === "remote_has_incoming") {
-      throw new Error("Remote has new incoming snapshots. Sync before publishing milestone history.");
-    }
-    if (!preflight.can_publish || !preflight.token) {
-      return null;
-    }
-    const result = await publishDraftlineSnapshotCleanup(preflight.token);
-    set({ lastHistoryCleanup: null, pendingHistoryCleanup: null });
-    await get().refreshSyncStatus();
-    await get().refreshIncomingCommits();
-    await get().loadGraphData();
-    await get().loadTimelines();
-    await get().loadVersions();
-    useToastStore.getState().show("Milestone history published safely.", 5000, "success");
-    return result;
-  }),
-
-  abandonSnapshotCleanup: (planId) => exclusiveHistoryCleanupOperation(async () => {
-    // isSyncing only disables the sync buttons; the exclusive lock prevents a racing publish.
-    if (get().isSyncing) {
-      throw new Error(SYNC_IN_PROGRESS_MESSAGE);
-    }
-    if (get().pendingHistoryCleanup?.plan_id !== planId) {
-      throw new Error("This compacted history is no longer pending. Refresh and try again.");
-    }
-    set({ isSyncing: true });
-    try {
-      await abandonDraftlinePendingSnapshotCleanup(planId);
-      set({ lastHistoryCleanup: null, pendingHistoryCleanup: null });
-      await get().loadPendingHistoryCleanup();
-      await get().refreshSyncStatus();
-      await get().refreshIncomingCommits();
-      await get().loadGraphData();
-    } finally {
-      set({ isSyncing: false });
-    }
-    useToastStore.getState().show("Compacted history won't be shared. Your next sync merges collaborators' snapshots back in.", 6000, "info");
-  }),
-
-  undoSnapshotCleanup: (planId) => exclusiveHistoryCleanupOperation(async () => {
-    const pendingCleanup = get().pendingHistoryCleanup;
-    const targetPlanId = planId ?? pendingCleanup?.plan_id ?? get().lastHistoryCleanup?.plan_id;
-    if (!targetPlanId) {
-      throw new Error("No milestone history backup is available to undo.");
-    }
-    const result = pendingCleanup?.plan_id === targetPlanId
-      ? await undoDraftlinePendingSnapshotCleanup(targetPlanId)
-      : await (async () => {
-        const preflight = await preflightDraftlineUndoSnapshotCleanup(targetPlanId);
-        if (!preflight.can_undo) {
-          throw new Error("Draftline cannot undo this cleanup because the current timeline no longer matches the cleanup backup.");
-        }
-        return undoDraftlineSnapshotCleanup(preflight.token);
-      })();
-    set({ diffResult: null, diffSelection: null, isDirty: false, changedFiles: [], lastHistoryCleanup: null, pendingHistoryCleanup: null });
-    await get().loadVersions();
-    await get().loadGraphData();
-    await get().loadTimelines();
-    await get().checkDirty();
-    const mainTabs = rewriteSnapshotPreviewTabs(get().openTabs, result, makeMainTabId);
-    const splitTabs = rewriteSnapshotPreviewTabs(get().splitTabs, result, makeSplitTabId);
-    if (mainTabs.changed || splitTabs.changed) {
-      set((state) => ({
-        openTabs: mainTabs.tabs,
-        activeTabId: remapActiveTabId(state.activeTabId, mainTabs.tabs, mainTabs.remappedIds),
-        splitTabs: splitTabs.tabs,
-        splitActiveTabId: remapActiveTabId(state.splitActiveTabId, splitTabs.tabs, splitTabs.remappedIds),
-        activeEditorGroup: splitTabs.tabs.length === 0 && state.activeEditorGroup === "split" ? "main" : state.activeEditorGroup,
-      }));
-      get()._persistTabs();
-    }
-    useToastStore.getState().show("Milestone history restored from Draftline backup.", 5000, "success");
-    return result;
-  }),
-
-  requestPrePushMilestone: (prompt) => {
-    cancelPendingPrePushMilestonePrompt();
-    return new Promise<PrePushMilestoneDecision>((resolve) => {
-      prePushMilestoneResolve = resolve;
-      set({ prePushMilestonePrompt: prompt });
-    });
-  },
-
-  resolvePrePushMilestone: (decision) => {
-    const resolve = prePushMilestoneResolve;
-    prePushMilestoneResolve = null;
-    set({ prePushMilestonePrompt: null });
-    resolve?.(decision);
-  },
-
   // ── Remote sync actions ────────────────────────────────────
 
   detectRemote: async () => {
@@ -3416,22 +3012,19 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadTimelines();
       await get().loadVersions();
     } catch (err) {
-      if (isDraftlineHistoryCleanupBlockedError(err)) {
-        await get().loadPendingHistoryCleanup();
-      }
       set({ syncError: remoteSyncErrorMessage(err) });
     } finally {
       set({ isSyncing: false });
     }
   },
 
-  pushToRemote:async () => {
+  pushToRemote: async () => {
     const { currentRemote, timelines } = get();
     if (!currentRemote) return;
     if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
     const active = timelines.find((t) => t.is_active);
     if (!active) return;
-    // Another sync or cleanup operation may have started while credentials were checked.
+    // Another sync operation may have started while credentials were checked.
     if (get().isSyncing) {
       useToastStore.getState().show(SYNC_IN_PROGRESS_MESSAGE, 5000, "info");
       return;
@@ -3447,71 +3040,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         set({ syncError: `Large files detected: ${names}. Remove or add to .gitignore before pushing.`, isSyncing: false });
         return;
       }
-      const pendingCleanup = get().pendingHistoryCleanup;
-      if (pendingCleanup) {
-        let published: DraftlineHistoryCleanupPublishResult | null;
-        try {
-          published = await get().publishSnapshotCleanup(pendingCleanup.plan_id, currentRemote.name);
-        } catch (err) {
-          // The compact sync bar only shows errors in a tooltip, so these also toast.
-          if (hasDraftlineErrorCode(err, "local_state_changed")) {
-            set({ syncError: PENDING_CLEANUP_STALE_MESSAGE });
-            useToastStore.getState().show(PENDING_CLEANUP_STALE_MESSAGE, 8000, "warning");
-            return;
-          }
-          if (isHistoryCleanupBusyError(err)) {
-            set({ syncError: HISTORY_CLEANUP_BUSY_MESSAGE });
-            useToastStore.getState().show(HISTORY_CLEANUP_BUSY_MESSAGE, 6000, "warning");
-            return;
-          }
-          throw err;
-        }
-        if (published) {
-          return;
-        }
-      }
-      const milestoneRange = localPrePushMilestoneRange(get().graphNodes, get().syncStatus?.ahead);
-      if (milestoneRange && get().syncStatus?.behind === 0) {
-        const newest = milestoneRange[0];
-        const oldest = milestoneRange[milestoneRange.length - 1];
-        let canCreateMilestoneMerge = false;
-        try {
-          const preflight = await preflightDraftlineMilestoneMerge(currentRemote.name);
-          canCreateMilestoneMerge = preflight.can_create_milestone;
-        } catch (err) {
-          console.warn("Could not validate automatic pre-push milestone merge; pushing snapshots as-is.", err);
-        }
-
-        if (canCreateMilestoneMerge) {
-          const decision = await get().requestPrePushMilestone({
-            snapshotCount: milestoneRange.length,
-            newestCommitId: newest.id,
-            oldestCommitId: oldest.id,
-            latestSnapshotLabel: newest.message,
-            suggestedLabel: suggestedMilestoneLabel(milestoneRange),
-            remoteName: currentRemote.name,
-          });
-          if (decision.type === "cancel") {
-            return;
-          }
-          if (decision.type === "milestone") {
-            const label = decision.label.trim();
-            if (!label) {
-              throw new Error("Milestone label is required before sharing local snapshots.");
-            }
-            await createDraftlineMilestoneMerge(currentRemote.name, label);
-            await publishDraftlineChanges(currentRemote.name);
-            await get().refreshSyncStatus();
-            await get().checkDirty();
-            await get().refreshChangedFiles();
-            await get().loadGraphData();
-            await get().loadTimelines();
-            await get().loadVersions();
-            useToastStore.getState().show("Milestone history shared without rewriting your saves.", 5000, "success");
-            return;
-          }
-        }
-      }
       await publishDraftlineChanges(currentRemote.name);
       await get().refreshSyncStatus();
       await get().checkDirty();
@@ -3520,9 +3048,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadTimelines();
       await get().loadVersions();
     } catch (err) {
-      if (isDraftlineHistoryCleanupBlockedError(err)) {
-        await get().loadPendingHistoryCleanup();
-      }
       set({ syncError: remoteSyncErrorMessage(err) });
     } finally {
       set({ isSyncing: false });
@@ -3534,10 +3059,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     await get().fetchFromRemote();
     const updated = get().syncStatus;
     if (!updated) return;
-    if (get().pendingHistoryCleanup && updated.behind > 0) {
-      set({ syncError: PENDING_CLEANUP_INCOMING_MESSAGE });
-      return;
-    }
     // If behind, pull first
     if (updated.behind > 0) {
       await get().pullFromRemote();
@@ -3571,10 +3092,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { currentRemote } = get();
     if (!currentRemote) return;
     if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
-    if (get().pendingHistoryCleanup) {
-      set({ syncError: PENDING_CLEANUP_INCOMING_MESSAGE });
-      return;
-    }
     set({ isSyncing: true, syncError: null });
     try {
       const preflight = await preflightDraftlineIncoming(currentRemote.name);
@@ -3636,9 +3153,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().checkDirty();
       useToastStore.getState().show("Incoming saves applied.", 4000, "success");
     } catch (err) {
-      if (isDraftlineHistoryCleanupBlockedError(err)) {
-        await get().loadPendingHistoryCleanup();
-      }
       set({ syncError: remoteSyncErrorMessage(err) });
     } finally {
       set({ isSyncing: false });
@@ -3733,7 +3247,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         const status = await getDraftlineSyncStatus(currentRemote.name);
         if (generation !== workspaceGeneration) return;
         set({ syncStatus: status, syncError: null });
-        await get().loadPendingHistoryCleanup();
       } catch {
         if (generation !== workspaceGeneration) return;
         set({ syncStatus: null });

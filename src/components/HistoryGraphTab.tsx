@@ -1,17 +1,14 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import {
   ArrowLeftRight,
-  ArrowRight,
   ChevronDown,
   GitBranch,
-  GitPullRequestArrow,
   LocateFixed,
   RotateCcw,
   Search,
@@ -29,22 +26,7 @@ import {
 } from "./FullHistoryGraph";
 import { TimelineSelector } from "./TimelineSelector";
 import { UnsavedWorkspaceDialog } from "./UnsavedWorkspaceDialog";
-import type {
-  DraftlineHistoryCleanupPreview,
-  DraftlineHistoryCompactionCandidate,
-  DraftlineHistoryCompactionCandidates,
-} from "../services/draftlineVersioning";
-import {
-  errorMessage,
-  hasDraftlineErrorCode,
-  PENDING_CLEANUP_STALE_MESSAGE,
-} from "../stores/appStore";
-import {
-  firstParentTimelineIds,
-  firstParentTimelineNodes,
-  isExactCleanupSelection,
-  twoPointCleanupSelection,
-} from "../utils/historyCleanupSelection";
+import { firstParentTimelineNodes } from "../utils/timelineNodes";
 
 export function HistoryGraphTab() {
   const graphNodes = useAppStore((s) => s.graphNodes);
@@ -55,20 +37,8 @@ export function HistoryGraphTab() {
   const checkRewound = useAppStore((s) => s.checkRewound);
   const navigateToSnapshot = useAppStore((s) => s.navigateToSnapshot);
   const switchTimeline = useAppStore((s) => s.switchTimeline);
-  const isDirty = useAppStore((s) => s.isDirty);
-  const isRewound = useAppStore((s) => s.isRewound);
   const discardChanges = useAppStore((s) => s.discardChanges);
   const deleteTimeline = useAppStore((s) => s.deleteTimeline);
-  const previewSnapshotCleanup = useAppStore((s) => s.previewSnapshotCleanup);
-  const findSnapshotCleanupCandidates = useAppStore(
-    (s) => s.findSnapshotCleanupCandidates,
-  );
-  const applySnapshotCleanup = useAppStore((s) => s.applySnapshotCleanup);
-  const undoSnapshotCleanup = useAppStore((s) => s.undoSnapshotCleanup);
-  const abandonSnapshotCleanup = useAppStore((s) => s.abandonSnapshotCleanup);
-  const isSyncing = useAppStore((s) => s.isSyncing);
-  const lastHistoryCleanup = useAppStore((s) => s.lastHistoryCleanup);
-  const pendingHistoryCleanup = useAppStore((s) => s.pendingHistoryCleanup);
   const currentRemote = useAppStore((s) => s.currentRemote);
   const syncStatus = useAppStore((s) => s.syncStatus);
   const currentProject = useAppStore((s) => s.currentProject);
@@ -80,31 +50,11 @@ export function HistoryGraphTab() {
   const [pendingSwitch, setPendingSwitch] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [authorFilter, setAuthorFilter] = useState("all");
-  const [cleanupMode, setCleanupMode] = useState(false);
-  const [cleanupPointIds, setCleanupPointIds] = useState<string[]>([]);
-  const [selectedForCleanup, setSelectedForCleanup] = useState<Set<string>>(
-    new Set(),
-  );
-  const [cleanupLabel, setCleanupLabel] = useState("");
-  const [cleanupError, setCleanupError] = useState<string | null>(null);
-  const [cleanupPreview, setCleanupPreview] =
-    useState<DraftlineHistoryCleanupPreview | null>(null);
-  const [cleanupCandidates, setCleanupCandidates] =
-    useState<DraftlineHistoryCompactionCandidates | null>(null);
-  const [cleanupCandidateFallback, setCleanupCandidateFallback] =
-    useState(false);
-  const [loadingCleanupCandidates, setLoadingCleanupCandidates] =
-    useState(false);
-  const [previewingCleanup, setPreviewingCleanup] = useState(false);
-  const [applyingCleanup, setApplyingCleanup] = useState(false);
-  const [undoingCleanup, setUndoingCleanup] = useState(false);
-  const [abandoningCleanup, setAbandoningCleanup] = useState(false);
   const [graphZoom, setGraphZoom] = useState(1);
   const [graphFiltersOpen, setGraphFiltersOpen] = useState(false);
   const [showSideAncestry, setShowSideAncestry] = useState(false);
   const [showRemoteOnly, setShowRemoteOnly] = useState(false);
   const [showRecoveryRefs, setShowRecoveryRefs] = useState(false);
-  const cleanupCandidateRequestRef = useRef(0);
   const { confirm, confirmationDialog } = useConfirmDialog();
 
   useEffect(() => {
@@ -186,8 +136,6 @@ export function HistoryGraphTab() {
       showSideAncestry,
     ],
   );
-  const activeCleanupNodes = firstParentNodes;
-
   const snapshotCount = useMemo(
     () => new Set(visibleGraphNodes.map((node) => node.id)).size,
     [visibleGraphNodes],
@@ -252,87 +200,6 @@ export function HistoryGraphTab() {
     );
   }, [authorFilter, graphNodes]);
 
-  const selectedNodes = useMemo(
-    () => activeCleanupNodes.filter((node) => selectedForCleanup.has(node.id)),
-    [activeCleanupNodes, selectedForCleanup],
-  );
-  const selectedNewest = selectedNodes[0];
-  const selectedOldest = selectedNodes[selectedNodes.length - 1];
-  const hasContiguousCleanupSelection = isExactCleanupSelection(
-    activeCleanupNodes,
-    selectedForCleanup,
-  );
-  const firstParentCleanupIds = useMemo(
-    () => firstParentTimelineIds(activeCleanupNodes),
-    [activeCleanupNodes],
-  );
-  const cleanupCandidateByEndpoint = useMemo(() => {
-    if (!cleanupCandidates || cleanupPointIds.length !== 1)
-      return new Map<string, DraftlineHistoryCompactionCandidate>();
-    return new Map(
-      cleanupCandidates.candidates.map((candidate) => [
-        cleanupCandidateEndpointId(candidate),
-        candidate,
-      ]),
-    );
-  }, [cleanupCandidates, cleanupPointIds.length]);
-  const validCleanupCandidateCount = useMemo(
-    () =>
-      Array.from(cleanupCandidateByEndpoint.values()).filter(
-        (candidate) => candidate.can_compact,
-      ).length,
-    [cleanupCandidateByEndpoint],
-  );
-  const sharedHistoryCandidateCount = useMemo(
-    () =>
-      Array.from(cleanupCandidateByEndpoint.values()).filter(
-        (candidate) =>
-          candidate.can_compact &&
-          candidate.remote_impact?.publish_status ===
-            "shared_history_rewrite_required",
-      ).length,
-    [cleanupCandidateByEndpoint],
-  );
-  const cleanupSelectableIds = useMemo(() => {
-    if (!cleanupMode) return new Set<string>();
-    if (cleanupPointIds.length !== 1) return firstParentCleanupIds;
-    const ids = new Set(cleanupPointIds);
-    if (
-      cleanupCandidateFallback ||
-      loadingCleanupCandidates ||
-      !cleanupCandidates
-    ) {
-      for (const id of firstParentCleanupIds) ids.add(id);
-      return ids;
-    }
-    for (const endpointId of cleanupCandidateByEndpoint.keys())
-      ids.add(endpointId);
-    return ids;
-  }, [
-    cleanupCandidateByEndpoint,
-    cleanupCandidateFallback,
-    cleanupCandidates,
-    cleanupMode,
-    cleanupPointIds,
-    firstParentCleanupIds,
-    loadingCleanupCandidates,
-  ]);
-  const effectiveCleanupLabel = useMemo(() => {
-    const explicit = cleanupLabel.trim();
-    if (explicit) return explicit;
-    if (selectedOldest && selectedNewest) {
-      return `Compact ${selectedOldest.message} to ${selectedNewest.message}`;
-    }
-    return "Compacted history";
-  }, [cleanupLabel, selectedNewest, selectedOldest]);
-  const canPreviewCleanup =
-    cleanupMode &&
-    hasContiguousCleanupSelection &&
-    !isDirty &&
-    !isRewound &&
-    cleanupPointIds.length === 2 &&
-    !previewingCleanup;
-
   const filteredGraphNodes = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return visibleGraphNodes;
@@ -366,267 +233,6 @@ export function HistoryGraphTab() {
     },
     [loadGraphData, loadTimelines, navigateToSnapshot],
   );
-
-  const loadCleanupCandidates = useCallback(
-    async (commitId: string) => {
-      const requestId = cleanupCandidateRequestRef.current + 1;
-      cleanupCandidateRequestRef.current = requestId;
-      setLoadingCleanupCandidates(true);
-      setCleanupCandidates(null);
-      setCleanupCandidateFallback(false);
-      try {
-        const candidates = await findSnapshotCleanupCandidates(commitId);
-        if (cleanupCandidateRequestRef.current !== requestId) return;
-        setCleanupCandidates(candidates);
-        const validCount = candidates.candidates.filter(
-          (candidate) => candidate.can_compact,
-        ).length;
-        if (validCount === 0) {
-          setCleanupError(
-            "Draftline could not find a valid compaction range endpoint for that snapshot.",
-          );
-        } else {
-          setCleanupError(null);
-        }
-      } catch (err) {
-        if (cleanupCandidateRequestRef.current !== requestId) return;
-        setCleanupCandidateFallback(true);
-        setCleanupError(null);
-      } finally {
-        if (cleanupCandidateRequestRef.current === requestId)
-          setLoadingCleanupCandidates(false);
-      }
-    },
-    [findSnapshotCleanupCandidates],
-  );
-
-  const toggleCleanupSelection = useCallback(
-    (commitId: string) => {
-      if (cleanupPointIds.length === 0 || cleanupPointIds.length === 2) {
-        setCleanupPointIds([commitId]);
-        setSelectedForCleanup(new Set([commitId]));
-        setCleanupPreview(null);
-        setCleanupError(null);
-        void loadCleanupCandidates(commitId);
-        return;
-      }
-
-      if (cleanupPointIds.includes(commitId)) {
-        setCleanupPointIds([]);
-        setSelectedForCleanup(new Set());
-        setCleanupPreview(null);
-        setCleanupError(null);
-        setCleanupCandidates(null);
-        setCleanupCandidateFallback(false);
-        cleanupCandidateRequestRef.current += 1;
-        setLoadingCleanupCandidates(false);
-        return;
-      }
-
-      if (loadingCleanupCandidates) {
-        setCleanupError(
-          "Still finding valid compaction range targets. Try again in a moment.",
-        );
-        return;
-      }
-
-      if (!cleanupCandidates && !cleanupCandidateFallback) {
-        setCleanupError(
-          "Draftline compaction range targets are not ready. Pick the first point again to retry.",
-        );
-        return;
-      }
-
-      if (!cleanupCandidateFallback) {
-        const candidate = cleanupCandidateByEndpoint.get(commitId);
-        if (!candidate) {
-          setCleanupError(
-            "Choose one of the Draftline-approved compaction range targets.",
-          );
-          return;
-        }
-
-        if (!candidate.can_compact) {
-          setCleanupError(cleanupCandidateBlockerMessage(candidate));
-          return;
-        }
-      }
-
-      const anchorId = cleanupPointIds[cleanupPointIds.length - 1];
-      const selection = twoPointCleanupSelection(
-        activeCleanupNodes,
-        anchorId,
-        commitId,
-      );
-      setCleanupPointIds([anchorId, commitId]);
-      setSelectedForCleanup(selection);
-      setCleanupPreview(null);
-      setCleanupError(
-        selection.size > 1
-          ? null
-          : "Choose two snapshots on the active timeline to compact.",
-      );
-    },
-    [
-      activeCleanupNodes,
-      cleanupCandidateByEndpoint,
-      cleanupCandidateFallback,
-      cleanupCandidates,
-      cleanupPointIds,
-      loadCleanupCandidates,
-      loadingCleanupCandidates,
-    ],
-  );
-
-  const cancelCleanup = useCallback(() => {
-    setCleanupMode(false);
-    setCleanupPointIds([]);
-    setSelectedForCleanup(new Set());
-    setCleanupLabel("");
-    setCleanupError(null);
-    setCleanupPreview(null);
-    setCleanupCandidates(null);
-    setCleanupCandidateFallback(false);
-    cleanupCandidateRequestRef.current += 1;
-    setLoadingCleanupCandidates(false);
-  }, []);
-
-  const handlePreviewCleanup = useCallback(async () => {
-    if (!selectedNewest || !selectedOldest) return;
-    setPreviewingCleanup(true);
-    setCleanupError(null);
-    setCleanupPreview(null);
-    try {
-      const preview = await previewSnapshotCleanup(
-        selectedOldest.id,
-        selectedNewest.id,
-        effectiveCleanupLabel,
-        selectedNodes.map((node) => node.id),
-      );
-      setCleanupPreview(preview);
-    } catch (err) {
-      setCleanupMode(true);
-      setCleanupError(errorMessage(err));
-    } finally {
-      setPreviewingCleanup(false);
-    }
-  }, [
-    effectiveCleanupLabel,
-    previewSnapshotCleanup,
-    selectedNewest,
-    selectedNodes,
-    selectedOldest,
-  ]);
-
-  const handleApplyCleanup = useCallback(async () => {
-    if (!cleanupPreview) return;
-    const warnings = cleanupPreview.warnings.map((warning) =>
-      cleanupWarningMessage(warning.message),
-    );
-    const warningText =
-      cleanupPreview.warnings.length > 0
-        ? `\n\nWarnings:\n${warnings.map((warning) => `- ${warning}`).join("\n")}`
-        : "";
-    const remoteText = currentRemote
-      ? "\n\nThis creates a local compaction first. Use Sync/Push afterward to publish compacted history through Draftline's guarded remote update."
-      : "";
-    const confirmed = await confirm({
-      title: "Compact history?",
-      message: `Draftline will replace ${cleanupPreview.graph_diff.old_commit_count} selected snapshots with ${cleanupPreview.graph_diff.new_commit_count} compacted snapshot and create a backup ref before moving the timeline.${warningText}${remoteText}`,
-      confirmLabel: "Compact history",
-      cancelLabel: "Cancel",
-      variant: "warning",
-    });
-    if (!confirmed) return;
-
-    setApplyingCleanup(true);
-    try {
-      await applySnapshotCleanup(cleanupPreview.plan_id);
-      cancelCleanup();
-    } catch (err) {
-      setCleanupError(errorMessage(err));
-    } finally {
-      setApplyingCleanup(false);
-    }
-  }, [
-    applySnapshotCleanup,
-    cancelCleanup,
-    cleanupPreview,
-    confirm,
-    currentRemote,
-  ]);
-
-  const handleUndoCleanup = useCallback(async () => {
-    const cleanupPlanId =
-      pendingHistoryCleanup?.plan_id ?? lastHistoryCleanup?.plan_id;
-    if (!cleanupPlanId || undoingCleanup) return;
-    const confirmed = await confirm({
-      title: "Undo history compaction?",
-      message:
-        "Draftline will restore the branch head from the backup ref created before the last compaction rewrite.",
-      confirmLabel: "Undo compaction",
-      cancelLabel: "Cancel",
-      variant: "warning",
-    });
-    if (!confirmed) return;
-
-    setUndoingCleanup(true);
-    try {
-      await undoSnapshotCleanup(cleanupPlanId);
-      await loadGraphData();
-      await loadTimelines();
-      await checkDirty();
-      await checkRewound();
-    } catch (err) {
-      setCleanupMode(true);
-      setCleanupError(
-        pendingHistoryCleanup && hasDraftlineErrorCode(err, "local_state_changed")
-          ? PENDING_CLEANUP_STALE_MESSAGE
-          : errorMessage(err),
-      );
-    } finally {
-      setUndoingCleanup(false);
-    }
-  }, [
-    checkDirty,
-    checkRewound,
-    confirm,
-    lastHistoryCleanup,
-    loadGraphData,
-    loadTimelines,
-    pendingHistoryCleanup,
-    undoingCleanup,
-    undoSnapshotCleanup,
-  ]);
-
-  const handleAbandonCleanup = useCallback(async () => {
-    const cleanupPlanId = pendingHistoryCleanup?.plan_id;
-    if (!cleanupPlanId || abandoningCleanup) return;
-    const confirmed = await confirm({
-      title: "Stop sharing compacted history?",
-      message:
-        "Your snapshots stay exactly as they are. The compacted history will not be published, and the next sync merges your collaborators' original snapshots back in. Use this when publishing or undoing the compaction keeps failing.",
-      confirmLabel: "Stop sharing",
-      cancelLabel: "Cancel",
-      variant: "warning",
-    });
-    if (!confirmed) return;
-
-    setAbandoningCleanup(true);
-    try {
-      await abandonSnapshotCleanup(cleanupPlanId);
-    } catch (err) {
-      setCleanupMode(true);
-      setCleanupError(errorMessage(err));
-    } finally {
-      setAbandoningCleanup(false);
-    }
-  }, [
-    abandonSnapshotCleanup,
-    abandoningCleanup,
-    confirm,
-    pendingHistoryCleanup,
-  ]);
 
   if (graphNodes.length === 0) {
     return (
@@ -783,55 +389,6 @@ export function HistoryGraphTab() {
             <div className="mx-0.5 h-4 w-px bg-[rgb(var(--color-border-subtle))]" />
             <button
               type="button"
-              onClick={() =>
-                setCleanupMode((value) => {
-                  if (value) cancelCleanup();
-                  return !value;
-                })
-              }
-              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                cleanupMode
-                  ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
-                  : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
-              }`}
-              aria-label="Compact selected timeline history"
-              title="Compact selected timeline history"
-            >
-              <GitPullRequestArrow className="h-3.5 w-3.5" />
-              <span className="history-graph-toolbar-label">Compact</span>
-            </button>
-            {(pendingHistoryCleanup || lastHistoryCleanup) && (
-              <button
-                type="button"
-                onClick={handleUndoCleanup}
-                disabled={undoingCleanup || abandoningCleanup}
-                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] disabled:pointer-events-none disabled:opacity-40"
-                aria-label="Undo the last history compaction"
-                title="Undo the last history compaction"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                <span className="history-graph-toolbar-label">
-                  {undoingCleanup ? "Undoing" : "Undo compaction"}
-                </span>
-              </button>
-            )}
-            {pendingHistoryCleanup && (
-              <button
-                type="button"
-                onClick={handleAbandonCleanup}
-                disabled={abandoningCleanup || undoingCleanup || isSyncing}
-                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] disabled:pointer-events-none disabled:opacity-40"
-                aria-label="Stop sharing the compacted history"
-                title="Stop sharing the compacted history"
-              >
-                <X className="h-3.5 w-3.5" />
-                <span className="history-graph-toolbar-label">
-                  {abandoningCleanup ? "Stopping" : "Stop sharing"}
-                </span>
-              </button>
-            )}
-            <button
-              type="button"
               onClick={focusCurrentSnapshot}
               className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
               aria-label="Focus current snapshot"
@@ -875,35 +432,6 @@ export function HistoryGraphTab() {
       </div>
 
       <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-auto">
-        {cleanupMode && (
-          <FloatingCleanupPanel
-            label={cleanupLabel}
-            cleanupError={cleanupError}
-            cleanupPointCount={cleanupPointIds.length}
-            loadingCandidates={loadingCleanupCandidates}
-            candidateFallback={cleanupCandidateFallback}
-            validCandidateCount={validCleanupCandidateCount}
-            sharedHistoryCandidateCount={sharedHistoryCandidateCount}
-            canPreview={canPreviewCleanup}
-            currentRemote={!!currentRemote}
-            hasContiguousSelection={hasContiguousCleanupSelection}
-            isDirty={isDirty}
-            isRewound={isRewound}
-            previewing={previewingCleanup}
-            selectedNodes={selectedNodes}
-            endpointIds={new Set(cleanupPointIds)}
-            preview={cleanupPreview}
-            applying={applyingCleanup}
-            onApply={handleApplyCleanup}
-            onCancel={cancelCleanup}
-            onLabelChange={(value) => {
-              setCleanupLabel(value);
-              setCleanupPreview(null);
-            }}
-            previewLabel={effectiveCleanupLabel}
-            onPreview={handlePreviewCleanup}
-          />
-        )}
         <div className="px-4 py-4">
           {authorFilter !== "all" && (
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] px-3 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] shadow-sm">
@@ -926,18 +454,12 @@ export function HistoryGraphTab() {
             zoomLevel={graphZoom}
             onZoomChange={setGraphZoom}
             showRemoteBadges
-            selectionMode={cleanupMode}
-            selectedIds={selectedForCleanup}
-            endpointIds={new Set(cleanupPointIds)}
             highlightedIds={authorHighlightedIds}
-            selectableIds={cleanupSelectableIds}
-            onToggleSelect={toggleCleanupSelection}
             onNodeClick={handleNodeClick}
           />
           <p className="mt-3 text-[11px] text-[rgb(var(--color-text-secondary))]">
             The graph starts on the first-parent timeline. Use View to reveal
-            merged, remote, and recovery history; compaction selection stays on
-            the first-parent path.
+            merged, remote, and recovery history.
           </p>
         </div>
       </div>
@@ -983,181 +505,6 @@ export function HistoryGraphTab() {
   );
 }
 
-function FloatingCleanupPanel({
-  label,
-  cleanupError,
-  cleanupPointCount,
-  loadingCandidates,
-  candidateFallback,
-  validCandidateCount,
-  sharedHistoryCandidateCount,
-  canPreview,
-  currentRemote,
-  hasContiguousSelection,
-  isDirty,
-  isRewound,
-  previewing,
-  selectedNodes,
-  endpointIds,
-  preview,
-  applying,
-  onApply,
-  onCancel,
-  onLabelChange,
-  previewLabel,
-  onPreview,
-}: {
-  label: string;
-  cleanupError: string | null;
-  cleanupPointCount: number;
-  loadingCandidates: boolean;
-  candidateFallback: boolean;
-  validCandidateCount: number;
-  sharedHistoryCandidateCount: number;
-  canPreview: boolean;
-  currentRemote: boolean;
-  hasContiguousSelection: boolean;
-  isDirty: boolean;
-  isRewound: boolean;
-  previewing: boolean;
-  selectedNodes: GraphNode[];
-  endpointIds: Set<string>;
-  preview: DraftlineHistoryCleanupPreview | null;
-  applying: boolean;
-  onApply: () => void;
-  onCancel: () => void;
-  onLabelChange: (value: string) => void;
-  previewLabel: string;
-  onPreview: () => void;
-}) {
-  const panelRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState(getInitialCleanupPanelPosition);
-  const [dragging, setDragging] = useState(false);
-  const dragOffsetRef = useRef({ x: 0, y: 0 });
-
-  useLayoutEffect(() => {
-    const width = panelRef.current?.offsetWidth ?? 560;
-    setPosition({
-      x: Math.max(16, window.innerWidth - width - 280),
-      y: 112,
-    });
-  }, []);
-
-  const startDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    const target = event.target as HTMLElement;
-    if (target.closest("button,input,select,textarea")) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dragOffsetRef.current = {
-      x: event.clientX - position.x,
-      y: event.clientY - position.y,
-    };
-    setDragging(true);
-  };
-
-  const moveDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragging) return;
-    const width = panelRef.current?.offsetWidth ?? 560;
-    const height = panelRef.current?.offsetHeight ?? 280;
-    setPosition({
-      x: Math.min(
-        Math.max(8, event.clientX - dragOffsetRef.current.x),
-        Math.max(8, window.innerWidth - width - 8),
-      ),
-      y: Math.min(
-        Math.max(8, event.clientY - dragOffsetRef.current.y),
-        Math.max(8, window.innerHeight - height - 8),
-      ),
-    });
-  };
-
-  const stopDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    setDragging(false);
-  };
-
-  return (
-    <div
-      ref={panelRef}
-      className="fixed z-overlay w-[min(560px,calc(100vw-2rem))] rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/95 p-3 shadow-xl shadow-black/10 backdrop-blur"
-      style={{ left: position.x, top: position.y }}
-    >
-      <div
-        className={`mb-2 flex touch-none select-none items-start justify-between gap-3 ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
-        onPointerDown={startDrag}
-        onPointerMove={moveDrag}
-        onPointerUp={stopDrag}
-        onPointerCancel={stopDrag}
-        title="Drag to move compaction panel"
-      >
-        <div>
-          <div className="text-xs font-semibold text-[rgb(var(--color-accent))]">
-            History compaction
-          </div>
-          <p className="mt-0.5 text-[11px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
-            Pick two snapshots to compact the contiguous range between them.
-            Draftline will preview the rewrite before anything is applied.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded p-1 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
-          title="Cancel compaction mode"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        <input
-          value={label}
-          onChange={(event) => onLabelChange(event.target.value)}
-          placeholder="Compacted snapshot name (optional)..."
-          className="min-w-[220px] flex-1 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2 text-xs text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:border-[rgb(var(--color-accent))]"
-        />
-        <button
-          type="button"
-          onClick={onPreview}
-          disabled={!canPreview}
-          className="rounded-lg bg-[rgb(var(--color-accent))] px-3 py-2 text-xs font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:pointer-events-none disabled:opacity-40"
-        >
-          {previewing ? "Previewing..." : "Preview"}
-        </button>
-      </div>
-      <CleanupStatus
-        cleanupError={cleanupError}
-        cleanupPointCount={cleanupPointCount}
-        loadingCandidates={loadingCandidates}
-        candidateFallback={candidateFallback}
-        validCandidateCount={validCandidateCount}
-        sharedHistoryCandidateCount={sharedHistoryCandidateCount}
-        currentRemote={currentRemote}
-        hasContiguousSelection={hasContiguousSelection}
-        isDirty={isDirty}
-        isRewound={isRewound}
-      />
-      <CleanupPreviewPanel
-        label={previewLabel}
-        selectedNodes={selectedNodes}
-        endpointIds={endpointIds}
-        preview={preview}
-        applying={applying}
-        onApply={onApply}
-      />
-    </div>
-  );
-}
-
-function getInitialCleanupPanelPosition() {
-  if (typeof window === "undefined") return { x: 16, y: 112 };
-  const width = Math.min(560, Math.max(0, window.innerWidth - 32));
-  return {
-    x: Math.max(16, window.innerWidth - width - 280),
-    y: 112,
-  };
-}
-
 function GraphLayerCheckbox({
   label,
   description,
@@ -1195,178 +542,6 @@ function GraphLayerCheckbox({
         </span>
       </span>
     </label>
-  );
-}
-
-function CleanupStatus({
-  cleanupError,
-  cleanupPointCount,
-  loadingCandidates,
-  candidateFallback,
-  validCandidateCount,
-  sharedHistoryCandidateCount,
-  currentRemote,
-  hasContiguousSelection,
-  isDirty,
-  isRewound,
-}: {
-  cleanupError: string | null;
-  cleanupPointCount: number;
-  loadingCandidates: boolean;
-  candidateFallback: boolean;
-  validCandidateCount: number;
-  sharedHistoryCandidateCount: number;
-  currentRemote: boolean;
-  hasContiguousSelection: boolean;
-  isDirty: boolean;
-  isRewound: boolean;
-}) {
-  let message =
-    "Pick two graph nodes to compact the contiguous range between them.";
-  let className = "text-[rgb(var(--color-text-secondary))]";
-
-  if (isDirty) {
-    message =
-      "Save or discard unsaved workspace changes before compacting history.";
-    className = "text-warning";
-  } else if (isRewound) {
-    message = "Return to the current timeline tip before compacting history.";
-    className = "text-warning";
-  } else if (cleanupPointCount === 1 && loadingCandidates) {
-    message = "First point selected. Finding valid Draftline range targets...";
-  } else if (cleanupPointCount === 1 && candidateFallback) {
-    message =
-      "First point selected. Draftline suggestions are unavailable, so choose another point on the active timeline; Preview will validate the range.";
-  } else if (
-    cleanupPointCount === 1 &&
-    validCandidateCount > 0 &&
-    currentRemote &&
-    sharedHistoryCandidateCount > 0
-  ) {
-    message = `${validCandidateCount} valid target${validCandidateCount === 1 ? "" : "s"} found; ${sharedHistoryCandidateCount} touch published history and can be shared afterward with guarded publish.`;
-  } else if (cleanupPointCount === 1 && validCandidateCount > 0) {
-    message = `First point selected. Choose one of ${validCandidateCount} valid Draftline range target${validCandidateCount === 1 ? "" : "s"}.`;
-  } else if (cleanupPointCount === 1) {
-    message =
-      "First point selected, but Draftline did not find a valid compaction range target.";
-    className = "text-warning";
-  } else if (cleanupPointCount === 2 && !hasContiguousSelection) {
-    message = "Choose two points that form a contiguous active-timeline range.";
-    className = "text-warning";
-  } else if (currentRemote) {
-    message =
-      "Compaction is local-first. Sync/Push will publish rewritten history with Draftline's guarded remote update.";
-  }
-
-  if (cleanupError) {
-    message = cleanupError;
-    className = "text-[rgb(var(--color-error))]";
-  }
-
-  return (
-    <div className={`mb-2 min-h-4 text-[11px] leading-relaxed ${className}`}>
-      {message}
-    </div>
-  );
-}
-
-function CleanupPreviewPanel({
-  label,
-  selectedNodes,
-  endpointIds,
-  preview,
-  applying,
-  onApply,
-}: {
-  label: string;
-  selectedNodes: GraphNode[];
-  endpointIds: Set<string>;
-  preview: DraftlineHistoryCleanupPreview | null;
-  applying: boolean;
-  onApply: () => void;
-}) {
-  return (
-    <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/70 p-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgb(var(--color-text-secondary))]">
-          Preview
-        </div>
-        {preview && (
-          <button
-            type="button"
-            onClick={onApply}
-            disabled={applying}
-            className="rounded-md bg-[rgb(var(--color-accent))] px-2.5 py-1.5 text-[10px] font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:opacity-40"
-          >
-            {applying ? "Applying..." : "Accept compaction"}
-          </button>
-        )}
-      </div>
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-2">
-        <div className="min-w-0 rounded-lg bg-[rgb(var(--color-surface-alt))] p-2">
-          <div className="mb-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">
-            Before
-          </div>
-          {selectedNodes.length < 2 ? (
-            <p className="text-[11px] text-[rgb(var(--color-text-secondary))]">
-              Pick two points to define a compaction range.
-            </p>
-          ) : (
-            <div className="space-y-1">
-              <div className="mb-1 rounded border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-text))]">
-                {endpointIds.size} picked points define {selectedNodes.length}{" "}
-                included snapshots
-              </div>
-              {selectedNodes.slice(0, 5).map((node) => (
-                <div
-                  key={node.id}
-                  className={`truncate rounded border px-2 py-1 text-[10px] text-[rgb(var(--color-text))] ${
-                    endpointIds.has(node.id)
-                      ? "border-[rgb(var(--color-warning))]/40 bg-[rgb(var(--color-warning))]/10 font-medium"
-                      : "border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]"
-                  }`}
-                  title={node.message}
-                >
-                  {endpointIds.has(node.id) ? "Picked point: " : "Included: "}
-                  {node.message}
-                </div>
-              ))}
-              {selectedNodes.length > 5 && (
-                <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
-                  +{selectedNodes.length - 5} more included snapshots
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="flex items-center text-[rgb(var(--color-text-secondary))]">
-          <ArrowRight className="h-3.5 w-3.5" />
-        </div>
-        <div className="min-w-0 rounded-lg bg-[rgb(var(--color-surface-alt))] p-2">
-          <div className="mb-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">
-            After
-          </div>
-          <div
-            className="truncate rounded border border-[rgb(var(--color-accent))]/30 bg-[rgb(var(--color-accent))]/10 px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-accent))]"
-            title={label || "Compacted snapshot"}
-          >
-            {label || "Compacted snapshot"}
-          </div>
-          <div className="mt-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
-            {preview
-              ? `${preview.graph_diff.old_commit_count} old snapshot${preview.graph_diff.old_commit_count === 1 ? "" : "s"} to ${preview.graph_diff.new_commit_count} compacted snapshot${preview.graph_diff.new_commit_count === 1 ? "" : "s"}`
-              : "Generate a Draftline preview before applying."}
-          </div>
-        </div>
-      </div>
-      {preview?.warnings.length ? (
-        <div className="mt-2 rounded-lg border border-warning/25 bg-warning/5 px-2 py-1.5 text-[10px] text-warning">
-          {preview.warnings
-            .map((warning) => cleanupWarningMessage(warning.message))
-            .join(" ")}
-        </div>
-      ) : null}
-    </div>
   );
 }
 
@@ -1411,32 +586,4 @@ function classifyGraphNodes(
   }
 
   return types;
-}
-
-function cleanupCandidateEndpointId(
-  candidate: DraftlineHistoryCompactionCandidate,
-): string {
-  return candidate.selected_role === "range_start"
-    ? candidate.include_range.end
-    : candidate.include_range.start;
-}
-
-function cleanupCandidateBlockerMessage(
-  candidate: DraftlineHistoryCompactionCandidate,
-): string {
-  const blocker = candidate.blockers[0] ?? candidate.warnings[0];
-  return (
-    blocker?.message ??
-    "Draftline marked that compaction range target as unavailable."
-  );
-}
-
-function cleanupWarningMessage(message: string): string {
-  if (
-    message.includes("apply_history_cleanup is local-first") ||
-    message.includes("preflight_replace_remote_history")
-  ) {
-    return "Compaction is applied locally first. Use Sync/Push afterward to safely publish the rewritten history to the remote.";
-  }
-  return message;
 }

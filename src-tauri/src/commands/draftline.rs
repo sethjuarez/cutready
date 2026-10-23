@@ -7,21 +7,20 @@ use draftline::tauri_contract as contract;
 use draftline::VersionId;
 use draftline::{
     ApplyIncomingReport, ChangeSet, ContributorProfile, HistoryEntry, MergeIncomingReport,
-    MilestoneMergeReport, PreflightReport, PreviewFile, RemoteCredential, RemoteCredentialRequest,
-    RemoteEndpoint, Shelf, Variation, VariationId, VariationRenamePreflight, VariationSummary,
-    Version, VersionDiff, VersionPreview,
+    PreflightReport, PreviewFile, RemoteCredential, RemoteCredentialRequest, RemoteEndpoint, Shelf,
+    Variation, VariationId, VariationRenamePreflight, VariationSummary, VersionDiff,
+    VersionPreview,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_auditaur::auditaur_command;
 
 use crate::commands::github::github_credential_token;
-use crate::engine::agent_state::{AgentStateStore, HistoryCleanupLedgerOperation};
 use crate::engine::draftline_adapter::{
     contributor_profile_for, cutready_content_policy, cutready_remote_options,
     is_github_remote_url, CutReadyDraftlineAdapter,
 };
-use crate::{AppState, ProjectLock};
+use crate::ProjectLock;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -50,13 +49,6 @@ pub struct DraftlineAddRemoteRequest {
     pub workspace_path: PathBuf,
     pub name: String,
     pub url: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct DraftlineSquashVersionsRequest {
-    pub workspace_path: PathBuf,
-    pub count: usize,
-    pub label: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -188,14 +180,6 @@ fn remote_endpoint_to_dto(remote: RemoteEndpoint) -> DraftlineRemoteEndpointDto 
         name: remote.name,
         url: redact_remote_url_credentials(&remote.url),
     }
-}
-
-fn current_project_roots(state: &AppState) -> Option<(PathBuf, PathBuf)> {
-    state.current_project.lock().ok().and_then(|project| {
-        project
-            .as_ref()
-            .map(|view| (view.repo_root.clone(), view.root.clone()))
-    })
 }
 
 fn reject_remote_url_credentials(url: &str) -> Result<(), String> {
@@ -427,21 +411,6 @@ pub async fn add_remote(
         .map_err(|error| error.to_string())
 }
 
-#[auditaur_command(skip_all, err)]
-pub async fn squash_versions(
-    request: DraftlineSquashVersionsRequest,
-    app: AppHandle,
-    lock: State<'_, ProjectLock>,
-) -> Result<Version, String> {
-    let _guard = lock.0.lock().map_err(|error| error.to_string())?;
-    require_contributor_profile(&request.workspace_path, &app).map_err(|error| error.message)?;
-    let adapter = CutReadyDraftlineAdapter::open_project(&request.workspace_path)
-        .map_err(|error| error.to_string())?;
-    adapter
-        .squash_versions(request.count, &request.label)
-        .map_err(|error| error.to_string())
-}
-
 #[auditaur_command(skip_all)]
 pub async fn list_support_refs(
     request: contract::ListSupportRefsRequest,
@@ -476,232 +445,6 @@ pub async fn get_full_history(
 ) -> contract::TauriCommandResult<Vec<HistoryEntry>> {
     let context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::get_full_history_with_context(&context, request))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn get_history_compaction_candidates(
-    request: contract::HistoryCompactionCandidatesCommandRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<draftline::HistoryCompactionCandidates> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::get_history_compaction_candidates_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn preview_history_cleanup(
-    request: contract::PreviewHistoryCleanupRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<draftline::HistoryCleanupPreview> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::preview_history_cleanup_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn apply_history_cleanup(
-    request: contract::ApplyHistoryCleanupRequest,
-    app: AppHandle,
-    lock: State<'_, ProjectLock>,
-    state: State<'_, AppState>,
-) -> contract::TauriCommandResult<draftline::TimelineCleanupResult> {
-    let _guard = lock
-        .0
-        .lock()
-        .map_err(|error| context_error(error.to_string()))?;
-    let workspace_path = request.workspace_path.clone();
-    let mut context = context_for_commit(&request.workspace_path, app)?;
-    let result = contract::into_tauri_result(contract::apply_history_cleanup_with_context(
-        &mut context,
-        request,
-    ))?;
-    let (repo_root, project_root) =
-        current_project_roots(&state).unwrap_or_else(|| (workspace_path.clone(), workspace_path));
-    if let Err(error) = AgentStateStore::record_history_cleanup_result(
-        &repo_root,
-        &project_root,
-        HistoryCleanupLedgerOperation::Apply,
-        &result,
-    ) {
-        tracing::warn!(
-            error = %error,
-            "Applied Draftline history cleanup but could not record the CutReady agent-state ledger"
-        );
-    }
-    Ok(result)
-}
-
-#[auditaur_command(skip_all)]
-pub async fn preflight_history_cleanup_remote_impact(
-    request: contract::HistoryCleanupRemoteImpactRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<draftline::HistoryCleanupRemoteImpact> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(
-        contract::preflight_history_cleanup_remote_impact_with_context(&context, request),
-    )
-}
-
-#[auditaur_command(skip_all)]
-pub async fn preflight_publish_history_cleanup(
-    request: contract::PublishHistoryCleanupPreflightRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<draftline::HistoryCleanupPublishPreflight> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::preflight_publish_history_cleanup_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn publish_history_cleanup(
-    request: contract::PublishHistoryCleanupRequest,
-    app: AppHandle,
-    lock: State<'_, ProjectLock>,
-) -> contract::TauriCommandResult<draftline::HistoryCleanupPublishResult> {
-    let _guard = lock
-        .0
-        .lock()
-        .map_err(|error| context_error(error.to_string()))?;
-    let mut context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::publish_history_cleanup_with_context(
-        &mut context,
-        request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn resolve_rewritten_version(
-    request: contract::ResolveRewrittenVersionRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<draftline::StaleVersionResolution> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::resolve_rewritten_version_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn preflight_undo_history_cleanup(
-    request: contract::UndoHistoryCleanupPreflightRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<draftline::HistoryCleanupUndoPreflight> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::preflight_undo_history_cleanup_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn undo_history_cleanup(
-    request: contract::UndoHistoryCleanupRequest,
-    app: AppHandle,
-    lock: State<'_, ProjectLock>,
-    state: State<'_, AppState>,
-) -> contract::TauriCommandResult<draftline::TimelineCleanupResult> {
-    let _guard = lock
-        .0
-        .lock()
-        .map_err(|error| context_error(error.to_string()))?;
-    let workspace_path = request.workspace_path.clone();
-    let mut context = context_for_workspace(&request.workspace_path, app)?;
-    let result = contract::into_tauri_result(contract::undo_history_cleanup_with_context(
-        &mut context,
-        request,
-    ))?;
-    let (repo_root, project_root) =
-        current_project_roots(&state).unwrap_or_else(|| (workspace_path.clone(), workspace_path));
-    if let Err(error) = AgentStateStore::record_history_cleanup_result(
-        &repo_root,
-        &project_root,
-        HistoryCleanupLedgerOperation::Undo,
-        &result,
-    ) {
-        tracing::warn!(
-            error = %error,
-            "Undid Draftline history cleanup but could not record the CutReady agent-state ledger"
-        );
-    }
-    Ok(result)
-}
-
-#[auditaur_command(skip_all)]
-pub async fn list_pending_history_cleanups(
-    request: contract::ListPendingHistoryCleanupsRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<Vec<draftline::PendingHistoryCleanup>> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::list_pending_history_cleanups_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn publish_pending_history_cleanup(
-    request: contract::PublishPendingHistoryCleanupRequest,
-    app: AppHandle,
-    lock: State<'_, ProjectLock>,
-) -> contract::TauriCommandResult<draftline::HistoryCleanupPublishResult> {
-    let _guard = lock
-        .0
-        .lock()
-        .map_err(|error| context_error(error.to_string()))?;
-    let mut context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::publish_pending_history_cleanup_with_context(
-        &mut context,
-        request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn undo_pending_history_cleanup(
-    request: contract::UndoPendingHistoryCleanupRequest,
-    app: AppHandle,
-    lock: State<'_, ProjectLock>,
-    state: State<'_, AppState>,
-) -> contract::TauriCommandResult<draftline::TimelineCleanupResult> {
-    let _guard = lock
-        .0
-        .lock()
-        .map_err(|error| context_error(error.to_string()))?;
-    let workspace_path = request.workspace_path.clone();
-    let mut context = context_for_workspace(&request.workspace_path, app)?;
-    let result = contract::into_tauri_result(contract::undo_pending_history_cleanup_with_context(
-        &mut context,
-        request,
-    ))?;
-    let (repo_root, project_root) =
-        current_project_roots(&state).unwrap_or_else(|| (workspace_path.clone(), workspace_path));
-    if let Err(error) = AgentStateStore::record_history_cleanup_result(
-        &repo_root,
-        &project_root,
-        HistoryCleanupLedgerOperation::Undo,
-        &result,
-    ) {
-        tracing::warn!(
-            error = %error,
-            "Undid pending Draftline history cleanup but could not record the CutReady agent-state ledger"
-        );
-    }
-    Ok(result)
-}
-
-#[auditaur_command(skip_all)]
-pub async fn abandon_pending_history_cleanup(
-    request: contract::AbandonPendingHistoryCleanupRequest,
-    app: AppHandle,
-    lock: State<'_, ProjectLock>,
-) -> contract::TauriCommandResult<draftline::PendingHistoryCleanup> {
-    let _guard = lock
-        .0
-        .lock()
-        .map_err(|error| context_error(error.to_string()))?;
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::abandon_pending_history_cleanup_with_context(
-        &context, request,
-    ))
 }
 
 #[auditaur_command(skip_all)]
@@ -1208,40 +951,6 @@ pub async fn merge_incoming(
 }
 
 #[auditaur_command(skip_all)]
-pub async fn preflight_milestone_merge(
-    request: contract::RemoteRequest,
-    app: AppHandle,
-    lock: State<'_, ProjectLock>,
-) -> contract::TauriCommandResult<MilestoneMergeReport> {
-    let _guard = lock
-        .0
-        .lock()
-        .map_err(|error| context_error(error.to_string()))?;
-    let mut context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::preflight_milestone_merge_with_context(
-        &mut context,
-        request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn create_milestone_merge(
-    request: contract::MilestoneMergeRequest,
-    app: AppHandle,
-    lock: State<'_, ProjectLock>,
-) -> contract::TauriCommandResult<contract::MilestoneMergeCommandResult> {
-    let _guard = lock
-        .0
-        .lock()
-        .map_err(|error| context_error(error.to_string()))?;
-    let mut context = context_for_commit(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::create_milestone_merge_with_context(
-        &mut context,
-        request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
 pub async fn merge_incoming_with_resolutions(
     request: contract::MergeIncomingWithResolutionsRequest,
     app: AppHandle,
@@ -1502,6 +1211,7 @@ mod tests {
                 workspace_path: first.clone(),
                 remote: "origin".to_string(),
                 label: "Merge incoming saves".to_string(),
+                from_base: false,
             },
         )
         .expect("merge incoming");

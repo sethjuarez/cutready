@@ -22,29 +22,18 @@ import {
   listDraftlineIncomingCommits,
   listDraftlineLargeChangedFiles,
   listDraftlineRemoteBranches,
-  listDraftlineSnapshotCleanupCandidates,
   listDraftlineTimelines,
   listDraftlineVersions,
-  createDraftlineMilestoneMerge,
   hasDraftlineShelf,
   popDraftlineShelf,
-  preflightDraftlineMilestoneMerge,
-  preflightDraftlineUndoSnapshotCleanup,
-  preflightDraftlinePublishSnapshotCleanup,
-  preflightDraftlineSnapshotCleanupRemoteImpact,
   preflightDraftlineRenameVariation,
-  applyDraftlineSnapshotCleanup,
-  publishDraftlineSnapshotCleanup,
-  previewDraftlineSnapshotCleanup,
   preflightDraftlineSwitchVariation,
   previewDraftlineVersion,
   renameDraftlineVariation,
-  resolveDraftlineRewrittenVersion,
   saveDraftlineVersion,
   setDraftlineWorkspacePath,
   shelveDraftlineChanges,
   switchDraftlineVariation,
-  undoDraftlineSnapshotCleanup,
 } from "../services/draftlineVersioning";
 
 const WORKSPACE = "D:\\project";
@@ -309,7 +298,7 @@ describe("draftlineVersioning", () => {
     });
   });
 
-  it("reads sync status without the apply-incoming preflight that pending cleanups block", async () => {
+  it("reads sync status without the apply-incoming preflight", async () => {
     const status = {
       remote: "origin",
       variation: "main",
@@ -336,45 +325,6 @@ describe("draftlineVersioning", () => {
       request: { workspace_path: WORKSPACE, remote: "origin" },
     });
     expect(mockInvoke).not.toHaveBeenCalledWith("preflight_apply_incoming", expect.anything());
-  });
-
-  it("preflights and creates additive milestone merges through Draftline commands", async () => {
-    const preflight = {
-      sync_status: { remote: "origin", variation: "main", ahead: 2, behind: 0, state: "LocalAhead", incoming: [] },
-      dirty_files: [],
-      token: {
-        remote: "origin",
-        variation: "main",
-        local_oid: "local",
-        remote_oid: "remote",
-        merge_base_oid: "remote",
-      },
-      can_create_milestone: true,
-      unpublished_versions: 2,
-      first_parent: "remote",
-      second_parent: "local",
-      changed_workspace: false,
-    };
-    const result = {
-      preflight,
-      merge: {
-        version: version("merge", "Shared milestone", 1_700_000_001),
-        first_parent: "remote",
-        second_parent: "local",
-        preserved_versions: 2,
-      },
-    };
-    mockInvoke.mockResolvedValueOnce(preflight).mockResolvedValueOnce(result);
-
-    await expect(preflightDraftlineMilestoneMerge("origin")).resolves.toEqual(preflight);
-    await expect(createDraftlineMilestoneMerge("origin", "Shared milestone")).resolves.toEqual(result);
-
-    expect(mockInvoke).toHaveBeenNthCalledWith(1, "preflight_milestone_merge", {
-      request: { workspace_path: WORKSPACE, remote: "origin" },
-    });
-    expect(mockInvoke).toHaveBeenNthCalledWith(2, "create_milestone_merge", {
-      request: { workspace_path: WORKSPACE, remote: "origin", label: "Shared milestone" },
-    });
   });
 
   it("creates a Draftline variation through remote-aware preflight and guarded create", async () => {
@@ -508,277 +458,6 @@ describe("draftlineVersioning", () => {
     });
   });
 
-  it("previews and applies Draftline history cleanup for a selected snapshot range", async () => {
-    const preview = {
-      plan_id: "cleanup-plan-1",
-      target_variation: "main",
-      old_head: "2222222222222222222222222222222222222222",
-      new_head: "3333333333333333333333333333333333333333",
-      preview_ref: "refs/draftline/previews/history-cleanup/main/cleanup-plan-1",
-      planned_backup_ref: "refs/draftline/backups/history-cleanup/main/cleanup-plan-1",
-      operations: [],
-      graph_diff: {
-        old_head: "2222222222222222222222222222222222222222",
-        new_head: "3333333333333333333333333333333333333333",
-        old_commit_count: 2,
-        new_commit_count: 1,
-        squashed_commit_count: 2,
-      },
-      commit_map: [],
-      snapshot_map: [],
-      warnings: [],
-    };
-    const result = {
-      plan_id: preview.plan_id,
-      old_head: preview.old_head,
-      new_head: preview.new_head,
-      backup_refs: ["refs/draftline/backups/history-cleanup/main/cleanup-plan-1"],
-      ref_updates: [],
-      commit_map: [],
-      snapshot_map: [],
-      warnings: [],
-    };
-    mockInvoke
-      .mockResolvedValueOnce(preview)
-      .mockResolvedValueOnce(result);
-
-    await expect(previewDraftlineSnapshotCleanup(
-      "1111111111111111111111111111111111111111",
-      "2222222222222222222222222222222222222222",
-      "Demo milestone",
-      "main",
-      "origin",
-    )).resolves.toEqual(preview);
-    await expect(applyDraftlineSnapshotCleanup("cleanup-plan-1")).resolves.toEqual(result);
-
-    expect(mockInvoke).toHaveBeenNthCalledWith(1, "preview_history_cleanup", {
-      request: {
-        workspace_path: WORKSPACE,
-        cleanup: {
-          target_variation: "main",
-          base: { kind: "auto" },
-          mode: {
-            kind: "compact_milestones",
-            milestones: [{
-              title: "Demo milestone",
-              description: null,
-              include_range: {
-                start: "1111111111111111111111111111111111111111",
-                end: "2222222222222222222222222222222222222222",
-              },
-            }],
-            preserve_named_branches: true,
-            preserve_merge_boundaries: true,
-          },
-          safety: {
-            create_backup_ref: true,
-            backup_ref_name: null,
-            require_clean_worktree: true,
-          },
-          remote_policy: { kind: "push_with_lease", remote: "origin", branch: "main" },
-        },
-      },
-    });
-    expect(mockInvoke).toHaveBeenNthCalledWith(2, "apply_history_cleanup", {
-      request: {
-        workspace_path: WORKSPACE,
-        plan_id: "cleanup-plan-1",
-        confirmation: "user_confirmed",
-      },
-    });
-  });
-
-  it("loads Draftline history cleanup candidates for a selected snapshot", async () => {
-    const candidates = {
-      target_variation: "main",
-      selected_version: "1111111111111111111111111111111111111111",
-      target_head: "3333333333333333333333333333333333333333",
-      candidates: [{
-        version: version("2222222222222222222222222222222222222222", "Range end", 2),
-        include_range: {
-          start: "1111111111111111111111111111111111111111",
-          end: "2222222222222222222222222222222222222222",
-        },
-        selected_role: "range_start",
-        can_compact: true,
-        requires_descendant_replay: true,
-        selected_commit_count: 2,
-        descendant_rewrite_count: 1,
-        blockers: [],
-        warnings: [],
-      }],
-    };
-    mockInvoke.mockResolvedValueOnce(candidates);
-
-    await expect(listDraftlineSnapshotCleanupCandidates(
-      "1111111111111111111111111111111111111111",
-      "main",
-      "origin",
-    )).resolves.toEqual(candidates);
-
-    expect(mockInvoke).toHaveBeenCalledWith("get_history_compaction_candidates", {
-      request: {
-        workspace_path: WORKSPACE,
-        request: {
-          target_variation: "main",
-          selected_version: "1111111111111111111111111111111111111111",
-          remote: "origin",
-          preserve_named_branches: true,
-          preserve_merge_boundaries: true,
-        },
-      },
-    });
-  });
-
-  it("preflights and publishes milestone history through Draftline guarded remote cleanup APIs", async () => {
-    const remoteImpact = {
-      remote: "origin",
-      variation: "main",
-      tracking_ref: "refs/remotes/origin/main",
-      upstream_head: "1111111111111111111111111111111111111111",
-      local_head: "3333333333333333333333333333333333333333",
-      replacement_head: "3333333333333333333333333333333333333333",
-      selected: {
-        published_count: 1,
-        private_count: 0,
-        published_versions: ["1111111111111111111111111111111111111111"],
-        private_versions: [],
-      },
-      descendants: {
-        published_count: 0,
-        private_count: 0,
-        published_versions: [],
-        private_versions: [],
-      },
-      publish_status: "shared_history_rewrite_required",
-      warnings: [],
-    };
-    const token = {
-      plan_id: "cleanup-plan-1",
-      remote: "origin",
-      variation: "main",
-      expected_remote_oid: "1111111111111111111111111111111111111111",
-      replacement_oid: "3333333333333333333333333333333333333333",
-      support_ref_token: { remote: "origin", refs: [] },
-    };
-    const publishPreflight = {
-      plan_id: "cleanup-plan-1",
-      remote: "origin",
-      variation: "main",
-      expected_remote_oid: token.expected_remote_oid,
-      replacement_oid: token.replacement_oid,
-      remote_impact: remoteImpact,
-      support_refs: [],
-      token,
-      can_publish: true,
-    };
-    const publishResult = {
-      plan_id: "cleanup-plan-1",
-      remote: "origin",
-      variation: "main",
-      expected_remote_oid: token.expected_remote_oid,
-      replacement_oid: token.replacement_oid,
-      support_refs: [],
-      ref_updates: [{
-        name: "refs/heads/main",
-        old: token.expected_remote_oid,
-        new: token.replacement_oid,
-      }],
-    };
-    mockInvoke
-      .mockResolvedValueOnce(remoteImpact)
-      .mockResolvedValueOnce(publishPreflight)
-      .mockResolvedValueOnce(publishResult);
-
-    await expect(preflightDraftlineSnapshotCleanupRemoteImpact("cleanup-plan-1", "origin")).resolves.toEqual(remoteImpact);
-    await expect(preflightDraftlinePublishSnapshotCleanup("cleanup-plan-1", "origin")).resolves.toEqual(publishPreflight);
-    await expect(publishDraftlineSnapshotCleanup(token)).resolves.toEqual(publishResult);
-
-    expect(mockInvoke).toHaveBeenNthCalledWith(1, "preflight_history_cleanup_remote_impact", {
-      request: {
-        workspace_path: WORKSPACE,
-        plan_id: "cleanup-plan-1",
-        remote: "origin",
-      },
-    });
-    expect(mockInvoke).toHaveBeenNthCalledWith(2, "preflight_publish_history_cleanup", {
-      request: {
-        workspace_path: WORKSPACE,
-        plan_id: "cleanup-plan-1",
-        remote: "origin",
-      },
-    });
-    expect(mockInvoke).toHaveBeenNthCalledWith(3, "publish_history_cleanup", {
-      request: {
-        workspace_path: WORKSPACE,
-        token,
-        confirmation: "user_confirmed",
-      },
-    });
-  });
-
-  it("resolves stale versions and undoes Draftline history cleanup through guarded tokens", async () => {
-    const resolution = {
-      requested: "1111111111111111111111111111111111111111",
-      disposition: {
-        kind: "squashed_into",
-        version: "3333333333333333333333333333333333333333",
-      },
-    };
-    const preflight = {
-      plan_id: "cleanup-plan-1",
-      target_variation: "main",
-      backup_ref: "refs/draftline/backups/history-cleanup/main/cleanup-plan-1",
-      expected_current_head: "3333333333333333333333333333333333333333",
-      restore_head: "2222222222222222222222222222222222222222",
-      token: {
-        plan_id: "cleanup-plan-1",
-        target_variation: "main",
-        backup_ref: "refs/draftline/backups/history-cleanup/main/cleanup-plan-1",
-        expected_current_head: "3333333333333333333333333333333333333333",
-        restore_head: "2222222222222222222222222222222222222222",
-      },
-      can_undo: true,
-    };
-    const undoResult = {
-      plan_id: "cleanup-plan-1",
-      old_head: "3333333333333333333333333333333333333333",
-      new_head: "2222222222222222222222222222222222222222",
-      backup_refs: [],
-      ref_updates: [],
-      commit_map: [],
-      snapshot_map: [],
-      warnings: [],
-    };
-    mockInvoke
-      .mockResolvedValueOnce(resolution)
-      .mockResolvedValueOnce(preflight)
-      .mockResolvedValueOnce(undoResult);
-
-    await expect(resolveDraftlineRewrittenVersion(resolution.requested)).resolves.toEqual(resolution);
-    await expect(preflightDraftlineUndoSnapshotCleanup("cleanup-plan-1")).resolves.toEqual(preflight);
-    await expect(undoDraftlineSnapshotCleanup(preflight.token)).resolves.toEqual(undoResult);
-
-    expect(mockInvoke).toHaveBeenNthCalledWith(1, "resolve_rewritten_version", {
-      request: {
-        workspace_path: WORKSPACE,
-        version_id: resolution.requested,
-      },
-    });
-    expect(mockInvoke).toHaveBeenNthCalledWith(2, "preflight_undo_history_cleanup", {
-      request: {
-        workspace_path: WORKSPACE,
-        plan_id: "cleanup-plan-1",
-      },
-    });
-    expect(mockInvoke).toHaveBeenNthCalledWith(3, "undo_history_cleanup", {
-      request: {
-        workspace_path: WORKSPACE,
-        token: preflight.token,
-      },
-    });
-  });
-
   it("switches Draftline variations through the no-save guarded API", async () => {
     const preflight = {
       operation: "switch_variation",
@@ -901,38 +580,6 @@ describe("draftlineVersioning", () => {
     ]);
     expect(mockInvoke).toHaveBeenCalledWith("diff_version_to_workspace", {
       request: { workspace_path: WORKSPACE, version_id: "1111111111111111111111111111111111111111" },
-    });
-  });
-
-  it("falls back to the rewritten version through the captured workspace facade (#263)", async () => {
-    mockInvoke
-      .mockRejectedValueOnce(new Error("unknown version"))
-      .mockResolvedValueOnce({
-        requested: "1111111111111111111111111111111111111111",
-        disposition: {
-          kind: "squashed_into",
-          version: "3333333333333333333333333333333333333333",
-        },
-      })
-      .mockResolvedValueOnce({
-        from_version: "3333333333333333333333333333333333333333",
-        to_version: null,
-        files: [{ path: "intro.sk", kind: "Modified", is_binary: false, is_large: false }],
-        patch: null,
-      });
-
-    await expect(previewDraftlineVersion("1111111111111111111111111111111111111111")).resolves.toEqual([
-      { path: "intro.sk", status: "modified", additions: 0, deletions: 0 },
-    ]);
-
-    expect(mockInvoke).toHaveBeenNthCalledWith(1, "diff_version_to_workspace", {
-      request: { workspace_path: WORKSPACE, version_id: "1111111111111111111111111111111111111111" },
-    });
-    expect(mockInvoke).toHaveBeenNthCalledWith(2, "resolve_rewritten_version", {
-      request: { workspace_path: WORKSPACE, version_id: "1111111111111111111111111111111111111111" },
-    });
-    expect(mockInvoke).toHaveBeenNthCalledWith(3, "diff_version_to_workspace", {
-      request: { workspace_path: WORKSPACE, version_id: "3333333333333333333333333333333333333333" },
     });
   });
 

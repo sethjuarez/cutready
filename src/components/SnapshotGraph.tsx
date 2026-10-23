@@ -21,10 +21,7 @@ const LANE_COLORS = [
   "#14b8a6", // teal
   "#8b5cf6", // violet
 ];
-const EMPTY_SELECTED_IDS = new Set<string>();
-const EMPTY_ENDPOINT_IDS = new Set<string>();
 const EMPTY_HIGHLIGHTED_IDS = new Set<string>();
-const EMPTY_SELECTABLE_IDS = new Set<string>();
 const EMPTY_NODE_TYPES = new Map<string, HistoryGraphNodeType>();
 function lc(i: number) {
   return LANE_COLORS[i % LANE_COLORS.length];
@@ -202,13 +199,8 @@ interface Props {
   variant?: "compact" | "expanded";
   zoom?: number;
   showRemoteBadges?: boolean;
-  selectionMode?: boolean;
-  selectedIds?: Set<string>;
-  endpointIds?: Set<string>;
   highlightedIds?: Set<string>;
-  selectableIds?: Set<string>;
   nodeTypes?: Map<string, HistoryGraphNodeType>;
-  onToggleSelect?: (commitId: string) => void;
   onNodeClick: (commitId: string, isHead: boolean) => void;
 }
 
@@ -222,13 +214,8 @@ export function SnapshotGraph({
   variant = "compact",
   zoom = 1,
   showRemoteBadges = false,
-  selectionMode = false,
-  selectedIds = EMPTY_SELECTED_IDS,
-  endpointIds = EMPTY_ENDPOINT_IDS,
   highlightedIds = EMPTY_HIGHLIGHTED_IDS,
-  selectableIds = EMPTY_SELECTABLE_IDS,
   nodeTypes = EMPTY_NODE_TYPES,
-  onToggleSelect,
   onNodeClick,
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
@@ -539,26 +526,13 @@ export function SnapshotGraph({
           const color = lc(tlInfo?.colorIndex ?? dl);
           const r = node.is_head ? headR : nodeR;
           const isHov = hovered === node.id;
-          const selected = selectedIds.has(node.id);
-          const endpoint = endpointIds.has(node.id);
           const highlighted = highlightedIds.has(node.id);
-          const selectable = !selectionMode || selectableIds.has(node.id);
           const nodeType = nodeTypes.get(node.id) ?? "first-parent";
           const tlLabel = tlInfo?.label ?? node.timeline;
           const nodeAliases = aliases.get(node.id);
           const isMutedNode = expanded && nodeType !== "first-parent";
-          const nodeOpacity =
-            selectionMode && !selected && !selectable
-              ? 0.42
-              : isMutedNode
-                ? 0.68
-                : 1;
-          const handleSelectOrNavigate = () => {
-            if (selectionMode) {
-              if (!selectable) return;
-              onToggleSelect?.(node.id);
-              return;
-            }
+          const nodeOpacity = isMutedNode ? 0.68 : 1;
+          const handleNavigate = () => {
             if (!node.is_head) onNodeClick(node.id, node.is_head);
           };
 
@@ -604,35 +578,23 @@ export function SnapshotGraph({
                     width: r * 2,
                     height: r * 2,
                     backgroundColor:
-                      node.is_head || isHov || selected
+                      node.is_head || isHov
                         ? color
                         : "rgb(var(--color-surface))",
-                    border: `2px solid ${selected ? "rgb(var(--color-warning))" : color}`,
-                    boxShadow: selected
-                      ? `0 0 0 4px ${color}25`
-                      : highlighted
-                        ? `0 0 0 4px ${color}18`
-                        : "0 0 0 2px rgb(var(--color-surface))",
-                    cursor: selectionMode
-                      ? selectable
-                        ? "pointer"
-                        : "not-allowed"
-                      : node.is_head
-                        ? "default"
-                        : "pointer",
+                    border: `2px solid ${color}`,
+                    boxShadow: highlighted
+                      ? `0 0 0 4px ${color}18`
+                      : "0 0 0 2px rgb(var(--color-surface))",
+                    cursor: node.is_head ? "default" : "pointer",
                     opacity: nodeOpacity,
                     zIndex: 3,
                     padding: 0,
                   }}
-                  onClick={handleSelectOrNavigate}
+                  onClick={handleNavigate}
                   title={
-                    selectionMode
-                      ? selectable
-                        ? `Select ${node.message}`
-                        : "This snapshot is not selectable for cleanup"
-                      : node.is_head
-                        ? "Current snapshot (HEAD)"
-                        : `Preview snapshot: ${node.message}`
+                    node.is_head
+                      ? "Current snapshot (HEAD)"
+                      : `Preview snapshot: ${node.message}`
                   }
                 />
                 {/* Remote badge — left of the dot with connector line, mirroring branch labels */}
@@ -737,34 +699,23 @@ export function SnapshotGraph({
               {/* Label column — indented to match lane */}
               <div
                 className={`flex-1 min-w-0 pr-2 flex flex-col justify-center ${
-                  selectionMode
-                    ? selectable
-                      ? "cursor-pointer"
-                      : "cursor-not-allowed"
-                    : !node.is_head
-                      ? "cursor-pointer"
-                      : ""
+                  !node.is_head ? "cursor-pointer" : ""
                 }`}
                 style={{ paddingLeft: expanded ? 0 : dl * laneW }}
-                onClick={handleSelectOrNavigate}
+                onClick={handleNavigate}
               >
                 {expanded ? (
                   <div
                     className={`border-l-2 px-3 py-1.5 transition-colors ${
-                      selected
-                        ? "border-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning))]/10"
-                        : highlighted
-                          ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10"
-                          : isHov
-                            ? "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]"
-                            : "border-transparent bg-transparent"
+                      highlighted
+                        ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10"
+                        : isHov
+                          ? "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]"
+                          : "border-transparent bg-transparent"
                     }`}
                     style={{
-                      borderLeftColor: selected
-                        ? "rgb(var(--color-warning))"
-                        : highlighted || isHov
-                          ? color
-                          : "transparent",
+                      borderLeftColor:
+                        highlighted || isHov ? color : "transparent",
                       opacity: nodeOpacity,
                     }}
                   >
@@ -828,12 +779,6 @@ export function SnapshotGraph({
                         )}
                         {node.is_branch_tip && (
                           <SnapshotBadge label="tip" tone="neutral" />
-                        )}
-                        {selectionMode && selected && (
-                          <SnapshotBadge
-                            label={endpoint ? "picked" : "milestone"}
-                            tone="warning"
-                          />
                         )}
                         {nodeType !== "first-parent" && (
                           <SnapshotBadge
