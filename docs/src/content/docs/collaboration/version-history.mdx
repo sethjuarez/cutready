@@ -51,19 +51,8 @@ Click any snapshot in the graph, then:
   so you can always go back to any previous state.
 </Aside>
 
-### Squashing Local Snapshots
-
-Use **Squash recent snapshots** when you have several local checkpoint saves
-that should become one cleaner snapshot before sharing.
-
-1. Click the squash button in the Snapshots panel header.
-2. Select a contiguous range ending at the current HEAD snapshot.
-3. Enter the replacement snapshot name.
-4. Confirm the squash.
-
-Squashing rewrites only the selected local snapshots and leaves unsaved
-workspace changes untouched. Do this before publishing or syncing those
-snapshots to a remote.
+History is append-only: CutReady never squashes, compacts, or rewrites saved
+snapshots.
 
 ## Persistence Scenarios
 
@@ -80,7 +69,8 @@ to Draftline APIs rather than running git operations directly.
 | **Run chat or agent workflows** | Stores runtime state locally; accepted outputs become versioned only when written to sketches, storyboards, notes, screenshots, or visuals. |
 | **Record screen/camera/audio takes** | Stores large take assets under `.cutready/recordings/`, which is local-only and excluded from snapshots. |
 | **Switch projects inside a workspace** | Changes the active project view without saving, discarding, or abandoning dirty Draftline workspace changes. |
-| **Sync with GitHub** | Publishes or pulls Draftline snapshots and timelines through the configured remote; users do not run git commands. |
+| **Sync with GitHub** | **Send** pushes your saved snapshots as-is; **Get updates** pulls. Users do not run git commands. |
+| **Project inside a code repo** | Saves land on `cutready/*` branches and **Send for review** opens a pull request. See [Projects in a Code Repository](/collaboration/hybrid-projects/). |
 
 ## Timelines (Branching)
 
@@ -136,8 +126,8 @@ See [History Graph](/collaboration/history-graph/) for details.
 - Each snapshot captures versioned content: `.sk`, `.sb`, `.md`, supported image
   assets, `.cutready/screenshots/`, and `.cutready/visuals/`
 - Runtime paths such as `.chats`, `.cutready/recordings/`,
-  `.cutready/agent-state.db`, `.cutready/memory.json`, and
-  `.cutready/locks.json` are excluded by policy
+  `.cutready/memory.json`, and `.cutready/locks.json` are excluded by policy;
+  agent state lives in `.git/cutready/agent-state.db`
 - The graph is computed with Draftline workspace graph helpers
 - Users do not need to run git commands — saves, branches, merges, and sync are built into the app
 - Editor state, open tabs, chat session selection, and sidebar order are stored

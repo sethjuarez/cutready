@@ -68,6 +68,7 @@ The backend is organized as independent engines:
 | --- | --- | --- | --- |
 | Project | `engine/project.rs` | ✅ | Folder-based project I/O, safe_resolve(), file scanning |
 | Draftline | `engine/draftline_adapter.rs` + `commands/draftline.rs` | ✅ | Draftline-backed persistence, history, diff, save, restore, remotes, merge/apply flows |
+| GitHub PRs | `engine/github_pull_requests.rs` | ✅ | Draftline `PullRequestProvider` for hybrid Send for review |
 | Agent | `engine/agent/` | ✅ | Multi-agent AI system (runner, tools, LLM client) |
 | Import | `engine/import.rs` | ✅ | .docx/.pdf/.pptx import to sketches/notes |
 | Memory | `engine/memory.rs` | ✅ | Agent memory system (core, procedural, archival) |
@@ -116,6 +117,8 @@ All models derive `Serialize` + `Deserialize` for JSON IPC and file storage. Use
 - Serialize in-process mutations of Draftline-tracked files with `engine::workspace_write_lock::lock()`. `StructureChange` owns the guard from its pending-file snapshot through its automatic save; acquire before validation/read-modify-write sequences and pass the guard to `begin_with_guard` when needed. Do not nest acquisitions. Agent `read_sketch` also needs the lock because legacy visual migration can write. This lock coordinates CutReady writers only; it does not protect against external processes editing the workspace.
 - Keep `.cutready/projects.json` durable and cross-client only: project `path`, `name`, and optional `description`. Do not add local UI state, recent-project timestamps, last-active project, locks, chat/run state, or device-specific settings to it.
 - Runtime state such as `.chats`, `.cutready/recordings`, `.cutready/agent-state.db`, `.cutready/memory.json`, and `.cutready/locks.json` is excluded from Draftline snapshots.
+- Draftline is pinned to git rev `b3b63fa` (branch `sethjuarez-hybrid-repo-coexistence`, unreleased). Squash, history cleanup/compaction, and milestone Send were removed; standalone Send is a plain push of saves. Do not reintroduce history rewrites.
+- **Hybrid projects**: a project folder with no own `.git/` inside an enclosing repo. Draftline is a guest. Agent state lives at `<gitdir>/cutready/<folder rel path>/`. Variations are limited to the `cutready/` namespace (plus base and current branch); Send is Send for review (push `cutready/<slug>` without force, open/reuse a PR via `github_pull_requests.rs`, which uses a blocking client — call it via `spawn_blocking`). Direct publish is refused; base-update conflicts outside the folder surface as `merge_needs_developer`.
 
 ## Visuals Storage
 

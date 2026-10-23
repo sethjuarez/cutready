@@ -1,0 +1,83 @@
+---
+title: Projects in a Code Repository
+description: Keep a CutReady project inside a developer's code repo and send changes for review as pull requests.
+sidebar:
+  order: 5
+---
+
+import { Aside, Badge } from '@astrojs/starlight/components';
+
+<Badge text="Available" variant="success" />
+
+A CutReady project can live in a folder inside an existing code repository,
+for example `contoso-app/cutready/`. Business users edit it in CutReady;
+developers edit and commit it with plain Git or Copilot. CutReady is a guest:
+it never takes over the repository.
+
+## How CutReady Detects It
+
+CutReady treats a project as **hybrid** when:
+
+- the project folder has no `.git/` of its own, and
+- Git finds an enclosing repository above it.
+
+Local runtime state (chat history, agent runs) is stored in the enclosing
+repo's git dir at `<gitdir>/cutready/<folder path>/`, so it never shows up as a
+change in the repository.
+
+## Who Does What
+
+| | Business users (CutReady) | Developers (Git / Copilot) |
+| --- | --- | --- |
+| **Edit** | Sketches, storyboards, notes in CutReady | Any file, including the CutReady folder |
+| **Save** | Snapshots on a `cutready/*` branch | Normal commits on any branch |
+| **Share** | **Send for review** opens a pull request | Review and merge the pull request |
+| **Stay current** | **Get updates from \<base\>** | Commit to the base branch as usual |
+
+## Variations (Branches)
+
+CutReady keeps its work in the `cutready/` branch namespace:
+
+- The variation list shows `cutready/*` branches, the base (default) branch,
+  and the current branch.
+- New variations are created as `cutready/<name>`.
+- CutReady refuses operations on other branches, except switching back to the
+  base branch.
+
+## Send for Review
+
+Hybrid projects never publish directly to the base branch. **Send for review**:
+
+1. Asks for a pull request title (and optional description).
+2. Moves your work to a `cutready/<slug>` branch and pushes it without force.
+3. Opens a GitHub pull request, or updates the existing one, and shows a link
+   in a toast.
+
+Requires a GitHub remote and a GitHub connection in
+**Settings** → **Repository**.
+
+## Get Updates
+
+When your `cutready/*` branch is behind the base branch, the Sync Bar shows
+**Get updates from \<base\>**. This brings in the latest base, including
+developer commits.
+
+| Conflict location | What happens |
+| --- | --- |
+| Inside the CutReady folder | The [Merge Conflict Panel](/collaboration/merging/) opens |
+| Outside the CutReady folder | CutReady stops; a developer must merge the base in with Git |
+
+## Common Messages
+
+| Message | Meaning | What to do |
+| --- | --- | --- |
+| **Git is busy** | Another Git process holds the repository lock | Try again in a moment |
+| **Project changed outside CutReady** | A developer committed while CutReady was working | Try again; nothing was lost |
+| **Interrupted change** | An unfinished CutReady change belongs to another project in the same repository | Open that project and finish it there |
+| **Branch belongs to the code repository** | The branch is outside `cutready/` | Switch to a CutReady branch or the base |
+| **Uses Git LFS or another Git filter** | CutReady can't safely write those files | Ask a developer to handle them with Git |
+
+<Aside type="note">
+  Saves are atomic. If a developer commit lands mid-save, CutReady refuses the
+  save instead of reverting their work. Try saving again.
+</Aside>
