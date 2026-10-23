@@ -30,7 +30,7 @@ import {
   type WorkspaceGraphRef,
 } from "@draftline/client";
 import { invoke, listen } from "./tauri";
-import type { ConflictFile, DiffEntry, GraphNode, IncomingCommit, RemoteBranchInfo, RemoteInfo, SyncStatus, TimelineInfo, VersionEntry } from "../types/sketch";
+import type { BaseStatus, ConflictFile, DiffEntry, GraphNode, IncomingCommit, RemoteBranchInfo, RemoteInfo, SyncStatus, TimelineInfo, VersionEntry } from "../types/sketch";
 
 export type DraftlineMergeIncomingToken = MergeIncomingToken;
 export type DraftlineMergeConflictResolution = MergeConflictResolution;
@@ -474,6 +474,39 @@ export async function getDraftlineSyncStatus(remote: string): Promise<SyncStatus
     ahead: status.ahead,
     behind: status.behind,
   };
+}
+
+/**
+ * Hybrid projects on a branch other than the base: how the branch compares
+ * with the remote base (e.g. `main`) as of the last fetch. `null` otherwise.
+ */
+export async function getDraftlineBaseStatus(remote: string): Promise<BaseStatus | null> {
+  const status = await invoke<DraftlineSyncStatusDto | null>("get_base_status", {
+    request: { workspace_path: requireWorkspacePath(), remote },
+  });
+  if (!status) return null;
+  return { base: status.variation, ahead: status.ahead, behind: status.behind };
+}
+
+/**
+ * Fetch and preflight bringing the latest base into the current branch.
+ * Rejects with `merge_needs_developer` when files outside the CutReady
+ * folder conflict; in-folder conflicts come back for the conflict panel.
+ */
+export async function preflightDraftlineMergeBase(remote: string): Promise<DraftlineMergeIncomingReport> {
+  return mergeIncomingReportToDto(await invoke<MergeIncomingReport>("preflight_merge_base", {
+    request: { workspace_path: requireWorkspacePath(), remote },
+  }));
+}
+
+/** Merge the latest base into the current branch (clean merges only). */
+export async function mergeDraftlineFromBase(remote: string, label: string): Promise<string> {
+  // The pinned @draftline/client facade can't pass `from_base`, so invoke the
+  // contract command directly.
+  const result = await invoke<{ merge: { version: { id: string } } }>("merge_incoming", {
+    request: { workspace_path: requireWorkspacePath(), remote, label, from_base: true },
+  });
+  return result.merge.version.id;
 }
 
 export async function listDraftlineIncomingCommits(remote: string): Promise<IncomingCommit[]> {

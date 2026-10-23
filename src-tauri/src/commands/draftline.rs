@@ -1093,6 +1093,56 @@ pub async fn get_sync_status(
     contract::into_tauri_result(adapter.sync_status(&request.remote))
 }
 
+/// How the current branch compares with the remote base branch as of the last
+/// fetch. `None` unless this is a hybrid project on a branch other than the
+/// base (standalone projects and the base itself have nothing to bring in).
+#[auditaur_command(skip_all)]
+pub async fn get_base_status(
+    request: contract::RemoteRequest,
+) -> contract::TauriCommandResult<Option<draftline::SyncStatus>> {
+    let adapter = contract::into_tauri_result(CutReadyDraftlineAdapter::open_project(
+        &request.workspace_path,
+    ))?;
+    contract::into_tauri_result(adapter.base_status(&request.remote))
+}
+
+/// Fetches and preflights bringing the latest base into the current branch.
+/// Conflicts outside the CutReady folder fail with `merge_needs_developer`;
+/// conflicts inside it come back in the report for the merge conflict panel.
+#[auditaur_command(skip_all)]
+pub async fn preflight_merge_base(
+    request: contract::RemoteRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<MergeIncomingReport> {
+    let mutex = lock.0;
+    // Fetching blocks on network I/O; keep it off the async runtime.
+    tokio::task::spawn_blocking(move || {
+        let _guard = mutex
+            .lock()
+            .map_err(|error| context_error(error.to_string()))?;
+        let mut context = context_for_workspace(&request.workspace_path, app)?;
+        preflight_merge_base_with(&mut context, request)
+    })
+    .await
+    .map_err(|error| context_error(format!("Getting updates stopped unexpectedly: {error}")))?
+}
+
+fn preflight_merge_base_with(
+    context: &mut contract::DraftlineCommandContext<'_>,
+    request: contract::RemoteRequest,
+) -> contract::TauriCommandResult<MergeIncomingReport> {
+    let report = contract::into_tauri_result(contract::preflight_merge_base_with_context(
+        context, request,
+    ))?;
+    if !report.developer_conflicts.is_empty() {
+        return contract::into_tauri_result(Err(draftline::DraftlineError::MergeNeedsDeveloper(
+            report.developer_conflicts,
+        )));
+    }
+    Ok(report)
+}
+
 #[auditaur_command(skip_all)]
 pub async fn apply_incoming(
     request: contract::RemoteRequest,
@@ -1630,5 +1680,208 @@ mod tests {
             .unwrap()
             .find_branch("cutready/launch-demo", git2::BranchType::Local)
             .is_ok());
+    }
+
+    fn git(dir: &Path, args: &[&str]) {
+        let output = git_command()
+            .current_dir(dir)
+            .args(["-c", "user.name=Dev", "-c", "user.email=dev@example.com"])
+            .args(args)
+            .output()
+            .expect("git");
+        assert!(output.status.success(), "git {args:?}: {output:?}");
+    }
+
+    /// A hybrid project sent for review (now on `cutready/launch-demo`) plus a
+    /// developer clone that pushes to `main`. Returns `(code, folder, dev)`.
+    fn hybrid_review_branch(temp: &Path) -> (PathBuf, PathBuf, PathBuf) {
+        let remote = temp.join("remote.git");
+        init_bare_remote(&remote);
+        let code = temp.join("contoso-app");
+        std::fs::create_dir_all(code.join("cutready")).unwrap();
+        std::fs::create_dir_all(code.join("src")).unwrap();
+        std::fs::write(code.join("README.md"), "# Contoso\n").unwrap();
+        std::fs::write(code.join("src").join("app.rs"), "fn main() {}\n").unwrap();
+        std::fs::write(
+            code.join("cutready").join("intro.sk"),
+            r#"{"title":"Intro"}"#,
+        )
+        .unwrap();
+        git(temp, &["init", "--initial-branch=main", "contoso-app"]);
+        git(
+            &code,
+            &["add", "README.md", "src/app.rs", "cutready/intro.sk"],
+        );
+        git(&code, &["commit", "-m", "Code"]);
+        git(
+            &code,
+            &["remote", "add", "origin", remote.to_str().unwrap()],
+        );
+        git(&code, &["push", "origin", "main"]);
+
+        let folder = code.join("cutready");
+        std::fs::write(folder.join("intro.sk"), r#"{"title":"Intro (branch)"}"#).unwrap();
+        save(&folder, "Intro");
+        fetch(&folder);
+        // On the base itself there is nothing to bring in from it.
+        assert!(CutReadyDraftlineAdapter::open_project(&folder)
+            .unwrap()
+            .base_status("origin")
+            .unwrap()
+            .is_none());
+
+        send_for_review_with(
+            send_request(&folder, "Launch demo"),
+            |_| Ok(Box::new(FakeHost::default())),
+            &mut RemoteOptions::new(),
+        )
+        .unwrap();
+
+        git(temp, &["clone", remote.to_str().unwrap(), "dev"]);
+        (code, folder, temp.join("dev"))
+    }
+
+    fn dev_push(dev: &Path, path: &str, content: &str, message: &str) {
+        let file = dev.join(path);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(file, content).unwrap();
+        git(dev, &["add", path]);
+        git(dev, &["commit", "-m", message]);
+        git(dev, &["push", "origin", "main"]);
+    }
+
+    /// File text with line endings normalized (git may check out CRLF).
+    fn read_text(path: &Path) -> String {
+        std::fs::read_to_string(path).unwrap().replace("\r\n", "\n")
+    }
+
+    fn merge_from_base(folder: &Path) -> contract::TauriCommandResult<()> {
+        contract::into_tauri_result(contract::merge_incoming_with_context(
+            &mut context(folder),
+            contract::MergeIncomingRequest {
+                workspace_path: folder.to_path_buf(),
+                remote: "origin".to_string(),
+                label: "Bring in latest main".to_string(),
+                from_base: true,
+            },
+        ))
+        .map(|_| ())
+    }
+
+    #[test]
+    fn base_merge_brings_developer_commits_into_the_review_branch() {
+        let temp = tempfile::tempdir().unwrap();
+        let (code, folder, dev) = hybrid_review_branch(temp.path());
+        dev_push(&dev, "README.md", "# Contoso v2\n", "Docs");
+
+        fetch(&folder);
+        let status = CutReadyDraftlineAdapter::open_project(&folder)
+            .unwrap()
+            .base_status("origin")
+            .unwrap()
+            .expect("hybrid review branch has a base");
+        assert_eq!(status.variation, "main");
+        assert_eq!(status.behind, 1);
+
+        let report =
+            preflight_merge_base_with(&mut context(&folder), remote_request(&folder)).unwrap();
+        assert!(report.can_merge_cleanly, "{report:?}");
+        assert_eq!(
+            report.token.as_ref().unwrap().source.as_deref(),
+            Some("main")
+        );
+
+        merge_from_base(&folder).unwrap();
+        assert_eq!(read_text(&code.join("README.md")), "# Contoso v2\n");
+        let adapter = CutReadyDraftlineAdapter::open_project(&folder).unwrap();
+        assert_eq!(adapter.current_variation().unwrap(), "cutready/launch-demo");
+        assert_eq!(adapter.base_status("origin").unwrap().unwrap().behind, 0);
+    }
+
+    #[test]
+    fn base_conflicts_outside_the_folder_need_a_developer() {
+        let temp = tempfile::tempdir().unwrap();
+        let (code, folder, dev) = hybrid_review_branch(temp.path());
+        std::fs::write(code.join("README.md"), "# Contoso (branch)\n").unwrap();
+        git(&code, &["commit", "-am", "Branch docs"]);
+        dev_push(&dev, "README.md", "# Contoso (main)\n", "Main docs");
+
+        let error =
+            preflight_merge_base_with(&mut context(&folder), remote_request(&folder)).unwrap_err();
+        assert_eq!(error.code, "merge_needs_developer");
+        assert!(error.message.contains("README.md"), "{}", error.message);
+
+        let error = merge_from_base(&folder).unwrap_err();
+        assert_eq!(error.code, "merge_needs_developer");
+        assert_eq!(read_text(&code.join("README.md")), "# Contoso (branch)\n");
+    }
+
+    #[test]
+    fn base_conflicts_inside_the_folder_resolve_through_the_conflict_flow() {
+        let temp = tempfile::tempdir().unwrap();
+        let (_code, folder, dev) = hybrid_review_branch(temp.path());
+        dev_push(
+            &dev,
+            "cutready/intro.sk",
+            r#"{"title":"Developer intro"}"#,
+            "Dev intro",
+        );
+
+        let report =
+            preflight_merge_base_with(&mut context(&folder), remote_request(&folder)).unwrap();
+        assert!(!report.can_merge_cleanly, "{report:?}");
+        assert!(report.developer_conflicts.is_empty());
+        assert!(!report.conflicts.is_empty());
+
+        let token = report
+            .token
+            .clone()
+            .expect("in-folder conflicts are resolvable");
+        assert_eq!(token.source.as_deref(), Some("main"));
+        assert!(merge_from_base(&folder).is_err());
+
+        let resolutions = report
+            .conflicts
+            .iter()
+            .map(|conflict| {
+                let keep_ours = draftline::MergeResolutionChoice::UseContent {
+                    content: r#"{"title":"Intro (branch)"}"#.to_string(),
+                };
+                match &conflict.field_path {
+                    Some(field) => draftline::MergeConflictResolution::with_field_path(
+                        conflict.path.clone(),
+                        field.clone(),
+                        keep_ours,
+                    ),
+                    None => {
+                        draftline::MergeConflictResolution::new(conflict.path.clone(), keep_ours)
+                    }
+                }
+            })
+            .collect();
+        contract::merge_incoming_with_resolutions_with_context(
+            &mut context(&folder),
+            contract::MergeIncomingWithResolutionsRequest {
+                workspace_path: folder.clone(),
+                remote: "origin".to_string(),
+                label: "Bring in latest main".to_string(),
+                token,
+                resolutions,
+            },
+        )
+        .unwrap();
+        assert!(read_text(&folder.join("intro.sk")).contains("Intro (branch)"));
+        let adapter = CutReadyDraftlineAdapter::open_project(&folder).unwrap();
+        assert_eq!(adapter.base_status("origin").unwrap().unwrap().behind, 0);
+    }
+
+    #[test]
+    fn standalone_projects_have_no_base_status() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("demo");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("intro.sk"), "{}").unwrap();
+        let adapter = CutReadyDraftlineAdapter::open_project(&root).unwrap();
+        assert!(adapter.base_status("origin").unwrap().is_none());
     }
 }

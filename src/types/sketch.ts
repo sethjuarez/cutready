@@ -165,6 +165,12 @@ export interface SyncStatus {
   behind: number;
 }
 
+/** Hybrid projects: how the current branch compares with the base branch (e.g. `main`). */
+export interface BaseStatus extends SyncStatus {
+  /** Base branch name. */
+  base: string;
+}
+
 /** A remote snapshot available to bring into the workspace. */
 export interface IncomingCommit {
   id: string;

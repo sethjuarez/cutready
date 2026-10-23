@@ -9,6 +9,7 @@ import {
   discardDraftlineFile,
   diffDraftlineVersions,
   fetchDraftlineRemote,
+  getDraftlineBaseStatus,
   getDraftlineSyncStatus,
   hasDraftlineShelf,
   hasDraftlineChanges,
@@ -22,8 +23,10 @@ import {
   listDraftlineTimelines,
   listDraftlineVersions,
   preflightDraftlineIncoming,
+  preflightDraftlineMergeBase,
   preflightDraftlineMergeIncoming,
   preflightDraftlineSwitchVariation,
+  mergeDraftlineFromBase,
   mergeDraftlineIncoming,
   mergeDraftlineIncomingWithResolutions,
   publishDraftlineChanges,
@@ -66,6 +69,7 @@ import type {
   RemoteBranchInfo,
   RemoteInfo,
   SyncStatus,
+  BaseStatus,
   IncomingCommit,
   DiffEntry,
   ConflictFile,
@@ -137,6 +141,18 @@ export function remoteSyncErrorMessage(error: unknown): string {
 }
 
 export const SYNC_IN_PROGRESS_MESSAGE = "A sync is already running. Wait for it to finish, then try again.";
+
+/** Draftline error code: bringing in the base conflicts in files outside the CutReady folder. */
+export const MERGE_NEEDS_DEVELOPER = "merge_needs_developer";
+
+export function mergeNeedsDeveloperMessage(base: string): string {
+  return `A developer needs to bring ${base} into this branch: files outside the CutReady folder conflict.`;
+}
+
+function isMergeNeedsDeveloperError(error: unknown): boolean {
+  if (error && typeof error === "object" && (error as { code?: unknown }).code === MERGE_NEEDS_DEVELOPER) return true;
+  return errorMessage(error).toLowerCase().includes("merge needs a developer");
+}
 
 export function suppressEditorFlush(relativePath: string) {
   suppressedEditorFlushPaths.add(normalizeRelativePath(relativePath));
@@ -437,6 +453,8 @@ interface AppStoreState {
   remoteBranchesLoading: boolean;
   /** Ahead/behind counts vs remote tracking branch. */
   syncStatus: SyncStatus | null;
+  /** Hybrid projects on a non-base branch: ahead/behind vs the remote base (e.g. `main`). */
+  baseStatus: BaseStatus | null;
   /** Whether a fetch/push/pull is in progress. */
   isSyncing: boolean;
   /** Last error from a sync operation. */
@@ -763,6 +781,8 @@ interface AppStoreState {
   cancelSendForReview: () => void;
   /** Pull from remote (fast-forward merge). */
   pullFromRemote: () => Promise<void>;
+  /** Hybrid projects on a non-base branch: merge the latest base (e.g. `main`) in. */
+  getUpdatesFromBase: () => Promise<void>;
   /** Sync: fetch then push (or pull if behind). */
   syncWithRemote: () => Promise<void>;
   /** Share local changes safely with collaborators. */
@@ -987,6 +1007,7 @@ function resetPersistenceState(): Pick<AppStoreState,
   | "remoteBranches"
   | "remoteBranchesLoading"
   | "syncStatus"
+  | "baseStatus"
   | "isSyncing"
   | "syncError"
   | "incomingCommits"
@@ -1017,6 +1038,7 @@ function resetPersistenceState(): Pick<AppStoreState,
     remoteBranches: [],
     remoteBranchesLoading: false,
     syncStatus: null,
+    baseStatus: null,
     isSyncing: false,
     syncError: null,
     incomingCommits: [],
@@ -1184,6 +1206,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   remoteBranches: [],
   remoteBranchesLoading: false,
   syncStatus: null,
+  baseStatus: null,
   isSyncing: false,
   syncError: null,
   incomingCommits: [],
@@ -3226,6 +3249,65 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
+  getUpdatesFromBase: async () => {
+    const { currentRemote } = get();
+    if (!currentRemote || !get().currentProject?.hybrid) return;
+    if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
+    if (get().isSyncing) {
+      useToastStore.getState().show(SYNC_IN_PROGRESS_MESSAGE, 5000, "info");
+      return;
+    }
+    const base = get().baseStatus?.base ?? "main";
+    set({ isSyncing: true, syncError: null });
+    let updateError: string | null = null;
+    try {
+      // Fetches first, so the merge below sees the latest base.
+      const report = await preflightDraftlineMergeBase(currentRemote.name);
+      if (report.dirtyFiles.length > 0) {
+        updateError = `Save or discard local changes before getting updates from ${base}.`;
+      } else if (report.canMergeCleanly && report.token) {
+        await mergeDraftlineFromBase(currentRemote.name, `Bring in latest ${base}`);
+        useToastStore.getState().show(`Updates from ${base} brought in.`, 4000, "success");
+      } else if (report.conflicts.length > 0 && report.token) {
+        set({
+          isMerging: true,
+          mergeSource: base,
+          mergeTarget: "incoming",
+          mergeConflicts: report.conflicts,
+          draftlineMergeToken: report.token,
+          draftlineMergeRemote: currentRemote.name,
+        });
+        useToastStore.getState().show(`Updates from ${base} need conflict resolution.`, 5000, "info");
+      } else if (report.syncStatus.behind === 0) {
+        useToastStore.getState().show(`Already up to date with ${base}.`, 4000, "info");
+      } else {
+        updateError = `Updates from ${base} can't be brought in safely right now.`;
+      }
+    } catch (err) {
+      updateError = isMergeNeedsDeveloperError(err)
+        ? mergeNeedsDeveloperMessage(base)
+        : remoteSyncErrorMessage(err);
+    } finally {
+      // Refresh even on failure: the fetch may have moved the base.
+      try {
+        await get().loadSketches();
+        await get().loadStoryboards();
+        await get().loadNotes();
+        await get().refreshSyncStatus();
+        await get().refreshIncomingCommits();
+        await get().loadVersions();
+        await get().loadGraphData();
+        await get().loadTimelines();
+        await get().checkDirty();
+      } catch {
+        // Refresh failures must not mask the update result.
+      }
+      // A successful status refresh clears syncError; keep the failure visible.
+      if (updateError) set({ syncError: updateError });
+      set({ isSyncing: false });
+    }
+  },
+
   loadRemoteBranches: async () => {
     const generation = workspaceGeneration;
     const { currentRemote, timelines } = get();
@@ -3318,6 +3400,17 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         if (generation !== workspaceGeneration) return;
         set({ syncStatus: null });
       }
+      // Only hybrid projects on a branch other than the base can fall behind it.
+      let baseStatus: BaseStatus | null = null;
+      if (get().currentProject?.hybrid) {
+        try {
+          baseStatus = await getDraftlineBaseStatus(currentRemote.name);
+        } catch {
+          baseStatus = null;
+        }
+      }
+      if (generation !== workspaceGeneration) return;
+      set({ baseStatus });
     };
     syncStatusInFlight = (async () => {
       try {
@@ -3417,9 +3510,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { draftlineMergeToken, draftlineMergeRemote } = get();
     if (!draftlineMergeToken || !draftlineMergeRemote) throw new Error("No Draftline merge in progress");
 
+    // Base merges carry the base branch name as the token source.
+    const base = (draftlineMergeToken as { source?: string | null }).source ?? null;
     const commitId = await mergeDraftlineIncomingWithResolutions(
       draftlineMergeToken,
-      "Resolve incoming saves",
+      base ? `Bring in latest ${base}` : "Resolve incoming saves",
       resolutions.map((resolution) => ({
         path: resolution.path,
         field_path: null,
@@ -3444,7 +3539,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     await get().loadGraphData();
     await get().loadTimelines();
     await get().checkDirty();
-    useToastStore.getState().show("Incoming saves merged.", 4000, "success");
+    useToastStore.getState().show(base ? `Updates from ${base} brought in.` : "Incoming saves merged.", 4000, "success");
     return commitId;
   },
 

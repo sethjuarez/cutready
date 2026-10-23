@@ -6,6 +6,9 @@ const mockFetchDraftlineRemote = vi.hoisted(() => vi.fn());
 const mockPublishDraftlineChanges = vi.hoisted(() => vi.fn());
 const mockSendForReview = vi.hoisted(() => vi.fn());
 const mockGetGitHubAuthStatus = vi.hoisted(() => vi.fn());
+const mockGetDraftlineBaseStatus = vi.hoisted(() => vi.fn());
+const mockPreflightDraftlineMergeBase = vi.hoisted(() => vi.fn());
+const mockMergeDraftlineFromBase = vi.hoisted(() => vi.fn());
 
 vi.mock("../services/draftlineVersioning", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/draftlineVersioning")>();
@@ -16,6 +19,9 @@ vi.mock("../services/draftlineVersioning", async (importOriginal) => {
     listDraftlineRemotes: (...args: unknown[]) => mockListDraftlineRemotes(...args),
     publishDraftlineChanges: (...args: unknown[]) => mockPublishDraftlineChanges(...args),
     sendForReview: (...args: unknown[]) => mockSendForReview(...args),
+    getDraftlineBaseStatus: (...args: unknown[]) => mockGetDraftlineBaseStatus(...args),
+    preflightDraftlineMergeBase: (...args: unknown[]) => mockPreflightDraftlineMergeBase(...args),
+    mergeDraftlineFromBase: (...args: unknown[]) => mockMergeDraftlineFromBase(...args),
   };
 });
 
@@ -23,7 +29,7 @@ vi.mock("../services/githubSetup", () => ({
   getGitHubAuthStatus: (...args: unknown[]) => mockGetGitHubAuthStatus(...args),
 }));
 
-import { remoteSyncErrorMessage, useAppStore } from "../stores/appStore";
+import { mergeNeedsDeveloperMessage, remoteSyncErrorMessage, useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 describe("appStore remote sync status", () => {
   afterEach(() => {
@@ -33,6 +39,9 @@ describe("appStore remote sync status", () => {
     mockListDraftlineRemotes.mockReset();
     mockPublishDraftlineChanges.mockReset();
     mockSendForReview.mockReset();
+    mockGetDraftlineBaseStatus.mockReset();
+    mockPreflightDraftlineMergeBase.mockReset();
+    mockMergeDraftlineFromBase.mockReset();
     useAppStore.setState({
       currentProject: null,
       versions: [],
@@ -42,8 +51,19 @@ describe("appStore remote sync status", () => {
       timelines: [],
       syncStatus: null,
       syncError: null,
+      baseStatus: null,
       incomingCommits: [],
       isSyncing: false,
+      isMerging: false,
+      mergeSource: null,
+      mergeTarget: null,
+      mergeConflicts: [],
+      draftlineMergeToken: null,
+      draftlineMergeRemote: null,
+      loadSketches: useAppStore.getInitialState().loadSketches,
+      loadStoryboards: useAppStore.getInitialState().loadStoryboards,
+      loadNotes: useAppStore.getInitialState().loadNotes,
+      refreshIncomingCommits: useAppStore.getInitialState().refreshIncomingCommits,
       checkLargeFiles: useAppStore.getInitialState().checkLargeFiles,
       checkDirty: useAppStore.getInitialState().checkDirty,
       refreshChangedFiles: useAppStore.getInitialState().refreshChangedFiles,
@@ -423,5 +443,151 @@ describe("appStore remote sync status", () => {
 
     // 3 concurrent callers collapsed to 2 remote round-trips, not 3.
     expect(mockGetDraftlineSyncStatus).toHaveBeenCalledTimes(2);
+  });
+
+  describe("get updates from base (hybrid)", () => {
+    const hybridProject = {
+      root: "D:\\contoso-app\\cutready",
+      name: "cutready",
+      repo_root: "D:\\contoso-app\\cutready",
+      git_root: "D:\\contoso-app",
+      hybrid: true,
+    };
+    const remote = { name: "origin", url: "https://github.com/contoso/app.git" };
+    const cleanReport = {
+      dirtyFiles: [],
+      conflicts: [],
+      canMergeCleanly: true,
+      syncStatus: { ahead: 1, behind: 2 },
+      token: { source: "main" },
+    };
+
+    function stubRefresh() {
+      const spies = {
+        loadSketches: vi.fn(async () => {}),
+        loadStoryboards: vi.fn(async () => {}),
+        loadNotes: vi.fn(async () => {}),
+        refreshIncomingCommits: vi.fn(async () => {}),
+        loadVersions: vi.fn(async () => {}),
+        loadGraphData: vi.fn(async () => {}),
+        loadTimelines: vi.fn(async () => {}),
+        checkDirty: vi.fn(async () => {}),
+      };
+      useAppStore.setState(spies);
+      return spies;
+    }
+
+    it("refreshes base status only for hybrid projects", async () => {
+      mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+      mockGetDraftlineSyncStatus.mockResolvedValue({ ahead: 0, behind: 0 });
+      mockGetDraftlineBaseStatus.mockResolvedValue({ ahead: 1, behind: 3, base: "main" });
+      useAppStore.setState({
+        currentProject: { root: "D:\\demo", name: "demo", repo_root: "D:\\demo", hybrid: false },
+        currentRemote: remote,
+      });
+
+      await useAppStore.getState().refreshSyncStatus();
+      expect(mockGetDraftlineBaseStatus).not.toHaveBeenCalled();
+      expect(useAppStore.getState().baseStatus).toBeNull();
+
+      useAppStore.setState({ currentProject: hybridProject });
+      await useAppStore.getState().refreshSyncStatus();
+      expect(mockGetDraftlineBaseStatus).toHaveBeenCalledWith("origin");
+      expect(useAppStore.getState().baseStatus).toEqual({ ahead: 1, behind: 3, base: "main" });
+    });
+
+    it("is a no-op for standalone projects", async () => {
+      mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+      useAppStore.setState({
+        currentProject: { root: "D:\\demo", name: "demo", repo_root: "D:\\demo", hybrid: false },
+        currentRemote: remote,
+      });
+
+      await useAppStore.getState().getUpdatesFromBase();
+
+      expect(mockPreflightDraftlineMergeBase).not.toHaveBeenCalled();
+      expect(mockMergeDraftlineFromBase).not.toHaveBeenCalled();
+    });
+
+    it("merges a clean base update and refreshes state", async () => {
+      mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+      mockGetDraftlineSyncStatus.mockResolvedValue({ ahead: 1, behind: 0 });
+      mockGetDraftlineBaseStatus.mockResolvedValue({ ahead: 2, behind: 0, base: "main" });
+      mockPreflightDraftlineMergeBase.mockResolvedValueOnce(cleanReport);
+      mockMergeDraftlineFromBase.mockResolvedValueOnce("abc123");
+      useAppStore.setState({
+        currentProject: hybridProject,
+        currentRemote: remote,
+        baseStatus: { ahead: 1, behind: 2, base: "main" },
+      });
+      const spies = stubRefresh();
+
+      await useAppStore.getState().getUpdatesFromBase();
+
+      expect(mockPreflightDraftlineMergeBase).toHaveBeenCalledWith("origin");
+      expect(mockMergeDraftlineFromBase).toHaveBeenCalledWith("origin", "Bring in latest main");
+      expect(useToastStore.getState().toasts).toEqual([
+        expect.objectContaining({ message: "Updates from main brought in.", type: "success" }),
+      ]);
+      for (const spy of Object.values(spies)) expect(spy).toHaveBeenCalled();
+      expect(useAppStore.getState().baseStatus).toEqual({ ahead: 2, behind: 0, base: "main" });
+      expect(useAppStore.getState().syncError).toBeNull();
+      expect(useAppStore.getState().isSyncing).toBe(false);
+    });
+
+    it("keeps the developer-needed error visible after refreshing", async () => {
+      mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+      mockGetDraftlineSyncStatus.mockResolvedValue({ ahead: 1, behind: 0 });
+      mockGetDraftlineBaseStatus.mockResolvedValue({ ahead: 1, behind: 2, base: "main" });
+      mockPreflightDraftlineMergeBase.mockRejectedValueOnce({
+        code: "merge_needs_developer",
+        message: "merge needs a developer: files outside the project conflict: [\"src/app.rs\"]",
+      });
+      useAppStore.setState({
+        currentProject: hybridProject,
+        currentRemote: remote,
+        baseStatus: { ahead: 1, behind: 2, base: "main" },
+      });
+      const spies = stubRefresh();
+
+      await useAppStore.getState().getUpdatesFromBase();
+
+      expect(mockMergeDraftlineFromBase).not.toHaveBeenCalled();
+      expect(mockGetDraftlineSyncStatus).toHaveBeenCalled();
+      expect(spies.loadTimelines).toHaveBeenCalled();
+      expect(spies.loadGraphData).toHaveBeenCalled();
+      expect(useAppStore.getState().syncError).toBe(mergeNeedsDeveloperMessage("main"));
+      expect(useAppStore.getState().isMerging).toBe(false);
+      expect(useAppStore.getState().isSyncing).toBe(false);
+    });
+
+    it("routes in-folder base conflicts to the conflict panel", async () => {
+      mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+      mockGetDraftlineSyncStatus.mockResolvedValue({ ahead: 1, behind: 0 });
+      mockGetDraftlineBaseStatus.mockResolvedValue({ ahead: 1, behind: 2, base: "main" });
+      const conflicts = [{ path: "intro.sk", file_type: "sketch", ours: "{}", theirs: "{}", ancestor: "{}", field_conflicts: [] }];
+      mockPreflightDraftlineMergeBase.mockResolvedValueOnce({
+        ...cleanReport,
+        canMergeCleanly: false,
+        conflicts,
+      });
+      useAppStore.setState({
+        currentProject: hybridProject,
+        currentRemote: remote,
+        baseStatus: { ahead: 1, behind: 2, base: "main" },
+      });
+      stubRefresh();
+
+      await useAppStore.getState().getUpdatesFromBase();
+
+      expect(mockMergeDraftlineFromBase).not.toHaveBeenCalled();
+      const state = useAppStore.getState();
+      expect(state.isMerging).toBe(true);
+      expect(state.mergeSource).toBe("main");
+      expect(state.mergeConflicts).toEqual(conflicts);
+      expect(state.draftlineMergeToken).toEqual({ source: "main" });
+      expect(state.draftlineMergeRemote).toBe("origin");
+      expect(state.syncError).toBeNull();
+    });
   });
 });

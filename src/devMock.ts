@@ -1502,6 +1502,10 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         is_fast_forward: false,
         can_proceed: false,
       };
+    case "get_base_status":
+      // The mock project is standalone, so there is no base to fall behind.
+      return null;
+    case "preflight_merge_base":
     case "preflight_merge_incoming":
       return {
         sync_status: {

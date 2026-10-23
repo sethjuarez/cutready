@@ -743,6 +743,8 @@ pub fn run() {
             commands::draftline::send_for_review,
             commands::draftline::preflight_apply_incoming,
             commands::draftline::get_sync_status,
+            commands::draftline::get_base_status,
+            commands::draftline::preflight_merge_base,
             commands::draftline::apply_incoming,
             commands::draftline::preflight_merge_incoming,
             commands::draftline::merge_incoming,

@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
-import { Check, ArrowUp, ArrowDown, AlertTriangle, Globe, RefreshCw, UserRound } from "lucide-react";
+import { Check, ArrowUp, ArrowDown, AlertTriangle, GitMerge, Globe, RefreshCw, UserRound } from "lucide-react";
 import { isContributorIdentityRequired } from "../services/identity";
 
 /**
@@ -20,6 +20,9 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
   const pushToRemote = useAppStore((s) => s.pushToRemote);
   const pullFromRemote = useAppStore((s) => s.pullFromRemote);
   const syncWithRemote = useAppStore((s) => s.syncWithRemote);
+  const isHybrid = useAppStore((s) => s.currentProject?.hybrid === true);
+  const baseStatus = useAppStore((s) => s.baseStatus);
+  const getUpdatesFromBase = useAppStore((s) => s.getUpdatesFromBase);
   const { settings } = useSettings();
   const [showIncoming, setShowIncoming] = useState(false);
   const timelines = useAppStore((s) => s.timelines);
@@ -102,6 +105,12 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
         : RefreshCw;
   const actionTitle = isSyncing ? "Syncing with collaborators" : `${compactActionLabel} with collaborators`;
 
+  // Hybrid projects on a review branch: offer the base's new commits (e.g. from developers on main).
+  const baseBehind = isHybrid && baseStatus ? baseStatus.behind : 0;
+  const baseUpdateTitle = baseStatus
+    ? `Get updates from ${baseStatus.base} (${baseBehind} new change${baseBehind === 1 ? "" : "s"})`
+    : "";
+
   // Compute PR URL — only for non-main branches with a GitHub remote
   const prUrl = (() => {
     if (!currentRemote?.url || !activeTimeline) return null;
@@ -124,6 +133,18 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
           >
             <ActionIcon className={`h-3 w-3 ${isSyncing ? "animate-spin" : ""}`} />
             <span className="hidden min-[260px]:inline">{isSyncing ? "Syncing" : compactButtonLabel}</span>
+          </button>
+        )}
+        {baseBehind > 0 && baseStatus && (
+          <button
+            onClick={() => getUpdatesFromBase()}
+            disabled={isSyncing}
+            className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/8 px-1.5 text-[10px] font-semibold text-[rgb(var(--color-accent))] transition-colors hover:bg-[rgb(var(--color-accent))]/14 disabled:opacity-50"
+            title={baseUpdateTitle}
+            aria-label={baseUpdateTitle}
+          >
+            <GitMerge className="h-3 w-3" />
+            <span className="hidden min-[260px]:inline">Get {baseStatus.base}</span>
           </button>
         )}
         <button
@@ -227,6 +248,20 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
           </button>
         )}
 
+        {/* Get updates from base — hybrid projects behind their base branch */}
+        {baseBehind > 0 && baseStatus && (
+          <button
+            onClick={() => getUpdatesFromBase()}
+            disabled={isSyncing}
+            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[rgb(var(--color-accent))] border border-[rgb(var(--color-accent))]/30 hover:bg-[rgb(var(--color-accent))]/10 transition-colors disabled:opacity-60"
+            title={baseUpdateTitle}
+            aria-label={baseUpdateTitle}
+          >
+            <GitMerge className="w-2.5 h-2.5" />
+            Get updates from {baseStatus.base}
+          </button>
+        )}
+
         {/* Open PR button — shown for non-main branches */}
         {currentRemote?.url && prUrl && (
           <button
@@ -262,6 +297,11 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
             <>
               <UserRound className="shrink-0 w-2.5 h-2.5" />
               <span className="truncate">Add your name and email in Settings › Profile</span>
+            </>
+          ) : syncError.startsWith("A developer needs to bring") ? (
+            <>
+              <AlertTriangle className="shrink-0 w-2.5 h-2.5" />
+              <span className="truncate">{syncError}</span>
             </>
           ) : (syncError.includes("network") || syncError.includes("resolve host") || syncError.includes("Could not resolve") || syncError.includes("timed out")) ? (
             <>

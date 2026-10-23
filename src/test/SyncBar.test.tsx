@@ -28,6 +28,8 @@ const originalState = {
   syncWithRemote: useAppStore.getState().syncWithRemote,
 };
 
+const originalGetUpdatesFromBase = useAppStore.getState().getUpdatesFromBase;
+
 describe("SyncBar", () => {
   afterEach(() => {
     cleanup();
@@ -38,6 +40,9 @@ describe("SyncBar", () => {
         currentRemote: null,
         syncStatus: null,
         syncError: null,
+        baseStatus: null,
+        currentProject: null,
+        getUpdatesFromBase: originalGetUpdatesFromBase,
         timelines: [],
         isSyncing: false,
       });
@@ -107,5 +112,47 @@ describe("SyncBar", () => {
     render(<SyncBar />);
 
     expect(screen.getByText("GitHub sign-in required — reconnect in Settings")).toBeInTheDocument();
+  });
+
+  it("offers updates from the base branch for hybrid projects behind their base", async () => {
+    const getUpdatesFromBase = vi.fn(() => Promise.resolve());
+    act(() => {
+      useAppStore.setState({
+        currentProject: { root: "D:\\app\\cutready", name: "cutready", repo_root: "D:\\app\\cutready", hybrid: true },
+        currentRemote: { name: "origin", url: "https://github.com/example/repo.git" },
+        syncStatus: { ahead: 0, behind: 0 },
+        baseStatus: { ahead: 1, behind: 2, base: "main" },
+        timelines: [{ name: "cutready/launch", label: "cutready/launch", is_active: true, snapshot_count: 1, color_index: 0 }],
+        detectRemote: vi.fn(() => Promise.resolve()),
+        fetchFromRemote: vi.fn(() => Promise.resolve()),
+        getUpdatesFromBase,
+      });
+    });
+
+    render(<SyncBar variant="compact" />);
+
+    const button = screen.getByRole("button", { name: /get updates from main/i });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    expect(getUpdatesFromBase).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not offer base updates for standalone projects", () => {
+    act(() => {
+      useAppStore.setState({
+        currentProject: { root: "D:\\demo", name: "demo", repo_root: "D:\\demo", hybrid: false },
+        currentRemote: { name: "origin", url: "https://github.com/example/repo.git" },
+        syncStatus: { ahead: 0, behind: 0 },
+        baseStatus: { ahead: 0, behind: 5, base: "main" },
+        timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 1, color_index: 0 }],
+        detectRemote: vi.fn(() => Promise.resolve()),
+        fetchFromRemote: vi.fn(() => Promise.resolve()),
+      });
+    });
+
+    render(<SyncBar />);
+
+    expect(screen.queryByRole("button", { name: /get updates from main/i })).not.toBeInTheDocument();
   });
 });

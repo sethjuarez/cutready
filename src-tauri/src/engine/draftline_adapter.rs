@@ -311,6 +311,32 @@ impl CutReadyDraftlineAdapter {
         self.workspace.sync_status(remote)
     }
 
+    /// Compare the current branch with the remote base branch (e.g. `main`)
+    /// from the last fetch. Only meaningful for hybrid projects working on a
+    /// branch other than the base; returns `None` for standalone projects, on
+    /// the base itself, or when the base can't be determined.
+    pub fn base_status(&self, remote: &str) -> DraftlineResult<Option<SyncStatus>> {
+        if !self.is_hybrid() {
+            return Ok(None);
+        }
+        let status = match self.workspace.base_status(remote) {
+            Ok(status) => status,
+            Err(draftline::DraftlineError::SendBaseUnknown) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        if status.variation == self.current_variation()? {
+            return Ok(None);
+        }
+        Ok(Some(status))
+    }
+
+    /// Preflight bringing the latest remote base into the current branch.
+    /// Conflicts outside the project folder are reported in
+    /// `developer_conflicts` and yield no token.
+    pub fn preflight_merge_base(&self, remote: &str) -> DraftlineResult<MergeIncomingReport> {
+        self.workspace.preflight_merge_base(remote)
+    }
+
     pub fn preflight_apply_incoming(&self, remote: &str) -> DraftlineResult<ApplyIncomingReport> {
         self.workspace.preflight_apply_incoming(remote)
     }
