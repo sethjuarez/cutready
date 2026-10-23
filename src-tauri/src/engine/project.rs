@@ -2469,18 +2469,53 @@ const GIT_STATE_DIR: &str = ".git/cutready";
 
 pub const REPO_SETTINGS_FILE: &str = ".cutready/settings.json";
 
-/// Resolve the per-project state directory inside .git/cutready/.
-/// For single-project repos: `.git/cutready/`
-/// For multi-project repos: `.git/cutready/<project-name>/`
-pub fn git_state_dir(repo_root: &Path, project_root: &Path) -> std::path::PathBuf {
-    let base = repo_root.join(GIT_STATE_DIR);
-    if repo_root == project_root {
+/// Where a project's local runtime state lives, plus the directory that must
+/// contain it (`anchor`), used by containment checks.
+pub struct GitStateLocation {
+    pub anchor: std::path::PathBuf,
+    pub dir: std::path::PathBuf,
+}
+
+/// Resolve the per-project state directory inside the git dir.
+/// Standalone single project: `<root>/.git/cutready/`
+/// Standalone multi-project: `<root>/.git/cutready/<project-name>/`
+/// Hybrid (folder inside a code repo, or a linked worktree):
+/// `<gitdir>/cutready/<folder relative to the work tree>/[<project-name>/]`
+pub fn git_state_location(repo_root: &Path, project_root: &Path) -> GitStateLocation {
+    let (anchor, base) = match enclosing_git_dir(repo_root) {
+        Some((git_dir, rel)) => {
+            let base = git_dir.join("cutready").join(rel);
+            (git_dir, base)
+        }
+        None => (repo_root.to_path_buf(), repo_root.join(GIT_STATE_DIR)),
+    };
+    let dir = if repo_root == project_root {
         base
     } else if let Ok(rel) = project_root.strip_prefix(repo_root) {
         base.join(rel)
     } else {
         base
+    };
+    GitStateLocation { anchor, dir }
+}
+
+pub fn git_state_dir(repo_root: &Path, project_root: &Path) -> std::path::PathBuf {
+    git_state_location(repo_root, project_root).dir
+}
+
+/// For a CutReady folder without its own `.git` directory, find the enclosing
+/// repository's git dir (per-worktree for linked worktrees) and the folder's path
+/// relative to the work tree. `None` keeps the standalone `<root>/.git` layout.
+fn enclosing_git_dir(repo_root: &Path) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+    if repo_root.join(".git").is_dir() {
+        return None;
     }
+    let repo = git2::Repository::discover(repo_root).ok()?;
+    let work_dir = std::fs::canonicalize(repo.workdir()?).ok()?;
+    let root = std::fs::canonicalize(repo_root).ok()?;
+    let rel = root.strip_prefix(&work_dir).ok()?.to_path_buf();
+    let git_dir = std::fs::canonicalize(repo.path()).ok()?;
+    Some((git_dir, rel))
 }
 
 /// Relocate a project's local runtime state when its path-based identity changes
@@ -3263,12 +3298,9 @@ mod tests {
         std::fs::create_dir_all(root.join("chat-artifacts")).unwrap();
         std::fs::write(root.join("chat-artifacts/old.cv"), "{}").unwrap();
 
-        let result = rename_project_asset(
-            root,
-            "chat-artifacts/old.cv",
-            "chat-artifacts/renamed.cv",
-        )
-        .unwrap();
+        let result =
+            rename_project_asset(root, "chat-artifacts/old.cv", "chat-artifacts/renamed.cv")
+                .unwrap();
 
         assert!(!root.join("chat-artifacts/old.cv").exists());
         assert!(root.join("chat-artifacts/renamed.cv").exists());
@@ -4096,6 +4128,40 @@ Some text
             root.join(".git/cutready/order.json").exists(),
             "Migrated order should be in .git/cutready/"
         );
+    }
+
+    #[test]
+    fn git_state_dir_for_hybrid_folder_uses_enclosing_git_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let code = tmp.path().join("contoso-app");
+        git2::Repository::init(&code).unwrap();
+        let folder = code.join("cutready");
+        std::fs::create_dir_all(folder.join("alpha")).unwrap();
+
+        let git_dir = std::fs::canonicalize(code.join(".git")).unwrap();
+        assert_eq!(
+            git_state_dir(&folder, &folder),
+            git_dir.join("cutready").join("cutready")
+        );
+        assert_eq!(
+            git_state_dir(&folder, &folder.join("alpha")),
+            git_dir.join("cutready").join("cutready").join("alpha")
+        );
+
+        let db = crate::engine::agent_state::AgentStateStore::ensure_database_for_project(
+            &folder, &folder,
+        )
+        .unwrap();
+        assert!(db.starts_with(&git_dir));
+        assert!(!folder.join(".git").exists());
+    }
+
+    #[test]
+    fn git_state_dir_keeps_standalone_layout_when_folder_has_git_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("demo");
+        git2::Repository::init(&root).unwrap();
+        assert_eq!(git_state_dir(&root, &root), root.join(".git/cutready"));
     }
 
     #[test]

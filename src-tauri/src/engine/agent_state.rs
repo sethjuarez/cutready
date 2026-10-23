@@ -1430,17 +1430,19 @@ fn validate_agent_state_directory(
     repo_root: &Path,
     project_root: &Path,
 ) -> Result<PathBuf, String> {
-    let canonical_repo_root = fs::canonicalize(repo_root)
+    let location = crate::engine::project::git_state_location(repo_root, project_root);
+    let anchor = location.anchor.as_path();
+    let canonical_repo_root = fs::canonicalize(anchor)
         .map_err(|err| format!("Could not canonicalize repository root for agent state: {err}"))?;
     if !canonical_repo_root.is_dir() {
         return Err(format!(
             "Repository root for agent state is not a directory: {}",
-            repo_root.display()
+            anchor.display()
         ));
     }
 
-    let configured_state_dir = crate::engine::project::git_state_dir(repo_root, project_root);
-    let relative_state_dir = configured_state_dir.strip_prefix(repo_root).map_err(|_| {
+    let configured_state_dir = location.dir;
+    let relative_state_dir = configured_state_dir.strip_prefix(anchor).map_err(|_| {
         format!(
             "Agent state directory is not contained by repository root: {}",
             configured_state_dir.display()
@@ -1606,9 +1608,10 @@ fn import_legacy_chat_sessions(
 ) -> Result<(), String> {
     let canonical_project_root = fs::canonicalize(project_root)
         .map_err(|err| format!("Could not canonicalize project root for chat migration: {err}"))?;
-    let canonical_repo_root = fs::canonicalize(repo_root).map_err(|err| {
-        format!("Could not canonicalize repository root for chat migration: {err}")
-    })?;
+    let canonical_repo_root = fs::canonicalize(
+        crate::engine::project::git_state_location(repo_root, project_root).anchor,
+    )
+    .map_err(|err| format!("Could not canonicalize repository root for chat migration: {err}"))?;
     let state_dir = validate_agent_state_directory(repo_root, project_root)?;
     let canonical_state_dir = fs::canonicalize(&state_dir)
         .map_err(|err| format!("Could not canonicalize repository state directory: {err}"))?;
