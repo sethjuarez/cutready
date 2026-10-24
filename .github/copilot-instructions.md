@@ -292,4 +292,5 @@ When updating, also use `store_memory` to capture the convention for cross-sessi
 - [docs/reference/NORTH_STAR.md](docs/reference/NORTH_STAR.md) — The press release / vision
 - [docs/reference/GUIDANCE.md](docs/reference/GUIDANCE.md) — Feature catalog
 - [docs/reference/ARCHITECTURE.md](docs/reference/ARCHITECTURE.md) — Technical design
+- [docs/reference/DRAFTLINE_SCENARIOS.md](docs/reference/DRAFTLINE_SCENARIOS.md) — Draftline playbook flows mapped to CutReady coverage and gaps; update it when versioning behavior changes
 - [User-facing docs site](https://cutready.io) — Astro Starlight
