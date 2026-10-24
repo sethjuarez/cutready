@@ -1612,7 +1612,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().checkStash();
     } catch (err) {
       console.error("Failed to create project:", err);
-      set({ error: String(err) });
+      set({ error: errorMessage(err) });
     } finally {
       set({ loading: false });
     }
@@ -1672,7 +1672,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       }
     } catch (err) {
       console.error("Failed to open project:", err);
-      set({ error: String(err) });
+      set({ error: errorMessage(err) });
     } finally {
       set({ loading: false });
     }

@@ -494,18 +494,12 @@ export async function getDraftlineBaseStatus(remote: string): Promise<BaseStatus
  * folder conflict; in-folder conflicts come back for the conflict panel.
  */
 export async function preflightDraftlineMergeBase(remote: string): Promise<DraftlineMergeIncomingReport> {
-  return mergeIncomingReportToDto(await invoke<MergeIncomingReport>("preflight_merge_base", {
-    request: { workspace_path: requireWorkspacePath(), remote },
-  }));
+  return mergeIncomingReportToDto(await facade().preflightMergeBase(remote));
 }
 
 /** Merge the latest base into the current branch (clean merges only). */
 export async function mergeDraftlineFromBase(remote: string, label: string): Promise<string> {
-  // The pinned @draftline/client facade can't pass `from_base`, so invoke the
-  // contract command directly.
-  const result = await invoke<{ merge: { version: { id: string } } }>("merge_incoming", {
-    request: { workspace_path: requireWorkspacePath(), remote, label, from_base: true },
-  });
+  const result = await facade().mergeBase(label, remote);
   return result.merge.version.id;
 }
 

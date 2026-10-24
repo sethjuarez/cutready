@@ -442,6 +442,20 @@ pub fn is_github_remote_url(url: &str) -> bool {
         || normalized.starts_with("git@github.com:")
 }
 
+/// Read a project's git remote URLs without opening a Draftline workspace,
+/// which would claim the checkout for this folder.
+pub fn read_remote_urls(root: &Path) -> Result<Vec<String>, git2::Error> {
+    let repo = git2::Repository::discover(root)?;
+    let names = repo.remotes()?;
+    Ok(names
+        .iter()
+        .flatten()
+        .flatten()
+        .filter_map(|name| repo.find_remote(name).ok())
+        .filter_map(|remote| remote.url().ok().map(str::to_string))
+        .collect())
+}
+
 /// Remaining CutReady-owned integration gaps after Draftline owns versioning.
 pub fn draftline_integration_gaps() -> &'static [&'static str] {
     &[]

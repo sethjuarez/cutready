@@ -63,10 +63,10 @@ harness-prompty = { path = "../crates/harness-prompty" }
 # Typra-generated document contracts (contracts/*.tsp). The app uses the
 # generated types directly where it has adopted them, such as `.cv` chat artifacts.
 cutready-contracts = { path = "../crates/cutready-contracts" }
-draftline = { git = "https://github.com/sethjuarez/draftline", rev = "b3b63fa" }
+draftline = "0.6.0"
 # Already in the tree through Draftline; used directly to read the git config
 # identity that contributor attribution falls back to.
-git2 = { version = "0.20", default-features = false }
+git2 = { version = "0.21", default-features = false }
 keyring = "4.1.2"
 xcap = "0.8"
 image = "0.25"

@@ -25,6 +25,10 @@ Local runtime state (chat history, agent runs) is stored in the enclosing
 repo's git dir at `<gitdir>/cutready/<folder path>/`, so it never shows up as a
 change in the repository.
 
+A repository holds **one** CutReady project. The first folder opened claims
+it; opening another CutReady folder in the same repository is refused with a
+message naming the claimed folder.
+
 ## Who Does What
 
 | | Business users (CutReady) | Developers (Git / Copilot) |
@@ -53,8 +57,8 @@ Hybrid projects never publish directly to the base branch. **Send for review**:
 3. Opens a GitHub pull request, or updates the existing one, and shows a link
    in a toast.
 
-Requires a GitHub remote and a GitHub connection in
-**Settings** → **Repository**.
+Requires a GitHub remote whose base branch has been pushed, and a GitHub
+connection in **Settings** → **Repository**.
 
 ## Get Updates
 
@@ -74,6 +78,8 @@ developer commits.
 | **Git is busy** | Another Git process holds the repository lock | Try again in a moment |
 | **Project changed outside CutReady** | A developer committed while CutReady was working | Try again; nothing was lost |
 | **Interrupted change** | An unfinished CutReady change belongs to another project in the same repository | Open that project and finish it there |
+| **This repository's CutReady project is …** | Another folder already holds the repository's CutReady project | Open that folder instead |
+| **Base branch isn't on the remote** | The base branch was never pushed | Ask a developer to push it, then send again |
 | **Branch belongs to the code repository** | The branch is outside `cutready/` | Switch to a CutReady branch or the base |
 | **Uses Git LFS or another Git filter** | CutReady can't safely write those files | Ask a developer to handle them with Git |
 

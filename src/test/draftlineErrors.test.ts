@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   GIT_INDEX_LOCKED_MESSAGE,
+  INVALID_WORKSPACE_CLAIM_MESSAGE,
   LOCAL_STATE_CHANGED_MESSAGE,
   SEND_BASE_UNKNOWN_MESSAGE,
   SEND_OUTSIDE_NAMESPACE_MESSAGE,
@@ -12,8 +13,8 @@ import {
   isRetryableDraftlineError,
   mergeNeedsDeveloperMessage,
   recoveryNextActionMessage,
-  type CutReadySafeNextAction,
 } from "../services/draftlineErrors";
+import type { SafeNextAction } from "@draftline/client";
 import { errorMessage, remoteSyncErrorMessage } from "../stores/appStore";
 
 function preflightFailed(hazards: Array<{ path: string; kind: string }>) {
@@ -43,6 +44,7 @@ describe("Draftline error messages", () => {
     ["send_outside_namespace", SEND_OUTSIDE_NAMESPACE_MESSAGE],
     ["send_base_unknown", SEND_BASE_UNKNOWN_MESSAGE],
     ["merge_needs_developer", mergeNeedsDeveloperMessage("the base branch")],
+    ["invalid_workspace_claim", INVALID_WORKSPACE_CLAIM_MESSAGE],
   ])("maps %s to a plain-language message", (code, expected) => {
     const error = { code, message: "technical detail" };
     expect(friendlyDraftlineErrorMessage(error)).toBe(expected);
@@ -82,6 +84,35 @@ describe("Draftline error messages", () => {
     expect(isDraftlineGuidanceMessage(message)).toBe(true);
   });
 
+  it("names the folder that already holds the repository's CutReady project", () => {
+    const sub = errorMessage({
+      code: "workspace_already_in_checkout",
+      message: "this checkout's Draftline workspace is `docs/demo`; open that folder, or relocate the workspace",
+      details: { project: "docs/demo" },
+    });
+    expect(sub).toBe('This repository\'s CutReady project is the "docs/demo" folder. Open that folder instead.');
+    expect(isDraftlineGuidanceMessage(sub)).toBe(true);
+
+    const root = errorMessage(JSON.stringify({
+      code: "workspace_already_in_checkout",
+      message: "this checkout's Draftline workspace is the repository root; open that folder, or relocate the workspace",
+      details: { project: "" },
+    }));
+    expect(root).toBe("This repository's CutReady project is the repository's root folder. Open that folder instead.");
+  });
+
+  it("names the missing review base when the remote lacks it", () => {
+    const message = errorMessage({
+      code: "send_base_not_on_remote",
+      message: "the remote has no branch `main` to send to; publish it first or pass a base branch",
+    });
+    expect(message).toBe(
+      "The shared repository doesn't have the main branch yet, so this can't be sent for review. Ask a developer to publish it, then send again.",
+    );
+    expect(isDraftlineGuidanceMessage(message)).toBe(true);
+    expect(friendlyDraftlineErrorMessage({ code: "send_base_not_on_remote" })).toContain("the branch to merge into");
+  });
+
   it("lists files that need Git LFS or another filter", () => {
     const error = preflightFailed([
       { path: "media/intro.mp4", kind: "git_filter" },
@@ -113,7 +144,7 @@ describe("Draftline error messages", () => {
   });
 
   it("offers no in-project action for finish_in_other_project", () => {
-    const finish: CutReadySafeNextAction = "finish_in_other_project";
+    const finish: SafeNextAction = "finish_in_other_project";
     expect(canActOnRecoveryNextAction(finish)).toBe(false);
     expect(recoveryNextActionMessage(finish, "deck")).toContain("other project that started it (deck)");
     expect(canActOnRecoveryNextAction("repair_recovery")).toBe(true);

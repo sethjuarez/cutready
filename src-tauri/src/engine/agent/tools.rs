@@ -5102,7 +5102,7 @@ mod tests {
         let person =
             |sig: git2::Signature| format!("{} <{}>", sig.name().unwrap(), sig.email().unwrap());
         (
-            commit.summary().unwrap().to_string(),
+            commit.summary().unwrap().unwrap().to_string(),
             person(commit.author()),
             person(commit.committer()),
         )

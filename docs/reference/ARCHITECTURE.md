@@ -830,7 +830,7 @@ blocks using `CommandExt::creation_flags()` (std) or the inherent
 | Motion graphics | Elucim (`@elucim/core` + `@elucim/dsl`) | Latest | TypeScript/SVG, JSON DSL for AI agents, browser-native rendering, video export |
 | LLM | agentive crate (multi-provider) | Latest | 4 providers (Foundry, Azure OpenAI, OpenAI, Anthropic), streaming, agentic loops, ARM discovery |
 | Visuals | Elucim DSL (`@elucim/dsl`) | Latest | SVG-based framing visuals with semantic color tokens |
-| Document versioning | Draftline | git rev `b3b63fa` | Content versioning, branch graph helpers, sync, merge, restore-as-new-save, hybrid repo coexistence |
+| Document versioning | Draftline | 0.6.0 | Content versioning, branch graph helpers, sync, merge, restore-as-new-save, hybrid repo coexistence |
 | Timeline export | FCPXML 1.9 | — | Multi-track, markers, native DaVinci Resolve 17+ import |
 | Project storage | Portable folders + Draftline | — | Versioned project content with local runtime state kept out of snapshots |
 

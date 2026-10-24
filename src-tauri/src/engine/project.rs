@@ -108,12 +108,42 @@ pub fn safe_resolve(root: &Path, relative_path: &str) -> Result<PathBuf, Project
 ///
 /// Creates the folder if it doesn't exist, initializes Draftline, and returns a ProjectView.
 pub fn init_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
+    let created = !root.exists();
     std::fs::create_dir_all(root).map_err(|e| ProjectError::Io(e.to_string()))?;
 
     // Draftline owns workspace initialization and existing-workspace detection.
-    CutReadyDraftlineAdapter::open_project(root).map_err(|e| ProjectError::Io(e.to_string()))?;
+    if let Err(error) = CutReadyDraftlineAdapter::open_project(root) {
+        if created && is_workspace_claim_error(&error) {
+            // Leave no empty folder behind for a refused new project.
+            let _ = std::fs::remove_dir(root);
+        }
+        return Err(draftline_open_error(error));
+    }
 
     Ok(ProjectView::new(root.to_path_buf()))
+}
+
+/// A git checkout holds one Draftline workspace: the first CutReady folder
+/// opened in it claims it, and any other folder in the same checkout is refused.
+fn is_workspace_claim_error(error: &draftline::DraftlineError) -> bool {
+    matches!(
+        error,
+        draftline::DraftlineError::WorkspaceAlreadyInCheckout(_)
+            | draftline::DraftlineError::InvalidWorkspaceClaim(_)
+    )
+}
+
+/// Keep Draftline's code and details on workspace-claim refusals so the UI can
+/// name the folder that holds the repository's CutReady project.
+fn draftline_open_error(error: draftline::DraftlineError) -> ProjectError {
+    if !is_workspace_claim_error(&error) {
+        return ProjectError::Io(error.to_string());
+    }
+    let error = draftline::tauri_contract::TauriCommandError::from(error);
+    match serde_json::to_string(&error) {
+        Ok(json) => ProjectError::Draftline(json),
+        Err(_) => ProjectError::Io(error.message),
+    }
 }
 
 // ── Multi-project manifest ────────────────────────────────────────
@@ -519,7 +549,7 @@ pub fn open_repo(root: &Path) -> Result<(RepoView, Vec<ProjectEntry>), ProjectEr
     }
 
     // Draftline owns workspace initialization and existing-workspace detection.
-    CutReadyDraftlineAdapter::open_project(root).map_err(|e| ProjectError::Io(e.to_string()))?;
+    CutReadyDraftlineAdapter::open_project(root).map_err(draftline_open_error)?;
 
     // Repair: move orphaned repo-level assets into the first project.
     // This fixes workspaces migrated before the asset-move fix.
@@ -2854,6 +2884,9 @@ pub enum ProjectError {
     PathTraversal(String),
     #[error("{0}")]
     Locked(String),
+    /// A Draftline refusal serialized as its Tauri command error JSON.
+    #[error("{0}")]
+    Draftline(String),
 }
 
 impl From<sketch_edits::SketchEditError> for ProjectError {
@@ -2875,6 +2908,86 @@ mod tests {
         let view = init_project_folder(&root).unwrap();
         assert_eq!(view.name, "My Demo");
         assert!(root.join(".git").exists());
+    }
+
+    fn workspace_claim(git_dir: &Path) -> serde_json::Value {
+        let claim = std::fs::read_to_string(git_dir.join("draftline").join("workspace.json"))
+            .expect("Draftline claims the checkout on first open");
+        serde_json::from_str(&claim).unwrap()
+    }
+
+    #[test]
+    fn multi_project_workspace_always_opens_draftline_at_repo_root() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path().join("workspace");
+        init_project_folder(&root).unwrap();
+        let alpha = create_project_in_repo(&root, "Alpha", None).unwrap();
+        let beta = create_project_in_repo(&root, "Beta", None).unwrap();
+
+        for entry in [&alpha, &beta, &alpha, &beta] {
+            let (repo, projects) = open_repo(&root).unwrap();
+            assert_eq!(projects.len(), 2);
+            let view = ProjectView::in_repo(repo.root.clone(), &entry.path, entry.name.clone());
+            assert!(!view.hybrid);
+            assert_eq!(view.repo_root, root);
+
+            let adapter = CutReadyDraftlineAdapter::open_project(&view.repo_root).unwrap();
+            adapter.changed_files().unwrap();
+            let change = crate::engine::draftline_adapter::StructureChange::begin(
+                &view.repo_root,
+                "Edit project",
+                [view.root.clone()],
+            )
+            .unwrap();
+            std::fs::write(view.root.join("notes").join("plan.md"), "# Plan\n").unwrap();
+            change
+                .finish(&view.repo_root, Err("no profile".into()))
+                .unwrap();
+        }
+
+        assert_eq!(workspace_claim(&root.join(".git"))["project"], "");
+    }
+
+    #[test]
+    fn second_hybrid_folder_in_same_checkout_is_refused_with_claimed_folder() {
+        let tmp = TempDir::new().unwrap();
+        let code = tmp.path().join("contoso-app");
+        let repo = git2::Repository::init(&code).unwrap();
+        std::fs::write(code.join("README.md"), "# Contoso\n").unwrap();
+        {
+            let mut index = repo.index().unwrap();
+            index.add_path(Path::new("README.md")).unwrap();
+            index.write().unwrap();
+            let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+            let signature = git2::Signature::now("Dev", "dev@example.com").unwrap();
+            repo.commit(Some("HEAD"), &signature, &signature, "Init", &tree, &[])
+                .unwrap();
+        }
+        let first = code.join("cutready");
+        let second = code.join("marketing");
+        for folder in [&first, &second] {
+            std::fs::create_dir_all(folder).unwrap();
+            std::fs::write(folder.join("intro.sk"), r#"{"title":"Intro"}"#).unwrap();
+        }
+
+        open_repo(&first).unwrap();
+        assert_eq!(workspace_claim(&code.join(".git"))["project"], "cutready");
+
+        let refused = |error: ProjectError| match error {
+            ProjectError::Draftline(json) => {
+                let error: serde_json::Value = serde_json::from_str(&json).unwrap();
+                assert_eq!(error["code"], "workspace_already_in_checkout");
+                assert_eq!(error["details"]["project"], "cutready");
+            }
+            other => panic!("expected a workspace claim refusal, got {other:?}"),
+        };
+        refused(open_repo(&second).unwrap_err());
+        let new_folder = code.join("new-demo");
+        refused(init_project_folder(&new_folder).unwrap_err());
+        assert!(!new_folder.exists(), "refused new project leaves no folder");
+
+        // The claimed folder keeps working.
+        open_repo(&first).unwrap();
     }
 
     #[test]
