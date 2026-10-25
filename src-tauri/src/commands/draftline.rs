@@ -1024,6 +1024,7 @@ fn send_for_review_with(
             .map(|base| base.trim().to_string())
             .filter(|base| !base.is_empty()),
         branch: None,
+        expected: None,
     };
     contract::into_tauri_result(adapter.send_for_review(
         &request.remote,

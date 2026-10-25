@@ -6,7 +6,7 @@ import type { SafeNextAction } from "@draftline/client";
  */
 export const DraftlineErrorCode = {
   MergeNeedsDeveloper: "merge_needs_developer",
-  RecoveryInOtherProject: "recovery_in_other_project",
+  RecoveryInOtherFolder: "recovery_in_other_folder",
   SendOutsideNamespace: "send_outside_namespace",
   SendBaseUnknown: "send_base_unknown",
   PullRequestFailed: "pull_request_failed",
@@ -15,12 +15,12 @@ export const DraftlineErrorCode = {
   LocalStateChanged: "local_state_changed",
   PreflightFailed: "preflight_failed",
   SendBaseNotOnRemote: "send_base_not_on_remote",
-  WorkspaceAlreadyInCheckout: "workspace_already_in_checkout",
-  InvalidWorkspaceClaim: "invalid_workspace_claim",
+  FolderIsElsewhere: "folder_is_elsewhere",
+  InvalidFolderMarker: "invalid_folder_marker",
 } as const;
 
-/** Draftline's next action when an interrupted operation belongs to another project in the same checkout. */
-export const FINISH_IN_OTHER_PROJECT: SafeNextAction = "finish_in_other_project";
+/** Draftline's next action when an interrupted operation belongs to another folder in the same checkout. */
+export const FINISH_IN_OTHER_FOLDER: SafeNextAction = "finish_in_other_folder";
 
 export const GIT_INDEX_LOCKED_MESSAGE = "Git is busy in this project's repository — try again in a moment. Nothing was changed.";
 export const LOCAL_STATE_CHANGED_MESSAGE =
@@ -31,8 +31,8 @@ export const SEND_OUTSIDE_NAMESPACE_MESSAGE =
   "This branch isn't a CutReady branch, so it can't be sent for review. Switch to a CutReady branch or the main branch, then send again.";
 export const SEND_BASE_UNKNOWN_MESSAGE =
   "CutReady couldn't tell which branch to send this to for review. Check for updates, then try again.";
-export const INVALID_WORKSPACE_CLAIM_MESSAGE =
-  "CutReady couldn't read which folder in this repository holds its project. Ask a developer to check the repository's Draftline settings.";
+export const INVALID_FOLDER_MARKER_MESSAGE =
+  "CutReady couldn't read which folder in this repository holds its project. Ask a developer to check the .draftline file at the repository root.";
 
 /** The remote doesn't have the branch a review would merge into. */
 export function sendBaseNotOnRemoteMessage(base?: string | null): string {
@@ -42,10 +42,10 @@ export function sendBaseNotOnRemoteMessage(base?: string | null): string {
 
 /**
  * Another folder in this repository already holds its CutReady project.
- * `project` is that folder relative to the repository; empty means the root.
+ * `folder` is that folder relative to the repository; empty or "." means the root.
  */
-export function workspaceAlreadyInCheckoutMessage(project?: string | null): string {
-  const where = project ? `the "${project}" folder` : "the repository's root folder";
+export function folderIsElsewhereMessage(folder?: string | null): string {
+  const where = folder && folder !== "." ? `the "${folder}" folder` : "the repository's root folder";
   return `This repository's CutReady project is ${where}. Open that folder instead.`;
 }
 
@@ -54,9 +54,9 @@ export function mergeNeedsDeveloperMessage(base: string): string {
   return `A developer needs to bring ${base} into this branch: files outside the CutReady folder conflict.`;
 }
 
-export function recoveryInOtherProjectMessage(project?: string | null): string {
-  const where = project ? ` (${project})` : "";
-  return `An interrupted change has to be finished in the other project that started it${where}. Open that project in CutReady to finish it, then try again.`;
+export function recoveryInOtherFolderMessage(folder?: string | null): string {
+  const where = folder ? ` (${folder})` : "";
+  return `An interrupted change has to be finished in the other folder that started it${where}. Open that folder in CutReady to finish it, then try again.`;
 }
 
 export function gitFilterFilesMessage(paths: string[]): string {
@@ -125,9 +125,9 @@ export function friendlyDraftlineErrorMessage(error: unknown): string | null {
   switch (draftlineErrorCode(error)) {
     case DraftlineErrorCode.MergeNeedsDeveloper:
       return mergeNeedsDeveloperMessage("the base branch");
-    case DraftlineErrorCode.RecoveryInOtherProject: {
-      const project = draftlineErrorDetails(error)?.project;
-      return recoveryInOtherProjectMessage(typeof project === "string" ? project : null);
+    case DraftlineErrorCode.RecoveryInOtherFolder: {
+      const folder = draftlineErrorDetails(error)?.folder;
+      return recoveryInOtherFolderMessage(typeof folder === "string" ? folder : null);
     }
     case DraftlineErrorCode.SendOutsideNamespace:
       return SEND_OUTSIDE_NAMESPACE_MESSAGE;
@@ -135,12 +135,12 @@ export function friendlyDraftlineErrorMessage(error: unknown): string | null {
       return SEND_BASE_UNKNOWN_MESSAGE;
     case DraftlineErrorCode.SendBaseNotOnRemote:
       return sendBaseNotOnRemoteMessage(sendBaseFromMessage(error));
-    case DraftlineErrorCode.WorkspaceAlreadyInCheckout: {
-      const project = draftlineErrorDetails(error)?.project;
-      return workspaceAlreadyInCheckoutMessage(typeof project === "string" ? project : null);
+    case DraftlineErrorCode.FolderIsElsewhere: {
+      const folder = draftlineErrorDetails(error)?.folder;
+      return folderIsElsewhereMessage(typeof folder === "string" ? folder : null);
     }
-    case DraftlineErrorCode.InvalidWorkspaceClaim:
-      return INVALID_WORKSPACE_CLAIM_MESSAGE;
+    case DraftlineErrorCode.InvalidFolderMarker:
+      return INVALID_FOLDER_MARKER_MESSAGE;
     // pull_request_failed is raised by CutReady's own GitHub provider with an
     // actionable message (and 401s that must reach the sign-in path), so keep it.
     case DraftlineErrorCode.GitIndexLocked:
@@ -164,13 +164,13 @@ const GUIDANCE_MESSAGES = [
   VARIATION_OUTSIDE_NAMESPACE_MESSAGE,
   SEND_OUTSIDE_NAMESPACE_MESSAGE,
   SEND_BASE_UNKNOWN_MESSAGE,
-  INVALID_WORKSPACE_CLAIM_MESSAGE,
+  INVALID_FOLDER_MARKER_MESSAGE,
 ];
 const GUIDANCE_PREFIXES = [
   "A developer needs to bring ",
   "The shared repository doesn't have ",
   "This repository's CutReady project is ",
-  "An interrupted change has to be finished in the other project",
+  "An interrupted change has to be finished in the other folder",
   "This file uses Git LFS",
   "These files use Git LFS",
 ];
@@ -185,11 +185,11 @@ export function isDraftlineGuidanceMessage(message: string): boolean {
 }
 
 /** What to tell the user about a pending-recovery next action. */
-export function recoveryNextActionMessage(action: SafeNextAction, project?: string | null): string | null {
-  return action === FINISH_IN_OTHER_PROJECT ? recoveryInOtherProjectMessage(project) : null;
+export function recoveryNextActionMessage(action: SafeNextAction, folder?: string | null): string | null {
+  return action === FINISH_IN_OTHER_FOLDER ? recoveryInOtherFolderMessage(folder) : null;
 }
 
 /** Whether CutReady can offer a button for a recovery next action in this project. */
 export function canActOnRecoveryNextAction(action: SafeNextAction): boolean {
-  return action !== FINISH_IN_OTHER_PROJECT;
+  return action !== FINISH_IN_OTHER_FOLDER;
 }

@@ -123,13 +123,15 @@ pub fn init_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
     Ok(ProjectView::new(root.to_path_buf()))
 }
 
-/// A git checkout holds one Draftline workspace: the first CutReady folder
-/// opened in it claims it, and any other folder in the same checkout is refused.
+/// A repository's committed `.draftline` marker names the one folder Draftline
+/// manages; opening any other folder, or a broken marker, is refused.
 fn is_workspace_claim_error(error: &draftline::DraftlineError) -> bool {
     matches!(
         error,
-        draftline::DraftlineError::WorkspaceAlreadyInCheckout(_)
-            | draftline::DraftlineError::InvalidWorkspaceClaim(_)
+        draftline::DraftlineError::FolderIsElsewhere(_)
+            | draftline::DraftlineError::FolderMissing(_)
+            | draftline::DraftlineError::InvalidFolderMarker(_)
+            | draftline::DraftlineError::RecoveryInOtherFolder(_)
     )
 }
 
@@ -2910,10 +2912,11 @@ mod tests {
         assert!(root.join(".git").exists());
     }
 
-    fn workspace_claim(git_dir: &Path) -> serde_json::Value {
-        let claim = std::fs::read_to_string(git_dir.join("draftline").join("workspace.json"))
-            .expect("Draftline claims the checkout on first open");
-        serde_json::from_str(&claim).unwrap()
+    /// The committed root `.draftline` marker that names the managed folder.
+    fn folder_marker(repo_root: &Path) -> serde_json::Value {
+        let marker = std::fs::read_to_string(repo_root.join(".draftline"))
+            .expect("Draftline writes the folder marker on first open");
+        serde_json::from_str(&marker).unwrap()
     }
 
     #[test]
@@ -2945,7 +2948,7 @@ mod tests {
                 .unwrap();
         }
 
-        assert_eq!(workspace_claim(&root.join(".git"))["project"], "");
+        assert_eq!(folder_marker(&root)["folder"], ".");
     }
 
     #[test]
@@ -2971,15 +2974,15 @@ mod tests {
         }
 
         open_repo(&first).unwrap();
-        assert_eq!(workspace_claim(&code.join(".git"))["project"], "cutready");
+        assert_eq!(folder_marker(&code)["folder"], "cutready");
 
         let refused = |error: ProjectError| match error {
             ProjectError::Draftline(json) => {
                 let error: serde_json::Value = serde_json::from_str(&json).unwrap();
-                assert_eq!(error["code"], "workspace_already_in_checkout");
-                assert_eq!(error["details"]["project"], "cutready");
+                assert_eq!(error["code"], "folder_is_elsewhere");
+                assert_eq!(error["details"]["folder"], "cutready");
             }
-            other => panic!("expected a workspace claim refusal, got {other:?}"),
+            other => panic!("expected a folder-is-elsewhere refusal, got {other:?}"),
         };
         refused(open_repo(&second).unwrap_err());
         let new_folder = code.join("new-demo");

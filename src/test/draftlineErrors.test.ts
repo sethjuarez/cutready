@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   GIT_INDEX_LOCKED_MESSAGE,
-  INVALID_WORKSPACE_CLAIM_MESSAGE,
+  INVALID_FOLDER_MARKER_MESSAGE,
   LOCAL_STATE_CHANGED_MESSAGE,
   SEND_BASE_UNKNOWN_MESSAGE,
   SEND_OUTSIDE_NAMESPACE_MESSAGE,
@@ -44,7 +44,7 @@ describe("Draftline error messages", () => {
     ["send_outside_namespace", SEND_OUTSIDE_NAMESPACE_MESSAGE],
     ["send_base_unknown", SEND_BASE_UNKNOWN_MESSAGE],
     ["merge_needs_developer", mergeNeedsDeveloperMessage("the base branch")],
-    ["invalid_workspace_claim", INVALID_WORKSPACE_CLAIM_MESSAGE],
+    ["invalid_folder_marker", INVALID_FOLDER_MARKER_MESSAGE],
   ])("maps %s to a plain-language message", (code, expected) => {
     const error = { code, message: "technical detail" };
     expect(friendlyDraftlineErrorMessage(error)).toBe(expected);
@@ -72,31 +72,31 @@ describe("Draftline error messages", () => {
     ).toBe("GitHub rejected the remote operation. Reconnect GitHub in Settings, then try again.");
   });
 
-  it("names the other project for an interrupted operation", () => {
+  it("names the other folder for an interrupted operation", () => {
     const message = errorMessage({
-      code: "recovery_in_other_project",
-      message: "another project in this checkout has an incomplete Draftline operation: deck",
-      details: { project: "deck" },
+      code: "recovery_in_other_folder",
+      message: "another folder in this checkout has an incomplete Draftline operation: deck",
+      details: { folder: "deck" },
     });
     expect(message).toBe(
-      "An interrupted change has to be finished in the other project that started it (deck). Open that project in CutReady to finish it, then try again.",
+      "An interrupted change has to be finished in the other folder that started it (deck). Open that folder in CutReady to finish it, then try again.",
     );
     expect(isDraftlineGuidanceMessage(message)).toBe(true);
   });
 
   it("names the folder that already holds the repository's CutReady project", () => {
     const sub = errorMessage({
-      code: "workspace_already_in_checkout",
+      code: "folder_is_elsewhere",
       message: "this checkout's Draftline workspace is `docs/demo`; open that folder, or relocate the workspace",
-      details: { project: "docs/demo" },
+      details: { folder: "docs/demo" },
     });
     expect(sub).toBe('This repository\'s CutReady project is the "docs/demo" folder. Open that folder instead.');
     expect(isDraftlineGuidanceMessage(sub)).toBe(true);
 
     const root = errorMessage(JSON.stringify({
-      code: "workspace_already_in_checkout",
+      code: "folder_is_elsewhere",
       message: "this checkout's Draftline workspace is the repository root; open that folder, or relocate the workspace",
-      details: { project: "" },
+      details: { folder: "." },
     }));
     expect(root).toBe("This repository's CutReady project is the repository's root folder. Open that folder instead.");
   });
@@ -143,10 +143,10 @@ describe("Draftline error messages", () => {
     expect(isRetryableDraftlineError({ code: "merge_needs_developer" })).toBe(false);
   });
 
-  it("offers no in-project action for finish_in_other_project", () => {
-    const finish: SafeNextAction = "finish_in_other_project";
+  it("offers no in-folder action for finish_in_other_folder", () => {
+    const finish: SafeNextAction = "finish_in_other_folder";
     expect(canActOnRecoveryNextAction(finish)).toBe(false);
-    expect(recoveryNextActionMessage(finish, "deck")).toContain("other project that started it (deck)");
+    expect(recoveryNextActionMessage(finish, "deck")).toContain("other folder that started it (deck)");
     expect(canActOnRecoveryNextAction("repair_recovery")).toBe(true);
     expect(recoveryNextActionMessage("repair_recovery")).toBeNull();
   });

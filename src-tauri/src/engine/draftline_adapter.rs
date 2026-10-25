@@ -1974,7 +1974,11 @@ mod tests {
 
         let saved = head(code);
         assert_ne!(saved.id, dev_head);
-        assert_eq!(saved.paths, vec!["cutready/intro.sk".to_string()]);
+        // The first save also commits the root `.draftline` folder marker.
+        assert_eq!(
+            saved.paths,
+            vec![".draftline".to_string(), "cutready/intro.sk".to_string()]
+        );
 
         let repo = git2::Repository::open(code).unwrap();
         let head_tree = repo.head().unwrap().peel_to_tree().unwrap();

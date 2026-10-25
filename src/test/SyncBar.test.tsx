@@ -180,7 +180,7 @@ describe("SyncBar", () => {
   });
 
   it("shows plain-language Draftline guidance as-is even when it mentions a GitHub path", () => {
-    const message = "An interrupted change has to be finished in the other project that started it (D:\\github\\deck). Open that project in CutReady to finish it, then try again.";
+    const message = "An interrupted change has to be finished in the other folder that started it (D:\\github\\deck). Open that folder in CutReady to finish it, then try again.";
     act(() => {
       useAppStore.setState({
         currentRemote: { name: "origin", url: "https://github.com/example/repo.git" },
