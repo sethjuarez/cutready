@@ -45,6 +45,7 @@ import {
 } from "../services/draftlineVersioning";
 import {
   DraftlineErrorCode,
+  baseRenamedBranches,
   draftlineErrorCode,
   friendlyDraftlineErrorMessage,
   mergeNeedsDeveloperMessage,
@@ -465,6 +466,8 @@ interface AppStoreState {
   isSyncing: boolean;
   /** Last error from a sync operation. */
   syncError: string | null;
+  /** Publish found the remote renamed its default branch; rename this branch to match. */
+  baseRename: { from: string; to: string } | null;
   /** Incoming snapshots discovered by the latest fetch. */
   incomingCommits: IncomingCommit[];
   /** Share/PR URL for the latest successful share operation. */
@@ -757,7 +760,7 @@ interface AppStoreState {
   loadTimelines: () => Promise<void>;
   /** Switch to a different timeline. */
   switchTimeline: (name: string) => Promise<void>;
-  /** Rename the legacy Draftline master variation to main. */
+  /** Rename the legacy master variation (or a branch the remote renamed) to the new base name. */
   renameLegacyMasterTimeline: () => Promise<void>;
   /** Delete a non-active timeline. */
   deleteTimeline: (name: string) => Promise<void>;
@@ -1016,6 +1019,7 @@ function resetPersistenceState(): Pick<AppStoreState,
   | "baseStatus"
   | "isSyncing"
   | "syncError"
+  | "baseRename"
   | "incomingCommits"
   | "shareUrl"
   | "isMerging"
@@ -1047,6 +1051,7 @@ function resetPersistenceState(): Pick<AppStoreState,
     baseStatus: null,
     isSyncing: false,
     syncError: null,
+    baseRename: null,
     incomingCommits: [],
     shareUrl: null,
     isMerging: false,
@@ -1215,6 +1220,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   baseStatus: null,
   isSyncing: false,
   syncError: null,
+  baseRename: null,
   incomingCommits: [],
   shareUrl: null,
   isMerging: false,
@@ -2913,21 +2919,24 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   renameLegacyMasterTimeline: async () => {
     const timelines = get().timelines;
-    const hasMaster = timelines.some((timeline) => timeline.name === "master");
-    const hasMain = timelines.some((timeline) => timeline.name === "main");
-    if (!hasMaster || hasMain) {
-      useToastStore.getState().show("No legacy master branch is available to rename.", 4000, "info");
+    const { from, to } = get().baseRename ?? { from: "master", to: "main" };
+    const hasFrom = timelines.some((timeline) => timeline.name === from);
+    const hasTo = timelines.some((timeline) => timeline.name === to);
+    if (!hasFrom || hasTo) {
+      set({ baseRename: null });
+      useToastStore.getState().show(`No ${from} branch is available to rename.`, 4000, "info");
       return;
     }
 
     try {
-      const preflight = await preflightDraftlineRenameVariation("master", "main");
-      await renameDraftlineVariation("master", "main", preflight.token);
+      const preflight = await preflightDraftlineRenameVariation(from, to);
+      await renameDraftlineVariation(from, to, preflight.token);
+      set({ baseRename: null, syncError: null });
       await get().loadTimelines();
       await get().loadVersions();
       await get().loadGraphData();
       await get().checkDirty();
-      useToastStore.getState().show("Renamed Draftline branch master to main.", 5000, "success");
+      useToastStore.getState().show(`Renamed branch ${from} to ${to}. Publish again to share it.`, 5000, "success");
     } catch (err) {
       console.error("Failed to rename Draftline branch:", err);
       useToastStore.getState().show(`Rename failed: ${errorMessage(err)}`, 5000, "error");
@@ -3064,7 +3073,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       });
       return;
     }
-    set({ isSyncing: true, syncError: null });
+    set({ isSyncing: true, syncError: null, baseRename: null });
     try {
       // Large-file check before push
       const largeFileError = largeFilesSyncError(await get().checkLargeFiles());
@@ -3080,7 +3089,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadTimelines();
       await get().loadVersions();
     } catch (err) {
-      set({ syncError: remoteSyncErrorMessage(err) });
+      set({ syncError: remoteSyncErrorMessage(err), baseRename: baseRenamedBranches(err) });
     } finally {
       set({ isSyncing: false });
     }

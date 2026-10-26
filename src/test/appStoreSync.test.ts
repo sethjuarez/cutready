@@ -52,6 +52,7 @@ describe("appStore remote sync status", () => {
       timelines: [],
       syncStatus: null,
       syncError: null,
+      baseRename: null,
       baseStatus: null,
       incomingCommits: [],
       isSyncing: false,
@@ -271,6 +272,25 @@ describe("appStore remote sync status", () => {
     expect(loadTimelines).toHaveBeenCalled();
     expect(loadVersions).toHaveBeenCalled();
     expect(useAppStore.getState().isSyncing).toBe(false);
+  });
+
+  it("remembers a renamed remote base so the branch can be renamed to match", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    mockPublishDraftlineChanges.mockRejectedValueOnce({
+      code: "base_renamed",
+      message: "renamed",
+      details: { from: "trunk", to: "main" },
+    });
+    useAppStore.setState({
+      currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
+      timelines: [{ name: "trunk", label: "trunk", is_active: true, snapshot_count: 2, color_index: 0 }],
+      checkLargeFiles: async () => [],
+    });
+
+    await useAppStore.getState().pushToRemote();
+
+    expect(useAppStore.getState().baseRename).toEqual({ from: "trunk", to: "main" });
+    expect(useAppStore.getState().syncError).toContain("renamed trunk to main");
   });
 
   it("prompts for a pull request title instead of pushing a hybrid project", async () => {

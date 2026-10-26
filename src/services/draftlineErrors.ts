@@ -127,6 +127,15 @@ function draftlineErrorDetails(error: unknown): Record<string, unknown> | null {
   return details && typeof details === "object" ? details as Record<string, unknown> : null;
 }
 
+/** The old and new base names from a `base_renamed` publish refusal. */
+export function baseRenamedBranches(error: unknown): { from: string; to: string } | null {
+  if (draftlineErrorCode(error) !== DraftlineErrorCode.BaseRenamed) return null;
+  const details = draftlineErrorDetails(error);
+  const from = details?.from;
+  const to = details?.to;
+  return typeof from === "string" && typeof to === "string" ? { from, to } : null;
+}
+
 /** Paths a failed preflight refused because they need a Git filter (e.g. Git LFS). */
 export function gitFilterHazardPaths(error: unknown): string[] {
   if (draftlineErrorCode(error) !== DraftlineErrorCode.PreflightFailed) return [];
