@@ -16,6 +16,8 @@ export const DraftlineErrorCode = {
   PreflightFailed: "preflight_failed",
   SendBaseNotOnRemote: "send_base_not_on_remote",
   FolderIsElsewhere: "folder_is_elsewhere",
+  FolderMissing: "folder_missing",
+  IncomingFolderElsewhere: "incoming_folder_elsewhere",
   InvalidFolderMarker: "invalid_folder_marker",
 } as const;
 
@@ -47,6 +49,20 @@ export function sendBaseNotOnRemoteMessage(base?: string | null): string {
 export function folderIsElsewhereMessage(folder?: string | null): string {
   const where = folder && folder !== "." ? `the "${folder}" folder` : "the repository's root folder";
   return `This repository's CutReady project is ${where}. Open that folder instead.`;
+}
+
+function folderName(folder?: string | null): string {
+  return folder && folder !== "." ? `the "${folder}" folder` : "the repository's root folder";
+}
+
+/** The folder `.draftline` names no longer exists (a developer moved or renamed it). */
+export function folderMissingMessage(folder?: string | null): string {
+  return `This repository's CutReady project should be in ${folderName(folder)}, but that folder is missing. A developer may have moved or renamed it — ask them to restore it or update the .draftline file at the repository root.`;
+}
+
+/** Incoming changes moved the project to another folder. */
+export function incomingFolderElsewhereMessage(folder?: string | null): string {
+  return `The incoming changes move this CutReady project to ${folderName(folder)}. Ask a developer to bring them in, then open that folder.`;
 }
 
 /** Bringing in the base conflicts in files outside the CutReady folder. */
@@ -141,6 +157,14 @@ export function friendlyDraftlineErrorMessage(error: unknown): string | null {
     }
     case DraftlineErrorCode.InvalidFolderMarker:
       return INVALID_FOLDER_MARKER_MESSAGE;
+    case DraftlineErrorCode.FolderMissing: {
+      const folder = draftlineErrorDetails(error)?.folder;
+      return folderMissingMessage(typeof folder === "string" ? folder : null);
+    }
+    case DraftlineErrorCode.IncomingFolderElsewhere: {
+      const folder = draftlineErrorDetails(error)?.folder;
+      return incomingFolderElsewhereMessage(typeof folder === "string" ? folder : null);
+    }
     // pull_request_failed is raised by CutReady's own GitHub provider with an
     // actionable message (and 401s that must reach the sign-in path), so keep it.
     case DraftlineErrorCode.GitIndexLocked:
@@ -170,6 +194,8 @@ const GUIDANCE_PREFIXES = [
   "A developer needs to bring ",
   "The shared repository doesn't have ",
   "This repository's CutReady project is ",
+  "This repository's CutReady project should be in ",
+  "The incoming changes move this CutReady project to ",
   "An interrupted change has to be finished in the other folder",
   "This file uses Git LFS",
   "These files use Git LFS",

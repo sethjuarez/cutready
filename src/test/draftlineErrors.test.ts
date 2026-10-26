@@ -8,7 +8,9 @@ import {
   VARIATION_OUTSIDE_NAMESPACE_MESSAGE,
   canActOnRecoveryNextAction,
   friendlyDraftlineErrorMessage,
+  folderMissingMessage,
   gitFilterHazardPaths,
+  incomingFolderElsewhereMessage,
   isDraftlineGuidanceMessage,
   isRetryableDraftlineError,
   mergeNeedsDeveloperMessage,
@@ -70,6 +72,17 @@ describe("Draftline error messages", () => {
         message: "GitHub create pull request failed (401 Unauthorized): Bad credentials",
       }),
     ).toBe("GitHub rejected the remote operation. Reconnect GitHub in Settings, then try again.");
+  });
+
+  it("names the missing folder and the folder incoming changes move to", () => {
+    const missing = errorMessage({ code: "folder_missing", message: "x", details: { folder: "cutready" } });
+    expect(missing).toBe(folderMissingMessage("cutready"));
+    expect(missing).toContain("\"cutready\" folder");
+    expect(isDraftlineGuidanceMessage(missing)).toBe(true);
+    const incoming = errorMessage({ code: "incoming_folder_elsewhere", message: "x", details: { folder: "showcase" } });
+    expect(incoming).toBe(incomingFolderElsewhereMessage("showcase"));
+    expect(isDraftlineGuidanceMessage(incoming)).toBe(true);
+    expect(folderMissingMessage(".")).toContain("root folder");
   });
 
   it("names the other folder for an interrupted operation", () => {
