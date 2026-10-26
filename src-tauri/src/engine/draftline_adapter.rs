@@ -13,9 +13,9 @@ use draftline::{
     ContributorProfile, HistoryEntry, MergeConflictResolution, MergeIncomingReport,
     MergeIncomingResult, MergeIncomingToken, PreflightReport, PreviewFile, PublishResult,
     PullRequestProvider, RemoteCredential, RemoteEndpoint, RemoteOptions,
-    Result as DraftlineResult, SendRequest, SendResult, Shelf, SwitchPolicy, SyncStatus, Variation,
-    VariationId, VariationMetadata, VariationSummary, Version, VersionDiff, VersionId,
-    VersionPreview, Workspace, WorkspaceSummary,
+    Result as DraftlineResult, SendPreflight, SendRequest, SendResult, Shelf, SwitchPolicy,
+    SyncStatus, Variation, VariationId, VariationMetadata, VariationSummary, Version, VersionDiff,
+    VersionId, VersionPreview, Workspace, WorkspaceSummary,
 };
 
 use serde::Serialize;
@@ -379,6 +379,17 @@ impl CutReadyDraftlineAdapter {
         options: &mut RemoteOptions<'_>,
     ) -> DraftlineResult<PublishResult> {
         self.workspace.publish_changes_with_options(remote, options)
+    }
+
+    /// Check what Send would do without pushing or creating a branch. Fetches
+    /// the base; run it off the async runtime.
+    pub fn preflight_send(
+        &self,
+        remote: &str,
+        request: &SendRequest,
+        options: &mut RemoteOptions<'_>,
+    ) -> DraftlineResult<SendPreflight> {
+        self.workspace.preflight_send(remote, request, options)
     }
 
     /// Push the current branch and open (or reuse) a pull request. Blocks on

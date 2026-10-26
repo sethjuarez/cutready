@@ -7,9 +7,10 @@ use draftline::tauri_contract as contract;
 use draftline::VersionId;
 use draftline::{
     ApplyIncomingReport, ChangeSet, ContributorProfile, HistoryEntry, MergeIncomingReport,
-    PreflightReport, PreviewFile, PullRequestProvider, RemoteCredential, RemoteCredentialRequest,
-    RemoteEndpoint, RemoteOptions, SendRequest, SendResult, Shelf, Variation, VariationId,
-    VariationRenamePreflight, VariationSummary, VersionDiff, VersionPreview,
+    OutgoingFileKind, PreflightReport, PreviewFile, PullRequestProvider, RemoteCredential,
+    RemoteCredentialRequest, RemoteEndpoint, RemoteOptions, SendRequest, SendResult, Shelf,
+    Variation, VariationId, VariationRenamePreflight, VariationSummary, VersionDiff,
+    VersionPreview,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
@@ -973,6 +974,7 @@ pub struct SendForReviewRequest {
 }
 
 pub const SEND_REQUIRES_HYBRID: &str = "send_requires_hybrid";
+pub const SEND_HAS_LFS_POINTERS: &str = "send_has_lfs_pointers";
 
 fn send_error(code: &str, message: impl Into<String>) -> contract::TauriCommandError {
     contract::TauriCommandError {
@@ -1015,8 +1017,7 @@ fn send_for_review_with(
                 format!("Remote `{}` is not configured.", request.remote),
             )
         })?;
-    let mut provider = contract::into_tauri_result(provider_for(&remote_url))?;
-    let send_request = SendRequest {
+    let mut send_request = SendRequest {
         title: title.to_string(),
         body: request.body.unwrap_or_default(),
         base: request
@@ -1026,6 +1027,32 @@ fn send_for_review_with(
         branch: None,
         expected: None,
     };
+    let preflight = contract::into_tauri_result(adapter.preflight_send(
+        &request.remote,
+        &send_request,
+        options,
+    ))?;
+    // Draftline's push never uploads LFS objects, so the pull request would
+    // reference content the remote doesn't have.
+    let lfs_pointers: Vec<String> = preflight
+        .outgoing_files
+        .iter()
+        .filter(|file| file.kind == OutgoingFileKind::LfsPointer)
+        .map(|file| file.path.to_string_lossy().replace('\\', "/"))
+        .collect();
+    if !lfs_pointers.is_empty() {
+        return Err(contract::TauriCommandError {
+            code: SEND_HAS_LFS_POINTERS.into(),
+            message: format!(
+                "Send would push Git LFS pointers without their content: {}",
+                lfs_pointers.join(", ")
+            ),
+            details: Some(serde_json::json!({ "paths": lfs_pointers })),
+        });
+    }
+    // Send refuses if anything it checked changed since this preflight.
+    send_request.expected = Some(preflight.token);
+    let mut provider = contract::into_tauri_result(provider_for(&remote_url))?;
     contract::into_tauri_result(adapter.send_for_review(
         &request.remote,
         &send_request,
@@ -1681,6 +1708,56 @@ mod tests {
             .unwrap()
             .find_branch("cutready/launch-demo", git2::BranchType::Local)
             .is_ok());
+    }
+
+    #[test]
+    fn send_for_review_refuses_outgoing_lfs_pointers() {
+        let temp = tempfile::tempdir().unwrap();
+        let remote = temp.path().join("remote.git");
+        init_bare_remote(&remote);
+        let code = temp.path().join("contoso-app");
+        std::fs::create_dir_all(code.join("cutready").join("screenshots")).unwrap();
+        std::fs::write(code.join("README.md"), "# Contoso\n").unwrap();
+        std::fs::write(
+            code.join("cutready").join("intro.sk"),
+            r#"{"title":"Intro"}"#,
+        )
+        .unwrap();
+        git(
+            temp.path(),
+            &["init", "--initial-branch=main", "contoso-app"],
+        );
+        git(&code, &["add", "README.md", "cutready/intro.sk"]);
+        git(&code, &["commit", "-m", "Code"]);
+        git(
+            &code,
+            &["remote", "add", "origin", remote.to_str().unwrap()],
+        );
+        git(&code, &["push", "origin", "main"]);
+        std::fs::write(
+            code.join("cutready").join("screenshots").join("a.png"),
+            "version https://git-lfs.github.com/spec/v1\noid sha256:4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393\nsize 12345\n",
+        )
+        .unwrap();
+        git(&code, &["add", "cutready/screenshots/a.png"]);
+        git(&code, &["commit", "-m", "Screenshot"]);
+
+        let folder = code.join("cutready");
+        let error = send_for_review_with(
+            send_request(&folder, "Launch demo"),
+            |_| panic!("LFS pointers must be refused before the provider"),
+            &mut RemoteOptions::new(),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, SEND_HAS_LFS_POINTERS);
+        assert_eq!(
+            error.details,
+            Some(serde_json::json!({ "paths": ["cutready/screenshots/a.png"] }))
+        );
+        assert!(git2::Repository::open_bare(&remote)
+            .unwrap()
+            .find_branch("cutready/launch-demo", git2::BranchType::Local)
+            .is_err());
     }
 
     fn git(dir: &Path, args: &[&str]) {

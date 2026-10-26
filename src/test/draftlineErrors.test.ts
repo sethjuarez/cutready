@@ -3,9 +3,11 @@ import {
   GIT_INDEX_LOCKED_MESSAGE,
   INVALID_FOLDER_MARKER_MESSAGE,
   LOCAL_STATE_CHANGED_MESSAGE,
+  NEWER_FOLDER_MARKER_MESSAGE,
   SEND_BASE_UNKNOWN_MESSAGE,
   SEND_OUTSIDE_NAMESPACE_MESSAGE,
   VARIATION_OUTSIDE_NAMESPACE_MESSAGE,
+  baseRenamedMessage,
   canActOnRecoveryNextAction,
   friendlyDraftlineErrorMessage,
   folderMissingMessage,
@@ -15,6 +17,7 @@ import {
   isRetryableDraftlineError,
   mergeNeedsDeveloperMessage,
   recoveryNextActionMessage,
+  sendHasLfsPointersMessage,
 } from "../services/draftlineErrors";
 import type { SafeNextAction } from "@draftline/client";
 import { errorMessage, remoteSyncErrorMessage } from "../stores/appStore";
@@ -47,6 +50,7 @@ describe("Draftline error messages", () => {
     ["send_base_unknown", SEND_BASE_UNKNOWN_MESSAGE],
     ["merge_needs_developer", mergeNeedsDeveloperMessage("the base branch")],
     ["invalid_folder_marker", INVALID_FOLDER_MARKER_MESSAGE],
+    ["newer_folder_marker", NEWER_FOLDER_MARKER_MESSAGE],
   ])("maps %s to a plain-language message", (code, expected) => {
     const error = { code, message: "technical detail" };
     expect(friendlyDraftlineErrorMessage(error)).toBe(expected);
@@ -72,6 +76,21 @@ describe("Draftline error messages", () => {
         message: "GitHub create pull request failed (401 Unauthorized): Bad credentials",
       }),
     ).toBe("GitHub rejected the remote operation. Reconnect GitHub in Settings, then try again.");
+  });
+
+  it("names renamed bases and LFS files Send can't upload", () => {
+    const renamed = errorMessage({ code: "base_renamed", message: "x", details: { from: "master", to: "main" } });
+    expect(renamed).toBe(baseRenamedMessage("master", "main"));
+    expect(renamed).toContain("renamed master to main");
+    expect(isDraftlineGuidanceMessage(renamed)).toBe(true);
+    const lfs = errorMessage({
+      code: "send_has_lfs_pointers",
+      message: "x",
+      details: { paths: ["cutready/a.png", "cutready/b.png", "cutready/c.png", "cutready/d.png"] },
+    });
+    expect(lfs).toBe(sendHasLfsPointersMessage(["cutready/a.png", "cutready/b.png", "cutready/c.png", "cutready/d.png"]));
+    expect(lfs).toContain("and 1 more");
+    expect(isDraftlineGuidanceMessage(lfs)).toBe(true);
   });
 
   it("names the missing folder and the folder incoming changes move to", () => {

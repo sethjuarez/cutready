@@ -19,6 +19,9 @@ export const DraftlineErrorCode = {
   FolderMissing: "folder_missing",
   IncomingFolderElsewhere: "incoming_folder_elsewhere",
   InvalidFolderMarker: "invalid_folder_marker",
+  NewerFolderMarker: "newer_folder_marker",
+  BaseRenamed: "base_renamed",
+  SendHasLfsPointers: "send_has_lfs_pointers",
 } as const;
 
 /** Draftline's next action when an interrupted operation belongs to another folder in the same checkout. */
@@ -35,6 +38,23 @@ export const SEND_BASE_UNKNOWN_MESSAGE =
   "CutReady couldn't tell which branch to send this to for review. Check for updates, then try again.";
 export const INVALID_FOLDER_MARKER_MESSAGE =
   "CutReady couldn't read which folder in this repository holds its project. Ask a developer to check the .draftline file at the repository root.";
+export const NEWER_FOLDER_MARKER_MESSAGE =
+  "This project was set up by a newer version of CutReady. Update CutReady to open it.";
+
+/** The shared repository renamed its main branch; publishing the old name would recreate it. */
+export function baseRenamedMessage(from?: string | null, to?: string | null): string {
+  if (from && to) {
+    return `The shared repository renamed ${from} to ${to}. Rename this branch to ${to}, then publish again.`;
+  }
+  return "The shared repository renamed its main branch. Rename this branch to match, then publish again.";
+}
+
+/** Send would push Git LFS pointers whose content the remote doesn't have. */
+export function sendHasLfsPointersMessage(paths: string[]): string {
+  const shown = paths.slice(0, 3).join(", ");
+  const more = paths.length > 3 ? ` and ${paths.length - 3} more` : "";
+  return `These changes include Git LFS files CutReady can't upload: ${shown}${more}. Ask a developer to push them with git lfs push, then send again.`;
+}
 
 /** The remote doesn't have the branch a review would merge into. */
 export function sendBaseNotOnRemoteMessage(base?: string | null): string {
@@ -157,6 +177,20 @@ export function friendlyDraftlineErrorMessage(error: unknown): string | null {
     }
     case DraftlineErrorCode.InvalidFolderMarker:
       return INVALID_FOLDER_MARKER_MESSAGE;
+    case DraftlineErrorCode.NewerFolderMarker:
+      return NEWER_FOLDER_MARKER_MESSAGE;
+    case DraftlineErrorCode.BaseRenamed: {
+      const details = draftlineErrorDetails(error);
+      return baseRenamedMessage(
+        typeof details?.from === "string" ? details.from : null,
+        typeof details?.to === "string" ? details.to : null,
+      );
+    }
+    case DraftlineErrorCode.SendHasLfsPointers: {
+      const paths = draftlineErrorDetails(error)?.paths;
+      const list = Array.isArray(paths) ? paths.filter((path): path is string => typeof path === "string") : [];
+      return sendHasLfsPointersMessage(list);
+    }
     case DraftlineErrorCode.FolderMissing: {
       const folder = draftlineErrorDetails(error)?.folder;
       return folderMissingMessage(typeof folder === "string" ? folder : null);
@@ -189,8 +223,11 @@ const GUIDANCE_MESSAGES = [
   SEND_OUTSIDE_NAMESPACE_MESSAGE,
   SEND_BASE_UNKNOWN_MESSAGE,
   INVALID_FOLDER_MARKER_MESSAGE,
+  NEWER_FOLDER_MARKER_MESSAGE,
 ];
 const GUIDANCE_PREFIXES = [
+  "The shared repository renamed ",
+  "These changes include Git LFS files ",
   "A developer needs to bring ",
   "The shared repository doesn't have ",
   "This repository's CutReady project is ",
