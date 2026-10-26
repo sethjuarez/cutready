@@ -11,6 +11,7 @@ import {
   canActOnRecoveryNextAction,
   friendlyDraftlineErrorMessage,
   folderMissingMessage,
+  projectFolderRenamedMessage,
   gitFilterHazardPaths,
   incomingFolderElsewhereMessage,
   isDraftlineGuidanceMessage,
@@ -91,6 +92,13 @@ describe("Draftline error messages", () => {
     expect(lfs).toBe(sendHasLfsPointersMessage(["cutready/a.png", "cutready/b.png", "cutready/c.png", "cutready/d.png"]));
     expect(lfs).toContain("and 1 more");
     expect(isDraftlineGuidanceMessage(lfs)).toBe(true);
+  });
+
+  it("points to the folder a commit renamed the project to", () => {
+    const renamed = errorMessage({ code: "project_folder_renamed", message: "x", details: { folder: "cutready", to: "showcase" } });
+    expect(renamed).toBe(projectFolderRenamedMessage("showcase"));
+    expect(renamed).toContain("\"showcase\" folder");
+    expect(isDraftlineGuidanceMessage(renamed)).toBe(true);
   });
 
   it("names the missing folder and the folder incoming changes move to", () => {

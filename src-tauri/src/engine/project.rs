@@ -131,6 +131,7 @@ fn is_workspace_claim_error(error: &draftline::DraftlineError) -> bool {
         draftline::DraftlineError::FolderIsElsewhere(_)
             | draftline::DraftlineError::FolderMissing(_)
             | draftline::DraftlineError::InvalidFolderMarker(_)
+            | draftline::DraftlineError::NewerFolderMarker(_)
             | draftline::DraftlineError::RecoveryInOtherFolder(_)
     )
 }
@@ -543,10 +544,26 @@ pub fn list_projects(repo_root: &Path) -> Vec<ProjectEntry> {
     }
 }
 
+/// Opening a folder a commit renamed; details name the old and new folders.
+pub const PROJECT_FOLDER_RENAMED: &str = "project_folder_renamed";
+
 /// Open a repo folder, detecting single vs multi-project mode.
 /// Returns the repo view and list of projects.
 pub fn open_repo(root: &Path) -> Result<(RepoView, Vec<ProjectEntry>), ProjectError> {
     if !root.exists() || !root.is_dir() {
+        if let Some((from, to)) = CutReadyDraftlineAdapter::renamed_project_folder(root) {
+            let from = from.to_string_lossy().replace('\\', "/");
+            let to = to.to_string_lossy().replace('\\', "/");
+            let error = draftline::tauri_contract::TauriCommandError {
+                code: PROJECT_FOLDER_RENAMED.into(),
+                message: format!("The project folder `{from}` was renamed to `{to}`."),
+                details: Some(serde_json::json!({ "folder": from, "to": to })),
+            };
+            return Err(match serde_json::to_string(&error) {
+                Ok(json) => ProjectError::Draftline(json),
+                Err(_) => ProjectError::Io(error.message),
+            });
+        }
         return Err(ProjectError::NotFound(root.to_string_lossy().into_owned()));
     }
 
@@ -2991,6 +3008,75 @@ mod tests {
 
         // The claimed folder keeps working.
         open_repo(&first).unwrap();
+    }
+
+    #[test]
+    fn renamed_hybrid_folder_names_its_new_location() {
+        let tmp = TempDir::new().unwrap();
+        let code = tmp.path().join("contoso-app");
+        let repo = git2::Repository::init(&code).unwrap();
+        std::fs::write(code.join("README.md"), "# Contoso\n").unwrap();
+        let commit_all = |message: &str| {
+            let mut index = repo.index().unwrap();
+            index
+                .add_all(["*"], git2::IndexAddOption::DEFAULT, None)
+                .unwrap();
+            index.update_all(["*"], None).unwrap();
+            index.write().unwrap();
+            let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+            let signature = git2::Signature::now("Dev", "dev@example.com").unwrap();
+            let parents = repo
+                .head()
+                .ok()
+                .and_then(|head| head.peel_to_commit().ok())
+                .into_iter()
+                .collect::<Vec<_>>();
+            let parents = parents.iter().collect::<Vec<_>>();
+            repo.commit(
+                Some("HEAD"),
+                &signature,
+                &signature,
+                message,
+                &tree,
+                &parents,
+            )
+            .unwrap();
+        };
+        commit_all("Init");
+        let old = code.join("cutready");
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join("intro.sk"), r#"{"title":"Intro"}"#).unwrap();
+        std::fs::write(old.join("outro.sk"), r#"{"title":"Outro"}"#).unwrap();
+        open_repo(&old).unwrap();
+        commit_all("Add demo");
+
+        let new = code.join("showcase");
+        std::fs::rename(&old, &new).unwrap();
+        commit_all("Rename demo folder");
+
+        match open_repo(&old).unwrap_err() {
+            ProjectError::Draftline(json) => {
+                let error: serde_json::Value = serde_json::from_str(&json).unwrap();
+                assert_eq!(error["code"], PROJECT_FOLDER_RENAMED);
+                assert_eq!(error["details"]["folder"], "cutready");
+                assert_eq!(error["details"]["to"], "showcase");
+            }
+            other => panic!("expected a renamed-folder refusal, got {other:?}"),
+        }
+        assert!(!old.exists(), "probing must not recreate the old folder");
+
+        let typo = code.join("cutreddy");
+        assert!(matches!(
+            open_repo(&typo).unwrap_err(),
+            ProjectError::NotFound(_)
+        ));
+        let other = code.join("docs");
+        std::fs::create_dir_all(&other).unwrap();
+        assert!(open_repo(&other).is_err(), "another folder is not adopted");
+        assert_eq!(folder_marker(&code)["folder"], "cutready");
+
+        open_repo(&new).unwrap();
+        assert_eq!(folder_marker(&code)["folder"], "showcase");
     }
 
     #[test]

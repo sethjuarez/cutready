@@ -22,6 +22,7 @@ export const DraftlineErrorCode = {
   NewerFolderMarker: "newer_folder_marker",
   BaseRenamed: "base_renamed",
   SendHasLfsPointers: "send_has_lfs_pointers",
+  ProjectFolderRenamed: "project_folder_renamed",
 } as const;
 
 /** Draftline's next action when an interrupted operation belongs to another folder in the same checkout. */
@@ -78,6 +79,11 @@ function folderName(folder?: string | null): string {
 /** The folder `.draftline` names no longer exists (a developer moved or renamed it). */
 export function folderMissingMessage(folder?: string | null): string {
   return `This repository's CutReady project should be in ${folderName(folder)}, but that folder is missing. A developer may have moved or renamed it — ask them to restore it or update the .draftline file at the repository root.`;
+}
+
+/** A commit renamed the project folder; CutReady opens the new one with its history. */
+export function projectFolderRenamedMessage(to?: string | null): string {
+  return `This CutReady project moved to ${folderName(to)}. Open that folder instead.`;
 }
 
 /** Incoming changes moved the project to another folder. */
@@ -204,6 +210,10 @@ export function friendlyDraftlineErrorMessage(error: unknown): string | null {
       const folder = draftlineErrorDetails(error)?.folder;
       return folderMissingMessage(typeof folder === "string" ? folder : null);
     }
+    case DraftlineErrorCode.ProjectFolderRenamed: {
+      const to = draftlineErrorDetails(error)?.to;
+      return projectFolderRenamedMessage(typeof to === "string" ? to : null);
+    }
     case DraftlineErrorCode.IncomingFolderElsewhere: {
       const folder = draftlineErrorDetails(error)?.folder;
       return incomingFolderElsewhereMessage(typeof folder === "string" ? folder : null);
@@ -242,6 +252,7 @@ const GUIDANCE_PREFIXES = [
   "This repository's CutReady project is ",
   "This repository's CutReady project should be in ",
   "The incoming changes move this CutReady project to ",
+  "This CutReady project moved to ",
   "An interrupted change has to be finished in the other folder",
   "This file uses Git LFS",
   "These files use Git LFS",

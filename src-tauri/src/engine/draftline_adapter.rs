@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use draftline::{
     ApplyIncomingReport, ApplyIncomingResult, ChangeSet, ContentPolicy, Contributor,
-    ContributorProfile, HistoryEntry, MergeConflictResolution, MergeIncomingReport,
+    ContributorProfile, FolderFix, HistoryEntry, MergeConflictResolution, MergeIncomingReport,
     MergeIncomingResult, MergeIncomingToken, PreflightReport, PreviewFile, PublishResult,
     PullRequestProvider, RemoteCredential, RemoteEndpoint, RemoteOptions,
     Result as DraftlineResult, SendPreflight, SendRequest, SendResult, Shelf, SwitchPolicy,
@@ -67,14 +67,62 @@ impl CutReadyDraftlineAdapter {
     /// A folder inside an existing repository joins it (no nested `.git`) and
     /// lists only `cutready/*` variations plus the default and current branch.
     pub fn open_project(root: impl AsRef<Path>) -> DraftlineResult<Self> {
+        let root = root.as_ref();
         let policy = cutready_content_policy()?;
-        let workspace = Workspace::init_with_policy(root, policy)?;
+        let workspace = match Workspace::init_with_policy(root, policy.clone()) {
+            Err(error @ draftline::DraftlineError::FolderMissing { .. }) => {
+                Self::adopt_renamed_folder(root, policy).ok_or(error)??
+            }
+            result => result?,
+        };
         let workspace = if workspace.scope().as_os_str().is_empty() {
             workspace
         } else {
             workspace.with_variation_namespace(CUTREADY_VARIATION_NAMESPACE)?
         };
         Ok(Self { workspace })
+    }
+
+    /// When `root` is gone because a commit renamed the managed folder, the
+    /// managed folder and where it went, both relative to the repository.
+    pub fn renamed_project_folder(root: &Path) -> Option<(PathBuf, PathBuf)> {
+        let probe = Workspace::probe_with_namespace(root, CUTREADY_VARIATION_NAMESPACE).ok()?;
+        let from = probe.folder.clone()?;
+        if !same_missing_path(&probe.repository?.join(&from), &probe.requested) {
+            return None;
+        }
+        probe
+            .suggestions
+            .into_iter()
+            .find_map(|suggestion| match suggestion.fix {
+                FolderFix::ManageRenamedFolder { folder } => Some((from.clone(), folder)),
+                _ => None,
+            })
+    }
+
+    /// Manage `root` with its history when a commit renamed the managed
+    /// folder to `root`. `None` when `root` isn't where it went.
+    fn adopt_renamed_folder(
+        root: &Path,
+        policy: ContentPolicy,
+    ) -> Option<DraftlineResult<Workspace>> {
+        let probe = Workspace::probe_with_namespace(root, CUTREADY_VARIATION_NAMESPACE).ok()?;
+        let repository = probe.repository?;
+        let old = repository.join(probe.folder?);
+        let (_, to) = Self::renamed_project_folder(&old)?;
+        let same = |a: &Path, b: &Path| match (a.canonicalize(), b.canonicalize()) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => false,
+        };
+        if !same(&repository.join(&to), root) {
+            return None;
+        }
+        Some(Workspace::apply_folder_fix_with_namespace(
+            &old,
+            policy,
+            CUTREADY_VARIATION_NAMESPACE,
+            &FolderFix::ManageRenamedFolder { folder: to },
+        ))
     }
 
     pub fn clone_project_with_options(
@@ -406,6 +454,22 @@ impl CutReadyDraftlineAdapter {
 }
 
 /// Build the content policy needed for a safe CutReady Draftline spike.
+/// Whether two paths that may no longer exist name the same location: their
+/// parents resolve to the same folder and their names match (ignoring case on
+/// Windows).
+fn same_missing_path(a: &Path, b: &Path) -> bool {
+    let (Some(a_name), Some(b_name)) = (a.file_name(), b.file_name()) else {
+        return false;
+    };
+    let names_match = if cfg!(windows) {
+        a_name.to_string_lossy().to_lowercase() == b_name.to_string_lossy().to_lowercase()
+    } else {
+        a_name == b_name
+    };
+    let parent = |path: &Path| path.parent().and_then(|parent| parent.canonicalize().ok());
+    names_match && parent(a).is_some() && parent(a) == parent(b)
+}
+
 pub fn cutready_content_policy() -> DraftlineResult<ContentPolicy> {
     ContentPolicy::new()
         .include_paths(CUTREADY_INCLUDED_PATHS)?
