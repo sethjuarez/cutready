@@ -1,8 +1,24 @@
 # Draftline Scenario Coverage
 
-CutReady hosts [Draftline](https://github.com/sethjuarez/draftline) 0.6.0. Draftline's playbook (`docs/scenarios.md` and `docs/scenario-flows/*.md`) defines the flows a host must support. This page maps every flow to CutReady's surface, tests, and gaps.
+CutReady hosts [Draftline](https://github.com/sethjuarez/draftline) 0.8.0. Draftline's playbook (`docs/scenarios.md` and `docs/scenario-flows/*.md`) defines the flows a host must support. This page maps every flow to CutReady's surface, tests, and gaps.
 
-Audited 2026-10-24 against Draftline `main` (`4607ad4`) and CutReady branch `sethjuarez-hybrid-projects-copilot-canvas`.
+Audited 2026-10-24 against Draftline 0.6.0 (`4607ad4`). The tables below are that audit; [Since 0.8.0](#since-080) records what changed.
+
+## Since 0.8.0
+
+Draftline 0.7.0 and 0.8.0 replaced the checkout claim with a committed `.draftline` marker and fixed the hybrid gaps below in Draftline. CutReady adopts the published crate and surfaces the new codes.
+
+| Gap | Now | Where |
+| --- | --- | --- |
+| G1 | Saves land on the checked-out branch, as a teammate's would. Send starts a `cutready/` branch from any other branch. | DL |
+| G2 | Send never carries or rewinds a developer's unpushed commits. CutReady passes the preflight token and refuses outgoing Git LFS pointers (`send_has_lfs_pointers`). | DL + CutReady |
+| G4 | A lock whose process died on the same machine clears immediately. | DL |
+| G8 | `folder_missing`, `folder_is_elsewhere`, `invalid_folder_marker`, and `newer_folder_marker` have plain messages. Opening a renamed folder's old path names the new one (`project_folder_renamed`); opening the new one keeps history. | DL + CutReady |
+| G10 | Publish returns `base_renamed {from, to}`; the Changes panel offers to rename the branch. | DL + CutReady |
+
+Still open: G3 (recovery UI), G5–G7, G9, and G11–G20. Draftline could add the new base name to `SyncStatus` so CutReady can offer the rename before publishing.
+
+A crash and hybrid stress pass against 0.8.0 was clean: developer branch switch, unpushed base commits, folder rename and move, default-branch rename, kills mid-save, move and Send, foreign markers, and 0.5.0 recovery records.
 
 ## Legend
 

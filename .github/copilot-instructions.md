@@ -60,7 +60,7 @@ contoso-app/                    # Developer's code repo (owned by git, not Draft
 ```
 
 - Detected when the folder has no own `.git/` and git discovery finds an enclosing repo. Draftline is a guest; developers keep using plain git / Copilot.
-- Variations live in the `cutready/` branch namespace; ops on other branches are refused (except switching back to base).
+- A committed root `.draftline` file names the managed folder. New variations live in the `cutready/` branch namespace; saves land on the checked-out branch, and Send from any other branch starts a `cutready/` branch at HEAD without carrying a developer's unpushed commits.
 - Send = **Send for review**: push `cutready/<slug>` (no force) and open/reuse a GitHub PR (`engine/github_pull_requests.rs`). Direct publish is refused. **Get updates from \<base\>** merges base in; conflicts outside the folder return `merge_needs_developer`.
 - No squash, history cleanup/compaction, or milestone Send exists; standalone Send is a plain push of saves.
 
@@ -73,7 +73,7 @@ contoso-app/                    # Developer's code repo (owned by git, not Draft
 | Backend | **Rust** (2021 edition) | Async via Tokio, native Windows API via windows-rs |
 | State management | **Zustand** | appStore, toastStore, updateStore |
 | Drag-and-drop | **dnd-kit** | Sketch reordering in storyboards, tab reordering |
-| Versioning | **Draftline** 0.6.0 (crates.io; `@draftline/client` 0.3.0) | Content versioning, collaboration, branch graph helpers, sync, merge, hybrid repo coexistence |
+| Versioning | **Draftline** 0.8.0 (crates.io; `@draftline/client` 0.4.1) | Content versioning, collaboration, branch graph helpers, sync, merge, hybrid repo coexistence |
 | Screen recording | **FFmpeg** (sidecar) | FFV1 lossless codec in MKV, multi-track audio |
 | Browser automation | **Playwright** (Node.js sidecar) | Headful browser observation and replay automation |
 | LLM | **Microsoft Foundry** | Chat Completions + Responses API, multi-agent system |

@@ -25,9 +25,11 @@ Local runtime state (chat history, agent runs) is stored in the enclosing
 repo's git dir at `<gitdir>/cutready/<folder path>/`, so it never shows up as a
 change in the repository.
 
-A repository holds **one** CutReady project. The first folder opened claims
-it; opening another CutReady folder in the same repository is refused with a
-message naming the claimed folder.
+A repository holds **one** CutReady project. A committed `.draftline` file at
+the repository root names its folder. Opening another folder in the same
+repository is refused with a message naming the project's folder. If a
+developer renames the folder, CutReady points you to the new one and keeps its
+history.
 
 ## Who Does What
 
@@ -45,15 +47,17 @@ CutReady keeps its work in the `cutready/` branch namespace:
 - The variation list shows `cutready/*` branches, the base (default) branch,
   and the current branch.
 - New variations are created as `cutready/<name>`.
-- CutReady refuses operations on other branches, except switching back to the
-  base branch.
+- Saves land on the checked-out branch, as a teammate's commit would. If a
+  developer switched branches, **Send for review** starts a `cutready/`
+  branch from there.
 
 ## Send for Review
 
 Hybrid projects never publish directly to the base branch. **Send for review**:
 
 1. Asks for a pull request title (and optional description).
-2. Moves your work to a `cutready/<slug>` branch and pushes it without force.
+2. Pushes your work on a `cutready/<slug>` branch without force. A
+   developer's unpushed commits are never included or rewound.
 3. Opens a GitHub pull request, or updates the existing one, and shows a link
    in a toast.
 
@@ -79,9 +83,12 @@ developer commits.
 | **Project changed outside CutReady** | A developer committed while CutReady was working | Try again; nothing was lost |
 | **Interrupted change** | An unfinished CutReady change belongs to another project in the same repository | Open that project and finish it there |
 | **This repository's CutReady project is …** | Another folder already holds the repository's CutReady project | Open that folder instead |
+| **This CutReady project moved to …** | A developer renamed the project folder | Open the folder it names |
+| **… but that folder is missing** | The folder `.draftline` names is gone on this branch | Ask a developer to restore it or update `.draftline` |
 | **Base branch isn't on the remote** | The base branch was never pushed | Ask a developer to push it, then send again |
 | **Branch belongs to the code repository** | The branch is outside `cutready/` | Switch to a CutReady branch or the base |
 | **Uses Git LFS or another Git filter** | CutReady can't safely write those files | Ask a developer to handle them with Git |
+| **These changes include Git LFS files** | Send would push LFS pointers without their content | Ask a developer to send them with Git |
 
 <Aside type="note">
   Saves are atomic. If a developer commit lands mid-save, CutReady refuses the
