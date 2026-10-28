@@ -1,22 +1,25 @@
 # Draftline Scenario Coverage
 
-CutReady hosts [Draftline](https://github.com/sethjuarez/draftline) 0.8.0. Draftline's playbook (`docs/scenarios.md` and `docs/scenario-flows/*.md`) defines the flows a host must support. This page maps every flow to CutReady's surface, tests, and gaps.
+CutReady hosts [Draftline](https://github.com/sethjuarez/draftline) 0.10.0. Draftline's playbook (`docs/scenarios.md` and `docs/scenario-flows/*.md`) defines the flows a host must support. This page maps every flow to CutReady's surface, tests, and gaps.
 
-Audited 2026-10-24 against Draftline 0.6.0 (`4607ad4`). The tables below are that audit; [Since 0.8.0](#since-080) records what changed.
+Audited 2026-10-24 against Draftline 0.6.0 (`4607ad4`). The flow tables below are that audit; [Since 0.8.0](#since-080) and the Gap Backlog record what changed.
 
 ## Since 0.8.0
 
-Draftline 0.7.0 and 0.8.0 replaced the checkout claim with a committed `.draftline` marker and fixed the hybrid gaps below in Draftline. CutReady adopts the published crate and surfaces the new codes.
+Draftline 0.7.0 and 0.8.0 replaced the checkout claim with a committed `.draftline` marker and fixed the hybrid gaps below in Draftline. Draftline 0.10.0 added crash recovery points, Git filter and LFS timeouts, and stale ref-lock cleanup. CutReady adopts the published crate and surfaces the new codes.
 
 | Gap | Now | Where |
 | --- | --- | --- |
 | G1 | Saves land on the checked-out branch, as a teammate's would. Send starts a `cutready/` branch from any other branch. | DL |
 | G2 | Send never carries or rewinds a developer's unpushed commits. CutReady passes the preflight token. When the Git LFS driver runs, Draftline uploads LFS content before pushing (`git_filter_failed` on failure); otherwise CutReady refuses outgoing LFS pointers (`send_has_lfs_pointers`). | DL + CutReady |
-| G4 | A lock whose process died on the same machine clears immediately. | DL |
+| G3 | An interrupted operation shows a banner with Finish (repair, then roll back if repair can't complete) and Dismiss (acknowledge). | DL + CutReady |
+| G4 | A lock whose process died on the same machine clears immediately, including Git ref locks. The banner offers Clear lock. | DL + CutReady |
+| G5 | Opening an unmanaged folder that holds other files and no CutReady content returns `not_a_cutready_project`. The app offers to create `<repo>/cutready`, use the folder as is, or cancel. | CutReady |
+| G7 | Discard lists every file it will restore and needs confirmation. | CutReady |
 | G8 | `folder_missing`, `folder_is_elsewhere`, `invalid_folder_marker`, and `newer_folder_marker` have plain messages. Opening a renamed folder's old path names the new one (`project_folder_renamed`); opening the new one keeps history. | DL + CutReady |
 | G10 | Publish returns `base_renamed {from, to}`; the Changes panel offers to rename the branch. | DL + CutReady |
 
-Still open: G3 (recovery UI), G5–G7, G9, and G11–G20. Draftline could add the new base name to `SyncStatus` so CutReady can offer the rename before publishing.
+Still open: G6, G9, and G11–G20. Draftline could add the new base name to `SyncStatus` so CutReady can offer the rename before publishing.
 
 A crash and hybrid stress pass against 0.8.0 was clean: developer branch switch, unpushed base commits, folder rename and move, default-branch rename, kills mid-save, move and Send, foreign markers, and 0.5.0 recovery records.
 
@@ -101,20 +104,20 @@ A crash and hybrid stress pass against 0.8.0 was clean: developer branch switch,
 
 ## Gap Backlog
 
-**Owner** is where the fix belongs. **DL** means Draftline.
+**Owner** is where the fix belongs. **DL** means Draftline. Rows marked ✅ are fixed; the text describes the original gap.
 
 | ID | Severity | Gap | Owner |
 | --- | --- | --- | --- |
-| G1 | 🔴 Critical | In hybrid projects, save, restore, pull, and merge write to whatever branch is checked out. After a developer runs `git switch feature/x`, business saves land on that branch, and Send and publish then refuse with no in-app way out. `hybrid-projects.mdx` claims these operations are refused. | DL: refuse writes outside the namespace. CutReady: guard the branch, show a banner, offer "start a CutReady branch here" |
-| G2 | 🔴 Critical | Send creates the review branch from `HEAD`. A developer's unpushed commits on the local base go into the PR, and local base is reset to the remote. The dialog says "your CutReady changes". | DL: refuse or report base commits outside the folder. CutReady: confirm and fix the copy |
-| G3 | 🔴 Critical | No recovery UI. `recovery_required` is not mapped, and repair, rollback, and acknowledge are not wired. A crash mid-merge blocks every operation. Recovery records left by 1.37.0 can only be acknowledged. | CutReady (DL: confirm `acknowledge_recovery` is in the contract) |
-| G4 | 🟠 High | No handling for a stale operation lock. `workspace_locked` is not mapped, and `clear_stale_lock` is not wired. | CutReady |
-| G5 | 🟠 High | Opening a code repo root silently adopts it as a standalone project. It tracks the developer's `.md` and image files, publishes directly, and claims the checkout. | CutReady: `preflight_adopt_workspace` plus a confirmation step or subfolder picker |
+| G1 | ✅ Fixed | In hybrid projects, save, restore, pull, and merge write to whatever branch is checked out. After a developer runs `git switch feature/x`, business saves land on that branch, and Send and publish then refuse with no in-app way out. `hybrid-projects.mdx` claims these operations are refused. | DL: refuse writes outside the namespace. CutReady: guard the branch, show a banner, offer "start a CutReady branch here" |
+| G2 | ✅ Fixed | Send creates the review branch from `HEAD`. A developer's unpushed commits on the local base go into the PR, and local base is reset to the remote. The dialog says "your CutReady changes". | DL: refuse or report base commits outside the folder. CutReady: confirm and fix the copy |
+| G3 | ✅ Fixed | No recovery UI. `recovery_required` is not mapped, and repair, rollback, and acknowledge are not wired. A crash mid-merge blocks every operation. Recovery records left by 1.37.0 can only be acknowledged. | CutReady (DL: confirm `acknowledge_recovery` is in the contract) |
+| G4 | ✅ Fixed | No handling for a stale operation lock. `workspace_locked` is not mapped, and `clear_stale_lock` is not wired. | CutReady |
+| G5 | ✅ Fixed | Opening a code repo root silently adopts it as a standalone project. It tracks the developer's `.md` and image files, publishes directly, and claims the checkout. | CutReady: refuses with `not_a_cutready_project` and offers Create `cutready/`, Use as is, or Cancel |
 | G6 | 🟠 High | A history cleanup left pending by 1.37.0 is stranded: there is no publish or undo, and a plain push is rejected. | CutReady: detect it and offer "keep remote" or "restore backup" |
-| G7 | 🟠 High | Discard restores every changed file in the folder, including a developer's uncommitted edits. The confirmation lists no files and has no Shelve option. "Discard and continue" takes one click. | CutReady |
-| G8 | 🟠 High | The checkout claim can point to a folder that no longer exists, for example after a rename or on another branch. Relocation is not exposed. | CutReady (DL: return a distinct error code) |
+| G7 | ✅ Fixed | Discard restores every changed file in the folder, including a developer's uncommitted edits. The confirmation lists no files and has no Shelve option. "Discard and continue" takes one click. | CutReady |
+| G8 | ✅ Fixed | The checkout claim can point to a folder that no longer exists, for example after a rename or on another branch. Relocation is not exposed. | CutReady (DL: return a distinct error code) |
 | G9 | 🟠 High | The Settings remote "Test" button makes no network call. Changing the URL when `origin` exists does nothing but reports success. There is no remove option. | CutReady |
-| G10 | 🟠 High | A default-branch rename (`master` to `main`) strands saves. A stale `origin/HEAD` keeps targeting the old base. | DL: refresh `origin/HEAD` and add a diagnostic. CutReady: surface it |
+| G10 | ✅ Fixed | A default-branch rename (`master` to `main`) strands saves. A stale `origin/HEAD` keeps targeting the old base. | DL: refresh `origin/HEAD` and add a diagnostic. CutReady: surface it |
 | G11 | 🟠 High | The pre-push large-file check scans unsaved files, not the outgoing commits. | CutReady (DL: publish preflight) |
 | G12 | 🟠 High | The large-file message tells users to add files to `.gitignore`, which makes them silently stop being tracked. Ignored tracked content is never surfaced. | CutReady |
 | G13 | 🟡 Medium | A detached `HEAD` stops the project loading, with a raw `NoCurrentVariation` error. | CutReady |
