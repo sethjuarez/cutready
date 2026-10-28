@@ -395,8 +395,23 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
           recovery: null,
           state_may_be_inconsistent: false,
         },
+        inspection: {
+          workspace_id: { root: "/mock" },
+          sharing_mode: "local_only",
+          current_variation: "main",
+          remotes: [],
+          dirty: { is_dirty: false, files: [] },
+          recovery: null,
+          operation_lock: { state: "unlocked" },
+          support_refs: {},
+          diagnostics: [],
+          safe_next_actions: ["normal_work"],
+        },
+        operation_lock: { state: "unlocked", metadata: null, is_stale: false, can_clear: false, diagnostics: [] },
         diagnostics: [],
       };
+    case "filtered_files":
+      return [];
     case "get_full_history":
       return [
         {

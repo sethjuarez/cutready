@@ -171,9 +171,14 @@ export function ChangesPanel() {
   }, [navigateToSnapshot, loadGraphData, loadTimelines]);
 
   const handleDiscard = useCallback(async () => {
+    const listed = changedFiles.slice(0, 6).map((file) => `• ${file.path}`);
+    if (changedFiles.length > listed.length) listed.push(`• and ${changedFiles.length - listed.length} more`);
     const confirmed = await confirm({
       title: "Discard all workspace changes?",
-      message: "This restores the workspace to the last saved snapshot. Unsaved edits in sketches, notes, storyboards, and visuals will be lost.",
+      message: [
+        `This restores the workspace to the last saved snapshot. ${changedFiles.length === 1 ? "This file loses its" : `These ${changedFiles.length} files lose their`} unsaved edits:`,
+        ...listed,
+      ].join("\n"),
       confirmLabel: "Discard changes",
       variant: "error",
     });
@@ -196,7 +201,7 @@ export function ChangesPanel() {
         await deleteTimeline(branchToDelete.branchName);
       }
     }
-  }, [confirm, deleteTimeline, discardChanges, emptyStartedBranch, loadGraphData, loadTimelines, switchTimeline, timelines]);
+  }, [changedFiles, confirm, deleteTimeline, discardChanges, emptyStartedBranch, loadGraphData, loadTimelines, switchTimeline, timelines]);
 
   const handleRenameMaster = useCallback(async () => {
     if (!confirmRenameMaster) {

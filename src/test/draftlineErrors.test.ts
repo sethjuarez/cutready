@@ -5,6 +5,9 @@ import {
   INVALID_FOLDER_MARKER_MESSAGE,
   LOCAL_STATE_CHANGED_MESSAGE,
   NEWER_FOLDER_MARKER_MESSAGE,
+  RECOVERY_REQUIRED_MESSAGE,
+  REMOTE_OPERATION_TIMED_OUT_MESSAGE,
+  WORKSPACE_LOCKED_MESSAGE,
   SEND_BASE_UNKNOWN_MESSAGE,
   SEND_OUTSIDE_NAMESPACE_MESSAGE,
   VARIATION_OUTSIDE_NAMESPACE_MESSAGE,
@@ -64,6 +67,14 @@ describe("Draftline error messages", () => {
 
   it("reads codes from JSON-serialized command errors", () => {
     expect(errorMessage("{\"code\":\"git_index_locked\",\"message\":\"Git is busy\"}")).toBe(GIT_INDEX_LOCKED_MESSAGE);
+  });
+
+  it("points crash leftovers and remote timeouts at their fixes", () => {
+    expect(friendlyDraftlineErrorMessage({ code: "recovery_required", message: "x" })).toBe(RECOVERY_REQUIRED_MESSAGE);
+    expect(friendlyDraftlineErrorMessage({ code: "workspace_locked", message: "x" })).toBe(WORKSPACE_LOCKED_MESSAGE);
+    expect(friendlyDraftlineErrorMessage({ code: "remote_operation_timed_out", message: "x" })).toBe(REMOTE_OPERATION_TIMED_OUT_MESSAGE);
+    expect(isDraftlineGuidanceMessage(RECOVERY_REQUIRED_MESSAGE)).toBe(true);
+    expect(isDraftlineGuidanceMessage(WORKSPACE_LOCKED_MESSAGE)).toBe(true);
   });
 
   it("keeps the GitHub provider's own pull request failure message", () => {

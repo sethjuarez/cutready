@@ -24,6 +24,9 @@ export const DraftlineErrorCode = {
   SendHasLfsPointers: "send_has_lfs_pointers",
   GitFilterFailed: "git_filter_failed",
   ProjectFolderRenamed: "project_folder_renamed",
+  RecoveryRequired: "recovery_required",
+  WorkspaceLocked: "workspace_locked",
+  RemoteOperationTimedOut: "remote_operation_timed_out",
 } as const;
 
 /** Draftline's next action when an interrupted operation belongs to another folder in the same checkout. */
@@ -45,6 +48,14 @@ export const NEWER_FOLDER_MARKER_MESSAGE =
 /** Git's filter (Git LFS) failed while saving, restoring, or uploading content; nothing was changed or sent. */
 export const GIT_FILTER_FAILED_MESSAGE =
   "Git LFS couldn't process this project's large files, so nothing was changed or sent. Check that Git LFS is installed, Git can sign in to the repository, and the files are on this computer, then try again.";
+/** An earlier change was interrupted (for example, CutReady closed mid-save) and must be finished first. */
+export const RECOVERY_REQUIRED_MESSAGE =
+  "An earlier change was interrupted before it finished. Use Finish or Undo in the banner at the top of the project, then try again.";
+/** Another Draftline operation holds the project's lock. */
+export const WORKSPACE_LOCKED_MESSAGE =
+  "Another change to this project is still running. Wait for it to finish, then try again. If CutReady closed during a change, use Clear lock in the banner at the top of the project.";
+export const REMOTE_OPERATION_TIMED_OUT_MESSAGE =
+  "The shared repository took too long to respond, so nothing was sent. Check your connection, then try again.";
 
 /** The shared repository renamed its main branch; publishing the old name would recreate it. */
 export function baseRenamedMessage(from?: string | null, to?: string | null): string {
@@ -232,6 +243,12 @@ export function friendlyDraftlineErrorMessage(error: unknown): string | null {
       return VARIATION_OUTSIDE_NAMESPACE_MESSAGE;
     case DraftlineErrorCode.LocalStateChanged:
       return LOCAL_STATE_CHANGED_MESSAGE;
+    case DraftlineErrorCode.RecoveryRequired:
+      return RECOVERY_REQUIRED_MESSAGE;
+    case DraftlineErrorCode.WorkspaceLocked:
+      return WORKSPACE_LOCKED_MESSAGE;
+    case DraftlineErrorCode.RemoteOperationTimedOut:
+      return REMOTE_OPERATION_TIMED_OUT_MESSAGE;
     case DraftlineErrorCode.PreflightFailed: {
       const paths = gitFilterHazardPaths(error);
       return paths.length > 0 ? gitFilterFilesMessage(paths) : null;
@@ -250,6 +267,9 @@ const GUIDANCE_MESSAGES = [
   INVALID_FOLDER_MARKER_MESSAGE,
   NEWER_FOLDER_MARKER_MESSAGE,
   GIT_FILTER_FAILED_MESSAGE,
+  RECOVERY_REQUIRED_MESSAGE,
+  WORKSPACE_LOCKED_MESSAGE,
+  REMOTE_OPERATION_TIMED_OUT_MESSAGE,
 ];
 const GUIDANCE_PREFIXES = [
   "The shared repository renamed ",

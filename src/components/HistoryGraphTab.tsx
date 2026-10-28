@@ -38,6 +38,8 @@ export function HistoryGraphTab() {
   const navigateToSnapshot = useAppStore((s) => s.navigateToSnapshot);
   const switchTimeline = useAppStore((s) => s.switchTimeline);
   const discardChanges = useAppStore((s) => s.discardChanges);
+  const stashChanges = useAppStore((s) => s.stashChanges);
+  const hasStash = useAppStore((s) => s.hasStash);
   const deleteTimeline = useAppStore((s) => s.deleteTimeline);
   const currentRemote = useAppStore((s) => s.currentRemote);
   const syncStatus = useAppStore((s) => s.syncStatus);
@@ -480,6 +482,12 @@ export function HistoryGraphTab() {
             snapshotPromptOpen: true,
           });
           setPendingSwitch(null);
+        }}
+        onShelveAndContinue={hasStash ? undefined : async () => {
+          if (!pendingSwitch) return;
+          const target = pendingSwitch;
+          setPendingSwitch(null);
+          if (await stashChanges()) await switchTimeline(target);
         }}
         onDiscardAndContinue={async () => {
           if (!pendingSwitch) return;

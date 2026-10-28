@@ -35,6 +35,11 @@ import {
   setDraftlineWorkspacePath,
   shelveDraftlineChanges,
   switchDraftlineVariation,
+  inspectDraftlineProjectHealth,
+  needsDraftlineAttention,
+  resolveDraftlineRecovery,
+  retryDraftlineContentDownload,
+  HEALTHY_PROJECT,
 } from "../services/draftlineVersioning";
 
 const WORKSPACE = "D:\\project";
@@ -811,6 +816,112 @@ describe("draftlineVersioning", () => {
       expect(requestWorkspace(mockInvoke.mock.calls[0])).toBe(WORKSPACE);
       expect(requestWorkspace(mockInvoke.mock.calls[1])).toBe(WORKSPACE);
       expect(requestWorkspace(mockInvoke.mock.calls[1])).not.toBe(OTHER);
+    });
+  });
+
+  describe("project health and recovery", () => {
+    const recovery = { operation_id: "op-1", operation: "save_version", completed: false };
+
+    function healthDiagnostics({
+      pending = null as typeof recovery | null,
+      staleLock = false,
+      otherFolder = false,
+    } = {}) {
+      const base = diagnostics();
+      return {
+        ...base,
+        inspection: {
+          recovery: pending,
+          safe_next_actions: otherFolder ? ["finish_in_other_folder"] : pending ? ["repair_recovery"] : ["normal_work"],
+        },
+        operation_lock: staleLock
+          ? { state: "locked", metadata: { operation: "switch_variation", process_id: 4242 }, is_stale: true, can_clear: true }
+          : { state: "unlocked", metadata: null, is_stale: false, can_clear: false },
+      };
+    }
+
+    function routeInvoke(handlers: Record<string, unknown>) {
+      mockInvoke.mockImplementation((command: string) => {
+        if (!(command in handlers)) throw new Error(`unexpected command ${command}`);
+        return Promise.resolve(handlers[command]);
+      });
+    }
+
+    function commandsCalled() {
+      return mockInvoke.mock.calls.map((call) => call[0]);
+    }
+
+    it("reports a healthy project", async () => {
+      routeInvoke({ inspect_workspace: healthDiagnostics(), filtered_files: [] });
+      const health = await inspectDraftlineProjectHealth();
+      expect(health).toEqual({ ...HEALTHY_PROJECT, missingContent: [] });
+      expect(needsDraftlineAttention({ ...health, missingContent: [] })).toBe(false);
+    });
+
+    it("reports pending recovery, a clearable stale lock, and missing content", async () => {
+      routeInvoke({
+        inspect_workspace: healthDiagnostics({ pending: recovery, staleLock: true }),
+        filtered_files: [
+          { path: "screenshots/a.png", content_missing: true },
+          { path: "screenshots/b.png", content_missing: false },
+        ],
+      });
+      const health = await inspectDraftlineProjectHealth();
+      expect(health.recovery?.operation_id).toBe("op-1");
+      expect(health.recoveryInOtherFolder).toBe(false);
+      expect(health.staleLock).toEqual({ operation: "switch_variation", processId: 4242 });
+      expect(health.missingContent).toEqual(["screenshots/a.png"]);
+    });
+
+    it("skips the content probe when asked and flags recovery owned by another folder", async () => {
+      routeInvoke({ inspect_workspace: healthDiagnostics({ pending: recovery, otherFolder: true }) });
+      const health = await inspectDraftlineProjectHealth({ probeContent: false });
+      expect(health.missingContent).toBeNull();
+      expect(health.recoveryInOtherFolder).toBe(true);
+      expect(commandsCalled()).not.toContain("filtered_files");
+    });
+
+    it("ignores a completed recovery record", async () => {
+      routeInvoke({
+        inspect_workspace: healthDiagnostics({ pending: { ...recovery, completed: true } }),
+        filtered_files: [],
+      });
+      expect((await inspectDraftlineProjectHealth()).recovery).toBeNull();
+    });
+
+    it("clears a stale lock before repairing and stops when repair finishes", async () => {
+      routeInvoke({
+        inspect_workspace: healthDiagnostics({ pending: recovery, staleLock: true }),
+        clear_stale_lock: {},
+        repair_recovery: { completed: true },
+      });
+      await expect(resolveDraftlineRecovery()).resolves.toBe("finished");
+      expect(commandsCalled()).toEqual(["inspect_workspace", "clear_stale_lock", "repair_recovery"]);
+    });
+
+    it("rolls back when repair can't finish", async () => {
+      routeInvoke({
+        inspect_workspace: healthDiagnostics({ pending: recovery }),
+        repair_recovery: { completed: false },
+        rollback_recovery: { completed: true },
+      });
+      await expect(resolveDraftlineRecovery()).resolves.toBe("undone");
+      expect(commandsCalled()).toEqual(["inspect_workspace", "repair_recovery", "rollback_recovery"]);
+    });
+
+    it("reports stuck when neither repair nor rollback completes", async () => {
+      routeInvoke({
+        inspect_workspace: healthDiagnostics({ pending: recovery }),
+        repair_recovery: { completed: false },
+        rollback_recovery: { completed: false },
+      });
+      await expect(resolveDraftlineRecovery()).resolves.toBe("stuck");
+    });
+
+    it("retries content download for the current workspace", async () => {
+      routeInvoke({ retry_content_download: true });
+      await expect(retryDraftlineContentDownload()).resolves.toBe(true);
+      expect(mockInvoke).toHaveBeenCalledWith("retry_content_download", { request: { workspace_path: WORKSPACE } });
     });
   });
 });

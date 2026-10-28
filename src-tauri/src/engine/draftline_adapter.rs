@@ -83,6 +83,12 @@ impl CutReadyDraftlineAdapter {
         Ok(Self { workspace })
     }
 
+    /// Write the real content of managed files still holding the LFS pointer
+    /// HEAD stores. True when anything was written.
+    pub fn smudge_pointer_files(&self) -> DraftlineResult<bool> {
+        self.workspace.smudge_pointer_files()
+    }
+
     /// When `root` is gone because a commit renamed the managed folder, the
     /// managed folder and where it went, both relative to the repository.
     pub fn renamed_project_folder(root: &Path) -> Option<(PathBuf, PathBuf)> {

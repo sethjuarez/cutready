@@ -96,6 +96,7 @@ function App() {
               store.loadTimelines(),
               store.refreshSyncStatus(),
               store.refreshIncomingCommits(),
+              store.checkProjectHealth({ probeContent: false }),
             ]);
           }
         } while (rerun && !disposed);

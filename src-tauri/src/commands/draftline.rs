@@ -345,6 +345,105 @@ pub async fn inspect_workspace(
 }
 
 #[auditaur_command(skip_all)]
+pub async fn clear_stale_lock(
+    request: contract::WorkspaceRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::CommandPostconditions> {
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::clear_stale_lock_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn repair_recovery(
+    request: contract::RecoveryRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<draftline::RecoveryRepairResult> {
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::repair_recovery_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn rollback_recovery(
+    request: contract::RecoveryRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<draftline::RecoveryRepairResult> {
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::rollback_recovery_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn acknowledge_recovery(
+    request: contract::WorkspaceRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<contract::CommandPostconditions> {
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::acknowledge_recovery_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+#[auditaur_command(skip_all)]
+pub async fn filtered_files(
+    request: contract::FilteredFilesRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<Vec<draftline::FilteredFile>> {
+    let mut context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::filtered_files_with_context(
+        &mut context,
+        request,
+    ))
+}
+
+/// Writes the real content of managed files that still hold an LFS pointer
+/// (for example after a stopped or offline download). True when anything
+/// was written.
+#[auditaur_command(skip_all)]
+pub async fn retry_content_download(
+    request: contract::WorkspaceRequest,
+    lock: State<'_, ProjectLock>,
+) -> contract::TauriCommandResult<bool> {
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
+    let adapter = CutReadyDraftlineAdapter::open_project(&request.workspace_path)
+        .map_err(contract::TauriCommandError::from)?;
+    adapter
+        .smudge_pointer_files()
+        .map_err(contract::TauriCommandError::from)
+}
+
+#[auditaur_command(skip_all)]
 pub async fn verify_workspace(
     request: contract::WorkspaceRequest,
     app: AppHandle,

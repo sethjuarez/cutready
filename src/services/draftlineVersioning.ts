@@ -12,6 +12,7 @@ import {
   type MergeIncomingReport,
   type MergeIncomingToken,
   type PreflightReport,
+  type RecoveryState,
   type RemoteVariation,
   type RenameVariationResult,
   type RestoreVersionTarget,
@@ -517,6 +518,93 @@ export async function listDraftlineIncomingCommits(remote: string): Promise<Inco
 
 export async function inspectDraftlineChanges() {
   return facade().changes();
+}
+
+/** Problems an interrupted or crashed operation left behind, or missing large-file content. */
+export interface DraftlineProjectHealth {
+  /** An operation that stopped part-way and must be finished or undone. */
+  recovery: RecoveryState | null;
+  /** The interrupted operation was started from another folder of this checkout. */
+  recoveryInOtherFolder: boolean;
+  /** A crashed CutReady left its lock; safe to clear. */
+  staleLock: { operation: string; processId: number } | null;
+  /** Managed files that still hold a Git LFS pointer instead of their content. */
+  missingContent: string[];
+}
+
+export const HEALTHY_PROJECT: DraftlineProjectHealth = {
+  recovery: null,
+  recoveryInOtherFolder: false,
+  staleLock: null,
+  missingContent: [],
+};
+
+export function needsDraftlineAttention(health: DraftlineProjectHealth): boolean {
+  return !!health.recovery || !!health.staleLock || health.missingContent.length > 0;
+}
+
+export async function inspectDraftlineProjectHealth(
+  options: { probeContent?: boolean } = {},
+): Promise<Omit<DraftlineProjectHealth, "missingContent"> & { missingContent: string[] | null }> {
+  const workspacePath = requireWorkspacePath();
+  const diagnostics = await draftlineClient.inspectWorkspace(workspacePath);
+  const lock = diagnostics.operation_lock;
+  const recovery = diagnostics.inspection.recovery ?? diagnostics.summary.recovery ?? null;
+  let missingContent: string[] | null = null;
+  if (options.probeContent !== false) {
+    try {
+      const filtered = await draftlineClient.filteredFiles({ workspace_path: workspacePath });
+      missingContent = filtered.filter((file) => file.content_missing).map((file) => file.path);
+    } catch {
+      // Probing filters is advisory; recovery and lock state still apply.
+    }
+  }
+  return {
+    recovery: recovery && !recovery.completed ? recovery : null,
+    recoveryInOtherFolder: diagnostics.inspection.safe_next_actions.includes("finish_in_other_folder"),
+    staleLock: lock.is_stale && lock.can_clear && lock.metadata
+      ? { operation: lock.metadata.operation, processId: lock.metadata.process_id }
+      : null,
+    missingContent,
+  };
+}
+
+export type DraftlineRecoveryOutcome = "finished" | "undone" | "stuck";
+
+/**
+ * Clears a crashed operation's lock, then finishes the interrupted operation,
+ * undoing it when it can't be finished. "stuck" means neither worked and the
+ * user may dismiss it with {@link dismissDraftlineRecovery}.
+ */
+export async function resolveDraftlineRecovery(): Promise<DraftlineRecoveryOutcome> {
+  const workspacePath = requireWorkspacePath();
+  const diagnostics = await draftlineClient.inspectWorkspace(workspacePath);
+  if (diagnostics.operation_lock.is_stale && diagnostics.operation_lock.can_clear) {
+    await draftlineClient.clearStaleLock(workspacePath);
+  }
+  const recovery = diagnostics.inspection.recovery ?? diagnostics.summary.recovery ?? null;
+  if (!recovery || recovery.completed) return "finished";
+  const request = { workspace_path: workspacePath, operation_id: recovery.operation_id };
+  const repaired = await draftlineClient.repairRecovery(request);
+  if (repaired.completed) return "finished";
+  const rolledBack = await draftlineClient.rollbackRecovery(request);
+  return rolledBack.completed ? "undone" : "stuck";
+}
+
+/** Leaves the interrupted operation as-is and lets work continue. */
+export async function dismissDraftlineRecovery(): Promise<void> {
+  await draftlineClient.acknowledgeRecovery(requireWorkspacePath());
+}
+
+export async function clearDraftlineStaleLock(): Promise<void> {
+  await draftlineClient.clearStaleLock(requireWorkspacePath());
+}
+
+/** Downloads content for files still holding a Git LFS pointer. True when anything was written. */
+export async function retryDraftlineContentDownload(): Promise<boolean> {
+  return invoke<boolean>("retry_content_download", {
+    request: { workspace_path: requireWorkspacePath() },
+  });
 }
 
 export async function discardDraftlineChanges(): Promise<void> {

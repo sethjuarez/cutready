@@ -21,6 +21,8 @@ export function TimelineSelector() {
   const graphNodes = useAppStore((s) => s.graphNodes);
   const isDirty = useAppStore((s) => s.isDirty);
   const discardChanges = useAppStore((s) => s.discardChanges);
+  const stashChanges = useAppStore((s) => s.stashChanges);
+  const hasStash = useAppStore((s) => s.hasStash);
   const deleteTimeline = useAppStore((s) => s.deleteTimeline);
   const startedBranchFromSnapshot = useAppStore((s) => s.startedBranchFromSnapshot);
   const currentRemote = useAppStore((s) => s.currentRemote);
@@ -352,6 +354,12 @@ export function TimelineSelector() {
           if (!pendingSwitch) return;
           useAppStore.setState({ pendingTimelineAfterSave: pendingSwitch, snapshotPromptOpen: true });
           setPendingSwitch(null);
+        }}
+        onShelveAndContinue={hasStash ? undefined : async () => {
+          if (!pendingSwitch) return;
+          const target = pendingSwitch;
+          setPendingSwitch(null);
+          if (await stashChanges()) await switchTimeline(target);
         }}
         onDiscardAndContinue={async () => {
           if (!pendingSwitch) return;

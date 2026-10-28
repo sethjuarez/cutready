@@ -40,6 +40,13 @@ import {
   setDraftlineWorkspacePath,
   shelveDraftlineChanges,
   switchDraftlineVariation,
+  HEALTHY_PROJECT,
+  clearDraftlineStaleLock,
+  dismissDraftlineRecovery,
+  inspectDraftlineProjectHealth,
+  resolveDraftlineRecovery,
+  retryDraftlineContentDownload,
+  type DraftlineProjectHealth,
   type DraftlineRestoreVersionTarget,
   type DraftlineMergeIncomingToken,
 } from "../services/draftlineVersioning";
@@ -88,6 +95,11 @@ const suppressedEditorFlushPaths = new Set<string>();
 /** The Output panel keeps a rolling window; full history lives in telemetry/run state. */
 export const MAX_ACTIVITY_ENTRIES = 1000;
 export function errorMessage(error: unknown): string {
+  const code = draftlineErrorCode(error);
+  if (code === DraftlineErrorCode.RecoveryRequired || code === DraftlineErrorCode.WorkspaceLocked) {
+    // The message points at the recovery banner; make sure it's showing.
+    queueMicrotask(() => void useAppStore.getState().checkProjectHealth({ probeContent: false }));
+  }
   const friendly = friendlyDraftlineErrorMessage(error);
   if (friendly) return friendly;
   if (error instanceof Error) return error.message;
@@ -181,6 +193,62 @@ function clearSuppressedEditorFlushes(relativePaths: string[]) {
 
 function isDocumentTab(tab: EditorTab): tab is EditorTab & { type: "sketch" | "storyboard" | "note" | "chat-artifact" } {
   return tab.type === "sketch" || tab.type === "storyboard" || tab.type === "note" || tab.type === "chat-artifact";
+}
+
+/**
+ * Runs an operation that rewrites managed files on disk (discard, shelve).
+ * Closes editors first so pending edits can't be flushed back over the result.
+ */
+async function rewriteWorkspaceFiles(
+  get: () => AppStoreState,
+  set: (partial: Partial<AppStoreState>) => void,
+  operation: () => Promise<void>,
+  failureLabel: string,
+): Promise<boolean> {
+  const suppressedPaths = Array.from(new Set([
+    ...get().openTabs.filter(isDocumentTab).map((tab) => tab.path),
+    ...get().splitTabs.filter(isDocumentTab).map((tab) => tab.path),
+    get().activeSketchPath,
+    get().activeStoryboardPath,
+    get().activeNotePath,
+    get().activeChatArtifactPath,
+  ].filter((path): path is string => !!path)));
+  try {
+    for (const path of suppressedPaths) suppressEditorFlush(path);
+    set({
+      activeSketch: null,
+      activeSketchPath: null,
+      activeStoryboard: null,
+      activeStoryboardPath: null,
+      activeNotePath: null,
+      activeNoteContent: null,
+      activeNoteLocked: false,
+      activeChatArtifactPath: null,
+    });
+    await operation();
+    await get().loadSketches();
+    await get().loadStoryboards();
+    await get().loadNotes();
+    await get().loadChatArtifacts();
+    set({
+      openTabs: [],
+      activeTabId: null,
+      splitTabs: [],
+      splitActiveTabId: null,
+      activeEditorGroup: "main",
+      editorReloadPath: null,
+    });
+    globalThis.setTimeout(() => clearSuppressedEditorFlushes(suppressedPaths), 100);
+    await get().checkDirty();
+    set({ syncError: null });
+    return true;
+  } catch (err) {
+    clearSuppressedEditorFlushes(suppressedPaths);
+    console.error(`${failureLabel}:`, err);
+    useToastStore.getState().show(`${failureLabel}: ${errorMessage(err)}`, 5000, "error");
+    await get().checkDirty();
+    return false;
+  }
 }
 
 function isDatabasePath(path: string): boolean {
@@ -448,6 +516,8 @@ interface AppStoreState {
   saving: boolean;
   /** Whether a stash (temporarily saved work) exists. */
   hasStash: boolean;
+  projectHealth: DraftlineProjectHealth;
+  projectHealthBusy: boolean;
   /** Whether we are viewing a rewound snapshot (prev-tip exists). */
   isRewound: boolean;
 
@@ -728,16 +798,24 @@ interface AppStoreState {
   refreshChangedFiles: () => Promise<void>;
   /** Save a labeled version. Optional forkLabel for naming the old timeline when forking. */
   saveVersion: (label: string, forkLabel?: string) => Promise<void>;
-  /** Stash dirty working tree before browsing snapshots. */
-  stashChanges: () => Promise<void>;
+  /** Shelve all unsaved changes so the workspace is clean. False if nothing was shelved. */
+  stashChanges: () => Promise<boolean>;
   /** Discard all working-directory changes, resetting to last snapshot. */
   discardChanges: () => Promise<void>;
   /** Discard changes for one file. */
   discardFile: (filePath: string) => Promise<void>;
-  /** Pop stash (restore stashed work). */
+  /** Restore shelved changes into the workspace. */
   popStash: () => Promise<void>;
   /** Check whether a stash exists. */
   checkStash: () => Promise<void>;
+  /** Interrupted operations, stale locks, and missing LFS content for the open project. */
+  checkProjectHealth: (options?: { probeContent?: boolean }) => Promise<void>;
+  /** Finish (or undo) an interrupted operation, then reload the project. */
+  resolveRecovery: () => Promise<void>;
+  /** Leave an interrupted operation that can't be finished or undone, then reload. */
+  dismissRecovery: () => Promise<void>;
+  clearStaleLock: () => Promise<void>;
+  retryContentDownload: () => Promise<void>;
   /** Check whether we are in a rewound state (prev-tip exists). */
   checkRewound: () => Promise<void>;
   /** Navigate to any snapshot. Defers fork until commit. */
@@ -1011,6 +1089,8 @@ function resetPersistenceState(): Pick<AppStoreState,
   | "isDirty"
   | "changedFiles"
   | "hasStash"
+  | "projectHealth"
+  | "projectHealthBusy"
   | "isRewound"
   | "currentRemote"
   | "remoteBranches"
@@ -1043,6 +1123,8 @@ function resetPersistenceState(): Pick<AppStoreState,
     isDirty: false,
     changedFiles: [],
     hasStash: false,
+    projectHealth: HEALTHY_PROJECT,
+    projectHealthBusy: false,
     isRewound: false,
     currentRemote: null,
     remoteBranches: [],
@@ -1212,6 +1294,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   changedFiles: [],
   saving: false,
   hasStash: false,
+  projectHealth: HEALTHY_PROJECT,
+  projectHealthBusy: false,
   isRewound: false,
   currentRemote: null,
   remoteBranches: [],
@@ -1616,6 +1700,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().checkDirty();
       await get().checkRewound();
       await get().checkStash();
+      await get().checkProjectHealth();
     } catch (err) {
       console.error("Failed to create project:", err);
       set({ error: errorMessage(err) });
@@ -1654,6 +1739,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         chatInputDraft: "",
       });
       localStorage.setItem("cutready:lastProject", path);
+      // Surface interrupted operations before loaders that may refuse during recovery.
+      await get().checkProjectHealth();
       // Load multi-project state
       await get().loadProjects();
       // Load workspace settings
@@ -1796,6 +1883,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().checkDirty();
       await get().checkRewound();
       await get().checkStash();
+      await get().checkProjectHealth();
     } catch (err) {
       console.error("Failed to switch project:", err);
       set({ error: String(err) });
@@ -2542,57 +2630,17 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   stashChanges: async () => {
-    try {
-      await shelveDraftlineChanges();
-      set({ hasStash: true });
-    } catch (err) {
-      console.error("Failed to stash changes:", err);
+    if (get().hasStash) {
+      useToastStore.getState().show("Restore your shelved changes before shelving more.", 5000, "warning");
+      return false;
     }
+    const shelved = await rewriteWorkspaceFiles(get, set, shelveDraftlineChanges, "Shelve failed");
+    if (shelved) await get().checkStash();
+    return shelved && get().hasStash;
   },
 
   discardChanges: async () => {
-    const suppressedPaths = Array.from(new Set([
-      ...get().openTabs.filter(isDocumentTab).map((tab) => tab.path),
-      ...get().splitTabs.filter(isDocumentTab).map((tab) => tab.path),
-      get().activeSketchPath,
-      get().activeStoryboardPath,
-      get().activeNotePath,
-      get().activeChatArtifactPath,
-    ].filter((path): path is string => !!path)));
-    try {
-      for (const path of suppressedPaths) suppressEditorFlush(path);
-      set({
-        activeSketch: null,
-        activeSketchPath: null,
-        activeStoryboard: null,
-        activeStoryboardPath: null,
-        activeNotePath: null,
-        activeNoteContent: null,
-        activeNoteLocked: false,
-        activeChatArtifactPath: null,
-      });
-      await discardDraftlineChanges();
-      await get().loadSketches();
-      await get().loadStoryboards();
-      await get().loadNotes();
-      await get().loadChatArtifacts();
-      set({
-        openTabs: [],
-        activeTabId: null,
-        splitTabs: [],
-        splitActiveTabId: null,
-        activeEditorGroup: "main",
-        editorReloadPath: null,
-      });
-      globalThis.setTimeout(() => clearSuppressedEditorFlushes(suppressedPaths), 100);
-      await get().checkDirty();
-      set({ syncError: null });
-    } catch (err) {
-      clearSuppressedEditorFlushes(suppressedPaths);
-      console.error("Failed to discard changes:", err);
-      useToastStore.getState().show(`Discard failed: ${errorMessage(err)}`, 5000, "error");
-      await get().checkDirty();
-    }
+    await rewriteWorkspaceFiles(get, set, discardDraftlineChanges, "Discard failed");
   },
 
   discardFile: async (filePath) => {
@@ -2718,20 +2766,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   popStash: async () => {
-    try {
-      const hadStash = await popDraftlineShelf();
-      set({ hasStash: false, isDirty: hadStash });
-      if (hadStash) {
-        await get().loadSketches();
-        await get().loadStoryboards();
-        const { activeSketchPath } = get();
-        if (activeSketchPath) {
-          await get().openSketch(activeSketchPath);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to pop stash:", err);
-    }
+    let restored = false;
+    await rewriteWorkspaceFiles(get, set, async () => {
+      restored = await popDraftlineShelf();
+    }, "Restore failed");
+    await get().checkStash();
+    if (restored) useToastStore.getState().show("Shelved changes restored.", 3000, "success");
   },
 
   checkStash: async () => {
@@ -2742,6 +2782,104 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       set({ hasStash });
     } catch (err) {
       console.error("Failed to check stash:", err);
+    }
+  },
+
+  checkProjectHealth: async (options) => {
+    const generation = workspaceGeneration;
+    try {
+      const health = await inspectDraftlineProjectHealth(options);
+      if (generation !== workspaceGeneration) return;
+      set({
+        projectHealth: {
+          ...health,
+          missingContent: health.missingContent ?? get().projectHealth.missingContent,
+        },
+      });
+    } catch (err) {
+      console.error("Failed to inspect project health:", err);
+    }
+  },
+
+  resolveRecovery: async () => {
+    const project = get().currentProject;
+    if (!project || get().projectHealthBusy) return;
+    set({ projectHealthBusy: true });
+    try {
+      const outcome = await resolveDraftlineRecovery();
+      if (outcome === "stuck") {
+        useToastStore.getState().show(
+          "CutReady couldn't finish or undo the interrupted change. You can dismiss it and keep working; check your files first.",
+          8000,
+          "warning",
+        );
+        await get().checkProjectHealth();
+        return;
+      }
+      useToastStore.getState().show(
+        outcome === "undone" ? "Undid the interrupted change." : "Finished the interrupted change.",
+        4000,
+        "success",
+      );
+      await get().openProject(project.repo_root);
+    } catch (err) {
+      useToastStore.getState().show(`Recovery failed: ${errorMessage(err)}`, 6000, "error");
+      await get().checkProjectHealth();
+    } finally {
+      set({ projectHealthBusy: false });
+    }
+  },
+
+  dismissRecovery: async () => {
+    const project = get().currentProject;
+    if (!project || get().projectHealthBusy) return;
+    set({ projectHealthBusy: true });
+    try {
+      await dismissDraftlineRecovery();
+      await get().openProject(project.repo_root);
+    } catch (err) {
+      useToastStore.getState().show(`Dismiss failed: ${errorMessage(err)}`, 6000, "error");
+      await get().checkProjectHealth();
+    } finally {
+      set({ projectHealthBusy: false });
+    }
+  },
+
+  clearStaleLock: async () => {
+    if (!get().currentProject || get().projectHealthBusy) return;
+    set({ projectHealthBusy: true });
+    try {
+      await clearDraftlineStaleLock();
+      useToastStore.getState().show("Cleared the lock left by a closed CutReady.", 4000, "success");
+    } catch (err) {
+      useToastStore.getState().show(`Clear lock failed: ${errorMessage(err)}`, 6000, "error");
+    } finally {
+      set({ projectHealthBusy: false });
+      await get().checkProjectHealth();
+    }
+  },
+
+  retryContentDownload: async () => {
+    if (!get().currentProject || get().projectHealthBusy) return;
+    set({ projectHealthBusy: true });
+    try {
+      const wrote = await retryDraftlineContentDownload();
+      await get().checkProjectHealth();
+      const remaining = get().projectHealth.missingContent.length;
+      if (remaining > 0) {
+        useToastStore.getState().show(
+          `${remaining} large ${remaining === 1 ? "file is" : "files are"} still not downloaded. Check that Git LFS is installed and you can reach the shared repository.`,
+          7000,
+          "warning",
+        );
+      } else if (wrote) {
+        useToastStore.getState().show("Downloaded the missing files.", 4000, "success");
+        await Promise.all([get().loadSketches(), get().loadStoryboards(), get().loadNotes()]);
+      }
+    } catch (err) {
+      useToastStore.getState().show(`Download failed: ${errorMessage(err)}`, 6000, "error");
+    } finally {
+      set({ projectHealthBusy: false });
     }
   },
 
