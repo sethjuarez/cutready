@@ -87,8 +87,9 @@ developer commits.
 | **… but that folder is missing** | The folder `.draftline` names is gone on this branch | Ask a developer to restore it or update `.draftline` |
 | **Base branch isn't on the remote** | The base branch was never pushed | Ask a developer to push it, then send again |
 | **Branch belongs to the code repository** | The branch is outside `cutready/` | Switch to a CutReady branch or the base |
-| **Uses Git LFS or another Git filter** | CutReady can't safely write those files | Ask a developer to handle them with Git |
-| **These changes include Git LFS files** | Send would push LFS pointers without their content | Ask a developer to send them with Git |
+| **Uses Git LFS or another Git filter** | Git LFS isn't set up on this computer, or the filter isn't Git LFS | Install Git LFS and run `git lfs install`, or ask a developer |
+| **These changes include Git LFS files** | Git LFS isn't set up here, so Send can't upload their content | Install Git LFS and run `git lfs install`, then send again |
+| **Git LFS couldn't process this project's large files** | Git LFS sign-in failed, or a file's content isn't on this computer | Check Git sign-in and try again; nothing was sent |
 
 <Aside type="note">
   Saves are atomic. If a developer commit lands mid-save, CutReady refuses the

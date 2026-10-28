@@ -22,6 +22,7 @@ export const DraftlineErrorCode = {
   NewerFolderMarker: "newer_folder_marker",
   BaseRenamed: "base_renamed",
   SendHasLfsPointers: "send_has_lfs_pointers",
+  GitFilterFailed: "git_filter_failed",
   ProjectFolderRenamed: "project_folder_renamed",
 } as const;
 
@@ -41,6 +42,9 @@ export const INVALID_FOLDER_MARKER_MESSAGE =
   "CutReady couldn't read which folder in this repository holds its project. Ask a developer to check the .draftline file at the repository root.";
 export const NEWER_FOLDER_MARKER_MESSAGE =
   "This project was set up by a newer version of CutReady. Update CutReady to open it.";
+/** Git's filter (Git LFS) failed while saving, restoring, or uploading content; nothing was changed or sent. */
+export const GIT_FILTER_FAILED_MESSAGE =
+  "Git LFS couldn't process this project's large files, so nothing was changed or sent. Check that Git LFS is installed, Git can sign in to the repository, and the files are on this computer, then try again.";
 
 /** The shared repository renamed its main branch; publishing the old name would recreate it. */
 export function baseRenamedMessage(from?: string | null, to?: string | null): string {
@@ -50,11 +54,11 @@ export function baseRenamedMessage(from?: string | null, to?: string | null): st
   return "The shared repository renamed its main branch. Rename this branch to match, then publish again.";
 }
 
-/** Send would push Git LFS pointers whose content the remote doesn't have. */
+/** Send would push Git LFS pointers, and Git LFS isn't set up here to upload their content. */
 export function sendHasLfsPointersMessage(paths: string[]): string {
   const shown = paths.slice(0, 3).join(", ");
   const more = paths.length > 3 ? ` and ${paths.length - 3} more` : "";
-  return `These changes include Git LFS files CutReady can't upload: ${shown}${more}. Ask a developer to push them with git lfs push, then send again.`;
+  return `These changes include Git LFS files, but Git LFS isn't set up on this computer to upload them: ${shown}${more}. Install Git LFS and run git lfs install, then send again.`;
 }
 
 /** The remote doesn't have the branch a review would merge into. */
@@ -206,6 +210,8 @@ export function friendlyDraftlineErrorMessage(error: unknown): string | null {
       const list = Array.isArray(paths) ? paths.filter((path): path is string => typeof path === "string") : [];
       return sendHasLfsPointersMessage(list);
     }
+    case DraftlineErrorCode.GitFilterFailed:
+      return GIT_FILTER_FAILED_MESSAGE;
     case DraftlineErrorCode.FolderMissing: {
       const folder = draftlineErrorDetails(error)?.folder;
       return folderMissingMessage(typeof folder === "string" ? folder : null);
@@ -243,10 +249,11 @@ const GUIDANCE_MESSAGES = [
   SEND_BASE_UNKNOWN_MESSAGE,
   INVALID_FOLDER_MARKER_MESSAGE,
   NEWER_FOLDER_MARKER_MESSAGE,
+  GIT_FILTER_FAILED_MESSAGE,
 ];
 const GUIDANCE_PREFIXES = [
   "The shared repository renamed ",
-  "These changes include Git LFS files ",
+  "These changes include Git LFS files, ",
   "A developer needs to bring ",
   "The shared repository doesn't have ",
   "This repository's CutReady project is ",

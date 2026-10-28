@@ -1032,14 +1032,19 @@ fn send_for_review_with(
         &send_request,
         options,
     ))?;
-    // Draftline's push never uploads LFS objects, so the pull request would
-    // reference content the remote doesn't have.
-    let lfs_pointers: Vec<String> = preflight
-        .outgoing_files
-        .iter()
-        .filter(|file| file.kind == OutgoingFileKind::LfsPointer)
-        .map(|file| file.path.to_string_lossy().replace('\\', "/"))
-        .collect();
+    // Draftline uploads LFS content before pushing only where it runs the LFS
+    // filter; elsewhere the pull request would reference content the remote
+    // doesn't have.
+    let lfs_pointers: Vec<String> = if adapter.uploads_lfs_content() {
+        Vec::new()
+    } else {
+        preflight
+            .outgoing_files
+            .iter()
+            .filter(|file| file.kind == OutgoingFileKind::LfsPointer)
+            .map(|file| file.path.to_string_lossy().replace('\\', "/"))
+            .collect()
+    };
     if !lfs_pointers.is_empty() {
         return Err(contract::TauriCommandError {
             code: SEND_HAS_LFS_POINTERS.into(),
@@ -1729,6 +1734,10 @@ mod tests {
         );
         git(&code, &["add", "README.md", "cutready/intro.sk"]);
         git(&code, &["commit", "-m", "Code"]);
+        // Blank any system LFS driver so Draftline can't upload the content.
+        for key in ["process", "clean", "smudge"] {
+            git(&code, &["config", &format!("filter.lfs.{key}"), ""]);
+        }
         git(
             &code,
             &["remote", "add", "origin", remote.to_str().unwrap()],
@@ -1754,6 +1763,68 @@ mod tests {
             error.details,
             Some(serde_json::json!({ "paths": ["cutready/screenshots/a.png"] }))
         );
+        assert!(git2::Repository::open_bare(&remote)
+            .unwrap()
+            .find_branch("cutready/launch-demo", git2::BranchType::Local)
+            .is_err());
+    }
+
+    #[test]
+    fn send_for_review_lets_draftline_upload_lfs_content() {
+        let lfs = git_command().args(["lfs", "version"]).output();
+        if !lfs.is_ok_and(|output| output.status.success()) {
+            eprintln!("skipping: git-lfs is not installed");
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let remote = temp.path().join("remote.git");
+        init_bare_remote(&remote);
+        let code = temp.path().join("contoso-app");
+        std::fs::create_dir_all(code.join("cutready").join("screenshots")).unwrap();
+        std::fs::write(code.join("README.md"), "# Contoso\n").unwrap();
+        std::fs::write(
+            code.join(".gitattributes"),
+            "*.png filter=lfs diff=lfs merge=lfs -text\n",
+        )
+        .unwrap();
+        std::fs::write(
+            code.join("cutready").join("intro.sk"),
+            r#"{"title":"Intro"}"#,
+        )
+        .unwrap();
+        git(
+            temp.path(),
+            &["init", "--initial-branch=main", "contoso-app"],
+        );
+        git(&code, &["lfs", "install", "--local"]);
+        git(
+            &code,
+            &["add", "README.md", ".gitattributes", "cutready/intro.sk"],
+        );
+        git(&code, &["commit", "-m", "Code"]);
+        git(
+            &code,
+            &["remote", "add", "origin", remote.to_str().unwrap()],
+        );
+        git(&code, &["push", "origin", "main"]);
+        // A pointer whose content this checkout never had: Draftline's upload
+        // fails, and nothing is pushed.
+        std::fs::write(
+            code.join("cutready").join("screenshots").join("a.png"),
+            "version https://git-lfs.github.com/spec/v1\noid sha256:4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393\nsize 12345\n",
+        )
+        .unwrap();
+        git(&code, &["add", "cutready/screenshots/a.png"]);
+        git(&code, &["commit", "-m", "Screenshot"]);
+
+        let folder = code.join("cutready");
+        let error = send_for_review_with(
+            send_request(&folder, "Launch demo"),
+            |_| Ok(Box::new(FakeHost::default()) as Box<dyn PullRequestProvider>),
+            &mut RemoteOptions::new(),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "git_filter_failed");
         assert!(git2::Repository::open_bare(&remote)
             .unwrap()
             .find_branch("cutready/launch-demo", git2::BranchType::Local)

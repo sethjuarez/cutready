@@ -11,7 +11,7 @@ Draftline 0.7.0 and 0.8.0 replaced the checkout claim with a committed `.draftli
 | Gap | Now | Where |
 | --- | --- | --- |
 | G1 | Saves land on the checked-out branch, as a teammate's would. Send starts a `cutready/` branch from any other branch. | DL |
-| G2 | Send never carries or rewinds a developer's unpushed commits. CutReady passes the preflight token and refuses outgoing Git LFS pointers (`send_has_lfs_pointers`). | DL + CutReady |
+| G2 | Send never carries or rewinds a developer's unpushed commits. CutReady passes the preflight token. When the Git LFS driver runs, Draftline uploads LFS content before pushing (`git_filter_failed` on failure); otherwise CutReady refuses outgoing LFS pointers (`send_has_lfs_pointers`). | DL + CutReady |
 | G4 | A lock whose process died on the same machine clears immediately. | DL |
 | G8 | `folder_missing`, `folder_is_elsewhere`, `invalid_folder_marker`, and `newer_folder_marker` have plain messages. Opening a renamed folder's old path names the new one (`project_folder_renamed`); opening the new one keeps history. | DL + CutReady |
 | G10 | Publish returns `base_renamed {from, to}`; the Changes panel offers to rename the branch. | DL + CutReady |
