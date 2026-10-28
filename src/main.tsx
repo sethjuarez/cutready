@@ -27,6 +27,8 @@ if (isViteDevelopment) {
   // Expose appStore for dev tooling and screenshot scripts.
   const { useAppStore } = await import("./stores/appStore");
   (window as any).__appStore = useAppStore;
+  const { useToastStore } = await import("./stores/toastStore");
+  (window as any).__toastStore = useToastStore;
 }
 
 if ((window as any).__TAURI_INTERNALS__) {
