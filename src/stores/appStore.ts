@@ -52,10 +52,12 @@ import {
 } from "../services/draftlineVersioning";
 import {
   DraftlineErrorCode,
+  adoptionPromptFromError,
   baseRenamedBranches,
   draftlineErrorCode,
   friendlyDraftlineErrorMessage,
   mergeNeedsDeveloperMessage,
+  type AdoptionPrompt,
 } from "../services/draftlineErrors";
 import { recordActivityEntries } from "../services/telemetry";
 import { getGitHubAuthStatus } from "../services/githubSetup";
@@ -518,6 +520,8 @@ interface AppStoreState {
   hasStash: boolean;
   projectHealth: DraftlineProjectHealth;
   projectHealthBusy: boolean;
+  /** A folder the user tried to open that isn't a CutReady project yet (e.g. a code repository). */
+  adoptionPrompt: AdoptionPrompt | null;
   /** Whether we are viewing a rewound snapshot (prev-tip exists). */
   isRewound: boolean;
 
@@ -657,7 +661,9 @@ interface AppStoreState {
   loadRecentProjects: () => Promise<void>;
   removeRecentProject: (path: string) => Promise<void>;
   createProject: (path: string) => Promise<void>;
-  openProject: (path: string) => Promise<void>;
+  openProject: (path: string, options?: { adopt?: boolean }) => Promise<void>;
+  /** Answer the adoption prompt: create the suggested CutReady folder, manage the folder as-is, or cancel. */
+  resolveAdoptionPrompt: (choice: "create" | "adopt" | "cancel") => Promise<void>;
   closeProject: () => void;
 
   // ── Multi-project actions ──────────────────────────────────
@@ -1296,6 +1302,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   hasStash: false,
   projectHealth: HEALTHY_PROJECT,
   projectHealthBusy: false,
+  adoptionPrompt: null,
   isRewound: false,
   currentRemote: null,
   remoteBranches: [],
@@ -1709,11 +1716,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
-  openProject: async (path) => {
+  openProject: async (path, options) => {
     remoteDetectionGeneration += 1;
-    set({ loading: true });
+    set({ loading: true, adoptionPrompt: null });
     try {
-      const project = await invoke<ProjectView>("open_project_folder", { path });
+      const project = await invoke<ProjectView>("open_project_folder", { path, adopt: options?.adopt ?? false });
       beginWorkspaceGeneration(project.repo_root);
       set({
         ...resetPersistenceState(),
@@ -1764,10 +1771,29 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         get().fetchFromRemote({ notifyAuthRequired: false }).catch(() => {});
       }
     } catch (err) {
+      const prompt = adoptionPromptFromError(err);
+      if (prompt) {
+        set({ adoptionPrompt: prompt });
+        return;
+      }
       console.error("Failed to open project:", err);
       set({ error: errorMessage(err) });
     } finally {
       set({ loading: false });
+    }
+  },
+
+  resolveAdoptionPrompt: async (choice) => {
+    const prompt = get().adoptionPrompt;
+    set({ adoptionPrompt: null });
+    if (!prompt || choice === "cancel") return;
+    if (choice === "adopt") {
+      await get().openProject(prompt.folder, { adopt: true });
+    } else if (prompt.suggestedExists) {
+      // Choosing the existing folder confirms it, even if it holds other files.
+      await get().openProject(prompt.suggested, { adopt: true });
+    } else {
+      await get().createProject(prompt.suggested);
     }
   },
 

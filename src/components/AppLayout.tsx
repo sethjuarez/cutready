@@ -24,6 +24,7 @@ import { ChatPanel } from "./ChatPanel";
 import { ChangesPanel } from "./ChangesPanel";
 import { FeedbackDialog } from "./FeedbackDialog";
 import { ProjectHealthBanner } from "./ProjectHealthBanner";
+import { AdoptFolderDialog } from "./AdoptFolderDialog";
 import { commandRegistry, useCommands } from "../services/commandRegistry";
 import { invoke } from "../services/tauri";
 import { useTheme } from "../hooks/useTheme";
@@ -467,6 +468,7 @@ export function AppLayout() {
           {/* Center column: content + output panel */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
             {contentView !== "home" && !projectSwitching && <ProjectHealthBanner />}
+            <AdoptFolderDialog />
             {/* Upper: main content */}
             <div className="relative flex-1 min-h-0">
               {contentView === "home" && <div className="h-full overflow-y-auto"><HomePanel /></div>}

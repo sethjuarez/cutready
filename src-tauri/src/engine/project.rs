@@ -547,9 +547,118 @@ pub fn list_projects(repo_root: &Path) -> Vec<ProjectEntry> {
 /// Opening a folder a commit renamed; details name the old and new folders.
 pub const PROJECT_FOLDER_RENAMED: &str = "project_folder_renamed";
 
+/// Opening a folder with someone else's files (typically a code repository)
+/// that Draftline has never managed; details name the folder, its repository,
+/// and a suggested CutReady subfolder.
+pub const NOT_A_CUTREADY_PROJECT: &str = "not_a_cutready_project";
+
+const CUTREADY_EXTENSIONS: &[&str] = &["sk", "sb", "cv"];
+const PLAIN_EXTENSIONS: &[&str] = &["md", "png", "jpg", "jpeg", "gif", "webp", "svg"];
+const PLAIN_FOLDERS: &[&str] = &["screenshots", "chat-artifacts", "visuals", "notes"];
+
+/// True when `root` already holds CutReady content: its metadata folder, a
+/// legacy chat folder, or a sketch/storyboard/chat artifact a few levels down.
+fn has_cutready_content(root: &Path) -> bool {
+    if root.join(".cutready").is_dir() || root.join(".chats").is_dir() {
+        return true;
+    }
+    fn walk(dir: &Path, depth: usize) -> bool {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return false;
+        };
+        entries.flatten().any(|entry| {
+            let path = entry.path();
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if path.is_dir() {
+                depth > 0 && !name.starts_with('.') && name != "node_modules" && walk(&path, depth - 1)
+            } else {
+                path.extension()
+                    .and_then(|ext| ext.to_str())
+                    .is_some_and(|ext| CUTREADY_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+            }
+        })
+    }
+    walk(root, 2)
+}
+
+/// True when `root` has top-level files or folders CutReady never creates.
+/// Hidden entries (`.git`, `.gitignore`, `.vscode`) don't count.
+fn has_foreign_content(root: &Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with('.') {
+            return false;
+        }
+        let path = entry.path();
+        if path.is_dir() {
+            return !PLAIN_FOLDERS.contains(&name.as_ref());
+        }
+        !path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| PLAIN_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+    })
+}
+
+/// Refuse to start managing a folder that looks like someone else's work (a
+/// code repository root or one of its source folders) until the user confirms.
+fn refuse_unclaimed_folder(root: &Path) -> Result<(), ProjectError> {
+    if !CutReadyDraftlineAdapter::is_unmanaged(root)
+        || has_cutready_content(root)
+        || !has_foreign_content(root)
+    {
+        return Ok(());
+    }
+    let repository = git_repository_root(root);
+    let base = repository.clone().unwrap_or_else(|| root.to_path_buf());
+    let suggested = base.join("cutready");
+    let error = draftline::tauri_contract::TauriCommandError {
+        code: NOT_A_CUTREADY_PROJECT.into(),
+        message: format!(
+            "`{}` isn't a CutReady project yet and has other files in it.",
+            root.display()
+        ),
+        details: Some(serde_json::json!({
+            "folder": root.to_string_lossy(),
+            "repository": repository.map(|path| path.to_string_lossy().into_owned()),
+            "suggested": suggested.to_string_lossy(),
+            "suggested_exists": suggested.exists(),
+        })),
+    };
+    Err(match serde_json::to_string(&error) {
+        Ok(json) => ProjectError::Draftline(json),
+        Err(_) => ProjectError::Io(error.message),
+    })
+}
+
+/// The work-tree root of the Git repository holding `path`, if any.
+fn git_repository_root(path: &Path) -> Option<PathBuf> {
+    path.ancestors()
+        .find(|dir| dir.join(".git").exists())
+        .map(Path::to_path_buf)
+}
+
 /// Open a repo folder, detecting single vs multi-project mode.
 /// Returns the repo view and list of projects.
+///
+/// Refuses (with [`NOT_A_CUTREADY_PROJECT`]) to start managing a folder that
+/// has other files and no CutReady content; see [`open_repo_with`].
+#[cfg(test)]
 pub fn open_repo(root: &Path) -> Result<(RepoView, Vec<ProjectEntry>), ProjectError> {
+    open_repo_with(root, false)
+}
+
+/// [`open_repo`], starting to manage an unrecognized folder when
+/// `adopt_unrecognized` is set (the user confirmed it).
+pub fn open_repo_with(
+    root: &Path,
+    adopt_unrecognized: bool,
+) -> Result<(RepoView, Vec<ProjectEntry>), ProjectError> {
     if !root.exists() || !root.is_dir() {
         if let Some((from, to)) = CutReadyDraftlineAdapter::renamed_project_folder(root) {
             let from = from.to_string_lossy().replace('\\', "/");
@@ -565,6 +674,10 @@ pub fn open_repo(root: &Path) -> Result<(RepoView, Vec<ProjectEntry>), ProjectEr
             });
         }
         return Err(ProjectError::NotFound(root.to_string_lossy().into_owned()));
+    }
+
+    if !adopt_unrecognized {
+        refuse_unclaimed_folder(root)?;
     }
 
     // Draftline owns workspace initialization and existing-workspace detection.
@@ -3077,6 +3190,118 @@ mod tests {
 
         open_repo(&new).unwrap();
         assert_eq!(folder_marker(&code)["folder"], "showcase");
+    }
+
+    fn code_repo(tmp: &TempDir) -> PathBuf {
+        let code = tmp.path().join("contoso-app");
+        let repo = git2::Repository::init(&code).unwrap();
+        std::fs::create_dir_all(code.join("src")).unwrap();
+        std::fs::write(code.join("src").join("main.rs"), "fn main() {}\n").unwrap();
+        std::fs::write(code.join("Cargo.toml"), "[package]\nname = \"contoso\"\n").unwrap();
+        std::fs::write(code.join("README.md"), "# Contoso\n").unwrap();
+        let mut index = repo.index().unwrap();
+        index
+            .add_all(["*"], git2::IndexAddOption::DEFAULT, None)
+            .unwrap();
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let signature = git2::Signature::now("Dev", "dev@example.com").unwrap();
+        repo.commit(Some("HEAD"), &signature, &signature, "Init", &tree, &[])
+            .unwrap();
+        code
+    }
+
+    fn not_a_project(error: ProjectError) -> serde_json::Value {
+        match error {
+            ProjectError::Draftline(json) => {
+                let error: serde_json::Value = serde_json::from_str(&json).unwrap();
+                assert_eq!(error["code"], NOT_A_CUTREADY_PROJECT);
+                error["details"].clone()
+            }
+            other => panic!("expected a not-a-CutReady-project refusal, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn code_repository_root_is_not_adopted_without_confirmation() {
+        let tmp = TempDir::new().unwrap();
+        let code = code_repo(&tmp);
+        let head = git2::Repository::open(&code)
+            .unwrap()
+            .head()
+            .unwrap()
+            .target();
+
+        let details = not_a_project(open_repo(&code).unwrap_err());
+        assert_eq!(
+            PathBuf::from(details["suggested"].as_str().unwrap()),
+            code.join("cutready")
+        );
+        assert_eq!(details["suggested_exists"], false);
+        assert!(!code.join(".draftline").exists(), "refusal writes nothing");
+        assert!(!code.join(".cutready").exists(), "refusal writes nothing");
+        let after = git2::Repository::open(&code)
+            .unwrap()
+            .head()
+            .unwrap()
+            .target();
+        assert_eq!(head, after, "refusal commits nothing");
+
+        // A source folder inside the repository is refused too, pointing at the root.
+        let details = not_a_project(open_repo(&code.join("src")).unwrap_err());
+        assert_eq!(
+            PathBuf::from(details["repository"].as_str().unwrap()),
+            code
+        );
+        assert_eq!(
+            PathBuf::from(details["suggested"].as_str().unwrap()),
+            code.join("cutready")
+        );
+
+        // The suggested subfolder becomes a hybrid project.
+        let view = init_project_folder(&code.join("cutready")).unwrap();
+        assert_eq!(view.root, code.join("cutready"));
+        assert_eq!(folder_marker(&code)["folder"], "cutready");
+    }
+
+    #[test]
+    fn confirmed_adoption_opens_an_unrecognized_folder() {
+        let tmp = TempDir::new().unwrap();
+        let code = code_repo(&tmp);
+        let (repo, projects) = open_repo_with(&code, true).unwrap();
+        assert_eq!(repo.root, code);
+        assert_eq!(projects.len(), 1);
+        // Once managed, it opens without asking again.
+        open_repo(&code).unwrap();
+    }
+
+    #[test]
+    fn existing_cutready_folders_open_without_confirmation() {
+        let tmp = TempDir::new().unwrap();
+
+        // A legacy project with sketches beside other files.
+        let legacy = tmp.path().join("legacy");
+        std::fs::create_dir_all(legacy.join("assets")).unwrap();
+        std::fs::write(legacy.join("intro.sk"), r#"{"title":"Intro"}"#).unwrap();
+        std::fs::write(legacy.join("assets").join("logo.ai"), "x").unwrap();
+        open_repo(&legacy).unwrap();
+
+        // A notes-only project.
+        let notes = tmp.path().join("notes-only");
+        std::fs::create_dir_all(notes.join("screenshots")).unwrap();
+        std::fs::write(notes.join("plan.md"), "# Plan\n").unwrap();
+        open_repo(&notes).unwrap();
+
+        // A project with only CutReady metadata.
+        let meta = tmp.path().join("meta");
+        std::fs::create_dir_all(meta.join(".cutready")).unwrap();
+        std::fs::write(meta.join("budget.xlsx"), "x").unwrap();
+        open_repo(&meta).unwrap();
+
+        // An empty folder.
+        let empty = tmp.path().join("empty");
+        std::fs::create_dir_all(&empty).unwrap();
+        open_repo(&empty).unwrap();
     }
 
     #[test]

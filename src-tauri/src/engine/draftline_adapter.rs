@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use draftline::{
     ApplyIncomingReport, ApplyIncomingResult, ChangeSet, ContentPolicy, Contributor,
-    ContributorProfile, FolderFix, HistoryEntry, MergeConflictResolution, MergeIncomingReport,
+    ContributorProfile, FolderFix, FolderState, HistoryEntry, MergeConflictResolution, MergeIncomingReport,
     MergeIncomingResult, MergeIncomingToken, PreflightReport, PreviewFile, PublishResult,
     PullRequestProvider, RemoteCredential, RemoteEndpoint, RemoteOptions,
     Result as DraftlineResult, SendPreflight, SendRequest, SendResult, Shelf, SwitchPolicy,
@@ -87,6 +87,15 @@ impl CutReadyDraftlineAdapter {
     /// HEAD stores. True when anything was written.
     pub fn smudge_pointer_files(&self) -> DraftlineResult<bool> {
         self.workspace.smudge_pointer_files()
+    }
+
+    /// True when Draftline has never managed `root` or any folder in its
+    /// repository, so opening it would start managing it.
+    pub fn is_unmanaged(root: &Path) -> bool {
+        matches!(
+            Workspace::probe_with_namespace(root, CUTREADY_VARIATION_NAMESPACE).map(|p| p.state),
+            Ok(FolderState::Unmanaged | FolderState::NotARepository)
+        )
     }
 
     /// When `root` is gone because a commit renamed the managed folder, the

@@ -27,7 +27,34 @@ export const DraftlineErrorCode = {
   RecoveryRequired: "recovery_required",
   WorkspaceLocked: "workspace_locked",
   RemoteOperationTimedOut: "remote_operation_timed_out",
+  NotACutReadyProject: "not_a_cutready_project",
 } as const;
+
+/** A folder CutReady refused to start managing because it holds other files (typically code). */
+export interface AdoptionPrompt {
+  /** The folder the user tried to open. */
+  folder: string;
+  /** The Git repository holding it, if any. */
+  repository: string | null;
+  /** Where CutReady suggests creating its project instead. */
+  suggested: string;
+  suggestedExists: boolean;
+}
+
+/** The adoption prompt from a `not_a_cutready_project` open refusal. */
+export function adoptionPromptFromError(error: unknown): AdoptionPrompt | null {
+  if (draftlineErrorCode(error) !== DraftlineErrorCode.NotACutReadyProject) return null;
+  const details = draftlineErrorDetails(error);
+  const folder = details?.folder;
+  const suggested = details?.suggested;
+  if (typeof folder !== "string" || typeof suggested !== "string") return null;
+  return {
+    folder,
+    repository: typeof details?.repository === "string" ? details.repository : null,
+    suggested,
+    suggestedExists: details?.suggested_exists === true,
+  };
+}
 
 /** Draftline's next action when an interrupted operation belongs to another folder in the same checkout. */
 export const FINISH_IN_OTHER_FOLDER: SafeNextAction = "finish_in_other_folder";

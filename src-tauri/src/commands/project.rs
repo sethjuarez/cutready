@@ -111,13 +111,15 @@ pub async fn create_project_folder(
 #[auditaur_command(skip_all, err)]
 pub async fn open_project_folder(
     path: String,
+    adopt: Option<bool>,
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<ProjectView, String> {
     let root = PathBuf::from(&path);
 
     // Always set repo view
-    let (repo, projects) = project::open_repo(&root).map_err(|e| e.to_string())?;
+    let (repo, projects) =
+        project::open_repo_with(&root, adopt.unwrap_or(false)).map_err(|e| e.to_string())?;
     {
         let mut repo_lock = state.current_repo.lock().map_err(|e| e.to_string())?;
         *repo_lock = Some(repo);

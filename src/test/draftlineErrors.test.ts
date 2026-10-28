@@ -11,6 +11,7 @@ import {
   SEND_BASE_UNKNOWN_MESSAGE,
   SEND_OUTSIDE_NAMESPACE_MESSAGE,
   VARIATION_OUTSIDE_NAMESPACE_MESSAGE,
+  adoptionPromptFromError,
   baseRenamedMessage,
   canActOnRecoveryNextAction,
   friendlyDraftlineErrorMessage,
@@ -202,5 +203,27 @@ describe("Draftline error messages", () => {
     expect(recoveryNextActionMessage(finish, "deck")).toContain("other folder that started it (deck)");
     expect(canActOnRecoveryNextAction("repair_recovery")).toBe(true);
     expect(recoveryNextActionMessage("repair_recovery")).toBeNull();
+  });
+});
+
+describe("adoptionPromptFromError", () => {
+  it("reads the not-a-project refusal", () => {
+    const error = JSON.stringify({
+      code: "not_a_cutready_project",
+      message: "x",
+      details: { folder: "/code/app/src", repository: "/code/app", suggested: "/code/app/cutready", suggested_exists: true },
+    });
+    expect(adoptionPromptFromError(error)).toEqual({
+      folder: "/code/app/src",
+      repository: "/code/app",
+      suggested: "/code/app/cutready",
+      suggestedExists: true,
+    });
+  });
+
+  it("ignores other errors and missing details", () => {
+    expect(adoptionPromptFromError({ code: "folder_is_elsewhere", message: "x", details: { folder: "a" } })).toBeNull();
+    expect(adoptionPromptFromError({ code: "not_a_cutready_project", message: "x" })).toBeNull();
+    expect(adoptionPromptFromError("plain failure")).toBeNull();
   });
 });

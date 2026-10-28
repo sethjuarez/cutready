@@ -72,6 +72,8 @@ const originalState = {
   detectRemote: useAppStore.getState().detectRemote,
   switchTimeline: useAppStore.getState().switchTimeline,
   refreshSyncStatus: useAppStore.getState().refreshSyncStatus,
+  openProject: useAppStore.getState().openProject,
+  createProject: useAppStore.getState().createProject,
 };
 
 describe("project switch store side effects", () => {
@@ -105,6 +107,8 @@ describe("project switch store side effects", () => {
       timelines: [],
       isSyncing: false,
       syncError: null,
+      adoptionPrompt: null,
+      error: null,
     });
   });
 
@@ -223,6 +227,66 @@ describe("project switch store side effects", () => {
     expect(useAppStore.getState().chatLoading).toBe(false);
     expect(useAppStore.getState().chatError).toBeNull();
     expect(useAppStore.getState().chatInputDraft).toBe("");
+  });
+
+  it("asks before managing a code repository, then creates the suggested folder", async () => {
+    const refusal = JSON.stringify({
+      code: "not_a_cutready_project",
+      message: "not a project",
+      details: {
+        folder: "D:\\code\\contoso",
+        repository: "D:\\code\\contoso",
+        suggested: "D:\\code\\contoso\\cutready",
+        suggested_exists: false,
+      },
+    });
+    const createProject = vi.fn(() => Promise.resolve());
+    const openProject = useAppStore.getState().openProject;
+    mockInvoke.mockImplementation((command: string) =>
+      command === "open_project_folder" ? Promise.reject(refusal) : Promise.resolve([]),
+    );
+    useAppStore.setState({ createProject, error: null });
+
+    await openProject("D:\\code\\contoso");
+
+    expect(mockInvoke).toHaveBeenCalledWith("open_project_folder", { path: "D:\\code\\contoso", adopt: false });
+    expect(useAppStore.getState().error).toBeNull();
+    expect(useAppStore.getState().currentProject).toBeNull();
+    expect(useAppStore.getState().adoptionPrompt).toEqual({
+      folder: "D:\\code\\contoso",
+      repository: "D:\\code\\contoso",
+      suggested: "D:\\code\\contoso\\cutready",
+      suggestedExists: false,
+    });
+
+    await useAppStore.getState().resolveAdoptionPrompt("create");
+
+    expect(createProject).toHaveBeenCalledWith("D:\\code\\contoso\\cutready");
+    expect(useAppStore.getState().adoptionPrompt).toBeNull();
+  });
+
+  it("manages the folder as-is only when the user confirms", async () => {
+    const openProject = vi.fn(() => Promise.resolve());
+    useAppStore.setState({
+      openProject,
+      adoptionPrompt: { folder: "D:\\code\\contoso", repository: null, suggested: "D:\\code\\contoso\\cutready", suggestedExists: true },
+    });
+
+    await useAppStore.getState().resolveAdoptionPrompt("cancel");
+    expect(openProject).not.toHaveBeenCalled();
+    expect(useAppStore.getState().adoptionPrompt).toBeNull();
+
+    useAppStore.setState({
+      adoptionPrompt: { folder: "D:\\code\\contoso", repository: null, suggested: "D:\\code\\contoso\\cutready", suggestedExists: true },
+    });
+    await useAppStore.getState().resolveAdoptionPrompt("adopt");
+    expect(openProject).toHaveBeenCalledWith("D:\\code\\contoso", { adopt: true });
+
+    useAppStore.setState({
+      adoptionPrompt: { folder: "D:\\code\\contoso", repository: null, suggested: "D:\\code\\contoso\\cutready", suggestedExists: true },
+    });
+    await useAppStore.getState().resolveAdoptionPrompt("create");
+    expect(openProject).toHaveBeenCalledWith("D:\\code\\contoso\\cutready", { adopt: true });
   });
 
   it("lists remote-only branches and adopts one before switching", async () => {
