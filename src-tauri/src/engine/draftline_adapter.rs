@@ -156,16 +156,6 @@ impl CutReadyDraftlineAdapter {
         !self.workspace.scope().as_os_str().is_empty()
     }
 
-    /// True when Draftline runs the Git LFS filter here, so Send and publish
-    /// upload LFS content before pushing. Mirrors Draftline's private check:
-    /// the repository configures the driver and a `git` executable runs.
-    pub fn uploads_lfs_content(&self) -> bool {
-        git2::Repository::open(self.root())
-            .and_then(|repo| repo.config()?.snapshot())
-            .is_ok_and(|config| lfs_driver_configured(&config))
-            && git_available()
-    }
-
     fn variation_name(&self, name: &str) -> String {
         namespaced_variation_name(self.is_hybrid(), name)
     }
@@ -525,36 +515,6 @@ pub fn is_github_remote_url(url: &str) -> bool {
     normalized.starts_with("https://github.com/")
         || normalized.starts_with("ssh://git@github.com/")
         || normalized.starts_with("git@github.com:")
-}
-
-/// Same rule as Draftline: `filter.lfs.process`, or both `clean` and `smudge`,
-/// set to a non-empty command.
-fn lfs_driver_configured(config: &git2::Config) -> bool {
-    let command = |key: &str| {
-        config
-            .get_string(&format!("filter.lfs.{key}"))
-            .is_ok_and(|value| !value.trim().is_empty())
-    };
-    command("process") || (command("clean") && command("smudge"))
-}
-
-fn git_available() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        let mut command = std::process::Command::new("git");
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            command.creation_flags(0x08000000);
-        }
-        command
-            .arg("--version")
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .is_ok_and(|status| status.success())
-    })
 }
 
 /// Read a project's git remote URLs without opening a Draftline workspace,

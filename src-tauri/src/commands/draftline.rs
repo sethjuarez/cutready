@@ -1032,19 +1032,15 @@ fn send_for_review_with(
         &send_request,
         options,
     ))?;
-    // Draftline uploads LFS content before pushing only where it runs the LFS
-    // filter; elsewhere the pull request would reference content the remote
+    // Draftline uploads LFS content before pushing (`uploaded`) only where it
+    // runs the LFS filter; other pointers would reference content the remote
     // doesn't have.
-    let lfs_pointers: Vec<String> = if adapter.uploads_lfs_content() {
-        Vec::new()
-    } else {
-        preflight
-            .outgoing_files
-            .iter()
-            .filter(|file| file.kind == OutgoingFileKind::LfsPointer)
-            .map(|file| file.path.to_string_lossy().replace('\\', "/"))
-            .collect()
-    };
+    let lfs_pointers: Vec<String> = preflight
+        .outgoing_files
+        .iter()
+        .filter(|file| file.kind == OutgoingFileKind::LfsPointer && !file.uploaded)
+        .map(|file| file.path.to_string_lossy().replace('\\', "/"))
+        .collect();
     if !lfs_pointers.is_empty() {
         return Err(contract::TauriCommandError {
             code: SEND_HAS_LFS_POINTERS.into(),
