@@ -87,7 +87,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-store = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-window-state = "2"
-tauri-plugin-auditaur = "0.4.7"
+tauri-plugin-auditaur = "0.4.10"
 tauri-plugin-single-instance = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-process = "2"
@@ -110,7 +110,7 @@ screencapturekit = "2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 wasapi = "0.23.0"
-windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Graphics_Gdi", "Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Graphics_Gdi", "Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
 windows-capture = "2.0.0"
 
 [dev-dependencies]
