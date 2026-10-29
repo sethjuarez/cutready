@@ -1,0 +1,59 @@
+{
+  "prefix": "cutready-openai-battle-",
+  "globalSettings": {
+    "seed": {
+      "aiAgentExecutionEngine": "prompty"
+    }
+  },
+  "notes": [
+    {
+      "path": "openai-brief.md",
+      "body": "# OpenAI Battle Brief\n\nExercise Prompty direct OpenAI with reading, delegation, mutation, storyboard updates, and visual tools.\n"
+    }
+  ],
+  "files": [
+    {
+      "path": "openai-battle.sk",
+      "json": {
+        "title": "OpenAI Battle Sketch",
+        "description": "Fixture sketch for direct OpenAI Prompty battle testing.",
+        "rows": [
+          {
+            "time": "~10s",
+            "narrative": "Open with the product promise.",
+            "demo_actions": "Show the project overview.",
+            "screenshot": null
+          },
+          {
+            "time": "~20s",
+            "narrative": "Explain the automation payoff.",
+            "demo_actions": "Show the refined script.",
+            "screenshot": null
+          }
+        ],
+        "state": "draft",
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z"
+      }
+    },
+    {
+      "path": "openai-battle.sb",
+      "json": {
+        "title": "OpenAI Battle Storyboard",
+        "description": "Storyboard fixture.",
+        "items": [
+          {
+            "type": "sketch_ref",
+            "path": "openai-battle.sk"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z"
+      }
+    },
+    {
+      "path": ".cutready/visuals/.keep",
+      "body": ""
+    }
+  ]
+}

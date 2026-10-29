@@ -1,0 +1,59 @@
+{
+  "prefix": "cutready-anthropic-battle-",
+  "globalSettings": {
+    "seed": {
+      "aiAgentExecutionEngine": "prompty"
+    }
+  },
+  "notes": [
+    {
+      "path": "anthropic-brief.md",
+      "body": "# Anthropic Battle Brief\n\nExercise Prompty direct Anthropic with reading, delegation, mutation, storyboard updates, and visual tools.\n"
+    }
+  ],
+  "files": [
+    {
+      "path": "anthropic-battle.sk",
+      "json": {
+        "title": "Anthropic Battle Sketch",
+        "description": "Fixture sketch for direct Anthropic Prompty battle testing.",
+        "rows": [
+          {
+            "time": "~10s",
+            "narrative": "Open with the product promise.",
+            "demo_actions": "Show the project overview.",
+            "screenshot": null
+          },
+          {
+            "time": "~20s",
+            "narrative": "Explain the automation payoff.",
+            "demo_actions": "Show the refined script.",
+            "screenshot": null
+          }
+        ],
+        "state": "draft",
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z"
+      }
+    },
+    {
+      "path": "anthropic-battle.sb",
+      "json": {
+        "title": "Anthropic Battle Storyboard",
+        "description": "Storyboard fixture.",
+        "items": [
+          {
+            "type": "sketch_ref",
+            "path": "anthropic-battle.sk"
+          }
+        ],
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z"
+      }
+    },
+    {
+      "path": ".cutready/visuals/.keep",
+      "body": ""
+    }
+  ]
+}
