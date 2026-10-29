@@ -48,9 +48,15 @@ showing your connection status and sync state:
 | Button | When it appears | What it does |
 | --- | --- | --- |
 | **Sync** | Unpublished + incoming | Pushes local, then pulls remote |
-| **Push** | Only unpublished | Sends local snapshots to remote |
-| **Pull** | Only incoming | Fetches remote snapshots |
+| **Send** | Only unpublished | Pushes your saved snapshots exactly as saved |
+| **Get** | Only incoming | Pulls remote snapshots |
 | **Fetch** | Always | Checks for remote changes without applying them |
+
+<Aside>
+  In a project inside a code repository, **Send** becomes **Send for review**
+  and opens a pull request instead. See
+  [Projects in a Code Repository](/collaboration/hybrid-projects/).
+</Aside>
 
 ## Publishing Timelines
 

@@ -3,20 +3,16 @@ import {
   createDraftlineHostFacade,
   createMergeConflictViewModel,
   createWholeFileUseContentResolutions,
-  isHistoryCleanupBlockedError,
   type ApplyIncomingReport,
   type ChangedFile,
   type ConflictContentSource,
   type DraftlineHostFacade,
-  type HistoryCompactionCandidate,
-  type HistoryCompactionCandidates,
   type MergeConflictResolution,
   type MergeConflictViewModel,
   type MergeIncomingReport,
   type MergeIncomingToken,
-  type MilestoneMergeCommandResult,
-  type MilestoneMergeReport,
   type PreflightReport,
+  type RecoveryState,
   type RemoteVariation,
   type RenameVariationResult,
   type RestoreVersionTarget,
@@ -28,17 +24,6 @@ import {
   type VariationRenameToken,
   type VariationCreatePreflight,
   type VariationCreateToken,
-  type HistoryCleanupPreview,
-  type HistoryCleanupPublishPreflight,
-  type HistoryCleanupPublishResult,
-  type HistoryCleanupPublishToken,
-  type HistoryCleanupRemoteImpact,
-  type HistoryCleanupUndoPreflight,
-  type HistoryCleanupUndoToken,
-  type HistoryCleanupBlockedError,
-  type StaleVersionResolution,
-  type TimelineCleanupResult,
-  type PendingHistoryCleanup,
   type VariationSummary,
   type Version,
   type VersionDiff,
@@ -46,7 +31,7 @@ import {
   type WorkspaceGraphRef,
 } from "@draftline/client";
 import { invoke, listen } from "./tauri";
-import type { ConflictFile, DiffEntry, GraphNode, IncomingCommit, RemoteBranchInfo, RemoteInfo, SyncStatus, TimelineInfo, VersionEntry } from "../types/sketch";
+import type { BaseStatus, ConflictFile, DiffEntry, GraphNode, IncomingCommit, RemoteBranchInfo, RemoteInfo, SyncStatus, TimelineInfo, VersionEntry } from "../types/sketch";
 
 export type DraftlineMergeIncomingToken = MergeIncomingToken;
 export type DraftlineMergeConflictResolution = MergeConflictResolution;
@@ -58,21 +43,6 @@ export type DraftlineSwitchVariationPreflight = PreflightReport;
 export type DraftlineSwitchVariationResult = SwitchVariationResult;
 export type DraftlineVariationCreatePreflight = VariationCreatePreflight;
 export type DraftlineVariationCreateToken = VariationCreateToken;
-export type DraftlineHistoryCleanupPreview = HistoryCleanupPreview;
-export type DraftlineHistoryCleanupPublishPreflight = HistoryCleanupPublishPreflight;
-export type DraftlineHistoryCleanupPublishResult = HistoryCleanupPublishResult;
-export type DraftlineHistoryCleanupPublishToken = HistoryCleanupPublishToken;
-export type DraftlineHistoryCleanupRemoteImpact = HistoryCleanupRemoteImpact;
-export type DraftlineHistoryCleanupUndoPreflight = HistoryCleanupUndoPreflight;
-export type DraftlineHistoryCleanupUndoToken = HistoryCleanupUndoToken;
-export type DraftlineStaleVersionResolution = StaleVersionResolution;
-export type DraftlineTimelineCleanupResult = TimelineCleanupResult;
-export type DraftlinePendingHistoryCleanup = PendingHistoryCleanup;
-export type DraftlineHistoryCleanupBlockedError = HistoryCleanupBlockedError;
-export type DraftlineHistoryCompactionCandidate = HistoryCompactionCandidate;
-export type DraftlineHistoryCompactionCandidates = HistoryCompactionCandidates;
-export type DraftlineMilestoneMergeReport = MilestoneMergeReport;
-export type DraftlineMilestoneMergeCommandResult = MilestoneMergeCommandResult;
 
 export class DraftlineVariationCreateConflictError extends Error {
   readonly preflight: VariationCreatePreflight;
@@ -88,12 +58,6 @@ export function isDraftlineVariationCreateConflictError(
   error: unknown,
 ): error is DraftlineVariationCreateConflictError {
   return error instanceof DraftlineVariationCreateConflictError;
-}
-
-export function isDraftlineHistoryCleanupBlockedError(
-  error: unknown,
-): error is HistoryCleanupBlockedError {
-  return isHistoryCleanupBlockedError(error);
 }
 
 export interface DraftlineMergeIncomingReport {
@@ -235,19 +199,7 @@ export async function listDraftlineTimelines(): Promise<TimelineInfo[]> {
 }
 
 export async function previewDraftlineVersion(version: string): Promise<DiffEntry[]> {
-  const f = facade();
-  try {
-    return versionDiffToDiffEntries(await f.diffVersionToWorkspace(version));
-  } catch (error) {
-    const resolution = await f.resolveRewrittenVersion(version);
-    if (
-      (resolution.disposition.kind === "live" || resolution.disposition.kind === "squashed_into")
-      && resolution.disposition.version !== version
-    ) {
-      return versionDiffToDiffEntries(await f.diffVersionToWorkspace(resolution.disposition.version));
-    }
-    throw error;
-  }
+  return versionDiffToDiffEntries(await facade().diffVersionToWorkspace(version));
 }
 
 export async function previewDraftlineVersionFile(version: string, path: string): Promise<DraftlinePreviewFile | null> {
@@ -298,7 +250,7 @@ export async function createDraftlineVariation(
   fromVersion: string,
   name: string,
   remote?: string | null,
-): Promise<void> {
+): Promise<string> {
   const workspacePath = requireWorkspacePath();
 
   const metadata = { label: name, slug: name };
@@ -313,11 +265,14 @@ export async function createDraftlineVariation(
   }
 
   try {
-    await draftlineClient.createVariationFromVersionGuarded({
+    const result = await draftlineClient.createVariationFromVersionGuarded({
       workspace_path: workspacePath,
       token: preflight.token,
       metadata,
     });
+    // Hybrid projects namespace new branches (`cutready/<name>`) on the backend,
+    // so report the name that was actually created.
+    return result?.variation?.name ?? preflight.token.variation ?? name;
   } catch (error) {
     const failedPreflight = variationCreatePreflightFromError(error);
     if (failedPreflight) {
@@ -424,6 +379,47 @@ export async function publishDraftlineChanges(remote: string): Promise<void> {
   await facade().publishCurrentVariation(remote);
 }
 
+export interface DraftlinePullRequest {
+  number: number;
+  url: string;
+}
+
+/** Mirrors Draftline's `SendResult` (hybrid "Send for review"). */
+export interface DraftlineSendResult {
+  remote: string;
+  variation: string;
+  base: string;
+  created_variation: boolean;
+  published_versions: number;
+  pull_request: DraftlinePullRequest;
+  created_pull_request: boolean;
+}
+
+export interface DraftlineSendForReviewOptions {
+  remote: string;
+  title: string;
+  body?: string;
+  base?: string;
+}
+
+/**
+ * Hybrid projects only: push the CutReady variation to its own branch and
+ * open (or reuse) a pull request on the code host.
+ */
+export async function sendForReview(
+  options: DraftlineSendForReviewOptions,
+): Promise<DraftlineSendResult> {
+  return invoke<DraftlineSendResult>("send_for_review", {
+    request: {
+      workspace_path: requireWorkspacePath(),
+      remote: options.remote,
+      title: options.title,
+      body: options.body?.trim() ? options.body : null,
+      base: options.base?.trim() ? options.base : null,
+    },
+  });
+}
+
 export async function listDraftlineRemoteBranches(remote: string): Promise<RemoteBranchInfo[]> {
   return (await facade().remoteVariations(remote)).map(remoteVariationToBranchInfo);
 }
@@ -450,17 +446,6 @@ export async function mergeDraftlineIncoming(remote: string, label: string): Pro
   return result.merge.version.id;
 }
 
-export async function preflightDraftlineMilestoneMerge(remote: string): Promise<DraftlineMilestoneMergeReport> {
-  return facade().preflightMilestoneMerge(remote);
-}
-
-export async function createDraftlineMilestoneMerge(
-  remote: string,
-  label: string,
-): Promise<DraftlineMilestoneMergeCommandResult> {
-  return facade().createMilestoneMerge(label, remote);
-}
-
 export async function mergeDraftlineIncomingWithResolutions(
   token: MergeIncomingToken,
   label: string,
@@ -479,8 +464,6 @@ export function createDraftlineWholeFileUseContentResolutions(
 }
 
 async function readDraftlineSyncStatus(remote: string): Promise<DraftlineSyncStatusDto> {
-  // Not facade().preflightApplyIncoming: Draftline blocks that while a history
-  // cleanup is pending, which would hide the publish/undo/abandon actions.
   return invoke<DraftlineSyncStatusDto>("get_sync_status", {
     request: { workspace_path: requireWorkspacePath(), remote },
   });
@@ -492,6 +475,33 @@ export async function getDraftlineSyncStatus(remote: string): Promise<SyncStatus
     ahead: status.ahead,
     behind: status.behind,
   };
+}
+
+/**
+ * Hybrid projects on a branch other than the base: how the branch compares
+ * with the remote base (e.g. `main`) as of the last fetch. `null` otherwise.
+ */
+export async function getDraftlineBaseStatus(remote: string): Promise<BaseStatus | null> {
+  const status = await invoke<DraftlineSyncStatusDto | null>("get_base_status", {
+    request: { workspace_path: requireWorkspacePath(), remote },
+  });
+  if (!status) return null;
+  return { base: status.variation, ahead: status.ahead, behind: status.behind };
+}
+
+/**
+ * Fetch and preflight bringing the latest base into the current branch.
+ * Rejects with `merge_needs_developer` when files outside the CutReady
+ * folder conflict; in-folder conflicts come back for the conflict panel.
+ */
+export async function preflightDraftlineMergeBase(remote: string): Promise<DraftlineMergeIncomingReport> {
+  return mergeIncomingReportToDto(await facade().preflightMergeBase(remote));
+}
+
+/** Merge the latest base into the current branch (clean merges only). */
+export async function mergeDraftlineFromBase(remote: string, label: string): Promise<string> {
+  const result = await facade().mergeBase(label, remote);
+  return result.merge.version.id;
 }
 
 export async function listDraftlineIncomingCommits(remote: string): Promise<IncomingCommit[]> {
@@ -508,6 +518,93 @@ export async function listDraftlineIncomingCommits(remote: string): Promise<Inco
 
 export async function inspectDraftlineChanges() {
   return facade().changes();
+}
+
+/** Problems an interrupted or crashed operation left behind, or missing large-file content. */
+export interface DraftlineProjectHealth {
+  /** An operation that stopped part-way and must be finished or undone. */
+  recovery: RecoveryState | null;
+  /** The interrupted operation was started from another folder of this checkout. */
+  recoveryInOtherFolder: boolean;
+  /** A crashed CutReady left its lock; safe to clear. */
+  staleLock: { operation: string; processId: number } | null;
+  /** Managed files that still hold a Git LFS pointer instead of their content. */
+  missingContent: string[];
+}
+
+export const HEALTHY_PROJECT: DraftlineProjectHealth = {
+  recovery: null,
+  recoveryInOtherFolder: false,
+  staleLock: null,
+  missingContent: [],
+};
+
+export function needsDraftlineAttention(health: DraftlineProjectHealth): boolean {
+  return !!health.recovery || !!health.staleLock || health.missingContent.length > 0;
+}
+
+export async function inspectDraftlineProjectHealth(
+  options: { probeContent?: boolean } = {},
+): Promise<Omit<DraftlineProjectHealth, "missingContent"> & { missingContent: string[] | null }> {
+  const workspacePath = requireWorkspacePath();
+  const diagnostics = await draftlineClient.inspectWorkspace(workspacePath);
+  const lock = diagnostics.operation_lock;
+  const recovery = diagnostics.inspection.recovery ?? diagnostics.summary.recovery ?? null;
+  let missingContent: string[] | null = null;
+  if (options.probeContent !== false) {
+    try {
+      const filtered = await draftlineClient.filteredFiles({ workspace_path: workspacePath });
+      missingContent = filtered.filter((file) => file.content_missing).map((file) => file.path);
+    } catch {
+      // Probing filters is advisory; recovery and lock state still apply.
+    }
+  }
+  return {
+    recovery: recovery && !recovery.completed ? recovery : null,
+    recoveryInOtherFolder: diagnostics.inspection.safe_next_actions.includes("finish_in_other_folder"),
+    staleLock: lock.is_stale && lock.can_clear && lock.metadata
+      ? { operation: lock.metadata.operation, processId: lock.metadata.process_id }
+      : null,
+    missingContent,
+  };
+}
+
+export type DraftlineRecoveryOutcome = "finished" | "undone" | "stuck";
+
+/**
+ * Clears a crashed operation's lock, then finishes the interrupted operation,
+ * undoing it when it can't be finished. "stuck" means neither worked and the
+ * user may dismiss it with {@link dismissDraftlineRecovery}.
+ */
+export async function resolveDraftlineRecovery(): Promise<DraftlineRecoveryOutcome> {
+  const workspacePath = requireWorkspacePath();
+  const diagnostics = await draftlineClient.inspectWorkspace(workspacePath);
+  if (diagnostics.operation_lock.is_stale && diagnostics.operation_lock.can_clear) {
+    await draftlineClient.clearStaleLock(workspacePath);
+  }
+  const recovery = diagnostics.inspection.recovery ?? diagnostics.summary.recovery ?? null;
+  if (!recovery || recovery.completed) return "finished";
+  const request = { workspace_path: workspacePath, operation_id: recovery.operation_id };
+  const repaired = await draftlineClient.repairRecovery(request);
+  if (repaired.completed) return "finished";
+  const rolledBack = await draftlineClient.rollbackRecovery(request);
+  return rolledBack.completed ? "undone" : "stuck";
+}
+
+/** Leaves the interrupted operation as-is and lets work continue. */
+export async function dismissDraftlineRecovery(): Promise<void> {
+  await draftlineClient.acknowledgeRecovery(requireWorkspacePath());
+}
+
+export async function clearDraftlineStaleLock(): Promise<void> {
+  await draftlineClient.clearStaleLock(requireWorkspacePath());
+}
+
+/** Downloads content for files still holding a Git LFS pointer. True when anything was written. */
+export async function retryDraftlineContentDownload(): Promise<boolean> {
+  return invoke<boolean>("retry_content_download", {
+    request: { workspace_path: requireWorkspacePath() },
+  });
 }
 
 export async function discardDraftlineChanges(): Promise<void> {
@@ -543,6 +640,26 @@ export async function listDraftlineLargeChangedFiles(): Promise<string[]> {
     .map((file) => file.path);
 }
 
+/** Result of moving the CutReady folder within its repository (mirrors the Rust `MoveProjectFolderResult`). */
+export interface MoveProjectFolderResult {
+  /** Absolute path of the project folder after the move. */
+  projectRoot: string;
+  /** Old and new folder, relative to the repository; empty means its root. */
+  from: string;
+  to: string;
+  /** True when the project now lives in a folder inside a code repository. */
+  hybrid: boolean;
+  /** Untracked files that couldn't follow the move, relative to the repository. */
+  leftBehind: string[];
+}
+
+/** Moves the project folder to `to` (relative to the repository) as one save. */
+export async function moveDraftlineProjectFolder(to: string): Promise<MoveProjectFolderResult> {
+  return invoke<MoveProjectFolderResult>("move_project_folder", {
+    request: { workspace_path: requireWorkspacePath(), to },
+  });
+}
+
 export async function saveDraftlineVersion(label: string): Promise<string> {
   const version = await facade().save(label);
   return version.version.id;
@@ -573,125 +690,6 @@ export async function popDraftlineShelf(): Promise<boolean> {
     request: { workspace_path: workspacePath, shelf_id: shelf.id },
   });
   return true;
-}
-
-export async function squashDraftlineVersions(count: number, label: string): Promise<string> {
-  if (!draftlineWorkspacePath) {
-    throw new Error("No Draftline workspace is currently open");
-  }
-  const version = await invoke<Version>("squash_versions", {
-    request: { workspace_path: draftlineWorkspacePath, count, label },
-  });
-  return version.id;
-}
-
-export async function listDraftlineSnapshotCleanupCandidates(
-  selectedVersion: string,
-  targetVariation?: string | null,
-  remote?: string | null,
-): Promise<HistoryCompactionCandidates> {
-  if (!draftlineWorkspacePath) {
-    throw new Error("No Draftline workspace is currently open");
-  }
-  return draftlineClient.getHistoryCompactionCandidates({
-    workspace_path: draftlineWorkspacePath,
-    request: {
-      target_variation: targetVariation ?? null,
-      selected_version: selectedVersion,
-      remote: remote ?? null,
-      preserve_named_branches: true,
-      preserve_merge_boundaries: true,
-    },
-  });
-}
-
-export async function previewDraftlineSnapshotCleanup(
-  oldestVersion: string,
-  newestVersion: string,
-  label: string,
-  targetVariation?: string | null,
-  remote?: string | null,
-): Promise<HistoryCleanupPreview> {
-  const remotePolicy = remote && targetVariation
-    ? { kind: "push_with_lease" as const, remote, branch: targetVariation }
-    : { kind: "local_only" as const };
-  return facade().previewHistoryCleanup({
-    target_variation: targetVariation ?? null,
-    base: { kind: "auto" },
-    mode: {
-      kind: "compact_milestones",
-      milestones: [{
-        title: label,
-        description: null,
-        include_range: { start: oldestVersion, end: newestVersion },
-      }],
-      preserve_named_branches: true,
-      preserve_merge_boundaries: true,
-    },
-    safety: {
-      create_backup_ref: true,
-      backup_ref_name: null,
-      require_clean_worktree: true,
-    },
-    remote_policy: remotePolicy,
-  });
-}
-
-export async function applyDraftlineSnapshotCleanup(planId: string): Promise<TimelineCleanupResult> {
-  return facade().applyHistoryCleanup(planId);
-}
-
-export async function preflightDraftlineSnapshotCleanupRemoteImpact(
-  planId: string,
-  remote: string,
-): Promise<HistoryCleanupRemoteImpact> {
-  return facade().preflightHistoryCleanupRemoteImpact(planId, remote);
-}
-
-export async function preflightDraftlinePublishSnapshotCleanup(
-  planId: string,
-  remote: string,
-): Promise<HistoryCleanupPublishPreflight> {
-  return facade().preflightPublishHistoryCleanup(planId, remote);
-}
-
-export async function publishDraftlineSnapshotCleanup(
-  token: HistoryCleanupPublishToken,
-): Promise<HistoryCleanupPublishResult> {
-  return facade().publishHistoryCleanup(token);
-}
-
-export async function listDraftlinePendingSnapshotCleanups(
-  targetVariation?: string | null,
-): Promise<PendingHistoryCleanup[]> {
-  return facade().pendingHistoryCleanups(targetVariation ?? undefined);
-}
-
-export async function publishDraftlinePendingSnapshotCleanup(
-  planId: string,
-  remote?: string | null,
-): Promise<HistoryCleanupPublishResult> {
-  return facade().publishPendingHistoryCleanup(planId, remote ?? undefined);
-}
-
-export async function undoDraftlinePendingSnapshotCleanup(planId: string): Promise<TimelineCleanupResult> {
-  return facade().undoPendingHistoryCleanup(planId);
-}
-
-export async function abandonDraftlinePendingSnapshotCleanup(planId: string): Promise<PendingHistoryCleanup> {
-  return facade().abandonPendingHistoryCleanup(planId);
-}
-
-export async function resolveDraftlineRewrittenVersion(versionId: string): Promise<StaleVersionResolution> {
-  return facade().resolveRewrittenVersion(versionId);
-}
-
-export async function preflightDraftlineUndoSnapshotCleanup(planId: string): Promise<HistoryCleanupUndoPreflight> {
-  return facade().preflightUndoHistoryCleanup(planId);
-}
-
-export async function undoDraftlineSnapshotCleanup(token: HistoryCleanupUndoToken): Promise<TimelineCleanupResult> {
-  return facade().undoHistoryCleanup(token);
 }
 
 function refsByTargetVersion(refs: WorkspaceGraphRef[]): Map<string, WorkspaceGraphRef[]> {

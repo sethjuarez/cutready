@@ -6,6 +6,7 @@ import {
   Info,
   type LucideIcon,
 } from "lucide-react";
+import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { useToastStore, type ToastType } from "../stores/toastStore";
 
 const toastIconMap: Record<
@@ -40,6 +41,17 @@ export function ToastContainer() {
           >
             <Icon className="w-3.5 h-3.5 shrink-0" style={{ stroke: color }} />
             <span>{t.message}</span>
+            {t.link && (
+              <button
+                onClick={() => {
+                  void shellOpen(t.link!.url).catch((err) => console.warn("Failed to open link:", err));
+                }}
+                title={t.link.url}
+                className="ml-1 font-medium text-[rgb(var(--color-accent))] hover:underline"
+              >
+                {t.link.label}
+              </button>
+            )}
             <button
               onClick={() => dismiss(t.id)}
               className="p-0.5 ml-1 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"

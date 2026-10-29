@@ -11,10 +11,25 @@ use serde::{Deserialize, Serialize};
 pub struct ProjectView {
     /// Absolute path to the project folder (where sketches/notes live).
     pub root: PathBuf,
-    /// Absolute path to the repo root (where .git/ lives).
+    /// Absolute path to the folder CutReady opened (where `.cutready/projects.json` lives).
     pub repo_root: PathBuf,
+    /// Git work-tree root that Draftline paths are relative to. Equals `repo_root`
+    /// unless the project is a hybrid folder inside a larger code repository.
+    #[serde(default)]
+    pub git_root: PathBuf,
+    /// True when `repo_root` is a folder inside an enclosing code repository.
+    #[serde(default)]
+    pub hybrid: bool,
     /// Display name (from manifest or derived from folder name).
     pub name: String,
+}
+
+/// Git work-tree root for a CutReady folder, and whether it is a hybrid project.
+fn git_root_for(repo_root: &std::path::Path) -> (PathBuf, bool) {
+    match crate::engine::project::hybrid_git_root(repo_root) {
+        Some(git_root) => (git_root, true),
+        None => (repo_root.to_path_buf(), false),
+    }
 }
 
 impl ProjectView {
@@ -24,9 +39,12 @@ impl ProjectView {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| "Untitled".into());
         let repo_root = root.clone();
+        let (git_root, hybrid) = git_root_for(&repo_root);
         Self {
             root,
             repo_root,
+            git_root,
+            hybrid,
             name,
         }
     }
@@ -34,9 +52,12 @@ impl ProjectView {
     /// Create a project view for a subdirectory within a repo.
     pub fn in_repo(repo_root: PathBuf, project_path: &str, name: String) -> Self {
         let root = repo_root.join(project_path);
+        let (git_root, hybrid) = git_root_for(&repo_root);
         Self {
             root,
             repo_root,
+            git_root,
+            hybrid,
             name,
         }
     }
@@ -47,6 +68,12 @@ impl ProjectView {
 pub struct RepoView {
     /// Absolute path to the repo root folder.
     pub root: PathBuf,
+    /// Git work-tree root that Draftline paths are relative to; see [`ProjectView::git_root`].
+    #[serde(default)]
+    pub git_root: PathBuf,
+    /// True when `root` is a folder inside an enclosing code repository.
+    #[serde(default)]
+    pub hybrid: bool,
     /// Display name (derived from folder name).
     pub name: String,
 }
@@ -57,7 +84,13 @@ impl RepoView {
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| "Untitled".into());
-        Self { root, name }
+        let (git_root, hybrid) = git_root_for(&root);
+        Self {
+            root,
+            git_root,
+            hybrid,
+            name,
+        }
     }
 }
 
@@ -132,6 +165,46 @@ mod tests {
     fn repo_view_from_path() {
         let view = RepoView::new(PathBuf::from("/home/user/demos"));
         assert_eq!(view.name, "demos");
+    }
+
+    #[test]
+    fn standalone_views_are_not_hybrid() {
+        let temp = tempfile::tempdir().unwrap();
+        git2::Repository::init(temp.path()).unwrap();
+        let project = ProjectView::new(temp.path().to_path_buf());
+        assert!(!project.hybrid);
+        assert_eq!(project.git_root, project.repo_root);
+        let repo = RepoView::new(temp.path().to_path_buf());
+        assert!(!repo.hybrid);
+        assert_eq!(repo.git_root, repo.root);
+
+        let json = serde_json::to_value(&project).unwrap();
+        assert_eq!(json["hybrid"], false);
+        assert!(json.get("git_root").is_some());
+    }
+
+    #[test]
+    fn hybrid_views_point_at_the_code_repository() {
+        let temp = tempfile::tempdir().unwrap();
+        let code = temp.path().join("contoso-app");
+        std::fs::create_dir_all(code.join("cutready/alpha")).unwrap();
+        git2::Repository::init(&code).unwrap();
+        let folder = code.join("cutready");
+
+        let project = ProjectView::in_repo(folder.clone(), "alpha", "Alpha".into());
+        assert!(project.hybrid);
+        assert_eq!(project.repo_root, folder);
+        assert_eq!(
+            project.git_root.canonicalize().unwrap(),
+            code.canonicalize().unwrap()
+        );
+        let repo = RepoView::new(folder);
+        assert!(repo.hybrid);
+        assert_eq!(
+            repo.git_root.canonicalize().unwrap(),
+            code.canonicalize().unwrap()
+        );
+        assert!(!code.join("cutready/.git").exists());
     }
 
     #[test]

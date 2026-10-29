@@ -46,7 +46,7 @@ tracing-subscriber = "0.3"
 log = "0.4"
 dirs = "6"
 tokio = { version = "1", features = ["process", "io-util", "sync", "time", "net"] }
-reqwest = { version = "0.12", features = ["json", "stream"] }
+reqwest = { version = "0.12", features = ["json", "stream", "blocking"] }
 scraper = "0.22"
 tokio-stream = "0.1"
 futures-util = "0.3"
@@ -63,10 +63,10 @@ harness-prompty = { path = "../crates/harness-prompty" }
 # Typra-generated document contracts (contracts/*.tsp). The app uses the
 # generated types directly where it has adopted them, such as `.cv` chat artifacts.
 cutready-contracts = { path = "../crates/cutready-contracts" }
-draftline = "0.5.0"
+draftline = "0.10.1"
 # Already in the tree through Draftline; used directly to read the git config
 # identity that contributor attribution falls back to.
-git2 = { version = "0.20", default-features = false }
+git2 = { version = "0.21", default-features = false }
 keyring = "4.1.2"
 xcap = "0.8"
 image = "0.25"

@@ -204,21 +204,6 @@ pub struct AgentRunDetail {
     pub verification_results: Vec<AgentVerificationResultRecord>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HistoryCleanupLedgerOperation {
-    Apply,
-    Undo,
-}
-
-impl HistoryCleanupLedgerOperation {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Apply => "apply",
-            Self::Undo => "undo",
-        }
-    }
-}
-
 impl AgentStateStore {
     pub fn for_project(
         repo_root: &Path,
@@ -420,35 +405,6 @@ impl AgentStateStore {
             })
         })
         .collect()
-    }
-
-    pub fn record_history_cleanup_result(
-        repo_root: &Path,
-        project_root: &Path,
-        operation: HistoryCleanupLedgerOperation,
-        result: &draftline::TimelineCleanupResult,
-    ) -> Result<(), String> {
-        let db_path = Self::ensure_database_for_project(repo_root, project_root)?;
-        let conn = Connection::open(&db_path)
-            .map_err(|e| format!("Could not open CutReady agent state database: {e}"))?;
-        conn.busy_timeout(BUSY_TIMEOUT)
-            .map_err(|e| format!("Could not configure agent state database timeout: {e}"))?;
-        let ledger_json = serde_json::to_string(result).map_err(|e| e.to_string())?;
-        conn.execute(
-            "INSERT INTO history_cleanup_ledgers
-                (plan_id, operation, created_at, old_head, new_head, ledger_json)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![
-                result.plan_id.to_string(),
-                operation.as_str(),
-                Utc::now().to_rfc3339(),
-                result.old_head.to_string(),
-                result.new_head.to_string(),
-                ledger_json,
-            ],
-        )
-        .map_err(|e| format!("Could not record history cleanup ledger: {e}"))?;
-        Ok(())
     }
 
     #[cfg(test)]
@@ -1474,17 +1430,19 @@ fn validate_agent_state_directory(
     repo_root: &Path,
     project_root: &Path,
 ) -> Result<PathBuf, String> {
-    let canonical_repo_root = fs::canonicalize(repo_root)
+    let location = crate::engine::project::git_state_location(repo_root, project_root);
+    let anchor = location.anchor.as_path();
+    let canonical_repo_root = fs::canonicalize(anchor)
         .map_err(|err| format!("Could not canonicalize repository root for agent state: {err}"))?;
     if !canonical_repo_root.is_dir() {
         return Err(format!(
             "Repository root for agent state is not a directory: {}",
-            repo_root.display()
+            anchor.display()
         ));
     }
 
-    let configured_state_dir = crate::engine::project::git_state_dir(repo_root, project_root);
-    let relative_state_dir = configured_state_dir.strip_prefix(repo_root).map_err(|_| {
+    let configured_state_dir = location.dir;
+    let relative_state_dir = configured_state_dir.strip_prefix(anchor).map_err(|_| {
         format!(
             "Agent state directory is not contained by repository root: {}",
             configured_state_dir.display()
@@ -1650,9 +1608,10 @@ fn import_legacy_chat_sessions(
 ) -> Result<(), String> {
     let canonical_project_root = fs::canonicalize(project_root)
         .map_err(|err| format!("Could not canonicalize project root for chat migration: {err}"))?;
-    let canonical_repo_root = fs::canonicalize(repo_root).map_err(|err| {
-        format!("Could not canonicalize repository root for chat migration: {err}")
-    })?;
+    let canonical_repo_root = fs::canonicalize(
+        crate::engine::project::git_state_location(repo_root, project_root).anchor,
+    )
+    .map_err(|err| format!("Could not canonicalize repository root for chat migration: {err}"))?;
     let state_dir = validate_agent_state_directory(repo_root, project_root)?;
     let canonical_state_dir = fs::canonicalize(&state_dir)
         .map_err(|err| format!("Could not canonicalize repository state directory: {err}"))?;
@@ -2298,19 +2257,6 @@ fn initialize_schema(conn: &Connection) -> Result<(), String> {
         );
         CREATE INDEX IF NOT EXISTS idx_agent_memories_category
             ON agent_memories (category, position);
-        CREATE TABLE IF NOT EXISTS history_cleanup_ledgers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            plan_id TEXT NOT NULL,
-            operation TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            old_head TEXT NOT NULL,
-            new_head TEXT NOT NULL,
-            ledger_json TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_history_cleanup_ledgers_plan_id
-            ON history_cleanup_ledgers (plan_id);
-        CREATE INDEX IF NOT EXISTS idx_history_cleanup_ledgers_old_head
-            ON history_cleanup_ledgers (old_head);
         CREATE TABLE IF NOT EXISTS context_assets (
             id TEXT PRIMARY KEY,
             owner_run_id TEXT NOT NULL,
@@ -2714,60 +2660,6 @@ mod tests {
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
         assert_eq!(version, SCHEMA_VERSION);
-    }
-
-    #[test]
-    fn history_cleanup_ledger_is_recorded_for_stale_resolution() {
-        let project_root = tempfile::tempdir().unwrap().keep();
-        let old_head =
-            draftline::VersionId::from_canonical_string("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-                .unwrap();
-        let new_head =
-            draftline::VersionId::from_canonical_string("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
-                .unwrap();
-        let result = draftline::TimelineCleanupResult {
-            plan_id: draftline::CleanupPlanId::from_string("cleanup-test-plan").unwrap(),
-            old_head: old_head.clone(),
-            new_head: new_head.clone(),
-            backup_refs: vec![draftline::RefName::from(
-                "refs/draftline/backups/history-cleanup/main/cleanup-test-plan",
-            )],
-            ref_updates: Vec::new(),
-            commit_map: Vec::new(),
-            snapshot_map: Vec::new(),
-            warnings: Vec::new(),
-        };
-
-        AgentStateStore::record_history_cleanup_result(
-            &project_root,
-            &project_root,
-            HistoryCleanupLedgerOperation::Apply,
-            &result,
-        )
-        .unwrap();
-
-        let db_path = AgentStateStore::database_path_for_project(&project_root, &project_root);
-        let conn = Connection::open(db_path).unwrap();
-        let (operation, old_head_recorded, new_head_recorded, ledger_json): (
-            String,
-            String,
-            String,
-            String,
-        ) = conn
-            .query_row(
-                "SELECT operation, old_head, new_head, ledger_json
-                 FROM history_cleanup_ledgers
-                 WHERE plan_id = ?1",
-                params!["cleanup-test-plan"],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-            )
-            .unwrap();
-
-        assert_eq!(operation, "apply");
-        assert_eq!(old_head_recorded, old_head.to_string());
-        assert_eq!(new_head_recorded, new_head.to_string());
-        let stored: draftline::TimelineCleanupResult = serde_json::from_str(&ledger_json).unwrap();
-        assert_eq!(stored, result);
     }
 
     #[test]

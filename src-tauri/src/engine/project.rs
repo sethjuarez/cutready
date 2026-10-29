@@ -108,12 +108,45 @@ pub fn safe_resolve(root: &Path, relative_path: &str) -> Result<PathBuf, Project
 ///
 /// Creates the folder if it doesn't exist, initializes Draftline, and returns a ProjectView.
 pub fn init_project_folder(root: &Path) -> Result<ProjectView, ProjectError> {
+    let created = !root.exists();
     std::fs::create_dir_all(root).map_err(|e| ProjectError::Io(e.to_string()))?;
 
     // Draftline owns workspace initialization and existing-workspace detection.
-    CutReadyDraftlineAdapter::open_project(root).map_err(|e| ProjectError::Io(e.to_string()))?;
+    if let Err(error) = CutReadyDraftlineAdapter::open_project(root) {
+        if created && is_workspace_claim_error(&error) {
+            // Leave no empty folder behind for a refused new project.
+            let _ = std::fs::remove_dir(root);
+        }
+        return Err(draftline_open_error(error));
+    }
 
     Ok(ProjectView::new(root.to_path_buf()))
+}
+
+/// A repository's committed `.draftline` marker names the one folder Draftline
+/// manages; opening any other folder, or a broken marker, is refused.
+fn is_workspace_claim_error(error: &draftline::DraftlineError) -> bool {
+    matches!(
+        error,
+        draftline::DraftlineError::FolderIsElsewhere(_)
+            | draftline::DraftlineError::FolderMissing(_)
+            | draftline::DraftlineError::InvalidFolderMarker(_)
+            | draftline::DraftlineError::NewerFolderMarker(_)
+            | draftline::DraftlineError::RecoveryInOtherFolder(_)
+    )
+}
+
+/// Keep Draftline's code and details on workspace-claim refusals so the UI can
+/// name the folder that holds the repository's CutReady project.
+fn draftline_open_error(error: draftline::DraftlineError) -> ProjectError {
+    if !is_workspace_claim_error(&error) {
+        return ProjectError::Io(error.to_string());
+    }
+    let error = draftline::tauri_contract::TauriCommandError::from(error);
+    match serde_json::to_string(&error) {
+        Ok(json) => ProjectError::Draftline(json),
+        Err(_) => ProjectError::Io(error.message),
+    }
 }
 
 // ── Multi-project manifest ────────────────────────────────────────
@@ -511,15 +544,203 @@ pub fn list_projects(repo_root: &Path) -> Vec<ProjectEntry> {
     }
 }
 
+/// Opening a folder a commit renamed; details name the old and new folders.
+pub const PROJECT_FOLDER_RENAMED: &str = "project_folder_renamed";
+
+/// Opening a folder with someone else's files (typically a code repository)
+/// that Draftline has never managed; details name the folder, its repository,
+/// and a suggested CutReady subfolder.
+pub const NOT_A_CUTREADY_PROJECT: &str = "not_a_cutready_project";
+
+const CUTREADY_EXTENSIONS: &[&str] = &["sk", "sb", "cv"];
+const PLAIN_EXTENSIONS: &[&str] = &["md", "png", "jpg", "jpeg", "gif", "webp", "svg"];
+const PLAIN_FOLDERS: &[&str] = &["screenshots", "chat-artifacts", "visuals", "notes"];
+
+/// True when `root` already holds CutReady content: its metadata folder, a
+/// legacy chat folder, or a sketch/storyboard/chat artifact a few levels down.
+fn has_cutready_content(root: &Path) -> bool {
+    if root.join(".cutready").is_dir() || root.join(".chats").is_dir() {
+        return true;
+    }
+    fn walk(dir: &Path, depth: usize) -> bool {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return false;
+        };
+        entries.flatten().any(|entry| {
+            let path = entry.path();
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if path.is_dir() {
+                depth > 0
+                    && !name.starts_with('.')
+                    && name != "node_modules"
+                    && walk(&path, depth - 1)
+            } else {
+                path.extension()
+                    .and_then(|ext| ext.to_str())
+                    .is_some_and(|ext| {
+                        CUTREADY_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str())
+                    })
+            }
+        })
+    }
+    walk(root, 2)
+}
+
+/// True when `root` itself (not a subfolder) holds CutReady content: its
+/// metadata folder or a top-level sketch, storyboard, or chat artifact.
+fn has_own_cutready_content(root: &Path) -> bool {
+    if root.join(".cutready").is_dir() {
+        return true;
+    }
+    std::fs::read_dir(root).is_ok_and(|entries| {
+        entries.flatten().any(|entry| {
+            let path = entry.path();
+            path.is_file()
+                && path
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .is_some_and(|ext| {
+                        CUTREADY_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str())
+                    })
+        })
+    })
+}
+
+/// True when `root` has top-level files or folders CutReady never creates.
+/// Hidden entries (`.git`, `.gitignore`, `.vscode`) don't count.
+fn has_foreign_content(root: &Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with('.') {
+            return false;
+        }
+        let path = entry.path();
+        if path.is_dir() {
+            return !PLAIN_FOLDERS.contains(&name.as_ref());
+        }
+        !path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| PLAIN_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+    })
+}
+
+/// Refuse to start managing a folder that looks like someone else's work (a
+/// code repository root or one of its source folders) until the user confirms.
+fn refuse_unclaimed_folder(root: &Path) -> Result<(), ProjectError> {
+    if !CutReadyDraftlineAdapter::is_unmanaged(root)
+        || has_cutready_content(root)
+        || !has_foreign_content(root)
+    {
+        return Ok(());
+    }
+    let repository = git_repository_root(root);
+    let base = repository.clone().unwrap_or_else(|| root.to_path_buf());
+    let suggested = base.join("cutready");
+    let error = draftline::tauri_contract::TauriCommandError {
+        code: NOT_A_CUTREADY_PROJECT.into(),
+        message: format!(
+            "`{}` isn't a CutReady project yet and has other files in it.",
+            root.display()
+        ),
+        details: Some(serde_json::json!({
+            "folder": root.to_string_lossy(),
+            "repository": repository.map(|path| path.to_string_lossy().into_owned()),
+            "suggested": suggested.to_string_lossy(),
+            "suggested_exists": suggested.exists(),
+        })),
+    };
+    Err(match serde_json::to_string(&error) {
+        Ok(json) => ProjectError::Draftline(json),
+        Err(_) => ProjectError::Io(error.message),
+    })
+}
+
+/// The work-tree root of the Git repository holding `path`, if any.
+fn git_repository_root(path: &Path) -> Option<PathBuf> {
+    path.ancestors()
+        .find(|dir| dir.join(".git").exists())
+        .map(Path::to_path_buf)
+}
+
 /// Open a repo folder, detecting single vs multi-project mode.
 /// Returns the repo view and list of projects.
+///
+/// Refuses (with [`NOT_A_CUTREADY_PROJECT`]) to start managing a folder that
+/// has other files and no CutReady content; see [`open_repo_with`].
+#[cfg(test)]
 pub fn open_repo(root: &Path) -> Result<(RepoView, Vec<ProjectEntry>), ProjectError> {
-    if !root.exists() || !root.is_dir() {
+    open_repo_with(root, false)
+}
+
+/// [`open_repo`], starting to manage an unrecognized folder when
+/// `adopt_unrecognized` is set (the user confirmed it).
+pub fn open_repo_with(
+    root: &Path,
+    adopt_unrecognized: bool,
+) -> Result<(RepoView, Vec<ProjectEntry>), ProjectError> {
+    let renamed = if root.is_dir() {
+        // A root project whose content a commit moved into a subfolder. Only a
+        // prompt: the user may keep the root (`adopt_unrecognized`), and a root
+        // holding its own CutReady content again is simply opened.
+        (!adopt_unrecognized && !has_own_cutready_content(root))
+            .then(|| CutReadyDraftlineAdapter::renamed_project_folder(root))
+            .flatten()
+            .filter(|(from, _)| from.as_os_str().is_empty())
+    } else {
+        CutReadyDraftlineAdapter::renamed_project_folder(root)
+    };
+    if let Some((from, to)) = renamed {
+        let moved_root = from.as_os_str().is_empty();
+        let from = from.to_string_lossy().replace('\\', "/");
+        let from = if from.is_empty() {
+            ".".to_string()
+        } else {
+            from
+        };
+        let to_display = to.to_string_lossy().replace('\\', "/");
+        let details = if moved_root {
+            let suggested = root.join(&to);
+            serde_json::json!({
+                "folder": root.to_string_lossy(),
+                "to": to_display,
+                "moved_root": true,
+                "repository": root.to_string_lossy(),
+                "suggested": suggested.to_string_lossy(),
+                "suggested_exists": suggested.is_dir(),
+            })
+        } else {
+            serde_json::json!({ "folder": from, "to": to_display })
+        };
+        let error = draftline::tauri_contract::TauriCommandError {
+            code: PROJECT_FOLDER_RENAMED.into(),
+            message: if moved_root {
+                format!("This project's content was moved to `{to_display}`.")
+            } else {
+                format!("The project folder `{from}` was renamed to `{to_display}`.")
+            },
+            details: Some(details),
+        };
+        return Err(match serde_json::to_string(&error) {
+            Ok(json) => ProjectError::Draftline(json),
+            Err(_) => ProjectError::Io(error.message),
+        });
+    }
+    if !root.is_dir() {
         return Err(ProjectError::NotFound(root.to_string_lossy().into_owned()));
     }
 
+    if !adopt_unrecognized {
+        refuse_unclaimed_folder(root)?;
+    }
+
     // Draftline owns workspace initialization and existing-workspace detection.
-    CutReadyDraftlineAdapter::open_project(root).map_err(|e| ProjectError::Io(e.to_string()))?;
+    CutReadyDraftlineAdapter::open_project(root).map_err(draftline_open_error)?;
 
     // Repair: move orphaned repo-level assets into the first project.
     // This fixes workspaces migrated before the asset-move fix.
@@ -2469,18 +2690,70 @@ const GIT_STATE_DIR: &str = ".git/cutready";
 
 pub const REPO_SETTINGS_FILE: &str = ".cutready/settings.json";
 
-/// Resolve the per-project state directory inside .git/cutready/.
-/// For single-project repos: `.git/cutready/`
-/// For multi-project repos: `.git/cutready/<project-name>/`
-pub fn git_state_dir(repo_root: &Path, project_root: &Path) -> std::path::PathBuf {
-    let base = repo_root.join(GIT_STATE_DIR);
-    if repo_root == project_root {
+/// Where a project's local runtime state lives, plus the directory that must
+/// contain it (`anchor`), used by containment checks.
+pub struct GitStateLocation {
+    pub anchor: std::path::PathBuf,
+    pub dir: std::path::PathBuf,
+}
+
+/// Resolve the per-project state directory inside the git dir.
+/// Standalone single project: `<root>/.git/cutready/`
+/// Standalone multi-project: `<root>/.git/cutready/<project-name>/`
+/// Hybrid (folder inside a code repo, or a linked worktree):
+/// `<gitdir>/cutready/<folder relative to the work tree>/[<project-name>/]`
+pub fn git_state_location(repo_root: &Path, project_root: &Path) -> GitStateLocation {
+    let (anchor, base) = match enclosing_git_dir(repo_root) {
+        Some((git_dir, rel)) => {
+            let base = git_dir.join("cutready").join(rel);
+            (git_dir, base)
+        }
+        None => (repo_root.to_path_buf(), repo_root.join(GIT_STATE_DIR)),
+    };
+    let dir = if repo_root == project_root {
         base
     } else if let Ok(rel) = project_root.strip_prefix(repo_root) {
         base.join(rel)
     } else {
         base
+    };
+    GitStateLocation { anchor, dir }
+}
+
+pub fn git_state_dir(repo_root: &Path, project_root: &Path) -> std::path::PathBuf {
+    git_state_location(repo_root, project_root).dir
+}
+
+/// The canonical git work-tree root when `root` is a CutReady folder inside a
+/// larger repository (a hybrid project). `None` for standalone projects, including
+/// linked-worktree roots, whose folder is the work-tree root itself.
+pub fn hybrid_git_root(root: &Path) -> Option<PathBuf> {
+    let (_, rel) = enclosing_git_dir(root)?;
+    if rel.as_os_str().is_empty() {
+        return None;
     }
+    // Walk up from the caller's path (not the canonical one) so the result keeps
+    // the same spelling as `root` and Windows `\\?\` prefixes never reach the UI.
+    let mut work_tree = root;
+    for _ in rel.components() {
+        work_tree = work_tree.parent()?;
+    }
+    Some(work_tree.to_path_buf())
+}
+
+/// For a CutReady folder without its own `.git` directory, find the enclosing
+/// repository's git dir (per-worktree for linked worktrees) and the folder's path
+/// relative to the work tree. `None` keeps the standalone `<root>/.git` layout.
+fn enclosing_git_dir(repo_root: &Path) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+    if repo_root.join(".git").is_dir() {
+        return None;
+    }
+    let repo = git2::Repository::discover(repo_root).ok()?;
+    let work_dir = std::fs::canonicalize(repo.workdir()?).ok()?;
+    let root = std::fs::canonicalize(repo_root).ok()?;
+    let rel = root.strip_prefix(&work_dir).ok()?.to_path_buf();
+    let git_dir = std::fs::canonicalize(repo.path()).ok()?;
+    Some((git_dir, rel))
 }
 
 /// Relocate a project's local runtime state when its path-based identity changes
@@ -2595,6 +2868,200 @@ pub fn relocate_project_state(
     }
 
     Ok(())
+}
+
+/// The git dir holding a CutReady folder and the folder's path relative to
+/// the work tree (empty at the root). Works for standalone, hybrid, and
+/// linked-worktree folders alike.
+pub fn folder_git_location(root: &Path) -> Option<(PathBuf, PathBuf)> {
+    let dot_git = root.join(".git");
+    if dot_git.is_dir() {
+        return Some((std::fs::canonicalize(dot_git).ok()?, PathBuf::new()));
+    }
+    enclosing_git_dir(root)
+}
+
+/// The local runtime state directory for the CutReady folder at `folder`
+/// (relative to the work tree) of the repository whose git dir is `git_dir`.
+/// Matches [`git_state_dir`] without requiring the folder to exist yet.
+pub fn folder_state_dir(git_dir: &Path, folder: &Path) -> PathBuf {
+    git_dir.join("cutready").join(folder)
+}
+
+/// Move a whole CutReady folder's local runtime state directory (every
+/// project's agent DB, memory, tabs, and sidebar order) from `from` to `to`,
+/// which may be nested in either direction. The directory moves with one
+/// `rename`, so a database a live run holds open refuses the move up front.
+/// Refuses, without changing anything, when `to` already holds other state.
+/// On failure every completed step is undone.
+pub fn move_folder_state(from: &Path, to: &Path) -> Result<(), ProjectError> {
+    if from == to || !from.exists() {
+        return Ok(());
+    }
+    let io = |e: std::io::Error| ProjectError::Io(e.to_string());
+    let occupied = || {
+        ProjectError::Io(format!(
+            "Refusing to move project state: {} already holds other state",
+            to.display()
+        ))
+    };
+    let staging = |anchor: &Path| {
+        let name = anchor
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| "cutready".into());
+        anchor.with_file_name(format!("{name}.moving-{}", uuid::Uuid::new_v4().simple()))
+    };
+
+    if to.starts_with(from) {
+        // Deeper (root → subfolder): park the state beside itself, then nest it.
+        if to.exists() {
+            return Err(occupied());
+        }
+        let parked = staging(from);
+        std::fs::rename(from, &parked).map_err(io)?;
+        let placed = to
+            .parent()
+            .map_or(Ok(()), std::fs::create_dir_all)
+            .and_then(|()| std::fs::rename(&parked, to));
+        if let Err(err) = placed {
+            remove_empty_dirs(to.parent(), from.parent());
+            return Err(match std::fs::rename(&parked, from) {
+                Ok(()) => io(err),
+                Err(_) => ProjectError::Io(format!(
+                    "Could not move project state ({err}); it is parked at {}",
+                    parked.display()
+                )),
+            });
+        }
+        return Ok(());
+    }
+
+    if from.starts_with(to) {
+        // Shallower (subfolder → root): `to` may only hold the path to `from`.
+        if !only_holds(to, from) {
+            return Err(occupied());
+        }
+        let parked = staging(to);
+        std::fs::rename(from, &parked).map_err(io)?;
+        remove_empty_dirs(from.parent(), to.parent());
+        let placed = if to.exists() {
+            Err(std::io::Error::other(format!(
+                "{} is not empty",
+                to.display()
+            )))
+        } else {
+            std::fs::rename(&parked, to)
+        };
+        if let Err(err) = placed {
+            let restored = from
+                .parent()
+                .map_or(Ok(()), std::fs::create_dir_all)
+                .and_then(|()| std::fs::rename(&parked, from));
+            return Err(match restored {
+                Ok(()) => io(err),
+                Err(_) => ProjectError::Io(format!(
+                    "Could not move project state ({err}); it is parked at {}",
+                    parked.display()
+                )),
+            });
+        }
+        return Ok(());
+    }
+
+    // Disjoint (subfolder → subfolder).
+    if to.exists() {
+        if std::fs::read_dir(to).map_err(io)?.next().is_some() {
+            return Err(occupied());
+        }
+        std::fs::remove_dir(to).map_err(io)?;
+    }
+    if let Some(parent) = to.parent() {
+        std::fs::create_dir_all(parent).map_err(io)?;
+    }
+    std::fs::rename(from, to).map_err(io)?;
+    Ok(())
+}
+
+/// True when `dir` holds nothing but the directories leading to `keep`.
+fn only_holds(dir: &Path, keep: &Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    entries.into_iter().all(|entry| {
+        let Ok(entry) = entry else {
+            return false;
+        };
+        let path = entry.path();
+        path == keep || (keep.starts_with(&path) && path.is_dir() && only_holds(&path, keep))
+    })
+}
+
+/// Remove `dir` and its ancestors while they are empty, stopping before `stop`.
+fn remove_empty_dirs(dir: Option<&Path>, stop: Option<&Path>) {
+    let mut current = dir;
+    while let Some(path) = current {
+        if Some(path) == stop || std::fs::remove_dir(path).is_err() {
+            break;
+        }
+        current = path.parent();
+    }
+}
+
+/// After the root's content moved into `new_root`, bring along CutReady's own
+/// untracked metadata (`.cutready/` settings, recordings, and legacy `.chats/`)
+/// that Git leaves at the root. Files Git tracks and files the destination
+/// already has stay put and are returned, relative to `old_root`.
+pub fn carry_root_metadata(old_root: &Path, new_root: &Path) -> Vec<PathBuf> {
+    let index = git2::Repository::open(old_root)
+        .and_then(|repo| repo.index())
+        .ok();
+    let tracked = |relative: &Path| {
+        let key = relative.to_string_lossy().replace('\\', "/");
+        index
+            .as_ref()
+            .is_some_and(|index| index.get_path(Path::new(&key), 0).is_some())
+    };
+    let mut left_behind = Vec::new();
+    for folder in [".cutready", ".chats"] {
+        let source = old_root.join(folder);
+        if !source.is_dir() {
+            continue;
+        }
+        let mut stack = vec![source.clone()];
+        let mut dirs = Vec::new();
+        while let Some(dir) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            dirs.push(dir);
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let Ok(relative) = path.strip_prefix(old_root) else {
+                    continue;
+                };
+                let is_dir = entry.file_type().is_ok_and(|kind| kind.is_dir());
+                if is_dir {
+                    stack.push(path);
+                    continue;
+                }
+                let target = new_root.join(relative);
+                let moved = !tracked(relative)
+                    && target.symlink_metadata().is_err()
+                    && target
+                        .parent()
+                        .is_none_or(|parent| std::fs::create_dir_all(parent).is_ok())
+                    && std::fs::rename(&path, &target).is_ok();
+                if !moved {
+                    left_behind.push(relative.to_path_buf());
+                }
+            }
+        }
+        for dir in dirs.iter().rev() {
+            let _ = std::fs::remove_dir(dir);
+        }
+    }
+    left_behind
 }
 
 /// Workspace state persisted across app restarts.
@@ -2802,6 +3269,9 @@ pub enum ProjectError {
     PathTraversal(String),
     #[error("{0}")]
     Locked(String),
+    /// A Draftline refusal serialized as its Tauri command error JSON.
+    #[error("{0}")]
+    Draftline(String),
 }
 
 impl From<sketch_edits::SketchEditError> for ProjectError {
@@ -2823,6 +3293,336 @@ mod tests {
         let view = init_project_folder(&root).unwrap();
         assert_eq!(view.name, "My Demo");
         assert!(root.join(".git").exists());
+    }
+
+    /// The committed root `.draftline` marker that names the managed folder.
+    fn folder_marker(repo_root: &Path) -> serde_json::Value {
+        let marker = std::fs::read_to_string(repo_root.join(".draftline"))
+            .expect("Draftline writes the folder marker on first open");
+        serde_json::from_str(&marker).unwrap()
+    }
+
+    #[test]
+    fn multi_project_workspace_always_opens_draftline_at_repo_root() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path().join("workspace");
+        init_project_folder(&root).unwrap();
+        let alpha = create_project_in_repo(&root, "Alpha", None).unwrap();
+        let beta = create_project_in_repo(&root, "Beta", None).unwrap();
+
+        for entry in [&alpha, &beta, &alpha, &beta] {
+            let (repo, projects) = open_repo(&root).unwrap();
+            assert_eq!(projects.len(), 2);
+            let view = ProjectView::in_repo(repo.root.clone(), &entry.path, entry.name.clone());
+            assert!(!view.hybrid);
+            assert_eq!(view.repo_root, root);
+
+            let adapter = CutReadyDraftlineAdapter::open_project(&view.repo_root).unwrap();
+            adapter.changed_files().unwrap();
+            let change = crate::engine::draftline_adapter::StructureChange::begin(
+                &view.repo_root,
+                "Edit project",
+                [view.root.clone()],
+            )
+            .unwrap();
+            std::fs::write(view.root.join("notes").join("plan.md"), "# Plan\n").unwrap();
+            change
+                .finish(&view.repo_root, Err("no profile".into()))
+                .unwrap();
+        }
+
+        assert_eq!(folder_marker(&root)["folder"], ".");
+    }
+
+    #[test]
+    fn second_hybrid_folder_in_same_checkout_is_refused_with_claimed_folder() {
+        let tmp = TempDir::new().unwrap();
+        let code = tmp.path().join("contoso-app");
+        let repo = git2::Repository::init(&code).unwrap();
+        std::fs::write(code.join("README.md"), "# Contoso\n").unwrap();
+        {
+            let mut index = repo.index().unwrap();
+            index.add_path(Path::new("README.md")).unwrap();
+            index.write().unwrap();
+            let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+            let signature = git2::Signature::now("Dev", "dev@example.com").unwrap();
+            repo.commit(Some("HEAD"), &signature, &signature, "Init", &tree, &[])
+                .unwrap();
+        }
+        let first = code.join("cutready");
+        let second = code.join("marketing");
+        for folder in [&first, &second] {
+            std::fs::create_dir_all(folder).unwrap();
+            std::fs::write(folder.join("intro.sk"), r#"{"title":"Intro"}"#).unwrap();
+        }
+
+        open_repo(&first).unwrap();
+        assert_eq!(folder_marker(&code)["folder"], "cutready");
+
+        let refused = |error: ProjectError| match error {
+            ProjectError::Draftline(json) => {
+                let error: serde_json::Value = serde_json::from_str(&json).unwrap();
+                assert_eq!(error["code"], "folder_is_elsewhere");
+                assert_eq!(error["details"]["folder"], "cutready");
+            }
+            other => panic!("expected a folder-is-elsewhere refusal, got {other:?}"),
+        };
+        refused(open_repo(&second).unwrap_err());
+        let new_folder = code.join("new-demo");
+        refused(init_project_folder(&new_folder).unwrap_err());
+        assert!(!new_folder.exists(), "refused new project leaves no folder");
+
+        // The claimed folder keeps working.
+        open_repo(&first).unwrap();
+    }
+
+    #[test]
+    fn root_content_moved_into_a_subfolder_names_and_adopts_it() {
+        let tmp = TempDir::new().unwrap();
+        let code = tmp.path().join("demo");
+        let repo = git2::Repository::init(&code).unwrap();
+        let commit_all = |message: &str| {
+            let mut index = repo.index().unwrap();
+            index
+                .add_all(["*"], git2::IndexAddOption::DEFAULT, None)
+                .unwrap();
+            index.update_all(["*"], None).unwrap();
+            index.write().unwrap();
+            let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+            let signature = git2::Signature::now("Dev", "dev@example.com").unwrap();
+            let parents = repo
+                .head()
+                .ok()
+                .and_then(|head| head.peel_to_commit().ok())
+                .into_iter()
+                .collect::<Vec<_>>();
+            let parents = parents.iter().collect::<Vec<_>>();
+            repo.commit(
+                Some("HEAD"),
+                &signature,
+                &signature,
+                message,
+                &tree,
+                &parents,
+            )
+            .unwrap();
+        };
+        std::fs::write(code.join("intro.sk"), r#"{"title":"Intro"}"#).unwrap();
+        std::fs::write(code.join("notes.md"), "# Notes\n").unwrap();
+        open_repo(&code).unwrap();
+        commit_all("Demo");
+        assert_eq!(folder_marker(&code)["folder"], ".");
+
+        let sub = code.join("cutready");
+        std::fs::create_dir_all(&sub).unwrap();
+        for name in ["intro.sk", "notes.md"] {
+            std::fs::rename(code.join(name), sub.join(name)).unwrap();
+        }
+        std::fs::create_dir_all(code.join("src")).unwrap();
+        std::fs::write(code.join("src").join("app.rs"), "fn main() {}\n").unwrap();
+        commit_all("Move demo into cutready/ and add code");
+
+        match open_repo(&code).unwrap_err() {
+            ProjectError::Draftline(json) => {
+                let error: serde_json::Value = serde_json::from_str(&json).unwrap();
+                assert_eq!(error["code"], PROJECT_FOLDER_RENAMED);
+                assert_eq!(error["details"]["moved_root"], true);
+                assert_eq!(error["details"]["to"], "cutready");
+                assert_eq!(
+                    error["details"]["suggested"],
+                    sub.to_string_lossy().as_ref()
+                );
+            }
+            other => panic!("expected a moved-root prompt, got {other:?}"),
+        }
+        // Keeping the root is the user's call; it opens without moving anything.
+        open_repo_with(&code, true).unwrap();
+        assert_eq!(folder_marker(&code)["folder"], ".");
+
+        open_repo(&sub).unwrap();
+        assert_eq!(folder_marker(&code)["folder"], "cutready");
+        assert_eq!(
+            std::fs::read_to_string(code.join("src").join("app.rs")).unwrap(),
+            "fn main() {}\n"
+        );
+    }
+
+    #[test]
+    fn renamed_hybrid_folder_names_its_new_location() {
+        let tmp = TempDir::new().unwrap();
+        let code = tmp.path().join("contoso-app");
+        let repo = git2::Repository::init(&code).unwrap();
+        std::fs::write(code.join("README.md"), "# Contoso\n").unwrap();
+        let commit_all = |message: &str| {
+            let mut index = repo.index().unwrap();
+            index
+                .add_all(["*"], git2::IndexAddOption::DEFAULT, None)
+                .unwrap();
+            index.update_all(["*"], None).unwrap();
+            index.write().unwrap();
+            let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+            let signature = git2::Signature::now("Dev", "dev@example.com").unwrap();
+            let parents = repo
+                .head()
+                .ok()
+                .and_then(|head| head.peel_to_commit().ok())
+                .into_iter()
+                .collect::<Vec<_>>();
+            let parents = parents.iter().collect::<Vec<_>>();
+            repo.commit(
+                Some("HEAD"),
+                &signature,
+                &signature,
+                message,
+                &tree,
+                &parents,
+            )
+            .unwrap();
+        };
+        commit_all("Init");
+        let old = code.join("cutready");
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join("intro.sk"), r#"{"title":"Intro"}"#).unwrap();
+        std::fs::write(old.join("outro.sk"), r#"{"title":"Outro"}"#).unwrap();
+        open_repo(&old).unwrap();
+        commit_all("Add demo");
+
+        let new = code.join("showcase");
+        std::fs::rename(&old, &new).unwrap();
+        commit_all("Rename demo folder");
+
+        match open_repo(&old).unwrap_err() {
+            ProjectError::Draftline(json) => {
+                let error: serde_json::Value = serde_json::from_str(&json).unwrap();
+                assert_eq!(error["code"], PROJECT_FOLDER_RENAMED);
+                assert_eq!(error["details"]["folder"], "cutready");
+                assert_eq!(error["details"]["to"], "showcase");
+            }
+            other => panic!("expected a renamed-folder refusal, got {other:?}"),
+        }
+        assert!(!old.exists(), "probing must not recreate the old folder");
+
+        let typo = code.join("cutreddy");
+        assert!(matches!(
+            open_repo(&typo).unwrap_err(),
+            ProjectError::NotFound(_)
+        ));
+        let other = code.join("docs");
+        std::fs::create_dir_all(&other).unwrap();
+        assert!(open_repo(&other).is_err(), "another folder is not adopted");
+        assert_eq!(folder_marker(&code)["folder"], "cutready");
+
+        open_repo(&new).unwrap();
+        assert_eq!(folder_marker(&code)["folder"], "showcase");
+    }
+
+    fn code_repo(tmp: &TempDir) -> PathBuf {
+        let code = tmp.path().join("contoso-app");
+        let repo = git2::Repository::init(&code).unwrap();
+        std::fs::create_dir_all(code.join("src")).unwrap();
+        std::fs::write(code.join("src").join("main.rs"), "fn main() {}\n").unwrap();
+        std::fs::write(code.join("Cargo.toml"), "[package]\nname = \"contoso\"\n").unwrap();
+        std::fs::write(code.join("README.md"), "# Contoso\n").unwrap();
+        let mut index = repo.index().unwrap();
+        index
+            .add_all(["*"], git2::IndexAddOption::DEFAULT, None)
+            .unwrap();
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let signature = git2::Signature::now("Dev", "dev@example.com").unwrap();
+        repo.commit(Some("HEAD"), &signature, &signature, "Init", &tree, &[])
+            .unwrap();
+        code
+    }
+
+    fn not_a_project(error: ProjectError) -> serde_json::Value {
+        match error {
+            ProjectError::Draftline(json) => {
+                let error: serde_json::Value = serde_json::from_str(&json).unwrap();
+                assert_eq!(error["code"], NOT_A_CUTREADY_PROJECT);
+                error["details"].clone()
+            }
+            other => panic!("expected a not-a-CutReady-project refusal, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn code_repository_root_is_not_adopted_without_confirmation() {
+        let tmp = TempDir::new().unwrap();
+        let code = code_repo(&tmp);
+        let head = git2::Repository::open(&code)
+            .unwrap()
+            .head()
+            .unwrap()
+            .target();
+
+        let details = not_a_project(open_repo(&code).unwrap_err());
+        assert_eq!(
+            PathBuf::from(details["suggested"].as_str().unwrap()),
+            code.join("cutready")
+        );
+        assert_eq!(details["suggested_exists"], false);
+        assert!(!code.join(".draftline").exists(), "refusal writes nothing");
+        assert!(!code.join(".cutready").exists(), "refusal writes nothing");
+        let after = git2::Repository::open(&code)
+            .unwrap()
+            .head()
+            .unwrap()
+            .target();
+        assert_eq!(head, after, "refusal commits nothing");
+
+        // A source folder inside the repository is refused too, pointing at the root.
+        let details = not_a_project(open_repo(&code.join("src")).unwrap_err());
+        assert_eq!(PathBuf::from(details["repository"].as_str().unwrap()), code);
+        assert_eq!(
+            PathBuf::from(details["suggested"].as_str().unwrap()),
+            code.join("cutready")
+        );
+
+        // The suggested subfolder becomes a hybrid project.
+        let view = init_project_folder(&code.join("cutready")).unwrap();
+        assert_eq!(view.root, code.join("cutready"));
+        assert_eq!(folder_marker(&code)["folder"], "cutready");
+    }
+
+    #[test]
+    fn confirmed_adoption_opens_an_unrecognized_folder() {
+        let tmp = TempDir::new().unwrap();
+        let code = code_repo(&tmp);
+        let (repo, projects) = open_repo_with(&code, true).unwrap();
+        assert_eq!(repo.root, code);
+        assert_eq!(projects.len(), 1);
+        // Once managed, it opens without asking again.
+        open_repo(&code).unwrap();
+    }
+
+    #[test]
+    fn existing_cutready_folders_open_without_confirmation() {
+        let tmp = TempDir::new().unwrap();
+
+        // A legacy project with sketches beside other files.
+        let legacy = tmp.path().join("legacy");
+        std::fs::create_dir_all(legacy.join("assets")).unwrap();
+        std::fs::write(legacy.join("intro.sk"), r#"{"title":"Intro"}"#).unwrap();
+        std::fs::write(legacy.join("assets").join("logo.ai"), "x").unwrap();
+        open_repo(&legacy).unwrap();
+
+        // A notes-only project.
+        let notes = tmp.path().join("notes-only");
+        std::fs::create_dir_all(notes.join("screenshots")).unwrap();
+        std::fs::write(notes.join("plan.md"), "# Plan\n").unwrap();
+        open_repo(&notes).unwrap();
+
+        // A project with only CutReady metadata.
+        let meta = tmp.path().join("meta");
+        std::fs::create_dir_all(meta.join(".cutready")).unwrap();
+        std::fs::write(meta.join("budget.xlsx"), "x").unwrap();
+        open_repo(&meta).unwrap();
+
+        // An empty folder.
+        let empty = tmp.path().join("empty");
+        std::fs::create_dir_all(&empty).unwrap();
+        open_repo(&empty).unwrap();
     }
 
     #[test]
@@ -3263,12 +4063,9 @@ mod tests {
         std::fs::create_dir_all(root.join("chat-artifacts")).unwrap();
         std::fs::write(root.join("chat-artifacts/old.cv"), "{}").unwrap();
 
-        let result = rename_project_asset(
-            root,
-            "chat-artifacts/old.cv",
-            "chat-artifacts/renamed.cv",
-        )
-        .unwrap();
+        let result =
+            rename_project_asset(root, "chat-artifacts/old.cv", "chat-artifacts/renamed.cv")
+                .unwrap();
 
         assert!(!root.join("chat-artifacts/old.cv").exists());
         assert!(root.join("chat-artifacts/renamed.cv").exists());
@@ -4099,6 +4896,40 @@ Some text
     }
 
     #[test]
+    fn git_state_dir_for_hybrid_folder_uses_enclosing_git_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let code = tmp.path().join("contoso-app");
+        git2::Repository::init(&code).unwrap();
+        let folder = code.join("cutready");
+        std::fs::create_dir_all(folder.join("alpha")).unwrap();
+
+        let git_dir = std::fs::canonicalize(code.join(".git")).unwrap();
+        assert_eq!(
+            git_state_dir(&folder, &folder),
+            git_dir.join("cutready").join("cutready")
+        );
+        assert_eq!(
+            git_state_dir(&folder, &folder.join("alpha")),
+            git_dir.join("cutready").join("cutready").join("alpha")
+        );
+
+        let db = crate::engine::agent_state::AgentStateStore::ensure_database_for_project(
+            &folder, &folder,
+        )
+        .unwrap();
+        assert!(db.starts_with(&git_dir));
+        assert!(!folder.join(".git").exists());
+    }
+
+    #[test]
+    fn git_state_dir_keeps_standalone_layout_when_folder_has_git_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("demo");
+        git2::Repository::init(&root).unwrap();
+        assert_eq!(git_state_dir(&root, &root), root.join(".git/cutready"));
+    }
+
+    #[test]
     fn git_state_dir_multi_project() {
         let repo = PathBuf::from("/repo");
         let project = PathBuf::from("/repo/projects/demo");
@@ -4211,6 +5042,66 @@ Some text
             std::fs::read_to_string(beta_state.join("agent-state.db")).unwrap(),
             "pre-existing"
         );
+    }
+
+    #[test]
+    fn move_folder_state_refuses_occupied_destinations_in_every_direction() {
+        let tmp = TempDir::new().unwrap();
+        let base = tmp.path().join("cutready");
+        let seed = |dir: &Path| {
+            std::fs::create_dir_all(dir).unwrap();
+            std::fs::write(dir.join("agent-state.db"), "live").unwrap();
+        };
+
+        // Deeper: another project's state already sits where the root's would nest.
+        seed(&base);
+        seed(&base.join("cutready"));
+        assert!(move_folder_state(&base, &base.join("cutready")).is_err());
+        assert_eq!(
+            std::fs::read_to_string(base.join("agent-state.db")).unwrap(),
+            "live"
+        );
+        std::fs::remove_dir_all(&base).unwrap();
+
+        // Shallower: the root's state dir holds something besides the path down.
+        seed(&base.join("a"));
+        std::fs::write(base.join("stray.json"), "{}").unwrap();
+        assert!(move_folder_state(&base.join("a"), &base).is_err());
+        assert!(base.join("a/agent-state.db").exists());
+        std::fs::remove_dir_all(&base).unwrap();
+
+        // Disjoint: the destination already has state.
+        seed(&base.join("a"));
+        seed(&base.join("b"));
+        assert!(move_folder_state(&base.join("a"), &base.join("b")).is_err());
+        assert!(base.join("a/agent-state.db").exists());
+    }
+
+    #[test]
+    fn move_folder_state_round_trips_between_root_and_subfolder() {
+        let tmp = TempDir::new().unwrap();
+        let base = tmp.path().join("cutready");
+        std::fs::create_dir_all(base.join("alpha")).unwrap();
+        std::fs::write(base.join("agent-state.db"), "root").unwrap();
+        std::fs::write(base.join("alpha/order.json"), "[]").unwrap();
+
+        let nested = base.join("demos").join("launch");
+        move_folder_state(&base, &nested).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(nested.join("agent-state.db")).unwrap(),
+            "root"
+        );
+        assert!(nested.join("alpha/order.json").exists());
+        assert!(!base.join("agent-state.db").exists());
+
+        move_folder_state(&nested, &base).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(base.join("agent-state.db")).unwrap(),
+            "root"
+        );
+        assert!(base.join("alpha/order.json").exists());
+        assert!(!base.join("demos").exists());
+        assert_eq!(std::fs::read_dir(tmp.path()).unwrap().count(), 1);
     }
 
     #[test]

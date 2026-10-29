@@ -10,7 +10,7 @@ use tauri_plugin_store::StoreExt;
 
 use crate::engine::{
     agent_state::AgentStateStore,
-    draftline_adapter::{CutReadyDraftlineAdapter, StructureChange, StructureSnapshot},
+    draftline_adapter::{StructureChange, StructureSnapshot},
     project,
 };
 use crate::models::script::{ProjectEntry, ProjectView, RecentProject, RepoView};
@@ -111,13 +111,15 @@ pub async fn create_project_folder(
 #[auditaur_command(skip_all, err)]
 pub async fn open_project_folder(
     path: String,
+    adopt: Option<bool>,
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<ProjectView, String> {
     let root = PathBuf::from(&path);
 
     // Always set repo view
-    let (repo, projects) = project::open_repo(&root).map_err(|e| e.to_string())?;
+    let (repo, projects) =
+        project::open_repo_with(&root, adopt.unwrap_or(false)).map_err(|e| e.to_string())?;
     {
         let mut repo_lock = state.current_repo.lock().map_err(|e| e.to_string())?;
         *repo_lock = Some(repo);
@@ -1231,7 +1233,7 @@ pub async fn set_workspace_settings(
 
 /// Check if any recent project was cloned from a given GitHub repo.
 ///
-/// Uses Draftline remotes to match `github.com/{owner}/{repo}`. Returns the path
+/// Uses the project's git remotes to match `github.com/{owner}/{repo}`. Returns the path
 /// if found and the folder still exists on disk.
 #[tauri::command]
 pub async fn resolve_deep_link(
@@ -1252,13 +1254,12 @@ pub async fn resolve_deep_link(
         if !path.exists() {
             continue;
         }
-        match CutReadyDraftlineAdapter::open_project(&path) {
-            Ok(adapter) => {
-                let remotes = adapter.remotes().map_err(|error| error.to_string())?;
-                if remotes.iter().any(|remote| {
-                    remote
-                        .url
-                        .to_lowercase()
+        // Read remotes without opening Draftline: opening would claim the
+        // checkout's single workspace for a folder the user isn't opening.
+        match crate::engine::draftline_adapter::read_remote_urls(&path) {
+            Ok(urls) => {
+                if urls.iter().any(|url| {
+                    url.to_lowercase()
                         .trim_end_matches(".git")
                         .contains(&target)
                 }) {
@@ -1269,7 +1270,7 @@ pub async fn resolve_deep_link(
                 tracing::warn!(
                     path = %path.display(),
                     error = %error,
-                    "Skipping recent project during deep-link resolution because Draftline could not open it"
+                    "Skipping recent project during deep-link resolution because its git remotes could not be read"
                 );
             }
         }

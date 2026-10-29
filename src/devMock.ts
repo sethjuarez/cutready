@@ -14,6 +14,8 @@ const MOCK_PROJECT: ProjectView = {
   root: "C:/mock-project",
   name: "Demo Project",
   repo_root: "C:/mock-project",
+  git_root: "C:/mock-project",
+  hybrid: false,
 };
 
 const MOCK_SKETCH: Sketch = {
@@ -393,8 +395,23 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
           recovery: null,
           state_may_be_inconsistent: false,
         },
+        inspection: {
+          workspace_id: { root: "/mock" },
+          sharing_mode: "local_only",
+          current_variation: "main",
+          remotes: [],
+          dirty: { is_dirty: false, files: [] },
+          recovery: null,
+          operation_lock: { state: "unlocked" },
+          support_refs: {},
+          diagnostics: [],
+          safe_next_actions: ["normal_work"],
+        },
+        operation_lock: { state: "unlocked", metadata: null, is_stale: false, can_clear: false, diagnostics: [] },
         diagnostics: [],
       };
+    case "filtered_files":
+      return [];
     case "get_full_history":
       return [
         {
@@ -515,194 +532,6 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "preview_version_file":
     case "preview_workspace_file":
       return { path: (args as { request?: { path?: string } })?.request?.path ?? "sketches/demo-introduction.sk", content: JSON.stringify(MOCK_SKETCH), is_binary: false };
-    case "preflight_milestone_merge":
-      return {
-        sync_status: {
-          remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
-          variation: "main",
-          ahead: 2,
-          behind: 0,
-          state: "LocalAhead",
-          incoming: [],
-        },
-        dirty_files: [],
-        token: {
-          remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
-          variation: "main",
-          local_oid: "def456def456def456def456def456def456def4",
-          remote_oid: "abc123abc123abc123abc123abc123abc123abc1",
-          merge_base_oid: "abc123abc123abc123abc123abc123abc123abc1",
-        },
-        can_create_milestone: true,
-        unpublished_versions: 2,
-        first_parent: "abc123abc123abc123abc123abc123abc123abc1",
-        second_parent: "def456def456def456def456def456def456def4",
-        changed_workspace: false,
-      };
-    case "create_milestone_merge":
-      return {
-        preflight: {
-          sync_status: {
-            remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
-            variation: "main",
-            ahead: 2,
-            behind: 0,
-            state: "LocalAhead",
-            incoming: [],
-          },
-          dirty_files: [],
-          token: {
-            remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
-            variation: "main",
-            local_oid: "def456def456def456def456def456def456def4",
-            remote_oid: "abc123abc123abc123abc123abc123abc123abc1",
-            merge_base_oid: "abc123abc123abc123abc123abc123abc123abc1",
-          },
-          can_create_milestone: true,
-          unpublished_versions: 2,
-          first_parent: "abc123abc123abc123abc123abc123abc123abc1",
-          second_parent: "def456def456def456def456def456def456def4",
-          changed_workspace: false,
-        },
-        merge: {
-          version: {
-            id: "merge456merge456merge456merge456merge456merge456",
-            label: (args as { request?: { label?: string } })?.request?.label ?? "Shared milestone",
-            author: { name: "CutReady", email: "app@cutready.local" },
-            committer: { name: "CutReady", email: "app@cutready.local" },
-            time_seconds: Math.floor(Date.now() / 1000),
-            parent_ids: [
-              "abc123abc123abc123abc123abc123abc123abc1",
-              "def456def456def456def456def456def456def4",
-            ],
-          },
-          first_parent: "abc123abc123abc123abc123abc123abc123abc1",
-          second_parent: "def456def456def456def456def456def456def4",
-          preserved_versions: 2,
-        },
-        postconditions: { workspace_changed: false, active_variation: "main", dirty_files: [] },
-      };
-    case "preview_history_cleanup": {
-      const request = (args as { request?: { cleanup?: { mode?: { milestones?: Array<{ title?: string; include_range?: { start?: string; end?: string } }> } } } })?.request;
-      const milestone = request?.cleanup?.mode?.milestones?.[0];
-      const oldHead = milestone?.include_range?.end ?? "def456def456def456def456def456def456def4";
-      const newHead = "clean456clean456clean456clean456clean456clean456";
-      return {
-        plan_id: "mock-cleanup-plan",
-        target_variation: "main",
-        old_head: oldHead,
-        new_head: newHead,
-        preview_ref: "refs/draftline/previews/history-cleanup/main/mock-cleanup-plan",
-        planned_backup_ref: "refs/draftline/backups/history-cleanup/main/mock-cleanup-plan",
-        operations: [{
-          title: milestone?.title ?? "Compacted history",
-          description: null,
-          old_versions: [milestone?.include_range?.start ?? "abc123abc123abc123abc123abc123abc123abc1", oldHead],
-          new_version: newHead,
-        }],
-        graph_diff: {
-          old_head: oldHead,
-          new_head: newHead,
-          old_commit_count: 2,
-          new_commit_count: 1,
-          squashed_commit_count: 2,
-        },
-        commit_map: [{
-          old: oldHead,
-          new: newHead,
-          disposition: { kind: "squashed_into", new_id: newHead },
-        }],
-        snapshot_map: [{
-          old: oldHead,
-          new: newHead,
-          disposition: { kind: "squashed_into", new_id: newHead },
-        }],
-        warnings: [],
-      };
-    }
-    case "apply_history_cleanup":
-      return {
-        plan_id: (args as { request?: { plan_id?: string } })?.request?.plan_id ?? "mock-cleanup-plan",
-        old_head: "def456def456def456def456def456def456def4",
-        new_head: "clean456clean456clean456clean456clean456clean456",
-        backup_refs: ["refs/draftline/backups/history-cleanup/main/mock-cleanup-plan"],
-        ref_updates: [{
-          name: "main",
-          old: "def456def456def456def456def456def456def4",
-          new: "clean456clean456clean456clean456clean456clean456",
-        }],
-        commit_map: [{
-          old: "def456def456def456def456def456def456def4",
-          new: "clean456clean456clean456clean456clean456clean456",
-          disposition: { kind: "squashed_into", new_id: "clean456clean456clean456clean456clean456clean456" },
-        }],
-        snapshot_map: [{
-          old: "def456def456def456def456def456def456def4",
-          new: "clean456clean456clean456clean456clean456clean456",
-          disposition: { kind: "squashed_into", new_id: "clean456clean456clean456clean456clean456clean456" },
-        }],
-        warnings: [],
-      };
-    case "preflight_history_cleanup_remote_impact":
-      return {
-        remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
-        variation: "main",
-        tracking_ref: "refs/remotes/origin/main",
-        upstream_head: "def456def456def456def456def456def456def4",
-        local_head: "clean456clean456clean456clean456clean456clean456",
-        replacement_head: "clean456clean456clean456clean456clean456clean456",
-        selected: { published_count: 1, private_count: 0, published_versions: ["def456def456def456def456def456def456def4"], private_versions: [] },
-        descendants: { published_count: 0, private_count: 0, published_versions: [], private_versions: [] },
-        publish_status: "shared_history_rewrite_required",
-        warnings: [],
-      };
-    case "preflight_publish_history_cleanup":
-      return {
-        plan_id: (args as { request?: { plan_id?: string } })?.request?.plan_id ?? "mock-cleanup-plan",
-        remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
-        variation: "main",
-        expected_remote_oid: "def456def456def456def456def456def456def4",
-        replacement_oid: "clean456clean456clean456clean456clean456clean456",
-        remote_impact: {
-          remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
-          variation: "main",
-          tracking_ref: "refs/remotes/origin/main",
-          upstream_head: "def456def456def456def456def456def456def4",
-          local_head: "clean456clean456clean456clean456clean456clean456",
-          replacement_head: "clean456clean456clean456clean456clean456clean456",
-          selected: { published_count: 1, private_count: 0, published_versions: ["def456def456def456def456def456def456def4"], private_versions: [] },
-          descendants: { published_count: 0, private_count: 0, published_versions: [], private_versions: [] },
-          publish_status: "shared_history_rewrite_required",
-          warnings: [],
-        },
-        support_refs: [],
-        can_publish: true,
-        token: {
-          plan_id: (args as { request?: { plan_id?: string } })?.request?.plan_id ?? "mock-cleanup-plan",
-          remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
-          variation: "main",
-          expected_remote_oid: "def456def456def456def456def456def456def4",
-          replacement_oid: "clean456clean456clean456clean456clean456clean456",
-          support_ref_token: {
-            remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
-            refs: [],
-          },
-        },
-      };
-    case "publish_history_cleanup":
-      return {
-        plan_id: (args as { request?: { token?: { plan_id?: string } } })?.request?.token?.plan_id ?? "mock-cleanup-plan",
-        remote: (args as { request?: { token?: { remote?: string } } })?.request?.token?.remote ?? "origin",
-        variation: "main",
-        expected_remote_oid: "def456def456def456def456def456def456def4",
-        replacement_oid: "clean456clean456clean456clean456clean456clean456",
-        support_refs: [],
-        ref_updates: [{
-          name: "refs/heads/main",
-          old: "def456def456def456def456def456def456def4",
-          new: "clean456clean456clean456clean456clean456clean456",
-        }],
-      };
     case "resolve_deep_link":
       return null;
     case "save":
@@ -840,14 +669,6 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
           is_current: true,
         },
         postconditions: { errors: [] },
-      };
-    case "squash_versions":
-      return {
-        id: "squash456squash456squash456squash456squa",
-        label: (args as { request?: { label?: string } })?.request?.label ?? "Squashed draft",
-        author: { name: "You", email: "dev@example.com" },
-        saved_by: { name: "You", email: "dev@example.com" },
-        time_seconds: Math.floor(Date.now() / 1000),
       };
     case "get_sidebar_order":
       return { storyboards: [], sketches: [], notes: [] };
@@ -1648,6 +1469,18 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "fetch_remote":
     case "publish_current_variation":
       return null;
+    case "send_for_review": {
+      const request = (args as { request?: { remote?: string; base?: string | null } })?.request;
+      return {
+        remote: request?.remote ?? "origin",
+        variation: "cutready/main",
+        base: request?.base ?? "main",
+        created_variation: false,
+        published_versions: 1,
+        pull_request: { number: 42, url: "https://github.com/demo/contoso-app/pull/42" },
+        created_pull_request: true,
+      };
+    }
     case "apply_incoming":
       return { applied_count: 0 };
     case "merge_incoming":
@@ -1684,6 +1517,10 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         is_fast_forward: false,
         can_proceed: false,
       };
+    case "get_base_status":
+      // The mock project is standalone, so there is no base to fall behind.
+      return null;
+    case "preflight_merge_base":
     case "preflight_merge_incoming":
       return {
         sync_status: {

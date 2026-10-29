@@ -9,60 +9,64 @@ import {
   discardDraftlineFile,
   diffDraftlineVersions,
   fetchDraftlineRemote,
+  getDraftlineBaseStatus,
   getDraftlineSyncStatus,
   hasDraftlineShelf,
   hasDraftlineChanges,
-  isDraftlineHistoryCleanupBlockedError,
   isDraftlineVariationCreateConflictError,
   listDraftlineIncomingCommits,
   listDraftlineChangedFiles,
   listDraftlineGraphNodes,
-  listDraftlinePendingSnapshotCleanups,
   listDraftlineLargeChangedFiles,
   listDraftlineRemoteBranches,
   listDraftlineRemotes,
-  listDraftlineSnapshotCleanupCandidates,
   listDraftlineTimelines,
   listDraftlineVersions,
-  createDraftlineMilestoneMerge,
   preflightDraftlineIncoming,
+  preflightDraftlineMergeBase,
   preflightDraftlineMergeIncoming,
-  preflightDraftlineMilestoneMerge,
-  preflightDraftlinePublishSnapshotCleanup,
   preflightDraftlineSwitchVariation,
+  mergeDraftlineFromBase,
   mergeDraftlineIncoming,
   mergeDraftlineIncomingWithResolutions,
   publishDraftlineChanges,
-  publishDraftlinePendingSnapshotCleanup,
-  publishDraftlineSnapshotCleanup,
+  sendForReview as sendDraftlineForReview,
   popDraftlineShelf,
   preflightDraftlineRenameVariation,
-  applyDraftlineSnapshotCleanup,
-  preflightDraftlineUndoSnapshotCleanup,
-  previewDraftlineSnapshotCleanup,
   restoreDraftlineVersionAsNewSave,
   restoreDraftlineVersionAsNewSaveToVariation,
   renameDraftlineVariation,
   saveDraftlineVersion,
+  moveDraftlineProjectFolder,
   setDraftlineWorkspacePath,
   shelveDraftlineChanges,
   switchDraftlineVariation,
-  undoDraftlineSnapshotCleanup,
-  undoDraftlinePendingSnapshotCleanup,
-  abandonDraftlinePendingSnapshotCleanup,
+  HEALTHY_PROJECT,
+  clearDraftlineStaleLock,
+  dismissDraftlineRecovery,
+  inspectDraftlineProjectHealth,
+  resolveDraftlineRecovery,
+  retryDraftlineContentDownload,
+  type DraftlineProjectHealth,
   type DraftlineRestoreVersionTarget,
   type DraftlineMergeIncomingToken,
-  type DraftlineHistoryCleanupPreview,
-  type DraftlineHistoryCleanupPublishResult,
-  type DraftlineHistoryCompactionCandidates,
-  type DraftlineTimelineCleanupResult,
-  type DraftlinePendingHistoryCleanup,
+  type MoveProjectFolderResult,
 } from "../services/draftlineVersioning";
+import {
+  DraftlineErrorCode,
+  adoptionPromptFromError,
+  baseRenamedBranches,
+  draftlineErrorCode,
+  friendlyDraftlineErrorMessage,
+  mergeNeedsDeveloperMessage,
+  SAVE_BEFORE_MOVE_MESSAGE,
+  type AdoptionPrompt,
+} from "../services/draftlineErrors";
 import { recordActivityEntries } from "../services/telemetry";
 import { getGitHubAuthStatus } from "../services/githubSetup";
 import { useToastStore } from "./toastStore";
-import { cleanupRange, firstParentTimelineNodes } from "../utils/historyCleanupSelection";
 import { getStoryboardSketchPaths } from "../utils/storyboard";
+import { draftlinePathVariants } from "../utils/draftlinePaths";
 import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
 import type {
   BrowserProfile,
@@ -84,6 +88,7 @@ import type {
   RemoteBranchInfo,
   RemoteInfo,
   SyncStatus,
+  BaseStatus,
   IncomingCommit,
   DiffEntry,
   ConflictFile,
@@ -95,6 +100,13 @@ const suppressedEditorFlushPaths = new Set<string>();
 /** The Output panel keeps a rolling window; full history lives in telemetry/run state. */
 export const MAX_ACTIVITY_ENTRIES = 1000;
 export function errorMessage(error: unknown): string {
+  const code = draftlineErrorCode(error);
+  if (code === DraftlineErrorCode.RecoveryRequired || code === DraftlineErrorCode.WorkspaceLocked) {
+    // The message points at the recovery banner; make sure it's showing.
+    queueMicrotask(() => void useAppStore.getState().checkProjectHealth({ probeContent: false }));
+  }
+  const friendly = friendlyDraftlineErrorMessage(error);
+  if (friendly) return friendly;
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   if (error && typeof error === "object") {
@@ -111,21 +123,6 @@ export function errorMessage(error: unknown): string {
   return String(error);
 }
 
-export interface PrePushMilestonePrompt {
-  snapshotCount: number;
-  newestCommitId: string;
-  oldestCommitId: string;
-  latestSnapshotLabel: string;
-  suggestedLabel: string;
-  remoteName: string;
-}
-
-export type PrePushMilestoneDecision =
-  | { type: "milestone"; label: string }
-  | { type: "pushAsIs" }
-  | { type: "cancel" };
-
-let prePushMilestoneResolve: ((decision: PrePushMilestoneDecision) => void) | null = null;
 let remoteDetectionGeneration = 0;
 
 /**
@@ -155,34 +152,7 @@ function beginWorkspaceGeneration(path: string | null): void {
   setDraftlineWorkspacePath(path);
 }
 
-function isGeneratedSnapshotLabel(label: string): boolean {
-  return /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) (morning|afternoon|evening) \d{1,2}:\d{2}$/.test(label.trim());
-}
-
-function localPrePushMilestoneRange(nodes: GraphNode[], ahead: number | null | undefined): GraphNode[] | null {
-  if (!ahead || ahead < 2) return null;
-  const activeNodes = firstParentTimelineNodes(nodes);
-  if (activeNodes.length < ahead) return null;
-  const range = activeNodes.slice(0, ahead);
-  return range[0]?.is_head ? range : null;
-}
-
-function suggestedMilestoneLabel(nodes: GraphNode[]): string {
-  const meaningful = nodes
-    .map((node) => node.message.trim())
-    .find((label) => label && !isGeneratedSnapshotLabel(label));
-  return meaningful ?? "Shared milestone";
-}
-
-function cancelPendingPrePushMilestonePrompt() {
-  prePushMilestoneResolve?.({ type: "cancel" });
-  prePushMilestoneResolve = null;
-}
-
 export function remoteSyncErrorMessage(error: unknown): string {
-  if (isDraftlineHistoryCleanupBlockedError(error)) {
-    return PENDING_CLEANUP_INCOMING_MESSAGE;
-  }
   const message = errorMessage(error);
   const lower = message.toLowerCase();
   if (
@@ -196,37 +166,16 @@ export function remoteSyncErrorMessage(error: unknown): string {
   return message;
 }
 
-const PENDING_CLEANUP_INCOMING_MESSAGE =
-  "Publish or undo milestone history before getting incoming remote saves. Pulling first would change the local timeline and invalidate the milestone publish.";
-
-export const PENDING_CLEANUP_STALE_MESSAGE =
-  "Compacted history can't be published because snapshots were saved after it. Open the history graph and choose Stop sharing to keep syncing.";
-
-export function hasDraftlineErrorCode(error: unknown, code: string): boolean {
-  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === code;
-}
-
-export const HISTORY_CLEANUP_BUSY_MESSAGE =
-  "Another milestone history operation is still running. Wait for it to finish, then try again.";
-
 export const SYNC_IN_PROGRESS_MESSAGE = "A sync is already running. Wait for it to finish, then try again.";
 
-function isHistoryCleanupBusyError(error: unknown): boolean {
-  return error instanceof Error && error.message === HISTORY_CLEANUP_BUSY_MESSAGE;
-}
+/** Draftline error code: bringing in the base conflicts in files outside the CutReady folder. */
+export const MERGE_NEEDS_DEVELOPER = DraftlineErrorCode.MergeNeedsDeveloper;
 
-let historyCleanupOperationRunning = false;
+export { mergeNeedsDeveloperMessage };
 
-// Publish, undo and abandon act on the same pending plan; the check-and-set
-// runs before any await so callers that are still awaiting auth can't interleave.
-async function exclusiveHistoryCleanupOperation<T>(operation: () => Promise<T>): Promise<T> {
-  if (historyCleanupOperationRunning) throw new Error(HISTORY_CLEANUP_BUSY_MESSAGE);
-  historyCleanupOperationRunning = true;
-  try {
-    return await operation();
-  } finally {
-    historyCleanupOperationRunning = false;
-  }
+function isMergeNeedsDeveloperError(error: unknown): boolean {
+  if (draftlineErrorCode(error) === MERGE_NEEDS_DEVELOPER) return true;
+  return errorMessage(error).toLowerCase().includes("merge needs a developer");
 }
 
 export function suppressEditorFlush(relativePath: string) {
@@ -241,6 +190,26 @@ export function clearSuppressedEditorFlush(relativePath: string) {
   suppressedEditorFlushPaths.delete(normalizeRelativePath(relativePath));
 }
 
+type EditorFlush = () => Promise<unknown> | unknown;
+const editorFlushes = new Set<EditorFlush>();
+
+/** Editors with debounced writes register here so callers can write them out on demand. */
+export function registerEditorFlush(flush: EditorFlush): () => void {
+  editorFlushes.add(flush);
+  return () => {
+    editorFlushes.delete(flush);
+  };
+}
+
+/** Writes every editor's pending (debounced) changes to disk; rejects if any write failed. */
+export async function flushEditorWrites(): Promise<void> {
+  const results = await Promise.allSettled(Array.from(editorFlushes, async (flush) => flush()));
+  const failed = results.find((result) => result.status === "rejected" || result.value === false);
+  if (failed) {
+    throw new Error("CutReady couldn't save an open editor's latest changes. Nothing was moved; try again.");
+  }
+}
+
 function clearSuppressedEditorFlushes(relativePaths: string[]) {
   for (const relativePath of relativePaths) {
     clearSuppressedEditorFlush(relativePath);
@@ -249,6 +218,62 @@ function clearSuppressedEditorFlushes(relativePaths: string[]) {
 
 function isDocumentTab(tab: EditorTab): tab is EditorTab & { type: "sketch" | "storyboard" | "note" | "chat-artifact" } {
   return tab.type === "sketch" || tab.type === "storyboard" || tab.type === "note" || tab.type === "chat-artifact";
+}
+
+/**
+ * Runs an operation that rewrites managed files on disk (discard, shelve).
+ * Closes editors first so pending edits can't be flushed back over the result.
+ */
+async function rewriteWorkspaceFiles(
+  get: () => AppStoreState,
+  set: (partial: Partial<AppStoreState>) => void,
+  operation: () => Promise<void>,
+  failureLabel: string,
+): Promise<boolean> {
+  const suppressedPaths = Array.from(new Set([
+    ...get().openTabs.filter(isDocumentTab).map((tab) => tab.path),
+    ...get().splitTabs.filter(isDocumentTab).map((tab) => tab.path),
+    get().activeSketchPath,
+    get().activeStoryboardPath,
+    get().activeNotePath,
+    get().activeChatArtifactPath,
+  ].filter((path): path is string => !!path)));
+  try {
+    for (const path of suppressedPaths) suppressEditorFlush(path);
+    set({
+      activeSketch: null,
+      activeSketchPath: null,
+      activeStoryboard: null,
+      activeStoryboardPath: null,
+      activeNotePath: null,
+      activeNoteContent: null,
+      activeNoteLocked: false,
+      activeChatArtifactPath: null,
+    });
+    await operation();
+    await get().loadSketches();
+    await get().loadStoryboards();
+    await get().loadNotes();
+    await get().loadChatArtifacts();
+    set({
+      openTabs: [],
+      activeTabId: null,
+      splitTabs: [],
+      splitActiveTabId: null,
+      activeEditorGroup: "main",
+      editorReloadPath: null,
+    });
+    globalThis.setTimeout(() => clearSuppressedEditorFlushes(suppressedPaths), 100);
+    await get().checkDirty();
+    set({ syncError: null });
+    return true;
+  } catch (err) {
+    clearSuppressedEditorFlushes(suppressedPaths);
+    console.error(`${failureLabel}:`, err);
+    useToastStore.getState().show(`${failureLabel}: ${errorMessage(err)}`, 5000, "error");
+    await get().checkDirty();
+    return false;
+  }
 }
 
 function isDatabasePath(path: string): boolean {
@@ -268,34 +293,9 @@ function normalizeRelativePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\.\/+/, "").replace(/^\/+/, "").replace(/\/+$/, "");
 }
 
-function normalizeAbsolutePath(path: string): string {
-  return path.replace(/\\/g, "/").replace(/\/+$/, "");
-}
-
-function activeProjectScope(currentProject: ProjectView | null): string | null {
-  if (!currentProject) return null;
-  const root = normalizeAbsolutePath(currentProject.root);
-  const repoRoot = normalizeAbsolutePath(currentProject.repo_root);
-  if (root.toLowerCase() === repoRoot.toLowerCase()) return null;
-  const repoPrefix = `${repoRoot}/`;
-  if (!root.toLowerCase().startsWith(repoPrefix.toLowerCase())) return null;
-  return normalizeRelativePath(root.slice(repoPrefix.length));
-}
-
 function scopedPathVariants(filePath: string, currentProject: ProjectView | null) {
-  const normalized = normalizeRelativePath(filePath);
-  const scope = activeProjectScope(currentProject);
-  if (!scope) {
-    return { repoPath: normalized, projectPath: normalized };
-  }
-  if (normalized === scope) {
-    return { repoPath: normalized, projectPath: "" };
-  }
-  const scopePrefix = `${scope}/`;
-  if (normalized.startsWith(scopePrefix)) {
-    return { repoPath: normalized, projectPath: normalized.slice(scopePrefix.length) };
-  }
-  return { repoPath: `${scopePrefix}${normalized}`, projectPath: normalized };
+  const { draftlinePath, projectPath } = draftlinePathVariants(filePath, currentProject);
+  return { repoPath: draftlinePath, projectPath };
 }
 
 /** The panels / views available in the app. */
@@ -346,6 +346,14 @@ function buildShareUrl(remoteUrl: string, branch: string): string | null {
   return `https://github.com/${repo}/compare/${branch}?expand=1`;
 }
 
+function largeFilesSyncError(largeFiles: [string, number][]): string | null {
+  if (largeFiles.length === 0) return null;
+  const names = largeFiles
+    .map(([p, s]) => s > 0 ? `${p} (${(s / 1024 / 1024).toFixed(1)} MB)` : p)
+    .join(", ");
+  return `Large files detected: ${names}. Remove or add to .gitignore before pushing.`;
+}
+
 const GITHUB_REMOTE_AUTH_MESSAGE =
   "This project has a GitHub remote. Connect GitHub in Settings > Repository before syncing.";
 const GITHUB_REMOTE_AUTH_FAILED_MESSAGE =
@@ -371,74 +379,6 @@ async function ensureGitHubRemoteCredential(remote: RemoteInfo | null, notify = 
     console.warn("Could not confirm GitHub auth status before sync; continuing remote operation.", error);
     return true;
   }
-}
-
-function snapshotIdFromPreviewPath(path: string): string | null {
-  return path.startsWith("snapshot:") ? path.slice("snapshot:".length) : null;
-}
-
-function cleanupRewriteTarget(result: DraftlineTimelineCleanupResult, versionId: string): string | null | undefined {
-  const entry = result.snapshot_map.find((candidate) => candidate.old === versionId)
-    ?? result.commit_map.find((candidate) => candidate.old === versionId);
-  if (!entry) return undefined;
-
-  switch (entry.disposition.kind) {
-    case "preserved":
-    case "squashed_into":
-      return entry.disposition.new_id || entry.new || null;
-    case "dropped_as_noise":
-    case "orphaned_but_backed_up":
-    case "conflict_requires_user_choice":
-      return null;
-  }
-}
-
-function rewriteSnapshotPreviewTabs(
-  tabs: EditorTab[],
-  result: DraftlineTimelineCleanupResult,
-  idForPath: (type: EditorTab["type"], path: string) => string,
-): { tabs: EditorTab[]; remappedIds: Map<string, string | null>; changed: boolean } {
-  const remappedIds = new Map<string, string | null>();
-  const seen = new Set<string>();
-  const next: EditorTab[] = [];
-  let changed = false;
-
-  for (const tab of tabs) {
-    const snapshotId = tab.type === "snapshot-preview" ? snapshotIdFromPreviewPath(tab.path) : null;
-    const target = snapshotId ? cleanupRewriteTarget(result, snapshotId) : undefined;
-    if (target === null) {
-      remappedIds.set(tab.id, null);
-      changed = true;
-      continue;
-    }
-
-    const path = target && target !== snapshotId ? `snapshot:${target}` : tab.path;
-    const id = path === tab.path ? tab.id : idForPath(tab.type, path);
-    const title = path === tab.path || !target ? tab.title : `Snapshot: ${target.slice(0, 7)}`;
-    const key = `${tab.type}\u0000${path}`;
-    if (seen.has(key)) {
-      remappedIds.set(tab.id, id);
-      changed = true;
-      continue;
-    }
-    seen.add(key);
-    next.push(path === tab.path ? tab : { ...tab, id, path, title });
-    if (id !== tab.id) {
-      remappedIds.set(tab.id, id);
-      changed = true;
-    }
-  }
-
-  return { tabs: next, remappedIds, changed };
-}
-
-function remapActiveTabId(activeId: string | null, tabs: EditorTab[], remappedIds: Map<string, string | null>): string | null {
-  if (!activeId) return null;
-  if (!remappedIds.has(activeId)) {
-    return tabs.some((tab) => tab.id === activeId) ? activeId : tabs[0]?.id ?? null;
-  }
-  const mapped = remappedIds.get(activeId) ?? null;
-  return mapped && tabs.some((tab) => tab.id === mapped) ? mapped : tabs[0]?.id ?? null;
 }
 
 /** A project asset (screenshot or visual) with reference info. */
@@ -585,18 +525,14 @@ interface AppStoreState {
   showSecondaryPanel: boolean;
   /** Whether the snapshot name prompt should be shown (triggered by Ctrl+S). */
   snapshotPromptOpen: boolean;
+  /** Hybrid projects: pending "Send for review" prompt (pull request title). */
+  sendForReviewPrompt: { defaultTitle: string } | null;
   /** After saving a snapshot, navigate to this commit ID (used by nav-save flow). */
   pendingNavAfterSave: string | null;
   /** After saving a snapshot, switch to this branch. */
   pendingTimelineAfterSave: string | null;
   /** Branch created from a historical snapshot that has not recorded its first new save yet. */
   startedBranchFromSnapshot: { branchName: string; snapshotId: string } | null;
-  /** Most recent Draftline history cleanup result, used for guarded undo. */
-  lastHistoryCleanup: DraftlineTimelineCleanupResult | null;
-  /** Durable Draftline pending cleanup that blocks normal remote operations until resolved. */
-  pendingHistoryCleanup: DraftlinePendingHistoryCleanup | null;
-  /** Pre-push prompt for compressing unpublished local snapshots into one milestone. */
-  prePushMilestonePrompt: PrePushMilestonePrompt | null;
   /** Whether there are unsaved changes since the last snapshot. */
   isDirty: boolean;
   /** List of changed files since last snapshot (for Changes panel). */
@@ -605,6 +541,12 @@ interface AppStoreState {
   saving: boolean;
   /** Whether a stash (temporarily saved work) exists. */
   hasStash: boolean;
+  projectHealth: DraftlineProjectHealth;
+  projectHealthBusy: boolean;
+  /** A folder the user tried to open that isn't a CutReady project yet (e.g. a code repository). */
+  adoptionPrompt: AdoptionPrompt | null;
+  /** Whether the "Move project folder" dialog is open. */
+  moveFolderDialogOpen: boolean;
   /** Whether we are viewing a rewound snapshot (prev-tip exists). */
   isRewound: boolean;
 
@@ -617,10 +559,14 @@ interface AppStoreState {
   remoteBranchesLoading: boolean;
   /** Ahead/behind counts vs remote tracking branch. */
   syncStatus: SyncStatus | null;
+  /** Hybrid projects on a non-base branch: ahead/behind vs the remote base (e.g. `main`). */
+  baseStatus: BaseStatus | null;
   /** Whether a fetch/push/pull is in progress. */
   isSyncing: boolean;
   /** Last error from a sync operation. */
   syncError: string | null;
+  /** Publish found the remote renamed its default branch; rename this branch to match. */
+  baseRename: { from: string; to: string } | null;
   /** Incoming snapshots discovered by the latest fetch. */
   incomingCommits: IncomingCommit[];
   /** Share/PR URL for the latest successful share operation. */
@@ -740,7 +686,15 @@ interface AppStoreState {
   loadRecentProjects: () => Promise<void>;
   removeRecentProject: (path: string) => Promise<void>;
   createProject: (path: string) => Promise<void>;
-  openProject: (path: string) => Promise<void>;
+  openProject: (path: string, options?: { adopt?: boolean }) => Promise<void>;
+  /** Answer the adoption prompt: create the suggested CutReady folder, manage the folder as-is, or cancel. */
+  resolveAdoptionPrompt: (choice: "create" | "adopt" | "cancel") => Promise<void>;
+  setMoveFolderDialogOpen: (open: boolean) => void;
+  /**
+   * Move the project folder to `to` (relative to its repository) as one save,
+   * then reopen it there. Throws (without changing anything) when the move is refused.
+   */
+  moveProjectFolder: (to: string) => Promise<MoveProjectFolderResult>;
   closeProject: () => void;
 
   // ── Multi-project actions ──────────────────────────────────
@@ -881,16 +835,24 @@ interface AppStoreState {
   refreshChangedFiles: () => Promise<void>;
   /** Save a labeled version. Optional forkLabel for naming the old timeline when forking. */
   saveVersion: (label: string, forkLabel?: string) => Promise<void>;
-  /** Stash dirty working tree before browsing snapshots. */
-  stashChanges: () => Promise<void>;
+  /** Shelve all unsaved changes so the workspace is clean. False if nothing was shelved. */
+  stashChanges: () => Promise<boolean>;
   /** Discard all working-directory changes, resetting to last snapshot. */
   discardChanges: () => Promise<void>;
   /** Discard changes for one file. */
   discardFile: (filePath: string) => Promise<void>;
-  /** Pop stash (restore stashed work). */
+  /** Restore shelved changes into the workspace. */
   popStash: () => Promise<void>;
   /** Check whether a stash exists. */
   checkStash: () => Promise<void>;
+  /** Interrupted operations, stale locks, and missing LFS content for the open project. */
+  checkProjectHealth: (options?: { probeContent?: boolean }) => Promise<void>;
+  /** Finish (or undo) an interrupted operation, then reload the project. */
+  resolveRecovery: () => Promise<void>;
+  /** Leave an interrupted operation that can't be finished or undone, then reload. */
+  dismissRecovery: () => Promise<void>;
+  clearStaleLock: () => Promise<void>;
+  retryContentDownload: () => Promise<void>;
   /** Check whether we are in a rewound state (prev-tip exists). */
   checkRewound: () => Promise<void>;
   /** Navigate to any snapshot. Defers fork until commit. */
@@ -913,7 +875,7 @@ interface AppStoreState {
   loadTimelines: () => Promise<void>;
   /** Switch to a different timeline. */
   switchTimeline: (name: string) => Promise<void>;
-  /** Rename the legacy Draftline master variation to main. */
+  /** Rename the legacy master variation (or a branch the remote renamed) to the new base name. */
   renameLegacyMasterTimeline: () => Promise<void>;
   /** Delete a non-active timeline. */
   deleteTimeline: (name: string) => Promise<void>;
@@ -929,32 +891,22 @@ interface AppStoreState {
   quickSave: () => Promise<void>;
   /** Open snapshot name prompt (and ensure panel is visible). */
   promptSnapshot: () => Promise<void>;
-  /** Compact a HEAD-anchored range of snapshots into one named milestone. */
-  squashSnapshots: (oldestCommitId: string, newestCommitId: string, label: string) => Promise<void>;
-  /** Load Draftline's valid compact-range endpoint candidates for one selected snapshot. */
-  findSnapshotCleanupCandidates: (selectedCommitId: string) => Promise<DraftlineHistoryCompactionCandidates>;
-  /** Preview compacting a contiguous range of snapshots through Draftline cleanup. */
-  previewSnapshotCleanup: (oldestCommitId: string, newestCommitId: string, label: string, selectedRangeCommitIds?: string[]) => Promise<DraftlineHistoryCleanupPreview>;
-  /** Apply a previously previewed Draftline cleanup plan. */
-  applySnapshotCleanup: (planId: string) => Promise<DraftlineTimelineCleanupResult>;
-  /** Refresh Draftline's durable pending history-cleanup state for the active timeline. */
-  loadPendingHistoryCleanup: () => Promise<DraftlinePendingHistoryCleanup | null>;
-  /** Publish an applied Draftline cleanup plan to the remote with Draftline's lease-protected token. */
-  publishSnapshotCleanup: (planId: string, remote: string) => Promise<DraftlineHistoryCleanupPublishResult | null>;
-  /** Undo a previously applied Draftline cleanup plan using Draftline's guarded backup token. */
-  undoSnapshotCleanup: (planId?: string) => Promise<DraftlineTimelineCleanupResult>;
-  /** Forget a pending cleanup without moving any snapshots, unblocking sync when publish/undo are no longer possible. */
-  abandonSnapshotCleanup: (planId: string) => Promise<void>;
 
   // ── Remote sync actions ────────────────────────────────────
   /** Detect configured remote for the project. */
   detectRemote: () => Promise<void>;
   /** Fetch from the remote. */
   fetchFromRemote: (options?: { notifyAuthRequired?: boolean }) => Promise<void>;
-  /** Push current timeline to the remote. */
+  /** Push current timeline to the remote (hybrid projects: opens the Send for review prompt). */
   pushToRemote: () => Promise<void>;
+  /** Hybrid projects: push the CutReady branch and open/update a pull request. */
+  sendForReview: (title: string, body?: string) => Promise<void>;
+  /** Dismiss the Send for review prompt without sending. */
+  cancelSendForReview: () => void;
   /** Pull from remote (fast-forward merge). */
   pullFromRemote: () => Promise<void>;
+  /** Hybrid projects on a non-base branch: merge the latest base (e.g. `main`) in. */
+  getUpdatesFromBase: () => Promise<void>;
   /** Sync: fetch then push (or pull if behind). */
   syncWithRemote: () => Promise<void>;
   /** Share local changes safely with collaborators. */
@@ -969,10 +921,6 @@ interface AppStoreState {
   checkoutRemoteTimeline: (branch: string) => Promise<void>;
   /** Publish (push) the current local-only timeline to the remote. */
   publishTimeline: () => Promise<void>;
-  /** Ask the user whether to compact unpublished local snapshots before push. */
-  requestPrePushMilestone: (prompt: PrePushMilestonePrompt) => Promise<PrePushMilestoneDecision>;
-  /** Resolve the active pre-push milestone prompt. */
-  resolvePrePushMilestone: (decision: PrePushMilestoneDecision) => void;
 
   // ── Diff ──────────────────────────────────────────────────
   /** Compare two snapshots and return file-level diffs. */
@@ -1171,22 +1119,24 @@ function resetPersistenceState(): Pick<AppStoreState,
   | "timelines"
   | "graphNodes"
   | "snapshotPromptOpen"
+  | "sendForReviewPrompt"
   | "pendingNavAfterSave"
   | "pendingTimelineAfterSave"
   | "startedBranchFromSnapshot"
-  | "lastHistoryCleanup"
-  | "pendingHistoryCleanup"
-  | "prePushMilestonePrompt"
   | "isDirty"
   | "changedFiles"
   | "hasStash"
+  | "projectHealth"
+  | "projectHealthBusy"
   | "isRewound"
   | "currentRemote"
   | "remoteBranches"
   | "remoteBranchesLoading"
   | "syncStatus"
+  | "baseStatus"
   | "isSyncing"
   | "syncError"
+  | "baseRename"
   | "incomingCommits"
   | "shareUrl"
   | "isMerging"
@@ -1198,28 +1148,29 @@ function resetPersistenceState(): Pick<AppStoreState,
   | "diffResult"
   | "diffSelection"
 > {
-  cancelPendingPrePushMilestonePrompt();
   return {
     versions: [],
     timelines: [],
     graphNodes: [],
     snapshotPromptOpen: false,
+    sendForReviewPrompt: null,
     pendingNavAfterSave: null,
     pendingTimelineAfterSave: null,
     startedBranchFromSnapshot: null,
-    lastHistoryCleanup: null,
-    pendingHistoryCleanup: null,
-    prePushMilestonePrompt: null,
     isDirty: false,
     changedFiles: [],
     hasStash: false,
+    projectHealth: HEALTHY_PROJECT,
+    projectHealthBusy: false,
     isRewound: false,
     currentRemote: null,
     remoteBranches: [],
     remoteBranchesLoading: false,
     syncStatus: null,
+    baseStatus: null,
     isSyncing: false,
     syncError: null,
+    baseRename: null,
     incomingCommits: [],
     shareUrl: null,
     isMerging: false,
@@ -1372,23 +1323,27 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   graphNodes: [],
   showSecondaryPanel: savedLayout.showSecondaryPanel ?? true,
   snapshotPromptOpen: false,
+  sendForReviewPrompt: null,
   pendingNavAfterSave: null,
   pendingTimelineAfterSave: null,
   startedBranchFromSnapshot: null,
-  lastHistoryCleanup: null,
-  pendingHistoryCleanup: null,
-  prePushMilestonePrompt: null,
   isDirty: false,
   changedFiles: [],
   saving: false,
   hasStash: false,
+  projectHealth: HEALTHY_PROJECT,
+  projectHealthBusy: false,
+  adoptionPrompt: null,
+  moveFolderDialogOpen: false,
   isRewound: false,
   currentRemote: null,
   remoteBranches: [],
   remoteBranchesLoading: false,
   syncStatus: null,
+  baseStatus: null,
   isSyncing: false,
   syncError: null,
+  baseRename: null,
   incomingCommits: [],
   shareUrl: null,
   isMerging: false,
@@ -1784,19 +1739,20 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().checkDirty();
       await get().checkRewound();
       await get().checkStash();
+      await get().checkProjectHealth();
     } catch (err) {
       console.error("Failed to create project:", err);
-      set({ error: String(err) });
+      set({ error: errorMessage(err) });
     } finally {
       set({ loading: false });
     }
   },
 
-  openProject: async (path) => {
+  openProject: async (path, options) => {
     remoteDetectionGeneration += 1;
-    set({ loading: true });
+    set({ loading: true, adoptionPrompt: null });
     try {
-      const project = await invoke<ProjectView>("open_project_folder", { path });
+      const project = await invoke<ProjectView>("open_project_folder", { path, adopt: options?.adopt ?? false });
       beginWorkspaceGeneration(project.repo_root);
       set({
         ...resetPersistenceState(),
@@ -1822,6 +1778,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         chatInputDraft: "",
       });
       localStorage.setItem("cutready:lastProject", path);
+      // Surface interrupted operations before loaders that may refuse during recovery.
+      await get().checkProjectHealth();
       // Load multi-project state
       await get().loadProjects();
       // Load workspace settings
@@ -1845,11 +1803,91 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         get().fetchFromRemote({ notifyAuthRequired: false }).catch(() => {});
       }
     } catch (err) {
+      const prompt = adoptionPromptFromError(err);
+      if (prompt) {
+        set({ adoptionPrompt: prompt });
+        return;
+      }
       console.error("Failed to open project:", err);
-      set({ error: String(err) });
+      set({ error: errorMessage(err) });
     } finally {
       set({ loading: false });
     }
+  },
+
+  resolveAdoptionPrompt: async (choice) => {
+    const prompt = get().adoptionPrompt;
+    set({ adoptionPrompt: null });
+    if (!prompt || choice === "cancel") return;
+    if (choice === "adopt") {
+      await get().openProject(prompt.folder, { adopt: true });
+    } else if (prompt.suggestedExists) {
+      // Choosing the existing folder confirms it, even if it holds other files.
+      await get().openProject(prompt.suggested, { adopt: true });
+    } else {
+      await get().createProject(prompt.suggested);
+    }
+  },
+
+  setMoveFolderDialogOpen: (open) => set({ moveFolderDialogOpen: open }),
+
+  moveProjectFolder: async (to) => {
+    const project = get().currentProject;
+    if (!project) throw new Error("Open a project first.");
+    // Debounced editor edits must reach disk before deciding whether anything is unsaved.
+    await flushEditorWrites();
+    await get().checkDirty();
+    if (get().isDirty) throw new Error(SAVE_BEFORE_MOVE_MESSAGE);
+    const oldRoot = project.repo_root;
+    const openPaths = Array.from(new Set([
+      ...get().openTabs.filter(isDocumentTab).map((tab) => tab.path),
+      ...get().splitTabs.filter(isDocumentTab).map((tab) => tab.path),
+    ]));
+    // Editors must not write back into the old folder once it has moved.
+    for (const path of openPaths) suppressEditorFlush(path);
+    let result: MoveProjectFolderResult;
+    try {
+      result = await moveDraftlineProjectFolder(to);
+    } catch (err) {
+      if (draftlineErrorCode(err) === DraftlineErrorCode.ProjectStateStranded) {
+        // Content and local history are split; stop writing until the user repairs it.
+        set({ moveFolderDialogOpen: false });
+        // Keep editor flushes suppressed so unmounting editors can't write into the split state.
+        get().closeProject();
+        throw err;
+      }
+      clearSuppressedEditorFlushes(openPaths);
+      throw err;
+    }
+    set({ moveFolderDialogOpen: false });
+    // Keep a way back to the moved project even if reopening it fails below.
+    await invoke("add_recent_project", { path: result.projectRoot }).catch(console.error);
+    await get().removeRecentProject(oldRoot);
+    set({ error: null });
+    await get().openProject(result.projectRoot);
+    globalThis.setTimeout(() => clearSuppressedEditorFlushes(openPaths), 100);
+    const reopened = get().currentProject;
+    // openProject installs a fresh project object only when it succeeds.
+    if (!reopened || reopened === project) {
+      const reason = get().error ?? "it didn't open";
+      get().closeProject();
+      useToastStore.getState().show(
+        `Moved the project to ${result.projectRoot}, but couldn't reopen it (${reason}). Open it from Recent Projects.`,
+        10000,
+        "error",
+      );
+      return result;
+    }
+    const where = result.to ? `${result.to}/` : "the repository root";
+    const leftBehind = result.leftBehind.length
+      ? ` ${result.leftBehind.length} untracked file${result.leftBehind.length === 1 ? "" : "s"} stayed behind: ${result.leftBehind.slice(0, 3).join(", ")}${result.leftBehind.length > 3 ? "…" : ""}`
+      : "";
+    useToastStore.getState().show(
+      `Moved the project to ${where}. Its history moved with it.${leftBehind}`,
+      leftBehind ? 8000 : 5000,
+      leftBehind ? "warning" : "success",
+    );
+    return result;
   },
 
   closeProject: () => {
@@ -1964,6 +2002,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().checkDirty();
       await get().checkRewound();
       await get().checkStash();
+      await get().checkProjectHealth();
     } catch (err) {
       console.error("Failed to switch project:", err);
       set({ error: String(err) });
@@ -2670,7 +2709,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       get().refreshChangedFiles();
     } catch (err) {
       console.error("Failed to check dirty state:", err);
-      useToastStore.getState().show(`Could not check project changes: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Could not check project changes: ${errorMessage(err)}`, 5000, "error");
     }
   },
 
@@ -2710,57 +2749,17 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   stashChanges: async () => {
-    try {
-      await shelveDraftlineChanges();
-      set({ hasStash: true });
-    } catch (err) {
-      console.error("Failed to stash changes:", err);
+    if (get().hasStash) {
+      useToastStore.getState().show("Restore your shelved changes before shelving more.", 5000, "warning");
+      return false;
     }
+    const shelved = await rewriteWorkspaceFiles(get, set, shelveDraftlineChanges, "Shelve failed");
+    if (shelved) await get().checkStash();
+    return shelved && get().hasStash;
   },
 
   discardChanges: async () => {
-    const suppressedPaths = Array.from(new Set([
-      ...get().openTabs.filter(isDocumentTab).map((tab) => tab.path),
-      ...get().splitTabs.filter(isDocumentTab).map((tab) => tab.path),
-      get().activeSketchPath,
-      get().activeStoryboardPath,
-      get().activeNotePath,
-      get().activeChatArtifactPath,
-    ].filter((path): path is string => !!path)));
-    try {
-      for (const path of suppressedPaths) suppressEditorFlush(path);
-      set({
-        activeSketch: null,
-        activeSketchPath: null,
-        activeStoryboard: null,
-        activeStoryboardPath: null,
-        activeNotePath: null,
-        activeNoteContent: null,
-        activeNoteLocked: false,
-        activeChatArtifactPath: null,
-      });
-      await discardDraftlineChanges();
-      await get().loadSketches();
-      await get().loadStoryboards();
-      await get().loadNotes();
-      await get().loadChatArtifacts();
-      set({
-        openTabs: [],
-        activeTabId: null,
-        splitTabs: [],
-        splitActiveTabId: null,
-        activeEditorGroup: "main",
-        editorReloadPath: null,
-      });
-      globalThis.setTimeout(() => clearSuppressedEditorFlushes(suppressedPaths), 100);
-      await get().checkDirty();
-      set({ syncError: null });
-    } catch (err) {
-      clearSuppressedEditorFlushes(suppressedPaths);
-      console.error("Failed to discard changes:", err);
-      useToastStore.getState().show(`Discard failed: ${err}`, 5000, "error");
-      await get().checkDirty();
-    }
+    await rewriteWorkspaceFiles(get, set, discardDraftlineChanges, "Discard failed");
   },
 
   discardFile: async (filePath) => {
@@ -2880,26 +2879,18 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } catch (err) {
       clearSuppressedEditorFlushes(suppressedPaths);
       console.error("Failed to discard file:", err);
-      useToastStore.getState().show(`Discard failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Discard failed: ${errorMessage(err)}`, 5000, "error");
       await get().checkDirty();
     }
   },
 
   popStash: async () => {
-    try {
-      const hadStash = await popDraftlineShelf();
-      set({ hasStash: false, isDirty: hadStash });
-      if (hadStash) {
-        await get().loadSketches();
-        await get().loadStoryboards();
-        const { activeSketchPath } = get();
-        if (activeSketchPath) {
-          await get().openSketch(activeSketchPath);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to pop stash:", err);
-    }
+    let restored = false;
+    await rewriteWorkspaceFiles(get, set, async () => {
+      restored = await popDraftlineShelf();
+    }, "Restore failed");
+    await get().checkStash();
+    if (restored) useToastStore.getState().show("Shelved changes restored.", 3000, "success");
   },
 
   checkStash: async () => {
@@ -2910,6 +2901,104 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       set({ hasStash });
     } catch (err) {
       console.error("Failed to check stash:", err);
+    }
+  },
+
+  checkProjectHealth: async (options) => {
+    const generation = workspaceGeneration;
+    try {
+      const health = await inspectDraftlineProjectHealth(options);
+      if (generation !== workspaceGeneration) return;
+      set({
+        projectHealth: {
+          ...health,
+          missingContent: health.missingContent ?? get().projectHealth.missingContent,
+        },
+      });
+    } catch (err) {
+      console.error("Failed to inspect project health:", err);
+    }
+  },
+
+  resolveRecovery: async () => {
+    const project = get().currentProject;
+    if (!project || get().projectHealthBusy) return;
+    set({ projectHealthBusy: true });
+    try {
+      const outcome = await resolveDraftlineRecovery();
+      if (outcome === "stuck") {
+        useToastStore.getState().show(
+          "CutReady couldn't finish or undo the interrupted change. You can dismiss it and keep working; check your files first.",
+          8000,
+          "warning",
+        );
+        await get().checkProjectHealth();
+        return;
+      }
+      useToastStore.getState().show(
+        outcome === "undone" ? "Undid the interrupted change." : "Finished the interrupted change.",
+        4000,
+        "success",
+      );
+      await get().openProject(project.repo_root);
+    } catch (err) {
+      useToastStore.getState().show(`Recovery failed: ${errorMessage(err)}`, 6000, "error");
+      await get().checkProjectHealth();
+    } finally {
+      set({ projectHealthBusy: false });
+    }
+  },
+
+  dismissRecovery: async () => {
+    const project = get().currentProject;
+    if (!project || get().projectHealthBusy) return;
+    set({ projectHealthBusy: true });
+    try {
+      await dismissDraftlineRecovery();
+      await get().openProject(project.repo_root);
+    } catch (err) {
+      useToastStore.getState().show(`Dismiss failed: ${errorMessage(err)}`, 6000, "error");
+      await get().checkProjectHealth();
+    } finally {
+      set({ projectHealthBusy: false });
+    }
+  },
+
+  clearStaleLock: async () => {
+    if (!get().currentProject || get().projectHealthBusy) return;
+    set({ projectHealthBusy: true });
+    try {
+      await clearDraftlineStaleLock();
+      useToastStore.getState().show("Cleared the lock left by a closed CutReady.", 4000, "success");
+    } catch (err) {
+      useToastStore.getState().show(`Clear lock failed: ${errorMessage(err)}`, 6000, "error");
+    } finally {
+      set({ projectHealthBusy: false });
+      await get().checkProjectHealth();
+    }
+  },
+
+  retryContentDownload: async () => {
+    if (!get().currentProject || get().projectHealthBusy) return;
+    set({ projectHealthBusy: true });
+    try {
+      const wrote = await retryDraftlineContentDownload();
+      await get().checkProjectHealth();
+      const remaining = get().projectHealth.missingContent.length;
+      if (remaining > 0) {
+        useToastStore.getState().show(
+          `${remaining} large ${remaining === 1 ? "file is" : "files are"} still not downloaded. Check that Git LFS is installed and you can reach the shared repository.`,
+          7000,
+          "warning",
+        );
+      } else if (wrote) {
+        useToastStore.getState().show("Downloaded the missing files.", 4000, "success");
+        await Promise.all([get().loadSketches(), get().loadStoryboards(), get().loadNotes()]);
+      }
+    } catch (err) {
+      useToastStore.getState().show(`Download failed: ${errorMessage(err)}`, 6000, "error");
+    } finally {
+      set({ projectHealthBusy: false });
     }
   },
 
@@ -2932,7 +3021,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       });
     } catch (err) {
       console.error("Failed to preview snapshot:", err);
-      useToastStore.getState().show(`Snapshot preview failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Snapshot preview failed: ${errorMessage(err)}`, 5000, "error");
     }
   },
 
@@ -2985,27 +3074,28 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } catch (err) {
       console.error("Failed to create timeline:", err);
       if (!isDraftlineVariationCreateConflictError(err)) {
-        useToastStore.getState().show(`Branch creation failed: ${err}`, 5000, "error");
+        useToastStore.getState().show(`Branch creation failed: ${errorMessage(err)}`, 5000, "error");
       }
       throw err;
     }
   },
 
   startTimelineFromSnapshot: async (fromCommitId, name) => {
+    let createdName = name;
     try {
-      await createDraftlineVariation(fromCommitId, name, get().currentRemote?.name ?? null);
-      set({ startedBranchFromSnapshot: { branchName: name, snapshotId: fromCommitId } });
-      await get().switchTimeline(name);
-      useToastStore.getState().show(`Started branch ${name} from the previewed snapshot.`, 4000, "success");
+      createdName = await createDraftlineVariation(fromCommitId, name, get().currentRemote?.name ?? null) || name;
+      set({ startedBranchFromSnapshot: { branchName: createdName, snapshotId: fromCommitId } });
+      await get().switchTimeline(createdName);
+      useToastStore.getState().show(`Started branch ${createdName} from the previewed snapshot.`, 4000, "success");
     } catch (err) {
       set((state) => (
-        state.startedBranchFromSnapshot?.branchName === name
+        state.startedBranchFromSnapshot?.branchName === createdName
           ? { startedBranchFromSnapshot: null }
           : {}
       ));
       console.error("Failed to start branch from snapshot:", err);
       if (!isDraftlineVariationCreateConflictError(err)) {
-        useToastStore.getState().show(`Start branch failed: ${err}`, 5000, "error");
+        useToastStore.getState().show(`Start branch failed: ${errorMessage(err)}`, 5000, "error");
       }
       throw err;
     }
@@ -3017,7 +3107,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const timelines = await listDraftlineTimelines();
       if (generation !== workspaceGeneration) return;
       set({ timelines });
-      await get().loadPendingHistoryCleanup();
     } catch (err) {
       console.error("Failed to load timelines:", err);
     }
@@ -3087,24 +3176,27 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   renameLegacyMasterTimeline: async () => {
     const timelines = get().timelines;
-    const hasMaster = timelines.some((timeline) => timeline.name === "master");
-    const hasMain = timelines.some((timeline) => timeline.name === "main");
-    if (!hasMaster || hasMain) {
-      useToastStore.getState().show("No legacy master branch is available to rename.", 4000, "info");
+    const { from, to } = get().baseRename ?? { from: "master", to: "main" };
+    const hasFrom = timelines.some((timeline) => timeline.name === from);
+    const hasTo = timelines.some((timeline) => timeline.name === to);
+    if (!hasFrom || hasTo) {
+      set({ baseRename: null });
+      useToastStore.getState().show(`No ${from} branch is available to rename.`, 4000, "info");
       return;
     }
 
     try {
-      const preflight = await preflightDraftlineRenameVariation("master", "main");
-      await renameDraftlineVariation("master", "main", preflight.token);
+      const preflight = await preflightDraftlineRenameVariation(from, to);
+      await renameDraftlineVariation(from, to, preflight.token);
+      set({ baseRename: null, syncError: null });
       await get().loadTimelines();
       await get().loadVersions();
       await get().loadGraphData();
       await get().checkDirty();
-      useToastStore.getState().show("Renamed Draftline branch master to main.", 5000, "success");
+      useToastStore.getState().show(`Renamed branch ${from} to ${to}. Publish again to share it.`, 5000, "success");
     } catch (err) {
       console.error("Failed to rename Draftline branch:", err);
-      useToastStore.getState().show(`Rename failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Rename failed: ${errorMessage(err)}`, 5000, "error");
     }
   },
 
@@ -3122,7 +3214,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       useToastStore.getState().show("Branch deleted.", 4000, "success");
     } catch (err) {
       console.error("Failed to delete timeline:", err);
-      useToastStore.getState().show(`Delete failed: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Delete failed: ${errorMessage(err)}`, 5000, "error");
     }
   },
 
@@ -3159,212 +3251,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   promptSnapshot: async () => {
     set({ snapshotPromptOpen: true });
-  },
-
-  squashSnapshots: async (oldestCommitId, newestCommitId, label) => {
-    try {
-      const preview = await get().previewSnapshotCleanup(oldestCommitId, newestCommitId, label);
-      await get().applySnapshotCleanup(preview.plan_id);
-    } catch (err) {
-      console.error("Failed to compact snapshots:", err);
-      useToastStore.getState().show(`Compaction failed: ${errorMessage(err)}`, 5000, "error");
-    }
-  },
-
-  findSnapshotCleanupCandidates: async (selectedCommitId) => {
-    const { currentRemote, timelines } = get();
-    const targetVariation = timelines.find((timeline) => timeline.is_active)?.name ?? null;
-    if (!currentRemote) {
-      return listDraftlineSnapshotCleanupCandidates(selectedCommitId, targetVariation, null);
-    }
-    try {
-      return await listDraftlineSnapshotCleanupCandidates(selectedCommitId, targetVariation, currentRemote.name);
-    } catch (err) {
-      if (!errorMessage(err).includes("401")) throw err;
-      return listDraftlineSnapshotCleanupCandidates(selectedCommitId, targetVariation, null);
-    }
-  },
-
-  previewSnapshotCleanup: async (oldestCommitId, newestCommitId, label, selectedRangeCommitIds) => {
-    const { currentRemote, graphNodes, timelines } = get();
-    const range = cleanupRange(graphNodes, newestCommitId, oldestCommitId);
-    if (selectedRangeCommitIds) {
-      const selected = new Set(selectedRangeCommitIds);
-      const allKnown = selectedRangeCommitIds.every((id) => graphNodes.some((node) => node.id === id));
-      const rangeIds = range?.map((node) => node.id) ?? [];
-      if (
-        selectedRangeCommitIds.length < 2
-        || selected.size !== selectedRangeCommitIds.length
-        || selectedRangeCommitIds[0] !== newestCommitId
-        || selectedRangeCommitIds[selectedRangeCommitIds.length - 1] !== oldestCommitId
-        || !allKnown
-        || rangeIds.length !== selectedRangeCommitIds.length
-        || !rangeIds.every((id, index) => id === selectedRangeCommitIds[index])
-      ) {
-        throw new Error("Select a contiguous range of snapshots to compact.");
-      }
-    } else if (!range) {
-      throw new Error("Select a contiguous range of snapshots to compact.");
-    }
-    const targetVariation = timelines.find((timeline) => timeline.is_active)?.name ?? null;
-    return previewDraftlineSnapshotCleanup(
-      oldestCommitId,
-      newestCommitId,
-      label,
-      targetVariation,
-      currentRemote?.name ?? null,
-    );
-  },
-
-  applySnapshotCleanup: async (planId) => {
-    const result = await applyDraftlineSnapshotCleanup(planId);
-    set({ diffResult: null, diffSelection: null, isDirty: false, changedFiles: [], lastHistoryCleanup: result });
-    await get().loadVersions();
-    await get().loadGraphData();
-    await get().loadTimelines();
-    await get().loadPendingHistoryCleanup();
-    await get().checkDirty();
-    const mainTabs = rewriteSnapshotPreviewTabs(get().openTabs, result, makeMainTabId);
-    const splitTabs = rewriteSnapshotPreviewTabs(get().splitTabs, result, makeSplitTabId);
-    if (mainTabs.changed || splitTabs.changed) {
-      set((state) => ({
-        openTabs: mainTabs.tabs,
-        activeTabId: remapActiveTabId(state.activeTabId, mainTabs.tabs, mainTabs.remappedIds),
-        splitTabs: splitTabs.tabs,
-        splitActiveTabId: remapActiveTabId(state.splitActiveTabId, splitTabs.tabs, splitTabs.remappedIds),
-        activeEditorGroup: splitTabs.tabs.length === 0 && state.activeEditorGroup === "split" ? "main" : state.activeEditorGroup,
-      }));
-      get()._persistTabs();
-    }
-    const squashed = result.commit_map.filter((entry) => entry.disposition.kind === "squashed_into").length;
-    useToastStore.getState().show(
-      squashed > 0 ? `History compacted. ${squashed} old snapshots are mapped to the compacted snapshot.` : "History compacted.",
-      5000,
-      "success",
-    );
-    return result;
-  },
-
-  loadPendingHistoryCleanup: async () => {
-    const generation = workspaceGeneration;
-    const targetVariation = get().timelines.find((timeline) => timeline.is_active)?.name ?? null;
-    try {
-      const pending = await listDraftlinePendingSnapshotCleanups(targetVariation);
-      const activePending = pending[0] ?? null;
-      if (generation === workspaceGeneration) set({ pendingHistoryCleanup: activePending });
-      return activePending;
-    } catch (err) {
-      if (!errorMessage(err).toLowerCase().includes("no draftline workspace")) {
-        console.error("Failed to load pending history cleanup:", err);
-      }
-      if (generation === workspaceGeneration) set({ pendingHistoryCleanup: null });
-      return null;
-    }
-  },
-
-  publishSnapshotCleanup: (planId, remote) => exclusiveHistoryCleanupOperation(async () => {
-    const pendingCleanup = get().pendingHistoryCleanup;
-    if (pendingCleanup?.plan_id === planId) {
-      const result = await publishDraftlinePendingSnapshotCleanup(planId, remote);
-      set({ lastHistoryCleanup: null, pendingHistoryCleanup: null });
-      await get().refreshSyncStatus();
-      await get().refreshIncomingCommits();
-      await get().loadGraphData();
-      await get().loadTimelines();
-      await get().loadVersions();
-      useToastStore.getState().show("Milestone history published safely.", 5000, "success");
-      return result;
-    }
-
-    const preflight = await preflightDraftlinePublishSnapshotCleanup(planId, remote);
-    if (preflight.remote_impact.publish_status === "remote_has_incoming") {
-      throw new Error("Remote has new incoming snapshots. Sync before publishing milestone history.");
-    }
-    if (!preflight.can_publish || !preflight.token) {
-      return null;
-    }
-    const result = await publishDraftlineSnapshotCleanup(preflight.token);
-    set({ lastHistoryCleanup: null, pendingHistoryCleanup: null });
-    await get().refreshSyncStatus();
-    await get().refreshIncomingCommits();
-    await get().loadGraphData();
-    await get().loadTimelines();
-    await get().loadVersions();
-    useToastStore.getState().show("Milestone history published safely.", 5000, "success");
-    return result;
-  }),
-
-  abandonSnapshotCleanup: (planId) => exclusiveHistoryCleanupOperation(async () => {
-    // isSyncing only disables the sync buttons; the exclusive lock prevents a racing publish.
-    if (get().isSyncing) {
-      throw new Error(SYNC_IN_PROGRESS_MESSAGE);
-    }
-    if (get().pendingHistoryCleanup?.plan_id !== planId) {
-      throw new Error("This compacted history is no longer pending. Refresh and try again.");
-    }
-    set({ isSyncing: true });
-    try {
-      await abandonDraftlinePendingSnapshotCleanup(planId);
-      set({ lastHistoryCleanup: null, pendingHistoryCleanup: null });
-      await get().loadPendingHistoryCleanup();
-      await get().refreshSyncStatus();
-      await get().refreshIncomingCommits();
-      await get().loadGraphData();
-    } finally {
-      set({ isSyncing: false });
-    }
-    useToastStore.getState().show("Compacted history won't be shared. Your next sync merges collaborators' snapshots back in.", 6000, "info");
-  }),
-
-  undoSnapshotCleanup: (planId) => exclusiveHistoryCleanupOperation(async () => {
-    const pendingCleanup = get().pendingHistoryCleanup;
-    const targetPlanId = planId ?? pendingCleanup?.plan_id ?? get().lastHistoryCleanup?.plan_id;
-    if (!targetPlanId) {
-      throw new Error("No milestone history backup is available to undo.");
-    }
-    const result = pendingCleanup?.plan_id === targetPlanId
-      ? await undoDraftlinePendingSnapshotCleanup(targetPlanId)
-      : await (async () => {
-        const preflight = await preflightDraftlineUndoSnapshotCleanup(targetPlanId);
-        if (!preflight.can_undo) {
-          throw new Error("Draftline cannot undo this cleanup because the current timeline no longer matches the cleanup backup.");
-        }
-        return undoDraftlineSnapshotCleanup(preflight.token);
-      })();
-    set({ diffResult: null, diffSelection: null, isDirty: false, changedFiles: [], lastHistoryCleanup: null, pendingHistoryCleanup: null });
-    await get().loadVersions();
-    await get().loadGraphData();
-    await get().loadTimelines();
-    await get().checkDirty();
-    const mainTabs = rewriteSnapshotPreviewTabs(get().openTabs, result, makeMainTabId);
-    const splitTabs = rewriteSnapshotPreviewTabs(get().splitTabs, result, makeSplitTabId);
-    if (mainTabs.changed || splitTabs.changed) {
-      set((state) => ({
-        openTabs: mainTabs.tabs,
-        activeTabId: remapActiveTabId(state.activeTabId, mainTabs.tabs, mainTabs.remappedIds),
-        splitTabs: splitTabs.tabs,
-        splitActiveTabId: remapActiveTabId(state.splitActiveTabId, splitTabs.tabs, splitTabs.remappedIds),
-        activeEditorGroup: splitTabs.tabs.length === 0 && state.activeEditorGroup === "split" ? "main" : state.activeEditorGroup,
-      }));
-      get()._persistTabs();
-    }
-    useToastStore.getState().show("Milestone history restored from Draftline backup.", 5000, "success");
-    return result;
-  }),
-
-  requestPrePushMilestone: (prompt) => {
-    cancelPendingPrePushMilestonePrompt();
-    return new Promise<PrePushMilestoneDecision>((resolve) => {
-      prePushMilestoneResolve = resolve;
-      set({ prePushMilestonePrompt: prompt });
-    });
-  },
-
-  resolvePrePushMilestone: (decision) => {
-    const resolve = prePushMilestoneResolve;
-    prePushMilestoneResolve = null;
-    set({ prePushMilestonePrompt: null });
-    resolve?.(decision);
   },
 
   // ── Remote sync actions ────────────────────────────────────
@@ -3416,101 +3302,41 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadTimelines();
       await get().loadVersions();
     } catch (err) {
-      if (isDraftlineHistoryCleanupBlockedError(err)) {
-        await get().loadPendingHistoryCleanup();
-      }
       set({ syncError: remoteSyncErrorMessage(err) });
     } finally {
       set({ isSyncing: false });
     }
   },
 
-  pushToRemote:async () => {
+  pushToRemote: async () => {
     const { currentRemote, timelines } = get();
     if (!currentRemote) return;
     if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
     const active = timelines.find((t) => t.is_active);
     if (!active) return;
-    // Another sync or cleanup operation may have started while credentials were checked.
+    // Another sync operation may have started while credentials were checked.
     if (get().isSyncing) {
       useToastStore.getState().show(SYNC_IN_PROGRESS_MESSAGE, 5000, "info");
       return;
     }
-    set({ isSyncing: true, syncError: null });
+    const project = get().currentProject;
+    if (project?.hybrid) {
+      // Hybrid projects send for review (branch + pull request) instead of
+      // pushing directly; ask for the pull request title first.
+      set({
+        sendForReviewPrompt: {
+          defaultTitle: get().versions[0]?.message?.trim() || `Update ${project.name}`,
+        },
+      });
+      return;
+    }
+    set({ isSyncing: true, syncError: null, baseRename: null });
     try {
       // Large-file check before push
-      const largeFiles = await get().checkLargeFiles();
-      if (largeFiles.length > 0) {
-        const names = largeFiles
-          .map(([p, s]) => s > 0 ? `${p} (${(s / 1024 / 1024).toFixed(1)} MB)` : p)
-          .join(", ");
-        set({ syncError: `Large files detected: ${names}. Remove or add to .gitignore before pushing.`, isSyncing: false });
+      const largeFileError = largeFilesSyncError(await get().checkLargeFiles());
+      if (largeFileError) {
+        set({ syncError: largeFileError, isSyncing: false });
         return;
-      }
-      const pendingCleanup = get().pendingHistoryCleanup;
-      if (pendingCleanup) {
-        let published: DraftlineHistoryCleanupPublishResult | null;
-        try {
-          published = await get().publishSnapshotCleanup(pendingCleanup.plan_id, currentRemote.name);
-        } catch (err) {
-          // The compact sync bar only shows errors in a tooltip, so these also toast.
-          if (hasDraftlineErrorCode(err, "local_state_changed")) {
-            set({ syncError: PENDING_CLEANUP_STALE_MESSAGE });
-            useToastStore.getState().show(PENDING_CLEANUP_STALE_MESSAGE, 8000, "warning");
-            return;
-          }
-          if (isHistoryCleanupBusyError(err)) {
-            set({ syncError: HISTORY_CLEANUP_BUSY_MESSAGE });
-            useToastStore.getState().show(HISTORY_CLEANUP_BUSY_MESSAGE, 6000, "warning");
-            return;
-          }
-          throw err;
-        }
-        if (published) {
-          return;
-        }
-      }
-      const milestoneRange = localPrePushMilestoneRange(get().graphNodes, get().syncStatus?.ahead);
-      if (milestoneRange && get().syncStatus?.behind === 0) {
-        const newest = milestoneRange[0];
-        const oldest = milestoneRange[milestoneRange.length - 1];
-        let canCreateMilestoneMerge = false;
-        try {
-          const preflight = await preflightDraftlineMilestoneMerge(currentRemote.name);
-          canCreateMilestoneMerge = preflight.can_create_milestone;
-        } catch (err) {
-          console.warn("Could not validate automatic pre-push milestone merge; pushing snapshots as-is.", err);
-        }
-
-        if (canCreateMilestoneMerge) {
-          const decision = await get().requestPrePushMilestone({
-            snapshotCount: milestoneRange.length,
-            newestCommitId: newest.id,
-            oldestCommitId: oldest.id,
-            latestSnapshotLabel: newest.message,
-            suggestedLabel: suggestedMilestoneLabel(milestoneRange),
-            remoteName: currentRemote.name,
-          });
-          if (decision.type === "cancel") {
-            return;
-          }
-          if (decision.type === "milestone") {
-            const label = decision.label.trim();
-            if (!label) {
-              throw new Error("Milestone label is required before sharing local snapshots.");
-            }
-            await createDraftlineMilestoneMerge(currentRemote.name, label);
-            await publishDraftlineChanges(currentRemote.name);
-            await get().refreshSyncStatus();
-            await get().checkDirty();
-            await get().refreshChangedFiles();
-            await get().loadGraphData();
-            await get().loadTimelines();
-            await get().loadVersions();
-            useToastStore.getState().show("Milestone history shared without rewriting your saves.", 5000, "success");
-            return;
-          }
-        }
       }
       await publishDraftlineChanges(currentRemote.name);
       await get().refreshSyncStatus();
@@ -3520,24 +3346,79 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadTimelines();
       await get().loadVersions();
     } catch (err) {
-      if (isDraftlineHistoryCleanupBlockedError(err)) {
-        await get().loadPendingHistoryCleanup();
-      }
-      set({ syncError: remoteSyncErrorMessage(err) });
+      set({ syncError: remoteSyncErrorMessage(err), baseRename: baseRenamedBranches(err) });
     } finally {
       set({ isSyncing: false });
     }
   },
+
+  sendForReview: async (title, body) => {
+    const { currentRemote } = get();
+    set({ sendForReviewPrompt: null });
+    if (!currentRemote || !get().currentProject?.hybrid) return;
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) return;
+    if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
+    if (get().isSyncing) {
+      useToastStore.getState().show(SYNC_IN_PROGRESS_MESSAGE, 5000, "info");
+      return;
+    }
+    set({ isSyncing: true, syncError: null });
+    let sendAttempted = false;
+    let sendError: string | null = null;
+    try {
+      const largeFileError = largeFilesSyncError(await get().checkLargeFiles());
+      if (largeFileError) {
+        set({ syncError: largeFileError, isSyncing: false });
+        return;
+      }
+      sendAttempted = true;
+      const result = await sendDraftlineForReview({
+        remote: currentRemote.name,
+        title: trimmedTitle,
+        body,
+      });
+      const { number, url } = result.pull_request;
+      useToastStore.getState().show(
+        result.created_pull_request
+          ? `Pull request #${number} opened for review.`
+          : `Pull request #${number} updated.`,
+        10000,
+        "success",
+        { label: "Open", url },
+      );
+      set({ shareUrl: url });
+    } catch (err) {
+      sendError = remoteSyncErrorMessage(err);
+      set({ syncError: sendError });
+    } finally {
+      // Send can switch branches and push before the pull request step fails,
+      // so refresh even on error to show the real current variation.
+      if (sendAttempted) {
+        try {
+          await get().refreshSyncStatus();
+          await get().checkDirty();
+          await get().refreshChangedFiles();
+          await get().loadGraphData();
+          await get().loadTimelines();
+          await get().loadVersions();
+        } catch {
+          // Refresh failures must not mask the send result.
+        }
+        // A successful status refresh clears syncError; keep the send failure visible.
+        if (sendError) set({ syncError: sendError });
+      }
+      set({ isSyncing: false });
+    }
+  },
+
+  cancelSendForReview: () => set({ sendForReviewPrompt: null }),
 
   syncWithRemote: async () => {
     // Fetch first to get latest state
     await get().fetchFromRemote();
     const updated = get().syncStatus;
     if (!updated) return;
-    if (get().pendingHistoryCleanup && updated.behind > 0) {
-      set({ syncError: PENDING_CLEANUP_INCOMING_MESSAGE });
-      return;
-    }
     // If behind, pull first
     if (updated.behind > 0) {
       await get().pullFromRemote();
@@ -3555,6 +3436,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const active = timelines.find((t) => t.is_active);
     if (!active) return;
     await get().pushToRemote();
+    // Hybrid projects share via the Send for review prompt (pull request), not a branch link.
+    if (get().currentProject?.hybrid) return;
     const url = buildShareUrl(currentRemote.url, active.name);
     set({ shareUrl: url });
     if (url) {
@@ -3571,10 +3454,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { currentRemote } = get();
     if (!currentRemote) return;
     if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
-    if (get().pendingHistoryCleanup) {
-      set({ syncError: PENDING_CLEANUP_INCOMING_MESSAGE });
-      return;
-    }
     set({ isSyncing: true, syncError: null });
     try {
       const preflight = await preflightDraftlineIncoming(currentRemote.name);
@@ -3636,11 +3515,67 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().checkDirty();
       useToastStore.getState().show("Incoming saves applied.", 4000, "success");
     } catch (err) {
-      if (isDraftlineHistoryCleanupBlockedError(err)) {
-        await get().loadPendingHistoryCleanup();
-      }
       set({ syncError: remoteSyncErrorMessage(err) });
     } finally {
+      set({ isSyncing: false });
+    }
+  },
+
+  getUpdatesFromBase: async () => {
+    const { currentRemote } = get();
+    if (!currentRemote || !get().currentProject?.hybrid) return;
+    if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
+    if (get().isSyncing) {
+      useToastStore.getState().show(SYNC_IN_PROGRESS_MESSAGE, 5000, "info");
+      return;
+    }
+    const base = get().baseStatus?.base ?? "main";
+    set({ isSyncing: true, syncError: null });
+    let updateError: string | null = null;
+    try {
+      // Fetches first, so the merge below sees the latest base.
+      const report = await preflightDraftlineMergeBase(currentRemote.name);
+      if (report.dirtyFiles.length > 0) {
+        updateError = `Save or discard local changes before getting updates from ${base}.`;
+      } else if (report.canMergeCleanly && report.token) {
+        await mergeDraftlineFromBase(currentRemote.name, `Bring in latest ${base}`);
+        useToastStore.getState().show(`Updates from ${base} brought in.`, 4000, "success");
+      } else if (report.conflicts.length > 0 && report.token) {
+        set({
+          isMerging: true,
+          mergeSource: base,
+          mergeTarget: "incoming",
+          mergeConflicts: report.conflicts,
+          draftlineMergeToken: report.token,
+          draftlineMergeRemote: currentRemote.name,
+        });
+        useToastStore.getState().show(`Updates from ${base} need conflict resolution.`, 5000, "info");
+      } else if (report.syncStatus.behind === 0) {
+        useToastStore.getState().show(`Already up to date with ${base}.`, 4000, "info");
+      } else {
+        updateError = `Updates from ${base} can't be brought in safely right now.`;
+      }
+    } catch (err) {
+      updateError = isMergeNeedsDeveloperError(err)
+        ? mergeNeedsDeveloperMessage(base)
+        : remoteSyncErrorMessage(err);
+    } finally {
+      // Refresh even on failure: the fetch may have moved the base.
+      try {
+        await get().loadSketches();
+        await get().loadStoryboards();
+        await get().loadNotes();
+        await get().refreshSyncStatus();
+        await get().refreshIncomingCommits();
+        await get().loadVersions();
+        await get().loadGraphData();
+        await get().loadTimelines();
+        await get().checkDirty();
+      } catch {
+        // Refresh failures must not mask the update result.
+      }
+      // A successful status refresh clears syncError; keep the failure visible.
+      if (updateError) set({ syncError: updateError });
       set({ isSyncing: false });
     }
   },
@@ -3701,6 +3636,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   publishTimeline: async () => {
+    // Hybrid projects never publish directly; they go through Send for review.
+    if (get().currentProject?.hybrid) {
+      await get().pushToRemote();
+      return;
+    }
     const { currentRemote, timelines } = get();
     if (!currentRemote) return;
     if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
@@ -3711,7 +3651,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await publishDraftlineChanges(currentRemote.name);
       await get().refreshSyncStatus();
     } catch (err) {
-      set({ syncError: errorMessage(err) });
+      set({ syncError: remoteSyncErrorMessage(err) });
     } finally {
       set({ isSyncing: false });
     }
@@ -3733,11 +3673,21 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         const status = await getDraftlineSyncStatus(currentRemote.name);
         if (generation !== workspaceGeneration) return;
         set({ syncStatus: status, syncError: null });
-        await get().loadPendingHistoryCleanup();
       } catch {
         if (generation !== workspaceGeneration) return;
         set({ syncStatus: null });
       }
+      // Only hybrid projects on a branch other than the base can fall behind it.
+      let baseStatus: BaseStatus | null = null;
+      if (get().currentProject?.hybrid) {
+        try {
+          baseStatus = await getDraftlineBaseStatus(currentRemote.name);
+        } catch {
+          baseStatus = null;
+        }
+      }
+      if (generation !== workspaceGeneration) return;
+      set({ baseStatus });
     };
     syncStatusInFlight = (async () => {
       try {
@@ -3782,7 +3732,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } catch (err) {
       console.error("Failed to diff snapshots:", err);
       if (generation === workspaceGeneration) set({ diffResult: null, diffSelection: null });
-      useToastStore.getState().show(`Could not compare snapshots: ${err}`, 5000, "error");
+      useToastStore.getState().show(`Could not compare snapshots: ${errorMessage(err)}`, 5000, "error");
       return [];
     }
   },
@@ -3837,9 +3787,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { draftlineMergeToken, draftlineMergeRemote } = get();
     if (!draftlineMergeToken || !draftlineMergeRemote) throw new Error("No Draftline merge in progress");
 
+    // Base merges carry the base branch name as the token source.
+    const base = (draftlineMergeToken as { source?: string | null }).source ?? null;
     const commitId = await mergeDraftlineIncomingWithResolutions(
       draftlineMergeToken,
-      "Resolve incoming saves",
+      base ? `Bring in latest ${base}` : "Resolve incoming saves",
       resolutions.map((resolution) => ({
         path: resolution.path,
         field_path: null,
@@ -3864,7 +3816,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     await get().loadGraphData();
     await get().loadTimelines();
     await get().checkDirty();
-    useToastStore.getState().show("Incoming saves merged.", 4000, "success");
+    useToastStore.getState().show(base ? `Updates from ${base} brought in.` : "Incoming saves merged.", 4000, "success");
     return commitId;
   },
 

@@ -1,8 +1,9 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
-import { Check, ArrowUp, ArrowDown, AlertTriangle, Globe, RefreshCw, UserRound } from "lucide-react";
+import { Check, ArrowUp, ArrowDown, AlertTriangle, GitMerge, Globe, RefreshCw, UserRound } from "lucide-react";
 import { isContributorIdentityRequired } from "../services/identity";
+import { isDraftlineGuidanceMessage } from "../services/draftlineErrors";
 
 /**
  * SyncBar — shown at the top of the Snapshots panel when a remote is configured.
@@ -20,7 +21,9 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
   const pushToRemote = useAppStore((s) => s.pushToRemote);
   const pullFromRemote = useAppStore((s) => s.pullFromRemote);
   const syncWithRemote = useAppStore((s) => s.syncWithRemote);
-  const pendingHistoryCleanup = useAppStore((s) => s.pendingHistoryCleanup);
+  const isHybrid = useAppStore((s) => s.currentProject?.hybrid === true);
+  const baseStatus = useAppStore((s) => s.baseStatus);
+  const getUpdatesFromBase = useAppStore((s) => s.getUpdatesFromBase);
   const { settings } = useSettings();
   const [showIncoming, setShowIncoming] = useState(false);
   const timelines = useAppStore((s) => s.timelines);
@@ -76,23 +79,17 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
   const ahead = syncStatus?.ahead ?? 0;
   const behind = syncStatus?.behind ?? 0;
   const isUpToDate = ahead === 0 && behind === 0 && syncStatus !== null;
-  // A pending milestone cleanup must stay publishable even when sync status
-  // could not be read.
-  const showPrimaryAction = pendingHistoryCleanup !== null || (!isUpToDate && syncStatus !== null);
+  const showPrimaryAction = !isUpToDate && syncStatus !== null;
 
   // Determine primary action label
   let actionLabel = "Sync";
   let compactActionLabel = "Sync";
   let compactButtonLabel = "Sync";
   let actionFn = syncWithRemote;
-  if (pendingHistoryCleanup) {
+  if (ahead > 0 && behind === 0) {
     actionLabel = "Push";
-    compactActionLabel = behind > 0 ? "Publish milestone history" : "Share milestone history";
-    compactButtonLabel = "Send";
-    actionFn = pushToRemote;
-  } else if (ahead > 0 && behind === 0) {
-    actionLabel = "Push";
-    compactActionLabel = "Share changes";
+    // Hybrid projects never push directly: this opens the Send for review prompt.
+    compactActionLabel = isHybrid ? "Send for review" : "Share changes";
     compactButtonLabel = "Send";
     actionFn = pushToRemote;
   } else if (behind > 0 && ahead === 0) {
@@ -108,7 +105,17 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
       : actionLabel === "Pull"
         ? ArrowDown
         : RefreshCw;
-  const actionTitle = isSyncing ? "Syncing with collaborators" : `${compactActionLabel} with collaborators`;
+  const actionTitle = isSyncing
+    ? "Syncing with collaborators"
+    : isHybrid && actionFn === pushToRemote
+      ? "Send for review"
+      : `${compactActionLabel} with collaborators`;
+
+  // Hybrid projects on a review branch: offer the base's new commits (e.g. from developers on main).
+  const baseBehind = isHybrid && baseStatus ? baseStatus.behind : 0;
+  const baseUpdateTitle = baseStatus
+    ? `Get updates from ${baseStatus.base} (${baseBehind} new change${baseBehind === 1 ? "" : "s"})`
+    : "";
 
   // Compute PR URL — only for non-main branches with a GitHub remote
   const prUrl = (() => {
@@ -132,6 +139,18 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
           >
             <ActionIcon className={`h-3 w-3 ${isSyncing ? "animate-spin" : ""}`} />
             <span className="hidden min-[260px]:inline">{isSyncing ? "Syncing" : compactButtonLabel}</span>
+          </button>
+        )}
+        {baseBehind > 0 && baseStatus && (
+          <button
+            onClick={() => getUpdatesFromBase()}
+            disabled={isSyncing}
+            className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/8 px-1.5 text-[10px] font-semibold text-[rgb(var(--color-accent))] transition-colors hover:bg-[rgb(var(--color-accent))]/14 disabled:opacity-50"
+            title={baseUpdateTitle}
+            aria-label={baseUpdateTitle}
+          >
+            <GitMerge className="h-3 w-3" />
+            <span className="hidden min-[260px]:inline">Get {baseStatus.base}</span>
           </button>
         )}
         <button
@@ -235,6 +254,20 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
           </button>
         )}
 
+        {/* Get updates from base — hybrid projects behind their base branch */}
+        {baseBehind > 0 && baseStatus && (
+          <button
+            onClick={() => getUpdatesFromBase()}
+            disabled={isSyncing}
+            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[rgb(var(--color-accent))] border border-[rgb(var(--color-accent))]/30 hover:bg-[rgb(var(--color-accent))]/10 transition-colors disabled:opacity-60"
+            title={baseUpdateTitle}
+            aria-label={baseUpdateTitle}
+          >
+            <GitMerge className="w-2.5 h-2.5" />
+            Get updates from {baseStatus.base}
+          </button>
+        )}
+
         {/* Open PR button — shown for non-main branches */}
         {currentRemote?.url && prUrl && (
           <button
@@ -270,6 +303,11 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
             <>
               <UserRound className="shrink-0 w-2.5 h-2.5" />
               <span className="truncate">Add your name and email in Settings › Profile</span>
+            </>
+          ) : isDraftlineGuidanceMessage(syncError) ? (
+            <>
+              <AlertTriangle className="shrink-0 w-2.5 h-2.5" />
+              <span className="truncate">{syncError}</span>
             </>
           ) : (syncError.includes("network") || syncError.includes("resolve host") || syncError.includes("Could not resolve") || syncError.includes("timed out")) ? (
             <>

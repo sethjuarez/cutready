@@ -160,6 +160,7 @@ src-tauri/
 │   │   ├── animation.rs           # Elucim animation rendering / video export
 │   │   ├── project.rs             # Folder-based project I/O, safe_resolve()
 │   │   ├── draftline_adapter.rs   # Draftline-backed persistence/versioning facade
+│   │   ├── github_pull_requests.rs # GitHub PR provider for hybrid Send for review
 │   │   └── export.rs              # FCPXML generation, folder assembly
 │   ├── models/                    # Core data types
 │   │   ├── action.rs              # Action enum, SelectorStrategy
@@ -763,6 +764,8 @@ fn graph_overview(adapter: &CutReadyDraftlineAdapter) -> DraftlineResult<Workspa
 - Snapshots are created automatically on user saves and explicit workspace-structure changes.
 - Draftline owns branch/variation IDs; CutReady treats IDs as opaque and uses helper APIs for graph relationships.
 - The version history UI presents Draftline graph summaries and neighborhoods, not raw git logs.
+- History is append-only: no squash, compaction, or history cleanup. Standalone **Send** is a plain push of saved snapshots.
+- Saves are atomic; if an external commit lands mid-save, the save is refused rather than reverting it.
 - ChatPanel conversation snapshots and legacy `.chats/*.chat` transcripts live in `.git/cutready/agent-state.db`; the Session History rail lists and reopens both transcript types. Legacy imports retain source metadata, are exempt from generic run retention, and are verified against a fresh source-file hash before removal; malformed, unverified, or changed files remain in place and their migration failure is recorded locally. Other legacy files such as `.cutready/memory.json`, `.cutready/workspace.json`, and `.cutready-order.json` are migrated non-destructively so tracked older projects do not become dirty simply by opening.
 
 **Content policy**:
@@ -778,6 +781,18 @@ Draftline tracks the user-authored project surface:
 Runtime state such as chat/run trajectories, locks, recordings, and local UI
 layout lives under `.git/cutready/` or other local-only folders, or is excluded
 by policy.
+
+**Hybrid projects** (CutReady folder inside a code repo):
+
+| Aspect | Behavior |
+| --- | --- |
+| Detection | Project folder has no own `.git/` and git discovery finds an enclosing repo |
+| Ownership | Draftline is a guest; developers keep committing with plain git |
+| Runtime state | `<gitdir>/cutready/<folder rel path>/` (e.g. `agent-state.db`), never in the work tree |
+| Variations | Only `cutready/*` branches plus base/default and current branch are listed; new ones get the `cutready/` prefix; ops outside the namespace are refused (except switching to base) |
+| Send | **Send for review**: push a `cutready/<slug>` branch without force, then open or reuse a GitHub PR via `engine/github_pull_requests.rs`. Direct publish is refused |
+| Get updates | Bring base into a `cutready/*` branch; conflicts outside the folder return `merge_needs_developer` |
+| Refusals | Git index lock, external change mid-operation, recovery owned by another project, Git LFS/filter files |
 
 **Deep link protocol**:
 
@@ -815,7 +830,7 @@ blocks using `CommandExt::creation_flags()` (std) or the inherent
 | Motion graphics | Elucim (`@elucim/core` + `@elucim/dsl`) | Latest | TypeScript/SVG, JSON DSL for AI agents, browser-native rendering, video export |
 | LLM | agentive crate (multi-provider) | Latest | 4 providers (Foundry, Azure OpenAI, OpenAI, Anthropic), streaming, agentic loops, ARM discovery |
 | Visuals | Elucim DSL (`@elucim/dsl`) | Latest | SVG-based framing visuals with semantic color tokens |
-| Document versioning | Draftline | 0.2.5 | Content versioning, branch graph helpers, sync, merge, restore-as-new-save |
+| Document versioning | Draftline | 0.6.0 | Content versioning, branch graph helpers, sync, merge, restore-as-new-save, hybrid repo coexistence |
 | Timeline export | FCPXML 1.9 | — | Multi-track, markers, native DaVinci Resolve 17+ import |
 | Project storage | Portable folders + Draftline | — | Versioned project content with local runtime state kept out of snapshots |
 

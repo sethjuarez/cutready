@@ -16,13 +16,16 @@ import { OutputPanel } from "./OutputPanel";
 import { CommandPalette } from "./CommandPalette";
 import { TitleBar } from "./TitleBar";
 import { SnapshotDialog } from "./SnapshotDialog";
-import { PrePushMilestoneDialog } from "./PrePushMilestoneDialog";
+import { SendForReviewDialog } from "./SendForReviewDialog";
 import { AiApplyGateDialog } from "./AiApplyGateDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { MergeConflictPanel } from "./MergeConflictPanel";
 import { ChatPanel } from "./ChatPanel";
 import { ChangesPanel } from "./ChangesPanel";
 import { FeedbackDialog } from "./FeedbackDialog";
+import { ProjectHealthBanner } from "./ProjectHealthBanner";
+import { AdoptFolderDialog } from "./AdoptFolderDialog";
+import { MoveProjectFolderDialog } from "./MoveProjectFolderDialog";
 import { commandRegistry, useCommands } from "../services/commandRegistry";
 import { invoke } from "../services/tauri";
 import { useTheme } from "../hooks/useTheme";
@@ -46,6 +49,7 @@ import {
   AlertCircle,
   UserRound,
   X,
+  FolderInput,
 } from "lucide-react";
 
 const REQUESTED_SETTINGS_TAB_KEY = "cutready:requested-settings-tab";
@@ -249,6 +253,16 @@ export function AppLayout() {
         handler: () => {
           const { currentProject, promptSnapshot } = useAppStore.getState();
           if (currentProject) promptSnapshot();
+        },
+      },
+      {
+        id: "project.moveFolder",
+        title: "Move Project Folder…",
+        category: "Project",
+        icon: <FolderInput className="w-4 h-4" />,
+        handler: () => {
+          const { currentProject, setMoveFolderDialogOpen } = useAppStore.getState();
+          if (currentProject) setMoveFolderDialogOpen(true);
         },
       },
       {
@@ -465,6 +479,9 @@ export function AppLayout() {
 
           {/* Center column: content + output panel */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            {contentView !== "home" && !projectSwitching && <ProjectHealthBanner />}
+            <AdoptFolderDialog />
+            <MoveProjectFolderDialog />
             {/* Upper: main content */}
             <div className="relative flex-1 min-h-0">
               {contentView === "home" && <div className="h-full overflow-y-auto"><HomePanel /></div>}
@@ -529,7 +546,7 @@ export function AppLayout() {
         recentCommands={recentCommands}
       />
       <SnapshotDialog />
-      <PrePushMilestoneDialog />
+      <SendForReviewDialog />
       <AiApplyGateDialog />
       <KeyboardShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <FeedbackDialog isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} />

@@ -19,7 +19,7 @@ CutReady uses a **Storyboard → Sketch** hierarchy:
 - **Sketch** (`.sk` files): A scene with title, description, and a planning table. Each planning table row has: Time, Narrative, Actions, Screenshot, and an optional Visual (Elucim DSL JSON stored externally in `.cutready/visuals/`).
 - **Storyboard** (`.sb` files): Sequences sketches with optional named sections. References sketches by path.
 - **Notes** (`.md` files): Markdown documents for planning, context, and AI-generated content.
-- **Agent state and memory** (`.git/cutready/agent-state.db`): Local SQLite runtime state for chat/run trajectories, checkpoints, resume context, verification, and agent recall memory. The Runs tab is the curated UI; the database inspector is the raw/debug view. Legacy `.git/cutready/memory.json` and `.cutready/memory.json` files migrate into this DB and should not dirty snapshots.
+- **Agent state and memory** (`.git/cutready/agent-state.db`, or `<gitdir>/cutready/<folder rel path>/agent-state.db` in hybrid projects): Local SQLite runtime state for chat/run trajectories, checkpoints, resume context, verification, and agent recall memory. The Runs tab is the curated UI; the database inspector is the raw/debug view. Legacy `.git/cutready/memory.json` and `.cutready/memory.json` files migrate into this DB and should not dirty snapshots.
 - **Legacy sessions** (`.chats/` directory): Old JSON chat session files. Keep readable for backward compatibility, but do not write new chat exhaust there or include it in snapshots.
 
 ## Project Storage
@@ -46,6 +46,24 @@ my-demo-project/
 - All user-provided relative paths go through `project::safe_resolve()` to prevent path traversal.
 - Agent runtime state is local by default under `.git/cutready/` so normal chat activity does not dirty the project. Accepted AI outputs should be written into versioned sketches, storyboards, notes, or visuals.
 
+### Hybrid projects (CutReady folder inside a code repo)
+
+```text
+contoso-app/                    # Developer's code repo (owned by git, not Draftline)
+├── src/ ...
+├── cutready/                   # CutReady project folder — no .git/ of its own
+│   ├── intro.sk
+│   └── .cutready/
+└── .git/
+    └── cutready/cutready/      # <gitdir>/cutready/<folder rel path>/
+        └── agent-state.db
+```
+
+- Detected when the folder has no own `.git/` and git discovery finds an enclosing repo. Draftline is a guest; developers keep using plain git / Copilot.
+- A committed root `.draftline` file names the managed folder. New variations live in the `cutready/` branch namespace; saves land on the checked-out branch, and Send from any other branch starts a `cutready/` branch at HEAD without carrying a developer's unpushed commits.
+- Send = **Send for review**: push `cutready/<slug>` (no force) and open/reuse a GitHub PR (`engine/github_pull_requests.rs`). Direct publish is refused. **Get updates from \<base\>** merges base in; conflicts outside the folder return `merge_needs_developer`.
+- No squash, history cleanup/compaction, or milestone Send exists; standalone Send is a plain push of saves.
+
 ## Tech Stack
 
 | Layer | Technology | Notes |
@@ -55,7 +73,7 @@ my-demo-project/
 | Backend | **Rust** (2021 edition) | Async via Tokio, native Windows API via windows-rs |
 | State management | **Zustand** | appStore, toastStore, updateStore |
 | Drag-and-drop | **dnd-kit** | Sketch reordering in storyboards, tab reordering |
-| Versioning | **Draftline** 0.4.0 | Content versioning, collaboration, branch graph helpers, sync, merge |
+| Versioning | **Draftline** 0.10.1 (crates.io; `@draftline/client` 0.5.0) | Content versioning, collaboration, branch graph helpers, sync, merge, hybrid repo coexistence |
 | Screen recording | **FFmpeg** (sidecar) | FFV1 lossless codec in MKV, multi-track audio |
 | Browser automation | **Playwright** (Node.js sidecar) | Headful browser observation and replay automation |
 | LLM | **Microsoft Foundry** | Chat Completions + Responses API, multi-agent system |
@@ -127,6 +145,7 @@ cutready/
 | engine/project.rs | ✅ Implemented | Folder-based project I/O, safe_resolve(), file scanning |
 | engine/draftline_adapter.rs | ✅ Implemented | Draftline-backed versioning facade, content policy, remotes, history, diff, save, restore |
 | commands/draftline.rs | ✅ Implemented | Tauri command wrappers for Draftline context, credentials, events, and collaboration operations |
+| engine/github_pull_requests.rs | ✅ Implemented | GitHub `PullRequestProvider` for hybrid Send for review (blocking client; run off the async runtime) |
 | engine/agent/ | ✅ Implemented | Multi-agent AI system (Planner, Writer, Editor, Designer) |
 | engine/agent/llm.rs | ✅ Implemented | Thin bridge: LlmConfig → agentive providers |
 | engine/agent/runner.rs | ✅ Implemented | Agentic loop (delegates to agentive::run) |
@@ -273,4 +292,5 @@ When updating, also use `store_memory` to capture the convention for cross-sessi
 - [docs/reference/NORTH_STAR.md](docs/reference/NORTH_STAR.md) — The press release / vision
 - [docs/reference/GUIDANCE.md](docs/reference/GUIDANCE.md) — Feature catalog
 - [docs/reference/ARCHITECTURE.md](docs/reference/ARCHITECTURE.md) — Technical design
+- [docs/reference/DRAFTLINE_SCENARIOS.md](docs/reference/DRAFTLINE_SCENARIOS.md) — Draftline playbook flows mapped to CutReady coverage and gaps; update it when versioning behavior changes
 - [User-facing docs site](https://cutready.io) — Astro Starlight

@@ -1,13 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mockGetDraftlineSyncStatus = vi.hoisted(() => vi.fn());
 const mockListDraftlineRemotes = vi.hoisted(() => vi.fn());
 const mockFetchDraftlineRemote = vi.hoisted(() => vi.fn());
-const mockListDraftlinePendingSnapshotCleanups = vi.hoisted(() => vi.fn());
 const mockPublishDraftlineChanges = vi.hoisted(() => vi.fn());
-const mockPreflightDraftlineMilestoneMerge = vi.hoisted(() => vi.fn());
-const mockCreateDraftlineMilestoneMerge = vi.hoisted(() => vi.fn());
+const mockSendForReview = vi.hoisted(() => vi.fn());
 const mockGetGitHubAuthStatus = vi.hoisted(() => vi.fn());
+const mockGetDraftlineBaseStatus = vi.hoisted(() => vi.fn());
+const mockPreflightDraftlineMergeBase = vi.hoisted(() => vi.fn());
+const mockMergeDraftlineFromBase = vi.hoisted(() => vi.fn());
 
 vi.mock("../services/draftlineVersioning", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/draftlineVersioning")>();
@@ -16,10 +17,11 @@ vi.mock("../services/draftlineVersioning", async (importOriginal) => {
     fetchDraftlineRemote: (...args: unknown[]) => mockFetchDraftlineRemote(...args),
     getDraftlineSyncStatus: (...args: unknown[]) => mockGetDraftlineSyncStatus(...args),
     listDraftlineRemotes: (...args: unknown[]) => mockListDraftlineRemotes(...args),
-    listDraftlinePendingSnapshotCleanups: (...args: unknown[]) => mockListDraftlinePendingSnapshotCleanups(...args),
     publishDraftlineChanges: (...args: unknown[]) => mockPublishDraftlineChanges(...args),
-    preflightDraftlineMilestoneMerge: (...args: unknown[]) => mockPreflightDraftlineMilestoneMerge(...args),
-    createDraftlineMilestoneMerge: (...args: unknown[]) => mockCreateDraftlineMilestoneMerge(...args),
+    sendForReview: (...args: unknown[]) => mockSendForReview(...args),
+    getDraftlineBaseStatus: (...args: unknown[]) => mockGetDraftlineBaseStatus(...args),
+    preflightDraftlineMergeBase: (...args: unknown[]) => mockPreflightDraftlineMergeBase(...args),
+    mergeDraftlineFromBase: (...args: unknown[]) => mockMergeDraftlineFromBase(...args),
   };
 });
 
@@ -27,36 +29,43 @@ vi.mock("../services/githubSetup", () => ({
   getGitHubAuthStatus: (...args: unknown[]) => mockGetGitHubAuthStatus(...args),
 }));
 
-import { remoteSyncErrorMessage, useAppStore } from "../stores/appStore";
+import { mergeNeedsDeveloperMessage, remoteSyncErrorMessage, useAppStore } from "../stores/appStore";
+import { GIT_INDEX_LOCKED_MESSAGE, SEND_OUTSIDE_NAMESPACE_MESSAGE } from "../services/draftlineErrors";
 import { useToastStore } from "../stores/toastStore";
 describe("appStore remote sync status", () => {
-  beforeEach(() => {
-    mockListDraftlinePendingSnapshotCleanups.mockResolvedValue([]);
-  });
-
   afterEach(() => {
     mockFetchDraftlineRemote.mockReset();
     mockGetGitHubAuthStatus.mockReset();
     mockGetDraftlineSyncStatus.mockReset();
     mockListDraftlineRemotes.mockReset();
-    mockListDraftlinePendingSnapshotCleanups.mockReset();
     mockPublishDraftlineChanges.mockReset();
-    mockPreflightDraftlineMilestoneMerge.mockReset();
-    mockCreateDraftlineMilestoneMerge.mockReset();
+    mockSendForReview.mockReset();
+    mockGetDraftlineBaseStatus.mockReset();
+    mockPreflightDraftlineMergeBase.mockReset();
+    mockMergeDraftlineFromBase.mockReset();
     useAppStore.setState({
+      currentProject: null,
+      versions: [],
+      sendForReviewPrompt: null,
+      shareUrl: null,
       currentRemote: null,
       timelines: [],
       syncStatus: null,
       syncError: null,
+      baseRename: null,
+      baseStatus: null,
       incomingCommits: [],
       isSyncing: false,
-      pendingHistoryCleanup: null,
-      prePushMilestonePrompt: null,
-      requestPrePushMilestone: useAppStore.getInitialState().requestPrePushMilestone,
-      findSnapshotCleanupCandidates: useAppStore.getInitialState().findSnapshotCleanupCandidates,
-      previewSnapshotCleanup: useAppStore.getInitialState().previewSnapshotCleanup,
-      applySnapshotCleanup: useAppStore.getInitialState().applySnapshotCleanup,
-      publishSnapshotCleanup: useAppStore.getInitialState().publishSnapshotCleanup,
+      isMerging: false,
+      mergeSource: null,
+      mergeTarget: null,
+      mergeConflicts: [],
+      draftlineMergeToken: null,
+      draftlineMergeRemote: null,
+      loadSketches: useAppStore.getInitialState().loadSketches,
+      loadStoryboards: useAppStore.getInitialState().loadStoryboards,
+      loadNotes: useAppStore.getInitialState().loadNotes,
+      refreshIncomingCommits: useAppStore.getInitialState().refreshIncomingCommits,
       checkLargeFiles: useAppStore.getInitialState().checkLargeFiles,
       checkDirty: useAppStore.getInitialState().checkDirty,
       refreshChangedFiles: useAppStore.getInitialState().refreshChangedFiles,
@@ -231,84 +240,10 @@ describe("appStore remote sync status", () => {
     expect(message).toBe("GitHub rejected the remote operation. Reconnect GitHub in Settings, then try again.");
   });
 
-  it("loads durable pending cleanup state when Draftline blocks normal sync", async () => {
-    const pendingCleanup = {
-      plan_id: "cleanup-1",
-      target_variation: "main",
-      expected_local_head: "before",
-      replacement_head: "after",
-      backup_refs: [],
-      ref_updates: [],
-      publish_status: "shared_history_rewrite_required",
-    };
-    mockGetGitHubAuthStatus.mockResolvedValueOnce({ connected: true });
-    mockFetchDraftlineRemote.mockRejectedValueOnce({
-      code: "history_cleanup_blocked",
-      message: "Pending history cleanup must be resolved first.",
-      details: { operation: "fetch", diagnostics: [], can_proceed: false },
-    });
-    mockListDraftlinePendingSnapshotCleanups.mockResolvedValueOnce([pendingCleanup]);
-    useAppStore.setState({
-      currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
-      timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 1, color_index: 0 }],
-    });
-
-    await useAppStore.getState().fetchFromRemote();
-
-    expect(mockListDraftlinePendingSnapshotCleanups).toHaveBeenCalledWith("main");
-    expect(useAppStore.getState().pendingHistoryCleanup).toEqual(pendingCleanup);
-    expect(useAppStore.getState().syncError).toContain("Publish or undo milestone history");
-  });
-
-  it("wraps unpublished local snapshots in a milestone merge before pushing", async () => {
-    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
-    const requestPrePushMilestone = vi.fn(async () => ({ type: "milestone" as const, label: "Finalize onboarding walkthrough" }));
-    mockPreflightDraftlineMilestoneMerge.mockResolvedValueOnce({ can_create_milestone: true });
-    mockCreateDraftlineMilestoneMerge.mockResolvedValueOnce({});
-    mockPublishDraftlineChanges.mockResolvedValueOnce(undefined);
-
-    useAppStore.setState({
-      currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
-      timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 4, color_index: 0 }],
-      syncStatus: { ahead: 3, behind: 0 },
-      graphNodes: [
-        { id: "e", message: "Wed afternoon 12:31", timestamp: "2026-07-08T18:31:00Z", timeline: "main", parents: ["d"], lane: 0, is_head: true },
-        { id: "d", message: "Refine intro", timestamp: "2026-07-08T18:20:00Z", timeline: "main", parents: ["c"], lane: 0, is_head: false },
-        { id: "c", message: "Quick save", timestamp: "2026-07-08T18:12:00Z", timeline: "main", parents: ["a"], lane: 0, is_head: false },
-        { id: "a", message: "Shared base", timestamp: "2026-07-08T18:00:00Z", timeline: "main", parents: [], lane: 0, is_head: false },
-      ],
-      checkLargeFiles: async () => [],
-      requestPrePushMilestone,
-      checkDirty: async () => {},
-      refreshChangedFiles: async () => {},
-      loadGraphData: async () => {},
-      loadTimelines: async () => {},
-      loadVersions: async () => {},
-    });
-
-    await useAppStore.getState().pushToRemote();
-
-    expect(requestPrePushMilestone).toHaveBeenCalledWith(expect.objectContaining({
-      snapshotCount: 3,
-      newestCommitId: "e",
-      oldestCommitId: "c",
-      latestSnapshotLabel: "Wed afternoon 12:31",
-      suggestedLabel: "Refine intro",
-      remoteName: "origin",
-    }));
-    expect(mockPreflightDraftlineMilestoneMerge).toHaveBeenCalledWith("origin");
-    expect(mockCreateDraftlineMilestoneMerge).toHaveBeenCalledWith("origin", "Finalize onboarding walkthrough");
-    expect(mockPublishDraftlineChanges).toHaveBeenCalledWith("origin");
-    expect(useAppStore.getState().isSyncing).toBe(false);
-  });
-
-  it("refreshes state after publishing a milestone merge", async () => {
+  it("publishes multiple local snapshots as-is and refreshes state", async () => {
     mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
     mockPublishDraftlineChanges.mockResolvedValueOnce(undefined);
     mockGetDraftlineSyncStatus.mockResolvedValueOnce({ ahead: 0, behind: 0 });
-    const requestPrePushMilestone = vi.fn(async () => ({ type: "milestone" as const, label: "Auditaur milestone validation" }));
-    mockPreflightDraftlineMilestoneMerge.mockResolvedValueOnce({ can_create_milestone: true });
-    mockCreateDraftlineMilestoneMerge.mockResolvedValueOnce({});
     const checkDirty = vi.fn(async () => {});
     const refreshChangedFiles = vi.fn(async () => {});
     const loadGraphData = vi.fn(async () => {});
@@ -319,14 +254,7 @@ describe("appStore remote sync status", () => {
       currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
       timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 4, color_index: 0 }],
       syncStatus: { ahead: 3, behind: 0 },
-      graphNodes: [
-        { id: "e", message: "Wed afternoon 12:31", timestamp: "2026-07-08T18:31:00Z", timeline: "main", parents: ["d"], lane: 0, is_head: true },
-        { id: "d", message: "Refine intro", timestamp: "2026-07-08T18:20:00Z", timeline: "main", parents: ["c"], lane: 0, is_head: false },
-        { id: "c", message: "Quick save", timestamp: "2026-07-08T18:12:00Z", timeline: "main", parents: ["a"], lane: 0, is_head: false },
-        { id: "a", message: "Shared base", timestamp: "2026-07-08T18:00:00Z", timeline: "main", parents: [], lane: 0, is_head: false },
-      ],
       checkLargeFiles: async () => [],
-      requestPrePushMilestone,
       checkDirty,
       refreshChangedFiles,
       loadGraphData,
@@ -336,134 +264,230 @@ describe("appStore remote sync status", () => {
 
     await useAppStore.getState().pushToRemote();
 
-    expect(mockCreateDraftlineMilestoneMerge).toHaveBeenCalledWith("origin", "Auditaur milestone validation");
+    expect(mockPublishDraftlineChanges).toHaveBeenCalledTimes(1);
     expect(mockPublishDraftlineChanges).toHaveBeenCalledWith("origin");
     expect(checkDirty).toHaveBeenCalled();
     expect(refreshChangedFiles).toHaveBeenCalled();
     expect(loadGraphData).toHaveBeenCalled();
     expect(loadTimelines).toHaveBeenCalled();
     expect(loadVersions).toHaveBeenCalled();
-  });
-
-  it("pushes snapshots as-is when Draftline cannot create a milestone merge", async () => {
-    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
-    mockPublishDraftlineChanges.mockResolvedValueOnce(undefined);
-    mockGetDraftlineSyncStatus.mockResolvedValueOnce({ ahead: 0, behind: 0 });
-    const requestPrePushMilestone = vi.fn(async () => ({ type: "milestone" as const, label: "Should not be used" }));
-    mockPreflightDraftlineMilestoneMerge.mockResolvedValueOnce({ can_create_milestone: false });
-
-    useAppStore.setState({
-      currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
-      timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 4, color_index: 0 }],
-      syncStatus: { ahead: 3, behind: 0 },
-      graphNodes: [
-        { id: "e", message: "Wed afternoon 12:31", timestamp: "2026-07-08T18:31:00Z", timeline: "main", parents: ["d"], lane: 0, is_head: true },
-        { id: "d", message: "Merge shared edits", timestamp: "2026-07-08T18:20:00Z", timeline: "main", parents: ["c", "side"], lane: 0, is_head: false },
-        { id: "c", message: "Quick save", timestamp: "2026-07-08T18:12:00Z", timeline: "main", parents: ["a"], lane: 0, is_head: false },
-        { id: "a", message: "Shared base", timestamp: "2026-07-08T18:00:00Z", timeline: "main", parents: [], lane: 0, is_head: false },
-      ],
-      checkLargeFiles: async () => [],
-      requestPrePushMilestone,
-      checkDirty: async () => {},
-      refreshChangedFiles: async () => {},
-      loadGraphData: async () => {},
-      loadTimelines: async () => {},
-      loadVersions: async () => {},
-    });
-
-    await useAppStore.getState().pushToRemote();
-
-    expect(mockPreflightDraftlineMilestoneMerge).toHaveBeenCalledWith("origin");
-    expect(requestPrePushMilestone).not.toHaveBeenCalled();
-    expect(mockCreateDraftlineMilestoneMerge).not.toHaveBeenCalled();
-    expect(mockPublishDraftlineChanges).toHaveBeenCalledWith("origin");
-  });
-
-  it("pushes snapshots as-is when the user skips the milestone", async () => {
-    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
-    mockPublishDraftlineChanges.mockResolvedValueOnce(undefined);
-    mockGetDraftlineSyncStatus.mockResolvedValueOnce({ ahead: 0, behind: 0 });
-    const requestPrePushMilestone = vi.fn(async () => ({ type: "pushAsIs" as const }));
-    mockPreflightDraftlineMilestoneMerge.mockResolvedValueOnce({ can_create_milestone: true });
-
-    useAppStore.setState({
-      currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
-      timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 3, color_index: 0 }],
-      syncStatus: { ahead: 2, behind: 0 },
-      graphNodes: [
-        { id: "c", message: "Wed afternoon 12:31", timestamp: "2026-07-08T18:31:00Z", timeline: "main", parents: ["b"], lane: 0, is_head: true },
-        { id: "b", message: "Quick save", timestamp: "2026-07-08T18:12:00Z", timeline: "main", parents: ["a"], lane: 0, is_head: false },
-        { id: "a", message: "Shared base", timestamp: "2026-07-08T18:00:00Z", timeline: "main", parents: [], lane: 0, is_head: false },
-      ],
-      checkLargeFiles: async () => [],
-      requestPrePushMilestone,
-      checkDirty: async () => {},
-      refreshChangedFiles: async () => {},
-      loadGraphData: async () => {},
-      loadTimelines: async () => {},
-      loadVersions: async () => {},
-    });
-
-    await useAppStore.getState().pushToRemote();
-
-    expect(mockPreflightDraftlineMilestoneMerge).toHaveBeenCalledWith("origin");
-    expect(requestPrePushMilestone).toHaveBeenCalledTimes(1);
-    expect(mockPublishDraftlineChanges).toHaveBeenCalledWith("origin");
-  });
-
-  it("cancels a milestone push without publishing snapshots", async () => {
-    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
-    const requestPrePushMilestone = vi.fn(async () => ({ type: "cancel" as const }));
-    mockPreflightDraftlineMilestoneMerge.mockResolvedValueOnce({ can_create_milestone: true });
-
-    useAppStore.setState({
-      currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
-      timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 3, color_index: 0 }],
-      syncStatus: { ahead: 2, behind: 0 },
-      graphNodes: [
-        { id: "c", message: "Wed afternoon 12:31", timestamp: "2026-07-08T18:31:00Z", timeline: "main", parents: ["b"], lane: 0, is_head: true },
-        { id: "b", message: "Quick save", timestamp: "2026-07-08T18:12:00Z", timeline: "main", parents: ["a"], lane: 0, is_head: false },
-        { id: "a", message: "Shared base", timestamp: "2026-07-08T18:00:00Z", timeline: "main", parents: [], lane: 0, is_head: false },
-      ],
-      checkLargeFiles: async () => [],
-      requestPrePushMilestone,
-    });
-
-    await useAppStore.getState().pushToRemote();
-
-    expect(mockPreflightDraftlineMilestoneMerge).toHaveBeenCalledWith("origin");
-    expect(requestPrePushMilestone).toHaveBeenCalledTimes(1);
-    expect(mockPublishDraftlineChanges).not.toHaveBeenCalled();
     expect(useAppStore.getState().isSyncing).toBe(false);
   });
 
-  it("does not prompt for a milestone when only one local snapshot is ahead", async () => {
+  it("remembers a renamed remote base so the branch can be renamed to match", async () => {
     mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
-    mockPublishDraftlineChanges.mockResolvedValueOnce(undefined);
-    mockGetDraftlineSyncStatus.mockResolvedValueOnce({ ahead: 0, behind: 0 });
-    const requestPrePushMilestone = vi.fn(async () => ({ type: "milestone" as const, label: "Should not be used" }));
-
+    mockPublishDraftlineChanges.mockRejectedValueOnce({
+      code: "base_renamed",
+      message: "renamed",
+      details: { from: "trunk", to: "main" },
+    });
     useAppStore.setState({
       currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
-      timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 2, color_index: 0 }],
-      syncStatus: { ahead: 1, behind: 0 },
-      graphNodes: [
-        { id: "b", message: "Single local save", timestamp: "2026-07-08T18:31:00Z", timeline: "main", parents: ["a"], lane: 0, is_head: true },
-        { id: "a", message: "Shared base", timestamp: "2026-07-08T18:00:00Z", timeline: "main", parents: [], lane: 0, is_head: false },
-      ],
+      timelines: [{ name: "trunk", label: "trunk", is_active: true, snapshot_count: 2, color_index: 0 }],
       checkLargeFiles: async () => [],
-      requestPrePushMilestone,
-      checkDirty: async () => {},
-      refreshChangedFiles: async () => {},
-      loadGraphData: async () => {},
-      loadTimelines: async () => {},
-      loadVersions: async () => {},
     });
 
     await useAppStore.getState().pushToRemote();
 
-    expect(requestPrePushMilestone).not.toHaveBeenCalled();
+    expect(useAppStore.getState().baseRename).toEqual({ from: "trunk", to: "main" });
+    expect(useAppStore.getState().syncError).toContain("renamed trunk to main");
+  });
+
+  it("prompts for a pull request title instead of pushing a hybrid project", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    const checkLargeFiles = vi.fn(async () => [] as Array<[string, number]>);
+    useAppStore.setState({
+      currentProject: { root: "D:\\contoso-app\\cutready", name: "cutready", repo_root: "D:\\contoso-app\\cutready", hybrid: true },
+      currentRemote: { name: "origin", url: "https://github.com/contoso/app.git" },
+      timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 2, color_index: 0 }],
+      versions: [{ id: "abc", message: "Tighten intro narration", timestamp: "", summary: "" }],
+      checkLargeFiles,
+    });
+
+    await useAppStore.getState().pushToRemote();
+
+    expect(useAppStore.getState().sendForReviewPrompt).toEqual({ defaultTitle: "Tighten intro narration" });
+    expect(mockPublishDraftlineChanges).not.toHaveBeenCalled();
+    expect(mockSendForReview).not.toHaveBeenCalled();
+    expect(checkLargeFiles).not.toHaveBeenCalled();
+    expect(useAppStore.getState().isSyncing).toBe(false);
+  });
+
+  it("sends a hybrid project for review, links the pull request, and refreshes state", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    mockGetDraftlineSyncStatus.mockResolvedValueOnce({ ahead: 0, behind: 0 });
+    mockSendForReview.mockResolvedValueOnce({
+      remote: "origin",
+      variation: "cutready/main",
+      base: "main",
+      created_variation: true,
+      published_versions: 2,
+      pull_request: { number: 12, url: "https://github.com/contoso/app/pull/12" },
+      created_pull_request: true,
+    });
+    const checkDirty = vi.fn(async () => {});
+    const refreshChangedFiles = vi.fn(async () => {});
+    const loadGraphData = vi.fn(async () => {});
+    const loadTimelines = vi.fn(async () => {});
+    const loadVersions = vi.fn(async () => {});
+    useAppStore.setState({
+      currentProject: { root: "D:\\contoso-app\\cutready", name: "cutready", repo_root: "D:\\contoso-app\\cutready", hybrid: true },
+      currentRemote: { name: "origin", url: "https://github.com/contoso/app.git" },
+      sendForReviewPrompt: { defaultTitle: "Update cutready" },
+      checkLargeFiles: async () => [],
+      checkDirty,
+      refreshChangedFiles,
+      loadGraphData,
+      loadTimelines,
+      loadVersions,
+    });
+
+    await useAppStore.getState().sendForReview("  Launch demo  ", "Please review");
+
+    expect(mockSendForReview).toHaveBeenCalledWith({ remote: "origin", title: "Launch demo", body: "Please review" });
+    expect(mockPublishDraftlineChanges).not.toHaveBeenCalled();
+    expect(useAppStore.getState().sendForReviewPrompt).toBeNull();
+    expect(useToastStore.getState().toasts).toEqual([
+      expect.objectContaining({
+        message: "Pull request #12 opened for review.",
+        type: "success",
+        link: { label: "Open", url: "https://github.com/contoso/app/pull/12" },
+      }),
+    ]);
+    expect(checkDirty).toHaveBeenCalled();
+    expect(refreshChangedFiles).toHaveBeenCalled();
+    expect(loadGraphData).toHaveBeenCalled();
+    expect(loadTimelines).toHaveBeenCalled();
+    expect(loadVersions).toHaveBeenCalled();
+    expect(useAppStore.getState().isSyncing).toBe(false);
+  });
+
+  it("blocks send for review when large files are pending", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    useAppStore.setState({
+      currentProject: { root: "D:\\contoso-app\\cutready", name: "cutready", repo_root: "D:\\contoso-app\\cutready", hybrid: true },
+      currentRemote: { name: "origin", url: "https://github.com/contoso/app.git" },
+      checkLargeFiles: async () => [["screenshots/huge.png", 120 * 1024 * 1024]],
+    });
+
+    await useAppStore.getState().sendForReview("Launch demo");
+
+    expect(mockSendForReview).not.toHaveBeenCalled();
+    expect(useAppStore.getState().syncError).toBe(
+      "Large files detected: screenshots/huge.png (120.0 MB). Remove or add to .gitignore before pushing.",
+    );
+    expect(useAppStore.getState().isSyncing).toBe(false);
+  });
+
+  it("surfaces send-for-review failures as sync errors", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    mockSendForReview.mockRejectedValueOnce(new Error("pull request provider failed: GitHub returned 422"));
+    const loadTimelines = vi.fn(async () => {});
+    useAppStore.setState({
+      currentProject: { root: "D:\\contoso-app\\cutready", name: "cutready", repo_root: "D:\\contoso-app\\cutready", hybrid: true },
+      currentRemote: { name: "origin", url: "https://github.com/contoso/app.git" },
+      checkLargeFiles: async () => [],
+      loadTimelines,
+      checkDirty: async () => {},
+      refreshChangedFiles: async () => {},
+      loadGraphData: async () => {},
+      loadVersions: async () => {},
+    });
+
+    await useAppStore.getState().sendForReview("Launch demo");
+
+    expect(useAppStore.getState().syncError).toBe("pull request provider failed: GitHub returned 422");
+    // Send may have switched branches before failing, so state is refreshed anyway.
+    expect(loadTimelines).toHaveBeenCalled();
+    expect(useToastStore.getState().toasts).toEqual([]);
+    expect(useAppStore.getState().isSyncing).toBe(false);
+  });
+
+  it("explains coded send-for-review failures in plain language", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    mockSendForReview.mockRejectedValueOnce({
+      code: "send_outside_namespace",
+      message: "branch `feature/login` is not a variation; switch to one or to the base branch to send",
+    });
+    useAppStore.setState({
+      currentProject: { root: "D:\\contoso-app\\cutready", name: "cutready", repo_root: "D:\\contoso-app\\cutready", hybrid: true },
+      currentRemote: { name: "origin", url: "https://github.com/contoso/app.git" },
+      checkLargeFiles: async () => [],
+      loadTimelines: async () => {},
+      checkDirty: async () => {},
+      refreshChangedFiles: async () => {},
+      loadGraphData: async () => {},
+      loadVersions: async () => {},
+    });
+
+    await useAppStore.getState().sendForReview("Launch demo");
+
+    expect(useAppStore.getState().syncError).toBe(SEND_OUTSIDE_NAMESPACE_MESSAGE);
+  });
+
+  it("routes a hybrid publishTimeline through the Send for review prompt", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    useAppStore.setState({
+      currentProject: { root: "D:\\contoso-app\\cutready", name: "cutready", repo_root: "D:\\contoso-app\\cutready", hybrid: true },
+      currentRemote: { name: "origin", url: "https://github.com/contoso/app.git" },
+      timelines: [{ name: "cutready/intro", label: "intro", is_active: true, snapshot_count: 2, color_index: 0 }],
+      versions: [{ id: "abc", message: "Tighten intro narration", timestamp: "", summary: "" }],
+    });
+
+    await useAppStore.getState().publishTimeline();
+
+    expect(mockPublishDraftlineChanges).not.toHaveBeenCalled();
+    expect(useAppStore.getState().sendForReviewPrompt).toEqual({ defaultTitle: "Tighten intro narration" });
+  });
+
+  it("routes a hybrid shareChanges through the Send for review prompt without a branch link", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    useAppStore.setState({
+      currentProject: { root: "D:\\contoso-app\\cutready", name: "cutready", repo_root: "D:\\contoso-app\\cutready", hybrid: true },
+      currentRemote: { name: "origin", url: "https://github.com/contoso/app.git" },
+      timelines: [{ name: "cutready/intro", label: "intro", is_active: true, snapshot_count: 2, color_index: 0 }],
+      versions: [{ id: "abc", message: "Tighten intro narration", timestamp: "", summary: "" }],
+    });
+
+    await useAppStore.getState().shareChanges();
+
+    expect(mockPublishDraftlineChanges).not.toHaveBeenCalled();
+    expect(useAppStore.getState().sendForReviewPrompt).toEqual({ defaultTitle: "Tighten intro narration" });
+    expect(useAppStore.getState().shareUrl).toBeNull();
+  });
+
+  it("publishes a standalone timeline directly", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    mockPublishDraftlineChanges.mockResolvedValueOnce(undefined);
+    mockGetDraftlineSyncStatus.mockResolvedValueOnce({ ahead: 0, behind: 0 });
+    useAppStore.setState({
+      currentProject: { root: "D:\\demo", name: "demo", repo_root: "D:\\demo" },
+      currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
+      timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 2, color_index: 0 }],
+    });
+
+    await useAppStore.getState().publishTimeline();
+
     expect(mockPublishDraftlineChanges).toHaveBeenCalledWith("origin");
+    expect(useAppStore.getState().sendForReviewPrompt).toBeNull();
+  });
+
+  it("explains a refused publish while Git holds the index", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    mockPublishDraftlineChanges.mockRejectedValueOnce({
+      code: "git_index_locked",
+      message: "Git is busy in this repository (.git/index.lock exists); try again when it finishes",
+    });
+    useAppStore.setState({
+      currentProject: { root: "D:\\demo", name: "demo", repo_root: "D:\\demo" },
+      currentRemote: { name: "origin", url: "https://github.com/sethjuarez/cutready.git" },
+      timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 2, color_index: 0 }],
+    });
+
+    await useAppStore.getState().publishTimeline();
+
+    expect(useAppStore.getState().syncError).toBe(GIT_INDEX_LOCKED_MESSAGE);
+    expect(useAppStore.getState().isSyncing).toBe(false);
   });
 
   it("does not repopulate sync status for a workspace that closed mid-refresh (#263)", async () => {
@@ -527,5 +551,151 @@ describe("appStore remote sync status", () => {
 
     // 3 concurrent callers collapsed to 2 remote round-trips, not 3.
     expect(mockGetDraftlineSyncStatus).toHaveBeenCalledTimes(2);
+  });
+
+  describe("get updates from base (hybrid)", () => {
+    const hybridProject = {
+      root: "D:\\contoso-app\\cutready",
+      name: "cutready",
+      repo_root: "D:\\contoso-app\\cutready",
+      git_root: "D:\\contoso-app",
+      hybrid: true,
+    };
+    const remote = { name: "origin", url: "https://github.com/contoso/app.git" };
+    const cleanReport = {
+      dirtyFiles: [],
+      conflicts: [],
+      canMergeCleanly: true,
+      syncStatus: { ahead: 1, behind: 2 },
+      token: { source: "main" },
+    };
+
+    function stubRefresh() {
+      const spies = {
+        loadSketches: vi.fn(async () => {}),
+        loadStoryboards: vi.fn(async () => {}),
+        loadNotes: vi.fn(async () => {}),
+        refreshIncomingCommits: vi.fn(async () => {}),
+        loadVersions: vi.fn(async () => {}),
+        loadGraphData: vi.fn(async () => {}),
+        loadTimelines: vi.fn(async () => {}),
+        checkDirty: vi.fn(async () => {}),
+      };
+      useAppStore.setState(spies);
+      return spies;
+    }
+
+    it("refreshes base status only for hybrid projects", async () => {
+      mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+      mockGetDraftlineSyncStatus.mockResolvedValue({ ahead: 0, behind: 0 });
+      mockGetDraftlineBaseStatus.mockResolvedValue({ ahead: 1, behind: 3, base: "main" });
+      useAppStore.setState({
+        currentProject: { root: "D:\\demo", name: "demo", repo_root: "D:\\demo", hybrid: false },
+        currentRemote: remote,
+      });
+
+      await useAppStore.getState().refreshSyncStatus();
+      expect(mockGetDraftlineBaseStatus).not.toHaveBeenCalled();
+      expect(useAppStore.getState().baseStatus).toBeNull();
+
+      useAppStore.setState({ currentProject: hybridProject });
+      await useAppStore.getState().refreshSyncStatus();
+      expect(mockGetDraftlineBaseStatus).toHaveBeenCalledWith("origin");
+      expect(useAppStore.getState().baseStatus).toEqual({ ahead: 1, behind: 3, base: "main" });
+    });
+
+    it("is a no-op for standalone projects", async () => {
+      mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+      useAppStore.setState({
+        currentProject: { root: "D:\\demo", name: "demo", repo_root: "D:\\demo", hybrid: false },
+        currentRemote: remote,
+      });
+
+      await useAppStore.getState().getUpdatesFromBase();
+
+      expect(mockPreflightDraftlineMergeBase).not.toHaveBeenCalled();
+      expect(mockMergeDraftlineFromBase).not.toHaveBeenCalled();
+    });
+
+    it("merges a clean base update and refreshes state", async () => {
+      mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+      mockGetDraftlineSyncStatus.mockResolvedValue({ ahead: 1, behind: 0 });
+      mockGetDraftlineBaseStatus.mockResolvedValue({ ahead: 2, behind: 0, base: "main" });
+      mockPreflightDraftlineMergeBase.mockResolvedValueOnce(cleanReport);
+      mockMergeDraftlineFromBase.mockResolvedValueOnce("abc123");
+      useAppStore.setState({
+        currentProject: hybridProject,
+        currentRemote: remote,
+        baseStatus: { ahead: 1, behind: 2, base: "main" },
+      });
+      const spies = stubRefresh();
+
+      await useAppStore.getState().getUpdatesFromBase();
+
+      expect(mockPreflightDraftlineMergeBase).toHaveBeenCalledWith("origin");
+      expect(mockMergeDraftlineFromBase).toHaveBeenCalledWith("origin", "Bring in latest main");
+      expect(useToastStore.getState().toasts).toEqual([
+        expect.objectContaining({ message: "Updates from main brought in.", type: "success" }),
+      ]);
+      for (const spy of Object.values(spies)) expect(spy).toHaveBeenCalled();
+      expect(useAppStore.getState().baseStatus).toEqual({ ahead: 2, behind: 0, base: "main" });
+      expect(useAppStore.getState().syncError).toBeNull();
+      expect(useAppStore.getState().isSyncing).toBe(false);
+    });
+
+    it("keeps the developer-needed error visible after refreshing", async () => {
+      mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+      mockGetDraftlineSyncStatus.mockResolvedValue({ ahead: 1, behind: 0 });
+      mockGetDraftlineBaseStatus.mockResolvedValue({ ahead: 1, behind: 2, base: "main" });
+      mockPreflightDraftlineMergeBase.mockRejectedValueOnce({
+        code: "merge_needs_developer",
+        message: "merge needs a developer: files outside the project conflict: [\"src/app.rs\"]",
+      });
+      useAppStore.setState({
+        currentProject: hybridProject,
+        currentRemote: remote,
+        baseStatus: { ahead: 1, behind: 2, base: "main" },
+      });
+      const spies = stubRefresh();
+
+      await useAppStore.getState().getUpdatesFromBase();
+
+      expect(mockMergeDraftlineFromBase).not.toHaveBeenCalled();
+      expect(mockGetDraftlineSyncStatus).toHaveBeenCalled();
+      expect(spies.loadTimelines).toHaveBeenCalled();
+      expect(spies.loadGraphData).toHaveBeenCalled();
+      expect(useAppStore.getState().syncError).toBe(mergeNeedsDeveloperMessage("main"));
+      expect(useAppStore.getState().isMerging).toBe(false);
+      expect(useAppStore.getState().isSyncing).toBe(false);
+    });
+
+    it("routes in-folder base conflicts to the conflict panel", async () => {
+      mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+      mockGetDraftlineSyncStatus.mockResolvedValue({ ahead: 1, behind: 0 });
+      mockGetDraftlineBaseStatus.mockResolvedValue({ ahead: 1, behind: 2, base: "main" });
+      const conflicts = [{ path: "intro.sk", file_type: "sketch", ours: "{}", theirs: "{}", ancestor: "{}", field_conflicts: [] }];
+      mockPreflightDraftlineMergeBase.mockResolvedValueOnce({
+        ...cleanReport,
+        canMergeCleanly: false,
+        conflicts,
+      });
+      useAppStore.setState({
+        currentProject: hybridProject,
+        currentRemote: remote,
+        baseStatus: { ahead: 1, behind: 2, base: "main" },
+      });
+      stubRefresh();
+
+      await useAppStore.getState().getUpdatesFromBase();
+
+      expect(mockMergeDraftlineFromBase).not.toHaveBeenCalled();
+      const state = useAppStore.getState();
+      expect(state.isMerging).toBe(true);
+      expect(state.mergeSource).toBe("main");
+      expect(state.mergeConflicts).toEqual(conflicts);
+      expect(state.draftlineMergeToken).toEqual({ source: "main" });
+      expect(state.draftlineMergeRemote).toBe("origin");
+      expect(state.syncError).toBeNull();
+    });
   });
 });

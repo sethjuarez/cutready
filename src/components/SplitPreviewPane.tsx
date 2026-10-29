@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "../services/tauri";
 import { X, MoreHorizontal, Search } from "lucide-react";
-import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
+import { registerEditorFlush, shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
 import type { Sketch, Storyboard } from "../types/sketch";
 import type { PlanningRow } from "../types/sketch";
@@ -376,6 +376,30 @@ function SketchSplitEditor({ path }: { path: string }) {
     };
   }, [path]);
 
+  useEffect(() => registerEditorFlush(async () => {
+    const title = pendingTitleRef.current;
+    const desc = pendingDescRef.current;
+    const rows = pendingRowsRef.current;
+    for (const timer of [titleTimerRef, descTimerRef, saveTimerRef]) {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = null;
+    }
+    pendingTitleRef.current = null;
+    pendingDescRef.current = null;
+    pendingRowsRef.current = null;
+    if (shouldSuppressEditorFlush(path)) return;
+    try {
+      if (title !== null) await invoke("update_sketch_title", { relativePath: path, title });
+      if (desc !== null) await invoke("update_sketch", { relativePath: path, description: desc });
+      if (rows) await invoke("update_sketch", { relativePath: path, rows });
+    } catch (err) {
+      pendingTitleRef.current ??= title;
+      pendingDescRef.current ??= desc;
+      pendingRowsRef.current ??= rows;
+      throw err;
+    }
+  }), [path]);
+
   // Re-load when primary pane saves (so split stays in sync if primary edits)
   useEffect(() => {
     const handler = () => {
@@ -559,6 +583,20 @@ function NoteSplitEditor({ path }: { path: string }) {
       }
     };
   }, [path, locked]);
+
+  useEffect(() => registerEditorFlush(async () => {
+    const pending = pendingContentRef.current;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = null;
+    pendingContentRef.current = null;
+    if (locked || pending === null || shouldSuppressEditorFlush(path)) return;
+    try {
+      await invoke("update_note", { relativePath: path, content: pending });
+    } catch (err) {
+      pendingContentRef.current ??= pending;
+      throw err;
+    }
+  }), [path, locked]);
 
   // Re-load when AI updates
   useEffect(() => {

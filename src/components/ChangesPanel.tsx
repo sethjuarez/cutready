@@ -24,7 +24,8 @@ import { IncomingPreview, SyncBar } from "./SyncBar";
 import { TimelineSelector } from "./TimelineSelector";
 import { useConfirmDialog } from "./ConfirmDialog";
 import type { DiffEntry } from "../types/sketch";
-import { firstParentTimelineNodes } from "../utils/historyCleanupSelection";
+import { firstParentTimelineNodes } from "../utils/timelineNodes";
+import { draftlineToRepoPath } from "../utils/draftlinePaths";
 
 export function ChangesPanel() {
   const changedFiles = useAppStore((s) => s.changedFiles);
@@ -44,6 +45,7 @@ export function ChangesPanel() {
   const timelines = useAppStore((s) => s.timelines);
   const loadTimelines = useAppStore((s) => s.loadTimelines);
   const renameLegacyMasterTimeline = useAppStore((s) => s.renameLegacyMasterTimeline);
+  const baseRename = useAppStore((s) => s.baseRename);
   const currentRemote = useAppStore((s) => s.currentRemote);
   const syncStatus = useAppStore((s) => s.syncStatus);
   const syncError = useAppStore((s) => s.syncError);
@@ -124,8 +126,11 @@ export function ChangesPanel() {
     && head?.id === startedBranchFromSnapshot.snapshotId
     ? startedBranchFromSnapshot
     : null;
-  const hasLegacyMasterTimeline = timelines.some((timeline) => timeline.name === "master")
+  // A hybrid project's `master` is the developer's own branch; leave it alone.
+  const hasLegacyMasterTimeline = !currentProject?.hybrid
+    && timelines.some((timeline) => timeline.name === "master")
     && !timelines.some((timeline) => timeline.name === "main");
+  const branchRename = baseRename ?? (hasLegacyMasterTimeline ? { from: "master", to: "main" } : null);
   const activeNodes = firstParentTimelineNodes(graphNodes);
 
   const timelineMap = new Map(
@@ -166,9 +171,14 @@ export function ChangesPanel() {
   }, [navigateToSnapshot, loadGraphData, loadTimelines]);
 
   const handleDiscard = useCallback(async () => {
+    const listed = changedFiles.slice(0, 6).map((file) => `• ${file.path}`);
+    if (changedFiles.length > listed.length) listed.push(`• and ${changedFiles.length - listed.length} more`);
     const confirmed = await confirm({
       title: "Discard all workspace changes?",
-      message: "This restores the workspace to the last saved snapshot. Unsaved edits in sketches, notes, storyboards, and visuals will be lost.",
+      message: [
+        `This restores the workspace to the last saved snapshot. ${changedFiles.length === 1 ? "This file loses its" : `These ${changedFiles.length} files lose their`} unsaved edits:`,
+        ...listed,
+      ].join("\n"),
       confirmLabel: "Discard changes",
       variant: "error",
     });
@@ -191,7 +201,7 @@ export function ChangesPanel() {
         await deleteTimeline(branchToDelete.branchName);
       }
     }
-  }, [confirm, deleteTimeline, discardChanges, emptyStartedBranch, loadGraphData, loadTimelines, switchTimeline, timelines]);
+  }, [changedFiles, confirm, deleteTimeline, discardChanges, emptyStartedBranch, loadGraphData, loadTimelines, switchTimeline, timelines]);
 
   const handleRenameMaster = useCallback(async () => {
     if (!confirmRenameMaster) {
@@ -215,7 +225,7 @@ export function ChangesPanel() {
     ? null
     : projects.find((project) => project.path === projectFilter) ?? null;
   const filteredChangedFiles = selectedProjectFilter
-    ? changedFiles.filter((file) => fileBelongsToProject(file.path, selectedProjectFilter.path))
+    ? changedFiles.filter((file) => fileBelongsToProject(draftlineToRepoPath(file.path, currentProject), selectedProjectFilter.path))
     : changedFiles;
   const added = filteredChangedFiles.filter((f) => f.status === "added");
   const modified = filteredChangedFiles.filter((f) => f.status === "modified");
@@ -266,7 +276,7 @@ export function ChangesPanel() {
         </button>
         {selectableProjects.map((project) => {
           const selected = projectFilter === project.path;
-          const projectChangeCount = changedFiles.filter((file) => fileBelongsToProject(file.path, project.path)).length;
+          const projectChangeCount = changedFiles.filter((file) => fileBelongsToProject(draftlineToRepoPath(file.path, currentProject), project.path)).length;
           return (
             <button
               key={project.path}
@@ -418,15 +428,17 @@ export function ChangesPanel() {
             </div>
           )}
 
-          {hasLegacyMasterTimeline && (
+          {branchRename && (
             <div className="mt-1.5 rounded-lg border border-[rgb(var(--color-warning))]/30 bg-[rgb(var(--color-warning))]/10 p-2 text-[10px] leading-snug text-[rgb(var(--color-text))]">
               <div className="flex min-w-0 items-start gap-2">
                 <GitBranch className="mt-0.5 h-3 w-3 shrink-0 text-[rgb(var(--color-warning))]" />
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium">Legacy Draftline branch name detected</div>
+                  <div className="font-medium">
+                    {baseRename ? `The shared repository renamed ${baseRename.from}` : "Legacy Draftline branch name detected"}
+                  </div>
                   <div className="mt-0.5 text-[rgb(var(--color-text-secondary))]">
-                    The real branch is <code className="rounded bg-[rgb(var(--color-surface))]/80 px-1">master</code>.
-                    Rename it to <code className="rounded bg-[rgb(var(--color-surface))]/80 px-1">main</code> at the source instead of hiding it.
+                    The real branch is <code className="rounded bg-[rgb(var(--color-surface))]/80 px-1">{branchRename.from}</code>.
+                    Rename it to <code className="rounded bg-[rgb(var(--color-surface))]/80 px-1">{branchRename.to}</code> at the source instead of hiding it.
                   </div>
                   <button
                     type="button"
@@ -434,7 +446,9 @@ export function ChangesPanel() {
                     disabled={renamingMaster}
                     className="mt-1.5 rounded-md border border-[rgb(var(--color-warning))]/30 bg-[rgb(var(--color-surface))] px-2 py-1 font-medium text-[rgb(var(--color-text))] transition-colors hover:border-[rgb(var(--color-warning))]/60 hover:bg-[rgb(var(--color-warning))]/10 disabled:pointer-events-none disabled:opacity-60"
                   >
-                    {renamingMaster ? "Renaming..." : confirmRenameMaster ? "Confirm rename master to main" : "Rename master to main"}
+                    {renamingMaster
+                      ? "Renaming..."
+                      : `${confirmRenameMaster ? "Confirm rename" : "Rename"} ${branchRename.from} to ${branchRename.to}`}
                   </button>
                 </div>
               </div>
@@ -708,6 +722,7 @@ function isDatabasePath(path: string): boolean {
 function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; icon: ReactNode }) {
   const openTab = useAppStore((s) => s.openTab);
   const openDatabase = useAppStore((s) => s.openDatabase);
+  const currentProject = useAppStore((s) => s.currentProject);
   const discardFile = useAppStore((s) => s.discardFile);
   const { confirm, confirmationDialog } = useConfirmDialog();
 
@@ -729,7 +744,7 @@ function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; 
               <button
                 onClick={() => {
                   if (isDatabasePath(file.path) && file.status !== "deleted") {
-                    openDatabase(file.path);
+                    openDatabase(draftlineToRepoPath(file.path, currentProject));
                   } else {
                     openTab({ type: "diff", path: file.path, title: `${filename} (diff)` });
                   }
