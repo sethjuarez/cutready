@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { SafeMarkdown } from "./SafeMarkdown";
-import { makeMainTabId, makeSplitTabId, shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
+import { makeMainTabId, makeSplitTabId, registerEditorFlush, shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
 import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
@@ -140,6 +140,23 @@ export function NoteEditor() {
     },
     [activeNoteLocked, activeNotePath, noteDocument.metadata],
   );
+
+  useEffect(() => registerEditorFlush(async () => {
+    const content = pendingContentRef.current;
+    if (content === null) return;
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+    pendingContentRef.current = null;
+    if (shouldSuppressEditorFlush(activeNotePath) || activeNoteLocked) return;
+    try {
+      await invoke("update_note", { relativePath: activeNotePath, content });
+    } catch (err) {
+      if (pendingContentRef.current === null) pendingContentRef.current = content;
+      throw err;
+    }
+  }), [activeNotePath, activeNoteLocked]);
 
   const handleMetadataChange = useCallback(
     (metadata: Parameters<typeof serializeNoteDocument>[0]) => {

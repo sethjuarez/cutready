@@ -37,6 +37,7 @@ import {
   restoreDraftlineVersionAsNewSaveToVariation,
   renameDraftlineVariation,
   saveDraftlineVersion,
+  moveDraftlineProjectFolder,
   setDraftlineWorkspacePath,
   shelveDraftlineChanges,
   switchDraftlineVariation,
@@ -49,6 +50,7 @@ import {
   type DraftlineProjectHealth,
   type DraftlineRestoreVersionTarget,
   type DraftlineMergeIncomingToken,
+  type MoveProjectFolderResult,
 } from "../services/draftlineVersioning";
 import {
   DraftlineErrorCode,
@@ -57,6 +59,7 @@ import {
   draftlineErrorCode,
   friendlyDraftlineErrorMessage,
   mergeNeedsDeveloperMessage,
+  SAVE_BEFORE_MOVE_MESSAGE,
   type AdoptionPrompt,
 } from "../services/draftlineErrors";
 import { recordActivityEntries } from "../services/telemetry";
@@ -185,6 +188,26 @@ export function shouldSuppressEditorFlush(relativePath: string | null | undefine
 
 export function clearSuppressedEditorFlush(relativePath: string) {
   suppressedEditorFlushPaths.delete(normalizeRelativePath(relativePath));
+}
+
+type EditorFlush = () => Promise<unknown> | unknown;
+const editorFlushes = new Set<EditorFlush>();
+
+/** Editors with debounced writes register here so callers can write them out on demand. */
+export function registerEditorFlush(flush: EditorFlush): () => void {
+  editorFlushes.add(flush);
+  return () => {
+    editorFlushes.delete(flush);
+  };
+}
+
+/** Writes every editor's pending (debounced) changes to disk; rejects if any write failed. */
+export async function flushEditorWrites(): Promise<void> {
+  const results = await Promise.allSettled(Array.from(editorFlushes, async (flush) => flush()));
+  const failed = results.find((result) => result.status === "rejected" || result.value === false);
+  if (failed) {
+    throw new Error("CutReady couldn't save an open editor's latest changes. Nothing was moved; try again.");
+  }
 }
 
 function clearSuppressedEditorFlushes(relativePaths: string[]) {
@@ -522,6 +545,8 @@ interface AppStoreState {
   projectHealthBusy: boolean;
   /** A folder the user tried to open that isn't a CutReady project yet (e.g. a code repository). */
   adoptionPrompt: AdoptionPrompt | null;
+  /** Whether the "Move project folder" dialog is open. */
+  moveFolderDialogOpen: boolean;
   /** Whether we are viewing a rewound snapshot (prev-tip exists). */
   isRewound: boolean;
 
@@ -664,6 +689,12 @@ interface AppStoreState {
   openProject: (path: string, options?: { adopt?: boolean }) => Promise<void>;
   /** Answer the adoption prompt: create the suggested CutReady folder, manage the folder as-is, or cancel. */
   resolveAdoptionPrompt: (choice: "create" | "adopt" | "cancel") => Promise<void>;
+  setMoveFolderDialogOpen: (open: boolean) => void;
+  /**
+   * Move the project folder to `to` (relative to its repository) as one save,
+   * then reopen it there. Throws (without changing anything) when the move is refused.
+   */
+  moveProjectFolder: (to: string) => Promise<MoveProjectFolderResult>;
   closeProject: () => void;
 
   // ── Multi-project actions ──────────────────────────────────
@@ -1303,6 +1334,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   projectHealth: HEALTHY_PROJECT,
   projectHealthBusy: false,
   adoptionPrompt: null,
+  moveFolderDialogOpen: false,
   isRewound: false,
   currentRemote: null,
   remoteBranches: [],
@@ -1795,6 +1827,67 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } else {
       await get().createProject(prompt.suggested);
     }
+  },
+
+  setMoveFolderDialogOpen: (open) => set({ moveFolderDialogOpen: open }),
+
+  moveProjectFolder: async (to) => {
+    const project = get().currentProject;
+    if (!project) throw new Error("Open a project first.");
+    // Debounced editor edits must reach disk before deciding whether anything is unsaved.
+    await flushEditorWrites();
+    await get().checkDirty();
+    if (get().isDirty) throw new Error(SAVE_BEFORE_MOVE_MESSAGE);
+    const oldRoot = project.repo_root;
+    const openPaths = Array.from(new Set([
+      ...get().openTabs.filter(isDocumentTab).map((tab) => tab.path),
+      ...get().splitTabs.filter(isDocumentTab).map((tab) => tab.path),
+    ]));
+    // Editors must not write back into the old folder once it has moved.
+    for (const path of openPaths) suppressEditorFlush(path);
+    let result: MoveProjectFolderResult;
+    try {
+      result = await moveDraftlineProjectFolder(to);
+    } catch (err) {
+      if (draftlineErrorCode(err) === DraftlineErrorCode.ProjectStateStranded) {
+        // Content and local history are split; stop writing until the user repairs it.
+        set({ moveFolderDialogOpen: false });
+        // Keep editor flushes suppressed so unmounting editors can't write into the split state.
+        get().closeProject();
+        throw err;
+      }
+      clearSuppressedEditorFlushes(openPaths);
+      throw err;
+    }
+    set({ moveFolderDialogOpen: false });
+    // Keep a way back to the moved project even if reopening it fails below.
+    await invoke("add_recent_project", { path: result.projectRoot }).catch(console.error);
+    await get().removeRecentProject(oldRoot);
+    set({ error: null });
+    await get().openProject(result.projectRoot);
+    globalThis.setTimeout(() => clearSuppressedEditorFlushes(openPaths), 100);
+    const reopened = get().currentProject;
+    // openProject installs a fresh project object only when it succeeds.
+    if (!reopened || reopened === project) {
+      const reason = get().error ?? "it didn't open";
+      get().closeProject();
+      useToastStore.getState().show(
+        `Moved the project to ${result.projectRoot}, but couldn't reopen it (${reason}). Open it from Recent Projects.`,
+        10000,
+        "error",
+      );
+      return result;
+    }
+    const where = result.to ? `${result.to}/` : "the repository root";
+    const leftBehind = result.leftBehind.length
+      ? ` ${result.leftBehind.length} untracked file${result.leftBehind.length === 1 ? "" : "s"} stayed behind: ${result.leftBehind.slice(0, 3).join(", ")}${result.leftBehind.length > 3 ? "…" : ""}`
+      : "";
+    useToastStore.getState().show(
+      `Moved the project to ${where}. Its history moved with it.${leftBehind}`,
+      leftBehind ? 8000 : 5000,
+      leftBehind ? "warning" : "success",
+    );
+    return result;
   },
 
   closeProject: () => {

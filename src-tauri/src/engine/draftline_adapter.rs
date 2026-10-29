@@ -10,9 +10,9 @@ use std::path::{Path, PathBuf};
 
 use draftline::{
     ApplyIncomingReport, ApplyIncomingResult, ChangeSet, ContentPolicy, Contributor,
-    ContributorProfile, FolderFix, FolderState, HistoryEntry, MergeConflictResolution, MergeIncomingReport,
-    MergeIncomingResult, MergeIncomingToken, PreflightReport, PreviewFile, PublishResult,
-    PullRequestProvider, RemoteCredential, RemoteEndpoint, RemoteOptions,
+    ContributorProfile, FolderFix, FolderState, HistoryEntry, MergeConflictResolution,
+    MergeIncomingReport, MergeIncomingResult, MergeIncomingToken, PreflightReport, PreviewFile,
+    PublishResult, PullRequestProvider, RemoteCredential, RemoteEndpoint, RemoteOptions,
     Result as DraftlineResult, SendPreflight, SendRequest, SendResult, Shelf, SwitchPolicy,
     SyncStatus, Variation, VariationId, VariationMetadata, VariationSummary, Version, VersionDiff,
     VersionId, VersionPreview, Workspace, WorkspaceSummary,

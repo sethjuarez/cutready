@@ -28,6 +28,10 @@ export const DraftlineErrorCode = {
   WorkspaceLocked: "workspace_locked",
   RemoteOperationTimedOut: "remote_operation_timed_out",
   NotACutReadyProject: "not_a_cutready_project",
+  FolderMoveRefused: "folder_move_refused",
+  InvalidDestination: "invalid_destination",
+  ProjectStateBusy: "project_state_busy",
+  ProjectStateStranded: "project_state_stranded",
 } as const;
 
 /** A folder CutReady refused to start managing because it holds other files (typically code). */
@@ -88,6 +92,34 @@ export const WORKSPACE_LOCKED_MESSAGE =
   "Another change to this project is still running. Wait for it to finish, then try again. If CutReady closed during a change, use Clear lock in the banner at the top of the project.";
 export const REMOTE_OPERATION_TIMED_OUT_MESSAGE =
   "The shared repository took too long to respond, so nothing was sent. Check your connection, then try again.";
+/** Moving the project folder records a save, so unsaved changes must be saved first. */
+export const SAVE_BEFORE_MOVE_MESSAGE =
+  "Save your changes before moving the project folder. Nothing was moved.";
+
+/** Draftline refused to move the project folder; `reason` is its explanation. */
+export function folderMoveRefusedMessage(reason?: string | null): string {
+  const why = reason?.replace(/^cannot move the Draftline folder:\s*/i, "").trim();
+  return why
+    ? `CutReady can't move the project there: ${why}. Nothing was moved.`
+    : "CutReady can't move the project there. Nothing was moved.";
+}
+
+/** What to show when "Move project folder" fails. */
+export function moveProjectFolderErrorMessage(error: unknown): string | null {
+  const code = draftlineErrorCode(error);
+  if (code === DraftlineErrorCode.PreflightFailed && gitFilterHazardPaths(error).length === 0) {
+    return SAVE_BEFORE_MOVE_MESSAGE;
+  }
+  if (
+    code === DraftlineErrorCode.InvalidDestination
+    || code === DraftlineErrorCode.ProjectStateBusy
+    || code === DraftlineErrorCode.ProjectStateStranded
+  ) {
+    const message = asRecord(error)?.message;
+    return typeof message === "string" ? message : null;
+  }
+  return friendlyDraftlineErrorMessage(error);
+}
 
 /** The shared repository renamed its main branch; publishing the old name would recreate it. */
 export function baseRenamedMessage(from?: string | null, to?: string | null): string {
@@ -281,6 +313,10 @@ export function friendlyDraftlineErrorMessage(error: unknown): string | null {
       return WORKSPACE_LOCKED_MESSAGE;
     case DraftlineErrorCode.RemoteOperationTimedOut:
       return REMOTE_OPERATION_TIMED_OUT_MESSAGE;
+    case DraftlineErrorCode.FolderMoveRefused: {
+      const message = asRecord(error)?.message;
+      return folderMoveRefusedMessage(typeof message === "string" ? message : null);
+    }
     case DraftlineErrorCode.PreflightFailed: {
       const paths = gitFilterHazardPaths(error);
       return paths.length > 0 ? gitFilterFilesMessage(paths) : null;
@@ -302,8 +338,10 @@ const GUIDANCE_MESSAGES = [
   RECOVERY_REQUIRED_MESSAGE,
   WORKSPACE_LOCKED_MESSAGE,
   REMOTE_OPERATION_TIMED_OUT_MESSAGE,
+  SAVE_BEFORE_MOVE_MESSAGE,
 ];
 const GUIDANCE_PREFIXES = [
+  "CutReady can't move the project there",
   "The shared repository renamed ",
   "These changes include Git LFS files, ",
   "A developer needs to bring ",

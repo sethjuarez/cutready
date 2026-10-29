@@ -734,6 +734,7 @@ pub fn run() {
             commands::draftline::restore_version_as_new_save,
             commands::draftline::restore_version_as_new_save_to_variation,
             commands::draftline::save,
+            commands::draftline::move_project_folder,
             commands::draftline::list_shelves,
             commands::draftline::apply_shelf,
             commands::draftline::delete_shelf,

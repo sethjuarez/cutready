@@ -23,7 +23,8 @@ vi.mock("../services/githubSetup", () => ({
   getGitHubAuthStatus: (...args: unknown[]) => mockGetGitHubAuthStatus(...args),
 }));
 
-import { useAppStore } from "../stores/appStore";
+import { registerEditorFlush, useAppStore } from "../stores/appStore";
+import { useToastStore } from "../stores/toastStore";
 import { setDraftlineWorkspacePath } from "../services/draftlineVersioning";
 import type { Sketch, SketchSummary } from "../types/sketch";
 
@@ -287,6 +288,99 @@ describe("project switch store side effects", () => {
     });
     await useAppStore.getState().resolveAdoptionPrompt("create");
     expect(openProject).toHaveBeenCalledWith("D:\\code\\contoso\\cutready", { adopt: true });
+  });
+
+  it("moves the project folder and reopens it at the new location", async () => {
+    const openProject = vi.fn(async (path: string) => {
+      useAppStore.setState({ currentProject: { root: path, name: "cutready", repo_root: path, hybrid: true } });
+    });
+    const removeRecentProject = vi.fn(() => Promise.resolve());
+    const order: string[] = [];
+    const unregister = registerEditorFlush(async () => {
+      order.push("flush");
+    });
+    setDraftlineWorkspacePath("D:\\workspace");
+    mockInvoke.mockImplementation((command: string) =>
+      command === "move_project_folder"
+        ? Promise.resolve({ projectRoot: "D:\\workspace\\cutready", from: "", to: "cutready", hybrid: true, leftBehind: [] })
+        : Promise.resolve(null),
+    );
+    useAppStore.setState({
+      currentProject: { root: "D:\\workspace", name: "workspace", repo_root: "D:\\workspace" },
+      openProject,
+      removeRecentProject,
+      checkDirty: async () => {
+        order.push("checkDirty");
+        useAppStore.setState({ isDirty: false });
+      },
+      moveFolderDialogOpen: true,
+    });
+
+    const result = await useAppStore.getState().moveProjectFolder("cutready");
+    unregister();
+
+    expect(order).toEqual(["flush", "checkDirty"]);
+    expect(result.hybrid).toBe(true);
+    expect(mockInvoke).toHaveBeenCalledWith("move_project_folder", {
+      request: { workspace_path: "D:\\workspace", to: "cutready" },
+    });
+    expect(mockInvoke).toHaveBeenCalledWith("add_recent_project", { path: "D:\\workspace\\cutready" });
+    expect(removeRecentProject).toHaveBeenCalledWith("D:\\workspace");
+    expect(openProject).toHaveBeenCalledWith("D:\\workspace\\cutready");
+    expect(useAppStore.getState().moveFolderDialogOpen).toBe(false);
+  });
+
+  it("closes the old project and says where it went when the moved project won't reopen", async () => {
+    const openProject = vi.fn(async () => {
+      useAppStore.setState({ error: "folder is busy" });
+    });
+    const realCloseProject = useAppStore.getState().closeProject;
+    const closeProject = vi.fn(() => useAppStore.setState({ currentProject: null }));
+    setDraftlineWorkspacePath("D:\\workspace");
+    mockInvoke.mockImplementation((command: string) =>
+      command === "move_project_folder"
+        ? Promise.resolve({ projectRoot: "D:\\workspace\\cutready", from: "", to: "cutready", hybrid: true, leftBehind: [] })
+        : Promise.resolve(null),
+    );
+    useAppStore.setState({
+      currentProject: { root: "D:\\workspace", name: "workspace", repo_root: "D:\\workspace" },
+      openProject,
+      closeProject,
+      removeRecentProject: vi.fn(() => Promise.resolve()),
+      checkDirty: async () => useAppStore.setState({ isDirty: false }),
+    });
+    const show = vi.spyOn(useToastStore.getState(), "show");
+
+    await useAppStore.getState().moveProjectFolder("cutready");
+    useAppStore.setState({ closeProject: realCloseProject });
+
+    expect(closeProject).toHaveBeenCalled();
+    expect(mockInvoke).toHaveBeenCalledWith("add_recent_project", { path: "D:\\workspace\\cutready" });
+    expect(show).toHaveBeenCalledWith(expect.stringMatching(/couldn't reopen it \(folder is busy\)/), 10000, "error");
+    show.mockRestore();
+  });
+
+  it("refuses to move the project folder with unsaved changes and keeps it open after a refusal", async () => {
+    const openProject = vi.fn(() => Promise.resolve());
+    setDraftlineWorkspacePath("D:\\workspace");
+    useAppStore.setState({
+      currentProject: { root: "D:\\workspace", name: "workspace", repo_root: "D:\\workspace" },
+      openProject,
+      checkDirty: async () => useAppStore.setState({ isDirty: true }),
+      moveFolderDialogOpen: true,
+    });
+    await expect(useAppStore.getState().moveProjectFolder("cutready")).rejects.toThrow(/Save your changes/);
+    expect(mockInvoke).not.toHaveBeenCalledWith("move_project_folder", expect.anything());
+
+    mockInvoke.mockImplementation((command: string) =>
+      command === "move_project_folder"
+        ? Promise.reject({ code: "folder_move_refused", message: "cannot move the Draftline folder: occupied isn't empty" })
+        : Promise.resolve(null),
+    );
+    useAppStore.setState({ checkDirty: async () => useAppStore.setState({ isDirty: false }) });
+    await expect(useAppStore.getState().moveProjectFolder("occupied")).rejects.toMatchObject({ code: "folder_move_refused" });
+    expect(openProject).not.toHaveBeenCalled();
+    expect(useAppStore.getState().moveFolderDialogOpen).toBe(true);
   });
 
   it("lists remote-only branches and adopts one before switching", async () => {

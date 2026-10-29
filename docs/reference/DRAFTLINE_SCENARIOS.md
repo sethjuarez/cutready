@@ -138,10 +138,9 @@ A live drill on 2026-10-24 ran the real app under Auditaur against a private Git
 | Standalone (`S*`) | Open, save, discard, shelve, branches, restore, publish, fetch, merge, conflicts, local-only state |
 | Hybrid (`H*`) | Open, scoped save, developer WIP untouched, Git busy, get updates (clean and conflicts), developer `git mv` of the folder |
 | Developer (`D*`) | Uncommitted and staged developer work, branch switch, detached `HEAD`, `index.lock`, concurrent git commands, developer commits inside the folder |
-| Moves (`M*`) | Root → `cutready/` hand move (the old root asks to open `cutready/` or keep the root; history kept), `cutready/` → `demos/launch/`, move while the app has the folder open |
+| Moves (`M*`) | Root → `cutready/` hand move (the old root asks to open `cutready/` or keep the root; history kept), `cutready/` → `demos/launch/`, move while the app has the folder open. **Move Project Folder…** command (Draftline `move_folder`): standalone root → `cutready/` through the dialog (save-first guard, untracked metadata carried, old root dropped from recents), `cutready/` → `demos/launch/`, occupied and out-of-repo targets refused with nothing changed |
 | Review (`R*`) | Send opens a `cutready/*` → `main` PR; second Send updates it; PR merged → get updates → new PR; developer edit after Send → conflict resolution |
 
 Still to drill:
 
 - Default-branch rename
-- Sanctioned folder moves through Draftline's `move_folder` (CutReady does not expose it yet; hand moves are detected and adopted when the rest of the repo is clean)

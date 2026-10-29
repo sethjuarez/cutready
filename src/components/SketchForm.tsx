@@ -4,7 +4,7 @@ import type { TokenResponse } from "../types/auth";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, Check, Film, Image as ImageIcon, Mic2 } from "lucide-react";
-import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
+import { registerEditorFlush, shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
 import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
@@ -1119,16 +1119,29 @@ export function SketchForm() {
       pendingPathRef.current = null;
       pendingTitleRef.current = null;
       pendingRowsRef.current = null;
-      if (!path || (title === null && rows === null)) return;
-      void saveSketchEditsForPath(path, title, rows, reason);
+      if (!path || (title === null && rows === null)) return Promise.resolve(true);
+      return saveSketchEditsForPath(path, title, rows, reason);
     },
     [saveSketchEditsForPath],
   );
 
+  useEffect(() => registerEditorFlush(async () => {
+    const path = pendingPathRef.current;
+    const title = pendingTitleRef.current;
+    const rows = pendingRowsRef.current;
+    if (await flushPendingSketchEdits("flush")) return;
+    if (path && shouldSuppressEditorFlush(path)) return;
+    // Keep the unsaved edits so a later save still writes them.
+    pendingPathRef.current ??= path;
+    pendingTitleRef.current ??= title;
+    pendingRowsRef.current ??= rows;
+    throw new Error("Couldn't save pending sketch changes");
+  }), [flushPendingSketchEdits]);
+
   // Reset local state when switching to a different sketch
   // Flush pending debounced saves by their captured path before showing another sketch.
   useEffect(() => {
-    flushPendingSketchEdits("sketch switch");
+    void flushPendingSketchEdits("sketch switch");
     setLocalTitle(activeSketch?.title ?? "");
     setLocalRows(activeSketch?.rows ?? []);
     setLocalDesc(typeof activeSketch?.description === "string" ? activeSketch.description : "");
@@ -1311,7 +1324,7 @@ export function SketchForm() {
   // Flush pending debounced saves on unmount (e.g., tab close)
   useEffect(() => {
     return () => {
-      flushPendingSketchEdits("unmount");
+      void flushPendingSketchEdits("unmount");
     };
   }, [flushPendingSketchEdits]);
 

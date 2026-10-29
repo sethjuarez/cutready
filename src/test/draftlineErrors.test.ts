@@ -24,6 +24,8 @@ import {
   mergeNeedsDeveloperMessage,
   recoveryNextActionMessage,
   sendHasLfsPointersMessage,
+  moveProjectFolderErrorMessage,
+  SAVE_BEFORE_MOVE_MESSAGE,
 } from "../services/draftlineErrors";
 import type { SafeNextAction } from "@draftline/client";
 import { errorMessage, remoteSyncErrorMessage } from "../stores/appStore";
@@ -241,5 +243,18 @@ describe("adoptionPromptFromError", () => {
       movedTo: "cutready",
     });
     expect(adoptionPromptFromError({ code: "project_folder_renamed", message: "x", details: { folder: "cutready", to: "showcase" } })).toBeNull();
+  });
+});
+describe("moveProjectFolderErrorMessage", () => {
+  it("explains refusals, unsaved work, and CutReady's own move errors", () => {
+    const refused = { code: "folder_move_refused", message: "cannot move the Draftline folder: occupied isn't empty" };
+    expect(moveProjectFolderErrorMessage(refused)).toBe("CutReady can't move the project there: occupied isn't empty. Nothing was moved.");
+    expect(isDraftlineGuidanceMessage(friendlyDraftlineErrorMessage(refused) ?? "")).toBe(true);
+    expect(moveProjectFolderErrorMessage({ code: "preflight_failed", message: "unsaved changes" })).toBe(SAVE_BEFORE_MOVE_MESSAGE);
+    expect(moveProjectFolderErrorMessage({ code: "invalid_destination", message: "Pick a folder inside the repository." }))
+      .toBe("Pick a folder inside the repository.");
+    expect(moveProjectFolderErrorMessage(JSON.stringify({ code: "project_state_busy", message: "Stop any running agent." })))
+      .toBe("Stop any running agent.");
+    expect(moveProjectFolderErrorMessage(new Error("boom"))).toBeNull();
   });
 });

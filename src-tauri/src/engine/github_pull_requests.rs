@@ -93,7 +93,9 @@ fn drill_api_base() -> Option<String> {
     std::env::var("CUTREADY_GITHUB_API_BASE")
         .ok()
         .map(|base| base.trim().trim_end_matches('/').to_string())
-        .filter(|base| base.starts_with("http://127.0.0.1:") || base.starts_with("http://localhost:"))
+        .filter(|base| {
+            base.starts_with("http://127.0.0.1:") || base.starts_with("http://localhost:")
+        })
 }
 
 /// In a drill, a local bare remote named `github.git` stands in for

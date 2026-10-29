@@ -1,5 +1,5 @@
 // Folder moves and the full Send for review round trip.
-import { mkdirSync, readdirSync, renameSync } from "node:fs";
+import { mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fakeGitHub } from "../fakeGitHub.mjs";
 import { devCommit, git, gitChanges, gitTry, hybrid, read, remoteFile, remoteHasBranch, sketch, standalone, write } from "../fixtures.mjs";
@@ -139,6 +139,98 @@ export default [
       ctx.check(!gitChanges(fx.repo).some((l) => l.includes("cutready/")), "old folder not recreated with tracked content", gitChanges(fx.repo));
       ctx.check(read(join(fx.repo, "showcase", "intro.sk")) === sketch("Before move"), "moved content intact");
       await checkMoved(ctx, fx.repo, "showcase", saved, sketch("Before move"));
+    },
+  },
+  {
+    id: "M04",
+    group: "moves",
+    title: "Move project folder command: standalone root into cutready/ through the dialog",
+    async run(ctx) {
+      const fx = standalone(ctx.root);
+      let state = await ctx.open(fx.folder);
+      ctx.require(!state.error && state.currentProject, "standalone project opens", state.error);
+      write(join(fx.folder, ".cutready", "settings.json"), "{}\n");
+      write(join(fx.folder, "intro.sk"), sketch("Before move"));
+      await ctx.refresh();
+      await save(ctx, "Before move");
+      const saved = git(fx.folder, "rev-parse", "HEAD");
+
+      // Unsaved work: the dialog says to save first and won't submit.
+      write(join(fx.folder, "intro.sk"), sketch("Unsaved"));
+      await ctx.refresh();
+      await ctx.act("setMoveFolderDialogOpen", true);
+      const dirtyUi = await ctx.app.eval(`(() => ({
+        dirty: Boolean(document.querySelector('[data-testid="move-project-folder-dirty"]')),
+        disabled: document.querySelector('[data-testid="move-project-folder-submit"]')?.disabled ?? null,
+        value: document.querySelector('[data-testid="move-project-folder-input"]')?.value ?? null,
+      }))()`);
+      ctx.check(dirtyUi.dirty && dirtyUi.disabled === true, "dialog asks to save first and disables Move", dirtyUi);
+      ctx.check(dirtyUi.value === "cutready", "root project suggests cutready/", dirtyUi.value);
+      const refused = await ctx.act("moveProjectFolder", "cutready");
+      ctx.check(!refused.ok && /save your changes/i.test(refused.error?.message ?? ""), "store refuses to move unsaved work", refused);
+      ctx.check(git(fx.folder, "rev-parse", "HEAD") === saved && !gitTry(fx.folder, "ls-files", "--error-unmatch", "cutready").ok, "refusal changes nothing");
+      write(join(fx.folder, "intro.sk"), sketch("Before move"));
+      await ctx.refresh();
+
+      // Submit through the dialog like a user.
+      await ctx.app.eval(`(async () => {
+        const submit = () => document.querySelector('[data-testid="move-project-folder-submit"]');
+        for (let i = 0; i < 50 && submit()?.disabled; i++) await new Promise((r) => setTimeout(r, 100));
+        submit().click();
+        return true;
+      })()`);
+      for (let i = 0; i < 60; i++) {
+        const { currentProject } = await ctx.state("currentProject");
+        if (currentProject?.hybrid) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      await ctx.settle();
+      state = await ctx.state("currentProject", "error", "moveFolderDialogOpen", "recentProjects");
+      const folder = join(fx.folder, "cutready");
+      ctx.require(!state.error && state.currentProject?.hybrid === true, "the moved project reopens as hybrid", state.error ?? state.currentProject);
+      ctx.check(state.currentProject.repo_root.toLowerCase() === folder.toLowerCase(), "reopened at cutready/", state.currentProject.repo_root);
+      ctx.check(state.moveFolderDialogOpen === false, "dialog closes");
+      ctx.check(!state.recentProjects?.some((p) => p.path?.toLowerCase() === fx.folder.toLowerCase()), "old root dropped from recent projects", state.recentProjects?.map((p) => p.path));
+      ctx.check(/Move Draftline folder/.test(git(fx.folder, "log", "-1", "--format=%s")), "the move is one recorded save", git(fx.folder, "log", "-1", "--format=%s"));
+      ctx.check(read(join(folder, ".cutready", "settings.json")) === "{}\n", "untracked project settings moved too");
+      ctx.check(read(join(fx.folder, ".cutready", "settings.json")) === null, "nothing left at the old root");
+      // Workspace settings are untracked by design; drop the seeded file so the clean-repo check covers the move only.
+      rmSync(join(folder, ".cutready", "settings.json"));
+      // Code can now join the repository beside the project.
+      write(join(fx.folder, "src", "app.rs"), "fn main() {}\n");
+      git(fx.folder, "add", "src");
+      git(fx.folder, "commit", "-qm", "Add code beside the demo");
+      await checkMoved(ctx, fx.folder, "cutready", saved, sketch("Before move"));
+      ctx.check(read(join(fx.folder, "src", "app.rs")) === "fn main() {}\n", "developer code untouched");
+    },
+  },
+  {
+    id: "M05",
+    group: "moves",
+    title: "Move project folder command: cutready/ to demos/launch/, refusing occupied and escaping targets",
+    async run(ctx) {
+      const { fx } = await openHybrid(ctx);
+      await edit(ctx, fx, "intro.sk", sketch("Before move"));
+      await save(ctx, "Before move");
+      const saved = git(fx.repo, "rev-parse", "HEAD");
+
+      write(join(fx.repo, "occupied", "notes.txt"), "keep\n");
+      const occupied = await ctx.act("moveProjectFolder", "occupied");
+      ctx.check(!occupied.ok && occupied.error?.code === "folder_move_refused", "an occupied target is refused", occupied);
+      const escaping = await ctx.act("moveProjectFolder", "../elsewhere");
+      ctx.check(!escaping.ok && escaping.error?.code === "invalid_destination", "a target outside the repository is refused", escaping);
+      ctx.check(git(fx.repo, "rev-parse", "HEAD") === saved && marker(fx.repo) === "cutready", "refusals change nothing", marker(fx.repo));
+      ctx.check(read(join(fx.repo, "occupied", "notes.txt")) === "keep\n", "occupied folder untouched");
+      rmSync(join(fx.repo, "occupied"), { recursive: true });
+      const after = await ctx.state("currentProject", "error");
+      ctx.check(after.currentProject?.repo_root?.toLowerCase() === fx.folder.toLowerCase(), "project stays open after a refusal", after.currentProject?.repo_root);
+
+      const moved = await ctx.act("moveProjectFolder", "demos/launch");
+      ctx.require(moved.ok, "move to demos/launch succeeds", moved.error);
+      ctx.check(moved.value?.from === "cutready" && moved.value?.to === "demos/launch", "move reports from/to", moved.value);
+      ctx.check(!gitTry(fx.repo, "ls-files", "--error-unmatch", "cutready").ok, "old folder no longer tracked");
+      await checkMoved(ctx, fx.repo, "demos/launch", saved, sketch("Before move"));
+      ctx.check(read(join(fx.repo, "src", "app.rs")) === "fn main() {}\n", "developer code untouched");
     },
   },
   {

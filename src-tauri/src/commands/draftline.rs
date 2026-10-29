@@ -418,10 +418,7 @@ pub async fn filtered_files(
     app: AppHandle,
 ) -> contract::TauriCommandResult<Vec<draftline::FilteredFile>> {
     let mut context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::filtered_files_with_context(
-        &mut context,
-        request,
-    ))
+    contract::into_tauri_result(contract::filtered_files_with_context(&mut context, request))
 }
 
 /// Writes the real content of managed files that still hold an LFS pointer
@@ -880,6 +877,178 @@ pub async fn save(
         .map_err(|error| context_error(error.to_string()))?;
     let mut context = context_for_commit(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::save_with_context(&mut context, request))
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MoveProjectFolderRequest {
+    pub workspace_path: PathBuf,
+    /// Destination relative to the repository root; empty or `.` for the root.
+    pub to: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MoveProjectFolderResult {
+    /// Where the project lives now; reopen it here.
+    pub project_root: PathBuf,
+    /// Old and new folder, relative to the repository root (empty = root).
+    pub from: String,
+    pub to: String,
+    /// True when the project is now a folder inside a larger repository.
+    pub hybrid: bool,
+    /// Untracked files that stayed at the old location, repository-relative.
+    pub left_behind: Vec<String>,
+}
+
+/// A destination folder relative to the repository root, using plain names
+/// only. Hidden names are refused so the project never lands in `.git`,
+/// `.cutready`, or another tool's metadata.
+fn destination_folder(to: &str) -> Result<PathBuf, String> {
+    let to = to.trim().replace('\\', "/");
+    let mut folder = PathBuf::new();
+    for part in to
+        .split('/')
+        .filter(|part| !part.is_empty() && *part != ".")
+    {
+        if part == ".." || part.starts_with('.') || part.contains(':') {
+            return Err(format!(
+                "\"{part}\" can't be part of the destination; use a folder inside the repository"
+            ));
+        }
+        folder.push(part);
+    }
+    Ok(folder)
+}
+
+fn folder_label(folder: &Path) -> String {
+    folder.to_string_lossy().replace('\\', "/")
+}
+
+/// Move the CutReady folder to another place in its repository as one save.
+/// Local runtime state (chat and run history, tabs, sidebar order) moves first
+/// so a live run refuses the move before any content changes; it moves back if
+/// Draftline refuses.
+#[auditaur_command(skip_all)]
+pub async fn move_project_folder(
+    request: MoveProjectFolderRequest,
+    app: AppHandle,
+    lock: State<'_, ProjectLock>,
+    state: State<'_, crate::AppState>,
+) -> contract::TauriCommandResult<MoveProjectFolderResult> {
+    let _guard = lock
+        .0
+        .lock()
+        .map_err(|error| context_error(error.to_string()))?;
+    let mut context = context_for_commit(&request.workspace_path, app)?;
+    let result = move_project_folder_with_context(&mut context, &request)?;
+
+    // The old path is gone; nothing may keep writing there until the frontend
+    // reopens the project at its new home.
+    if let Ok(mut current) = state.current_project.lock() {
+        *current = None;
+    }
+    if let Ok(mut repo) = state.current_repo.lock() {
+        *repo = None;
+    }
+    Ok(result)
+}
+
+fn move_project_folder_with_context(
+    context: &mut contract::DraftlineCommandContext<'_>,
+    request: &MoveProjectFolderRequest,
+) -> contract::TauriCommandResult<MoveProjectFolderResult> {
+    let to = destination_folder(&request.to).map_err(|message| contract::TauriCommandError {
+        code: "invalid_destination".into(),
+        message,
+        details: None,
+    })?;
+    let root = request.workspace_path.clone();
+    let (git_dir, from) = crate::engine::project::folder_git_location(&root).ok_or_else(|| {
+        context_error(format!("{} isn't inside a Git repository", root.display()))
+    })?;
+    let work_tree = crate::engine::project::hybrid_git_root(&root).unwrap_or_else(|| root.clone());
+
+    let old_state = crate::engine::project::folder_state_dir(&git_dir, &from);
+    let new_state = crate::engine::project::folder_state_dir(&git_dir, &to);
+    if cfg!(any(windows, target_os = "macos"))
+        && from != to
+        && folder_label(&from).eq_ignore_ascii_case(&folder_label(&to))
+    {
+        return Err(contract::TauriCommandError {
+            code: "folder_move_refused".into(),
+            message: "cannot move the Draftline folder: changing only the letter case isn't supported here; pick a different name".into(),
+            details: None,
+        });
+    }
+    if from != to {
+        crate::engine::project::move_folder_state(&old_state, &new_state).map_err(|error| {
+            contract::TauriCommandError {
+                code: "project_state_busy".into(),
+                message: format!(
+                    "CutReady couldn't move this project's chat and run history: {error}. Stop any running agent and try again."
+                ),
+                details: None,
+            }
+        })?;
+    }
+    let moved = contract::into_tauri_result(contract::move_folder_with_context(
+        context,
+        contract::MoveFolderRequest {
+            workspace_path: root.clone(),
+            to: to.clone(),
+        },
+    ));
+    let moved = match moved {
+        Ok(moved) => moved,
+        Err(error) => {
+            if from != to {
+                if let Err(state_error) =
+                    crate::engine::project::move_folder_state(&new_state, &old_state)
+                {
+                    tracing::warn!(%state_error, "could not move project state back after a refused folder move");
+                    // Content stayed put but local history didn't; say so instead of "nothing moved".
+                    return Err(contract::TauriCommandError {
+                        code: "project_state_stranded".into(),
+                        message: format!(
+                            "CutReady didn't move the project ({}), but couldn't put its chat and run history back ({state_error}). Close CutReady and move {} back to {} to restore it.",
+                            error.message,
+                            new_state.display(),
+                            old_state.display()
+                        ),
+                        details: None,
+                    });
+                }
+            }
+            return Err(error);
+        }
+    };
+
+    let project_root = if to.as_os_str().is_empty() {
+        work_tree.clone()
+    } else {
+        work_tree.join(&to)
+    };
+    let mut left_behind: Vec<String> = moved
+        .moved
+        .left_behind
+        .iter()
+        .map(|path| folder_label(path))
+        .collect();
+    if from.as_os_str().is_empty() {
+        left_behind.extend(
+            crate::engine::project::carry_root_metadata(&root, &project_root)
+                .iter()
+                .map(|path| folder_label(path)),
+        );
+    }
+
+    Ok(MoveProjectFolderResult {
+        hybrid: !to.as_os_str().is_empty(),
+        project_root,
+        from: folder_label(&from),
+        to: folder_label(&to),
+        left_behind,
+    })
 }
 
 #[auditaur_command(skip_all)]
@@ -2127,5 +2296,148 @@ mod tests {
         std::fs::write(root.join("intro.sk"), "{}").unwrap();
         let adapter = CutReadyDraftlineAdapter::open_project(&root).unwrap();
         assert!(adapter.base_status("origin").unwrap().is_none());
+    }
+
+    fn seed_chat(repo_root: &Path, session_id: &str) {
+        crate::engine::agent_state::AgentStateStore::save_chat_session(
+            repo_root,
+            repo_root,
+            session_id,
+            "Seeded",
+            &[serde_json::json!({ "role": "user", "content": "remember me" })],
+            serde_json::json!({}),
+        )
+        .unwrap();
+    }
+
+    fn chat_ids(repo_root: &Path) -> Vec<String> {
+        crate::engine::agent_state::AgentStateStore::list_chat_sessions(repo_root, repo_root, 10, 0)
+            .unwrap()
+            .sessions
+            .into_iter()
+            .map(|session| session.session_id)
+            .collect()
+    }
+
+    fn move_request(root: &Path, to: &str) -> MoveProjectFolderRequest {
+        MoveProjectFolderRequest {
+            workspace_path: root.to_path_buf(),
+            to: to.to_string(),
+        }
+    }
+
+    #[test]
+    fn moving_the_project_folder_carries_history_metadata_and_chat() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("demo");
+        std::fs::create_dir_all(root.join(".cutready")).unwrap();
+        std::fs::write(root.join("intro.sk"), r#"{"title":"Intro"}"#).unwrap();
+        std::fs::write(root.join(".cutready/settings.json"), "{}").unwrap();
+        CutReadyDraftlineAdapter::open_project(&root).unwrap();
+        save(&root, "Intro");
+        seed_chat(&root, "s1");
+
+        // Root → subfolder: the project becomes a folder inside a code repo.
+        let moved =
+            move_project_folder_with_context(&mut context(&root), &move_request(&root, "cutready"))
+                .unwrap_or_else(|error| panic!("move: {}", error.message));
+        let folder = root.join("cutready");
+        assert_eq!(moved.project_root, folder);
+        assert_eq!((moved.from.as_str(), moved.to.as_str()), ("", "cutready"));
+        assert!(moved.hybrid);
+        assert!(moved.left_behind.is_empty(), "{:?}", moved.left_behind);
+        assert!(folder.join("intro.sk").exists());
+        assert!(!root.join("intro.sk").exists());
+        assert!(folder.join(".cutready/settings.json").exists());
+        assert!(!root.join(".cutready").exists());
+        assert_eq!(chat_ids(&folder), vec!["s1"]);
+        let adapter = CutReadyDraftlineAdapter::open_project(&folder).unwrap();
+        assert!(adapter.is_hybrid());
+        let labels: Vec<_> = adapter
+            .versions()
+            .unwrap()
+            .into_iter()
+            .map(|version| version.label)
+            .collect();
+        assert!(labels.iter().any(|label| label == "Intro"), "{labels:?}");
+
+        // Subfolder → subfolder.
+        let moved = move_project_folder_with_context(
+            &mut context(&folder),
+            &move_request(&folder, "demos/launch"),
+        )
+        .unwrap_or_else(|error| panic!("second move: {}", error.message));
+        let launch = root.join("demos").join("launch");
+        assert_eq!(moved.project_root, launch);
+        assert_eq!(moved.to, "demos/launch");
+        assert!(!folder.exists());
+        assert!(launch.join("intro.sk").exists());
+        assert!(launch.join(".cutready/settings.json").exists());
+        assert_eq!(chat_ids(&launch), vec!["s1"]);
+    }
+
+    #[test]
+    fn a_refused_move_leaves_content_and_chat_where_they_were() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("demo");
+        std::fs::create_dir_all(root.join("occupied")).unwrap();
+        std::fs::write(root.join("intro.sk"), r#"{"title":"Intro"}"#).unwrap();
+        std::fs::write(root.join("occupied/notes.txt"), "keep").unwrap();
+        CutReadyDraftlineAdapter::open_project(&root).unwrap();
+        save(&root, "Intro");
+        seed_chat(&root, "s1");
+
+        let error =
+            move_project_folder_with_context(&mut context(&root), &move_request(&root, "occupied"))
+                .unwrap_err();
+        assert_eq!(error.code, "folder_move_refused", "{}", error.message);
+        assert!(root.join("intro.sk").exists());
+        assert_eq!(chat_ids(&root), vec!["s1"]);
+
+        // Unsaved work must be saved first.
+        std::fs::write(root.join("intro.sk"), r#"{"title":"Edited"}"#).unwrap();
+        let error =
+            move_project_folder_with_context(&mut context(&root), &move_request(&root, "cutready"))
+                .unwrap_err();
+        assert_ne!(error.code, "project_state_busy", "{}", error.message);
+        assert!(!root.join("cutready").exists());
+        assert_eq!(chat_ids(&root), vec!["s1"]);
+    }
+
+    #[cfg(any(windows, target_os = "macos"))]
+    #[test]
+    fn a_case_only_rename_is_refused_with_nothing_moved() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("demo");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("intro.sk"), r#"{"title":"Intro"}"#).unwrap();
+        CutReadyDraftlineAdapter::open_project(&root).unwrap();
+        save(&root, "Intro");
+        move_project_folder_with_context(&mut context(&root), &move_request(&root, "cutready"))
+            .unwrap_or_else(|error| panic!("first move: {}", error.message));
+        let folder = root.join("cutready");
+        seed_chat(&folder, "s1");
+
+        let error = move_project_folder_with_context(
+            &mut context(&folder),
+            &move_request(&folder, "CutReady"),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "folder_move_refused", "{}", error.message);
+        assert!(error.message.contains("letter case"), "{}", error.message);
+        assert!(folder.join("intro.sk").exists());
+        assert_eq!(chat_ids(&folder), vec!["s1"]);
+    }
+
+    #[test]
+    fn move_destinations_stay_inside_the_repository() {
+        assert_eq!(destination_folder(" . ").unwrap(), PathBuf::new());
+        assert_eq!(
+            destination_folder("demos\\launch/").unwrap(),
+            PathBuf::from("demos").join("launch")
+        );
+        for bad in ["../elsewhere", ".git", "demos/.cutready", "C:/demo"] {
+            assert!(destination_folder(bad).is_err(), "{bad}");
+        }
     }
 }

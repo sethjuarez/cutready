@@ -640,6 +640,26 @@ export async function listDraftlineLargeChangedFiles(): Promise<string[]> {
     .map((file) => file.path);
 }
 
+/** Result of moving the CutReady folder within its repository (mirrors the Rust `MoveProjectFolderResult`). */
+export interface MoveProjectFolderResult {
+  /** Absolute path of the project folder after the move. */
+  projectRoot: string;
+  /** Old and new folder, relative to the repository; empty means its root. */
+  from: string;
+  to: string;
+  /** True when the project now lives in a folder inside a code repository. */
+  hybrid: boolean;
+  /** Untracked files that couldn't follow the move, relative to the repository. */
+  leftBehind: string[];
+}
+
+/** Moves the project folder to `to` (relative to the repository) as one save. */
+export async function moveDraftlineProjectFolder(to: string): Promise<MoveProjectFolderResult> {
+  return invoke<MoveProjectFolderResult>("move_project_folder", {
+    request: { workspace_path: requireWorkspacePath(), to },
+  });
+}
+
 export async function saveDraftlineVersion(label: string): Promise<string> {
   const version = await facade().save(label);
   return version.version.id;

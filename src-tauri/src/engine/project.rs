@@ -571,11 +571,16 @@ fn has_cutready_content(root: &Path) -> bool {
             let name = entry.file_name();
             let name = name.to_string_lossy();
             if path.is_dir() {
-                depth > 0 && !name.starts_with('.') && name != "node_modules" && walk(&path, depth - 1)
+                depth > 0
+                    && !name.starts_with('.')
+                    && name != "node_modules"
+                    && walk(&path, depth - 1)
             } else {
                 path.extension()
                     .and_then(|ext| ext.to_str())
-                    .is_some_and(|ext| CUTREADY_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+                    .is_some_and(|ext| {
+                        CUTREADY_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str())
+                    })
             }
         })
     }
@@ -595,7 +600,9 @@ fn has_own_cutready_content(root: &Path) -> bool {
                 && path
                     .extension()
                     .and_then(|ext| ext.to_str())
-                    .is_some_and(|ext| CUTREADY_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+                    .is_some_and(|ext| {
+                        CUTREADY_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str())
+                    })
         })
     })
 }
@@ -691,7 +698,11 @@ pub fn open_repo_with(
     if let Some((from, to)) = renamed {
         let moved_root = from.as_os_str().is_empty();
         let from = from.to_string_lossy().replace('\\', "/");
-        let from = if from.is_empty() { ".".to_string() } else { from };
+        let from = if from.is_empty() {
+            ".".to_string()
+        } else {
+            from
+        };
         let to_display = to.to_string_lossy().replace('\\', "/");
         let details = if moved_root {
             let suggested = root.join(&to);
@@ -2859,6 +2870,200 @@ pub fn relocate_project_state(
     Ok(())
 }
 
+/// The git dir holding a CutReady folder and the folder's path relative to
+/// the work tree (empty at the root). Works for standalone, hybrid, and
+/// linked-worktree folders alike.
+pub fn folder_git_location(root: &Path) -> Option<(PathBuf, PathBuf)> {
+    let dot_git = root.join(".git");
+    if dot_git.is_dir() {
+        return Some((std::fs::canonicalize(dot_git).ok()?, PathBuf::new()));
+    }
+    enclosing_git_dir(root)
+}
+
+/// The local runtime state directory for the CutReady folder at `folder`
+/// (relative to the work tree) of the repository whose git dir is `git_dir`.
+/// Matches [`git_state_dir`] without requiring the folder to exist yet.
+pub fn folder_state_dir(git_dir: &Path, folder: &Path) -> PathBuf {
+    git_dir.join("cutready").join(folder)
+}
+
+/// Move a whole CutReady folder's local runtime state directory (every
+/// project's agent DB, memory, tabs, and sidebar order) from `from` to `to`,
+/// which may be nested in either direction. The directory moves with one
+/// `rename`, so a database a live run holds open refuses the move up front.
+/// Refuses, without changing anything, when `to` already holds other state.
+/// On failure every completed step is undone.
+pub fn move_folder_state(from: &Path, to: &Path) -> Result<(), ProjectError> {
+    if from == to || !from.exists() {
+        return Ok(());
+    }
+    let io = |e: std::io::Error| ProjectError::Io(e.to_string());
+    let occupied = || {
+        ProjectError::Io(format!(
+            "Refusing to move project state: {} already holds other state",
+            to.display()
+        ))
+    };
+    let staging = |anchor: &Path| {
+        let name = anchor
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .unwrap_or_else(|| "cutready".into());
+        anchor.with_file_name(format!("{name}.moving-{}", uuid::Uuid::new_v4().simple()))
+    };
+
+    if to.starts_with(from) {
+        // Deeper (root → subfolder): park the state beside itself, then nest it.
+        if to.exists() {
+            return Err(occupied());
+        }
+        let parked = staging(from);
+        std::fs::rename(from, &parked).map_err(io)?;
+        let placed = to
+            .parent()
+            .map_or(Ok(()), std::fs::create_dir_all)
+            .and_then(|()| std::fs::rename(&parked, to));
+        if let Err(err) = placed {
+            remove_empty_dirs(to.parent(), from.parent());
+            return Err(match std::fs::rename(&parked, from) {
+                Ok(()) => io(err),
+                Err(_) => ProjectError::Io(format!(
+                    "Could not move project state ({err}); it is parked at {}",
+                    parked.display()
+                )),
+            });
+        }
+        return Ok(());
+    }
+
+    if from.starts_with(to) {
+        // Shallower (subfolder → root): `to` may only hold the path to `from`.
+        if !only_holds(to, from) {
+            return Err(occupied());
+        }
+        let parked = staging(to);
+        std::fs::rename(from, &parked).map_err(io)?;
+        remove_empty_dirs(from.parent(), to.parent());
+        let placed = if to.exists() {
+            Err(std::io::Error::other(format!(
+                "{} is not empty",
+                to.display()
+            )))
+        } else {
+            std::fs::rename(&parked, to)
+        };
+        if let Err(err) = placed {
+            let restored = from
+                .parent()
+                .map_or(Ok(()), std::fs::create_dir_all)
+                .and_then(|()| std::fs::rename(&parked, from));
+            return Err(match restored {
+                Ok(()) => io(err),
+                Err(_) => ProjectError::Io(format!(
+                    "Could not move project state ({err}); it is parked at {}",
+                    parked.display()
+                )),
+            });
+        }
+        return Ok(());
+    }
+
+    // Disjoint (subfolder → subfolder).
+    if to.exists() {
+        if std::fs::read_dir(to).map_err(io)?.next().is_some() {
+            return Err(occupied());
+        }
+        std::fs::remove_dir(to).map_err(io)?;
+    }
+    if let Some(parent) = to.parent() {
+        std::fs::create_dir_all(parent).map_err(io)?;
+    }
+    std::fs::rename(from, to).map_err(io)?;
+    Ok(())
+}
+
+/// True when `dir` holds nothing but the directories leading to `keep`.
+fn only_holds(dir: &Path, keep: &Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    entries.into_iter().all(|entry| {
+        let Ok(entry) = entry else {
+            return false;
+        };
+        let path = entry.path();
+        path == keep || (keep.starts_with(&path) && path.is_dir() && only_holds(&path, keep))
+    })
+}
+
+/// Remove `dir` and its ancestors while they are empty, stopping before `stop`.
+fn remove_empty_dirs(dir: Option<&Path>, stop: Option<&Path>) {
+    let mut current = dir;
+    while let Some(path) = current {
+        if Some(path) == stop || std::fs::remove_dir(path).is_err() {
+            break;
+        }
+        current = path.parent();
+    }
+}
+
+/// After the root's content moved into `new_root`, bring along CutReady's own
+/// untracked metadata (`.cutready/` settings, recordings, and legacy `.chats/`)
+/// that Git leaves at the root. Files Git tracks and files the destination
+/// already has stay put and are returned, relative to `old_root`.
+pub fn carry_root_metadata(old_root: &Path, new_root: &Path) -> Vec<PathBuf> {
+    let index = git2::Repository::open(old_root)
+        .and_then(|repo| repo.index())
+        .ok();
+    let tracked = |relative: &Path| {
+        let key = relative.to_string_lossy().replace('\\', "/");
+        index
+            .as_ref()
+            .is_some_and(|index| index.get_path(Path::new(&key), 0).is_some())
+    };
+    let mut left_behind = Vec::new();
+    for folder in [".cutready", ".chats"] {
+        let source = old_root.join(folder);
+        if !source.is_dir() {
+            continue;
+        }
+        let mut stack = vec![source.clone()];
+        let mut dirs = Vec::new();
+        while let Some(dir) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            dirs.push(dir);
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let Ok(relative) = path.strip_prefix(old_root) else {
+                    continue;
+                };
+                let is_dir = entry.file_type().is_ok_and(|kind| kind.is_dir());
+                if is_dir {
+                    stack.push(path);
+                    continue;
+                }
+                let target = new_root.join(relative);
+                let moved = !tracked(relative)
+                    && target.symlink_metadata().is_err()
+                    && target
+                        .parent()
+                        .is_none_or(|parent| std::fs::create_dir_all(parent).is_ok())
+                    && std::fs::rename(&path, &target).is_ok();
+                if !moved {
+                    left_behind.push(relative.to_path_buf());
+                }
+            }
+        }
+        for dir in dirs.iter().rev() {
+            let _ = std::fs::remove_dir(dir);
+        }
+    }
+    left_behind
+}
+
 /// Workspace state persisted across app restarts.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct WorkspaceState {
@@ -3192,8 +3397,15 @@ mod tests {
                 .into_iter()
                 .collect::<Vec<_>>();
             let parents = parents.iter().collect::<Vec<_>>();
-            repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &parents)
-                .unwrap();
+            repo.commit(
+                Some("HEAD"),
+                &signature,
+                &signature,
+                message,
+                &tree,
+                &parents,
+            )
+            .unwrap();
         };
         std::fs::write(code.join("intro.sk"), r#"{"title":"Intro"}"#).unwrap();
         std::fs::write(code.join("notes.md"), "# Notes\n").unwrap();
@@ -3216,7 +3428,10 @@ mod tests {
                 assert_eq!(error["code"], PROJECT_FOLDER_RENAMED);
                 assert_eq!(error["details"]["moved_root"], true);
                 assert_eq!(error["details"]["to"], "cutready");
-                assert_eq!(error["details"]["suggested"], sub.to_string_lossy().as_ref());
+                assert_eq!(
+                    error["details"]["suggested"],
+                    sub.to_string_lossy().as_ref()
+                );
             }
             other => panic!("expected a moved-root prompt, got {other:?}"),
         }
@@ -3358,10 +3573,7 @@ mod tests {
 
         // A source folder inside the repository is refused too, pointing at the root.
         let details = not_a_project(open_repo(&code.join("src")).unwrap_err());
-        assert_eq!(
-            PathBuf::from(details["repository"].as_str().unwrap()),
-            code
-        );
+        assert_eq!(PathBuf::from(details["repository"].as_str().unwrap()), code);
         assert_eq!(
             PathBuf::from(details["suggested"].as_str().unwrap()),
             code.join("cutready")
@@ -4830,6 +5042,66 @@ Some text
             std::fs::read_to_string(beta_state.join("agent-state.db")).unwrap(),
             "pre-existing"
         );
+    }
+
+    #[test]
+    fn move_folder_state_refuses_occupied_destinations_in_every_direction() {
+        let tmp = TempDir::new().unwrap();
+        let base = tmp.path().join("cutready");
+        let seed = |dir: &Path| {
+            std::fs::create_dir_all(dir).unwrap();
+            std::fs::write(dir.join("agent-state.db"), "live").unwrap();
+        };
+
+        // Deeper: another project's state already sits where the root's would nest.
+        seed(&base);
+        seed(&base.join("cutready"));
+        assert!(move_folder_state(&base, &base.join("cutready")).is_err());
+        assert_eq!(
+            std::fs::read_to_string(base.join("agent-state.db")).unwrap(),
+            "live"
+        );
+        std::fs::remove_dir_all(&base).unwrap();
+
+        // Shallower: the root's state dir holds something besides the path down.
+        seed(&base.join("a"));
+        std::fs::write(base.join("stray.json"), "{}").unwrap();
+        assert!(move_folder_state(&base.join("a"), &base).is_err());
+        assert!(base.join("a/agent-state.db").exists());
+        std::fs::remove_dir_all(&base).unwrap();
+
+        // Disjoint: the destination already has state.
+        seed(&base.join("a"));
+        seed(&base.join("b"));
+        assert!(move_folder_state(&base.join("a"), &base.join("b")).is_err());
+        assert!(base.join("a/agent-state.db").exists());
+    }
+
+    #[test]
+    fn move_folder_state_round_trips_between_root_and_subfolder() {
+        let tmp = TempDir::new().unwrap();
+        let base = tmp.path().join("cutready");
+        std::fs::create_dir_all(base.join("alpha")).unwrap();
+        std::fs::write(base.join("agent-state.db"), "root").unwrap();
+        std::fs::write(base.join("alpha/order.json"), "[]").unwrap();
+
+        let nested = base.join("demos").join("launch");
+        move_folder_state(&base, &nested).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(nested.join("agent-state.db")).unwrap(),
+            "root"
+        );
+        assert!(nested.join("alpha/order.json").exists());
+        assert!(!base.join("agent-state.db").exists());
+
+        move_folder_state(&nested, &base).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(base.join("agent-state.db")).unwrap(),
+            "root"
+        );
+        assert!(base.join("alpha/order.json").exists());
+        assert!(!base.join("demos").exists());
+        assert_eq!(std::fs::read_dir(tmp.path()).unwrap().count(), 1);
     }
 
     #[test]
