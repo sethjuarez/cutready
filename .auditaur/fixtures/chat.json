@@ -1,0 +1,11 @@
+{
+  "prefix": "cutready-chat-drill-",
+  "globalSettings": { "seed": { "aiAgentExecutionEngine": "prompty" } },
+  "notes": [
+    { "path": "brief.md", "body": "# Launch brief\n\nInternal only. The launch codename is ZULU-7781.\nDo not share outside the team.\n" }
+  ],
+  "sketches": [
+    { "path": "intro.sk", "title": "Aurora Onboarding", "narrative": "Welcome tour. Reference marker CIPHER-3096 for tracking." },
+    { "path": "demo.sk", "title": "Falcon Checkout", "narrative": "Checkout walkthrough. Reference marker CIPHER-8042 for tracking." }
+  ]
+}
