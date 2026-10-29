@@ -1,52 +1,26 @@
-import { mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+#!/usr/bin/env node
+// Runs `auditaur drill test` for the suites in .auditaur/drills.
+//
+//   node scripts/auditaur-drill.mjs [suite filters] [auditaur drill test flags]
+//
+// Workaround (Auditaur AR-3): on Windows, `drill test` rejects every hook cwd as
+// "outside workspace" because it compares a canonicalized \\?\ path with a
+// non-verbatim workspace root. Running from the verbatim form of the repo path
+// makes both sides match. Drop this once Auditaur normalizes the comparison.
+import { spawn } from "node:child_process";
+import { toNamespacedPath } from "node:path";
 
-const reportPath = resolve(
-  process.env.CUTREADY_AUDITAUR_DRILL_REPORT ?? "target/auditaur-drill-report.json",
-);
-const projectRoot = resolve(
-  process.env.CUTREADY_AUDITAUR_DRILL_PROJECT ?? "docs/examples/cutready-demo-project",
-);
-
-mkdirSync(dirname(reportPath), { recursive: true });
-
-const appCommand =
-  process.platform === "win32" ? ["cmd", "/c", "npm run debug"] : ["npm", "run", "debug"];
-
-const args = [
-  "drill",
-  "run",
-  "--app",
-  "cutready",
-  "--require-frontend",
-  "--require-drive-bridge",
-  "--timeout-seconds",
-  process.env.CUTREADY_AUDITAUR_DRILL_TIMEOUT ?? "180",
-  "--report",
-  reportPath,
-  "--selector",
-  "body",
-  "--expect-text",
-  "CutReady",
-  "--json",
-  "--",
-  ...appCommand,
-];
-
-const result = spawnSync("auditaur", args, {
-  env: {
-    ...process.env,
-    CUTREADY_PROJECT: projectRoot,
-  },
+const cwd = toNamespacedPath(process.cwd());
+const child = spawn("auditaur", ["drill", "test", ...process.argv.slice(2)], {
+  cwd,
+  // Lets scripts/auditaur-start-debug.mjs apply the suite's launch-env.json.
+  env: { ...process.env, CUTREADY_AUDITAUR_DRILL: "1" },
   stdio: "inherit",
-  shell: false,
+  windowsHide: true,
 });
 
-if (result.error) {
-  console.error(`Failed to run Auditaur drill: ${result.error.message}`);
-  console.error("Install auditaur-cli 0.4.1+ and ensure `auditaur` is on PATH.");
+child.on("exit", (code, signal) => process.exit(signal ? 1 : code ?? 1));
+child.on("error", (error) => {
+  console.error(`[auditaur-drill] Could not start auditaur: ${error.message}`);
   process.exit(1);
-}
-
-process.exit(result.status ?? 1);
+});
