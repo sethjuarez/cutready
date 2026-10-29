@@ -1,0 +1,7 @@
+{
+  "prefix": "cutready-settings-drill-",
+  "globalSettings": { "seed": { "aiAgentExecutionEngine": "drill-unavailable-harness" } },
+  "sketches": [
+    { "path": "intro.sk", "title": "Settings Drill Fixture", "narrative": "A sketch so the app opens into the full workspace shell." }
+  ]
+}

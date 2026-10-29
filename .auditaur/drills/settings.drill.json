@@ -1,0 +1,47 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "An unavailable saved harness is flagged in Settings, switching to Prompty clears it, and chat runs on the switched harness.",
+  "tags": ["@settings", "@harness"],
+  "setup": [
+    { "name": "Create fixture with an unavailable harness", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/settings.json"] }
+  ],
+  "teardown": [
+    { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "tests": [
+    {
+      "name": "flags an unavailable harness and switches to Prompty",
+      "steps": [
+        { "waitFor": { "testId": "activity-settings" }, "timeoutMs": 45000 },
+        { "click": { "testId": "activity-settings" } },
+        { "click": { "testId": "settings-tab-ai" } },
+        { "click": { "testId": "settings-ai-tab-agent" } },
+        { "expect": { "testId": "harness-picker" }, "toBeVisible": true },
+        { "expect": { "testId": "harness-option-prompty" }, "toBeVisible": true },
+        { "expect": { "testId": "harness-picker" }, "toContainText": "Runtime Harness" },
+        { "expect": "body", "toContainText": "never silently downgraded" },
+        { "expect": { "testId": "harness-unavailable-warning" }, "toContainText": "the run will fail" },
+        { "expect": { "testId": "harness-switch-fallback" }, "toContainText": "Switch to Prompty" },
+        { "click": { "testId": "harness-switch-fallback" } },
+        { "expect": "[data-testid=\"harness-option-prompty\"][data-selected=\"true\"]", "toBeVisible": true },
+        { "expect": { "testId": "harness-unavailable-warning" }, "toBeHidden": true },
+        { "screenshot": "settings-after-switch" },
+        { "expect": "body", "not": true, "toContainText": "Something went wrong" },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "chat turn runs after switching harness",
+      "timeoutMs": 60000,
+      "description": "agent_chat_with_tools skips frontend IPC telemetry (sensitive), so the backend start log proves which harness ran.",
+      "steps": [
+        { "click": { "testId": "activity-chat" } },
+        { "fill": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]", "value": "Reply with the single word READY and nothing else.", "timeoutMs": 20000 },
+        { "click": "[data-testid=\"secondary-chat-panel\"] button[title=\"Send (Enter)\"]" },
+        { "expectLog": "[agent_chat_with_tools] start", "timeoutMs": 30000 },
+        { "expectLog": "engine=prompty agent=" },
+        { "expectLog": "engine=drill-unavailable-harness", "not": true }
+      ]
+    }
+  ]
+}
