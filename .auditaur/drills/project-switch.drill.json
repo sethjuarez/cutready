@@ -1,0 +1,29 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "Switching between projects in a multi-project repo updates the shell without a reload fallback.",
+  "tags": ["@projects"],
+  "setup": [
+    { "name": "Create a two-project repo", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/project-switch.json"] }
+  ],
+  "teardown": [
+    { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "tests": [
+    {
+      "name": "switches to beta and back to alpha",
+      "steps": [
+        { "waitFor": { "testId": "project-switcher-title-trigger" }, "timeoutMs": 45000 },
+        { "expect": { "testId": "project-switcher-title-trigger" }, "toContainText": "Alpha Project" },
+        { "click": { "testId": "project-switcher-title-trigger" } },
+        { "click": { "testId": "project-switcher-option-beta" } },
+        { "expect": { "testId": "project-switcher-title-trigger" }, "toContainText": "Beta Project" },
+        { "click": { "testId": "project-switcher-title-trigger" } },
+        { "click": { "testId": "project-switcher-option-alpha" } },
+        { "expect": { "testId": "project-switcher-title-trigger" }, "toContainText": "Alpha Project" },
+        { "expect": "body", "not": true, "toContainText": "Something went wrong" },
+        { "expect": "body", "not": true, "toContainText": "Reload interface" },
+        { "expectNoErrors": true }
+      ]
+    }
+  ]
+}
