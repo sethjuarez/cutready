@@ -6,7 +6,7 @@ Audited 2026-10-24 against Draftline 0.6.0 (`4607ad4`). The flow tables below ar
 
 ## Since 0.8.0
 
-Draftline 0.7.0 and 0.8.0 replaced the checkout claim with a committed `.draftline` marker and fixed the hybrid gaps below in Draftline. Draftline 0.10.0 added crash recovery points, Git filter and LFS timeouts, and stale ref-lock cleanup. CutReady adopts the published crate and surfaces the new codes.
+Draftline 0.7.0 and 0.8.0 replaced the checkout claim with a committed `.draftline` marker and fixed the hybrid gaps below in Draftline. Draftline 0.10.0 added crash recovery points, Git filter and LFS timeouts, and stale ref-lock cleanup. Draftline 0.10.1 detects a root project whose content a commit moved into a subfolder. CutReady adopts the published crate and surfaces the new codes.
 
 | Gap | Now | Where |
 | --- | --- | --- |
@@ -131,20 +131,17 @@ A crash and hybrid stress pass against 0.8.0 was clean: developer branch switch,
 
 ## Drill Coverage
 
-A live drill on 2026-10-24 ran the real app under Auditaur against a private GitHub repo with a separate developer clone.
+A live drill on 2026-10-24 ran the real app under Auditaur against a private GitHub repo with a separate developer clone. Since then `npm run test:e2e:draftline` (`scripts/draftline-drill/`) runs the same flows automatically against the real debug app, using local bare remotes and a fake GitHub pull request API (debug builds honor `CUTREADY_GITHUB_API_BASE`, localhost only).
 
-| Scenario | Result |
+| Group | Scenarios |
 | --- | --- |
-| Hybrid open, namespace filter, scoped save, developer WIP untouched | ✅ |
-| `.git/index.lock` gives "Git is busy" | ✅ |
-| Send for review opens a PR | ✅ |
-| Get updates: clean, conflict inside the folder, conflict outside the folder | ✅ |
+| Standalone (`S*`) | Open, save, discard, shelve, branches, restore, publish, fetch, merge, conflicts, local-only state |
+| Hybrid (`H*`) | Open, scoped save, developer WIP untouched, Git busy, get updates (clean and conflicts), developer `git mv` of the folder |
+| Developer (`D*`) | Uncommitted and staged developer work, branch switch, detached `HEAD`, `index.lock`, concurrent git commands, developer commits inside the folder |
+| Moves (`M*`) | Root → `cutready/` hand move (the old root asks to open `cutready/` or keep the root; history kept), `cutready/` → `demos/launch/`, move while the app has the folder open |
+| Review (`R*`) | Send opens a `cutready/*` → `main` PR; second Send updates it; PR merged → get updates → new PR; developer edit after Send → conflict resolution |
 
-Still to drill once the gaps are fixed:
+Still to drill:
 
-- Crash at each mutation step
-- Developer branch switch, stash, and detached `HEAD` while the app is open
-- Unpushed commits on the base before Send
-- PR closed or merged
 - Default-branch rename
-- Upgrade from 1.37.0 with a pending cleanup
+- Sanctioned folder moves through Draftline's `move_folder` (CutReady does not expose it yet; hand moves are detected and adopted when the rest of the repo is clean)

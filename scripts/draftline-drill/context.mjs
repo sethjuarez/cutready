@@ -85,7 +85,7 @@ export class DrillContext {
   async open(path) {
     await this.toasts();
     await this.app.eval(`(async () => {
-      window.__appStore.setState({ error: null, syncError: null });
+      window.__appStore.setState({ error: null, syncError: null, adoptionPrompt: null });
       await window.__appStore.getState().openProject(${json(path)});
       return true;
     })()`);
@@ -93,7 +93,19 @@ export class DrillContext {
     // openProject fires a background fetch; let it land before asserting.
     await delay(500);
     await this.settle();
-    return this.state("currentProject", "error", "syncError", "isDirty", "timelines", "currentRemote", "baseStatus");
+    return this.state("currentProject", "error", "syncError", "isDirty", "timelines", "currentRemote", "baseStatus", "adoptionPrompt");
+  }
+
+  /** Answer the open prompt ("adopt", "create", or "cancel") like the dialog does. */
+  async resolvePrompt(choice) {
+    await this.app.eval(`(async () => {
+      await window.__appStore.getState().resolveAdoptionPrompt(${json(choice)});
+      return true;
+    })()`);
+    await this.settle();
+    await delay(500);
+    await this.settle();
+    return this.state("currentProject", "error", "syncError", "isDirty", "adoptionPrompt");
   }
 
   workspace(state) {

@@ -84,16 +84,51 @@ pub struct GitHubPullRequestProvider {
     token: String,
 }
 
+/// Debug builds only: `CUTREADY_GITHUB_API_BASE` points Send for review at a
+/// local fake GitHub API so live drills can exercise the full flow.
+fn drill_api_base() -> Option<String> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    std::env::var("CUTREADY_GITHUB_API_BASE")
+        .ok()
+        .map(|base| base.trim().trim_end_matches('/').to_string())
+        .filter(|base| base.starts_with("http://127.0.0.1:") || base.starts_with("http://localhost:"))
+}
+
+/// In a drill, a local bare remote named `github.git` stands in for
+/// `drill/<its parent folder>`. Other local remotes stay non-GitHub.
+fn drill_repo(remote_url: &str) -> Option<GitHubRepo> {
+    let path = std::path::Path::new(remote_url.trim());
+    if !path.is_absolute() || !path.file_name()?.eq_ignore_ascii_case("github.git") {
+        return None;
+    }
+    let repo = path.parent()?.file_name()?.to_str()?.to_ascii_lowercase();
+    Some(GitHubRepo {
+        owner: "drill".to_string(),
+        repo,
+    })
+}
+
 impl GitHubPullRequestProvider {
     /// Builds a provider for the GitHub repository behind `remote_url`.
     /// Fails with [`DraftlineError::PullRequest`] for non-GitHub remotes or
     /// when no GitHub token is available.
     pub fn for_remote_url(remote_url: &str, token: Option<String>) -> draftline::Result<Self> {
-        let repo = parse_github_remote_url(remote_url).ok_or_else(|| {
-            pull_request_error(
-                "Send for review only supports GitHub remotes. Push manually or switch the remote to a github.com repository.",
-            )
-        })?;
+        let api_base = drill_api_base();
+        let repo = parse_github_remote_url(remote_url)
+            .or_else(|| api_base.as_ref().and_then(|_| drill_repo(remote_url)))
+            .ok_or_else(|| {
+                pull_request_error(
+                    "Send for review only supports GitHub remotes. Push manually or switch the remote to a github.com repository.",
+                )
+            })?;
+        // A drill's fake GitHub never sees a real token.
+        let token = if api_base.is_some() {
+            Some("drill-token".to_string())
+        } else {
+            token
+        };
         let token = token
             .map(|token| token.trim().to_string())
             .filter(|token| !token.is_empty())
@@ -110,7 +145,7 @@ impl GitHubPullRequestProvider {
             })?;
         Ok(Self {
             client,
-            api_base: GITHUB_API_BASE_URL.to_string(),
+            api_base: api_base.unwrap_or_else(|| GITHUB_API_BASE_URL.to_string()),
             repo,
             token,
         })
@@ -240,6 +275,17 @@ mod tests {
         )
         .unwrap()
         .with_api_base(server.base_url())
+    }
+
+    #[test]
+    fn drill_repo_names_a_local_remote_by_its_folder() {
+        let remote = std::env::temp_dir().join("R01").join("github.git");
+        let repo = drill_repo(remote.to_str().unwrap()).unwrap();
+        assert_eq!((repo.owner.as_str(), repo.repo.as_str()), ("drill", "r01"));
+        assert!(drill_repo("relative/github.git").is_none());
+        // Other local remotes stay non-GitHub, so drills can still test refusals.
+        let other = std::env::temp_dir().join("H06").join("remote.git");
+        assert!(drill_repo(other.to_str().unwrap()).is_none());
     }
 
     #[test]

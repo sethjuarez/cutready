@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { AppSession, activeCutReadySession } from "./app.mjs";
 import { DrillContext } from "./context.mjs";
+import { fakeGitHub } from "./fakeGitHub.mjs";
 import { standalone } from "./fixtures.mjs";
 import { scenarios } from "./scenarios/index.mjs";
 
@@ -34,6 +35,7 @@ if (unknown.length || !selected.length) {
 }
 
 mkdirSync(dirname(reportPath), { recursive: true });
+process.env.CUTREADY_GITHUB_API_BASE = await fakeGitHub.start();
 let exitCode = 0;
 try {
   if (args.attach) {
@@ -86,6 +88,7 @@ try {
   writeReport();
   await forgetDrillProjects();
   app.stop();
+  fakeGitHub.stop();
   if (!args.keep) rmSync(root, { recursive: true, force: true });
 }
 

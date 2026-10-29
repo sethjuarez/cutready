@@ -76,10 +76,10 @@ export function standalone(root, { base = "main", withRemote = true, committed =
 }
 
 /** A developer's code repo with a `cutready/` folder, a bare origin, and a second developer clone. */
-export function hybrid(root, { base = "main", folderName = "cutready", marker = null } = {}) {
+export function hybrid(root, { base = "main", folderName = "cutready", marker = null, remoteName = "remote.git" } = {}) {
   const repo = join(root, "code");
   mkdirSync(repo, { recursive: true });
-  const remote = bareRemote(root, "remote.git", base);
+  const remote = bareRemote(root, remoteName, base);
   git(repo, "init", "-q", "-b", base);
   git(repo, "config", "core.autocrlf", "false");
   write(join(repo, "src", "app.rs"), "fn main() {}\n");
