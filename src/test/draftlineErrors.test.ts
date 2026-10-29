@@ -226,4 +226,20 @@ describe("adoptionPromptFromError", () => {
     expect(adoptionPromptFromError({ code: "not_a_cutready_project", message: "x" })).toBeNull();
     expect(adoptionPromptFromError("plain failure")).toBeNull();
   });
+
+  it("offers to open where a root project's content moved, or keep the root", () => {
+    const error = {
+      code: "project_folder_renamed",
+      message: "x",
+      details: { folder: "D:\\demo", to: "cutready", moved_root: true, repository: "D:\\demo", suggested: "D:\\demo\\cutready", suggested_exists: true },
+    };
+    expect(adoptionPromptFromError(error)).toEqual({
+      folder: "D:\\demo",
+      repository: "D:\\demo",
+      suggested: "D:\\demo\\cutready",
+      suggestedExists: true,
+      movedTo: "cutready",
+    });
+    expect(adoptionPromptFromError({ code: "project_folder_renamed", message: "x", details: { folder: "cutready", to: "showcase" } })).toBeNull();
+  });
 });

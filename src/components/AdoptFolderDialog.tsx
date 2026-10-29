@@ -22,6 +22,30 @@ export function AdoptFolderDialog() {
   const isRepositoryRoot = inRepository && samePath(prompt.repository ?? "", prompt.folder);
   const offerSuggested = !samePath(prompt.suggested, prompt.folder);
 
+  if (prompt.movedTo) {
+    return (
+      <DecisionDialog
+        open
+        icon="warning"
+        title={`This project moved to ${prompt.movedTo}/`}
+        message={
+          <div className="space-y-2">
+            <p>
+              A commit moved this project's sketches, storyboards, and notes from "{folder}" into "{prompt.movedTo}". Its
+              history moves with it.
+            </p>
+            <p>{`Open "${prompt.movedTo}", or keep using "${folder}" as its own project.`}</p>
+          </div>
+        }
+        actions={[
+          { id: "cancel", label: "Cancel", variant: "secondary", onSelect: () => resolve("cancel") },
+          { id: "adopt", label: `Keep ${folder}`, variant: "secondary", onSelect: () => resolve("adopt") },
+          { id: "create", label: `Open ${prompt.movedTo}/`, variant: "primary", onSelect: () => resolve("create") },
+        ]}
+        onClose={() => void resolve("cancel")}
+      />
+    );
+  }
   return (
     <DecisionDialog
       open

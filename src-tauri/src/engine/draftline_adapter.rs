@@ -70,9 +70,8 @@ impl CutReadyDraftlineAdapter {
         let root = root.as_ref();
         let policy = cutready_content_policy()?;
         let workspace = match Workspace::init_with_policy(root, policy.clone()) {
-            Err(error @ draftline::DraftlineError::FolderMissing { .. }) => {
-                Self::adopt_renamed_folder(root, policy).ok_or(error)??
-            }
+            // A commit moved the managed folder (or the root's content) here.
+            Err(error) => Self::adopt_renamed_folder(root, policy).ok_or(error)??,
             result => result?,
         };
         let workspace = if workspace.scope().as_os_str().is_empty() {
@@ -100,10 +99,16 @@ impl CutReadyDraftlineAdapter {
 
     /// When `root` is gone because a commit renamed the managed folder, the
     /// managed folder and where it went, both relative to the repository.
+    /// Also covers a root project whose content a commit moved into a
+    /// subfolder: the root still exists, but the project now lives there.
     pub fn renamed_project_folder(root: &Path) -> Option<(PathBuf, PathBuf)> {
         let probe = Workspace::probe_with_namespace(root, CUTREADY_VARIATION_NAMESPACE).ok()?;
         let from = probe.folder.clone()?;
-        if !same_missing_path(&probe.repository?.join(&from), &probe.requested) {
+        let managed = probe.repository?.join(&from);
+        let moved_out_of_root = from.as_os_str().is_empty()
+            && probe.state == FolderState::Ready
+            && same_existing_path(&managed, &probe.requested);
+        if !moved_out_of_root && !same_missing_path(&managed, &probe.requested) {
             return None;
         }
         probe
@@ -125,11 +130,7 @@ impl CutReadyDraftlineAdapter {
         let repository = probe.repository?;
         let old = repository.join(probe.folder?);
         let (_, to) = Self::renamed_project_folder(&old)?;
-        let same = |a: &Path, b: &Path| match (a.canonicalize(), b.canonicalize()) {
-            (Ok(a), Ok(b)) => a == b,
-            _ => false,
-        };
-        if !same(&repository.join(&to), root) {
+        if !same_existing_path(&repository.join(&to), root) {
             return None;
         }
         Some(Workspace::apply_folder_fix_with_namespace(
@@ -472,6 +473,10 @@ impl CutReadyDraftlineAdapter {
 /// Whether two paths that may no longer exist name the same location: their
 /// parents resolve to the same folder and their names match (ignoring case on
 /// Windows).
+fn same_existing_path(a: &Path, b: &Path) -> bool {
+    matches!((a.canonicalize(), b.canonicalize()), (Ok(a), Ok(b)) if a == b)
+}
+
 fn same_missing_path(a: &Path, b: &Path) -> bool {
     let (Some(a_name), Some(b_name)) = (a.file_name(), b.file_name()) else {
         return false;

@@ -582,6 +582,24 @@ fn has_cutready_content(root: &Path) -> bool {
     walk(root, 2)
 }
 
+/// True when `root` itself (not a subfolder) holds CutReady content: its
+/// metadata folder or a top-level sketch, storyboard, or chat artifact.
+fn has_own_cutready_content(root: &Path) -> bool {
+    if root.join(".cutready").is_dir() {
+        return true;
+    }
+    std::fs::read_dir(root).is_ok_and(|entries| {
+        entries.flatten().any(|entry| {
+            let path = entry.path();
+            path.is_file()
+                && path
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .is_some_and(|ext| CUTREADY_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+        })
+    })
+}
+
 /// True when `root` has top-level files or folders CutReady never creates.
 /// Hidden entries (`.git`, `.gitignore`, `.vscode`) don't count.
 fn has_foreign_content(root: &Path) -> bool {
@@ -659,20 +677,50 @@ pub fn open_repo_with(
     root: &Path,
     adopt_unrecognized: bool,
 ) -> Result<(RepoView, Vec<ProjectEntry>), ProjectError> {
-    if !root.exists() || !root.is_dir() {
-        if let Some((from, to)) = CutReadyDraftlineAdapter::renamed_project_folder(root) {
-            let from = from.to_string_lossy().replace('\\', "/");
-            let to = to.to_string_lossy().replace('\\', "/");
-            let error = draftline::tauri_contract::TauriCommandError {
-                code: PROJECT_FOLDER_RENAMED.into(),
-                message: format!("The project folder `{from}` was renamed to `{to}`."),
-                details: Some(serde_json::json!({ "folder": from, "to": to })),
-            };
-            return Err(match serde_json::to_string(&error) {
-                Ok(json) => ProjectError::Draftline(json),
-                Err(_) => ProjectError::Io(error.message),
-            });
-        }
+    let renamed = if root.is_dir() {
+        // A root project whose content a commit moved into a subfolder. Only a
+        // prompt: the user may keep the root (`adopt_unrecognized`), and a root
+        // holding its own CutReady content again is simply opened.
+        (!adopt_unrecognized && !has_own_cutready_content(root))
+            .then(|| CutReadyDraftlineAdapter::renamed_project_folder(root))
+            .flatten()
+            .filter(|(from, _)| from.as_os_str().is_empty())
+    } else {
+        CutReadyDraftlineAdapter::renamed_project_folder(root)
+    };
+    if let Some((from, to)) = renamed {
+        let moved_root = from.as_os_str().is_empty();
+        let from = from.to_string_lossy().replace('\\', "/");
+        let from = if from.is_empty() { ".".to_string() } else { from };
+        let to_display = to.to_string_lossy().replace('\\', "/");
+        let details = if moved_root {
+            let suggested = root.join(&to);
+            serde_json::json!({
+                "folder": root.to_string_lossy(),
+                "to": to_display,
+                "moved_root": true,
+                "repository": root.to_string_lossy(),
+                "suggested": suggested.to_string_lossy(),
+                "suggested_exists": suggested.is_dir(),
+            })
+        } else {
+            serde_json::json!({ "folder": from, "to": to_display })
+        };
+        let error = draftline::tauri_contract::TauriCommandError {
+            code: PROJECT_FOLDER_RENAMED.into(),
+            message: if moved_root {
+                format!("This project's content was moved to `{to_display}`.")
+            } else {
+                format!("The project folder `{from}` was renamed to `{to_display}`.")
+            },
+            details: Some(details),
+        };
+        return Err(match serde_json::to_string(&error) {
+            Ok(json) => ProjectError::Draftline(json),
+            Err(_) => ProjectError::Io(error.message),
+        });
+    }
+    if !root.is_dir() {
         return Err(ProjectError::NotFound(root.to_string_lossy().into_owned()));
     }
 
@@ -3121,6 +3169,67 @@ mod tests {
 
         // The claimed folder keeps working.
         open_repo(&first).unwrap();
+    }
+
+    #[test]
+    fn root_content_moved_into_a_subfolder_names_and_adopts_it() {
+        let tmp = TempDir::new().unwrap();
+        let code = tmp.path().join("demo");
+        let repo = git2::Repository::init(&code).unwrap();
+        let commit_all = |message: &str| {
+            let mut index = repo.index().unwrap();
+            index
+                .add_all(["*"], git2::IndexAddOption::DEFAULT, None)
+                .unwrap();
+            index.update_all(["*"], None).unwrap();
+            index.write().unwrap();
+            let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+            let signature = git2::Signature::now("Dev", "dev@example.com").unwrap();
+            let parents = repo
+                .head()
+                .ok()
+                .and_then(|head| head.peel_to_commit().ok())
+                .into_iter()
+                .collect::<Vec<_>>();
+            let parents = parents.iter().collect::<Vec<_>>();
+            repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &parents)
+                .unwrap();
+        };
+        std::fs::write(code.join("intro.sk"), r#"{"title":"Intro"}"#).unwrap();
+        std::fs::write(code.join("notes.md"), "# Notes\n").unwrap();
+        open_repo(&code).unwrap();
+        commit_all("Demo");
+        assert_eq!(folder_marker(&code)["folder"], ".");
+
+        let sub = code.join("cutready");
+        std::fs::create_dir_all(&sub).unwrap();
+        for name in ["intro.sk", "notes.md"] {
+            std::fs::rename(code.join(name), sub.join(name)).unwrap();
+        }
+        std::fs::create_dir_all(code.join("src")).unwrap();
+        std::fs::write(code.join("src").join("app.rs"), "fn main() {}\n").unwrap();
+        commit_all("Move demo into cutready/ and add code");
+
+        match open_repo(&code).unwrap_err() {
+            ProjectError::Draftline(json) => {
+                let error: serde_json::Value = serde_json::from_str(&json).unwrap();
+                assert_eq!(error["code"], PROJECT_FOLDER_RENAMED);
+                assert_eq!(error["details"]["moved_root"], true);
+                assert_eq!(error["details"]["to"], "cutready");
+                assert_eq!(error["details"]["suggested"], sub.to_string_lossy().as_ref());
+            }
+            other => panic!("expected a moved-root prompt, got {other:?}"),
+        }
+        // Keeping the root is the user's call; it opens without moving anything.
+        open_repo_with(&code, true).unwrap();
+        assert_eq!(folder_marker(&code)["folder"], ".");
+
+        open_repo(&sub).unwrap();
+        assert_eq!(folder_marker(&code)["folder"], "cutready");
+        assert_eq!(
+            std::fs::read_to_string(code.join("src").join("app.rs")).unwrap(),
+            "fn main() {}\n"
+        );
     }
 
     #[test]

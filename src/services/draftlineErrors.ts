@@ -39,12 +39,16 @@ export interface AdoptionPrompt {
   /** Where CutReady suggests creating its project instead. */
   suggested: string;
   suggestedExists: boolean;
+  /** Set when a commit moved this root project's content into `suggested`. */
+  movedTo?: string;
 }
 
-/** The adoption prompt from a `not_a_cutready_project` open refusal. */
+/** The adoption prompt from a `not_a_cutready_project` refusal or a moved root project. */
 export function adoptionPromptFromError(error: unknown): AdoptionPrompt | null {
-  if (draftlineErrorCode(error) !== DraftlineErrorCode.NotACutReadyProject) return null;
+  const code = draftlineErrorCode(error);
   const details = draftlineErrorDetails(error);
+  const movedRoot = code === DraftlineErrorCode.ProjectFolderRenamed && details?.moved_root === true;
+  if (code !== DraftlineErrorCode.NotACutReadyProject && !movedRoot) return null;
   const folder = details?.folder;
   const suggested = details?.suggested;
   if (typeof folder !== "string" || typeof suggested !== "string") return null;
@@ -53,6 +57,7 @@ export function adoptionPromptFromError(error: unknown): AdoptionPrompt | null {
     repository: typeof details?.repository === "string" ? details.repository : null,
     suggested,
     suggestedExists: details?.suggested_exists === true,
+    ...(movedRoot && typeof details?.to === "string" ? { movedTo: details.to } : {}),
   };
 }
 
