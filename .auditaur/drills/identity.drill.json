@@ -1,0 +1,84 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "Contributor identity: detected from GIT_AUTHOR env, overridden by a CutReady profile that authors snapshots and auto-saves, then reset. Identity values must stay out of telemetry.",
+  "tags": ["@identity", "@versioning"],
+  "setup": [
+    { "name": "Create fixture with env identity and no profile", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/identity.json"] }
+  ],
+  "teardown": [
+    { "name": "Snapshot is authored by the profile", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-git", "Drill Profile <profile@drill.test>", "log", "--skip=1", "-1", "--format=%an <%ae>"] },
+    { "name": "Auto-save is authored by the profile and committed by CutReady", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-git", "Add Drill Extra to workspace | Drill Profile <profile@drill.test> | CutReady", "log", "-1", "--format=%s | %an <%ae> | %cn"] },
+    { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "tests": [
+    {
+      "name": "detects the environment identity",
+      "steps": [
+        { "waitFor": { "testId": "activity-settings" }, "timeoutMs": 45000 },
+        { "click": { "testId": "activity-settings" } },
+        { "click": { "testId": "settings-tab-profile" } },
+        { "expect": { "testId": "profile-current" }, "toContainText": "Drill Env <env@drill.test>" },
+        { "expect": { "testId": "profile-current" }, "toContainText": "GIT_AUTHOR environment variables" },
+        { "expect": { "testId": "profile-reset" }, "toBeHidden": true }
+      ]
+    },
+    {
+      "name": "saved profile overrides the detected identity",
+      "steps": [
+        { "fill": { "testId": "profile-name-input" }, "value": "Drill Profile" },
+        { "fill": { "testId": "profile-email-input" }, "value": "profile@drill.test" },
+        { "click": { "testId": "profile-save" } },
+        { "expect": { "testId": "profile-current" }, "toContainText": "Drill Profile <profile@drill.test>" },
+        { "expect": { "testId": "profile-current" }, "toContainText": "your CutReady profile" },
+        { "click": { "testId": "settings-close" } }
+      ]
+    },
+    {
+      "name": "snapshot dialog saves as the profile",
+      "steps": [
+        { "evaluate": "window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true }))", "name": "Ctrl+S (press does not parse chords yet: Auditaur AR-8)" },
+        { "expect": { "testId": "snapshot-identity" }, "toContainText": "Saving as Drill Profile <profile@drill.test>", "timeoutMs": 15000 },
+        { "expect": "#snapshot-author-email-input", "toHaveCount": 0 },
+        { "click": { "role": "button", "name": "Save Snapshot" } },
+        { "expect": { "testId": "snapshot-identity" }, "toHaveCount": 0, "timeoutMs": 30000 }
+      ]
+    },
+    {
+      "name": "auto-save uses the profile",
+      "description": "No UI creates a repo project directly, so the command is invoked; it resolves after its auto-save commit.",
+      "steps": [
+        { "evaluate": "window.__TAURI_INTERNALS__.invoke('create_project_in_repo', { name: 'Drill Extra', description: null }).then(() => 'ok')" }
+      ]
+    },
+    {
+      "name": "deferred auto-save warns about the missing identity",
+      "steps": [
+        { "evaluate": "window.__TAURI_INTERNALS__.invoke('plugin:event|emit', { event: 'workspace-snapshot-deferred', payload: { reason: 'identity', message: 'Drill change is in your pending changes. Add your name and email in Settings › Profile to save it as a version.' } })" },
+        { "expect": "body", "toContainText": "Drill change is in your pending changes.", "timeoutMs": 15000 }
+      ]
+    },
+    {
+      "name": "reset returns to the detected identity",
+      "steps": [
+        { "click": { "testId": "activity-settings" } },
+        { "click": { "testId": "settings-tab-profile" } },
+        { "click": { "testId": "profile-reset" } },
+        { "expect": "body", "toContainText": "Using the detected identity." },
+        { "expect": { "testId": "profile-current" }, "toContainText": "Drill Env <env@drill.test>" },
+        { "screenshot": "identity-after-reset" }
+      ]
+    },
+    {
+      "name": "identity stays out of telemetry",
+      "description": "Trace attributes and IPC args can't be searched yet (Auditaur AR-6c), so only logs and IPC command names are checked.",
+      "steps": [
+        { "expect": "body", "not": true, "toContainText": "Something went wrong" },
+        { "expectNoErrors": true },
+        { "expectIpc": "get_contributor_identity", "not": true },
+        { "expectIpc": "set_contributor_identity", "not": true },
+        { "expectIpc": "clear_contributor_identity", "not": true },
+        { "expectLog": "profile@drill.test", "not": true }
+      ]
+    }
+  ]
+}
