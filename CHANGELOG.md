@@ -10,6 +10,13 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.38.0](https://github.com/sethjuarez/cutready/compare/v1.37.0...v1.38.0) (2026-10-29)
+
+
+### Features
+
+* **versioning:** hybrid CutReady projects on Draftline 0.10.1 ([#298](https://github.com/sethjuarez/cutready/issues/298)) ([b28c8c4](https://github.com/sethjuarez/cutready/commit/b28c8c45ee2faeee8e8d6f652921488571712cc7))
+
 ## [1.37.0](https://github.com/sethjuarez/cutready/compare/v1.36.1...v1.37.0) (2026-10-17)
 
 
