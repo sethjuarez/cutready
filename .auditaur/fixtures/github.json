@@ -1,0 +1,7 @@
+{
+  "prefix": "cutready-github-drill-",
+  "env": { "VITE_CUTREADY_STARTUP_VIEW": "settings", "VITE_CUTREADY_STARTUP_SETTINGS_TAB": "repository" },
+  "sketches": [
+    { "path": "github-auth-drill.sk", "title": "GitHub auth drill", "narrative": "Disposable project for GitHub auth validation." }
+  ]
+}
