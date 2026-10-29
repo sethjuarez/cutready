@@ -12,9 +12,11 @@
     {
       "name": "flags an unavailable harness and switches to Prompty",
       "steps": [
-        { "waitFor": { "testId": "activity-settings" }, "timeoutMs": 45000 },
+        { "expect": { "testId": "activity-settings" }, "toBeVisible": true, "timeoutMs": 45000 },
         { "click": { "testId": "activity-settings" } },
+        { "expect": { "testId": "settings-tab-ai" }, "toBeVisible": true },
         { "click": { "testId": "settings-tab-ai" } },
+        { "expect": { "testId": "settings-ai-tab-agent" }, "toBeVisible": true },
         { "click": { "testId": "settings-ai-tab-agent" } },
         { "expect": { "testId": "harness-picker" }, "toBeVisible": true },
         { "expect": { "testId": "harness-option-prompty" }, "toBeVisible": true },
@@ -36,7 +38,8 @@
       "description": "agent_chat_with_tools skips frontend IPC telemetry (sensitive), so the backend start log proves which harness ran.",
       "steps": [
         { "click": { "testId": "activity-chat" } },
-        { "fill": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]", "value": "Reply with the single word READY and nothing else.", "timeoutMs": 20000 },
+        { "expect": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]", "toBeVisible": true, "timeoutMs": 20000 },
+        { "fill": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]", "value": "Reply with the single word READY and nothing else." },
         { "click": "[data-testid=\"secondary-chat-panel\"] button[title=\"Send (Enter)\"]" },
         { "expectLog": "[agent_chat_with_tools] start", "timeoutMs": 30000 },
         { "expectLog": "engine=prompty agent=" },

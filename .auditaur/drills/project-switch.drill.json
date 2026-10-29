@@ -12,12 +12,14 @@
     {
       "name": "switches to beta and back to alpha",
       "steps": [
-        { "waitFor": { "testId": "project-switcher-title-trigger" }, "timeoutMs": 45000 },
+        { "expect": { "testId": "project-switcher-title-trigger" }, "toBeVisible": true, "timeoutMs": 45000 },
         { "expect": { "testId": "project-switcher-title-trigger" }, "toContainText": "Alpha Project" },
         { "click": { "testId": "project-switcher-title-trigger" } },
+        { "expect": { "testId": "project-switcher-option-beta" }, "toBeVisible": true },
         { "click": { "testId": "project-switcher-option-beta" } },
         { "expect": { "testId": "project-switcher-title-trigger" }, "toContainText": "Beta Project" },
         { "click": { "testId": "project-switcher-title-trigger" } },
+        { "expect": { "testId": "project-switcher-option-alpha" }, "toBeVisible": true },
         { "click": { "testId": "project-switcher-option-alpha" } },
         { "expect": { "testId": "project-switcher-title-trigger" }, "toContainText": "Alpha Project" },
         { "expect": "body", "not": true, "toContainText": "Something went wrong" },

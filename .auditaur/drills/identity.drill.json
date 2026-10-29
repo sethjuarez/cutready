@@ -14,8 +14,9 @@
     {
       "name": "detects the environment identity",
       "steps": [
-        { "waitFor": { "testId": "activity-settings" }, "timeoutMs": 45000 },
+        { "expect": { "testId": "activity-settings" }, "toBeVisible": true, "timeoutMs": 45000 },
         { "click": { "testId": "activity-settings" } },
+        { "expect": { "testId": "settings-tab-profile" }, "toBeVisible": true },
         { "click": { "testId": "settings-tab-profile" } },
         { "expect": { "testId": "profile-current" }, "toContainText": "Drill Env <env@drill.test>" },
         { "expect": { "testId": "profile-current" }, "toContainText": "GIT_AUTHOR environment variables" },
@@ -61,7 +62,9 @@
       "name": "reset returns to the detected identity",
       "steps": [
         { "click": { "testId": "activity-settings" } },
+        { "expect": { "testId": "settings-tab-profile" }, "toBeVisible": true },
         { "click": { "testId": "settings-tab-profile" } },
+        { "expect": { "testId": "profile-reset" }, "toBeVisible": true },
         { "click": { "testId": "profile-reset" } },
         { "expect": "body", "toContainText": "Using the detected identity." },
         { "expect": { "testId": "profile-current" }, "toContainText": "Drill Env <env@drill.test>" },

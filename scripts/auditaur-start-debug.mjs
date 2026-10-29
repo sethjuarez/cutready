@@ -1,14 +1,15 @@
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { createWriteStream, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 
 // Drill suites hand per-suite environment (fixture project, git identity, ...)
 // through this file; see scripts/auditaur-drill-fixture.mjs. Only drill runs
 // (marked by scripts/auditaur-drill.mjs) use it, so a stale file never leaks
 // into other Auditaur launches.
 const launchEnvPath = resolve("target", "auditaur-drill", "launch-env.json");
+const drill = process.env.CUTREADY_AUDITAUR_DRILL === "1";
 let drillEnv = {};
-if (process.env.CUTREADY_AUDITAUR_DRILL === "1" && existsSync(launchEnvPath)) {
+if (drill && existsSync(launchEnvPath)) {
   drillEnv = JSON.parse(readFileSync(launchEnvPath, "utf8"));
   console.log(`[auditaur-start-debug] Using drill environment from ${launchEnvPath}`);
 }
@@ -22,9 +23,19 @@ const args = process.platform === "win32" ? ["/c", "npm", "run", "debug"] : ["ru
 const child = spawn(command, args, {
   cwd,
   env: { ...process.env, ...drillEnv },
-  stdio: "inherit",
+  stdio: drill ? ["inherit", "pipe", "pipe"] : "inherit",
   shell: false,
 });
+
+// `auditaur drill test` discards the app's output, so drill runs keep it in
+// target/auditaur-drill/app.log (appended per launch) to diagnose launch failures.
+if (drill) {
+  mkdirSync(dirname(launchEnvPath), { recursive: true });
+  const log = createWriteStream(resolve(dirname(launchEnvPath), "app.log"), { flags: "a" });
+  log.write(`\n=== ${new Date().toISOString()} launch ===\n`);
+  child.stdout.on("data", (chunk) => { process.stdout.write(chunk); log.write(chunk); });
+  child.stderr.on("data", (chunk) => { process.stderr.write(chunk); log.write(chunk); });
+}
 
 const forward = (signal) => {
   if (!child.killed) {

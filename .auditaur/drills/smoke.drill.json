@@ -12,7 +12,7 @@
     {
       "name": "opens the demo project",
       "steps": [
-        { "waitFor": { "testId": "activity-settings" }, "timeoutMs": 45000 },
+        { "expect": { "testId": "activity-settings" }, "toBeVisible": true, "timeoutMs": 45000 },
         { "expect": { "text": "Plan the demo" }, "toBeVisible": true },
         { "expect": "body", "not": true, "toContainText": "Something went wrong" },
         { "expectNoErrors": true }
