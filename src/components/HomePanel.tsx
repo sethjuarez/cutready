@@ -137,7 +137,7 @@ export function HomePanel() {
     if (!url) return;
 
     // Extract repo name from URL for the folder name
-    const repoName = url.replace(/\.git$/, "").split("/").pop() || "cloned-project";
+    const repoName = url.replace(/[\\/]+$/, "").replace(/\.git$/, "").split(/[\\/]/).pop() || "cloned-project";
 
     let defaultPath: string | undefined;
     try {
