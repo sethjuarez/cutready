@@ -73,7 +73,7 @@ contoso-app/                    # Developer's code repo (owned by git, not Draft
 | Backend | **Rust** (2021 edition) | Async via Tokio, native Windows API via windows-rs |
 | State management | **Zustand** | appStore, toastStore, updateStore |
 | Drag-and-drop | **dnd-kit** | Sketch reordering in storyboards, tab reordering |
-| Versioning | **Draftline** 0.10.1 (crates.io; `@draftline/client` 0.5.0) | Content versioning, collaboration, branch graph helpers, sync, merge, hybrid repo coexistence |
+| Versioning | **Draftline** 0.10.2 (crates.io; `@draftline/client` 0.5.0) | Content versioning, collaboration, branch graph helpers, sync, merge, hybrid repo coexistence |
 | Screen recording | **FFmpeg** (sidecar) | FFV1 lossless codec in MKV, multi-track audio |
 | Browser automation | **Playwright** (Node.js sidecar) | Headful browser observation and replay automation |
 | LLM | **Microsoft Foundry** | Chat Completions + Responses API, multi-agent system |
