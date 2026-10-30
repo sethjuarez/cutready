@@ -199,6 +199,7 @@ export function TimelineSelector() {
           <button
             key={t.name}
             onClick={() => t.is_active ? setOpen(false) : handleSwitch(t.name)}
+            aria-label={t.is_active ? `${t.label} (current branch)` : `Switch to branch ${t.label}`}
             className={`group w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors relative ${
               t.is_active
                 ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))] font-medium"
@@ -339,6 +340,8 @@ export function TimelineSelector() {
         onClick={() => setOpen(!open)}
         className="flex h-6 min-w-0 max-w-full items-center gap-1.5 rounded-md px-1.5 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
         title={`Branch: ${active?.label ?? "main"}`}
+        aria-label={`Branch: ${active?.label ?? "main"}`}
+        aria-expanded={open}
       >
         <ArrowLeftRight className="shrink-0 w-3 h-3" />
         <span className="truncate">{active?.label ?? "main"}</span>
