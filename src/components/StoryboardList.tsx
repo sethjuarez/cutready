@@ -1056,7 +1056,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
 
   const handleImport = useCallback(async (kind: ImportKind = "all") => {
     try {
-      const { open: openDialog, message: showMessage } = await import("@tauri-apps/plugin-dialog");
+      const { open: openDialog, message: showMessage } = await import("../dialogs");
       const selected = await openDialog({
         title: importDialogTitles[kind],
         multiple: true,
@@ -1092,9 +1092,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                 buttons: { yes: "Overwrite", no: "Keep Both", cancel: "Cancel" },
               },
             );
-            if (result === "Yes") {
+            // Custom buttons resolve to their label (the plugin returns "Yes"/"No" only for default buttons).
+            if (result === "Overwrite" || result === "Yes") {
               return await invoke<T>(command, { filePath, conflict: "overwrite", ...extraArgs });
-            } else if (result === "No") {
+            } else if (result === "Keep Both" || result === "No") {
               return await invoke<T>(command, { filePath, conflict: "rename", ...extraArgs });
             }
             return ""; // Cancel
@@ -1123,7 +1124,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
         }
       }
 
-      const videoImportLlmConfig = await buildVideoImportLlmConfig();
+      const videoImportLlmConfig = containsVideo ? await buildVideoImportLlmConfig() : null;
       let importedNote = "";
       let importedSketch = "";
       for (const raw of paths) {
@@ -1271,6 +1272,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
       onClick={handleOpenImportMenu}
       className="inline-flex items-center gap-1 rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/80 px-2 py-1 text-[11px] font-medium text-[rgb(var(--color-text-secondary))] shadow-sm transition-colors hover:border-[rgb(var(--color-accent))]/50 hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-50"
       title="Import..."
+      data-testid="explorer-import-menu"
       disabled={importing}
       aria-haspopup="menu"
       aria-expanded={importMenu !== null}
