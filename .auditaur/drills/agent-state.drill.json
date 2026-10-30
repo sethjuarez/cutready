@@ -1,0 +1,90 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "Chat history and agent runs seeded from legacy chats: reopening, deleting and promoting conversations, inspecting and deleting runs, and browsing the agent-state database.",
+  "tags": ["@chat", "@agent-state", "@local"],
+  "setup": [
+    { "name": "Create a project with three legacy chats", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/agent-state.json"] }
+  ],
+  "teardown": [
+    { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "tests": [
+    {
+      "name": "imported chats are listed and reopen in the chat",
+      "steps": [
+        { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 45000 },
+        { "click": { "role": "button", "name": "Session History", "exact": true } },
+        { "expectSpan": "list_chat_sessions", "status": "ok", "name": "backend span (frontend IPC is bypassed for privacy)" },
+        { "expect": { "role": "button", "name": "Retro notes", "nth": 0 }, "toBeVisible": true },
+        { "expect": { "role": "button", "name": "Pricing questions", "nth": 0 }, "toBeVisible": true },
+        { "click": { "role": "button", "name": "Plan the launch", "nth": 0 } },
+        { "expectSpan": "get_chat_session", "status": "ok", "name": "backend span (frontend IPC is bypassed for privacy)" },
+        { "expect": { "text": "Here is a plan with three beats." }, "toBeVisible": true },
+        { "name": "the legacy files moved into the agent database", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", ".chats/plan.chat", "absent"] },
+        { "name": "transcripts never reach telemetry", "expectNoTelemetry": { "pattern": "three beats|free tier|Ship smaller demos" } },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "deleting a conversation removes it from history",
+      "steps": [
+        { "click": { "role": "button", "name": "Session History", "exact": true } },
+        { "expect": { "role": "button", "name": "Delete Pricing questions", "exact": true }, "toExist": true },
+        { "click": { "role": "button", "name": "Delete Pricing questions", "exact": true } },
+        { "click": { "role": "button", "name": "Delete", "exact": true } },
+        { "expectIpc": "delete_chat_session", "status": "ok" },
+        { "expect": { "role": "button", "name": "Pricing questions" }, "toHaveCount": 0 },
+        { "reload": true },
+        { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 45000 },
+        { "click": { "role": "button", "name": "Session History", "exact": true } },
+        { "expect": { "role": "button", "name": "Retro notes", "nth": 0 }, "toBeVisible": true },
+        { "expect": { "role": "button", "name": "Pricing questions" }, "toHaveCount": 0 },
+        { "name": "transcripts never reach telemetry", "expectNoTelemetry": { "pattern": "three beats|free tier|Ship smaller demos" } },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "promoting a conversation saves it as a chat artifact",
+      "steps": [
+        { "click": { "role": "button", "name": "Session History", "exact": true } },
+        { "click": { "role": "button", "name": "Promote Plan the launch", "exact": true } },
+        { "expectSpan": "update_note", "status": "ok", "name": "backend span (frontend IPC is bypassed for privacy)" },
+        { "expect": { "role": "button", "name": "Promote Plan the launch", "exact": true }, "toHaveCount": 0 },
+        { "expect": { "text": "Here is a plan with three beats." }, "toBeVisible": true },
+        { "name": "the artifact holds the transcript", "run": "node", "cwd": "${CUTREADY_PROJECT}", "args": ["-e", "const fs = require('fs'); const files = fs.readdirSync('chat-artifacts').filter((f) => /^plan-the-launch-\\d+\\.cv$/.test(f)); if (files.length !== 1) { console.error('expected one plan-the-launch artifact, found ' + files.join(', ')); process.exit(1); } const text = fs.readFileSync('chat-artifacts/' + files[0], 'utf8'); if (!text.includes('Here is a plan with three beats.')) { console.error('artifact lacks the transcript'); process.exit(1); }"] },
+        { "name": "transcripts never reach telemetry", "expectNoTelemetry": { "pattern": "three beats|free tier|Ship smaller demos" } },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "inspecting and deleting an agent run",
+      "steps": [
+        { "click": { "role": "button", "name": "Runs", "exact": true } },
+        { "expectSpan": "list_agent_runs", "status": "ok", "name": "backend span (frontend IPC is bypassed for privacy)" },
+        { "click": { "role": "button", "name": "Retro notes", "nth": 0 } },
+        { "expectSpan": "get_agent_run", "status": "ok", "name": "backend span (frontend IPC is bypassed for privacy)" },
+        { "expect": { "text": "Trajectory" }, "toBeVisible": true },
+        { "click": { "role": "button", "name": "Delete run Retro notes", "exact": true } },
+        { "click": { "role": "button", "name": "Delete run", "exact": true } },
+        { "expectIpc": "delete_agent_run", "status": "ok" },
+        { "expect": { "role": "button", "name": "Delete run Retro notes", "exact": true }, "toHaveCount": 0 },
+        { "name": "transcripts never reach telemetry", "expectNoTelemetry": { "pattern": "three beats|free tier|Ship smaller demos" } },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "browsing and compacting the agent-state database",
+      "steps": [
+        { "click": { "role": "button", "name": "Database", "exact": true } },
+        { "expectSpan": "get_agent_state_database_preview", "status": "ok", "name": "backend span (frontend IPC is bypassed for privacy)" },
+        { "click": { "role": "button", "name": "agent_runs" } },
+        { "name": "the runs table shows the imported legacy runs", "expect": { "text": "imported_legacy", "nth": 0 }, "toBeVisible": true },
+        { "click": { "role": "button", "name": "Compact database", "exact": true } },
+        { "click": { "role": "button", "name": "Compact", "exact": true } },
+        { "expectIpc": "compact_agent_state_database", "status": "ok" },
+        { "name": "transcripts never reach telemetry", "expectNoTelemetry": { "pattern": "three beats|free tier|Ship smaller demos" } },
+        { "expectNoErrors": true }
+      ]
+    }
+  ]
+}
