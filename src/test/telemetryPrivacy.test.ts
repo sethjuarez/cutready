@@ -98,6 +98,17 @@ describe("recorded telemetry (Auditaur helpers)", () => {
     const logged = recordedConsole("error", "Failed to open project:", new Error("owner ada@example.com"));
     expect(JSON.stringify(logged)).not.toContain("ada@");
   });
+
+  test("Errors logged from sensitive areas are redacted with the omitted body", () => {
+    const recorded = recordedConsole("warn", "Could not save chat session:", new Error("transcript: secret plan"));
+    expect(recorded).toEqual({ body: OMITTED_PAYLOAD, error: { message: "[REDACTED]", errorType: "Error" } });
+    expect(JSON.stringify(recorded)).not.toContain("secret plan");
+  });
+
+  test("Errors logged from other areas keep their message", () => {
+    const recorded = recordedConsole("error", "Failed to load sketches:", new Error("not found"));
+    expect(recorded.error?.message).toBe("not found");
+  });
 });
 
 describe("telemetry privacy", () => {
