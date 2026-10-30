@@ -17,6 +17,12 @@
 //        [--engine <id>] [--min-completed <n>] [--tools a,b,...]
 //   node scripts/auditaur-drill-fixture.mjs write <file> <text>
 //   (writes a fixture-relative file mid-test, e.g. state under .git/ that only exists once the app opened the project)
+//   node scripts/auditaur-drill-fixture.mjs connect-remote
+//   (adds the `remote` spec's bare repo as `origin` once the app has created the project's .git)
+//   node scripts/auditaur-drill-fixture.mjs collaborator-save <file> <text> <message>
+//   (a collaborator's clone of the bare remote writes <file>, saves, and pushes to main)
+//   node scripts/auditaur-drill-fixture.mjs expect-remote <message>
+//   (main on the bare remote has a save with that message)
 //
 // Fixture spec (all optional):
 //   prefix         temp folder prefix
@@ -28,6 +34,8 @@
 //   globalSettings { seed: { key: value } }  merged into app settings.json
 //   appStores      [{ file, clear, json }]  app-data files or dirs backed up (then cleared and/or seeded)
 //   recentProjects [{ name, sketches, notes, files }]  extra project folders (<root>-<name>) seeded as the only recents
+//   remote         true: an empty bare repo at <root>-remote.git (main) for collaboration drills
+//   remote         true: an empty bare repo at <root>-remote.git (main) for collaboration drills
 
 import { spawnSync } from "node:child_process";
 import {
@@ -56,7 +64,10 @@ try {
   else if (command === "expect-file") expectFile(args[0], args[1]);
   else if (command === "expect-agent-runs") await expectAgentRuns(parseFlags(args));
   else if (command === "write") writeProjectFile(args[0], args[1]);
-  else throw new Error(`unknown command ${JSON.stringify(command)}; use setup, teardown, expect-json, expect-file, expect-agent-runs, or write`);
+  else if (command === "connect-remote") connectRemote();
+  else if (command === "collaborator-save") collaboratorSave(args[0], args[1], args[2]);
+  else if (command === "expect-remote") expectRemote(args[0]);
+  else throw new Error(`unknown command ${JSON.stringify(command)}; use setup, teardown, expect-json, expect-file, expect-agent-runs, write, connect-remote, collaborator-save, or expect-remote`);
 } catch (error) {
   console.error(`[auditaur-drill-fixture] ${error.message}`);
   process.exit(1);
@@ -125,6 +136,12 @@ function setup(specPath) {
     writeFileSync(path, `${JSON.stringify({ recent_projects: recent }, null, 2)}\n`);
   }
 
+  if (spec.remote) {
+    state.extraRoots = [...(state.extraRoots ?? []), remotePath(projectRoot), collaboratorPath(projectRoot)];
+    saveState();
+    git(["init", "--bare", "--initial-branch=main", remotePath(projectRoot)]);
+  }
+
   appendFileSync(envFile, `CUTREADY_PROJECT=${projectRoot}\n`);
   console.log(`Drill fixture ready at ${projectRoot}`);
 }
@@ -161,8 +178,8 @@ function fixtureRoot() {
 }
 
 // Editors save on a debounce, so file checks retry briefly before failing.
-function eventually(check) {
-  const deadline = Date.now() + 5000;
+function eventually(check, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
   for (;;) {
     try {
       return check();
@@ -340,6 +357,62 @@ function writeProjectFile(file, text) {
   if (!path.startsWith(root + sep)) throw new Error(`write target ${file} is outside the fixture project`);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, text);
+}
+
+function remotePath(root) {
+  return `${root}-remote.git`;
+}
+
+function collaboratorPath(root) {
+  return `${root}-collab`;
+}
+
+function git(args, cwd, env) {
+  const result = spawnSync("git", args, { cwd, env: { ...process.env, ...env }, encoding: "utf8", windowsHide: true });
+  if (result.error) throw new Error(`git ${args[0]} failed: ${result.error.message}`);
+  if (result.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${result.stderr.trim()}`);
+  return result.stdout;
+}
+
+function connectRemote() {
+  const root = fixtureRoot();
+  if (!existsSync(remotePath(root))) throw new Error("connect-remote needs a fixture spec with `remote: true`");
+  if (!existsSync(join(root, ".git"))) throw new Error("the project has no .git yet; open it in the app first");
+  git(["remote", "add", "origin", remotePath(root)], root);
+}
+
+// A second contributor saving and sending from their own clone.
+function collaboratorSave(file, text, message) {
+  if (!file || text === undefined || !message) throw new Error("collaborator-save needs <file> <text> <message>");
+  const root = fixtureRoot();
+  const clone = collaboratorPath(root);
+  if (existsSync(clone)) git(["pull", "--ff-only", "origin", "main"], clone);
+  else git(["clone", "--branch", "main", remotePath(root), clone]);
+  const path = resolve(clone, file);
+  if (!path.startsWith(resolve(clone) + sep)) throw new Error(`collaborator-save target ${file} is outside the clone`);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, text);
+  git(["add", "--", file], clone);
+  // The drill env sets GIT_AUTHOR_* for the app, which would override -c user.name here.
+  const who = { name: "Drill Collaborator", email: "collaborator@drill.test" };
+  git(["commit", "-m", message], clone, {
+    GIT_AUTHOR_NAME: who.name,
+    GIT_AUTHOR_EMAIL: who.email,
+    GIT_COMMITTER_NAME: who.name,
+    GIT_COMMITTER_EMAIL: who.email,
+  });
+  git(["push", "origin", "HEAD:main"], clone);
+}
+
+function expectRemote(message) {
+  if (!message) throw new Error("expect-remote needs <message>");
+  // Send finishes in the background after the button settles, so retry briefly.
+  eventually(() => {
+    const log = git(["--git-dir", remotePath(fixtureRoot()), "log", "--format=%s", "main"]);
+    if (!log.split("\n").includes(message)) {
+      throw new Error(`main on the remote has no save named ${JSON.stringify(message)}; it has:\n${log.trim()}`);
+    }
+  }, 30000);
 }
 
 // Fixture-relative path, or `app-data:<file>` for CutReady's app data folder.
