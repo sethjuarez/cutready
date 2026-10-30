@@ -47,7 +47,7 @@
         { "click": { "role": "button", "name": "Save Snapshot" } },
         { "expect": { "testId": "snapshot-identity" }, "toHaveCount": 0, "timeoutMs": 30000 },
         { "name": "snapshot is authored by the profile", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["log", "-1", "--format=%an <%ae>"], "stdout": "Drill Profile <profile@drill.test>" },
-        { "expectNoTelemetry": { "pattern": "Drill Env|env@drill\\.test|Drill Profile|profile@drill\\.test" }, "in": ["logs", "spans", "events"], "name": "identity stays out of logs, spans, and events (history IPC results carry commit authors: Auditaur AR-13)" },
+        { "expectNoTelemetry": { "pattern": "Drill Env|env@drill\\.test|Drill Profile|profile@drill\\.test" }, "name": "identity stays out of telemetry (history IPC results redact author and saved_by)" },
         { "expectIpc": { "pattern": "^(get|set|clear)_contributor_identity$" }, "not": true, "name": "identity commands are sensitive (no IPC spans)" }
       ]
     },
@@ -57,7 +57,7 @@
       "steps": [
         { "evaluate": "window.__TAURI_INTERNALS__.invoke('create_project_in_repo', { name: 'Drill Extra', description: null }).then(() => 'ok')" },
         { "name": "auto-save is authored by the profile and committed by CutReady", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["log", "-1", "--format=%s | %an <%ae> | %cn"], "stdout": "Add Drill Extra to workspace | Drill Profile <profile@drill.test> | CutReady" },
-        { "expectNoTelemetry": { "pattern": "Drill Env|env@drill\\.test|Drill Profile|profile@drill\\.test" }, "in": ["logs", "spans", "events"], "name": "identity stays out of logs, spans, and events (history IPC results carry commit authors: Auditaur AR-13)" },
+        { "expectNoTelemetry": { "pattern": "Drill Env|env@drill\\.test|Drill Profile|profile@drill\\.test" }, "name": "identity stays out of telemetry (history IPC results redact author and saved_by)" },
         { "expectIpc": { "pattern": "^(get|set|clear)_contributor_identity$" }, "not": true, "name": "identity commands are sensitive (no IPC spans)" }
       ]
     },
@@ -65,7 +65,8 @@
       "name": "deferred auto-save warns about the missing identity",
       "steps": [
         { "evaluate": "window.__TAURI_INTERNALS__.invoke('plugin:event|emit', { event: 'workspace-snapshot-deferred', payload: { reason: 'identity', message: 'Drill change is in your pending changes. Add your name and email in Settings › Profile to save it as a version.' } })" },
-        { "expect": "body", "toContainText": "Drill change is in your pending changes.", "timeoutMs": 15000 }
+        { "expect": "body", "toContainText": "Drill change is in your pending changes.", "timeoutMs": 15000 },
+        { "expectNoTelemetry": { "pattern": "Drill Env|env@drill\\.test|Drill Profile|profile@drill\\.test" }, "name": "identity stays out of telemetry" }
       ]
     },
     {

@@ -17,6 +17,16 @@
         { "expect": "body", "not": true, "toContainText": "Something went wrong" },
         { "expectNoErrors": true }
       ]
+    },
+    {
+      "name": "authored content stays out of telemetry",
+      "description": "Opening a sketch reads it over IPC; redactKeys must strip its narrative and actions.",
+      "steps": [
+        { "click": { "text": "Plan the demo" } },
+        { "expect": "body", "toContainText": "editable production plan", "timeoutMs": 15000 },
+        { "expectIpc": { "pattern": "^get_sketch$" }, "name": "the sketch was read over instrumented IPC" },
+        { "expectNoTelemetry": { "pattern": "editable production plan|scan the planning table" }, "name": "sketch narrative and actions are redacted" }
+      ]
     }
   ]
 }

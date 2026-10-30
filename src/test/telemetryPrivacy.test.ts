@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { isSensitiveInvokeCommand, isSensitiveTauriEvent } from "../services/tauri";
+import { OMITTED_PAYLOAD, REDACT_KEYS, redactTelemetryPayload } from "../services/telemetryPolicy";
 import { recordActivityEntries } from "../services/telemetry";
 
 describe("telemetry privacy", () => {
@@ -57,6 +58,24 @@ describe("telemetry privacy", () => {
 
   test("agent events bypass payload instrumentation", () => {
     expect(isSensitiveTauriEvent("agent-event")).toBe(true);
+  });
+
+  test("redaction hook omits payloads from bypassed commands, note bodies, and agent events", () => {
+    expect(redactTelemetryPayload({ name: "Ada" }, { kind: "invokeArgs", name: "set_contributor_identity" })).toBe(OMITTED_PAYLOAD);
+    expect(redactTelemetryPayload([{ role: "user" }], { kind: "invokeResult", name: "save_chat_session" })).toBe(OMITTED_PAYLOAD);
+    expect(redactTelemetryPayload({ relativePath: "a.cv", content: "x" }, { kind: "invokeArgs", name: "update_note" })).toBe(OMITTED_PAYLOAD);
+    expect(redactTelemetryPayload("note body", { kind: "invokeResult", name: "get_note" })).toBe(OMITTED_PAYLOAD);
+    expect(redactTelemetryPayload({ delta: "hi" }, { kind: "eventPayload", name: "agent-event" })).toBe(OMITTED_PAYLOAD);
+    const args = { relativePath: "planning.md" };
+    expect(redactTelemetryPayload(args, { kind: "invokeArgs", name: "get_note" })).toBe(args);
+    expect(redactTelemetryPayload(args, { kind: "invokeArgs", name: "list_snapshots" })).toBe(args);
+  });
+
+  test("redaction keys cover identity, chat content, and camelCase credentials beyond Auditaur defaults", () => {
+    const keys = new Set(REDACT_KEYS.map((key) => key.toLowerCase()));
+    for (const key of ["email", "author", "saved_by", "messages", "prompt", "accesstoken", "refreshtoken", "usercode", "content", "narrative", "demo_actions", "description"]) {
+      expect(keys.has(key)).toBe(true);
+    }
   });
 
   test("activity telemetry records metadata without the activity body", () => {
