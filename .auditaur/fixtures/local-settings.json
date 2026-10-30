@@ -1,0 +1,18 @@
+{
+  "prefix": "cutready-local-settings-drill-",
+  "appStores": [
+    {
+      "file": "feedback.json",
+      "clear": true,
+      "json": [
+        { "category": "Bug", "feedback": "DRILL-ALPHA export button is hard to find", "date": "2026-01-02T10:00:00.000Z" },
+        { "category": "Feature", "feedback": "DRILL-BRAVO add keyboard reorder", "date": "2026-01-03T10:00:00.000Z" }
+      ]
+    },
+    { "file": "feedback-attachments", "clear": true },
+    { "file": "feedback-attachments-trash", "clear": true }
+  ],
+  "sketches": [
+    { "path": "intro.sk", "title": "Local Settings Drill Fixture", "narrative": "A sketch so the app opens into the full workspace shell." }
+  ]
+}

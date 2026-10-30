@@ -11,6 +11,7 @@
 //   node scripts/auditaur-drill-fixture.mjs setup .auditaur/fixtures/<name>.json
 //   node scripts/auditaur-drill-fixture.mjs teardown
 //   node scripts/auditaur-drill-fixture.mjs expect-json <file> <js expression over doc>
+//   (<file> is fixture-relative, or app-data:<file> for the app data folder)
 //   node scripts/auditaur-drill-fixture.mjs expect-file <file> <absent | exists | text it must contain | lacks:text>
 //   node scripts/auditaur-drill-fixture.mjs expect-agent-runs --provider <id> [--model <m> | --model-prefix <p>]
 //        [--engine <id>] [--min-completed <n>] [--tools a,b,...]
@@ -23,7 +24,7 @@
 //   files          [{ path, body } | { path, json }]  any other project file
 //   projects       [{ path, name, description, sketches }]  (multi-project repo)
 //   globalSettings { seed: { key: value } }  merged into app settings.json
-//   appStores      [{ file, clear }]        app-data files backed up (and cleared)
+//   appStores      [{ file, clear, json }]  app-data files or dirs backed up (then cleared and/or seeded)
 
 import { spawnSync } from "node:child_process";
 import {
@@ -98,7 +99,11 @@ function setup(specPath) {
     const path = join(appDataDir(), store.file);
     backup(state, path);
     saveState();
-    if (store.clear) rmSync(path, { force: true });
+    if (store.clear) rmSync(path, { recursive: true, force: true });
+    if (store.json !== undefined) {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, `${JSON.stringify(store.json, null, 2)}\n`);
+    }
   }
 
   appendFileSync(envFile, `CUTREADY_PROJECT=${projectRoot}\n`);
@@ -111,11 +116,10 @@ function teardown() {
   let failed = false;
   for (const { path, existed, copy } of state.backups ?? []) {
     try {
+      rmSync(path, { recursive: true, force: true });
       if (existed) {
         mkdirSync(dirname(path), { recursive: true });
-        writeFileSync(path, readFileSync(copy));
-      } else {
-        rmSync(path, { force: true });
+        cpSync(copy, path, { recursive: true });
       }
     } catch (error) {
       failed = true;
@@ -153,7 +157,7 @@ function expectJson(file, expression) {
   if (!file || !expression) throw new Error("expect-json needs <file> <expression>");
   const predicate = new Function("doc", `return (${expression});`);
   eventually(() => {
-    const doc = JSON.parse(readFileSync(join(fixtureRoot(), file), "utf8"));
+    const doc = JSON.parse(readFileSync(resolveExpectPath(file), "utf8"));
     if (!predicate(doc)) throw new Error(`expected ${file} to satisfy ${expression}; got ${JSON.stringify(doc)}`);
   });
   console.log(`${file} satisfies ${expression}`);
@@ -162,7 +166,7 @@ function expectJson(file, expression) {
 // `absent`, `exists`, or text the file must contain.
 function expectFile(file, expectation) {
   if (!file || !expectation) throw new Error("expect-file needs <file> <absent|exists|text|lacks:text>");
-  const path = join(fixtureRoot(), file);
+  const path = resolveExpectPath(file);
   eventually(() => {
     const exists = existsSync(path);
     if (expectation === "absent") {
@@ -225,7 +229,7 @@ function backup(state, path) {
   if (state.backups.some((entry) => entry.path === path)) return;
   const existed = existsSync(path);
   const copy = join(BACKUP_DIR, `${state.backups.length}.bak`);
-  if (existed) writeFileSync(copy, readFileSync(path));
+  if (existed) cpSync(path, copy, { recursive: true });
   state.backups.push({ path, existed, copy });
 }
 
@@ -307,10 +311,16 @@ function waitForWebViewExit(timeoutSeconds = 120) {
   }
 }
 
+// Fixture-relative path, or `app-data:<file>` for CutReady's app data folder.
+function resolveExpectPath(file) {
+  return file.startsWith("app-data:") ? join(appDataDir(), file.slice(9)) : join(fixtureRoot(), file);
+}
+
 function appDataDir() {
   if (process.platform === "win32" && process.env.APPDATA) return join(process.env.APPDATA, "com.cutready.app");
   if (process.platform === "darwin") return join(process.env.HOME, "Library", "Application Support", "com.cutready.app");
-  return join(process.env.HOME, ".config", "com.cutready.app");
+  // Tauri's app_data_dir on Linux is the XDG data dir, not ~/.config.
+  return join(process.env.XDG_DATA_HOME || join(process.env.HOME, ".local", "share"), "com.cutready.app");
 }
 
 function globalSettingsPath() {

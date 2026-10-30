@@ -1,0 +1,75 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "Workspace settings persist to the project, and feedback is saved, deleted, and cleared locally without leaking its text to telemetry.",
+  "tags": ["@settings", "@feedback"],
+  "setup": [
+    { "name": "Create fixture with seeded feedback", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/local-settings.json"] }
+  ],
+  "teardown": [
+    { "name": "Remove fixture and restore feedback.json", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "tests": [
+    {
+      "name": "workspace export override persists to the project and survives reload",
+      "description": "Uses click, not check: the drive bridge's check sets the DOM state without a change event React sees (AR-30 workaround).",
+      "steps": [
+        { "expect": { "testId": "activity-settings" }, "toBeVisible": true, "timeoutMs": 45000 },
+        { "click": { "testId": "activity-settings" } },
+        { "click": { "testId": "settings-scope-workspace" } },
+        { "click": { "testId": "settings-tab-export" } },
+        { "expect": { "label": "Use workspace export settings" }, "not": true, "toBeChecked": true },
+        { "click": { "label": "Use workspace export settings" } },
+        { "expectIpc": "set_workspace_settings", "status": "ok" },
+        { "name": "the override is written to .cutready/settings.json", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", ".cutready/settings.json", "doc.videoExportOverrideEnabled === true"] },
+        { "reload": true },
+        { "expect": { "testId": "activity-settings" }, "toBeVisible": true, "timeoutMs": 45000 },
+        { "click": { "testId": "activity-settings" } },
+        { "click": { "testId": "settings-scope-workspace" } },
+        { "click": { "testId": "settings-tab-export" } },
+        { "expect": { "label": "Use workspace export settings" }, "toBeChecked": true },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "submitted feedback is saved locally and kept out of telemetry",
+      "steps": [
+        { "click": { "testId": "activity-feedback" } },
+        { "expect": { "label": "Feedback", "exact": true }, "toBeVisible": true },
+        { "click": { "role": "button", "name": "Bug", "exact": true } },
+        { "fill": { "label": "Feedback", "exact": true }, "value": "DRILL-CHARLIE the timeline drifts after reorder" },
+        { "click": { "role": "button", "name": "Submit", "exact": true } },
+        { "expect": { "label": "Feedback", "exact": true }, "toBeHidden": true, "timeoutMs": 10000 },
+        { "name": "feedback.json has the new entry appended", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "app-data:feedback.json", "doc.length === 3 && doc[2].category === 'Bug' && doc[2].feedback === 'DRILL-CHARLIE the timeline drifts after reorder'"] },
+        { "expectNoTelemetry": { "pattern": "DRILL-CHARLIE" } },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "one saved feedback item is deleted after confirmation",
+      "steps": [
+        { "click": { "testId": "activity-settings" } },
+        { "click": { "testId": "settings-scope-app" } },
+        { "click": { "testId": "settings-tab-feedback" } },
+        { "expect": "body", "toContainText": "DRILL-ALPHA export button is hard to find" },
+        { "click": { "role": "button", "name": "Delete feedback: DRILL-ALPHA" } },
+        { "expect": "body", "toContainText": "Delete this feedback?" },
+        { "click": { "role": "button", "name": "Delete", "exact": true } },
+        { "expect": "body", "not": true, "toContainText": "DRILL-ALPHA" },
+        { "name": "feedback.json no longer has the deleted entry", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "app-data:feedback.json", "doc.length === 2 && !doc.some((e) => e.feedback.includes('DRILL-ALPHA')) && doc.some((e) => e.feedback.includes('DRILL-BRAVO'))"] },
+        { "expectNoTelemetry": { "pattern": "DRILL-ALPHA|DRILL-BRAVO|DRILL-CHARLIE" } },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "clear all removes every saved feedback item",
+      "steps": [
+        { "expect": "body", "toContainText": "DRILL-BRAVO" },
+        { "click": { "role": "button", "name": "Clear All", "exact": true } },
+        { "expect": "body", "not": true, "toContainText": "DRILL-BRAVO" },
+        { "name": "feedback.json is empty", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "app-data:feedback.json", "Array.isArray(doc) && doc.length === 0"] },
+        { "expectNoTelemetry": { "pattern": "DRILL-ALPHA|DRILL-BRAVO|DRILL-CHARLIE" } },
+        { "expectNoErrors": true }
+      ]
+    }
+  ]
+}
