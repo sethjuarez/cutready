@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Dialog } from "./Dialog";
 
 interface ConfirmDialogProps {
@@ -26,6 +26,7 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const confirmRef = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
   const defaultFocusRef = variant === "default" ? confirmRef : cancelRef;
 
   useEffect(() => {
@@ -44,10 +45,10 @@ export function ConfirmDialog({
   const colors = variantColors[variant];
 
   return (
-    <Dialog isOpen={open} onClose={onCancel} align="top" topOffset="20vh" width="w-full max-w-sm mx-4">
+    <Dialog isOpen={open} onClose={onCancel} align="top" topOffset="20vh"     width="w-full max-w-sm mx-4" labelledBy={titleId}>
       <div className="cr-modal-surface rounded-xl overflow-hidden">
         <div className="px-5 pt-5 pb-4">
-          <h2 className="text-sm font-semibold text-[rgb(var(--color-text))] mb-2">{title}</h2>
+              <h2 id={titleId} className="text-sm font-semibold text-[rgb(var(--color-text))] mb-2">{title}</h2>
           <p className="text-xs text-[rgb(var(--color-text-secondary))] leading-relaxed whitespace-pre-line">{message}</p>
         </div>
         <div className="flex items-center justify-end gap-2 px-5 pb-4">

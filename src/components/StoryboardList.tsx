@@ -1386,6 +1386,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                       <div
                         role="button"
                         tabIndex={0}
+                        data-testid={`explorer-item-${sb.path}`}
                         onClick={() => { if (!renamingItem) openStoryboard(sb.path); }}
                         onDoubleClick={(e) => { e.stopPropagation(); startRename("storyboard", sb.path); }}
                         onContextMenu={(e) => {
@@ -1542,6 +1543,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                       <div
                         role="button"
                         tabIndex={0}
+                        data-testid={`explorer-item-${sk.path}`}
                         onClick={() => { if (!renamingItem) handleOpenSketchStandalone(sk.path); }}
                         onDoubleClick={(e) => { e.stopPropagation(); startRename("sketch", sk.path); }}
                         onContextMenu={(e) => {
@@ -1715,6 +1717,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                       <div
                         role="button"
                         tabIndex={0}
+                        data-testid={`explorer-item-${note.path}`}
                         onClick={() => { if (!renamingItem) openNote(note.path); }}
                         onDoubleClick={(e) => { e.stopPropagation(); startRename("note", note.path); }}
                         onContextMenu={(e) => {
@@ -1882,13 +1885,13 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
       {/* Delete confirmation overlay */}
       {pendingDelete && (
         <div className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center">
-          <div className="cr-modal-surface rounded-xl p-5 max-w-sm mx-4">
-            <p className="text-sm text-[rgb(var(--color-text))] mb-1 font-medium">Delete {deleteAssetLabel(pendingDelete.type)}?</p>
+          <div className="cr-modal-surface rounded-xl p-5 max-w-sm mx-4" role="dialog" aria-modal="true" aria-labelledby="delete-asset-title" data-testid="delete-asset-dialog">
+            <p id="delete-asset-title" className="text-sm text-[rgb(var(--color-text))] mb-1 font-medium">Delete {deleteAssetLabel(pendingDelete.type)}?</p>
             <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-2">
               "{pendingDelete.title}" will be permanently deleted.
             </p>
             {pendingDelete.usedBy && pendingDelete.usedBy.length > 0 && (
-              <div className="mb-3 px-3 py-2 rounded-lg bg-warning/10 border border-warning/30">
+              <div className="mb-3 px-3 py-2 rounded-lg bg-warning/10 border border-warning/30" data-testid="delete-asset-used-by">
                 <p className="text-xs text-warning font-medium mb-1">⚠ Used in {pendingDelete.usedBy.length === 1 ? "a storyboard" : `${pendingDelete.usedBy.length} storyboards`}:</p>
                 <ul className="text-[11px] text-warning/80 list-disc list-inside">
                   {pendingDelete.usedBy.map((t) => <li key={t}>{t}</li>)}
@@ -1904,6 +1907,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                 Cancel
               </button>
               <button
+                data-testid="delete-asset-confirm"
                 onClick={() => {
                   const { type, path } = pendingDelete;
                   setPendingDelete(null);
