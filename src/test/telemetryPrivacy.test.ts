@@ -10,6 +10,7 @@ const auditaur = await vi.importActual<typeof import("../../node_modules/@audita
 const recorded = (kind: "invokeArgs" | "invokeResult" | "eventPayload", name: string, value: unknown) =>
   JSON.stringify(auditaur.recordedPayload(TELEMETRY_REDACTION, kind, name, value));
 const recordedError = (name: string, error: unknown) => auditaur.recordedErrorMessage(TELEMETRY_REDACTION, name, error);
+const recordedConsole = (level: string, ...args: unknown[]) => auditaur.recordedConsole(TELEMETRY_REDACTION, level, args);
 
 describe("recorded telemetry (Auditaur helpers)", () => {
   test("identity, chat, and credential payloads are omitted", () => {
@@ -60,6 +61,42 @@ describe("recorded telemetry (Auditaur helpers)", () => {
     const shown = recordedError("update_note", { message: "write failed", content: "secret plan" });
     expect(shown).toContain("write failed");
     expect(shown).not.toContain("secret plan");
+  });
+
+  test("console bodies from chat, memory, auth, feedback, and identity code are omitted", () => {
+    for (const args of [
+      ["Could not save chat session:", "transcript: secret plan"],
+      ["[chat] tool call failed", { prompt: "secret plan" }],
+      ["Failed to push pending message:", "secret plan"],
+      ["Failed to update memory:", "secret plan"],
+      ["[auth] Startup OAuth refresh failed; keeping cached credentials."],
+      ["[secrets] Stronghold unavailable:", "secret plan"],
+      ["[feedback] GitHub issue create failed:", "secret plan"],
+      ["Could not resolve contributor identity for chat promotion:", "ada@example.com"],
+      [{ type: "cutready.ai.oauth", phase: "error", error: "secret plan" }],
+    ]) {
+      const recorded = recordedConsole("warn", ...args);
+      expect(recorded.body).toBe(OMITTED_PAYLOAD);
+      expect(recorded.bodyJson).toBeUndefined();
+    }
+  });
+
+  test("other console bodies are kept with emails scrubbed and no structured JSON", () => {
+    expect(recordedConsole("error", "Failed to load sketches:", "not found").body).toBe("Failed to load sketches: not found");
+    const recorded = recordedConsole("error", "Snapshot save failed:", "unable to auto-detect email address (got 'ada@host')", {
+      content: "secret plan",
+    });
+    expect(recorded.body).toContain("Snapshot save failed:");
+    expect(recorded.body).not.toMatch(/ada@|secret plan/);
+    expect(recorded.bodyJson).toBeUndefined();
+  });
+
+  test("uncaught and console Error messages are email-scrubbed", () => {
+    const uncaught = auditaur.recordedError(TELEMETRY_REDACTION, "window.error", new Error("bad author ada@example.com"));
+    expect(uncaught.message).toBe("bad author [email]");
+    expect(JSON.stringify(uncaught)).not.toContain("ada@");
+    const logged = recordedConsole("error", "Failed to open project:", new Error("owner ada@example.com"));
+    expect(JSON.stringify(logged)).not.toContain("ada@");
   });
 });
 
