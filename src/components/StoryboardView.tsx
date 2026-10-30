@@ -632,6 +632,7 @@ export function StoryboardView() {
                 title={activeStoryboard.title}
                 className={`min-w-0 w-full truncate border-none bg-transparent text-2xl font-semibold text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/40 ${activeStoryboard.title && !storyboardLocked ? "pr-8" : ""} ${storyboardLocked ? "cursor-default" : ""}`}
                 placeholder="Storyboard title..."
+                aria-label="Storyboard title"
               />
               {activeStoryboard.title && !storyboardLocked && (
                 <FieldAiButton
@@ -654,6 +655,7 @@ export function StoryboardView() {
         <InlineDescriptionEditor
           value={localDesc}
           placeholder="Describe this storyboard..."
+          label="Storyboard description"
           disabled={storyboardLocked}
           rows={4}
           className="my-2"
@@ -1034,6 +1036,7 @@ function ExpandableSketchCard({
               onClick={onOpen}
               className="shrink-0 p-1 rounded text-[rgb(var(--color-text-secondary))] opacity-0 transition-all group-hover/sketch:opacity-100 hover:text-[rgb(var(--color-text))]"
               title="Open in editor"
+              aria-label={`Open ${sketch.title} in editor`}
             >
               <Pencil className="w-3.5 h-3.5" />
             </button>
@@ -1043,6 +1046,7 @@ function ExpandableSketchCard({
                 onClick={onRemove}
                 className="shrink-0 p-1 rounded text-[rgb(var(--color-text-secondary))] opacity-0 group-hover/sketch:opacity-100 hover:text-error transition-all"
                 title="Remove from storyboard"
+                aria-label={`Remove ${sketch.title} from storyboard`}
               >
                 <X className="w-3 h-3" />
               </button>
@@ -1220,6 +1224,7 @@ function StoryboardSectionBlock({
                 className={`min-w-0 max-w-[60%] rounded border border-[rgb(var(--color-accent))]/30 bg-[rgb(var(--color-surface))]/60 px-1 text-base font-semibold leading-tight text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/35 outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/35 ${locked ? "cursor-default" : ""}`}
                 style={{ width: `${titleWidthCh}ch` }}
                 placeholder="Section title..."
+                aria-label="Section title"
               />
             ) : (
               <button
@@ -1257,6 +1262,7 @@ function StoryboardSectionBlock({
                 }}
                 className="shrink-0 p-1 rounded text-[rgb(var(--color-text-secondary))] opacity-0 group-hover/section-title:opacity-100 hover:text-error focus-visible:opacity-100 transition-all"
                 title="Remove section"
+                aria-label={`Remove section: ${item.title}`}
               >
                 <X className="w-3 h-3" />
               </button>
@@ -1265,6 +1271,7 @@ function StoryboardSectionBlock({
           <InlineDescriptionEditor
             value={draftDescription}
             placeholder="Add section framing..."
+            label={`Section description: ${item.title}`}
             disabled={locked}
             rows={1}
             className="mt-2"
@@ -1478,6 +1485,7 @@ function SketchPicker({
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search sketches..."
+          aria-label="Search sketches"
           autoFocus
           onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
           className="w-full px-2 py-1.5 text-xs bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none"
