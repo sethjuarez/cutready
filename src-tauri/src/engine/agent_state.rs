@@ -16,6 +16,8 @@ use sha2::{Digest, Sha256};
 
 const AGENT_STATE_FILENAME: &str = "agent-state.db";
 const SCHEMA_VERSION: i32 = 6;
+/// `legacy_memory_imports` source marking a database that predates import tracking.
+pub(crate) const PRE_TRACKING_MEMORY_SOURCE: &str = "*";
 const BUSY_TIMEOUT: Duration = Duration::from_millis(750);
 const MAX_COMPLETED_RUNS: usize = 100;
 const MAX_EVENTS_PER_RUN: usize = 1_000;
@@ -2174,6 +2176,18 @@ fn initialize_schema(conn: &Connection) -> Result<(), String> {
         ));
     }
 
+    let table_exists = |name: &str| -> Result<bool, String> {
+        conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
+            params![name],
+            |row| row.get::<_, bool>(0),
+        )
+        .map_err(|e| format!("Could not inspect agent state schema: {e}"))
+    };
+    // Databases from before legacy memory import tracking already merged the legacy file.
+    let memory_imports_untracked =
+        table_exists("agent_memories")? && !table_exists("legacy_memory_imports")?;
+
     conn.execute_batch(
         "
         PRAGMA foreign_keys = ON;
@@ -2287,6 +2301,12 @@ fn initialize_schema(conn: &Connection) -> Result<(), String> {
         );
         CREATE INDEX IF NOT EXISTS idx_legacy_chat_imports_run
             ON legacy_chat_imports (run_id);
+        CREATE TABLE IF NOT EXISTS legacy_memory_imports (
+            source TEXT NOT NULL,
+            fingerprint TEXT NOT NULL,
+            imported_at TEXT NOT NULL,
+            PRIMARY KEY (source, fingerprint)
+        );
         CREATE TABLE IF NOT EXISTS legacy_chat_import_failures (
             source_path TEXT PRIMARY KEY,
             error TEXT NOT NULL,
@@ -2310,6 +2330,14 @@ fn initialize_schema(conn: &Connection) -> Result<(), String> {
         ",
     )
     .map_err(|e| format!("Could not initialize agent state schema: {e}"))?;
+    if memory_imports_untracked {
+        conn.execute(
+            "INSERT OR IGNORE INTO legacy_memory_imports (source, fingerprint, imported_at)
+             VALUES (?1, '', ?2)",
+            params![PRE_TRACKING_MEMORY_SOURCE, chrono::Utc::now().to_rfc3339()],
+        )
+        .map_err(|e| format!("Could not mark legacy memory imports: {e}"))?;
+    }
     if existing_version < SCHEMA_VERSION {
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)
             .map_err(|e| format!("Could not set agent state schema version: {e}"))?;
