@@ -1395,6 +1395,7 @@ function SortableRow({
     <>
     <tr
       ref={setNodeRef}
+      data-testid={`planning-row-${idx + 1}`}
       style={{ ...style, backgroundColor: isHighlighted ? undefined : rowBg }}
       className={`card-row group hover:shadow-sm ${isSorting ? "" : "transition-all"} ${isHighlighted ? "ai-highlight-row" : ""} ${rowLocked ? "ring-1 ring-[rgb(var(--color-warning))]/15" : ""}`}
       onKeyDown={(e) => {
@@ -1448,13 +1449,14 @@ function SortableRow({
             value={row.time}
             onChange={(v) => updateRow(idx, "time", v)}
             placeholder="~30s"
+            label={`Row ${idx + 1} time`}
             readOnly={readOnly || timeLocked}
             onAddRow={isLastRow && !readOnly && !hasAnyLock(row) ? () => addRow(idx) : undefined}
             hasActionRail={!readOnly && !rowLocked && !!onCellLockChange}
           />
           {!readOnly && !rowLocked && onCellLockChange && (
             <CellActionRail persistent={timeLocked}>
-              <CellLockButton locked={timeLocked} onClick={() => onCellLockChange(idx, "time", !timeLocked)} />
+              <CellLockButton locked={timeLocked} label={`row ${idx + 1} time`} onClick={() => onCellLockChange(idx, "time", !timeLocked)} />
             </CellActionRail>
           )}
         </div>
@@ -1465,6 +1467,7 @@ function SortableRow({
             value={row.narrative}
             onChange={(v) => updateRow(idx, "narrative", v)}
             placeholder="What to say..."
+            label={`Row ${idx + 1} narrative`}
             readOnly={readOnly || narrativeLocked}
             onAddRow={isLastRow && !readOnly && !hasAnyLock(row) ? () => addRow(idx) : undefined}
             hasActionRail={!readOnly && (!!onCellLockChange || !!onSparkle)}
@@ -1477,7 +1480,7 @@ function SortableRow({
                 )} />
               )}
               {!rowLocked && onCellLockChange && (
-                <CellLockButton locked={narrativeLocked} onClick={() => onCellLockChange(idx, "narrative", !narrativeLocked)} />
+                <CellLockButton locked={narrativeLocked} label={`row ${idx + 1} narrative`} onClick={() => onCellLockChange(idx, "narrative", !narrativeLocked)} />
               )}
             </CellActionRail>
           )}
@@ -1489,6 +1492,7 @@ function SortableRow({
             value={row.demo_actions}
             onChange={(v) => updateRow(idx, "demo_actions", v)}
             placeholder="What to do..."
+            label={`Row ${idx + 1} actions`}
             readOnly={readOnly || actionsLocked}
             onAddRow={isLastRow && !readOnly && !hasAnyLock(row) ? () => addRow(idx) : undefined}
             hasActionRail={!readOnly && (!!onCellLockChange || !!onSparkle)}
@@ -1501,7 +1505,7 @@ function SortableRow({
                 )} />
               )}
               {!rowLocked && onCellLockChange && (
-                <CellLockButton locked={actionsLocked} onClick={() => onCellLockChange(idx, "demo_actions", !actionsLocked)} />
+                <CellLockButton locked={actionsLocked} label={`row ${idx + 1} actions`} onClick={() => onCellLockChange(idx, "demo_actions", !actionsLocked)} />
               )}
             </CellActionRail>
           )}
@@ -1758,6 +1762,7 @@ function SortableRow({
                     : "border-transparent text-[rgb(var(--color-text-secondary))] hover:border-[rgb(var(--color-border))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-accent))]"
                 }`}
                 title={rowLocked ? "Unlock row" : "Lock row"}
+                aria-label={`${rowLocked ? "Unlock" : "Lock"} row ${idx + 1}`}
               >
                 {rowLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
               </button>
@@ -1766,6 +1771,7 @@ function SortableRow({
               onClick={() => addRow(idx)}
               className="p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
               title="Add row below"
+              aria-label={`Add row below row ${idx + 1}`}
             >
               <Plus className="w-3 h-3" />
             </button>}
@@ -1773,6 +1779,7 @@ function SortableRow({
               onClick={() => deleteRow(idx)}
               className="p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-error transition-colors"
               title="Delete row"
+              aria-label={`Delete row ${idx + 1}`}
             >
               <X className="w-3 h-3" />
             </button>}
@@ -1823,6 +1830,7 @@ function LocalInput({
   value,
   onChange,
   placeholder,
+  label,
   readOnly,
   onAddRow,
   hasActionRail = false,
@@ -1830,6 +1838,7 @@ function LocalInput({
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
+  label?: string;
   readOnly: boolean;
   onAddRow?: () => void;
   hasActionRail?: boolean;
@@ -1859,6 +1868,7 @@ function LocalInput({
         }
       }}
       placeholder={placeholder}
+      aria-label={label}
       readOnly={readOnly}
       className={`w-full bg-transparent text-xs py-0.5 rounded outline-none transition-colors focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 placeholder:text-[rgb(var(--color-text-secondary))]/40 ${hasActionRail ? "pl-1 pr-5" : "px-1"}`}
     />
@@ -1901,6 +1911,7 @@ function MarkdownCell({
   value,
   onChange,
   placeholder,
+  label,
   readOnly,
   onAddRow,
   hasActionRail = false,
@@ -1908,6 +1919,7 @@ function MarkdownCell({
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
+  label?: string;
   readOnly: boolean;
   onAddRow?: () => void;
   hasActionRail?: boolean;
@@ -1961,6 +1973,9 @@ function MarkdownCell({
     return (
       <div
         data-cell
+        role="textbox"
+        aria-readonly={readOnly || undefined}
+        aria-label={label}
         tabIndex={readOnly ? undefined : 0}
         className={`md-cell-preview min-h-[1.5rem] rounded outline-none transition-colors ${hasActionRail ? "pr-7" : ""} ${!readOnly ? "cursor-text focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40" : ""}`}
         onClick={() => {
@@ -2005,6 +2020,7 @@ function MarkdownCell({
       onChange={(e) => handleChange(e.target.value)}
       onBlur={() => setIsEditing(false)}
       placeholder={placeholder}
+      aria-label={label}
       rows={1}
       className={`md-cell-editor w-full bg-transparent p-0 rounded outline-none resize-none ring-1 ring-[rgb(var(--color-accent))]/40 placeholder:text-[rgb(var(--color-text-secondary))]/40 ${hasActionRail ? "pr-7" : "pr-0"}`}
       onKeyDown={(e) => {
@@ -2071,7 +2087,8 @@ function SparkleButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function CellLockButton({ locked, onClick, className = "" }: { locked: boolean; onClick: () => void; className?: string }) {
+function CellLockButton({ locked, onClick, label, className = "" }: { locked: boolean; onClick: () => void; label?: string; className?: string }) {
+  const name = `${locked ? "Unlock" : "Lock"} ${label ?? "cell"}`;
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onClick(); }}
@@ -2081,7 +2098,7 @@ function CellLockButton({ locked, onClick, className = "" }: { locked: boolean; 
           : "border-transparent text-[rgb(var(--color-text-secondary))] hover:border-[rgb(var(--color-border))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-accent))]"
       } ${className}`}
       title={locked ? "Unlock cell" : "Lock cell"}
-      aria-label={locked ? "Unlock cell" : "Lock cell"}
+      aria-label={name}
     >
       {locked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
     </button>

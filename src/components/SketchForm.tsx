@@ -2561,6 +2561,7 @@ Rules:
               onChange={(e) => handleTitleChange(e.target.value)}
               readOnly={sketchLocked}
               placeholder="Sketch title..."
+              aria-label="Sketch title"
               title={localTitle}
               className={`min-w-0 w-full truncate border-none bg-transparent text-2xl font-semibold text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/40 ${localTitle && !sketchLocked ? "pr-8" : ""} ${sketchLocked ? "cursor-default" : ""}`}
             />
@@ -2586,6 +2587,7 @@ Rules:
         <InlineDescriptionEditor
           value={localDesc}
           placeholder="Describe what this sketch covers..."
+          label="Sketch description"
           disabled={sketchLocked}
           rows={4}
           className="my-8"
