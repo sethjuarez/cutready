@@ -247,14 +247,19 @@ After the agentive `azure_oauth` module lands, CutReady's migration should also:
 - **TypeScript check**: `npx tsc --noEmit`
 - **Rust tests**: `cargo test --workspace` (from the repo root, covers `src-tauri` plus the `crates/*` harness crates). Use `cargo test -p <crate>` to target one crate.
 - **Vitest**: `npx vitest run`
-- **E2E tests**: `npm run test:e2e` runs the Auditaur drill against the real Tauri debug app with frontend telemetry and the native drive bridge required.
 - **Default app validation**: `npm run debug` runs the real Tauri app; debug builds enable Auditaur end-to-end observability for frontend console/errors, Tauri IPC/events, backend traces, and the Tauri-native drive bridge.
-- **Repeatable Auditaur confidence validation**: prefer `auditaur drill run` for agent-owned smoke passes. It pins validation to the spawned session, requires frontend telemetry and drive-bridge responsiveness, checks frontend errors/failed IPC/`explain`, writes a JSON report, and cleans up the process tree:
+- **E2E drills**: suites live in `.auditaur/drills/*.drill.json` and run with `auditaur drill test` (CLI ≥ 0.4.12) against the real Tauri debug app. `.auditaur/config.json` holds the start command and readiness (frontend telemetry + drive bridge).
 
-  ```bash
-  npm ci
-  auditaur drill run --app cutready --require-frontend --require-drive-bridge --timeout-seconds 180 --report <artifact-or-report-path> --selector body --expect-text CutReady --json -- cmd /c npm run debug
-  ```
+  | Command | Runs |
+  | --- | --- |
+  | `npm run test:e2e` | Everything except `@live` (needs a configured LLM provider) and `@human` |
+  | `npm run test:e2e:live` | `@live` chat and Prompty provider suites |
+  | `npm run test:e2e:human` | `@human` tests with gates (GitHub device flow, Copilot sign-in) |
+  | `auditaur drill test <suite> --grep <text>` | One suite or test |
+
+  - Fixtures: setup hooks call `scripts/auditaur-drill-fixture.mjs`, which creates a temp project and appends `CUTREADY_PROJECT=<path>` to `$AUDITAUR_DRILL_ENV_FILE`. Use `"cwd": "${CUTREADY_PROJECT}"` in `run` steps (e.g. `git log`) to inspect it.
+  - Privacy: telemetry assertions only see the current test, so put `expectNoTelemetry` guards in each test after the actions they cover. Commands carrying transcripts, memory, identity, or credentials must be listed in `SENSITIVE_INVOKE_COMMANDS` (`src/services/tauri.ts`); Auditaur records invoke args/result summaries even with full payload capture off.
+  - Human gates and results: open the `auditaur-drills` canvas (Auditaur Copilot plugin or `auditaur init extension`) to run suites, answer gates on its Progress page, and inspect Trace, Snapshots, and Coverage. Runs are saved under `.auditaur/drill-runs/` (`auditaur drill show`).
 
 - **Human-observable Auditaur startup**: when the user needs to use the app while the agent observes, do not start `npm run debug` directly. Start the app through Auditaur, preferably in a visible terminal canvas when the user wants to watch logs, or in a detached background shell when the agent owns startup:
 
