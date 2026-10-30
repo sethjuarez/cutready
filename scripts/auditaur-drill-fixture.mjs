@@ -314,7 +314,7 @@ function waitForWebViewExit(timeoutSeconds = 120) {
   }
 }
 
-// Fixture-relative path, or `app-data:<file>` for CutReady's app data folder.
+// Writes text to a fixture-relative file (never app data or outside the project).
 function writeProjectFile(file, text) {
   if (!file || text === undefined) throw new Error("write needs <file> <text>");
   if (file.startsWith("app-data:")) throw new Error("write only targets the fixture project, not app data");
