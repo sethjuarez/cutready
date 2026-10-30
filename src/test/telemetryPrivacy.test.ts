@@ -38,6 +38,14 @@ describe("recorded telemetry (Auditaur helpers)", () => {
     expect(recorded("invokeArgs", "update_note", { relativePath: "chat-artifacts/a.cv", content: "x" })).not.toContain("a.cv");
   });
 
+  test("saved feedback text and diagnostics are redacted but entries stay countable", () => {
+    const shown = recorded("invokeResult", "list_feedback", [
+      { category: "Bug", feedback: "secret plan", date: "2026-01-02", debug_log: "ada@example.com" },
+    ]);
+    expect(shown).toContain("Bug");
+    expect(shown).not.toMatch(/secret plan|ada@/);
+  });
+
   test("identity, chat, and credential error messages are omitted", () => {
     for (const name of [
       "set_contributor_identity",

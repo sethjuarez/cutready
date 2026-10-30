@@ -85,6 +85,9 @@ export const REDACT_KEYS = [
   "text",
   "source_text",
   "ssml",
+  // Saved feedback (list_feedback results) and its attached diagnostics.
+  "feedback",
+  "debug_log",
 ];
 
 export const OMITTED_PAYLOAD = "[omitted]";
