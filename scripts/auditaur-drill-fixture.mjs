@@ -135,12 +135,26 @@ function fixtureRoot() {
   return root;
 }
 
+// Editors save on a debounce, so file checks retry briefly before failing.
+function eventually(check) {
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    try {
+      return check();
+    } catch (error) {
+      if (Date.now() >= deadline) throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
+    }
+  }
+}
+
 function expectJson(file, expression) {
   if (!file || !expression) throw new Error("expect-json needs <file> <expression>");
-  const doc = JSON.parse(readFileSync(join(fixtureRoot(), file), "utf8"));
-  if (!new Function("doc", `return (${expression});`)(doc)) {
-    throw new Error(`expected ${file} to satisfy ${expression}; got ${JSON.stringify(doc)}`);
-  }
+  const predicate = new Function("doc", `return (${expression});`);
+  eventually(() => {
+    const doc = JSON.parse(readFileSync(join(fixtureRoot(), file), "utf8"));
+    if (!predicate(doc)) throw new Error(`expected ${file} to satisfy ${expression}; got ${JSON.stringify(doc)}`);
+  });
   console.log(`${file} satisfies ${expression}`);
 }
 
@@ -148,14 +162,16 @@ function expectJson(file, expression) {
 function expectFile(file, expectation) {
   if (!file || !expectation) throw new Error("expect-file needs <file> <absent|exists|text>");
   const path = join(fixtureRoot(), file);
-  const exists = existsSync(path);
-  if (expectation === "absent") {
-    if (exists) throw new Error(`expected ${file} to be absent`);
-  } else if (!exists) {
-    throw new Error(`expected ${file} to exist`);
-  } else if (expectation !== "exists" && !readFileSync(path, "utf8").includes(expectation)) {
-    throw new Error(`expected ${file} to contain ${JSON.stringify(expectation)}`);
-  }
+  eventually(() => {
+    const exists = existsSync(path);
+    if (expectation === "absent") {
+      if (exists) throw new Error(`expected ${file} to be absent`);
+    } else if (!exists) {
+      throw new Error(`expected ${file} to exist`);
+    } else if (expectation !== "exists" && !readFileSync(path, "utf8").includes(expectation)) {
+      throw new Error(`expected ${file} to contain ${JSON.stringify(expectation)}`);
+    }
+  });
   console.log(`${file}: ${expectation}`);
 }
 

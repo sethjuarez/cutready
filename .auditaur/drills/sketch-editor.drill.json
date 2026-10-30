@@ -1,0 +1,100 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "Editing a sketch's title, description and planning rows, and locking rows, cells and the sketch, is saved to the .sk file.",
+  "tags": ["@sketch", "@authoring"],
+  "setup": [
+    { "name": "Create a project with a two-row sketch", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/sketch-editor.json"] }
+  ],
+  "teardown": [
+    { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "tests": [
+    {
+      "name": "opens a sketch from the explorer",
+      "steps": [
+        { "click": { "testId": "explorer-item-walkthrough.sk" }, "timeoutMs": 45000 },
+        { "expect": { "label": "Sketch title" }, "toHaveValue": "Dashboard Walkthrough" },
+        { "expect": { "testId": "planning-row-2" }, "toBeVisible": true },
+        { "expectIpc": "get_sketch", "status": "ok" },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "renames the sketch title",
+      "steps": [
+        { "fill": { "label": "Sketch title" }, "value": "Regional Sales Walkthrough" },
+        { "expectIpc": "update_sketch_title", "status": "ok" },
+        { "name": "the sketch file has the new title", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "walkthrough.sk", "doc.title === 'Regional Sales Walkthrough'"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "writes the sketch description",
+      "steps": [
+        { "click": { "role": "button", "name": "Sketch description", "exact": true } },
+        { "fill": { "role": "textbox", "name": "Sketch description", "exact": true }, "value": "Shows regional sales filtering for the quarterly review." },
+        { "press": "Control+Enter", "target": { "role": "textbox", "name": "Sketch description", "exact": true } },
+        { "expectIpc": "update_sketch", "status": "ok" },
+        { "name": "the sketch file has the description", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "walkthrough.sk", "JSON.stringify(doc.description).includes('quarterly review')"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "adds a planning row and fills it in",
+      "steps": [
+        { "hover": { "testId": "planning-row-2" } },
+        { "click": { "role": "button", "name": "Add row below row 2", "exact": true } },
+        { "expect": { "testId": "planning-row-3" }, "toBeVisible": true },
+        { "fill": { "role": "textbox", "name": "Row 3 time", "exact": true }, "value": "~15s" },
+        { "click": { "label": "Row 3 narrative", "exact": true } },
+        { "fill": { "role": "textbox", "name": "Row 3 narrative", "exact": true }, "value": "Export the filtered report." },
+        { "click": { "label": "Row 3 actions", "exact": true } },
+        { "fill": { "role": "textbox", "name": "Row 3 actions", "exact": true }, "value": "Click Export to CSV." },
+        { "name": "the sketch file has the new row", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "walkthrough.sk", "doc.rows.length === 3 && doc.rows[2].time === '~15s' && doc.rows[2].narrative === 'Export the filtered report.' && doc.rows[2].demo_actions === 'Click Export to CSV.'"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "deletes a planning row",
+      "steps": [
+        { "hover": { "testId": "planning-row-1" } },
+        { "click": { "role": "button", "name": "Delete row 1", "exact": true } },
+        { "expect": { "testId": "planning-row-3" }, "toHaveCount": 0 },
+        { "name": "the first row is gone from the sketch file", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "walkthrough.sk", "doc.rows.length === 2 && doc.rows[0].narrative === 'Filter to the west region.'"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "locks a planning row",
+      "steps": [
+        { "hover": { "testId": "planning-row-1" } },
+        { "click": { "role": "button", "name": "Lock row 1", "exact": true } },
+        { "expectIpc": "set_planning_row_lock", "status": "ok" },
+        { "expect": { "role": "button", "name": "Unlock row 1", "exact": true }, "toExist": true },
+        { "name": "row 1 is locked in the sketch file", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "walkthrough.sk", "doc.rows[0].locked === true && doc.rows[1].locked !== true"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "locks a single planning cell",
+      "steps": [
+        { "hover": { "testId": "planning-row-2" } },
+        { "click": { "role": "button", "name": "Lock row 2 narrative", "exact": true } },
+        { "expectIpc": "set_planning_cell_lock", "status": "ok" },
+        { "expect": { "role": "button", "name": "Unlock row 2 narrative", "exact": true }, "toExist": true },
+        { "name": "only row 2's narrative is locked", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "walkthrough.sk", "doc.rows[1].locks.narrative === true && doc.rows[1].locks.demo_actions !== true && doc.rows[1].locked !== true"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "locks the whole sketch",
+      "steps": [
+        { "click": { "role": "button", "name": "Lock sketch", "exact": true } },
+        { "expectIpc": "set_sketch_lock", "status": "ok" },
+        { "expect": { "role": "button", "name": "Unlock sketch", "exact": true }, "toBeVisible": true },
+        { "name": "the sketch and every row are locked", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "walkthrough.sk", "doc.locked === true && doc.rows.every((row) => row.locked)"] },
+        { "expectNoErrors": true }
+      ]
+    }
+  ]
+}
