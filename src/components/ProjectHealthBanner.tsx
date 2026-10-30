@@ -12,10 +12,23 @@ const OPERATION_LABELS: Record<string, string> = {
   publish_changes: "publish",
   send: "send",
   merge_incoming: "merge",
+  shelve_changes: "shelve",
+  discard_file: "file discard",
+  delete_variation: "branch delete",
+  apply_shelf: "shelf restore",
+  delete_remote_variation: "shared branch delete",
+  expire_support_refs: "cleanup",
+  rename_variation: "branch rename",
+  move_folder: "folder move",
+  milestone_merge: "milestone merge",
+  squash_versions: "squash",
+  history_cleanup: "history cleanup",
 };
 
 function operationLabel(operation: string): string {
-  return OPERATION_LABELS[operation] ?? operation.replace(/_/g, " ");
+  // Draftline reports recovery operations in PascalCase (DiscardChanges) and locks in snake_case.
+  const key = operation.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
+  return OPERATION_LABELS[key] ?? key.replace(/_/g, " ");
 }
 
 function BannerButton({ onClick, disabled, label, children }: { onClick: () => void; disabled: boolean; label?: string; children: ReactNode }) {
