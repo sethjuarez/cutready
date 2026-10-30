@@ -11,7 +11,7 @@
 //   node scripts/auditaur-drill-fixture.mjs setup .auditaur/fixtures/<name>.json
 //   node scripts/auditaur-drill-fixture.mjs teardown
 //   node scripts/auditaur-drill-fixture.mjs expect-json <file> <js expression over doc>
-//   node scripts/auditaur-drill-fixture.mjs expect-file <file> <absent | exists | text it must contain>
+//   node scripts/auditaur-drill-fixture.mjs expect-file <file> <absent | exists | text it must contain | lacks:text>
 //   node scripts/auditaur-drill-fixture.mjs expect-agent-runs --provider <id> [--model <m> | --model-prefix <p>]
 //        [--engine <id>] [--min-completed <n>] [--tools a,b,...]
 //
@@ -160,7 +160,7 @@ function expectJson(file, expression) {
 
 // `absent`, `exists`, or text the file must contain.
 function expectFile(file, expectation) {
-  if (!file || !expectation) throw new Error("expect-file needs <file> <absent|exists|text>");
+  if (!file || !expectation) throw new Error("expect-file needs <file> <absent|exists|text|lacks:text>");
   const path = join(fixtureRoot(), file);
   eventually(() => {
     const exists = existsSync(path);
@@ -168,6 +168,10 @@ function expectFile(file, expectation) {
       if (exists) throw new Error(`expected ${file} to be absent`);
     } else if (!exists) {
       throw new Error(`expected ${file} to exist`);
+    } else if (expectation.startsWith("lacks:")) {
+      if (readFileSync(path, "utf8").includes(expectation.slice(6))) {
+        throw new Error(`expected ${file} not to contain ${JSON.stringify(expectation.slice(6))}`);
+      }
     } else if (expectation !== "exists" && !readFileSync(path, "utf8").includes(expectation)) {
       throw new Error(`expected ${file} to contain ${JSON.stringify(expectation)}`);
     }

@@ -1,0 +1,7 @@
+{
+  "prefix": "cutready-versioning-drill-",
+  "appStores": [{ "file": "identity.json", "clear": true }],
+  "notes": [
+    { "path": "plan.md", "body": "# Launch plan\n\nDraft agenda.\n" }
+  ]
+}
