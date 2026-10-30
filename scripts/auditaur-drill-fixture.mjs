@@ -23,6 +23,10 @@
 //   (a collaborator's clone of the bare remote writes <file>, saves, and pushes to main)
 //   node scripts/auditaur-drill-fixture.mjs expect-remote <message>
 //   (main on the bare remote has a save with that message)
+//   node scripts/auditaur-drill-fixture.mjs reset
+//   (a `beforeEach` step, followed by `reload`: puts the open project back to the state
+//   the app first opened it in — files, history, branches, remotes, agent state — and
+//   re-seeds app stores, so tests in a suite don't depend on each other)
 //
 // Fixture spec (all optional):
 //   prefix         temp folder prefix
@@ -35,7 +39,6 @@
 //   appStores      [{ file, clear, json }]  app-data files or dirs backed up (then cleared and/or seeded)
 //   recentProjects [{ name, sketches, notes, files }]  extra project folders (<root>-<name>) seeded as the only recents
 //   remote         true: an empty bare repo at <root>-remote.git (main) for collaboration drills
-//   remote         true: an empty bare repo at <root>-remote.git (main) for collaboration drills
 
 import { spawnSync } from "node:child_process";
 import {
@@ -45,6 +48,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -55,6 +59,7 @@ import { dirname, join, resolve, sep } from "node:path";
 const DRILL_DIR = resolve("target", "auditaur-drill");
 const STATE = join(DRILL_DIR, "state.json");
 const BACKUP_DIR = join(DRILL_DIR, "backup");
+const PRISTINE_DIR = join(DRILL_DIR, "pristine");
 
 const [command, ...args] = process.argv.slice(2);
 try {
@@ -67,7 +72,8 @@ try {
   else if (command === "connect-remote") connectRemote();
   else if (command === "collaborator-save") collaboratorSave(args[0], args[1], args[2]);
   else if (command === "expect-remote") expectRemote(args[0]);
-  else throw new Error(`unknown command ${JSON.stringify(command)}; use setup, teardown, expect-json, expect-file, expect-agent-runs, write, connect-remote, collaborator-save, or expect-remote`);
+  else if (command === "reset") reset();
+  else throw new Error(`unknown command ${JSON.stringify(command)}; use setup, teardown, reset, expect-json, expect-file, expect-agent-runs, write, connect-remote, collaborator-save, or expect-remote`);
 } catch (error) {
   console.error(`[auditaur-drill-fixture] ${error.message}`);
   process.exit(1);
@@ -97,29 +103,21 @@ function setup(specPath) {
   saveState();
 
   writeProject(projectRoot, spec);
-  if (spec.globalSettings?.seed) {
-    const path = globalSettingsPath();
-    backup(state, path);
+  // Files as written, before the app opens (and imports, e.g., legacy .chats) — `reset` restores them.
+  rmSync(PRISTINE_DIR, { recursive: true, force: true });
+  cpSync(projectRoot, PRISTINE_DIR, { recursive: true, filter: (src) => !isGitDir(projectRoot, src) });
+  // Reset re-seeds exactly these (backed-up) stores, even if the spec file changes mid-run.
+  state.stores = { settingsSeed: spec.globalSettings?.seed, appStores: spec.appStores ?? [] };
+  saveState();
+  if (state.stores.settingsSeed) {
+    backup(state, globalSettingsPath());
     saveState();
-    let store = {};
-    try {
-      store = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {};
-    } catch {
-      store = {};
-    }
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, `${JSON.stringify({ ...store, ...spec.globalSettings.seed }, null, 2)}\n`);
   }
-  for (const store of spec.appStores ?? []) {
-    const path = join(appDataDir(), store.file);
-    backup(state, path);
+  for (const store of state.stores.appStores) {
+    backup(state, appStorePath(store.file));
     saveState();
-    if (store.clear) rmSync(path, { recursive: true, force: true });
-    if (store.json !== undefined) {
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, `${JSON.stringify(store.json, null, 2)}\n`);
-    }
   }
+  seedAppStores(state.stores);
 
   if (spec.recentProjects?.length) {
     const path = recentProjectsPath();
@@ -165,10 +163,102 @@ function teardown() {
   removeFromRecents(state.prefix);
   if (state.projectRoot) rmSync(state.projectRoot, { recursive: true, force: true });
   for (const root of state.extraRoots ?? []) rmSync(root, { recursive: true, force: true });
+  rmSync(PRISTINE_DIR, { recursive: true, force: true });
   if (failed) throw new Error(`restore failed; backups kept in ${BACKUP_DIR}`);
   rmSync(BACKUP_DIR, { recursive: true, force: true });
   rmSync(STATE, { force: true });
   console.log("Drill fixture removed and app stores restored.");
+}
+
+function appStorePath(file) {
+  const path = resolve(appDataDir(), file);
+  if (!path.startsWith(resolve(appDataDir()) + sep)) throw new Error(`app store ${file} is outside the app data folder`);
+  return path;
+}
+
+function seedAppStores({ settingsSeed, appStores }) {
+  if (settingsSeed) {
+    const path = globalSettingsPath();
+    let store = {};
+    try {
+      store = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {};
+    } catch {
+      store = {};
+    }
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, `${JSON.stringify({ ...store, ...settingsSeed }, null, 2)}\n`);
+  }
+  for (const store of appStores) {
+    const path = appStorePath(store.file);
+    if (store.clear) rmSync(path, { recursive: true, force: true });
+    if (store.json !== undefined) {
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, `${JSON.stringify(store.json, null, 2)}\n`);
+    }
+  }
+}
+
+// Restores the history the app made when it first opened the project (recorded by the
+// first reset, in the first test's beforeEach) plus the files setup wrote.
+function reset() {
+  if (!existsSync(STATE)) throw new Error("reset needs a fixture from `setup`");
+  const state = JSON.parse(readFileSync(STATE, "utf8"));
+  const root = fixtureRoot();
+  if (resolve(root) !== resolve(state.projectRoot)) throw new Error(`CUTREADY_PROJECT ${root} is not the fixture project`);
+  const gitDir = join(root, ".git");
+
+  if (!state.baseline) {
+    // The app creates the project's repo (without a first save) when it opens it.
+    eventually(() => {
+      if (!existsSync(join(gitDir, "HEAD"))) throw new Error("the app has not opened the project yet");
+    }, 20000);
+    if (resolve(root, git(["rev-parse", "--git-dir"], root).trim()) !== resolve(gitDir)) {
+      throw new Error("reset only supports a standalone project repo");
+    }
+    const head = spawnSync("git", ["rev-parse", "--verify", "--quiet", "HEAD"], { cwd: root, encoding: "utf8", windowsHide: true });
+    state.baseline = {
+      head: head.status === 0 ? head.stdout.trim() : null,
+      branch: git(["symbolic-ref", "--short", "HEAD"], root).trim(),
+      remotes: git(["remote"], root).split("\n").filter(Boolean),
+    };
+    writeFileSync(STATE, `${JSON.stringify(state, null, 2)}\n`);
+  }
+
+  const { head, branch, remotes } = state.baseline;
+  const branchRef = `refs/heads/${branch}`;
+  git(["symbolic-ref", "HEAD", branchRef], root);
+  for (const ref of git(["for-each-ref", "--format=%(refname)"], root).split("\n").filter(Boolean)) {
+    if (ref !== branchRef) git(["update-ref", "-d", ref], root);
+  }
+  if (head) {
+    git(["update-ref", branchRef, head], root);
+    git(["reset", "--hard", head], root);
+  } else {
+    // No saves yet: an unborn branch with an empty index.
+    git(["update-ref", "-d", branchRef], root);
+    rmSync(join(gitDir, "index"), { force: true });
+  }
+  git(["clean", "-ffdx"], root);
+  for (const remote of git(["remote"], root).split("\n").filter(Boolean)) {
+    if (!remotes.includes(remote)) git(["remote", "remove", remote], root);
+  }
+  cpSync(PRISTINE_DIR, root, { recursive: true });
+
+  // A standalone project's agent state lives in .git/cutready; the app opens it per call
+  // and re-imports the project's legacy .chats when it recreates it.
+  const stateDir = join(gitDir, "cutready");
+  for (const name of existsSync(stateDir) ? readdirSync(stateDir) : []) {
+    if (/^(agent-state\.db(-wal|-shm|-journal)?|memory\.json)$/.test(name)) {
+      eventually(() => rmSync(join(stateDir, name), { force: true }), 10000);
+    }
+  }
+  seedAppStores(state.stores);
+  console.log(`Fixture reset to ${head ? head.slice(0, 7) : "no saves"} on ${branch}`);
+}
+
+function isGitDir(root, path) {
+  const rel = path.slice(resolve(root).length + 1);
+  return rel === ".git" || rel.startsWith(`.git${sep}`);
 }
 
 function fixtureRoot() {

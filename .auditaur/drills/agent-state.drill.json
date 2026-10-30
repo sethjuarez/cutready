@@ -8,11 +8,18 @@
   "teardown": [
     { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
   ],
+  "beforeEach": [
+    { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 45000 },
+    { "name": "Drop the previous test's pending autosaves", "reload": true },
+    { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 45000 },
+    { "name": "Restore the seeded project and agent state", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "reset"] },
+    { "reload": true },
+    { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 45000 }
+  ],
   "tests": [
     {
       "name": "imported chats are listed and reopen in the chat",
       "steps": [
-        { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 45000 },
         { "click": { "role": "button", "name": "Session History", "exact": true } },
         { "expectSpan": "list_chat_sessions", "status": "ok", "name": "backend span (frontend IPC is bypassed for privacy)" },
         { "expect": { "role": "button", "name": "Retro notes", "nth": 0 }, "toBeVisible": true },
