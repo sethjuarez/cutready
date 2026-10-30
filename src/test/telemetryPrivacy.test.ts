@@ -11,10 +11,48 @@ describe("telemetry privacy", () => {
     expect(isSensitiveInvokeCommand("agent_chat_with_tools")).toBe(true);
   });
 
+  test("chat transcript, agent run, and memory commands bypass IPC instrumentation", () => {
+    for (const cmd of [
+      "agent_chat",
+      "get_agent_run",
+      "get_agent_state_database_preview",
+      "get_chat_session",
+      "get_memory_context",
+      "list_agent_runs",
+      "list_chat_sessions",
+      "push_pending_chat_message",
+      "save_chat_session",
+      "update_chat_summary",
+      "update_memory",
+    ]) {
+      expect(isSensitiveInvokeCommand(cmd)).toBe(true);
+    }
+  });
+
   test("contributor identity commands bypass IPC instrumentation", () => {
     for (const cmd of ["get_contributor_identity", "set_contributor_identity", "clear_contributor_identity"]) {
       expect(isSensitiveInvokeCommand(cmd)).toBe(true);
     }
+  });
+
+  test("credential-bearing provider and device-code commands bypass IPC instrumentation", () => {
+    for (const cmd of [
+      "github_device_code_start",
+      "list_azure_ai_resources",
+      "list_azure_subscriptions",
+      "list_foundry_projects",
+      "list_models",
+      "synthesize_narration_recording",
+    ]) {
+      expect(isSensitiveInvokeCommand(cmd)).toBe(true);
+    }
+  });
+
+  test("promoted chat artifacts bypass note IPC instrumentation; ordinary notes do not", () => {
+    expect(isSensitiveInvokeCommand("update_note", { relativePath: "chat-artifacts/run.cv", content: "x" })).toBe(true);
+    expect(isSensitiveInvokeCommand("get_note", { relativePath: "chat-artifacts/Run.CV" })).toBe(true);
+    expect(isSensitiveInvokeCommand("update_note", { relativePath: "planning.md", content: "x" })).toBe(false);
+    expect(isSensitiveInvokeCommand("get_note")).toBe(false);
   });
 
   test("agent events bypass payload instrumentation", () => {
