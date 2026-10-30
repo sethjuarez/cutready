@@ -1,0 +1,8 @@
+{
+  "prefix": "cutready-recent-drill-",
+  "sketches": [{ "path": "launch.sk", "title": "Launch Sketch" }],
+  "recentProjects": [
+    { "name": "archive", "sketches": [{ "path": "archive.sk", "title": "Archive Sketch" }] },
+    { "name": "retired", "sketches": [{ "path": "retired.sk", "title": "Retired Sketch" }] }
+  ]
+}

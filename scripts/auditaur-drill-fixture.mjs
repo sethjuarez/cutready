@@ -27,6 +27,7 @@
 //   projects       [{ path, name, description, sketches }]  (multi-project repo)
 //   globalSettings { seed: { key: value } }  merged into app settings.json
 //   appStores      [{ file, clear, json }]  app-data files or dirs backed up (then cleared and/or seeded)
+//   recentProjects [{ name, sketches, notes, files }]  extra project folders (<root>-<name>) seeded as the only recents
 
 import { spawnSync } from "node:child_process";
 import {
@@ -109,6 +110,21 @@ function setup(specPath) {
     }
   }
 
+  if (spec.recentProjects?.length) {
+    const path = recentProjectsPath();
+    backup(state, path);
+    state.extraRoots = spec.recentProjects.map(({ name }) => `${projectRoot}-${name}`);
+    saveState();
+    const recent = spec.recentProjects.map((project, index) => {
+      const root = state.extraRoots[index];
+      mkdirSync(root, { recursive: true });
+      writeProject(root, project);
+      return { path: root, last_opened: new Date(Date.now() - (index + 1) * 3_600_000).toISOString() };
+    });
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, `${JSON.stringify({ recent_projects: recent }, null, 2)}\n`);
+  }
+
   appendFileSync(envFile, `CUTREADY_PROJECT=${projectRoot}\n`);
   console.log(`Drill fixture ready at ${projectRoot}`);
 }
@@ -131,6 +147,7 @@ function teardown() {
   }
   removeFromRecents(state.prefix);
   if (state.projectRoot) rmSync(state.projectRoot, { recursive: true, force: true });
+  for (const root of state.extraRoots ?? []) rmSync(root, { recursive: true, force: true });
   if (failed) throw new Error(`restore failed; backups kept in ${BACKUP_DIR}`);
   rmSync(BACKUP_DIR, { recursive: true, force: true });
   rmSync(STATE, { force: true });
@@ -341,8 +358,12 @@ function globalSettingsPath() {
   return process.env.CUTREADY_GLOBAL_SETTINGS_STORE ?? join(appDataDir(), "settings.json");
 }
 
+function recentProjectsPath() {
+  return process.env.CUTREADY_RECENT_PROJECTS_STORE ?? join(appDataDir(), "recent-projects.json");
+}
+
 function removeFromRecents(prefix) {
-  const path = process.env.CUTREADY_RECENT_PROJECTS_STORE ?? join(appDataDir(), "recent-projects.json");
+  const path = recentProjectsPath();
   if (!prefix || !existsSync(path)) return;
   try {
     const store = JSON.parse(readFileSync(path, "utf8"));
