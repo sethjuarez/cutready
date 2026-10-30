@@ -145,6 +145,40 @@
         { "expectNoTelemetry": { "pattern": "Drill Versioning|versioning@drill\\.test" }, "name": "identity stays out of telemetry" },
         { "expectNoErrors": true, "ignore": ["incomplete Draftline operation", "recovery_required"], "name": "no errors (ignores Draftline reads racing the in-flight branch switch; reported to Draftline)" }
       ]
+    },
+    {
+      "name": "deletes an abandoned branch that has no new snapshots",
+      "steps": [
+        { "click": { "testId": "activity-changes" } },
+        { "click": { "role": "button", "name": "Save snapshot", "exact": true } },
+        { "fill": "#snapshot-name-input", "value": "Shelf kept" },
+        { "click": { "role": "button", "name": "Save Snapshot", "exact": true } },
+        { "expect": "#snapshot-name-input", "toHaveCount": 0, "timeoutMs": 30000 },
+        { "click": { "role": "button", "name": "Preview snapshot: Pricing added" }, "timeoutMs": 15000 },
+        { "expect": { "text": "Snapshot: Pricing added" }, "toBeVisible": true },
+        { "click": { "role": "button", "name": "Start Branch from Here" } },
+        { "fill": { "label": "New branch name" }, "value": "scratch" },
+        { "click": { "role": "button", "name": "Create Branch", "exact": true } },
+        { "click": { "role": "button", "name": "Confirm Start Branch", "exact": true } },
+        { "expect": { "role": "button", "name": "Branch: scratch" }, "toBeVisible": true, "timeoutMs": 15000 },
+        { "click": { "testId": "activity-project" } },
+        { "click": { "testId": "explorer-item-plan.md" } },
+        { "click": { "label": "Note content" } },
+        { "press": "Control+End", "target": { "label": "Note content" } },
+        { "type": { "label": "Note content" }, "value": " Throwaway." },
+        { "name": "the unsaved edit is on disk", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Throwaway."] },
+        { "click": { "testId": "activity-changes" } },
+        { "click": { "role": "button", "name": "Branch: scratch" } },
+        { "click": { "role": "button", "name": "Switch to branch main" } },
+        { "click": { "role": "button", "name": "Discard and continue", "exact": true } },
+        { "expect": { "text": "Delete the empty branch too?" }, "toBeVisible": true, "timeoutMs": 15000 },
+        { "click": { "role": "button", "name": "Delete branch", "exact": true } },
+        { "expectIpc": "delete_variation", "status": "ok", "timeoutMs": 15000 },
+        { "expect": { "role": "button", "name": "Branch: main" }, "toBeVisible": true },
+        { "name": "the discarded edit is gone", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "lacks:Throwaway."] },
+        { "name": "the branch no longer exists", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["rev-parse", "--verify", "--quiet", "refs/heads/scratch"], "exitCode": 1 },
+        { "expectNoErrors": true, "ignore": ["incomplete Draftline operation", "recovery_required"], "name": "no errors (ignores Draftline reads racing the in-flight branch switch; reported to Draftline)" }
+      ]
     }
   ]
 }

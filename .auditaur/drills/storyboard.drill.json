@@ -23,7 +23,13 @@
       "name": "renames the storyboard title",
       "steps": [
         { "fill": { "label": "Storyboard title" }, "value": "Partner Product Tour" },
+        { "name": "watch the title blur (workaround: AR-29)", "evaluate": "(() => { const el = document.querySelector('[aria-label=\"Storyboard title\"]'); window.__drillTitle = el; el.__drillBlurCalled = false; el.__drillFocusout = false; const blur = el.blur; el.blur = function () { el.__drillBlurCalled = true; return blur.call(this); }; el.addEventListener('focusout', () => { el.__drillFocusout = true; }, { once: true }); return 'watching'; })()" },
         { "press": "Enter", "target": { "label": "Storyboard title" } },
+        {
+          "name": "Enter blurs the title; deliver focusout if the app window lacks OS focus (workaround: AR-29)",
+          "expectValue": "(() => { const el = window.__drillTitle; if (!el.__drillBlurCalled) return 'Enter did not blur the title'; if (!el.__drillFocusout) { el.__drillFocusout = true; el.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); return 'blurred; dispatched focusout because the window lacks OS focus'; } return 'blurred; native focusout'; })()",
+          "toMatch": "^blurred"
+        },
         { "expectIpc": "update_storyboard", "status": "ok" },
         { "name": "the storyboard file has the new title", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "tour.sb", "doc.title === 'Partner Product Tour'"] },
         { "expectNoErrors": true }
