@@ -166,6 +166,17 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
   const lightboxImageRef = useRef<HTMLImageElement | null>(null);
   const [lightboxPreviewWidth, setLightboxPreviewWidth] = useState(0);
   const [visualLightbox, setVisualLightbox] = useState<{ visualPath: string; rowIndex: number } | null>(null);
+  const visualDialogRef = useRef<HTMLDivElement | null>(null);
+  const isVisualLightboxOpen = visualLightbox !== null;
+  // Move focus into the visual lightbox when it opens and back to the opener when it closes.
+  useEffect(() => {
+    if (!isVisualLightboxOpen) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    visualDialogRef.current?.focus();
+    return () => {
+      if (opener?.isConnected) opener.focus();
+    };
+  }, [isVisualLightboxOpen]);
   const [nudgeInput, setNudgeInput] = useState("");
   const [lightboxMode, setLightboxMode] = useState<"preview" | "edit">("preview");
   const [spotAuthoringMode, setSpotAuthoringMode] = useState<"motion" | "typing">("motion");
@@ -1116,7 +1127,11 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
           }}
         >
           <div
-            className="relative flex flex-col rounded-xl overflow-hidden shadow-2xl bg-[rgb(var(--color-surface))]"
+            role="dialog"
+            aria-label={`Row ${visualLightbox.rowIndex + 1} visual`}
+            ref={visualDialogRef}
+            tabIndex={-1}
+            className="relative flex flex-col rounded-xl overflow-hidden shadow-2xl bg-[rgb(var(--color-surface))] outline-none"
             style={{ width: "calc(100vw - 60px)", height: "calc(100vh - 60px)" }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1131,6 +1146,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   <div className="flex items-center rounded-lg bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] p-0.5">
                     <button
                       onClick={() => setLightboxMode("preview")}
+                      aria-pressed={lightboxMode === "preview"}
                       className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors ${
                         lightboxMode === "preview"
                           ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))]"
@@ -1141,6 +1157,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                     </button>
                     <button
                       onClick={() => setLightboxMode("edit")}
+                      aria-pressed={lightboxMode === "edit"}
                       className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors ${
                         lightboxMode === "edit"
                           ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))]"
@@ -1161,6 +1178,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   <button
                     onClick={() => saveEditorChanges(editorDsl)}
                     title="Save changes"
+                    aria-label="Save visual changes"
                     className="p-1.5 rounded-lg text-[rgb(var(--color-accent))] hover:text-[rgb(var(--color-accent-hover))] hover:bg-[rgb(var(--color-surface))] transition-colors"
                   >
                     <Check className="w-4 h-4" />
@@ -1169,6 +1187,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                 {/* Close button */}
                 <button
                   onClick={closeLightbox}
+                  aria-label="Close visual"
                   className="p-1.5 rounded-lg text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors"
                 >
                   <X className="w-5 h-5" />
@@ -1610,11 +1629,12 @@ function SortableRow({
                   key={`${row.visual}-v${visualVersion}`}
                 />
               </Suspense>
-              {!mediaLocked && <div className="absolute inset-0 bg-[rgb(var(--color-media-control-bg)/0.4)] opacity-0 group-hover/vis:opacity-100 transition-opacity flex items-center justify-center gap-1.5 rounded-md" onClick={(e) => e.stopPropagation()}>
+              {!mediaLocked && <div className="absolute inset-0 bg-[rgb(var(--color-media-control-bg)/0.4)] opacity-0 group-hover/vis:opacity-100 focus-within:opacity-100 transition-opacity flex items-center justify-center gap-1.5 rounded-md" onClick={(e) => e.stopPropagation()}>
                 <button
                   onClick={() => onVisualClick(row.visual!, idx)}
                   className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.4)]"
                   title="Preview visual (click to edit)"
+                  aria-label={`Preview visual for row ${idx + 1}`}
                 >
                   <Maximize2 className="w-3.5 h-3.5" />
                 </button>
@@ -1623,6 +1643,7 @@ function SortableRow({
                     onClick={() => onGenerateVisual(idx)}
                     className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-accent)/0.8)]"
                     title="Regenerate visual with AI"
+                    aria-label={`Regenerate visual for row ${idx + 1}`}
                   >
                     <Sparkles className="w-3.5 h-3.5" />
                   </button>
@@ -1632,6 +1653,7 @@ function SortableRow({
                     onClick={() => onRemoveVisual?.(idx)}
                     className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-error)/0.8)]"
                     title="Remove visual"
+                    aria-label={`Remove visual for row ${idx + 1}`}
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
