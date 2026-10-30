@@ -1,0 +1,55 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "Cloning a shared workspace from Home: the user enters a remote URL, picks a folder, and the clone opens. The remote is a local bare repo, so no network or sign-in is needed.",
+  "tags": ["@dialogs", "@projects", "@collaboration", "@local"],
+  "setup": [
+    { "name": "Create a project shared through a local bare remote, plus an empty clone destination", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/clone.json"] }
+  ],
+  "teardown": [
+    { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "beforeEach": [
+    { "name": "Drop pending autosaves and per-test UI state", "clearStorage": true },
+    { "name": "a project is open", "expect": { "testId": "explorer-import-menu" }, "toBeVisible": true, "timeoutMs": 45000 },
+    { "name": "Restore the seeded project, remote, recents and clone destination", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "reset"] },
+    { "name": "Reload the restored project with clean UI state", "clearStorage": true },
+    { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 45000 }
+  ],
+  "tests": [
+    {
+      "name": "clones a workspace from a remote URL",
+      "fixme": "AR-40: fill does not expand ${CUTREADY_REMOTE_URL}, so the app receives the literal placeholder",
+      "steps": [
+        { "press": "Control+Shift+P" },
+        { "fill": { "role": "combobox", "name": "Search commands" }, "value": "Go to Home" },
+        { "press": "Enter", "target": { "role": "combobox", "name": "Search commands" } },
+        { "click": { "role": "button", "name": "Clone Workspace" } },
+        { "fill": { "placeholder": "https://github.com/org/repo.git" }, "value": "${CUTREADY_REMOTE_URL}" },
+        { "dialog": "open", "respond": "${CUTREADY_SCRATCH}", "expectOptions": { "directory": true, "multiple": false, "title": "Choose location to clone into" } },
+        { "click": { "role": "button", "name": "Choose Folder & Clone" } },
+        { "name": "no clone error is shown", "expect": { "text": "git operation failed" }, "toHaveCount": 0 },
+        { "expectIpc": "clone_from_url", "status": "ok", "timeoutMs": 30000 },
+        { "expectIpc": "open_project_folder", "status": "ok", "timeoutMs": 30000 },
+        { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 30000 },
+        { "name": "the clone has the shared files and history", "run": "node", "cwd": "${CUTREADY_SCRATCH}", "args": ["-e", "const fs = require('fs'); const dirs = fs.readdirSync('.').filter((d) => d.endsWith('-remote')); if (dirs.length !== 1 || !fs.existsSync(dirs[0] + '/plan.md') || !fs.existsSync(dirs[0] + '/.git')) { console.error('expected one clone with plan.md and .git, found ' + fs.readdirSync('.').join(', ')); process.exit(1); }"] },
+        { "name": "the clone is now the most recent workspace", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "app-data:recent-projects.json", "doc.recent_projects[0].path.endsWith('-remote')"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "cancelling the clone folder picker clones nothing",
+      "steps": [
+        { "press": "Control+Shift+P" },
+        { "fill": { "role": "combobox", "name": "Search commands" }, "value": "Go to Home" },
+        { "press": "Enter", "target": { "role": "combobox", "name": "Search commands" } },
+        { "click": { "role": "button", "name": "Clone Workspace" } },
+        { "fill": { "placeholder": "https://github.com/org/repo.git" }, "value": "${CUTREADY_REMOTE_URL}" },
+        { "dialog": "open", "respond": null },
+        { "click": { "role": "button", "name": "Choose Folder & Clone" } },
+        { "expectIpc": "clone_from_url", "not": true },
+        { "name": "nothing was cloned", "run": "node", "cwd": "${CUTREADY_SCRATCH}", "args": ["-e", "const fs = require('fs'); const dirs = fs.readdirSync('.').filter((d) => d.endsWith('-remote')); if (dirs.length) { console.error('unexpected clone: ' + dirs.join(', ')); process.exit(1); }"] },
+        { "expectNoErrors": true }
+      ]
+    }
+  ]
+}
