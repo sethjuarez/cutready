@@ -1,7 +1,7 @@
 {
   "$schema": "https://auditaur.dev/schemas/drill.schema.json",
-  "description": "Creating, renaming and deleting sketches, storyboards and notes from the explorer changes the project files.",
-  "tags": ["@explorer", "@authoring"],
+  "description": "Creating, renaming and deleting sketches, storyboards and notes from the explorer changes the project files, and the command palette runs commands.",
+  "tags": ["@explorer", "@palette", "@authoring"],
   "setup": [
     { "name": "Create a project with two sketches, a storyboard and a note", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/explorer.json"] }
   ],
@@ -86,6 +86,30 @@
         { "expect": { "testId": "explorer-item-brief.md" }, "toHaveCount": 0 },
         { "expectIpc": "delete_note", "status": "ok" },
         { "name": "the note file is gone", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "brief.md", "absent"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "runs a command from the command palette",
+      "steps": [
+        { "press": "Control+Shift+P" },
+        { "expect": { "role": "combobox", "name": "Search commands" }, "toBeVisible": true },
+        { "fill": { "role": "combobox", "name": "Search commands" }, "value": "Go to Settings" },
+        { "expect": { "role": "option", "name": "Go to Settings" }, "toBeVisible": true },
+        { "press": "Enter", "target": { "role": "combobox", "name": "Search commands" } },
+        { "expect": { "role": "combobox", "name": "Search commands" }, "toHaveCount": 0 },
+        { "expect": { "testId": "settings-tab-ai" }, "toBeVisible": true },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "reports when no command matches and closes on Escape",
+      "steps": [
+        { "press": "Control+Shift+P" },
+        { "fill": { "role": "combobox", "name": "Search commands" }, "value": "zzqx no such command" },
+        { "expect": { "text": "No commands found" }, "toBeVisible": true },
+        { "press": "Escape", "target": { "role": "combobox", "name": "Search commands" } },
+        { "expect": { "role": "combobox", "name": "Search commands" }, "toHaveCount": 0 },
         { "expectNoErrors": true }
       ]
     }

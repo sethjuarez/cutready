@@ -1,0 +1,77 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "Editing, previewing, locking and renaming a markdown note is saved to the project.",
+  "tags": ["@notes", "@authoring"],
+  "setup": [
+    { "name": "Create a project with one note", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/notes.json"] }
+  ],
+  "teardown": [
+    { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "tests": [
+    {
+      "name": "opens a note from the explorer",
+      "steps": [
+        { "click": { "testId": "explorer-item-plan.md" }, "timeoutMs": 45000 },
+        { "expect": { "label": "Note title" }, "toHaveValue": "plan" },
+        { "expect": { "label": "Note content" }, "toContainText": "Draft agenda." },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "edits the note content",
+      "steps": [
+        { "click": { "label": "Note content" } },
+        { "press": "Control+End", "target": { "label": "Note content" } },
+        { "type": { "label": "Note content" }, "value": " Agenda: demo, pricing, Q&A." },
+        { "expect": { "label": "Note content" }, "toContainText": "Agenda: demo, pricing, Q&A." },
+        { "expectIpc": "update_note", "status": "ok" },
+        { "name": "the note file has the new content", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Agenda: demo, pricing, Q&A."] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "previews the rendered note",
+      "steps": [
+        { "click": { "role": "button", "name": "Preview", "exact": true } },
+        { "expect": { "role": "heading", "name": "Launch plan" }, "toBeVisible": true },
+        { "expect": { "label": "Note content" }, "toHaveCount": 0 },
+        { "click": { "role": "button", "name": "Edit", "exact": true } },
+        { "expect": { "label": "Note content" }, "toBeVisible": true },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "locks the note against edits",
+      "steps": [
+        { "click": { "role": "button", "name": "Lock note", "exact": true } },
+        { "expectIpc": "set_note_lock", "status": "ok" },
+        { "expect": { "text": "Note is locked. Unlock it to edit" }, "toBeVisible": true },
+        { "expect": { "label": "Note content" }, "toHaveCount": 0 },
+        { "name": "the lock manifest records the note", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", ".cutready/locks.json", "doc.notes['plan.md'].locked === true"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "unlocks the note",
+      "steps": [
+        { "click": { "role": "button", "name": "Unlock note", "exact": true } },
+        { "expect": { "label": "Note content" }, "toBeVisible": true },
+        { "name": "the lock manifest no longer records the note", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", ".cutready/locks.json", "!doc.notes['plan.md']"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "renames the note from its title",
+      "steps": [
+        { "fill": { "label": "Note title" }, "value": "Launch Checklist" },
+        { "press": "Enter", "target": { "label": "Note title" } },
+        { "expectIpc": "rename_note", "status": "ok" },
+        { "expect": { "testId": "explorer-item-launch-checklist.md" }, "toBeVisible": true },
+        { "name": "the renamed file keeps the content", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "launch-checklist.md", "Agenda: demo, pricing, Q&A."] },
+        { "name": "the old file is gone", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "absent"] },
+        { "expectNoErrors": true }
+      ]
+    }
+  ]
+}

@@ -23,7 +23,7 @@
       "name": "renames the storyboard title",
       "steps": [
         { "fill": { "label": "Storyboard title" }, "value": "Partner Product Tour" },
-        { "press": "Tab", "target": { "label": "Storyboard title" } },
+        { "press": "Enter", "target": { "label": "Storyboard title" } },
         { "expectIpc": "update_storyboard", "status": "ok" },
         { "name": "the storyboard file has the new title", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "tour.sb", "doc.title === 'Partner Product Tour'"] },
         { "expectNoErrors": true }
