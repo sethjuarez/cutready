@@ -10,9 +10,9 @@
   "tests": [
     {
       "name": "agentive harness runs chat turns",
-      "tags": ["@harness"],
+      "tags": ["@harness", "@live"],
       "timeoutMs": 60000,
-      "description": "agent_chat_with_tools skips frontend IPC telemetry (sensitive), so the backend start log proves which harness ran.",
+      "description": "Needs a signed-in model connection. agent_chat_with_tools skips frontend IPC telemetry (sensitive), so the backend start log proves which harness ran.",
       "steps": [
         { "expect": { "testId": "activity-settings" }, "toBeVisible": true, "timeoutMs": 45000 },
         { "click": { "testId": "activity-settings" } },

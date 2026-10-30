@@ -83,12 +83,12 @@ function setup(specPath) {
   if (!specPath) throw new Error("setup needs a fixture spec path");
   const envFile = process.env.AUDITAUR_DRILL_ENV_FILE;
   if (!envFile) throw new Error("setup must run as an `auditaur drill test` setup hook (AUDITAUR_DRILL_ENV_FILE is unset)");
+  ensureNoRunningCutReady();
+  waitForWebViewExit();
   if (existsSync(STATE)) {
     console.log("Recovering from an unfinished drill run first.");
     teardown();
   }
-  ensureNoRunningCutReady();
-  waitForWebViewExit();
   const spec = JSON.parse(readFileSync(resolve(specPath), "utf8"));
   const prefix = spec.prefix ?? "cutready-drill-";
   const projectRoot = mkdtempSync(join(tmpdir(), prefix));
@@ -108,6 +108,9 @@ function setup(specPath) {
   cpSync(projectRoot, PRISTINE_DIR, { recursive: true, filter: (src) => !isGitDir(projectRoot, src) });
   // Reset re-seeds exactly these (backed-up) stores, even if the spec file changes mid-run.
   state.stores = { settingsSeed: spec.globalSettings?.seed, appStores: spec.appStores ?? [] };
+  saveState();
+  // Every launch refreshes OAuth and rewrites the credential vault; keep the user's real one intact.
+  backup(state, vaultPath());
   saveState();
   if (state.stores.settingsSeed) {
     backup(state, globalSettingsPath());
@@ -146,6 +149,9 @@ function setup(specPath) {
 
 function teardown() {
   if (!existsSync(STATE)) return;
+  // Restoring app stores (notably the credential vault) under a live app would let it overwrite them.
+  ensureNoRunningCutReady();
+  waitForWebViewExit();
   const state = JSON.parse(readFileSync(STATE, "utf8"));
   let failed = false;
   for (const { path, existed, copy } of state.backups ?? []) {
@@ -519,6 +525,11 @@ function appDataDir() {
 
 function globalSettingsPath() {
   return process.env.CUTREADY_GLOBAL_SETTINGS_STORE ?? join(appDataDir(), "settings.json");
+}
+
+// useSecretStore.ts builds this as `${appDataDir()}vault.hold` with no separator, so it sits beside the folder.
+function vaultPath() {
+  return `${appDataDir()}vault.hold`;
 }
 
 function recentProjectsPath() {
