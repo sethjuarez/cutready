@@ -11,6 +11,7 @@
 //   node scripts/auditaur-drill-fixture.mjs setup .auditaur/fixtures/<name>.json
 //   node scripts/auditaur-drill-fixture.mjs teardown
 //   node scripts/auditaur-drill-fixture.mjs expect-json <file> <js expression over doc>
+//   node scripts/auditaur-drill-fixture.mjs expect-file <file> <absent | exists | text it must contain>
 //   node scripts/auditaur-drill-fixture.mjs expect-agent-runs --provider <id> [--model <m> | --model-prefix <p>]
 //        [--engine <id>] [--min-completed <n>] [--tools a,b,...]
 //
@@ -48,8 +49,9 @@ try {
   if (command === "setup") setup(args[0]);
   else if (command === "teardown") teardown();
   else if (command === "expect-json") expectJson(args[0], args[1]);
+  else if (command === "expect-file") expectFile(args[0], args[1]);
   else if (command === "expect-agent-runs") await expectAgentRuns(parseFlags(args));
-  else throw new Error(`unknown command ${JSON.stringify(command)}; use setup, teardown, expect-json, or expect-agent-runs`);
+  else throw new Error(`unknown command ${JSON.stringify(command)}; use setup, teardown, expect-json, expect-file, or expect-agent-runs`);
 } catch (error) {
   console.error(`[auditaur-drill-fixture] ${error.message}`);
   process.exit(1);
@@ -142,6 +144,21 @@ function expectJson(file, expression) {
   console.log(`${file} satisfies ${expression}`);
 }
 
+// `absent`, `exists`, or text the file must contain.
+function expectFile(file, expectation) {
+  if (!file || !expectation) throw new Error("expect-file needs <file> <absent|exists|text>");
+  const path = join(fixtureRoot(), file);
+  const exists = existsSync(path);
+  if (expectation === "absent") {
+    if (exists) throw new Error(`expected ${file} to be absent`);
+  } else if (!exists) {
+    throw new Error(`expected ${file} to exist`);
+  } else if (expectation !== "exists" && !readFileSync(path, "utf8").includes(expectation)) {
+    throw new Error(`expected ${file} to contain ${JSON.stringify(expectation)}`);
+  }
+  console.log(`${file}: ${expectation}`);
+}
+
 // Reads the project's agent-state.db after the app closes: completed runs must
 // use the expected provider/model/engine, and checkpoints must show the tools.
 async function expectAgentRuns(flags) {
@@ -194,10 +211,6 @@ function backup(state, path) {
 function writeProject(root, spec) {
   if (spec.copyFrom) cpSync(resolve(spec.copyFrom), root, { recursive: true });
   for (const note of spec.notes ?? []) writeFileSync(join(root, note.path), note.body ?? "");
-  for (const file of spec.files ?? []) {
-    mkdirSync(dirname(join(root, file.path)), { recursive: true });
-    writeFileSync(join(root, file.path), file.json ? `${JSON.stringify(file.json, null, 2)}\n` : file.body ?? "");
-  }
   for (const file of spec.files ?? []) {
     mkdirSync(dirname(join(root, file.path)), { recursive: true });
     writeFileSync(join(root, file.path), file.json ? `${JSON.stringify(file.json, null, 2)}\n` : file.body ?? "");
