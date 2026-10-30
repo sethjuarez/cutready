@@ -28,6 +28,7 @@ export const SENSITIVE_INVOKE_COMMANDS = new Set([
   "get_memory_context",
   "list_agent_runs",
   "list_chat_sessions",
+  "list_memories",
   "push_pending_chat_message",
   "save_chat_session",
   "update_chat_summary",
