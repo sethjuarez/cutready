@@ -1,5 +1,6 @@
 {
   "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "serial": true,
   "description": "Local versioning: pending changes, diffs, named snapshots, discarding a file, previewing history, branching from a snapshot, switching branches, and shelving unsaved work.",
   "tags": ["@versioning"],
   "env": { "GIT_AUTHOR_NAME": "Drill Versioning", "GIT_AUTHOR_EMAIL": "versioning@drill.test" },
@@ -102,7 +103,7 @@
         { "expectIpc": "create_variation_from_version_guarded", "status": "ok", "timeoutMs": 15000 },
         { "name": "the workspace has the earlier snapshot's content", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "lacks:Pricing."] },
         { "name": "the new branch is checked out", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["branch", "--show-current"], "stdout": "alt-intro" },
-        { "expectNoErrors": true, "ignore": ["incomplete Draftline operation", "recovery_required"], "name": "no errors (ignores Draftline reads racing the in-flight branch switch; reported to Draftline)" }
+        { "expectNoErrors": true }
       ]
     },
     {
@@ -114,7 +115,7 @@
         { "expectIpc": "switch_variation", "status": "ok", "timeoutMs": 15000 },
         { "name": "the workspace has main's content", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Pricing."] },
         { "expect": { "role": "button", "name": "Branch: main" }, "toBeVisible": true },
-        { "expectNoErrors": true, "ignore": ["incomplete Draftline operation", "recovery_required"], "name": "no errors (ignores Draftline reads racing the in-flight branch switch; reported to Draftline)" }
+        { "expectNoErrors": true }
       ]
     },
     {
@@ -143,7 +144,7 @@
         { "name": "the shelved edit is back", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Shelved thought."] },
         { "expect": { "text": "You have shelved changes." }, "toHaveCount": 0 },
         { "expectNoTelemetry": { "pattern": "Drill Versioning|versioning@drill\\.test" }, "name": "identity stays out of telemetry" },
-        { "expectNoErrors": true, "ignore": ["incomplete Draftline operation", "recovery_required"], "name": "no errors (ignores Draftline reads racing the in-flight branch switch; reported to Draftline)" }
+        { "expectNoErrors": true }
       ]
     },
     {
@@ -177,7 +178,7 @@
         { "expect": { "role": "button", "name": "Branch: main" }, "toBeVisible": true },
         { "name": "the discarded edit is gone", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "lacks:Throwaway."] },
         { "name": "the branch no longer exists", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["rev-parse", "--verify", "--quiet", "refs/heads/scratch"], "exitCode": 1 },
-        { "expectNoErrors": true, "ignore": ["incomplete Draftline operation", "recovery_required"], "name": "no errors (ignores Draftline reads racing the in-flight branch switch; reported to Draftline)" }
+        { "expectNoErrors": true }
       ]
     }
   ]

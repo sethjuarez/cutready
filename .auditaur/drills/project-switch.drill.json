@@ -31,7 +31,7 @@
       "name": "moves a sketch to another project",
       "steps": [
         { "expect": { "testId": "explorer-item-alpha.sk" }, "toBeVisible": true, "timeoutMs": 15000 },
-        { "name": "open the sketch's context menu (no right-click step; see AR-27)", "evaluate": "const el = document.querySelector('[data-testid=\"explorer-item-alpha.sk\"]'); const r = el.getBoundingClientRect(); el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: r.left + 10, clientY: r.top + 5 })); true" },
+        { "name": "open the sketch's context menu", "click": { "testId": "explorer-item-alpha.sk" }, "button": "right" },
         { "click": { "role": "menuitem", "name": "Move to", "exact": true } },
         { "click": { "role": "menuitem", "name": "Beta Project", "exact": true } },
         { "expectIpc": "transfer_asset", "status": "ok", "timeoutMs": 15000 },

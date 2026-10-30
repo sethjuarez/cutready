@@ -11,14 +11,13 @@
   "tests": [
     {
       "name": "workspace export override persists to the project and survives reload",
-      "description": "Uses click, not check: the drive bridge's check sets the DOM state without a change event React sees (AR-30 workaround).",
       "steps": [
         { "expect": { "testId": "activity-settings" }, "toBeVisible": true, "timeoutMs": 45000 },
         { "click": { "testId": "activity-settings" } },
         { "click": { "testId": "settings-scope-workspace" } },
         { "click": { "testId": "settings-tab-export" } },
         { "expect": { "label": "Use workspace export settings" }, "not": true, "toBeChecked": true },
-        { "click": { "label": "Use workspace export settings" } },
+        { "check": { "label": "Use workspace export settings" } },
         { "expectIpc": "set_workspace_settings", "status": "ok" },
         { "name": "the override is written to .cutready/settings.json", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", ".cutready/settings.json", "doc.videoExportOverrideEnabled === true"] },
         { "reload": true },

@@ -15,7 +15,6 @@
         { "click": { "testId": "explorer-item-launch.sk" }, "timeoutMs": 45000 },
         { "expect": { "label": "Sketch title" }, "toHaveValue": "Launch Visuals" },
         { "expectIpc": "get_visual", "status": "ok" },
-        { "name": "focus the preview button as a real click would (drive click does not move focus, AR-32)", "evaluate": "(() => { document.querySelector('[aria-label=\"Preview visual for row 1\"]').focus(); return document.activeElement?.getAttribute('aria-label'); })()" },
         { "click": { "role": "button", "name": "Preview visual for row 1" } },
         { "expect": { "role": "dialog", "name": "Row 1 visual" }, "toBeVisible": true },
         { "name": "focus moves into the visual dialog", "expectValue": "document.activeElement?.getAttribute('aria-label')", "toEqual": "Row 1 visual" },

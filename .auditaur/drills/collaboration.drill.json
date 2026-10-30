@@ -1,5 +1,6 @@
 {
   "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "serial": true,
   "description": "Collaborating through a shared remote (a local bare repo): sending saves, getting a collaborator's saves, and resolving a conflicting edit. Tests share one project and remote and build on each other in order; the app creates the project's git repo on first open and has no add-remote UI, so the first test wires the remote.",
   "tags": ["@versioning", "@collaboration", "@local"],
   "env": { "GIT_AUTHOR_NAME": "Drill Author", "GIT_AUTHOR_EMAIL": "author@drill.test" },

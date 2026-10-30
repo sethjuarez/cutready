@@ -67,7 +67,9 @@
     {
       "name": "moves a planning row down with the keyboard",
       "steps": [
-        { "name": "pick up, move and drop row 1 with Space/ArrowDown/Space (evaluate: drive press sends no event.code, AR-25)", "evaluate": "(async () => { const h = document.querySelector('[aria-label=\"Move row 1\"]'); h.focus(); const key = (k, code) => (h.ownerDocument.activeElement ?? h).dispatchEvent(new KeyboardEvent('keydown', { key: k, code, bubbles: true, cancelable: true })); const tick = () => new Promise((r) => setTimeout(r, 150)); key(' ', 'Space'); await tick(); key('ArrowDown', 'ArrowDown'); await tick(); key(' ', 'Space'); await tick(); return true; })()" },
+        { "name": "pick up row 1", "press": "Space", "target": { "label": "Move row 1" } },
+        { "name": "move it down", "press": "ArrowDown", "target": { "label": "Move row 1" } },
+        { "name": "drop it", "press": "Space", "target": { "label": "Move row 1" } },
         { "expectIpc": "update_sketch", "status": "ok" },
         { "name": "the rows are swapped in the sketch file", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "walkthrough.sk", "doc.rows.length === 2 && doc.rows[1].narrative === 'Filter to the west region.'"] },
         { "expectNoErrors": true }
