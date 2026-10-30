@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAppStore } from "../stores/appStore";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open } from "../dialogs";
 import { invoke } from "../services/tauri";
 import { Plus, Download, Folder, X, XCircle } from "lucide-react";
 import { GitHubConnectionCard } from "./GitHubConnectionCard";
@@ -272,6 +272,7 @@ export function HomePanel() {
                   onChange={(e) => setNewName(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="My Demo"
+                  aria-label="Workspace name"
                   autoFocus
                   className="flex-1 px-3 py-2 rounded-lg bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-sm text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-accent))]/40"
                 />

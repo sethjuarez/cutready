@@ -4,7 +4,7 @@ import { exportSketchToPowerPoint, exportStoryboardToPowerPoint } from "../utils
 import type { Sketch, Storyboard } from "../types/sketch";
 
 const mockSave = vi.fn();
-vi.mock("@tauri-apps/plugin-dialog", () => ({ save: (...args: unknown[]) => mockSave(...args) }));
+vi.mock("../dialogs", () => ({ save: (...args: unknown[]) => mockSave(...args) }));
 
 const mockWriteFile = vi.fn();
 vi.mock("@tauri-apps/plugin-fs", () => ({ writeFile: (...args: unknown[]) => mockWriteFile(...args) }));

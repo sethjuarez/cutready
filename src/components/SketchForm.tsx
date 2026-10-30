@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Channel, convertFileSrc, invoke, listen } from "../services/tauri";
 import type { TokenResponse } from "../types/auth";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { open, save } from "../dialogs";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, Check, Film, Image as ImageIcon, Mic2 } from "lucide-react";
 import { registerEditorFlush, shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";

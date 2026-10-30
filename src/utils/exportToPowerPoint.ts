@@ -3,9 +3,9 @@
  */
 
 import pptxgen from "pptxgenjs";
-import { save } from "@tauri-apps/plugin-dialog";
+import { save } from "../dialogs";
 import { writeFile } from "@tauri-apps/plugin-fs";
-import { openPath } from "@tauri-apps/plugin-opener";
+import { captureExportOpener } from "./openExportedFile";
 import type { Sketch, Storyboard } from "../types/sketch";
 import { getUniqueStoryboardSketchPaths } from "./storyboard";
 
@@ -369,11 +369,12 @@ async function saveDeck(pptx: pptxgen, defaultName: string): Promise<boolean> {
     filters: [{ name: "PowerPoint Presentation", extensions: ["pptx"] }],
   });
   if (!filePath) return false;
+  const openExportedFile = captureExportOpener();
 
   const output = await pptx.write({ outputType: "uint8array" });
   await writeFile(filePath, output instanceof Uint8Array ? output : new Uint8Array(output as ArrayBuffer));
   try {
-    await openPath(filePath);
+    await openExportedFile(filePath);
   } catch (e) {
     console.error("[exportToPowerPoint] Failed to open file:", filePath, e);
   }
