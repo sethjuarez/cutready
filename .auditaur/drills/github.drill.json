@@ -38,6 +38,7 @@
         },
         { "expect": { "testId": "github-connection-card" }, "toContainText": "Connected as" },
         { "screenshot": "github-connected" },
+        { "expectNoTelemetry": { "pattern": "gh[oupsr]_[A-Za-z0-9]{20,}|\"(access_token|device_code|user_code|userCode|deviceCode)\"" }, "name": "OAuth codes and tokens stay out of telemetry" },
         { "expectNoErrors": true }
       ]
     }
