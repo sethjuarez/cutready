@@ -510,9 +510,9 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "auditaur-collector"
-version = "0.4.18"
+version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed5ae9b7c77820b065a3cb6fed945e972f158bb117ee9b7bf76b5566d41ad70d"
+checksum = "0db99b7da9e9948bc8abf5ed049aff8e5038210300176d6c3b56845b03d37349"
 dependencies = [
  "auditaur-core",
  "rusqlite",
@@ -523,9 +523,9 @@ dependencies = [
 
 [[package]]
 name = "auditaur-core"
-version = "0.4.18"
+version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cb0ad790713f1a6b8f64693885ac0295214bbd18919f47c02fbc2f4843c6fc7"
+checksum = "51d21eba443def1cb323e4dccc5619c158312b4180cae1b2bd59cbcf1d6c1c21"
 dependencies = [
  "directories",
  "serde",
@@ -8293,9 +8293,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-auditaur"
-version = "0.4.18"
+version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c856658f86a09a4e490b66f69307db4907d6709c104957e53b0f41149fcb721b"
+checksum = "1a3c928961d93a3f8b6161fe8f2bc7b8ccee17ac1dbbca9e3aa48c040380ba0f"
 dependencies = [
  "auditaur-collector",
  "auditaur-core",
@@ -8323,9 +8323,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-auditaur-macros"
-version = "0.4.18"
+version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "533698937a68627feb6588313c2c08fa0e7f070b04a9c8f043081e1472bf3b9b"
+checksum = "4dfe6c63bb558f358bba883116dfc8f908684cfe52595c06d24cbd4e51e1b0b6"
 dependencies = [
  "proc-macro-crate 3.5.0",
  "proc-macro2",
