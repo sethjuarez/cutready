@@ -1,6 +1,5 @@
 {
   "prefix": "cutready-identity-drill-",
-  "env": { "GIT_AUTHOR_NAME": "Drill Env", "GIT_AUTHOR_EMAIL": "env@drill.test" },
   "appStores": [{ "file": "identity.json", "clear": true }],
   "sketches": [
     { "path": "intro.sk", "title": "Identity Drill Fixture", "narrative": "A sketch so the first snapshot has content." }

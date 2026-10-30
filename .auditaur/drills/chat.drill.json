@@ -1,6 +1,6 @@
 {
   "$schema": "https://auditaur.dev/schemas/drill.schema.json",
-  "description": "Live Prompty chat turns: tool reads, cancellation, and recovery, with fixture secrets kept out of telemetry. Needs a configured AI provider. Privacy checks search log bodies only until Auditaur ships expectNoTelemetry (AR-6).",
+  "description": "Live Prompty chat turns: tool reads, cancellation, and recovery, with fixture secrets kept out of telemetry. Needs a configured AI provider.",
   "tags": ["@live", "@chat"],
   "setup": [
     { "name": "Create fixture with marked secrets", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/chat.json"] }
@@ -23,12 +23,11 @@
         { "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]", "toBeVisible": true, "timeoutMs": 12000, "name": "turn starts" },
         { "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]", "toHaveCount": 0, "timeoutMs": 120000, "name": "turn finishes" },
         { "expect": "[data-testid=\"secondary-chat-panel\"] [data-testid=\"chat-messages-scroll\"]", "toContainText": "ZULU-7781" },
+        { "expectSpan": "agent_chat_with_tools", "count": 1, "name": "backend command span (args skipped)" },
         { "expectLog": "engine=prompty agent=" },
         { "expectLog": "engine=agentive agent=", "not": true },
         { "expectNoErrors": true },
-        { "expectLog": "ZULU-7781", "not": true },
-        { "expectLog": "CIPHER-3096", "not": true },
-        { "expectLog": "CIPHER-8042", "not": true }
+        { "expectNoTelemetry": { "pattern": "ZULU-7781|CIPHER-3096|CIPHER-8042" } }
       ]
     },
     {
@@ -46,9 +45,7 @@
         { "expectLog": "engine=prompty agent=" },
         { "expectLog": "engine=agentive agent=", "not": true },
         { "expectNoErrors": true },
-        { "expectLog": "ZULU-7781", "not": true },
-        { "expectLog": "CIPHER-3096", "not": true },
-        { "expectLog": "CIPHER-8042", "not": true }
+        { "expectNoTelemetry": { "pattern": "ZULU-7781|CIPHER-3096|CIPHER-8042" } }
       ]
     },
     {
@@ -64,9 +61,7 @@
         { "click": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]" },
         { "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]", "toHaveCount": 0, "timeoutMs": 15000, "name": "turn stops" },
         { "expectNoErrors": true },
-        { "expectLog": "ZULU-7781", "not": true },
-        { "expectLog": "CIPHER-3096", "not": true },
-        { "expectLog": "CIPHER-8042", "not": true }
+        { "expectNoTelemetry": { "pattern": "ZULU-7781|CIPHER-3096|CIPHER-8042" } }
       ]
     },
     {
@@ -83,9 +78,7 @@
         { "expectLog": "engine=prompty agent=" },
         { "expectLog": "engine=agentive agent=", "not": true },
         { "expectNoErrors": true },
-        { "expectLog": "ZULU-7781", "not": true },
-        { "expectLog": "CIPHER-3096", "not": true },
-        { "expectLog": "CIPHER-8042", "not": true }
+        { "expectNoTelemetry": { "pattern": "ZULU-7781|CIPHER-3096|CIPHER-8042" } }
       ]
     }
   ]

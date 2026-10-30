@@ -4,6 +4,6 @@
   "readiness": {
     "frontend": true,
     "driveBridge": true,
-    "timeoutSeconds": 180
+    "timeoutSeconds": 300
   }
 }

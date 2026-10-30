@@ -1,6 +1,6 @@
 {
   "$schema": "https://auditaur.dev/schemas/drill.schema.json",
-  "description": "Prompty battle drill against direct OpenAI: reading, delegation, cancellation, sketch and storyboard mutation, and visuals. Seeds no keys: configure OpenAI in Settings and make it the default provider first. Durable-state checks run as teardown hooks until Auditaur ships run steps (AR-7).",
+  "description": "Prompty battle drill against direct OpenAI: reading, delegation, cancellation, sketch and storyboard mutation, and visuals. Seeds no keys: configure OpenAI in Settings and make it the default provider first.",
   "tags": [
     "@live",
     "@prompty",
@@ -18,54 +18,6 @@
     }
   ],
   "teardown": [
-    {
-      "name": "Completed runs are Prompty OpenAI and used every tool",
-      "run": "node",
-      "args": [
-        "scripts/auditaur-drill-fixture.mjs",
-        "expect-agent-runs",
-        "--provider",
-        "openai",
-        "--model",
-        "gpt-4o",
-        "--engine",
-        "prompty",
-        "--min-completed",
-        "3",
-        "--tools",
-        "read_note,read_sketch,delegate_to_agent,update_planning_row,write_storyboard,set_row_visual,review_row_visual"
-      ]
-    },
-    {
-      "name": "Sketch mutation persisted",
-      "run": "node",
-      "args": [
-        "scripts/auditaur-drill-fixture.mjs",
-        "expect-json",
-        "openai-battle.sk",
-        "JSON.stringify(doc).includes('OPENAI-MUTATION-4242')"
-      ]
-    },
-    {
-      "name": "Visual set on a row",
-      "run": "node",
-      "args": [
-        "scripts/auditaur-drill-fixture.mjs",
-        "expect-json",
-        "openai-battle.sk",
-        "doc.rows.some((row) => row.visual)"
-      ]
-    },
-    {
-      "name": "Storyboard mutation persisted",
-      "run": "node",
-      "args": [
-        "scripts/auditaur-drill-fixture.mjs",
-        "expect-json",
-        "openai-battle.sb",
-        "JSON.stringify(doc).includes('OPENAI-STORYBOARD-4242')"
-      ]
-    },
     {
       "name": "Remove fixture",
       "run": "node",
@@ -98,8 +50,10 @@
           "timeoutMs": 60000
         },
         {
-          "evaluate": "(() => { const b = document.querySelector('[data-testid=\"secondary-chat-panel\"] button[title^=\"Select Model\"]'); if (!b || !b.title.includes('OpenAI') || !b.innerText.includes('gpt-4o')) throw new Error('Set OpenAI (gpt-4o) as the default provider before this drill; the picker shows ' + (b ? b.title + ' / ' + b.innerText : 'nothing')); return b.title; })()",
-          "name": "model picker shows OpenAI"
+          "name": "model picker shows OpenAI (set it as the default provider first)",
+          "expectValue": "(() => { const b = document.querySelector('[data-testid=\"secondary-chat-panel\"] button[title^=\"Select Model\"]'); return b ? b.title + ' | ' + b.innerText : 'no model picker'; })()",
+          "toMatch": "OpenAI[\\s\\S]*\\|[\\s\\S]*gpt\\-4o",
+          "timeoutMs": 15000
         }
       ]
     },
@@ -255,6 +209,59 @@
         },
         {
           "expectNoErrors": true
+        }
+      ]
+    },
+    {
+      "name": "durable state persisted",
+      "steps": [
+        {
+          "name": "Completed runs are Prompty OpenAI and used every tool",
+          "run": "node",
+          "args": [
+            "scripts/auditaur-drill-fixture.mjs",
+            "expect-agent-runs",
+            "--provider",
+            "openai",
+            "--model",
+            "gpt-4o",
+            "--engine",
+            "prompty",
+            "--min-completed",
+            "3",
+            "--tools",
+            "read_note,read_sketch,delegate_to_agent,update_planning_row,write_storyboard,set_row_visual,review_row_visual"
+          ]
+        },
+        {
+          "name": "Sketch mutation persisted",
+          "run": "node",
+          "args": [
+            "scripts/auditaur-drill-fixture.mjs",
+            "expect-json",
+            "openai-battle.sk",
+            "JSON.stringify(doc).includes('OPENAI-MUTATION-4242')"
+          ]
+        },
+        {
+          "name": "Visual set on a row",
+          "run": "node",
+          "args": [
+            "scripts/auditaur-drill-fixture.mjs",
+            "expect-json",
+            "openai-battle.sk",
+            "doc.rows.some((row) => row.visual)"
+          ]
+        },
+        {
+          "name": "Storyboard mutation persisted",
+          "run": "node",
+          "args": [
+            "scripts/auditaur-drill-fixture.mjs",
+            "expect-json",
+            "openai-battle.sb",
+            "JSON.stringify(doc).includes('OPENAI-STORYBOARD-4242')"
+          ]
         }
       ]
     }

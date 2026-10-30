@@ -1,6 +1,6 @@
 {
   "$schema": "https://auditaur.dev/schemas/drill.schema.json",
-  "description": "Prompty battle drill against direct Anthropic: reading, delegation, cancellation, sketch and storyboard mutation, and visuals. Seeds no keys: configure Anthropic in Settings and make it the default provider first. Durable-state checks run as teardown hooks until Auditaur ships run steps (AR-7).",
+  "description": "Prompty battle drill against direct Anthropic: reading, delegation, cancellation, sketch and storyboard mutation, and visuals. Seeds no keys: configure Anthropic in Settings and make it the default provider first.",
   "tags": [
     "@live",
     "@prompty",
@@ -18,54 +18,6 @@
     }
   ],
   "teardown": [
-    {
-      "name": "Completed runs are Prompty Anthropic and used every tool",
-      "run": "node",
-      "args": [
-        "scripts/auditaur-drill-fixture.mjs",
-        "expect-agent-runs",
-        "--provider",
-        "anthropic",
-        "--model-prefix",
-        "claude-",
-        "--engine",
-        "prompty",
-        "--min-completed",
-        "3",
-        "--tools",
-        "read_note,read_sketch,delegate_to_agent,update_planning_row,write_storyboard,set_row_visual,review_row_visual"
-      ]
-    },
-    {
-      "name": "Sketch mutation persisted",
-      "run": "node",
-      "args": [
-        "scripts/auditaur-drill-fixture.mjs",
-        "expect-json",
-        "anthropic-battle.sk",
-        "JSON.stringify(doc).includes('ANTHROPIC-MUTATION-4242')"
-      ]
-    },
-    {
-      "name": "Visual set on a row",
-      "run": "node",
-      "args": [
-        "scripts/auditaur-drill-fixture.mjs",
-        "expect-json",
-        "anthropic-battle.sk",
-        "doc.rows.some((row) => row.visual)"
-      ]
-    },
-    {
-      "name": "Storyboard mutation persisted",
-      "run": "node",
-      "args": [
-        "scripts/auditaur-drill-fixture.mjs",
-        "expect-json",
-        "anthropic-battle.sb",
-        "JSON.stringify(doc).includes('ANTHROPIC-STORYBOARD-4242')"
-      ]
-    },
     {
       "name": "Remove fixture",
       "run": "node",
@@ -98,8 +50,10 @@
           "timeoutMs": 60000
         },
         {
-          "evaluate": "(() => { const b = document.querySelector('[data-testid=\"secondary-chat-panel\"] button[title^=\"Select Model\"]'); if (!b || !b.title.includes('Anthropic') || !b.innerText.includes('claude-')) throw new Error('Set Anthropic (claude-) as the default provider before this drill; the picker shows ' + (b ? b.title + ' / ' + b.innerText : 'nothing')); return b.title; })()",
-          "name": "model picker shows Anthropic"
+          "name": "model picker shows Anthropic (set it as the default provider first)",
+          "expectValue": "(() => { const b = document.querySelector('[data-testid=\"secondary-chat-panel\"] button[title^=\"Select Model\"]'); return b ? b.title + ' | ' + b.innerText : 'no model picker'; })()",
+          "toMatch": "Anthropic[\\s\\S]*\\|[\\s\\S]*claude\\-",
+          "timeoutMs": 15000
         }
       ]
     },
@@ -255,6 +209,59 @@
         },
         {
           "expectNoErrors": true
+        }
+      ]
+    },
+    {
+      "name": "durable state persisted",
+      "steps": [
+        {
+          "name": "Completed runs are Prompty Anthropic and used every tool",
+          "run": "node",
+          "args": [
+            "scripts/auditaur-drill-fixture.mjs",
+            "expect-agent-runs",
+            "--provider",
+            "anthropic",
+            "--model-prefix",
+            "claude-",
+            "--engine",
+            "prompty",
+            "--min-completed",
+            "3",
+            "--tools",
+            "read_note,read_sketch,delegate_to_agent,update_planning_row,write_storyboard,set_row_visual,review_row_visual"
+          ]
+        },
+        {
+          "name": "Sketch mutation persisted",
+          "run": "node",
+          "args": [
+            "scripts/auditaur-drill-fixture.mjs",
+            "expect-json",
+            "anthropic-battle.sk",
+            "JSON.stringify(doc).includes('ANTHROPIC-MUTATION-4242')"
+          ]
+        },
+        {
+          "name": "Visual set on a row",
+          "run": "node",
+          "args": [
+            "scripts/auditaur-drill-fixture.mjs",
+            "expect-json",
+            "anthropic-battle.sk",
+            "doc.rows.some((row) => row.visual)"
+          ]
+        },
+        {
+          "name": "Storyboard mutation persisted",
+          "run": "node",
+          "args": [
+            "scripts/auditaur-drill-fixture.mjs",
+            "expect-json",
+            "anthropic-battle.sb",
+            "JSON.stringify(doc).includes('ANTHROPIC-STORYBOARD-4242')"
+          ]
         }
       ]
     }

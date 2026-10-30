@@ -1,22 +1,21 @@
 #!/usr/bin/env node
 // Setup/teardown hooks for `auditaur drill test` suites.
 //
-// Auditaur suites launch the app with one shared start command, so per-suite
-// state goes through files: `setup` builds an isolated temp project, backs up
-// the user's app-data stores it will touch, and writes launch-env.json, which
-// scripts/auditaur-start-debug.mjs merges into the app's environment.
+// `setup` builds an isolated temp project, backs up the user's app-data stores
+// it will touch, and appends CUTREADY_PROJECT to $AUDITAUR_DRILL_ENV_FILE so the
+// app launch, later hooks, and `run` steps see it (`"cwd": "${CUTREADY_PROJECT}"`).
 // `teardown` restores everything. A crashed run is recovered by the next setup.
+//
+// The expect-* commands are `run` steps that check durable project state.
 //
 //   node scripts/auditaur-drill-fixture.mjs setup .auditaur/fixtures/<name>.json
 //   node scripts/auditaur-drill-fixture.mjs teardown
-//   node scripts/auditaur-drill-fixture.mjs expect-git <expected> <git args...>
 //   node scripts/auditaur-drill-fixture.mjs expect-json <file> <js expression over doc>
 //   node scripts/auditaur-drill-fixture.mjs expect-agent-runs --provider <id> [--model <m> | --model-prefix <p>]
 //        [--engine <id>] [--min-completed <n>] [--tools a,b,...]
 //
 // Fixture spec (all optional):
 //   prefix         temp folder prefix
-//   env            extra app environment
 //   copyFrom       repo-relative folder copied into the project
 //   sketches       [{ path, title, description, narrative }]
 //   notes          [{ path, body }]
@@ -27,6 +26,7 @@
 
 import { spawnSync } from "node:child_process";
 import {
+  appendFileSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -40,7 +40,6 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 const DRILL_DIR = resolve("target", "auditaur-drill");
-const LAUNCH_ENV = join(DRILL_DIR, "launch-env.json");
 const STATE = join(DRILL_DIR, "state.json");
 const BACKUP_DIR = join(DRILL_DIR, "backup");
 
@@ -48,10 +47,9 @@ const [command, ...args] = process.argv.slice(2);
 try {
   if (command === "setup") setup(args[0]);
   else if (command === "teardown") teardown();
-  else if (command === "expect-git") expectGit(args[0], args.slice(1));
   else if (command === "expect-json") expectJson(args[0], args[1]);
   else if (command === "expect-agent-runs") await expectAgentRuns(parseFlags(args));
-  else throw new Error(`unknown command ${JSON.stringify(command)}; use setup, teardown, expect-git, expect-json, or expect-agent-runs`);
+  else throw new Error(`unknown command ${JSON.stringify(command)}; use setup, teardown, expect-json, or expect-agent-runs`);
 } catch (error) {
   console.error(`[auditaur-drill-fixture] ${error.message}`);
   process.exit(1);
@@ -59,11 +57,12 @@ try {
 
 function setup(specPath) {
   if (!specPath) throw new Error("setup needs a fixture spec path");
+  const envFile = process.env.AUDITAUR_DRILL_ENV_FILE;
+  if (!envFile) throw new Error("setup must run as an `auditaur drill test` setup hook (AUDITAUR_DRILL_ENV_FILE is unset)");
   if (existsSync(STATE)) {
     console.log("Recovering from an unfinished drill run first.");
     teardown();
   }
-  rmSync(LAUNCH_ENV, { force: true });
   ensureNoRunningCutReady();
   const spec = JSON.parse(readFileSync(resolve(specPath), "utf8"));
   const prefix = spec.prefix ?? "cutready-drill-";
@@ -99,15 +98,11 @@ function setup(specPath) {
     if (store.clear) rmSync(path, { force: true });
   }
 
-  writeFileSync(
-    LAUNCH_ENV,
-    `${JSON.stringify({ ...(spec.env ?? {}), CUTREADY_PROJECT: projectRoot }, null, 2)}\n`,
-  );
+  appendFileSync(envFile, `CUTREADY_PROJECT=${projectRoot}\n`);
   console.log(`Drill fixture ready at ${projectRoot}`);
 }
 
 function teardown() {
-  rmSync(LAUNCH_ENV, { force: true });
   if (!existsSync(STATE)) return;
   const state = JSON.parse(readFileSync(STATE, "utf8"));
   let failed = false;
@@ -132,20 +127,10 @@ function teardown() {
   console.log("Drill fixture removed and app stores restored.");
 }
 
-// Drill steps cannot run processes, so git assertions run as teardown hooks
-// (the app has closed by then; the project still exists until `teardown`).
-function expectGit(expected, gitArgs) {
-  const { projectRoot } = JSON.parse(readFileSync(STATE, "utf8"));
-  const result = spawnSync("git", gitArgs, { cwd: projectRoot, encoding: "utf8", windowsHide: true });
-  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim();
-  if (result.status !== 0 || !output.includes(expected)) {
-    throw new Error(`expected \`git ${gitArgs.join(" ")}\` to contain ${JSON.stringify(expected)}, got ${JSON.stringify(output)}`);
-  }
-  console.log(`git ${gitArgs.join(" ")} -> ${output}`);
-}
-
 function fixtureRoot() {
-  return JSON.parse(readFileSync(STATE, "utf8")).projectRoot;
+  const root = process.env.CUTREADY_PROJECT;
+  if (!root) throw new Error("CUTREADY_PROJECT is unset; run this as an `auditaur drill test` step");
+  return root;
 }
 
 function expectJson(file, expression) {
