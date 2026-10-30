@@ -30,7 +30,7 @@
         { "fill": { "testId": "profile-name-input" }, "value": "Drill Profile" },
         { "fill": { "testId": "profile-email-input" }, "value": "profile@drill.test" },
         { "click": { "testId": "profile-save" } },
-        { "expectSpan": "set_contributor_identity", "name": "backend span records the command, not the identity" },
+        { "expectSpan": "set_contributor_identity", "status": "ok", "name": "backend span succeeded and records the command, not the identity" },
         { "expect": { "testId": "profile-current" }, "toContainText": "Drill Profile <profile@drill.test>" },
         { "expect": { "testId": "profile-current" }, "toContainText": "your CutReady profile" },
         { "click": { "testId": "settings-close" } },
