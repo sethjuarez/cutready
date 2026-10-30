@@ -1,6 +1,6 @@
 import { initAuditaur, type AuditaurClient } from "@auditaur/api";
 import { invoke as rawInvoke } from "@tauri-apps/api/core";
-import { REDACT_KEYS, redactTelemetryPayload } from "./telemetryPolicy";
+import { TELEMETRY_REDACTION } from "./telemetryPolicy";
 
 let client: AuditaurClient | null = null;
 let initPromise: Promise<AuditaurClient | null> | null = null;
@@ -35,9 +35,7 @@ export function initializeAuditaur() {
       instrumentErrors: true,
       instrumentTauriInvoke: true,
       instrumentTauriEvents: true,
-      captureFullPayloads: false,
-      redactKeys: REDACT_KEYS,
-      redactPayload: redactTelemetryPayload,
+      ...TELEMETRY_REDACTION,
       driveBridge: policy.release_build ? false : { windowLabel: "main" },
       batchIntervalMs: 1000,
       onExportError(failure) {

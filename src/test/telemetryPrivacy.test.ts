@@ -1,7 +1,67 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { isSensitiveInvokeCommand, isSensitiveTauriEvent } from "../services/tauri";
-import { OMITTED_PAYLOAD, REDACT_KEYS, redactTelemetryPayload } from "../services/telemetryPolicy";
+import { OMITTED_PAYLOAD, REDACT_KEYS, TELEMETRY_REDACTION, redactTelemetryPayload } from "../services/telemetryPolicy";
 import { recordActivityEntries } from "../services/telemetry";
+
+// The real package, not the vitest alias mock, so these run Auditaur's recording path.
+const auditaur = await vi.importActual<typeof import("../../node_modules/@auditaur/api/dist/index.js")>(
+  "../../node_modules/@auditaur/api/dist/index.js",
+);
+const recorded = (kind: "invokeArgs" | "invokeResult" | "eventPayload", name: string, value: unknown) =>
+  JSON.stringify(auditaur.recordedPayload(TELEMETRY_REDACTION, kind, name, value));
+const recordedError = (name: string, error: unknown) => auditaur.recordedErrorMessage(TELEMETRY_REDACTION, name, error);
+
+describe("recorded telemetry (Auditaur helpers)", () => {
+  test("identity, chat, and credential payloads are omitted", () => {
+    for (const [kind, name, value] of [
+      ["invokeArgs", "set_contributor_identity", { name: "Ada Lovelace", email: "ada@example.com" }],
+      ["invokeResult", "get_contributor_identity", { name: "Ada Lovelace", email: "ada@example.com" }],
+      ["invokeArgs", "agent_chat_with_tools", { messages: [{ role: "user", content: "secret plan" }] }],
+      ["invokeResult", "get_chat_session", { title: "secret plan" }],
+      ["invokeResult", "github_device_code_start", { user_code: "ABCD-1234", verification_uri: "x" }],
+      ["invokeArgs", "azure_token_refresh", { refreshToken: "rt-secret" }],
+      ["eventPayload", "agent-event", { delta: "secret plan" }],
+    ] as const) {
+      const shown = recorded(kind, name, value);
+      expect(shown).not.toMatch(/Ada|ada@|secret plan|ABCD-1234|rt-secret/);
+    }
+  });
+
+  test("other payloads keep metadata but redact identity and authored content", () => {
+    const shown = recorded("invokeResult", "list_snapshots", [
+      { id: "abc123", message: "Save", author: "Ada Lovelace", email: "ada@example.com" },
+    ]);
+    expect(shown).toContain("abc123");
+    expect(shown).not.toMatch(/Ada|ada@/);
+    expect(recorded("invokeArgs", "update_note", { relativePath: "plan.md", content: "secret plan" })).not.toContain("secret plan");
+    expect(recorded("invokeArgs", "update_note", { relativePath: "chat-artifacts/a.cv", content: "x" })).not.toContain("a.cv");
+  });
+
+  test("identity, chat, and credential error messages are omitted", () => {
+    for (const name of [
+      "set_contributor_identity",
+      "get_contributor_identity",
+      "agent_chat_with_tools",
+      "save_chat_session",
+      "update_memory",
+      "github_device_code_poll",
+      "azure_token_refresh",
+      "agent-event",
+    ]) {
+      expect(recordedError(name, "invalid identity ada@example.com: secret plan")).toBe(OMITTED_PAYLOAD);
+    }
+  });
+
+  test("other error messages are kept, with object errors key-redacted", () => {
+    expect(recordedError("list_snapshots", "repository not found")).toBe("repository not found");
+    expect(recordedError("save_snapshot", "unable to auto-detect email address (got 'ada@host.(none)')")).toBe(
+      "unable to auto-detect email address (got '[email].(none)')",
+    );
+    const shown = recordedError("update_note", { message: "write failed", content: "secret plan" });
+    expect(shown).toContain("write failed");
+    expect(shown).not.toContain("secret plan");
+  });
+});
 
 describe("telemetry privacy", () => {
   afterEach(() => {

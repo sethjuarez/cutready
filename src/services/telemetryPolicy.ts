@@ -1,4 +1,4 @@
-import type { AuditaurRedactPayload } from "@auditaur/api";
+import type { AuditaurFrontendConfig, AuditaurRedactErrorMessage, AuditaurRedactPayload } from "@auditaur/api";
 
 // What diagnostics may record about IPC. Two layers:
 //
@@ -7,12 +7,12 @@ import type { AuditaurRedactPayload } from "@auditaur/api";
 //    error message). Backend #[auditaur_command] spans use skip_all, so only the
 //    frontend side needs this list.
 // 2. Redaction: everything else is recorded, but values under REDACT_KEYS
-//    (on top of Auditaur's credential defaults) are replaced in the webview,
-//    and redactTelemetryPayload omits any payload that reaches Auditaur from a
-//    bypassed command.
+//    (on top of Auditaur's credential defaults) are replaced in the webview.
+//    redactTelemetryPayload and redactTelemetryErrorMessage also omit payloads
+//    and error messages from bypassed commands, so each layer covers the other.
 //
-// Keep the bypass list: Auditaur still records invoke/event error messages
-// verbatim, and errors from these commands can echo the sensitive input.
+// Keep the bypass list as defense in depth: it also hides command timing and
+// outcome, and Auditaur still records console bodies and uncaught errors verbatim.
 export const SENSITIVE_INVOKE_COMMANDS = new Set([
   "agent_chat",
   "agent_chat_with_tools",
@@ -103,3 +103,17 @@ export const redactTelemetryPayload: AuditaurRedactPayload = (payload, { kind, n
   }
   return payload;
 };
+
+// Git/Draftline errors from ordinary commands can echo the contributor's email.
+const EMAIL_PATTERN = /[\w.+-]+@[\w-]+(?:\.[\w-]+)*/g;
+
+export const redactTelemetryErrorMessage: AuditaurRedactErrorMessage = (message, { name }) =>
+  isSensitiveInvokeCommand(name) || isSensitiveTauriEvent(name) ? OMITTED_PAYLOAD : message.replace(EMAIL_PATTERN, "[email]");
+
+// Shared by initAuditaur and the redaction tests so both see the same policy.
+export const TELEMETRY_REDACTION = {
+  captureFullPayloads: false,
+  redactKeys: REDACT_KEYS,
+  redactPayload: redactTelemetryPayload,
+  redactErrorMessage: redactTelemetryErrorMessage,
+} satisfies Partial<AuditaurFrontendConfig>;
