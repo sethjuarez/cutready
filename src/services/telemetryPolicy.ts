@@ -47,6 +47,7 @@ export const SENSITIVE_INVOKE_COMMANDS = new Set([
   "read_narration_asset",
   "save_feedback",
   "save_narration_recording",
+  "secret_vault_path",
   "set_contributor_identity",
   "synthesize_narration_recording",
 ]);

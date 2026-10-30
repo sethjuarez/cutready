@@ -123,8 +123,11 @@ function setup(specPath) {
   state.stores = { settingsSeed: spec.globalSettings?.seed, appStores: spec.appStores ?? [] };
   saveState();
   // Every launch refreshes OAuth and rewrites the credential vault; keep the user's real one intact.
-  backup(state, vaultPath());
-  saveState();
+  // Back up both locations: the app moves a legacy vault into the app data folder on first use.
+  for (const path of vaultPaths()) {
+    backup(state, path);
+    saveState();
+  }
   if (state.stores.settingsSeed) {
     backup(state, globalSettingsPath());
     saveState();
@@ -613,9 +616,9 @@ function globalSettingsPath() {
   return process.env.CUTREADY_GLOBAL_SETTINGS_STORE ?? join(appDataDir(), "settings.json");
 }
 
-// useSecretStore.ts builds this as `${appDataDir()}vault.hold` with no separator, so it sits beside the folder.
-function vaultPath() {
-  return `${appDataDir()}vault.hold`;
+// Current builds keep the vault in the app data folder (engine/secret_vault.rs); older builds put it beside it.
+function vaultPaths() {
+  return [join(appDataDir(), "vault.hold"), join(appDataDir(), "vault.hold.bak"), `${appDataDir()}vault.hold`];
 }
 
 function recentProjectsPath() {

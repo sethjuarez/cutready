@@ -14,6 +14,7 @@ pub mod note;
 pub mod project;
 pub mod recording;
 pub mod screenshot;
+pub mod secrets;
 pub mod sketch;
 pub mod storyboard;
 pub mod terminal;
