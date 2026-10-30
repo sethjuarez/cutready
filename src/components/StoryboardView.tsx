@@ -629,6 +629,9 @@ export function StoryboardView() {
                     updateStoryboard({ title: val });
                   }
                 }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
                 title={activeStoryboard.title}
                 className={`min-w-0 w-full truncate border-none bg-transparent text-2xl font-semibold text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/40 ${activeStoryboard.title && !storyboardLocked ? "pr-8" : ""} ${storyboardLocked ? "cursor-default" : ""}`}
                 placeholder="Storyboard title..."

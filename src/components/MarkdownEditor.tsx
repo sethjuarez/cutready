@@ -88,6 +88,8 @@ export interface MarkdownEditorProps {
   onChange: (value: string) => void;
   /** Placeholder text shown when empty. */
   placeholder?: string;
+  /** Accessible name for the editable content. */
+  label?: string;
   /** Stable key to force remount (e.g., file path). */
   editorKey?: string;
   /** Whether to save pasted images to project (requires open project). */
@@ -169,7 +171,7 @@ function clipboardItemType(item: ClipboardItem, mimeType: string) {
   return item.types.find((type) => type.toLowerCase() === mimeType);
 }
 
-export function MarkdownEditor({ value, onChange, placeholder, editorKey, saveImages = true, getAiConfig }: MarkdownEditorProps) {
+export function MarkdownEditor({ value, onChange, placeholder, label, editorKey, saveImages = true, getAiConfig }: MarkdownEditorProps) {
   const editorIdRef = useRef(`markdown-editor-${Math.random().toString(36).slice(2, 10)}`);
   const viewRef = useRef<EditorView | null>(null);
   const [contextMenu, setContextMenu] = useState<MarkdownContextMenuState | null>(null);
@@ -188,7 +190,8 @@ export function MarkdownEditor({ value, onChange, placeholder, editorKey, saveIm
       editorIdRef.current,
       saveImages,
     ),
-  ], [saveImages]);
+    ...(label ? [EditorView.contentAttributes.of({ "aria-label": label })] : []),
+  ], [saveImages, label]);
 
   useEffect(() => {
     const closeMenu = () => setContextMenu(null);
