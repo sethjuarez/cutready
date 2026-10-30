@@ -42,6 +42,25 @@
       ]
     },
     {
+      "name": "pastes an image into the note",
+      "steps": [
+        { "click": { "label": "Note content" } },
+        { "press": "Control+End", "target": { "label": "Note content" } },
+        { "name": "paste a PNG from the clipboard (synthetic clipboard event)", "evaluate": "(() => { const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0)); const data = new DataTransfer(); data.items.add(new File([bytes], 'shot.png', { type: 'image/png' })); const target = document.querySelector('[aria-label=\"Note content\"]'); return target.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true })) === false; })()" },
+        { "expectIpc": "save_pasted_image", "status": "ok" },
+        { "expect": { "label": "Note content" }, "toContainText": "![](.cutready/screenshots/pasted-" },
+        { "expectIpc": "update_note", "status": "ok" },
+        { "name": "the note links the saved image", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "![](.cutready/screenshots/pasted-"] },
+        { "name": "the image file was saved", "run": "node", "cwd": "${CUTREADY_PROJECT}", "args": ["-e", "const fs = require('fs'); const files = fs.readdirSync('.cutready/screenshots').filter((f) => /^pasted-\\d+\\.png$/.test(f)); if (files.length !== 1) { console.error('expected one pasted image, found ' + files.join(', ')); process.exit(1); }"] },
+        { "click": { "role": "button", "name": "Preview", "exact": true } },
+        { "expectIpc": "read_project_image", "status": "ok" },
+        { "name": "the preview shows the pasted image", "expect": { "css": "img[src^='data:image/png']" }, "toBeVisible": true },
+        { "click": { "role": "button", "name": "Edit", "exact": true } },
+        { "expect": { "label": "Note content" }, "toBeVisible": true },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
       "name": "locks the note against edits",
       "steps": [
         { "click": { "role": "button", "name": "Lock note", "exact": true } },
