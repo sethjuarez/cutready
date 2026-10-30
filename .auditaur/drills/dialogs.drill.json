@@ -1,0 +1,169 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "Native file dialogs answered by drill steps: exporting documents to Word and PowerPoint, importing notes, sketches and images, resolving import conflicts, exporting logs, and cancelling a dialog. Each test starts from the seeded project and a fresh scratch folder.",
+  "tags": ["@dialogs", "@import-export", "@local"],
+  "setup": [
+    { "name": "Create a project plus a scratch folder of import sources", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/dialogs.json"] }
+  ],
+  "teardown": [
+    { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "beforeEach": [
+    { "click": { "testId": "activity-project" }, "timeoutMs": 45000 },
+    { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 45000 },
+    { "name": "Drop the previous test's pending autosaves", "reload": true },
+    { "click": { "testId": "activity-project" }, "timeoutMs": 45000 },
+    { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 45000 },
+    { "name": "Restore the seeded project and scratch folder", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "reset"] },
+    { "reload": true },
+    { "click": { "testId": "activity-project" }, "timeoutMs": 45000 },
+    { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 45000 }
+  ],
+  "tests": [
+    {
+      "name": "exports a sketch to Word",
+      "steps": [
+        { "click": { "testId": "explorer-item-launch.sk" } },
+        { "click": { "testId": "document-export-menu" } },
+        { "dialog": "save", "respond": "${CUTREADY_SCRATCH}/launch.docx", "expectOptions": { "defaultPath": "Launch-Walkthrough.docx", "filters": [{ "name": "Word Document", "extensions": ["docx"] }] } },
+        { "click": { "role": "menuitem", "name": "Word - Landscape" } },
+        { "expectIpc": "export_markdown_to_word", "status": "ok" },
+        { "name": "the Word file was written", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "scratch:launch.docx", "zip"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "exports a note to Word",
+      "steps": [
+        { "click": { "testId": "explorer-item-plan.md" } },
+        { "click": { "testId": "document-export-menu" } },
+        { "dialog": "save", "respond": "${CUTREADY_SCRATCH}/plan.docx", "expectOptions": { "filters": [{ "name": "Word Document", "extensions": ["docx"] }] } },
+        { "click": { "role": "menuitem", "name": "Word - Portrait" } },
+        { "expectIpc": "export_markdown_to_word", "status": "ok" },
+        { "name": "the Word file was written", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "scratch:plan.docx", "zip"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "exports a storyboard to Word",
+      "steps": [
+        { "click": { "testId": "explorer-item-tour.sb" } },
+        { "click": { "testId": "document-export-menu" } },
+        { "dialog": "save", "respond": "${CUTREADY_SCRATCH}/tour.docx", "expectOptions": { "filters": [{ "name": "Word Document", "extensions": ["docx"] }] } },
+        { "click": { "role": "menuitem", "name": "Word - Portrait" } },
+        { "expectIpc": "export_markdown_to_word", "status": "ok" },
+        { "name": "the Word file was written", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "scratch:tour.docx", "zip"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "exports a sketch to PowerPoint",
+      "steps": [
+        { "click": { "testId": "explorer-item-launch.sk" } },
+        { "click": { "testId": "document-export-menu" } },
+        { "dialog": "save", "respond": "${CUTREADY_SCRATCH}/launch.pptx", "expectOptions": { "filters": [{ "name": "PowerPoint Presentation", "extensions": ["pptx"] }] } },
+        { "click": { "role": "menuitem", "name": "PowerPoint - Narration" } },
+        { "name": "the deck was written", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "scratch:launch.pptx", "zip"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "cancelling the save dialog writes nothing",
+      "steps": [
+        { "click": { "testId": "explorer-item-launch.sk" } },
+        { "click": { "testId": "document-export-menu" } },
+        { "dialog": "save", "respond": null },
+        { "click": { "role": "menuitem", "name": "Word - Landscape" } },
+        { "expectIpc": "export_markdown_to_word", "not": true },
+        { "name": "no file appeared", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "scratch:launch.docx", "absent"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "imports a markdown note",
+      "steps": [
+        { "click": { "testId": "explorer-import-menu" } },
+        { "dialog": "open", "respond": ["${CUTREADY_SCRATCH}/kickoff.md"], "expectOptions": { "title": "Import Markdown Note", "multiple": true, "filters": [{ "name": "Markdown (.md)", "extensions": ["md"] }] } },
+        { "click": { "role": "menuitem", "name": "Markdown note..." } },
+        { "expectIpc": "import_markdown", "status": "ok" },
+        { "expect": { "testId": "explorer-item-kickoff.md" }, "toBeVisible": true },
+        { "name": "the note was copied into the project", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "kickoff.md", "Imported agenda."] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "imports a sketch",
+      "steps": [
+        { "click": { "testId": "explorer-import-menu" } },
+        { "dialog": "open", "respond": ["${CUTREADY_SCRATCH}/partner-demo.sk"], "expectOptions": { "title": "Import Sketch", "multiple": true } },
+        { "click": { "role": "menuitem", "name": "Sketch...", "exact": true } },
+        { "expectIpc": "import_sketch", "status": "ok" },
+        { "expect": { "testId": "explorer-item-partner-demo.sk" }, "toBeVisible": true },
+        { "name": "the sketch was copied into the project", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "partner-demo.sk", "doc.title === 'Partner Demo'"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "overwrites a note when an import conflicts",
+      "steps": [
+        { "click": { "testId": "explorer-import-menu" } },
+        { "dialog": "open", "respond": ["${CUTREADY_SCRATCH}/plan.md"] },
+        { "dialog": "message", "respond": "Overwrite", "expectOptions": { "title": "File Already Exists" } },
+        { "click": { "role": "menuitem", "name": "Markdown note..." } },
+        { "expectIpc": "import_markdown", "status": "ok" },
+        { "name": "the existing note was replaced", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Replacement agenda."] },
+        { "name": "no copy was made", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan-2.md", "absent"] }
+      ]
+    },
+    {
+      "name": "keeps both notes when an import conflicts",
+      "steps": [
+        { "click": { "testId": "explorer-import-menu" } },
+        { "dialog": "open", "respond": ["${CUTREADY_SCRATCH}/plan.md"] },
+        { "dialog": "message", "respond": "Keep Both", "expectOptions": { "title": "File Already Exists" } },
+        { "click": { "role": "menuitem", "name": "Markdown note..." } },
+        { "expectIpc": "import_markdown", "status": "ok" },
+        { "expect": { "testId": "explorer-item-plan-2.md" }, "toBeVisible": true },
+        { "name": "the import landed beside the original", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan-2.md", "Replacement agenda."] },
+        { "name": "the original note is untouched", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Draft agenda."] }
+      ]
+    },
+    {
+      "name": "cancelling an import conflict keeps the original",
+      "steps": [
+        { "click": { "testId": "explorer-import-menu" } },
+        { "dialog": "open", "respond": ["${CUTREADY_SCRATCH}/plan.md"] },
+        { "dialog": "message", "respond": "Cancel", "expectOptions": { "title": "File Already Exists" } },
+        { "click": { "role": "menuitem", "name": "Markdown note..." } },
+        { "expectIpc": "import_markdown", "status": "error", "count": 1 },
+        { "name": "the original note is untouched", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Draft agenda."] },
+        { "name": "no copy was made", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan-2.md", "absent"] }
+      ]
+    },
+    {
+      "name": "imports an image into Visuals",
+      "steps": [
+        { "press": "Control+Shift+P" },
+        { "fill": { "role": "combobox", "name": "Search commands" }, "value": "Go to Visuals" },
+        { "press": "Enter", "target": { "role": "combobox", "name": "Search commands" } },
+        { "dialog": "open", "respond": "${CUTREADY_SCRATCH}/logo.png", "expectOptions": { "multiple": false, "filters": [{ "name": "Images" }] } },
+        { "click": { "role": "button", "name": "Import image", "exact": true } },
+        { "expectIpc": "import_image", "status": "ok" },
+        { "name": "the image was copied into the project", "run": "node", "cwd": "${CUTREADY_PROJECT}", "args": ["-e", "const fs = require('fs'); const files = fs.existsSync('.cutready/screenshots') ? fs.readdirSync('.cutready/screenshots').filter((f) => f.endsWith('_logo.png')) : []; if (files.length !== 1) { console.error('expected one imported logo, found ' + files.join(', ')); process.exit(1); }"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "exports diagnostic logs",
+      "steps": [
+        { "press": "Control+Shift+P" },
+        { "fill": { "role": "combobox", "name": "Search commands" }, "value": "Export Logs" },
+        { "dialog": "save", "respond": "${CUTREADY_SCRATCH}/logs.zip", "expectOptions": { "filters": [{ "name": "Zip Archive", "extensions": ["zip"] }] } },
+        { "press": "Enter", "target": { "role": "combobox", "name": "Search commands" } },
+        { "expectIpc": "export_logs", "status": "ok" },
+        { "name": "the log archive was written", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "scratch:logs.zip", "zip"] },
+        { "expectNoErrors": true }
+      ]
+    }
+  ]
+}

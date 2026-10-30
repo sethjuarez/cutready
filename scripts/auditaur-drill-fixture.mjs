@@ -11,8 +11,8 @@
 //   node scripts/auditaur-drill-fixture.mjs setup .auditaur/fixtures/<name>.json
 //   node scripts/auditaur-drill-fixture.mjs teardown
 //   node scripts/auditaur-drill-fixture.mjs expect-json <file> <js expression over doc>
-//   (<file> is fixture-relative, or app-data:<file> for the app data folder)
-//   node scripts/auditaur-drill-fixture.mjs expect-file <file> <absent | exists | text it must contain | lacks:text>
+//   (<file> is fixture-relative, app-data:<file> for the app data folder, or scratch:<file>)
+//   node scripts/auditaur-drill-fixture.mjs expect-file <file> <absent | exists | zip | text it must contain | lacks:text>
 //   node scripts/auditaur-drill-fixture.mjs expect-agent-runs --provider <id> [--model <m> | --model-prefix <p>]
 //        [--engine <id>] [--min-completed <n>] [--tools a,b,...]
 //   node scripts/auditaur-drill-fixture.mjs write <file> <text>
@@ -33,12 +33,14 @@
 //   copyFrom       repo-relative folder copied into the project
 //   sketches       [{ path, title, description, narrative }]
 //   notes          [{ path, body }]
-//   files          [{ path, body } | { path, json }]  any other project file
+//   files          [{ path, body } | { path, json } | { path, base64 }]  any other project file
 //   projects       [{ path, name, description, sketches }]  (multi-project repo)
 //   globalSettings { seed: { key: value } }  merged into app settings.json
 //   appStores      [{ file, clear, json }]  app-data files or dirs backed up (then cleared and/or seeded)
 //   recentProjects [{ name, sketches, notes, files }]  extra project folders (<root>-<name>) seeded as the only recents
 //   remote         true: an empty bare repo at <root>-remote.git (main) for collaboration drills
+//   scratch        { sketches, notes, files }  a folder outside the project (<root>-scratch, env
+//                  CUTREADY_SCRATCH) for dialog import sources and export targets; reset rebuilds it
 
 import { spawnSync } from "node:child_process";
 import {
@@ -84,7 +86,6 @@ function setup(specPath) {
   const envFile = process.env.AUDITAUR_DRILL_ENV_FILE;
   if (!envFile) throw new Error("setup must run as an `auditaur drill test` setup hook (AUDITAUR_DRILL_ENV_FILE is unset)");
   ensureNoRunningCutReady();
-  waitForWebViewExit();
   if (existsSync(STATE)) {
     console.log("Recovering from an unfinished drill run first.");
     teardown();
@@ -143,6 +144,14 @@ function setup(specPath) {
     git(["init", "--bare", "--initial-branch=main", remotePath(projectRoot)]);
   }
 
+  if (spec.scratch) {
+    state.scratch = spec.scratch;
+    state.extraRoots = [...(state.extraRoots ?? []), scratchPath(projectRoot)];
+    saveState();
+    writeScratch(state);
+    appendFileSync(envFile, `CUTREADY_SCRATCH=${scratchPath(projectRoot)}\n`);
+  }
+
   appendFileSync(envFile, `CUTREADY_PROJECT=${projectRoot}\n`);
   console.log(`Drill fixture ready at ${projectRoot}`);
 }
@@ -151,7 +160,6 @@ function teardown() {
   if (!existsSync(STATE)) return;
   // Restoring app stores (notably the credential vault) under a live app would let it overwrite them.
   ensureNoRunningCutReady();
-  waitForWebViewExit();
   const state = JSON.parse(readFileSync(STATE, "utf8"));
   let failed = false;
   for (const { path, existed, copy } of state.backups ?? []) {
@@ -259,6 +267,7 @@ function reset() {
     }
   }
   seedAppStores(state.stores);
+  writeScratch(state);
   console.log(`Fixture reset to ${head ? head.slice(0, 7) : "no saves"} on ${branch}`);
 }
 
@@ -306,6 +315,9 @@ function expectFile(file, expectation) {
       if (exists) throw new Error(`expected ${file} to be absent`);
     } else if (!exists) {
       throw new Error(`expected ${file} to exist`);
+    } else if (expectation === "zip") {
+      // .docx, .pptx and .zip exports are zip containers.
+      if (readFileSync(path).subarray(0, 4).toString("binary") !== "PK\x03\x04") throw new Error(`expected ${file} to be a zip file`);
     } else if (expectation.startsWith("lacks:")) {
       if (readFileSync(path, "utf8").includes(expectation.slice(6))) {
         throw new Error(`expected ${file} not to contain ${JSON.stringify(expectation.slice(6))}`);
@@ -371,7 +383,10 @@ function writeProject(root, spec) {
   for (const note of spec.notes ?? []) writeFileSync(join(root, note.path), note.body ?? "");
   for (const file of spec.files ?? []) {
     mkdirSync(dirname(join(root, file.path)), { recursive: true });
-    writeFileSync(join(root, file.path), file.json ? `${JSON.stringify(file.json, null, 2)}\n` : file.body ?? "");
+    const content = file.json
+      ? `${JSON.stringify(file.json, null, 2)}\n`
+      : file.base64 ? Buffer.from(file.base64, "base64") : file.body ?? "";
+    writeFileSync(join(root, file.path), content);
   }
   for (const sketch of spec.sketches ?? []) writeSketch(join(root, sketch.path), sketch);
   const projects = spec.projects ?? [];
@@ -390,7 +405,20 @@ function writeProject(root, spec) {
   }
 }
 
+function scratchPath(projectRoot) {
+  return `${projectRoot}-scratch`;
+}
+
+function writeScratch(state) {
+  if (!state.scratch) return;
+  const root = scratchPath(state.projectRoot);
+  rmSync(root, { recursive: true, force: true });
+  mkdirSync(root, { recursive: true });
+  writeProject(root, state.scratch);
+}
+
 function writeSketch(path, sketch) {
+  mkdirSync(dirname(path), { recursive: true });
   const now = new Date().toISOString();
   writeFileSync(
     path,
@@ -423,27 +451,6 @@ function ensureNoRunningCutReady() {
     throw new Error("CutReady is already running; close it before running drills.");
   }
 }
-// Workaround for Auditaur AR-28: on 0.4.20, cleanup can give up while a WebView2
-// child is still tearing down. That child keeps the EBWebView user-data folder
-// locked, so the next launch fails with 0x800700AA ("The requested resource is in
-// use"). Wait for it here before the next launch.
-function waitForWebViewExit(timeoutSeconds = 120) {
-  if (process.platform !== "win32") return;
-  const script =
-    `$deadline = (Get-Date).AddSeconds(${timeoutSeconds}); ` +
-    "while ((Get-Date) -lt $deadline) { " +
-    "$p = Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" | Where-Object { $_.CommandLine -like '*com.cutready.app*' }; " +
-    "if (-not $p) { exit 0 }; Start-Sleep -Milliseconds 250 }; exit 1";
-  const result = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], {
-    encoding: "utf8",
-    windowsHide: true,
-  });
-  if (result.error) throw new Error(`could not check for CutReady WebView2 processes: ${result.error.message}`);
-  if (result.status !== 0) {
-    throw new Error(`CutReady WebView2 processes still running after ${timeoutSeconds}s; close them before running drills.`);
-  }
-}
-
 // Writes text to a fixture-relative file (never app data or outside the project).
 function writeProjectFile(file, text) {
   if (!file || text === undefined) throw new Error("write needs <file> <text>");
@@ -511,9 +518,11 @@ function expectRemote(message) {
   }, 30000);
 }
 
-// Fixture-relative path, or `app-data:<file>` for CutReady's app data folder.
+// Fixture-relative path, `app-data:<file>` for CutReady's app data folder, or `scratch:<file>`.
 function resolveExpectPath(file) {
-  return file.startsWith("app-data:") ? join(appDataDir(), file.slice(9)) : join(fixtureRoot(), file);
+  if (file.startsWith("app-data:")) return join(appDataDir(), file.slice(9));
+  if (file.startsWith("scratch:")) return join(scratchPath(fixtureRoot()), file.slice(8));
+  return join(fixtureRoot(), file);
 }
 
 function appDataDir() {
