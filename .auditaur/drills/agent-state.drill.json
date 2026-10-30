@@ -9,11 +9,10 @@
     { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
   ],
   "beforeEach": [
-    { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 45000 },
-    { "name": "Drop the previous test's pending autosaves", "reload": true },
-    { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 45000 },
+    { "name": "Drop pending autosaves and per-test UI state", "clearStorage": true },
+    { "name": "a project is open", "expect": { "testId": "explorer-import-menu" }, "toBeVisible": true, "timeoutMs": 45000 },
     { "name": "Restore the seeded project and agent state", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "reset"] },
-    { "reload": true },
+    { "name": "Reload the restored project with clean UI state", "clearStorage": true },
     { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 45000 }
   ],
   "tests": [

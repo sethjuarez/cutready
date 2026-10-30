@@ -8,6 +8,13 @@
   "teardown": [
     { "name": "Remove fixture and restore feedback.json", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
   ],
+  "beforeEach": [
+    { "name": "Drop pending autosaves and per-test UI state", "clearStorage": true },
+    { "name": "a project is open", "expect": { "testId": "explorer-import-menu" }, "toBeVisible": true, "timeoutMs": 45000 },
+    { "name": "Restore the seeded project", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "reset"] },
+    { "name": "Reload the restored project with clean UI state", "clearStorage": true },
+    { "expect": { "testId": "explorer-item-intro.sk" }, "toBeVisible": true, "timeoutMs": 45000 }
+  ],
   "tests": [
     {
       "name": "workspace export override persists to the project and survives reload",
@@ -54,7 +61,7 @@
         { "expect": "body", "toContainText": "Delete this feedback?" },
         { "click": { "role": "button", "name": "Delete", "exact": true } },
         { "expect": "body", "not": true, "toContainText": "DRILL-ALPHA" },
-        { "name": "feedback.json no longer has the deleted entry", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "app-data:feedback.json", "doc.length === 2 && !doc.some((e) => e.feedback.includes('DRILL-ALPHA')) && doc.some((e) => e.feedback.includes('DRILL-BRAVO'))"] },
+        { "name": "feedback.json no longer has the deleted entry", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "app-data:feedback.json", "doc.length === 1 && !doc.some((e) => e.feedback.includes('DRILL-ALPHA')) && doc.some((e) => e.feedback.includes('DRILL-BRAVO'))"] },
         { "expectNoTelemetry": { "pattern": "DRILL-ALPHA|DRILL-BRAVO|DRILL-CHARLIE" } },
         { "expectNoErrors": true }
       ]
@@ -62,6 +69,9 @@
     {
       "name": "clear all removes every saved feedback item",
       "steps": [
+        { "click": { "testId": "activity-settings" } },
+        { "click": { "testId": "settings-scope-app" } },
+        { "click": { "testId": "settings-tab-feedback" } },
         { "expect": "body", "toContainText": "DRILL-BRAVO" },
         { "click": { "role": "button", "name": "Clear All", "exact": true } },
         { "expect": "body", "not": true, "toContainText": "DRILL-BRAVO" },

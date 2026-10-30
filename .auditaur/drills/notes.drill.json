@@ -1,6 +1,6 @@
 {
   "$schema": "https://auditaur.dev/schemas/drill.schema.json",
-  "description": "Editing, previewing, locking and renaming a markdown note is saved to the project.",
+  "description": "Editing, previewing, locking and renaming a markdown note is saved to the project. Each test starts from the seeded project.",
   "tags": ["@notes", "@authoring"],
   "setup": [
     { "name": "Create a project with one note", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/notes.json"] }
@@ -8,11 +8,18 @@
   "teardown": [
     { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
   ],
+  "beforeEach": [
+    { "name": "Drop pending autosaves and per-test UI state", "clearStorage": true },
+    { "name": "a project is open", "expect": { "testId": "explorer-import-menu" }, "toBeVisible": true, "timeoutMs": 45000 },
+    { "name": "Restore the seeded project", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "reset"] },
+    { "name": "Reload the restored project with clean UI state", "clearStorage": true },
+    { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 45000 }
+  ],
   "tests": [
     {
       "name": "opens a note from the explorer",
       "steps": [
-        { "click": { "testId": "explorer-item-plan.md" }, "timeoutMs": 45000 },
+        { "click": { "testId": "explorer-item-plan.md" } },
         { "expect": { "label": "Note title" }, "toHaveValue": "plan" },
         { "expect": { "label": "Note content" }, "toContainText": "Draft agenda." },
         { "expectNoErrors": true }
@@ -21,6 +28,7 @@
     {
       "name": "edits the note content",
       "steps": [
+        { "click": { "testId": "explorer-item-plan.md" } },
         { "click": { "label": "Note content" } },
         { "press": "Control+End", "target": { "label": "Note content" } },
         { "type": { "label": "Note content" }, "value": " Agenda: demo, pricing, Q&A." },
@@ -33,6 +41,7 @@
     {
       "name": "previews the rendered note",
       "steps": [
+        { "click": { "testId": "explorer-item-plan.md" } },
         { "click": { "role": "button", "name": "Preview", "exact": true } },
         { "expect": { "role": "heading", "name": "Launch plan" }, "toBeVisible": true },
         { "expect": { "label": "Note content" }, "toHaveCount": 0 },
@@ -44,9 +53,10 @@
     {
       "name": "pastes an image into the note",
       "steps": [
+        { "click": { "testId": "explorer-item-plan.md" } },
         { "click": { "label": "Note content" } },
         { "press": "Control+End", "target": { "label": "Note content" } },
-        { "name": "paste a PNG from the clipboard (synthetic clipboard event)", "evaluate": "(() => { const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0)); const data = new DataTransfer(); data.items.add(new File([bytes], 'shot.png', { type: 'image/png' })); const target = document.querySelector('[aria-label=\"Note content\"]'); return target.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true })) === false; })()" },
+        { "name": "paste a PNG from the clipboard", "paste": { "files": [".auditaur/fixtures/assets/shot.png"] }, "target": { "label": "Note content" } },
         { "expectIpc": "save_pasted_image", "status": "ok" },
         { "expect": { "label": "Note content" }, "toContainText": "![](.cutready/screenshots/pasted-" },
         { "expectIpc": "update_note", "status": "ok" },
@@ -63,6 +73,7 @@
     {
       "name": "locks the note against edits",
       "steps": [
+        { "click": { "testId": "explorer-item-plan.md" } },
         { "click": { "role": "button", "name": "Lock note", "exact": true } },
         { "expectIpc": "set_note_lock", "status": "ok" },
         { "expect": { "text": "Note is locked. Unlock it to edit" }, "toBeVisible": true },
@@ -72,8 +83,11 @@
       ]
     },
     {
-      "name": "unlocks the note",
+      "name": "unlocks a locked note",
       "steps": [
+        { "click": { "testId": "explorer-item-plan.md" } },
+        { "name": "lock the note first", "click": { "role": "button", "name": "Lock note", "exact": true } },
+        { "expect": { "label": "Note content" }, "toHaveCount": 0 },
         { "click": { "role": "button", "name": "Unlock note", "exact": true } },
         { "expect": { "label": "Note content" }, "toBeVisible": true },
         { "name": "the lock manifest no longer records the note", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", ".cutready/locks.json", "!doc.notes['plan.md']"] },
@@ -83,11 +97,12 @@
     {
       "name": "renames the note from its title",
       "steps": [
+        { "click": { "testId": "explorer-item-plan.md" } },
         { "fill": { "label": "Note title" }, "value": "Launch Checklist" },
         { "press": "Enter", "target": { "label": "Note title" } },
         { "expectIpc": "rename_note", "status": "ok" },
         { "expect": { "testId": "explorer-item-launch-checklist.md" }, "toBeVisible": true },
-        { "name": "the renamed file keeps the content", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "launch-checklist.md", "Agenda: demo, pricing, Q&A."] },
+        { "name": "the renamed file keeps the content", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "launch-checklist.md", "Draft agenda."] },
         { "name": "the old file is gone", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "absent"] },
         { "expectNoErrors": true }
       ]

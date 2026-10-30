@@ -1,7 +1,7 @@
 {
   "$schema": "https://auditaur.dev/schemas/drill.schema.json",
   "serial": true,
-  "description": "Local versioning: pending changes, diffs, named snapshots, discarding a file, previewing history, branching from a snapshot, switching branches, and shelving unsaved work.",
+  "description": "Local versioning: pending changes, diffs, named snapshots, discarding a file, previewing history, branching from a snapshot, switching branches, and shelving unsaved work. Each test starts from a seeded history: \"Agenda drafted\" then \"Pricing added\" on main, and an alt-intro branch at \"Agenda drafted\".",
   "tags": ["@versioning"],
   "env": { "GIT_AUTHOR_NAME": "Drill Versioning", "GIT_AUTHOR_EMAIL": "versioning@drill.test" },
   "setup": [
@@ -10,6 +10,13 @@
   "teardown": [
     { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
   ],
+  "beforeEach": [
+    { "name": "Drop pending autosaves and per-test UI state", "clearStorage": true },
+    { "name": "a project is open", "expect": { "testId": "explorer-import-menu" }, "toBeVisible": true, "timeoutMs": 45000 },
+    { "name": "Restore the seeded project", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "reset"] },
+    { "name": "Reload the restored project with clean UI state", "clearStorage": true },
+    { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 45000 }
+  ],
   "tests": [
     {
       "name": "lists an edited note as a pending change",
@@ -17,7 +24,7 @@
         { "click": { "testId": "explorer-item-plan.md" }, "timeoutMs": 45000 },
         { "click": { "label": "Note content" } },
         { "press": "Control+End", "target": { "label": "Note content" } },
-        { "type": { "label": "Note content" }, "value": " Agenda: demo." },
+        { "type": { "label": "Note content" }, "value": " Venue." },
         { "expectIpc": "update_note", "status": "ok" },
         { "click": { "testId": "activity-changes" } },
         { "expect": { "role": "button", "name": "View diff: plan.md" }, "toBeVisible": true, "timeoutMs": 15000 },
@@ -28,20 +35,32 @@
     {
       "name": "shows the diff of a pending change",
       "steps": [
+        { "name": "an edited note", "click": { "testId": "explorer-item-plan.md" }, "timeoutMs": 45000 },
+        { "click": { "label": "Note content" } },
+        { "press": "Control+End", "target": { "label": "Note content" } },
+        { "type": { "label": "Note content" }, "value": " Venue." },
+        { "expectIpc": "update_note", "status": "ok" },
+        { "click": { "testId": "activity-changes" } },
         { "click": { "role": "button", "name": "View diff: plan.md" } },
         { "expect": { "text": "plan.md (diff)" }, "toBeVisible": true },
-        { "expect": { "text": "Agenda: demo." }, "toBeVisible": true },
+        { "expect": { "text": "Venue." }, "toBeVisible": true },
         { "expectNoErrors": true }
       ]
     },
     {
       "name": "saves a named snapshot",
       "steps": [
+        { "name": "an edited note", "click": { "testId": "explorer-item-plan.md" }, "timeoutMs": 45000 },
+        { "click": { "label": "Note content" } },
+        { "press": "Control+End", "target": { "label": "Note content" } },
+        { "type": { "label": "Note content" }, "value": " Venue." },
+        { "expectIpc": "update_note", "status": "ok" },
+        { "click": { "testId": "activity-changes" } },
         { "click": { "role": "button", "name": "Save snapshot", "exact": true } },
-        { "fill": "#snapshot-name-input", "value": "Agenda drafted" },
+        { "fill": "#snapshot-name-input", "value": "Venue noted" },
         { "click": { "role": "button", "name": "Save Snapshot", "exact": true } },
         { "expect": "#snapshot-name-input", "toHaveCount": 0, "timeoutMs": 30000 },
-        { "name": "the snapshot is the latest commit", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["log", "-1", "--format=%s"], "stdout": "Agenda drafted" },
+        { "name": "the snapshot is the latest commit", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["log", "-1", "--format=%s"], "stdout": "Venue noted" },
         { "expect": { "text": "No workspace changes since last snapshot" }, "toBeVisible": true, "timeoutMs": 15000 },
         { "expectNoErrors": true }
       ]
@@ -66,19 +85,19 @@
       ]
     },
     {
-      "name": "saves a second snapshot",
+      "name": "saves a snapshot from the keyboard",
       "steps": [
         { "click": { "testId": "activity-project" } },
         { "click": { "testId": "explorer-item-plan.md" } },
         { "click": { "label": "Note content" } },
         { "press": "Control+End", "target": { "label": "Note content" } },
-        { "type": { "label": "Note content" }, "value": " Pricing." },
-        { "name": "the pricing edit is on disk", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Pricing."] },
+        { "type": { "label": "Note content" }, "value": " Timeline." },
+        { "name": "the timeline edit is on disk", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Timeline."] },
         { "press": "ControlOrMeta+s" },
-        { "fill": "#snapshot-name-input", "value": "Pricing added" },
+        { "fill": "#snapshot-name-input", "value": "Timeline added" },
         { "click": { "role": "button", "name": "Save Snapshot", "exact": true } },
         { "expect": "#snapshot-name-input", "toHaveCount": 0, "timeoutMs": 30000 },
-        { "name": "the snapshot is the latest commit", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["log", "-1", "--format=%s"], "stdout": "Pricing added" },
+        { "name": "the snapshot is the latest commit", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["log", "-1", "--format=%s"], "stdout": "Timeline added" },
         { "expectNoErrors": true }
       ]
     },
@@ -96,19 +115,27 @@
     {
       "name": "starts a branch from the earlier snapshot",
       "steps": [
+        { "name": "preview the earlier snapshot", "click": { "testId": "activity-changes" } },
+        { "click": { "role": "button", "name": "Preview snapshot: Agenda drafted" }, "timeoutMs": 15000 },
+        { "expect": { "text": "Snapshot: Agenda drafted" }, "toBeVisible": true },
         { "click": { "role": "button", "name": "Start Branch from Here" } },
-        { "fill": { "label": "New branch name" }, "value": "alt-intro" },
+        { "fill": { "label": "New branch name" }, "value": "alt-agenda" },
         { "click": { "role": "button", "name": "Create Branch", "exact": true } },
         { "click": { "role": "button", "name": "Confirm Start Branch", "exact": true } },
         { "expectIpc": "create_variation_from_version_guarded", "status": "ok", "timeoutMs": 15000 },
         { "name": "the workspace has the earlier snapshot's content", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "lacks:Pricing."] },
-        { "name": "the new branch is checked out", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["branch", "--show-current"], "stdout": "alt-intro" },
+        { "name": "the new branch is checked out", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["branch", "--show-current"], "stdout": "alt-agenda" },
         { "expectNoErrors": true }
       ]
     },
     {
       "name": "switches back to the main branch",
       "steps": [
+        { "name": "be on another branch", "click": { "testId": "activity-changes" } },
+        { "click": { "role": "button", "name": "Branch: main" }, "timeoutMs": 15000 },
+        { "click": { "role": "button", "name": "Switch to branch alt-intro" } },
+        { "expect": { "role": "button", "name": "Branch: alt-intro" }, "toBeVisible": true, "timeoutMs": 15000 },
+        { "name": "the workspace has alt-intro's content", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "lacks:Pricing."] },
         { "click": { "testId": "activity-changes" } },
         { "click": { "role": "button", "name": "Branch: alt-intro" }, "timeoutMs": 15000 },
         { "click": { "role": "button", "name": "Switch to branch main" } },
@@ -151,12 +178,8 @@
       "name": "deletes an abandoned branch that has no new snapshots",
       "steps": [
         { "click": { "testId": "activity-changes" } },
-        { "click": { "role": "button", "name": "Save snapshot", "exact": true } },
-        { "fill": "#snapshot-name-input", "value": "Shelf kept" },
-        { "click": { "role": "button", "name": "Save Snapshot", "exact": true } },
-        { "expect": "#snapshot-name-input", "toHaveCount": 0, "timeoutMs": 30000 },
-        { "click": { "role": "button", "name": "Preview snapshot: Pricing added" }, "timeoutMs": 15000 },
-        { "expect": { "text": "Snapshot: Pricing added" }, "toBeVisible": true },
+        { "click": { "role": "button", "name": "Preview snapshot: Agenda drafted" }, "timeoutMs": 15000 },
+        { "expect": { "text": "Snapshot: Agenda drafted" }, "toBeVisible": true },
         { "click": { "role": "button", "name": "Start Branch from Here" } },
         { "fill": { "label": "New branch name" }, "value": "scratch" },
         { "click": { "role": "button", "name": "Create Branch", "exact": true } },

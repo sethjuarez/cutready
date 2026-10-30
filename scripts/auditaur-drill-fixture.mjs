@@ -25,8 +25,9 @@
 //   (main on the bare remote has a save with that message)
 //   node scripts/auditaur-drill-fixture.mjs reset
 //   (a `beforeEach` step, followed by `reload`: puts the open project back to the state
-//   the app first opened it in — files, history, branches, remotes, agent state — and
-//   re-seeds app stores, so tests in a suite don't depend on each other)
+//   the app first opened it in — files, history, refs, remotes, Draftline's .git/draftline
+//   state, agent state, the recent-projects store — plus the shared remote, and re-seeds
+//   app stores, so tests in a suite don't depend on each other)
 //
 // Fixture spec (all optional):
 //   prefix         temp folder prefix
@@ -38,11 +39,18 @@
 //   globalSettings { seed: { key: value } }  merged into app settings.json
 //   appStores      [{ file, clear, json }]  app-data files or dirs backed up (then cleared and/or seeded)
 //   recentProjects [{ name, sketches, notes, files }]  extra project folders (<root>-<name>) seeded as the only recents
-//   remote         true: an empty bare repo at <root>-remote.git (main) for collaboration drills
+//   remote         true: an empty bare repo at <root>-remote.git (main) for collaboration drills;
+//                  { seedSave: "<message>" }: also gives the project a repo whose first save (the
+//                  seeded files) is already on the remote's main, with the remote as `origin`
+//                  (env CUTREADY_REMOTE_URL is the remote's path with forward slashes)
+//   history        [{ save: "<message>", notes, files, sketches } | { branch: "<name>" }]  saves made
+//                  before the app opens, in order: a save writes its files and commits everything on
+//                  main; a branch starts at the latest save (main stays checked out)
 //   scratch        { sketches, notes, files }  a folder outside the project (<root>-scratch, env
 //                  CUTREADY_SCRATCH) for dialog import sources and export targets; reset rebuilds it
 
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import {
   appendFileSync,
   cpSync,
@@ -62,6 +70,9 @@ const DRILL_DIR = resolve("target", "auditaur-drill");
 const STATE = join(DRILL_DIR, "state.json");
 const BACKUP_DIR = join(DRILL_DIR, "backup");
 const PRISTINE_DIR = join(DRILL_DIR, "pristine");
+const BASELINE_DRAFTLINE_DIR = join(DRILL_DIR, "baseline-draftline");
+const COLLABORATOR = { name: "Drill Collaborator", email: "collaborator@drill.test" };
+const SEEDER = { name: "Drill Seed", email: "seed@drill.test" };
 
 const [command, ...args] = process.argv.slice(2);
 try {
@@ -104,6 +115,7 @@ function setup(specPath) {
   saveState();
 
   writeProject(projectRoot, spec);
+  if (spec.history?.length) seedHistory(projectRoot, spec.history);
   // Files as written, before the app opens (and imports, e.g., legacy .chats) — `reset` restores them.
   rmSync(PRISTINE_DIR, { recursive: true, force: true });
   cpSync(projectRoot, PRISTINE_DIR, { recursive: true, filter: (src) => !isGitDir(projectRoot, src) });
@@ -142,6 +154,10 @@ function setup(specPath) {
     state.extraRoots = [...(state.extraRoots ?? []), remotePath(projectRoot), collaboratorPath(projectRoot)];
     saveState();
     git(["init", "--bare", "--initial-branch=main", remotePath(projectRoot)]);
+    if (spec.remote.seedSave) seedSharedSave(projectRoot, spec.remote.seedSave);
+    state.remoteRefs = gitRefs(["--git-dir", remotePath(projectRoot)]);
+    saveState();
+    appendFileSync(envFile, `CUTREADY_REMOTE_URL=${pathToFileURL(remotePath(projectRoot)).href}\n`);
   }
 
   if (spec.scratch) {
@@ -178,6 +194,7 @@ function teardown() {
   if (state.projectRoot) rmSync(state.projectRoot, { recursive: true, force: true });
   for (const root of state.extraRoots ?? []) rmSync(root, { recursive: true, force: true });
   rmSync(PRISTINE_DIR, { recursive: true, force: true });
+  rmSync(BASELINE_DRAFTLINE_DIR, { recursive: true, force: true });
   if (failed) throw new Error(`restore failed; backups kept in ${BACKUP_DIR}`);
   rmSync(BACKUP_DIR, { recursive: true, force: true });
   rmSync(STATE, { force: true });
@@ -234,15 +251,25 @@ function reset() {
       head: head.status === 0 ? head.stdout.trim() : null,
       branch: git(["symbolic-ref", "--short", "HEAD"], root).trim(),
       remotes: git(["remote"], root).split("\n").filter(Boolean),
+      refs: gitRefs([], root),
+      // Which workspace and project the app last had open (`last_active_project`) lives here.
+      recents: existsSync(recentProjectsPath()) ? readFileSync(recentProjectsPath(), "utf8") : null,
     };
+    // Draftline's own state (recovery records, locks, pending saves) sits beside the refs.
+    rmSync(BASELINE_DRAFTLINE_DIR, { recursive: true, force: true });
+    if (existsSync(join(gitDir, "draftline"))) cpSync(join(gitDir, "draftline"), BASELINE_DRAFTLINE_DIR, { recursive: true });
     writeFileSync(STATE, `${JSON.stringify(state, null, 2)}\n`);
   }
 
   const { head, branch, remotes } = state.baseline;
+  const baselineRefs = state.baseline.refs ?? {};
   const branchRef = `refs/heads/${branch}`;
   git(["symbolic-ref", "HEAD", branchRef], root);
   for (const ref of git(["for-each-ref", "--format=%(refname)"], root).split("\n").filter(Boolean)) {
-    if (ref !== branchRef) git(["update-ref", "-d", ref], root);
+    if (ref !== branchRef && !(ref in baselineRefs)) git(["update-ref", "-d", ref], root);
+  }
+  for (const [ref, sha] of Object.entries(baselineRefs)) {
+    if (ref !== branchRef) git(["update-ref", ref, sha], root);
   }
   if (head) {
     git(["update-ref", branchRef, head], root);
@@ -257,6 +284,12 @@ function reset() {
     if (!remotes.includes(remote)) git(["remote", "remove", remote], root);
   }
   cpSync(PRISTINE_DIR, root, { recursive: true });
+  eventually(() => rmSync(join(gitDir, "draftline"), { recursive: true, force: true }), 10000);
+  if (existsSync(BASELINE_DRAFTLINE_DIR)) cpSync(BASELINE_DRAFTLINE_DIR, join(gitDir, "draftline"), { recursive: true });
+  if (state.baseline.recents !== null && state.baseline.recents !== undefined) {
+    writeFileSync(recentProjectsPath(), state.baseline.recents);
+  }
+  if (state.remoteRefs) resetRemote(root, state.remoteRefs);
 
   // A standalone project's agent state lives in .git/cutready; the app opens it per call
   // and re-imports the project's legacy .chats when it recreates it.
@@ -466,6 +499,56 @@ function remotePath(root) {
   return `${root}-remote.git`;
 }
 
+function authorEnv(who) {
+  return { GIT_AUTHOR_NAME: who.name, GIT_AUTHOR_EMAIL: who.email, GIT_COMMITTER_NAME: who.name, GIT_COMMITTER_EMAIL: who.email };
+}
+
+function seedHistory(root, steps) {
+  git(["init", "--initial-branch=main"], root);
+  // Seeded files are checked out byte-for-byte, so a reset never shows them as edited.
+  git(["config", "core.autocrlf", "false"], root);
+  for (const step of steps) {
+    if (step.branch) {
+      git(["branch", step.branch], root);
+      continue;
+    }
+    writeProject(root, step);
+    git(["add", "-A"], root);
+    git(["commit", "-m", step.save], root, authorEnv(SEEDER));
+  }
+}
+
+// The project's first save, already shared: a repo with the seeded files on main, pushed to the remote.
+function seedSharedSave(root, message) {
+  git(["init", "--initial-branch=main"], root);
+  // Seeded files are checked out byte-for-byte, so a reset never shows them as edited.
+  git(["config", "core.autocrlf", "false"], root);
+  git(["add", "-A"], root);
+  git(["commit", "-m", message], root, authorEnv(SEEDER));
+  git(["remote", "add", "origin", remotePath(root)], root);
+  git(["push", "origin", "main"], root);
+  git(["fetch", "origin"], root);
+}
+
+function gitRefs(prefixArgs, cwd) {
+  const refs = {};
+  for (const line of git([...prefixArgs, "for-each-ref", "--format=%(objectname) %(refname)"], cwd).split("\n").filter(Boolean)) {
+    const [sha, ref] = line.split(" ");
+    refs[ref] = sha;
+  }
+  return refs;
+}
+
+// Puts the shared remote back to its seeded refs and drops the collaborator's clone.
+function resetRemote(root, refs) {
+  const gitDirArgs = ["--git-dir", remotePath(root)];
+  for (const ref of Object.keys(gitRefs(gitDirArgs))) {
+    if (!(ref in refs)) git([...gitDirArgs, "update-ref", "-d", ref]);
+  }
+  for (const [ref, sha] of Object.entries(refs)) git([...gitDirArgs, "update-ref", ref, sha]);
+  eventually(() => rmSync(collaboratorPath(root), { recursive: true, force: true }), 10000);
+}
+
 function collaboratorPath(root) {
   return `${root}-collab`;
 }
@@ -497,13 +580,7 @@ function collaboratorSave(file, text, message) {
   writeFileSync(path, text);
   git(["add", "--", file], clone);
   // The drill env sets GIT_AUTHOR_* for the app, which would override -c user.name here.
-  const who = { name: "Drill Collaborator", email: "collaborator@drill.test" };
-  git(["commit", "-m", message], clone, {
-    GIT_AUTHOR_NAME: who.name,
-    GIT_AUTHOR_EMAIL: who.email,
-    GIT_COMMITTER_NAME: who.name,
-    GIT_COMMITTER_EMAIL: who.email,
-  });
+  git(["commit", "-m", message], clone, authorEnv(COLLABORATOR));
   git(["push", "origin", "HEAD:main"], clone);
 }
 
