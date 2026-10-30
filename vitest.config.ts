@@ -12,7 +12,5 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     exclude: ["**/node_modules/**", "docs/**"],
-    // @auditaur/api's dist uses extensionless ESM imports that Node can't load; let Vite transform it.
-    server: { deps: { inline: [/@auditaur[\\/]api/] } },
   },
 });
