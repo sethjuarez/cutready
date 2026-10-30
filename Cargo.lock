@@ -510,9 +510,9 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "auditaur-collector"
-version = "0.4.20"
+version = "0.4.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67b12a59bf56f657c24c4ea3ed5d189404ca4ec6e66d8e5ee4d251e46be5188b"
+checksum = "f124de01d7eb4dae1abb34ce69980ab6aed1d83d7377d48213e5bfc01b10f253"
 dependencies = [
  "auditaur-core",
  "rusqlite",
@@ -523,9 +523,9 @@ dependencies = [
 
 [[package]]
 name = "auditaur-core"
-version = "0.4.20"
+version = "0.4.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89f1f1c29ca172bd7f8d5aa7907c951d4fd3f5766dfb219bcd92423f0871ee24"
+checksum = "a3187674a816ccce5baa6d90452fa7595038c82c67b641531f2b1493b9713d2a"
 dependencies = [
  "directories",
  "serde",
@@ -673,7 +673,7 @@ dependencies = [
  "bitflags 2.13.1",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "regex",
@@ -3687,7 +3687,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.5",
+ "socket2 0.5.10",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -3707,7 +3707,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
@@ -4041,15 +4041,6 @@ name = "itertools"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
 dependencies = [
  "either",
 ]
@@ -6377,7 +6368,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.6.5",
+ "socket2 0.5.10",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -6416,7 +6407,7 @@ dependencies = [
  "cfg_aliases 0.2.2",
  "libc",
  "once_cell",
- "socket2 0.6.5",
+ "socket2 0.5.10",
  "tracing",
  "windows-sys 0.61.2",
 ]
@@ -8293,9 +8284,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-auditaur"
-version = "0.4.20"
+version = "0.4.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64f7ac3d411fa58a003cfc7d4817030e1aef367afffc584a620ea19f69ef6e21"
+checksum = "c260d4493ad6cda37c85225200bae25dd01f38d802364b766069ff6dc1e97b9c"
 dependencies = [
  "auditaur-collector",
  "auditaur-core",
@@ -8323,9 +8314,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-auditaur-macros"
-version = "0.4.20"
+version = "0.4.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19def1f2644b37130db0322a50d73c4010b15173f78db2a2b24ad1b69a257132"
+checksum = "73502a6444381266722e1182112b70f4e8e4341a74d1bb6cfb4c0b2e515e2715"
 dependencies = [
  "proc-macro-crate 3.5.0",
  "proc-macro2",
