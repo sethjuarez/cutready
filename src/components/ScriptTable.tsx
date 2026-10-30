@@ -4,6 +4,7 @@ import { usePopover } from "../hooks/usePopover";
 import {
   DndContext,
   closestCenter,
+  KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
@@ -12,6 +13,7 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
+  sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
@@ -292,6 +294,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
   // Ensure at least one row exists (materialize instead of phantom displayRows)
@@ -1429,6 +1432,7 @@ function SortableRow({
             className={`${hasAnyLock(row) ? "cursor-default text-[rgb(var(--color-warning))]" : "cursor-grab active:cursor-grabbing text-[rgb(var(--color-text-secondary))]"} flex items-center justify-center h-full`}
             {...attributes}
             {...listeners}
+            aria-label={`Move row ${idx + 1}`}
           >
             {/* Row number (visible by default), drag icon on hover */}
             <span className="text-[0.625rem] font-medium opacity-40 group-hover:hidden">{rowLocked ? <Lock className="w-3 h-3 opacity-80" /> : idx + 1}</span>
