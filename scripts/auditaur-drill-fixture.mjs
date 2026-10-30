@@ -15,6 +15,8 @@
 //   node scripts/auditaur-drill-fixture.mjs expect-file <file> <absent | exists | text it must contain | lacks:text>
 //   node scripts/auditaur-drill-fixture.mjs expect-agent-runs --provider <id> [--model <m> | --model-prefix <p>]
 //        [--engine <id>] [--min-completed <n>] [--tools a,b,...]
+//   node scripts/auditaur-drill-fixture.mjs write <file> <text>
+//   (writes a fixture-relative file mid-test, e.g. state under .git/ that only exists once the app opened the project)
 //
 // Fixture spec (all optional):
 //   prefix         temp folder prefix
@@ -39,7 +41,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 
 const DRILL_DIR = resolve("target", "auditaur-drill");
 const STATE = join(DRILL_DIR, "state.json");
@@ -52,7 +54,8 @@ try {
   else if (command === "expect-json") expectJson(args[0], args[1]);
   else if (command === "expect-file") expectFile(args[0], args[1]);
   else if (command === "expect-agent-runs") await expectAgentRuns(parseFlags(args));
-  else throw new Error(`unknown command ${JSON.stringify(command)}; use setup, teardown, expect-json, expect-file, or expect-agent-runs`);
+  else if (command === "write") writeProjectFile(args[0], args[1]);
+  else throw new Error(`unknown command ${JSON.stringify(command)}; use setup, teardown, expect-json, expect-file, expect-agent-runs, or write`);
 } catch (error) {
   console.error(`[auditaur-drill-fixture] ${error.message}`);
   process.exit(1);
@@ -309,6 +312,17 @@ function waitForWebViewExit(timeoutSeconds = 120) {
   if (result.status !== 0) {
     throw new Error(`CutReady WebView2 processes still running after ${timeoutSeconds}s; close them before running drills.`);
   }
+}
+
+// Fixture-relative path, or `app-data:<file>` for CutReady's app data folder.
+function writeProjectFile(file, text) {
+  if (!file || text === undefined) throw new Error("write needs <file> <text>");
+  if (file.startsWith("app-data:")) throw new Error("write only targets the fixture project, not app data");
+  const root = resolve(fixtureRoot());
+  const path = resolve(root, file);
+  if (!path.startsWith(root + sep)) throw new Error(`write target ${file} is outside the fixture project`);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, text);
 }
 
 // Fixture-relative path, or `app-data:<file>` for CutReady's app data folder.
