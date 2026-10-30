@@ -64,7 +64,6 @@ function setup(specPath) {
     teardown();
   }
   ensureNoRunningCutReady();
-  waitForWebViewExit();
   const spec = JSON.parse(readFileSync(resolve(specPath), "utf8"));
   const prefix = spec.prefix ?? "cutready-drill-";
   const projectRoot = mkdtempSync(join(tmpdir(), prefix));
@@ -253,28 +252,6 @@ function ensureNoRunningCutReady() {
     throw new Error("CutReady is already running; close it before running drills.");
   }
 }
-
-// WebView2 browser processes outlive the closed app by up to ~10s and keep the
-// EBWebView user-data folder locked; launching then fails with 0x800700AA
-// ("The requested resource is in use"). Auditaur 0.4.13's close does not wait
-// for them (Auditaur AR-17), so wait here before the next launch.
-function waitForWebViewExit(timeoutSeconds = 30) {
-  if (process.platform !== "win32") return;
-  const script =
-    `$deadline = (Get-Date).AddSeconds(${timeoutSeconds}); ` +
-    "while ((Get-Date) -lt $deadline) { " +
-    "$p = Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" | Where-Object { $_.CommandLine -like '*com.cutready.app*' }; " +
-    "if (-not $p) { exit 0 }; Start-Sleep -Milliseconds 250 }; exit 1";
-  const result = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], {
-    encoding: "utf8",
-    windowsHide: true,
-  });
-  if (result.error) throw new Error(`could not check for CutReady WebView2 processes: ${result.error.message}`);
-  if (result.status !== 0) {
-    throw new Error(`CutReady WebView2 processes still running after ${timeoutSeconds}s; close them before running drills.`);
-  }
-}
-
 function appDataDir() {
   if (process.platform === "win32" && process.env.APPDATA) return join(process.env.APPDATA, "com.cutready.app");
   if (process.platform === "darwin") return join(process.env.HOME, "Library", "Application Support", "com.cutready.app");
