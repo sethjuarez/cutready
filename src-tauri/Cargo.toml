@@ -63,7 +63,7 @@ harness-prompty = { path = "../crates/harness-prompty" }
 # Typra-generated document contracts (contracts/*.tsp). The app uses the
 # generated types directly where it has adopted them, such as `.cv` chat artifacts.
 cutready-contracts = { path = "../crates/cutready-contracts" }
-draftline = "0.10.1"
+draftline = "0.10.2"
 # Already in the tree through Draftline; used directly to read the git config
 # identity that contributor attribution falls back to.
 git2 = { version = "0.21", default-features = false }
@@ -87,7 +87,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-store = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-window-state = "2"
-tauri-plugin-auditaur = "0.4.7"
+tauri-plugin-auditaur = "0.4.32"
 tauri-plugin-single-instance = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-process = "2"
@@ -110,7 +110,7 @@ screencapturekit = "2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 wasapi = "0.23.0"
-windows = { version = "0.61.3", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Graphics_Gdi", "Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Graphics_Gdi", "Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
 windows-capture = "2.0.0"
 
 [dev-dependencies]

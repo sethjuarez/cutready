@@ -1,0 +1,9 @@
+{
+  "prefix": "cutready-collab-drill-",
+  "appStores": [{ "file": "identity.json", "clear": true }],
+  "remote": { "seedSave": "Initial plan" },
+  "notes": [
+    { "path": "plan.md", "body": "# Launch plan\n\nDraft agenda.\n" },
+    { "path": "agenda.md", "body": "# Agenda\n\nOpen items.\n" }
+  ]
+}

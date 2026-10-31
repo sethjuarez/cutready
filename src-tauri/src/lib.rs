@@ -628,6 +628,7 @@ pub fn run() {
             commands::project::create_project_folder,
             commands::project::open_project_folder,
             commands::project::get_startup_project_path,
+            commands::secrets::secret_vault_path,
             commands::project::get_current_project,
             commands::project::close_project,
             commands::project::get_recent_projects,

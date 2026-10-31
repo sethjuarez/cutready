@@ -408,6 +408,7 @@ Use write_note to save the cleaned Markdown back to "${activeNotePath}". Do not 
               title={draftTitle}
               className={`min-w-0 w-full truncate border-none bg-transparent text-2xl font-semibold text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/40 ${activeNoteLocked ? "cursor-default" : ""}`}
               placeholder="Note title..."
+              aria-label="Note title"
             />
           }
           badge={<span className="rounded bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))]">.md</span>}
@@ -463,6 +464,7 @@ Use write_note to save the cleaned Markdown back to "${activeNotePath}". Do not 
             value={noteDocument.body}
             onChange={handleChange}
             placeholder="Write your notes here..."
+            label="Note content"
             getAiConfig={buildRichPasteAiConfig}
           />
         ) : (

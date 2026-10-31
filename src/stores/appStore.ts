@@ -2560,7 +2560,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   importAsset: async () => {
     try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
+      const { open } = await import("../dialogs");
       const selected = await open({
         multiple: false,
         filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg"] }],

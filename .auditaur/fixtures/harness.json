@@ -1,0 +1,7 @@
+{
+  "prefix": "cutready-harness-drill-",
+  "globalSettings": { "seed": { "aiAgentExecutionEngine": "prompty" } },
+  "sketches": [
+    { "path": "intro.sk", "title": "Harness Drill Fixture", "narrative": "A sketch so the app opens into the full workspace shell." }
+  ]
+}

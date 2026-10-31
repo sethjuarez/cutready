@@ -1,0 +1,13 @@
+{
+  "prefix": "cutready-agent-state-drill-",
+  "notes": [{ "path": "plan.md", "body": "# Launch plan\n" }],
+  "files": [
+    { "path": ".chats/plan.chat", "json": { "title": "Plan the launch", "created_at": "2025-06-01T10:00:00Z", "updated_at": "2025-06-01T10:05:00Z", "messages": [{ "role": "user", "content": "Draft a launch plan" }, { "role": "assistant", "content": "Here is a plan with three beats." }] } },
+    { "path": ".chats/pricing.chat", "json": { "title": "Pricing questions", "created_at": "2025-06-02T10:00:00Z", "updated_at": "2025-06-02T10:05:00Z", "messages": [{ "role": "user", "content": "What should pricing say?" }, { "role": "assistant", "content": "Lead with the free tier." }] } },
+    { "path": ".chats/retro.chat", "json": { "title": "Retro notes", "created_at": "2025-06-03T10:00:00Z", "updated_at": "2025-06-03T10:05:00Z", "messages": [{ "role": "user", "content": "Summarize the retro" }, { "role": "assistant", "content": "Ship smaller demos." }] } },
+    { "path": ".cutready/memory.json", "json": { "memories": [
+      { "category": "core", "content": "Prefer short narration beats", "tags": ["voicestyle"], "created_at": "2025-06-01T00:00:00Z", "updated_at": "2025-06-01T00:00:00Z", "access_count": 0 },
+      { "category": "archival", "content": "Viewers are finance analysts", "tags": ["audiencenote"], "created_at": "2025-06-02T00:00:00Z", "updated_at": "2025-06-02T00:00:00Z", "access_count": 0 }
+    ] } }
+  ]
+}

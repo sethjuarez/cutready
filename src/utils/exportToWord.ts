@@ -5,8 +5,8 @@
  * validating every image reference against the project root.
  */
 
-import { save } from "@tauri-apps/plugin-dialog";
-import { openPath } from "@tauri-apps/plugin-opener";
+import { save } from "../dialogs";
+import { captureExportOpener } from "./openExportedFile";
 import { invoke } from "../services/tauri";
 import type { PlanningRow, Sketch, Storyboard } from "../types/sketch";
 import { getElucimDocumentSize } from "./elucimDocument";
@@ -276,6 +276,7 @@ async function saveMarkdownAsWord(
     filters: [{ name: "Word Document", extensions: ["docx"] }],
   });
   if (!outputPath) return null;
+  const openExportedFile = captureExportOpener();
 
   const report = await invoke<WordExportReport>("export_markdown_to_word", {
     markdown,
@@ -284,7 +285,7 @@ async function saveMarkdownAsWord(
     maxImageWidthPx,
   });
   try {
-    await openPath(outputPath);
+    await openExportedFile(outputPath);
   } catch (e) {
     console.error("[exportToWord] Failed to open file:", outputPath, e);
   }

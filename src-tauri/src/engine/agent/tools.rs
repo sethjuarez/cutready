@@ -1040,7 +1040,7 @@ pub fn execute_tool(
     // Privacy: tool results can contain user document content (note/sketch bodies,
     // web page text). Telemetry stays metadata-only — emit the result length and an
     // error flag, never the result content itself. See the chat acceptance drill's
-    // no-privacy-leak assertion (scripts/auditaur-chat-drill.mjs).
+    // no-privacy-leak assertion (.auditaur/drills/chat.drill.json).
     crate::util::trace::emit(
         "tool_exec",
         "tools",

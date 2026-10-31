@@ -1,0 +1,7 @@
+{
+  "prefix": "cutready-project-switch-drill-",
+  "projects": [
+    { "path": "alpha", "name": "Alpha Project", "description": "First drill project", "sketches": [{ "path": "alpha.sk", "title": "Alpha Sketch" }] },
+    { "path": "beta", "name": "Beta Project", "description": "Second drill project", "sketches": [{ "path": "beta.sk", "title": "Beta Sketch" }] }
+  ]
+}

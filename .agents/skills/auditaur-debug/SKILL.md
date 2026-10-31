@@ -8,6 +8,12 @@ license: MIT
 
 Use Auditaur as the first diagnostic surface for Tauri app debugging. Prefer machine-readable JSON when acting as an agent. The canonical mental model is: Auditaur observes the app; it does not replace the app's normal dev command.
 
+When starting from an unfamiliar repo or CLI version, ask Auditaur for the current agent contract:
+
+```bash
+auditaur agent guide --json
+```
+
 ## Intent map
 
 Translate common user phrases to the appropriate Auditaur workflow:
@@ -15,10 +21,11 @@ Translate common user phrases to the appropriate Auditaur workflow:
 | User phrase | Agent interpretation |
 | --- | --- |
 | "observe the app" | Attach to the already-running app and watch readiness. |
-| "start with Auditaur" / "Auditaur start the app" | Run `auditaur start` when `.auditaur/config.json` exists; otherwise start the normal app command under Auditaur observation with `debug run -- <normal command>`. |
+| "start with Auditaur" / "Auditaur start the app" | Run `auditaur start` when `.auditaur/config.json` exists; otherwise start the normal app command under Auditaur observation with `observe -- <normal command>`. |
 | "debug the app with Auditaur" | Check readiness first, then inspect logs/timeline/traces/IPC. |
 | "drive the app" / "click in the app" | Require the Tauri-native drive bridge, then use `auditaur drive`. |
 | "run a drill" / "smoke test the app" | Run `auditaur drill` for the configured default drill, or `auditaur drill <name>` for a named drill. |
+| "run the drill tests" / "add a test for this" / "did my change break anything" | Use `auditaur drill test` with suites in `.auditaur/drills/*.drill.json` (see Drill tests). |
 | "manual approval" / "human gate" / "OAuth consent" | Use a drill script gate so the app session stays pinned while the human action completes. |
 
 Preserve the app's normal startup command. Prefer the simple repo-configured flow when available:
@@ -48,7 +55,7 @@ For a running app, watch until core telemetry is ready:
 auditaur debug --app <app-name> --active --json watch --until-ready --timeout-seconds 120
 ```
 
-If the task requires frontend telemetry, add `--require-frontend`. If the task requires WebView selector actions, use the Auditaur in-app drive bridge: enable `initAuditaur({ driveBridge: true })` in exactly one debug/test WebView per Auditaur session and add `--require-drive-bridge` to readiness watches.
+If the task requires frontend telemetry, add `--require-frontend`. This is stricter than default readiness and may wait until a Tauri WebView action emits frontend logs, errors, IPC, events, or spans. If the task requires WebView selector actions, use the Auditaur in-app drive bridge: enable `initAuditaur({ driveBridge: true })` in exactly one debug/test WebView per Auditaur session and add `--require-drive-bridge` to readiness watches.
 
 ```bash
 npm run tauri dev
@@ -83,13 +90,40 @@ If the agent should start the app, wrap the existing command:
 auditaur start
 ```
 
-`auditaur start` uses `.auditaur/config.json`, reports readiness, writes `.auditaur/session.json`, and intentionally leaves the app running after it becomes ready. If the config declares named ports, `start` reserves random local ports, expands `{{port:name}}` placeholders in the command, sets configured port environment variables, and records the chosen ports in the session file and JSON output. If no config exists yet, use the lower-level form:
+`auditaur start` uses `.auditaur/config.json`, reports readiness, writes `.auditaur/session.json`, and intentionally leaves the app running after it becomes ready. If the config declares named ports, `start` reserves random local ports, expands `{{port:name}}` placeholders in the command, sets configured port environment variables, and records the chosen ports in the session file and JSON output. If no config exists yet, use the no-config form:
 
 ```bash
-auditaur debug --app <app-name> --require-frontend --json run --timeout-seconds 180 --write-session .auditaur/session.json -- npm run tauri dev
+auditaur observe --app <app-name> -- npm run tauri dev
 ```
 
-`debug run` reports readiness and intentionally leaves the app running after it becomes ready. When `--app` is supplied, it ignores matching discovery records that existed before spawn, waits for the new Auditaur session, and pins readiness to that exact session/database/pid. Use `--write-session <path>` for agent-owned startup so later commands can read `sessionId`, `instanceId`, `pid`, `databasePath`, and the generated selector argument arrays instead of guessing with `--active` or `--latest`. Clean up the spawned app process with `auditaur stop` when the validation is done.
+`observe` reports core readiness and intentionally leaves the app running after it becomes ready. It starts the command directly as argv, so package-manager and tool shims such as `npm`, `pnpm`, `yarn`, and `cargo tauri` should work naturally across Windows/macOS/Linux without manually wrapping in PowerShell/bash unless shell syntax is needed. When `--app` is supplied, it ignores matching discovery records that existed before spawn, waits for the new Auditaur session, and writes `.auditaur/session.json` with `sessionId`, `instanceId`, `pid`, `databasePath`, and generated selector argument arrays instead of guessing with `--active` or `--latest`. Prefer read commands with `--session-file .auditaur/session.json` for follow-up telemetry, including postmortem reads after the app exits or crashes. Clean up the spawned app process with `auditaur stop --session-file .auditaur/session.json` when the validation is done.
+
+Useful pinned follow-up commands:
+
+```bash
+auditaur logs --session-file .auditaur/session.json
+auditaur ipc --session-file .auditaur/session.json --failed
+auditaur timeline --session-file .auditaur/session.json
+auditaur explain --session-file .auditaur/session.json
+auditaur diagnose --session-file .auditaur/session.json
+auditaur tail --session-file .auditaur/session.json --signal failures --replay
+```
+
+Use `--require-frontend` only when the task explicitly needs frontend telemetry readiness:
+
+```bash
+auditaur observe --app <app-name> --require-frontend -- npm run tauri dev
+```
+
+When multiple apps or agents may run concurrently, reserve named ports and wire them into the dev command:
+
+```bash
+auditaur observe --app <app-name> --port web -- npm run dev -- --port {{port:web}}
+auditaur observe --app <app-name> --port-env web=VITE_PORT -- npm run tauri dev
+auditaur observe --app <app-name> --port web=5177 -- npm run dev -- --port {{port:web}}
+```
+
+Prefer random named ports (`--port web` or `--port-env web=VITE_PORT`) for agent-owned runs. Use explicit ports only when required. Auditaur records chosen ports in `.auditaur/session.json`, but the app's Vite/Tauri setup must consume the placeholder or environment variable.
 
 ## Interpreting readiness
 
@@ -162,6 +196,25 @@ auditaur explain --json
 
 Prefer `--session <id>`, `--db <path>`, `--active`, `--latest`, `--pid`, or `--instance-id` when there are stale or multiple sessions.
 
+## Drill tests
+
+For repeatable checks, write Playwright-style suites in `.auditaur/drills/<name>.drill.json` and run them with `auditaur drill test`. Each test is a list of steps: actions (`click`, `fill`, `press`, `select`, `check`, ...), auto-retrying UI assertions (`expect` with `toBeVisible`, `toHaveText`, `toMatchAriaSnapshot`, `toHaveScreenshot`, ...), polled JavaScript value assertions (`expectValue` with `toEqual`, `toContain`, `toMatch`), and telemetry assertions (`expectIpc`, `expectEvent`, `expectLog`, `expectSpan`, `expectNoTelemetry`, `expectNoErrors`) scoped to that test. A `run` step runs a command mid-test and checks its exit code and output. Suite `env` (plus `KEY=VALUE` lines setup hooks append to `$AUDITAUR_DRILL_ENV_FILE`) reaches the app launch, hooks, and `run` steps.
+
+```bash
+auditaur drill validate                      # schema check with "did you mean" hints
+auditaur drill test --app <app> -- npm run tauri dev
+auditaur drill test --last-failed -x         # rerun failures, stop at the first
+auditaur drill show                          # latest run and its failures
+auditaur drill locate 'li button' --app <app>  # suggest role/label/test-id locators for a running app
+```
+
+- Prefer role/label/text locators (`{ "role": "button", "name": "Save" }`) over brittle CSS. When writing a step, run `auditaur drill locate <css>` against the running app and paste the locator it suggests.
+- Assert telemetry, not just UI: a passing click whose IPC failed is still a bug.
+- Snapshot baselines go in `__snapshots__/` beside the suite. A missing baseline is written and fails; review it before committing. Use `--update-snapshots=changed` (the `=` is required) only for intended UI changes.
+- Read failures from `.auditaur/drill-runs/<runId>/` (`run.json`, `tests/<id>/attempt-<n>/attempt.json`), not by rerunning blindly.
+- When the user wants to see drills, open the `auditaur-drills` canvas (from the Auditaur Copilot plugin or `auditaur init extension`) instead of pasting result tables, and use its `navigate` action to switch pages: `tests`, `run` (watch a run and answer its `gate` steps), `trace`, `snapshots`, `coverage`. To debug a failed test step by step, rerun with `--trace on` (or MCP `trace: "on"`) and navigate to `trace`.
+- A `gate` step in a drill test pauses for a human. `drill test` never reads the terminal: surface the gate on the `run` page of `auditaur-drills` (or answer with `respond_human_gate` when the user tells you to). Gate waits are off the test clock; the gate's own `timeoutMs` (default 5 minutes) bounds them.
+
 ## Human gates in drills
 
 Use drill human gates for workflows that require real human action while preserving the same pinned app session: OAuth/device-code approval, OS permission prompts, installer elevation, external browser handoffs, camera/mic permissions, hardware security keys, or any flow where an agent should pause instead of simulating trust-sensitive input.
@@ -195,7 +248,7 @@ When a gate requires a manual response, Auditaur also publishes a session-local 
 auditaur mcp
 ```
 
-Use `list_pending_human_gates` to find pending gates and `respond_human_gate` with the `requestId`, optional `choiceId`, optional `inputs`, and a clear `responder` value. Run the MCP server with the same Auditaur data directory as the drill so it can see the session-local request files. If the Copilot canvas extension is installed with `auditaur init extension`, open the `auditaur-human-gate` canvas for the pending gate so the user gets an action card and can click a response. Terminal ENTER/choice input remains the fallback when no MCP or canvas client is available.
+Use `list_pending_human_gates` to find pending gates and `respond_human_gate` with the `requestId`, optional `choiceId`, optional `inputs`, and a clear `responder` value. Run the MCP server with the same Auditaur data directory as the drill so it can see the session-local request files. If the `auditaur-drills` canvas is installed (the Auditaur Copilot plugin or `auditaur init extension`), open the `auditaur-drills` canvas with `input.gate` set to the pending gate (or call `show_gate` on an open one) so the user gets an action card on its Gate page and can click a response. Terminal ENTER/choice input remains the fallback when no MCP or canvas client is available.
 
 ## Common failure patterns
 

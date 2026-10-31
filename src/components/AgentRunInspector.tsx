@@ -406,10 +406,11 @@ function RunListItem({
           </div>
         </button>
         <button
-          className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[rgb(var(--color-text-secondary))] opacity-0 transition-colors hover:bg-error/10 hover:text-error group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[rgb(var(--color-text-secondary))]"
+          className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[rgb(var(--color-text-secondary))] opacity-0 transition-colors hover:bg-error/10 hover:text-error group-hover:opacity-100 group-focus-within:opacity-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[rgb(var(--color-text-secondary))]"
           onClick={onDelete}
           disabled={deleting || isRunning}
           title={isRunning ? "Running runs cannot be deleted" : "Delete run records"}
+          aria-label={`Delete run ${run.model || shortId(run.run_id)}`}
         >
           {deleting ? <CircleDashed className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
         </button>

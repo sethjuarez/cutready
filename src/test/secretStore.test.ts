@@ -64,7 +64,11 @@ const fakeStronghold = {
 vi.mock("@tauri-apps/plugin-stronghold", () => ({
   Stronghold: { load: vi.fn(async () => fakeStronghold) },
 }));
-vi.mock("@tauri-apps/api/path", () => ({ appDataDir: vi.fn(async () => "/tmp/") }));
+const invokeMock = vi.hoisted(() => vi.fn(async (command: string) => {
+  if (command === "secret_vault_path") return "/app-data/com.cutready.app/vault.hold";
+  throw new Error(`unexpected command ${command}`);
+}));
+vi.mock("../services/tauri", () => ({ invoke: invokeMock }));
 
 async function importSecretStore() {
   // isTauri is captured at module load, so the flag must be set before import.
@@ -90,6 +94,14 @@ describe("useSecretStore hardening", () => {
     fakeStore.failNextGet = true;
     // A transient failure must not blank a configured secret.
     expect(await mod.getSecret("aiApiKey")).toBe("sk-good");
+  });
+
+  it("loads the vault from the path the backend resolves", async () => {
+    const { Stronghold } = await import("@tauri-apps/plugin-stronghold");
+    const mod = await importSecretStore();
+    await mod.getSecret("aiApiKey");
+    expect(invokeMock).toHaveBeenCalledWith("secret_vault_path");
+    expect(Stronghold.load).toHaveBeenCalledWith("/app-data/com.cutready.app/vault.hold", expect.any(String));
   });
 
   it("still reports a genuinely empty secret as empty", async () => {

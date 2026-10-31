@@ -1,0 +1,14 @@
+{
+  "prefix": "cutready-workspace-dialogs-drill-",
+  "notes": [
+    { "path": "plan.md", "body": "# Launch plan\n\nDraft agenda.\n" }
+  ],
+  "appStores": [
+    { "file": "recent-projects.json" }
+  ],
+  "scratch": {
+    "sketches": [
+      { "path": "existing/partner-tour.sk", "title": "Partner Tour", "narrative": "Walk the partner portal." }
+    ]
+  }
+}

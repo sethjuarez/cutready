@@ -1,0 +1,124 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "Creating, renaming and deleting sketches, storyboards and notes from the explorer changes the project files, and the command palette runs commands.",
+  "tags": ["@explorer", "@palette", "@authoring"],
+  "setup": [
+    { "name": "Create a project with two sketches, a storyboard and a note", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/explorer.json"] }
+  ],
+  "teardown": [
+    { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "beforeEach": [
+    { "name": "Drop pending autosaves and per-test UI state", "clearStorage": true },
+    { "name": "a project is open", "expect": { "testId": "explorer-import-menu" }, "toBeVisible": true, "timeoutMs": 45000 },
+    { "name": "Restore the seeded project", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "reset"] },
+    { "name": "Reload the restored project with clean UI state", "clearStorage": true },
+    { "expect": { "testId": "explorer-item-intro.sk" }, "toBeVisible": true, "timeoutMs": 45000 }
+  ],
+  "tests": [
+    {
+      "name": "creates a sketch",
+      "steps": [
+        { "expect": { "testId": "explorer-item-intro.sk" }, "toBeVisible": true, "timeoutMs": 45000 },
+        { "click": { "role": "button", "name": "New sketch", "exact": true } },
+        { "fill": { "label": "Sketch name" }, "value": "Launch Recap" },
+        { "press": "Enter", "target": { "label": "Sketch name" } },
+        { "expect": { "testId": "explorer-item-launch-recap.sk" }, "toBeVisible": true },
+        { "expectIpc": "create_sketch", "status": "ok" },
+        { "name": "the sketch file has the new title", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "launch-recap.sk", "doc.title === 'Launch Recap' && Array.isArray(doc.rows)"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "creates a storyboard",
+      "steps": [
+        { "click": { "role": "button", "name": "New storyboard", "exact": true } },
+        { "fill": { "label": "Storyboard name" }, "value": "Partner Demo" },
+        { "press": "Enter", "target": { "label": "Storyboard name" } },
+        { "expect": { "testId": "explorer-item-partner-demo.sb" }, "toBeVisible": true },
+        { "expectIpc": "create_storyboard", "status": "ok" },
+        { "name": "the storyboard file is empty and titled", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "partner-demo.sb", "doc.title === 'Partner Demo' && doc.items.length === 0"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "creates a note",
+      "steps": [
+        { "click": { "role": "button", "name": "New note", "exact": true } },
+        { "fill": { "label": "Note name" }, "value": "Release Notes" },
+        { "press": "Enter", "target": { "label": "Note name" } },
+        { "expect": { "testId": "explorer-item-release-notes.md" }, "toBeVisible": true },
+        { "expectIpc": "create_note", "status": "ok" },
+        { "name": "the note file exists", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "release-notes.md", "exists"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "renames a sketch and updates the storyboard that uses it",
+      "steps": [
+        { "hover": { "testId": "explorer-item-checkout.sk" } },
+        { "click": { "role": "button", "name": "Rename Falcon Checkout", "exact": true } },
+        { "fill": { "label": "Rename sketch file" }, "value": "falcon-checkout" },
+        { "press": "Enter", "target": { "label": "Rename sketch file" } },
+        { "expect": { "role": "dialog", "name": "Rename and update references?" }, "toContainText": "1 reference" },
+        { "click": { "role": "button", "name": "Rename and update", "exact": true } },
+        { "expect": { "testId": "explorer-item-falcon-checkout.sk" }, "toBeVisible": true },
+        { "expect": { "testId": "explorer-item-checkout.sk" }, "toHaveCount": 0 },
+        { "expectIpc": "rename_project_asset", "status": "ok" },
+        { "name": "the old file is gone", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "checkout.sk", "absent"] },
+        { "name": "the storyboard points at the new path", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "tour.sb", "doc.items.some((i) => i.path === 'falcon-checkout.sk') && !doc.items.some((i) => i.path === 'checkout.sk')"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "warns before deleting a sketch a storyboard uses",
+      "steps": [
+        { "hover": { "testId": "explorer-item-intro.sk" } },
+        { "click": { "role": "button", "name": "Delete Aurora Onboarding", "exact": true } },
+        { "expect": { "testId": "delete-asset-used-by" }, "toContainText": "Product Tour" },
+        { "click": { "testId": "delete-asset-confirm" } },
+        { "expect": { "testId": "explorer-item-intro.sk" }, "toHaveCount": 0 },
+        { "expectIpc": "delete_sketch", "status": "ok" },
+        { "name": "the sketch file is gone", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "intro.sk", "absent"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "deletes a note",
+      "steps": [
+        { "hover": { "testId": "explorer-item-brief.md" } },
+        { "click": { "role": "button", "name": "Delete brief", "exact": true } },
+        { "expect": { "role": "dialog", "name": "Delete note?" }, "toBeVisible": true },
+        { "click": { "testId": "delete-asset-confirm" } },
+        { "expect": { "testId": "explorer-item-brief.md" }, "toHaveCount": 0 },
+        { "expectIpc": "delete_note", "status": "ok" },
+        { "name": "the note file is gone", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "brief.md", "absent"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "runs a command from the command palette",
+      "steps": [
+        { "press": "Control+Shift+P" },
+        { "expect": { "role": "combobox", "name": "Search commands" }, "toBeVisible": true },
+        { "fill": { "role": "combobox", "name": "Search commands" }, "value": "Go to Settings" },
+        { "expect": { "role": "option", "name": "Go to Settings" }, "toBeVisible": true },
+        { "press": "Enter", "target": { "role": "combobox", "name": "Search commands" } },
+        { "expect": { "role": "combobox", "name": "Search commands" }, "toHaveCount": 0 },
+        { "expect": { "testId": "settings-tab-ai" }, "toBeVisible": true },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "reports when no command matches and closes on Escape",
+      "steps": [
+        { "press": "Control+Shift+P" },
+        { "fill": { "role": "combobox", "name": "Search commands" }, "value": "zzqx no such command" },
+        { "expect": { "text": "No commands found" }, "toBeVisible": true },
+        { "press": "Escape", "target": { "role": "combobox", "name": "Search commands" } },
+        { "expect": { "role": "combobox", "name": "Search commands" }, "toHaveCount": 0 },
+        { "expectNoErrors": true }
+      ]
+    }
+  ]
+}

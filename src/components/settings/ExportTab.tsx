@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { CheckCircle, ExternalLink, Info, RefreshCw } from "lucide-react";
-import { open as dialogOpen } from "@tauri-apps/plugin-dialog";
+import { open as dialogOpen } from "../../dialogs";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { useSettings, type AppSettings } from "../../hooks/useSettings";
 import { useFfmpegStatus } from "../../hooks/useFfmpegStatus";

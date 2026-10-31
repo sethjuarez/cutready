@@ -17,6 +17,9 @@ use std::sync::Mutex;
 
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
+use crate::engine::agent_state::PRE_TRACKING_MEMORY_SOURCE;
 
 // Canonical data model + deterministic logic come from Prompty.
 pub use prompty::{MemoryCategory, MemoryEntry, MemoryPort, MemoryStore, ScoredMemory};
@@ -164,6 +167,12 @@ impl SqliteBackend {
         self.migrate_json_file(conn, &self.legacy_json_path, "legacy memory store", false)
     }
 
+    /// Import a JSON memory store into the database.
+    ///
+    /// The local store is removed after import, so it merges once. The versioned legacy
+    /// project store stays on disk (and changes with branches), so each of its entries is
+    /// imported at most once, tracked by fingerprint; edits and deletions in the database
+    /// stick even when the file cycles between versions.
     fn migrate_json_file(
         &self,
         conn: &Connection,
@@ -179,32 +188,116 @@ impl SqliteBackend {
             .map_err(|e| format!("Could not read {label} for migration: {e}"))?;
         let incoming = parse_store(&data)
             .map_err(|e| format!("Could not parse {label} for migration: {e}"))?;
-        if !incoming.entries.is_empty() {
-            let mut merged = load_store_from_conn(conn)?;
-            for memory in incoming.entries {
-                if !merged.entries.iter().any(|existing| {
-                    existing.category == memory.category
-                        && existing.content == memory.content
-                        && existing.tags == memory.tags
-                }) {
-                    merged.entries.push(memory);
-                }
-            }
-            save_store_to_conn(conn, &merged)?;
-        }
+        let mut merged = load_store_from_conn(conn)?;
 
         if remove_after_import {
+            if merge_new_entries(&mut merged, incoming.entries) {
+                save_store_to_conn(conn, &merged)?;
+            }
             std::fs::remove_file(path)
                 .map_err(|e| format!("Could not remove migrated {label}: {e}"))?;
+            log::info!(
+                "[memory] imported {label} from {:?} into agent-state.db",
+                path
+            );
+            return Ok(());
         }
+
+        let imported = imported_fingerprints(conn, label)?;
+        // Databases created before import tracking re-merged this file on every load, so
+        // their memories already reflect it; record it as imported instead of re-merging
+        // entries the user may have edited or deleted since.
+        let bootstrap = !imported.contains(TRACKED_MARKER)
+            && !imported_fingerprints(conn, PRE_TRACKING_MEMORY_SOURCE)?.is_empty();
+        let fresh: Vec<(String, MemoryEntry)> = incoming
+            .entries
+            .into_iter()
+            .map(|entry| (legacy_fingerprint(&entry), entry))
+            .filter(|(fingerprint, _)| !imported.contains(fingerprint))
+            .collect();
+        if imported.contains(TRACKED_MARKER) && fresh.is_empty() {
+            return Ok(());
+        }
+
+        let mut fingerprints = vec![TRACKED_MARKER.to_string()];
+        let mut entries = Vec::with_capacity(fresh.len());
+        for (fingerprint, entry) in fresh {
+            fingerprints.push(fingerprint);
+            entries.push(entry);
+        }
+        let changed = !bootstrap && merge_new_entries(&mut merged, entries);
+        let imported_at = chrono::Utc::now().to_rfc3339();
+        // Entries and their fingerprints land together, so a failure can't leave imported
+        // entries untracked (and re-importable after the user edits them).
+        in_transaction(conn, || {
+            if changed {
+                write_store_rows(conn, &merged)?;
+            }
+            for fingerprint in &fingerprints {
+                conn.execute(
+                    "INSERT OR IGNORE INTO legacy_memory_imports (source, fingerprint, imported_at)
+                     VALUES (?1, ?2, ?3)",
+                    params![label, fingerprint, imported_at],
+                )
+                .map_err(|e| format!("Could not record {label} import: {e}"))?;
+            }
+            Ok(())
+        })?;
         log::info!(
-            "[memory] imported {label} from {:?} into agent-state.db",
+            "[memory] {} {label} from {:?} into agent-state.db",
+            if bootstrap {
+                "recorded existing"
+            } else {
+                "imported"
+            },
             path
         );
         Ok(())
     }
 }
 
+/// Marks a legacy source as tracked, so an empty fingerprint set is not mistaken for an
+/// untracked database.
+const TRACKED_MARKER: &str = "";
+
+fn same_memory(a: &MemoryEntry, b: &MemoryEntry) -> bool {
+    a.category == b.category && a.content == b.content && a.tags == b.tags
+}
+
+/// Append entries the store doesn't already hold. Returns whether anything was added.
+fn merge_new_entries(store: &mut MemoryStore, entries: Vec<MemoryEntry>) -> bool {
+    let mut changed = false;
+    for entry in entries {
+        if !store
+            .entries
+            .iter()
+            .any(|existing| same_memory(existing, &entry))
+        {
+            store.entries.push(entry);
+            changed = true;
+        }
+    }
+    changed
+}
+
+fn legacy_fingerprint(entry: &MemoryEntry) -> String {
+    let identity = serde_json::json!([entry.category.as_str(), entry.content, entry.tags]);
+    format!("{:x}", Sha256::digest(identity.to_string().as_bytes()))
+}
+
+fn imported_fingerprints(
+    conn: &Connection,
+    source: &str,
+) -> Result<std::collections::HashSet<String>, String> {
+    let mut stmt = conn
+        .prepare("SELECT fingerprint FROM legacy_memory_imports WHERE source = ?1")
+        .map_err(|e| format!("Could not prepare memory import query: {e}"))?;
+    let rows = stmt
+        .query_map(params![source], |row| row.get::<_, String>(0))
+        .map_err(|e| format!("Could not read memory imports: {e}"))?;
+    rows.collect::<Result<_, _>>()
+        .map_err(|e| format!("Could not read memory import: {e}"))
+}
 impl MemoryPort for SqliteBackend {
     fn load(&self) -> MemoryStore {
         let conn = match self.connect() {
@@ -223,9 +316,10 @@ impl MemoryPort for SqliteBackend {
         })
     }
 
+    /// Callers load (which migrates JSON stores) under `MEMORY_BACKEND_LOCK` before saving,
+    /// so saving does not migrate again; a file changed in between is picked up next load.
     fn save(&self, store: &MemoryStore) -> Result<(), String> {
         let conn = self.connect()?;
-        self.migrate_json_files(&conn)?;
         save_store_to_conn(&conn, store)
     }
 }
@@ -249,22 +343,29 @@ fn load_store_from_conn(conn: &Connection) -> Result<MemoryStore, String> {
 }
 
 fn save_store_to_conn(conn: &Connection, store: &MemoryStore) -> Result<(), String> {
-    conn.execute("BEGIN IMMEDIATE", [])
-        .map_err(|e| format!("Could not begin memory save transaction: {e}"))?;
-    let result = (|| {
-        conn.execute(&format!("DELETE FROM {AGENT_MEMORIES_TABLE}"), [])
-            .map_err(|e| format!("Could not clear existing memories: {e}"))?;
-        for (position, memory) in store.entries.iter().enumerate() {
-            insert_memory_row(conn, position, memory)?;
-        }
-        Ok::<(), String>(())
-    })();
+    in_transaction(conn, || write_store_rows(conn, store))
+}
 
-    match result {
+fn write_store_rows(conn: &Connection, store: &MemoryStore) -> Result<(), String> {
+    conn.execute(&format!("DELETE FROM {AGENT_MEMORIES_TABLE}"), [])
+        .map_err(|e| format!("Could not clear existing memories: {e}"))?;
+    for (position, memory) in store.entries.iter().enumerate() {
+        insert_memory_row(conn, position, memory)?;
+    }
+    Ok(())
+}
+
+fn in_transaction(
+    conn: &Connection,
+    work: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    conn.execute("BEGIN IMMEDIATE", [])
+        .map_err(|e| format!("Could not begin memory transaction: {e}"))?;
+    match work() {
         Ok(()) => conn
             .execute("COMMIT", [])
             .map(|_| ())
-            .map_err(|e| format!("Could not commit memory save transaction: {e}")),
+            .map_err(|e| format!("Could not commit memory transaction: {e}")),
         Err(err) => {
             let _ = conn.execute("ROLLBACK", []);
             Err(err)
@@ -815,6 +916,155 @@ mod tests {
         assert!(root.join(".git/cutready/agent-state.db").exists());
         assert!(!root.join(".git/cutready/memory.json").exists());
         assert_eq!(memory_row_count(root), 1);
+    }
+
+    #[test]
+    fn legacy_project_memory_store_is_not_reimported_after_edits() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let legacy_path = root.join(".cutready/memory.json");
+        std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &legacy_path,
+            r#"{"memories":[{"category":"core","content":"Use concise narration","tags":[]},{"category":"archival","content":"Viewers are analysts","tags":[]}]}"#,
+        )
+        .unwrap();
+
+        assert_eq!(load(root, root).len(), 2);
+        update_memory(root, root, 0, "Use brisk narration").unwrap();
+        delete_memory(root, root, 1).unwrap();
+
+        let store = load(root, root);
+        let contents: Vec<_> = store.entries.iter().map(|e| e.content.as_str()).collect();
+        assert_eq!(contents, ["Use brisk narration"]);
+        assert!(legacy_path.exists());
+
+        // A changed legacy file (e.g. pulled from a collaborator) merges only its new entries.
+        std::fs::write(
+            &legacy_path,
+            r#"{"memories":[{"category":"core","content":"Use concise narration","tags":[]},{"category":"insight","content":"Charts should animate in","tags":[]}]}"#,
+        )
+        .unwrap();
+        let store = load(root, root);
+        let contents: Vec<_> = store.entries.iter().map(|e| e.content.as_str()).collect();
+        assert_eq!(
+            contents,
+            ["Use brisk narration", "Charts should animate in"]
+        );
+
+        // Cycling the file through another version (e.g. a branch switch) re-imports nothing.
+        std::fs::write(&legacy_path, r#"{"memories":[]}"#).unwrap();
+        assert_eq!(load(root, root).len(), 2);
+        std::fs::write(
+            &legacy_path,
+            r#"{"memories":[{"category":"core","content":"Use concise narration","tags":[]},{"category":"archival","content":"Viewers are analysts","tags":[]}]}"#,
+        )
+        .unwrap();
+        let store = load(root, root);
+        let contents: Vec<_> = store.entries.iter().map(|e| e.content.as_str()).collect();
+        assert_eq!(
+            contents,
+            ["Use brisk narration", "Charts should animate in"]
+        );
+    }
+
+    #[test]
+    fn database_from_before_import_tracking_keeps_its_edits() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        // An older build already merged the legacy file, then the user edited a memory.
+        save_memory(
+            root,
+            root,
+            MemoryCategory::Core,
+            "Use brisk narration",
+            vec![],
+        )
+        .unwrap();
+        let db_path =
+            crate::engine::agent_state::AgentStateStore::database_path_for_project(root, root);
+        Connection::open(db_path)
+            .unwrap()
+            .execute("DROP TABLE legacy_memory_imports", [])
+            .unwrap();
+        let legacy_path = root.join(".cutready/memory.json");
+        std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &legacy_path,
+            r#"{"memories":[{"category":"core","content":"Use concise narration","tags":[]}]}"#,
+        )
+        .unwrap();
+
+        let contents: Vec<_> = load(root, root)
+            .entries
+            .into_iter()
+            .map(|e| e.content)
+            .collect();
+        assert_eq!(contents, ["Use brisk narration"]);
+
+        // Entries added to the file afterwards still import.
+        std::fs::write(
+            &legacy_path,
+            r#"{"memories":[{"category":"core","content":"Use concise narration","tags":[]},{"category":"insight","content":"Charts should animate in","tags":[]}]}"#,
+        )
+        .unwrap();
+        let contents: Vec<_> = load(root, root)
+            .entries
+            .into_iter()
+            .map(|e| e.content)
+            .collect();
+        assert_eq!(
+            contents,
+            ["Use brisk narration", "Charts should animate in"]
+        );
+    }
+
+    #[test]
+    fn cleared_database_from_before_import_tracking_stays_empty() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        // An older build merged the legacy file, then the user cleared every memory.
+        save_memory(
+            root,
+            root,
+            MemoryCategory::Core,
+            "Use brisk narration",
+            vec![],
+        )
+        .unwrap();
+        clear_memories(root, root, None).unwrap();
+        let db_path =
+            crate::engine::agent_state::AgentStateStore::database_path_for_project(root, root);
+        Connection::open(db_path)
+            .unwrap()
+            .execute("DROP TABLE legacy_memory_imports", [])
+            .unwrap();
+        let legacy_path = root.join(".cutready/memory.json");
+        std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &legacy_path,
+            r#"{"memories":[{"category":"core","content":"Use concise narration","tags":[]}]}"#,
+        )
+        .unwrap();
+
+        assert_eq!(load(root, root).len(), 0);
+    }
+
+    #[test]
+    fn unparseable_legacy_file_changes_nothing() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let legacy_path = root.join(".cutready/memory.json");
+        std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
+        std::fs::write(&legacy_path, "{not json").unwrap();
+
+        assert_eq!(load(root, root).len(), 0);
+        std::fs::write(
+            &legacy_path,
+            r#"{"memories":[{"category":"core","content":"Use concise narration","tags":[]}]}"#,
+        )
+        .unwrap();
+        assert_eq!(load(root, root).len(), 1);
     }
 
     #[test]

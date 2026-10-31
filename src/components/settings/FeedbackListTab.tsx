@@ -562,6 +562,7 @@ export function FeedbackListTab() {
           {[...entries].reverse().map((entry, i) => {
             const realIndex = entries.length - 1 - i;
             const isConfirming = confirmDelete === realIndex;
+            const itemName = entry.feedback.trim().slice(0, 60) || entry.category;
             return (
             <div
               key={i}
@@ -625,27 +626,31 @@ export function FeedbackListTab() {
               {/* Action buttons — hover to reveal */}
               <button
                 onClick={() => copySingle(entry)}
-                className="absolute top-2 right-16 opacity-0 group-hover:opacity-100 p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-all"
+                className="absolute top-2 right-16 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-all"
                 title="Copy this item"
+                aria-label={`Copy feedback: ${itemName}`}
               >
                 <ClipboardList className="w-3 h-3" />
               </button>
               <button
                 onClick={() => setConfirmDelete(isConfirming ? null : realIndex)}
-                className="absolute top-2 right-9 opacity-0 group-hover:opacity-100 p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-error hover:bg-[rgb(var(--color-surface))] transition-all"
+                className="absolute top-2 right-9 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-1 rounded text-[rgb(var(--color-text-secondary))] hover:text-error hover:bg-[rgb(var(--color-surface))] transition-all"
                 title="Delete this item"
+                aria-label={`Delete feedback: ${itemName}`}
+                aria-expanded={isConfirming}
               >
                 <Trash2 className="w-3 h-3" />
               </button>
               <button
                 onClick={() => formatAndOpenIssue(entry, i)}
                 disabled={issuePending !== null}
-                className={`absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 rounded transition-all ${
+                className={`absolute top-2 right-2 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-1 rounded transition-all ${
                   issuePending === i
                     ? "text-[rgb(var(--color-accent))] animate-pulse"
                     : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))]"
                 }`}
                 title={`Create GitHub Issue in ${CUTREADY_FEEDBACK_REPO}`}
+                aria-label={`Create GitHub issue from feedback: ${itemName}`}
               >
                 {issuePending === i ? (
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin">

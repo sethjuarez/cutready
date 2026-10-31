@@ -63,6 +63,7 @@ export function SketchPickerItem({
   return (
     <button
       onClick={onSelect}
+      aria-label={`Add ${sketch.title} (${sketch.row_count} rows)`}
       className="w-full flex items-center gap-2 px-3 py-2 text-left rounded-lg hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
     >
       <FileText className="w-3.5 h-3.5 text-[rgb(var(--color-text-secondary))] shrink-0" />

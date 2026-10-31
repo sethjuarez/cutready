@@ -12,18 +12,32 @@ const OPERATION_LABELS: Record<string, string> = {
   publish_changes: "publish",
   send: "send",
   merge_incoming: "merge",
+  shelve_changes: "shelve",
+  discard_file: "file discard",
+  delete_variation: "branch delete",
+  apply_shelf: "shelf restore",
+  delete_remote_variation: "shared branch delete",
+  expire_support_refs: "cleanup",
+  rename_variation: "branch rename",
+  move_folder: "folder move",
+  milestone_merge: "milestone merge",
+  squash_versions: "squash",
+  history_cleanup: "history cleanup",
 };
 
 function operationLabel(operation: string): string {
-  return OPERATION_LABELS[operation] ?? operation.replace(/_/g, " ");
+  // Draftline reports recovery operations in PascalCase (DiscardChanges) and locks in snake_case.
+  const key = operation.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
+  return OPERATION_LABELS[key] ?? key.replace(/_/g, " ");
 }
 
-function BannerButton({ onClick, disabled, children }: { onClick: () => void; disabled: boolean; children: ReactNode }) {
+function BannerButton({ onClick, disabled, label, children }: { onClick: () => void; disabled: boolean; label?: string; children: ReactNode }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      aria-label={label}
       className="shrink-0 rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-2 py-0.5 text-xs font-medium text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-inset))] disabled:opacity-50"
     >
       {children}
@@ -98,7 +112,7 @@ export function ProjectHealthBanner() {
       {hasStash && (
         <BannerRow testId="project-health-shelf" icon={<Archive className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--color-accent))]" />}>
           <span className="flex-1">You have shelved changes.</span>
-          <BannerButton onClick={() => void popStash()} disabled={busy || !!health.recovery}>Restore</BannerButton>
+          <BannerButton onClick={() => void popStash()} disabled={busy || !!health.recovery} label="Restore shelved changes">Restore</BannerButton>
         </BannerRow>
       )}
     </>

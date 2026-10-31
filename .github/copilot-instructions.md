@@ -73,7 +73,7 @@ contoso-app/                    # Developer's code repo (owned by git, not Draft
 | Backend | **Rust** (2021 edition) | Async via Tokio, native Windows API via windows-rs |
 | State management | **Zustand** | appStore, toastStore, updateStore |
 | Drag-and-drop | **dnd-kit** | Sketch reordering in storyboards, tab reordering |
-| Versioning | **Draftline** 0.10.1 (crates.io; `@draftline/client` 0.5.0) | Content versioning, collaboration, branch graph helpers, sync, merge, hybrid repo coexistence |
+| Versioning | **Draftline** 0.10.2 (crates.io; `@draftline/client` 0.5.0) | Content versioning, collaboration, branch graph helpers, sync, merge, hybrid repo coexistence |
 | Screen recording | **FFmpeg** (sidecar) | FFV1 lossless codec in MKV, multi-track audio |
 | Browser automation | **Playwright** (Node.js sidecar) | Headful browser observation and replay automation |
 | LLM | **Microsoft Foundry** | Chat Completions + Responses API, multi-agent system |
@@ -247,14 +247,21 @@ After the agentive `azure_oauth` module lands, CutReady's migration should also:
 - **TypeScript check**: `npx tsc --noEmit`
 - **Rust tests**: `cargo test --workspace` (from the repo root, covers `src-tauri` plus the `crates/*` harness crates). Use `cargo test -p <crate>` to target one crate.
 - **Vitest**: `npx vitest run`
-- **E2E tests**: `npm run test:e2e` runs the Auditaur drill against the real Tauri debug app with frontend telemetry and the native drive bridge required.
 - **Default app validation**: `npm run debug` runs the real Tauri app; debug builds enable Auditaur end-to-end observability for frontend console/errors, Tauri IPC/events, backend traces, and the Tauri-native drive bridge.
-- **Repeatable Auditaur confidence validation**: prefer `auditaur drill run` for agent-owned smoke passes. It pins validation to the spawned session, requires frontend telemetry and drive-bridge responsiveness, checks frontend errors/failed IPC/`explain`, writes a JSON report, and cleans up the process tree:
+- **E2E drills**: suites live in `.auditaur/drills/*.drill.json` and run with `auditaur drill test` (CLI ≥ 0.4.12) against the real Tauri debug app. `.auditaur/config.json` holds the start command and readiness (frontend telemetry + drive bridge).
 
-  ```bash
-  npm ci
-  auditaur drill run --app cutready --require-frontend --require-drive-bridge --timeout-seconds 180 --report <artifact-or-report-path> --selector body --expect-text CutReady --json -- cmd /c npm run debug
-  ```
+  | Command | Runs |
+  | --- | --- |
+  | `npm run test:e2e` | Everything except `@live` (needs a configured LLM provider) and `@human` |
+  | `npm run test:e2e:live` | `@live` chat and Prompty provider suites |
+  | `npm run test:e2e:human` | `@human` tests with gates (GitHub device flow, Copilot sign-in) |
+  | `auditaur drill test <suite> --grep <text>` | One suite or test |
+
+  - Fixtures: setup hooks call `scripts/auditaur-drill-fixture.mjs`, which creates a temp project and appends `CUTREADY_PROJECT=<path>` to `$AUDITAUR_DRILL_ENV_FILE`. Use `"cwd": "${CUTREADY_PROJECT}"` in `run` steps (e.g. `git log`) to inspect it, or assert on saved files with the fixture's `expect-json <file> <js expr over doc>` and `expect-file <file> <absent|exists|text>` (both retry for 5s).
+  - Isolation: the app launches once per suite. Give each suite a `beforeEach` of [`clearStorage` (reloads, dropping pending autosaves and UI state) → wait for `explorer-import-menu` → `run` the fixture's `reset` → `clearStorage` → expect a seeded item] so tests don't depend on order; the app reopens the fixture project from `CUTREADY_PROJECT`, and `reset` restores the seeded files, history, branches, remotes, agent-state DB and app stores. Put heavy-mutation scenarios (versioning, collaboration) in their own `"serial": true` suites. Step text (`fill`/`type` values) does not expand `${ENV}`; only `run` args/cwd, dialog `respond` and `paste` file paths do.
+  - Scenario drills: one user scenario per test, located by role/name, label or `data-testid` (add accessible names in the app rather than CSS selectors), asserting on IPC and saved files rather than layout. In the drive bridge, `press "Tab"` does not move focus and `fill` does not edit CodeMirror; commit fields with Enter and type into CodeMirror with `click` + `type`.
+  - Privacy: telemetry assertions only see the current test, so put `expectNoTelemetry` guards in each test after the actions they cover. Commands carrying transcripts, memory, identity, or credentials must be listed in `SENSITIVE_INVOKE_COMMANDS` (`src/services/telemetryPolicy.ts`), which bypasses instrumentation entirely; the payload and error-message hooks omit them too, as defense in depth. Other payloads are recorded as key-redacted summaries; add identity or content fields to `REDACT_KEYS` there. Console bodies from sensitive areas (matched by `SENSITIVE_CONSOLE_PATTERN`) are omitted; other console bodies and uncaught errors are email-scrubbed. `src/test/telemetryPrivacy.test.ts` checks the policy through Auditaur's `recordedPayload`/`recordedErrorMessage`/`recordedConsole`/`recordedError` helpers.
+  - Human gates and results: open the `auditaur-drills` canvas (Auditaur Copilot plugin or `auditaur init extension`) to run suites, answer gates on its Progress page, and inspect Trace, Snapshots, and Coverage. Runs are saved under `.auditaur/drill-runs/` (`auditaur drill show`).
 
 - **Human-observable Auditaur startup**: when the user needs to use the app while the agent observes, do not start `npm run debug` directly. Start the app through Auditaur, preferably in a visible terminal canvas when the user wants to watch logs, or in a detached background shell when the agent owns startup:
 

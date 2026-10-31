@@ -1,0 +1,269 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "Prompty battle drill against direct Anthropic: reading, delegation, cancellation, sketch and storyboard mutation, and visuals. Seeds no keys: configure Anthropic in Settings and make it the default provider first.",
+  "tags": [
+    "@live",
+    "@prompty",
+    "@anthropic"
+  ],
+  "setup": [
+    {
+      "name": "Create battle fixture",
+      "run": "node",
+      "args": [
+        "scripts/auditaur-drill-fixture.mjs",
+        "setup",
+        ".auditaur/fixtures/prompty-anthropic.json"
+      ]
+    }
+  ],
+  "teardown": [
+    {
+      "name": "Remove fixture",
+      "run": "node",
+      "args": [
+        "scripts/auditaur-drill-fixture.mjs",
+        "teardown"
+      ],
+      "always": true
+    }
+  ],
+  "tests": [
+    {
+      "name": "chat uses Anthropic",
+      "steps": [
+        {
+          "expect": {
+            "testId": "activity-chat"
+          },
+          "toBeVisible": true,
+          "timeoutMs": 45000
+        },
+        {
+          "click": {
+            "testId": "activity-chat"
+          }
+        },
+        {
+          "expect": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]",
+          "toBeVisible": true,
+          "timeoutMs": 60000
+        },
+        {
+          "name": "model picker shows Anthropic (set it as the default provider first)",
+          "expectValue": "(() => { const b = document.querySelector('[data-testid=\"secondary-chat-panel\"] button[title^=\"Select Model\"]'); return b ? b.title + ' | ' + b.innerText : 'no model picker'; })()",
+          "toMatch": "Anthropic[\\s\\S]*\\|[\\s\\S]*claude\\-",
+          "timeoutMs": 15000
+        }
+      ]
+    },
+    {
+      "name": "reads and delegates",
+      "timeoutMs": 240000,
+      "steps": [
+        {
+          "fill": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]",
+          "value": "You are Writer. Do this exactly once: read anthropic-brief.md, read anthropic-battle.sk, and call delegate_to_agent one time for a concise review. Do not repeat any successful tool call. After the delegated result returns, immediately reply with ANTHROPIC-DELEGATE-4242 and stop."
+        },
+        {
+          "click": "[data-testid=\"secondary-chat-panel\"] button[title=\"Send (Enter)\"]"
+        },
+        {
+          "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]",
+          "toBeVisible": true,
+          "timeoutMs": 20000,
+          "name": "turn starts"
+        },
+        {
+          "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]",
+          "toHaveCount": 0,
+          "timeoutMs": 180000,
+          "name": "turn finishes"
+        },
+        {
+          "expectLog": "engine=prompty agent="
+        },
+        {
+          "expectNoErrors": true
+        }
+      ]
+    },
+    {
+      "name": "cancels a long turn",
+      "timeoutMs": 120000,
+      "steps": [
+        {
+          "click": "[data-testid=\"secondary-chat-panel\"] button[aria-label=\"New Chat\"]"
+        },
+        {
+          "expect": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]",
+          "toBeVisible": true,
+          "timeoutMs": 15000
+        },
+        {
+          "fill": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]",
+          "value": "Read anthropic-brief.md, then write an extremely long, exhaustively detailed 2000-word narration script for a product demo about relational databases. Keep going with as much detail as possible."
+        },
+        {
+          "click": "[data-testid=\"secondary-chat-panel\"] button[title=\"Send (Enter)\"]"
+        },
+        {
+          "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]",
+          "toBeVisible": true,
+          "timeoutMs": 20000,
+          "name": "turn starts"
+        },
+        {
+          "sleep": 2500
+        },
+        {
+          "click": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]"
+        },
+        {
+          "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Send (Enter)\"]",
+          "toBeVisible": true,
+          "timeoutMs": 60000,
+          "name": "composer returns to idle"
+        },
+        {
+          "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]",
+          "toHaveCount": 0
+        },
+        {
+          "expectNoErrors": true
+        }
+      ]
+    },
+    {
+      "name": "mutates a sketch row",
+      "timeoutMs": 240000,
+      "steps": [
+        {
+          "click": "[data-testid=\"secondary-chat-panel\"] button[aria-label=\"New Chat\"]"
+        },
+        {
+          "expect": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]",
+          "toBeVisible": true,
+          "timeoutMs": 15000
+        },
+        {
+          "fill": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]",
+          "value": "You are Writer. Do this exactly once: call update_planning_row, not write_sketch, to update anthropic-battle.sk row 1 narrative so it includes ANTHROPIC-MUTATION-4242. Then read anthropic-battle.sk once. Do not repeat any successful tool call. Reply when persisted and stop."
+        },
+        {
+          "click": "[data-testid=\"secondary-chat-panel\"] button[title=\"Send (Enter)\"]"
+        },
+        {
+          "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]",
+          "toBeVisible": true,
+          "timeoutMs": 20000,
+          "name": "turn starts"
+        },
+        {
+          "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]",
+          "toHaveCount": 0,
+          "timeoutMs": 180000,
+          "name": "turn finishes"
+        },
+        {
+          "expectLog": "engine=prompty agent="
+        },
+        {
+          "expectNoErrors": true
+        }
+      ]
+    },
+    {
+      "name": "updates storyboard and visual",
+      "timeoutMs": 360000,
+      "steps": [
+        {
+          "click": "[data-testid=\"secondary-chat-panel\"] button[aria-label=\"New Chat\"]"
+        },
+        {
+          "expect": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]",
+          "toBeVisible": true,
+          "timeoutMs": 15000
+        },
+        {
+          "fill": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]",
+          "value": "You are Writer. Do this exactly once: update anthropic-battle.sb description to include ANTHROPIC-STORYBOARD-4242, set one valid simple Elucim v2 visual on row 2 of anthropic-battle.sk, then review that visual once. Do not repeat any successful tool call. Reply with ANTHROPIC-VISUAL-4242 and stop."
+        },
+        {
+          "click": "[data-testid=\"secondary-chat-panel\"] button[title=\"Send (Enter)\"]"
+        },
+        {
+          "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]",
+          "toBeVisible": true,
+          "timeoutMs": 20000,
+          "name": "turn starts"
+        },
+        {
+          "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]",
+          "toHaveCount": 0,
+          "timeoutMs": 300000,
+          "name": "turn finishes"
+        },
+        {
+          "expectLog": "engine=prompty agent="
+        },
+        {
+          "expectNoErrors": true
+        }
+      ]
+    },
+    {
+      "name": "durable state persisted",
+      "steps": [
+        {
+          "name": "Completed runs are Prompty Anthropic and used every tool",
+          "run": "node",
+          "args": [
+            "scripts/auditaur-drill-fixture.mjs",
+            "expect-agent-runs",
+            "--provider",
+            "anthropic",
+            "--model-prefix",
+            "claude-",
+            "--engine",
+            "prompty",
+            "--min-completed",
+            "3",
+            "--tools",
+            "read_note,read_sketch,delegate_to_agent,update_planning_row,write_storyboard,set_row_visual,review_row_visual"
+          ]
+        },
+        {
+          "name": "Sketch mutation persisted",
+          "run": "node",
+          "args": [
+            "scripts/auditaur-drill-fixture.mjs",
+            "expect-json",
+            "anthropic-battle.sk",
+            "JSON.stringify(doc).includes('ANTHROPIC-MUTATION-4242')"
+          ]
+        },
+        {
+          "name": "Visual set on a row",
+          "run": "node",
+          "args": [
+            "scripts/auditaur-drill-fixture.mjs",
+            "expect-json",
+            "anthropic-battle.sk",
+            "doc.rows.some((row) => row.visual)"
+          ]
+        },
+        {
+          "name": "Storyboard mutation persisted",
+          "run": "node",
+          "args": [
+            "scripts/auditaur-drill-fixture.mjs",
+            "expect-json",
+            "anthropic-battle.sb",
+            "JSON.stringify(doc).includes('ANTHROPIC-STORYBOARD-4242')"
+          ]
+        }
+      ]
+    }
+  ]
+}

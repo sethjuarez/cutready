@@ -1,0 +1,46 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "GitHub account card in Settings > Repository, plus an opt-in human device-flow sign-in.",
+  "env": { "VITE_CUTREADY_STARTUP_VIEW": "settings", "VITE_CUTREADY_STARTUP_SETTINGS_TAB": "repository" },
+  "setup": [
+    { "name": "Create fixture that starts in Settings > Repository", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/github.json"] }
+  ],
+  "teardown": [
+    { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "tests": [
+    {
+      "name": "shows the GitHub account card",
+      "tags": ["@github"],
+      "steps": [
+        { "waitFor": { "testId": "github-connection-card" }, "state": "visible", "timeoutMs": 45000 },
+        { "expect": { "testId": "github-connection-card" }, "toContainText": "GitHub account" },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "device flow connects a GitHub account",
+      "tags": ["@github", "@human"],
+      "description": "Needs CUTREADY_GITHUB_OAUTH_CLIENT_ID (env or .env). The gate continues once the card shows a connected account.",
+      "timeoutMs": 660000,
+      "steps": [
+        {
+          "gate": {
+            "name": "Connect GitHub",
+            "instructions": "In CutReady, Settings > Repository > GitHub account: Disconnect first if already connected, click Connect GitHub, approve the device code in the browser, and continue once the card says \"Connected as <user>\".",
+            "timeoutMs": 600000,
+            "choices": [
+              { "id": "connected", "label": "Card says Connected as <user>", "outcome": "continue" },
+              { "id": "skip", "label": "GitHub OAuth is not configured here", "outcome": "skip" },
+              { "id": "fail", "label": "Sign-in failed", "outcome": "fail" }
+            ]
+          }
+        },
+        { "expect": { "testId": "github-connection-card" }, "toContainText": "Connected as" },
+        { "screenshot": "github-connected" },
+        { "expectNoTelemetry": { "pattern": "gh[oupsr]_[A-Za-z0-9]{20,}|\"(access_token|device_code|user_code|userCode|deviceCode)\"" }, "name": "OAuth codes and tokens stay out of telemetry" },
+        { "expectNoErrors": true }
+      ]
+    }
+  ]
+}

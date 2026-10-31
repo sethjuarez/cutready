@@ -1532,7 +1532,7 @@ pub async fn delete_memory(index: usize, state: tauri::State<'_, AppState>) -> R
 }
 
 /// Update a memory's content by index.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn update_memory(
     index: usize,
     content: String,

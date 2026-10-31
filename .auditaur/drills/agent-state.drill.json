@@ -1,0 +1,186 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "Chat history, agent runs and agent memory seeded from legacy files: reopening, deleting and promoting conversations, inspecting, deleting and pruning runs, forgetting saved context, editing and deleting memories, and browsing the agent-state database. Each test starts from the seeded project.",
+  "tags": ["@chat", "@agent-state", "@local"],
+  "setup": [
+    { "name": "Create a project with three legacy chats and two memories", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/agent-state.json"] }
+  ],
+  "teardown": [
+    { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "beforeEach": [
+    { "name": "Drop pending autosaves and per-test UI state", "clearStorage": true },
+    { "name": "a project is open", "expect": { "testId": "explorer-import-menu" }, "toBeVisible": true, "timeoutMs": 45000 },
+    { "name": "Restore the seeded project and agent state", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "reset"] },
+    { "name": "Reload the restored project with clean UI state", "clearStorage": true },
+    { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 45000 }
+  ],
+  "tests": [
+    {
+      "name": "imported chats are listed and reopen in the chat",
+      "steps": [
+        { "click": { "role": "button", "name": "Session History", "exact": true } },
+        { "expectSpan": "list_chat_sessions", "status": "ok", "name": "backend span (frontend IPC is bypassed for privacy)" },
+        { "expect": { "role": "button", "name": "Retro notes", "nth": 0 }, "toBeVisible": true },
+        { "expect": { "role": "button", "name": "Pricing questions", "nth": 0 }, "toBeVisible": true },
+        { "click": { "role": "button", "name": "Plan the launch", "nth": 0 } },
+        { "expectSpan": "get_chat_session", "status": "ok", "name": "backend span (frontend IPC is bypassed for privacy)" },
+        { "expect": { "text": "Here is a plan with three beats." }, "toBeVisible": true },
+        { "name": "the legacy files moved into the agent database", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", ".chats/plan.chat", "absent"] },
+        { "name": "transcripts never reach telemetry", "expectNoTelemetry": { "pattern": "three beats|free tier|Ship smaller demos" } },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "deleting a conversation removes it from history",
+      "steps": [
+        { "click": { "role": "button", "name": "Session History", "exact": true } },
+        { "expect": { "role": "button", "name": "Delete Pricing questions", "exact": true }, "toExist": true },
+        { "click": { "role": "button", "name": "Delete Pricing questions", "exact": true } },
+        { "click": { "role": "button", "name": "Delete", "exact": true } },
+        { "expectIpc": "delete_chat_session", "status": "ok" },
+        { "expect": { "role": "button", "name": "Pricing questions" }, "toHaveCount": 0 },
+        { "reload": true },
+        { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 45000 },
+        { "click": { "role": "button", "name": "Session History", "exact": true } },
+        { "expect": { "role": "button", "name": "Retro notes", "nth": 0 }, "toBeVisible": true },
+        { "expect": { "role": "button", "name": "Pricing questions" }, "toHaveCount": 0 },
+        { "name": "transcripts never reach telemetry", "expectNoTelemetry": { "pattern": "three beats|free tier|Ship smaller demos" } },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "promoting a conversation saves it as a chat artifact",
+      "steps": [
+        { "click": { "role": "button", "name": "Session History", "exact": true } },
+        { "click": { "role": "button", "name": "Promote Plan the launch", "exact": true } },
+        { "expectSpan": "update_note", "status": "ok", "name": "backend span (frontend IPC is bypassed for privacy)" },
+        { "expect": { "role": "button", "name": "Promote Plan the launch", "exact": true }, "toHaveCount": 0 },
+        { "expect": { "text": "Here is a plan with three beats." }, "toBeVisible": true },
+        { "name": "the artifact holds the transcript", "run": "node", "cwd": "${CUTREADY_PROJECT}", "args": ["-e", "const fs = require('fs'); const files = fs.readdirSync('chat-artifacts').filter((f) => /^plan-the-launch-\\d+\\.cv$/.test(f)); if (files.length !== 1) { console.error('expected one plan-the-launch artifact, found ' + files.join(', ')); process.exit(1); } const text = fs.readFileSync('chat-artifacts/' + files[0], 'utf8'); if (!text.includes('Here is a plan with three beats.')) { console.error('artifact lacks the transcript'); process.exit(1); }"] },
+        { "name": "transcripts never reach telemetry", "expectNoTelemetry": { "pattern": "three beats|free tier|Ship smaller demos" } },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "inspecting and deleting an agent run",
+      "steps": [
+        { "click": { "role": "button", "name": "Runs", "exact": true } },
+        { "expectSpan": "list_agent_runs", "status": "ok", "name": "backend span (frontend IPC is bypassed for privacy)" },
+        { "click": { "role": "button", "name": "Retro notes", "nth": 0 } },
+        { "expectSpan": "get_agent_run", "status": "ok", "name": "backend span (frontend IPC is bypassed for privacy)" },
+        { "expect": { "text": "Trajectory" }, "toBeVisible": true },
+        { "click": { "role": "button", "name": "Delete run Retro notes", "exact": true } },
+        { "click": { "role": "button", "name": "Delete run", "exact": true } },
+        { "expectIpc": "delete_agent_run", "status": "ok" },
+        { "expect": { "role": "button", "name": "Delete run Retro notes", "exact": true }, "toHaveCount": 0 },
+        { "name": "transcripts never reach telemetry", "expectNoTelemetry": { "pattern": "three beats|free tier|Ship smaller demos" } },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "browsing and compacting the agent-state database",
+      "steps": [
+        { "click": { "role": "button", "name": "Database", "exact": true } },
+        { "expectSpan": "get_agent_state_database_preview", "status": "ok", "name": "backend span (frontend IPC is bypassed for privacy)" },
+        { "click": { "role": "button", "name": "agent_runs" } },
+        { "name": "the runs table shows the imported legacy runs", "expect": { "text": "imported_legacy", "nth": 0 }, "toBeVisible": true },
+        { "click": { "role": "button", "name": "Compact database", "exact": true } },
+        { "click": { "role": "button", "name": "Compact", "exact": true } },
+        { "expectIpc": "compact_agent_state_database", "status": "ok" },
+        { "name": "transcripts never reach telemetry", "expectNoTelemetry": { "pattern": "three beats|free tier|Ship smaller demos" } },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "pruning old runs keeps imported transcripts",
+      "steps": [
+        { "click": { "role": "button", "name": "Runs", "exact": true } },
+        { "expect": { "role": "button", "name": "Delete run Retro notes", "exact": true }, "toExist": true },
+        { "click": { "role": "button", "name": "Prune old", "exact": true } },
+        { "click": { "role": "button", "name": "Prune old runs", "exact": true } },
+        { "expectIpc": "prune_agent_runs", "status": "ok" },
+        { "expect": { "text": "Pruned 0 runs" }, "toBeVisible": true },
+        { "expect": { "role": "button", "name": "Delete run Retro notes", "exact": true }, "toExist": true },
+        { "expect": { "role": "button", "name": "Delete run Pricing questions", "exact": true }, "toExist": true },
+        { "name": "transcripts never reach telemetry", "expectNoTelemetry": { "pattern": "three beats|free tier|Ship smaller demos" } },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "forgetting saved context leaves runs alone",
+      "steps": [
+        { "click": { "role": "button", "name": "Runs", "exact": true } },
+        { "click": { "role": "button", "name": "Forget context", "exact": true } },
+        { "click": { "role": "button", "name": "Forget context", "exact": true, "nth": 1 } },
+        { "expectIpc": "clear_saved_context", "status": "ok" },
+        { "expect": { "text": "No saved context to forget" }, "toBeVisible": true },
+        { "expect": { "role": "button", "name": "Delete run Retro notes", "exact": true }, "toExist": true },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "editing a memory keeps the new text",
+      "steps": [
+        { "click": { "testId": "activity-settings" } },
+        { "click": { "testId": "settings-scope-workspace" } },
+        { "click": { "testId": "settings-tab-ai" } },
+        { "click": { "testId": "settings-ai-tab-memory" } },
+        { "click": { "role": "button", "name": "Edit memory: Prefer short narration beats", "exact": true } },
+        { "fill": { "label": "Memory content" }, "value": "Prefer brisk narration beats" },
+        { "click": { "role": "button", "name": "Save", "exact": true } },
+        { "expectSpan": "update_memory", "status": "ok", "name": "backend span (frontend IPC is bypassed for privacy)" },
+        { "reload": true },
+        { "click": { "testId": "activity-settings" }, "timeoutMs": 45000 },
+        { "click": { "testId": "settings-scope-workspace" } },
+        { "click": { "testId": "settings-tab-ai" } },
+        { "click": { "testId": "settings-ai-tab-memory" } },
+        { "expect": { "text": "Prefer brisk narration beats" }, "toBeVisible": true },
+        { "expect": { "text": "Prefer short narration beats" }, "toHaveCount": 0 },
+        { "expect": { "text": "2 memories stored" }, "toBeVisible": true },
+        { "name": "memories never reach telemetry", "expectNoTelemetry": { "pattern": "narration beats|finance analysts|voicestyle|audiencenote" } },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "deleting a memory removes it",
+      "steps": [
+        { "click": { "testId": "activity-settings" } },
+        { "click": { "testId": "settings-scope-workspace" } },
+        { "click": { "testId": "settings-tab-ai" } },
+        { "click": { "testId": "settings-ai-tab-memory" } },
+        { "click": { "role": "button", "name": "Delete memory: Viewers are finance analysts", "exact": true } },
+        { "expectIpc": "delete_memory", "status": "ok" },
+        { "reload": true },
+        { "click": { "testId": "activity-settings" }, "timeoutMs": 45000 },
+        { "click": { "testId": "settings-scope-workspace" } },
+        { "click": { "testId": "settings-tab-ai" } },
+        { "click": { "testId": "settings-ai-tab-memory" } },
+        { "expect": { "text": "Prefer short narration beats" }, "toBeVisible": true },
+        { "expect": { "text": "Viewers are finance analysts" }, "toHaveCount": 0 },
+        { "name": "memories never reach telemetry", "expectNoTelemetry": { "pattern": "narration beats|finance analysts|voicestyle|audiencenote" } },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "clearing memories empties the list",
+      "steps": [
+        { "click": { "testId": "activity-settings" } },
+        { "click": { "testId": "settings-scope-workspace" } },
+        { "click": { "testId": "settings-tab-ai" } },
+        { "click": { "testId": "settings-ai-tab-memory" } },
+        { "expect": { "text": "2 memories stored" }, "toBeVisible": true },
+        { "click": { "role": "button", "name": "Clear All", "exact": true } },
+        { "expectIpc": "clear_memories", "status": "ok" },
+        { "reload": true },
+        { "click": { "testId": "activity-settings" }, "timeoutMs": 45000 },
+        { "click": { "testId": "settings-scope-workspace" } },
+        { "click": { "testId": "settings-tab-ai" } },
+        { "click": { "testId": "settings-ai-tab-memory" } },
+        { "expect": { "text": "No memories yet" }, "toBeVisible": true },
+        { "name": "memories never reach telemetry", "expectNoTelemetry": { "pattern": "narration beats|finance analysts|voicestyle|audiencenote" } },
+        { "expectNoErrors": true }
+      ]
+    }
+  ]
+}

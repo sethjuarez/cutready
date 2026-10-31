@@ -14,7 +14,7 @@
 
 import { useEffect } from "react";
 import { invoke, listen } from "../services/tauri";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open } from "../dialogs";
 import { sep } from "@tauri-apps/api/path";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
