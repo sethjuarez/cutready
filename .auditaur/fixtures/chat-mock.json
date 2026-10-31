@@ -1,0 +1,15 @@
+{
+  "prefix": "cutready-chat-mock-",
+  "mockLlm": true,
+  "globalSettings": {
+    "seed": {
+      "aiAgentExecutionEngine": "prompty"
+    }
+  },
+  "notes": [
+    {
+      "path": "brief.md",
+      "body": "# Mock Brief\n\nMarker MOCK-BRIEF-7731 for the tool round trip.\n"
+    }
+  ]
+}

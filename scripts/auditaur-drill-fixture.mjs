@@ -49,8 +49,16 @@
 //                  main; a branch starts at the latest save (main stays checked out)
 //   scratch        { sketches, notes, files }  a folder outside the project (<root>-scratch, env
 //                  CUTREADY_SCRATCH) for dialog import sources and export targets; reset rebuilds it
+//   mockLlm        true: starts scripts/auditaur-mock-llm.mjs on 127.0.0.1 and seeds an OpenAI
+//                  provider (model drill-mock) pointing at it as the active and default provider.
+//                  No key is stored: the suite sets a dummy OPENAI_API_KEY in its env. Teardown
+//                  stops the server.
+//
+//   node scripts/auditaur-drill-fixture.mjs expect-mock-llm <js expression over entry>
+//   (some request the mock logged matches, e.g. "e.toolResult?.includes('X')"; retries for 5s)
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import {
   appendFileSync,
@@ -88,9 +96,12 @@ try {
   else if (command === "collaborator-branch") collaboratorSave(args[1], args[2], args[3], args[0]);
   else if (command === "expect-remote") expectRemote(args[0]);
   else if (command === "reset") reset();
-  else throw new Error(`unknown command ${JSON.stringify(command)}; use setup, teardown, reset, expect-json, expect-file, expect-agent-runs, write, connect-remote, collaborator-save, collaborator-branch, or expect-remote`);
+  else if (command === "expect-mock-llm") expectMockLlm(args[0]);
+  else throw new Error(`unknown command ${JSON.stringify(command)}; use setup, teardown, reset, expect-json, expect-file, expect-agent-runs, expect-mock-llm, write, connect-remote, collaborator-save, collaborator-branch, or expect-remote`);
 } catch (error) {
   console.error(`[auditaur-drill-fixture] ${error.message}`);
+  // A failed setup must not leave the mock model server running.
+  if (command === "setup" && existsSync(STATE)) stopMockLlm(JSON.parse(readFileSync(STATE, "utf8")));
   process.exit(1);
 }
 
@@ -124,6 +135,12 @@ function setup(specPath) {
   // Reset re-seeds exactly these (backed-up) stores, even if the spec file changes mid-run.
   state.stores = { settingsSeed: spec.globalSettings?.seed, appStores: spec.appStores ?? [] };
   saveState();
+  if (spec.mockLlm) {
+    state.mockLlm = startMockLlm(saveState, state);
+    state.stores.settingsSeed = { ...state.stores.settingsSeed, ...mockProviderSettings(state.mockLlm.url) };
+    saveState();
+    appendFileSync(envFile, `CUTREADY_MOCK_LLM_LOG=${state.mockLlm.log}\n`);
+  }
   // Every launch refreshes OAuth and rewrites the credential vault; keep the user's real one intact.
   // Back up both locations: the app moves a legacy vault into the app data folder on first use.
   for (const path of vaultPaths()) {
@@ -180,9 +197,15 @@ function setup(specPath) {
 
 function teardown() {
   if (!existsSync(STATE)) return;
+  const state = JSON.parse(readFileSync(STATE, "utf8"));
+  // Stop the mock first so a refused restore below can't leave it running.
+  try {
+    stopMockLlm(state);
+  } catch (error) {
+    console.error(`could not stop the mock model server: ${error.message}`);
+  }
   // Restoring app stores (notably the credential vault) under a live app would let it overwrite them.
   ensureNoRunningCutReady();
-  const state = JSON.parse(readFileSync(STATE, "utf8"));
   let failed = false;
   for (const { path, existed, copy } of state.backups ?? []) {
     try {
@@ -398,6 +421,112 @@ async function expectAgentRuns(flags) {
   } finally {
     db.close();
   }
+}
+
+// Spawns the mock detached (it outlives this hook) and waits for it to report its port.
+// Any failure after spawning stops this child before rethrowing.
+function startMockLlm(saveState, state) {
+  const dir = join(DRILL_DIR, "mock-llm");
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  const portFile = join(dir, "port");
+  const log = join(dir, "requests.jsonl");
+  writeFileSync(log, "");
+  const token = randomBytes(16).toString("hex");
+  const child = spawn(process.execPath, [resolve("scripts", "auditaur-mock-llm.mjs"), "--port-file", portFile, "--log", log, "--token", token], {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  child.on("error", () => {});
+  child.unref();
+  if (!child.pid) throw new Error("could not spawn the mock model server");
+  try {
+    state.mockLlm = { pid: child.pid, log, portFile, token };
+    saveState();
+    eventually(() => {
+      if (!existsSync(portFile) || !readFileSync(portFile, "utf8").trim()) throw new Error("the mock model server did not start");
+    }, 10000);
+    state.mockLlm.url = `http://127.0.0.1:${readFileSync(portFile, "utf8").trim()}`;
+    return state.mockLlm;
+  } catch (error) {
+    try {
+      child.kill();
+    } catch {
+      // Already gone.
+    }
+    delete state.mockLlm;
+    throw error;
+  }
+}
+
+// Asks the mock to exit via its token-guarded endpoint, then kills the pid only if it is
+// still this mock: after the mock's own lifetime expires, Windows may reuse the pid.
+function stopMockLlm(state) {
+  const mock = state.mockLlm;
+  if (!mock?.pid) return;
+  if (mock.url && mock.token) {
+    spawnSync(
+      process.execPath,
+      ["-e", `fetch(process.argv[1] + "/__drill/shutdown", { method: "POST", headers: { "x-drill-token": process.argv[2] }, signal: AbortSignal.timeout(3000) }).catch(() => {})`, mock.url, mock.token],
+      { stdio: "ignore", windowsHide: true, timeout: 5000 },
+    );
+  }
+  if (!isMockProcess(mock)) return;
+  try {
+    process.kill(mock.pid);
+  } catch {
+    // Exited meanwhile.
+  }
+}
+
+function isMockProcess({ pid, portFile }) {
+  const result =
+    process.platform === "win32"
+      ? spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `(Get-CimInstance Win32_Process -Filter "ProcessId=${Number(pid)}").CommandLine`], { encoding: "utf8", windowsHide: true })
+      : spawnSync("ps", ["-o", "command=", "-p", String(Number(pid))], { encoding: "utf8" });
+  const commandLine = result.stdout ?? "";
+  return commandLine.includes("auditaur-mock-llm.mjs") && (!portFile || commandLine.includes(portFile));
+}
+
+function mockProviderSettings(url) {
+  const MOCK_PROVIDER_ID = "drill-mock-openai";
+  const provider = {
+    id: MOCK_PROVIDER_ID,
+    name: "Drill mock (OpenAI)",
+    provider: "openai",
+    authMode: "api_key",
+    endpoint: url,
+    model: "drill-mock",
+    contextLength: 128000,
+    modelSupportsVision: "false",
+    tenantId: "",
+    clientId: "",
+    subscriptionId: "",
+    resourceGroup: "",
+    resourceName: "",
+  };
+  return {
+    aiProviders: [provider],
+    aiActiveProviderId: MOCK_PROVIDER_ID,
+    aiDefaultProviderId: MOCK_PROVIDER_ID,
+    aiProvider: "openai",
+    aiEndpoint: url,
+    aiModel: "drill-mock",
+    aiAuthMode: "api_key",
+  };
+}
+
+function expectMockLlm(expression) {
+  const log = process.env.CUTREADY_MOCK_LLM_LOG;
+  if (!log) throw new Error("CUTREADY_MOCK_LLM_LOG is unset; the fixture needs `mockLlm: true`");
+  const matches = new Function("e", `return (${expression});`);
+  eventually(() => {
+    const entries = readFileSync(log, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
+    if (!entries.some((entry) => matches(entry))) {
+      throw new Error(`no mock request matched ${expression}; saw ${JSON.stringify(entries.map(({ at, ...entry }) => entry)).slice(0, 1500)}`);
+    }
+  });
 }
 
 function parseFlags(args) {
