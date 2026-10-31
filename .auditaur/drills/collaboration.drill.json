@@ -1,7 +1,7 @@
 {
   "$schema": "https://auditaur.dev/schemas/drill.schema.json",
   "serial": true,
-  "description": "Collaborating through a shared remote (a local bare repo): sending saves, getting a collaborator's saves, and resolving a conflicting edit. Each test starts from the seeded project, whose first save (\"Initial plan\") is already on the remote's main, with the remote as origin (the app has no add-remote UI).",
+  "description": "Collaborating through a shared remote (a local bare repo): sending saves, getting a collaborator's saves, merging diverged work, resolving a conflicting edit, and adopting a collaborator's branch. Each test starts from the seeded project, whose first save (\"Initial plan\") is already on the remote's main, with the remote as origin (remote-setup.drill.json covers adding one).",
   "tags": ["@versioning", "@collaboration", "@local"],
   "env": { "GIT_AUTHOR_NAME": "Drill Author", "GIT_AUTHOR_EMAIL": "author@drill.test" },
   "setup": [
@@ -73,6 +73,45 @@
         { "name": "the incoming wording won", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Remote wording."] },
         { "name": "the local wording is gone", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "lacks:Local wording."] },
         { "name": "history has both parents", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["rev-parse", "--verify", "--quiet", "HEAD^2"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "merges a collaborator's saves into diverged local work",
+      "steps": [
+        { "click": { "testId": "explorer-item-agenda.md" } },
+        { "click": { "label": "Note content" } },
+        { "press": "Control+End", "target": { "label": "Note content" } },
+        { "type": { "label": "Note content" }, "value": "Local item." },
+        { "name": "the local edit is on disk", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "agenda.md", "Local item."] },
+        { "click": { "testId": "activity-changes" } },
+        { "click": { "role": "button", "name": "Save snapshot", "exact": true }, "timeoutMs": 15000 },
+        { "fill": "#snapshot-name-input", "value": "Local item" },
+        { "click": { "role": "button", "name": "Save Snapshot", "exact": true } },
+        { "expect": "#snapshot-name-input", "toHaveCount": 0, "timeoutMs": 30000 },
+        { "name": "a collaborator sends a save to another file", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "collaborator-save", "plan.md", "# Launch plan\n\nCollaborator agenda.\n", "Collaborator agenda"] },
+        { "click": { "role": "button", "name": "Check for updates without changing your files", "exact": true } },
+        { "click": { "role": "button", "name": "Sync with collaborators", "exact": true }, "timeoutMs": 15000 },
+        { "expectIpc": "merge_incoming", "status": "ok", "timeoutMs": 30000 },
+        { "name": "the collaborator's edit is in the project", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Collaborator agenda."] },
+        { "name": "the local edit is kept", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "agenda.md", "Local item."] },
+        { "name": "history has both parents", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["rev-parse", "--verify", "--quiet", "HEAD^2"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "adopts a collaborator's branch from the remote",
+      "steps": [
+        { "name": "a collaborator sends a new branch", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "collaborator-branch", "pricing-review", "plan.md", "# Launch plan\n\nPricing review.\n", "Pricing review"] },
+        { "click": { "testId": "activity-changes" } },
+        { "click": { "role": "button", "name": "Branch: main" }, "timeoutMs": 15000 },
+        { "expectIpc": "list_remote_variations", "status": "ok", "timeoutMs": 30000 },
+        { "click": { "role": "button", "name": "pricing-review" }, "timeoutMs": 15000 },
+        { "click": { "role": "button", "name": "Adopt and switch", "exact": true } },
+        { "expectIpc": "adopt_remote_variation", "status": "ok", "timeoutMs": 30000 },
+        { "expect": { "role": "button", "name": "Branch: pricing-review" }, "toBeVisible": true, "timeoutMs": 15000 },
+        { "name": "the adopted branch is checked out", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["branch", "--show-current"], "stdout": "pricing-review" },
+        { "name": "with the collaborator's edit", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Pricing review."] },
         { "expectNoErrors": true }
       ]
     }

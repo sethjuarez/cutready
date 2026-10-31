@@ -1,0 +1,7 @@
+{
+  "prefix": "cutready-remote-setup-drill-",
+  "remote": { "seedSave": "Initial plan", "origin": false },
+  "notes": [
+    { "path": "plan.md", "body": "# Launch plan\n\nDraft agenda.\n" }
+  ]
+}

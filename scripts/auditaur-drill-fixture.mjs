@@ -42,7 +42,8 @@
 //   remote         true: an empty bare repo at <root>-remote.git (main) for collaboration drills;
 //                  { seedSave: "<message>" }: also gives the project a repo whose first save (the
 //                  seeded files) is already on the remote's main, with the remote as `origin`
-//                  (env CUTREADY_REMOTE_URL is the remote's path with forward slashes)
+//                  (env CUTREADY_REMOTE_URL is the remote's path with forward slashes);
+//                  { seedSave, origin: false }: the same, but the project has no remotes (to add one in the app)
 //   history        [{ save: "<message>", notes, files, sketches } | { branch: "<name>" }]  saves made
 //                  before the app opens, in order: a save writes its files and commits everything on
 //                  main; a branch starts at the latest save (main stays checked out)
@@ -84,9 +85,10 @@ try {
   else if (command === "write") writeProjectFile(args[0], args[1]);
   else if (command === "connect-remote") connectRemote();
   else if (command === "collaborator-save") collaboratorSave(args[0], args[1], args[2]);
+  else if (command === "collaborator-branch") collaboratorSave(args[1], args[2], args[3], args[0]);
   else if (command === "expect-remote") expectRemote(args[0]);
   else if (command === "reset") reset();
-  else throw new Error(`unknown command ${JSON.stringify(command)}; use setup, teardown, reset, expect-json, expect-file, expect-agent-runs, write, connect-remote, collaborator-save, or expect-remote`);
+  else throw new Error(`unknown command ${JSON.stringify(command)}; use setup, teardown, reset, expect-json, expect-file, expect-agent-runs, write, connect-remote, collaborator-save, collaborator-branch, or expect-remote`);
 } catch (error) {
   console.error(`[auditaur-drill-fixture] ${error.message}`);
   process.exit(1);
@@ -158,6 +160,7 @@ function setup(specPath) {
     saveState();
     git(["init", "--bare", "--initial-branch=main", remotePath(projectRoot)]);
     if (spec.remote.seedSave) seedSharedSave(projectRoot, spec.remote.seedSave);
+    if (spec.remote.seedSave && spec.remote.origin === false) git(["remote", "remove", "origin"], projectRoot);
     state.remoteRefs = gitRefs(["--git-dir", remotePath(projectRoot)]);
     saveState();
     appendFileSync(envFile, `CUTREADY_REMOTE_URL=${pathToFileURL(remotePath(projectRoot)).href}\n`);
@@ -570,13 +573,18 @@ function connectRemote() {
   git(["remote", "add", "origin", remotePath(root)], root);
 }
 
-// A second contributor saving and sending from their own clone.
-function collaboratorSave(file, text, message) {
-  if (!file || text === undefined || !message) throw new Error("collaborator-save needs <file> <text> <message>");
+// A second contributor saving and sending from their own clone, to main or to a new branch from main.
+function collaboratorSave(file, text, message, branch) {
+  if (!file || text === undefined || !message || branch === "") {
+    throw new Error("collaborator-save needs <file> <text> <message>; collaborator-branch needs <branch> <file> <text> <message>");
+  }
   const root = fixtureRoot();
   const clone = collaboratorPath(root);
-  if (existsSync(clone)) git(["pull", "--ff-only", "origin", "main"], clone);
-  else git(["clone", "--branch", "main", remotePath(root), clone]);
+  if (existsSync(clone)) {
+    git(["checkout", "main"], clone);
+    git(["pull", "--ff-only", "origin", "main"], clone);
+  } else git(["clone", "--branch", "main", remotePath(root), clone]);
+  if (branch) git(["checkout", "-B", branch], clone);
   const path = resolve(clone, file);
   if (!path.startsWith(resolve(clone) + sep)) throw new Error(`collaborator-save target ${file} is outside the clone`);
   mkdirSync(dirname(path), { recursive: true });
@@ -584,7 +592,7 @@ function collaboratorSave(file, text, message) {
   git(["add", "--", file], clone);
   // The drill env sets GIT_AUTHOR_* for the app, which would override -c user.name here.
   git(["commit", "-m", message], clone, authorEnv(COLLABORATOR));
-  git(["push", "origin", "HEAD:main"], clone);
+  git(["push", "origin", `HEAD:refs/heads/${branch ?? "main"}`], clone);
 }
 
 function expectRemote(message) {
