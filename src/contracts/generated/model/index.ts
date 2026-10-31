@@ -21,8 +21,9 @@ export {
   StoryboardSection,
 } from "./storyboard-item";
 export { Storyboard } from "./storyboard";
+export { CmdErrorDetails } from "./cmd-error-details";
+export { CmdError } from "./cmd-error";
 export { RowTextUpdate } from "./row-text-update";
-export { SketchEditError } from "./sketch-edit-error";
 export { ChatParticipant } from "./chat-participant";
 export { ChatArtifactSource } from "./chat-artifact-source";
 export { ChatToolUse } from "./chat-tool-use";

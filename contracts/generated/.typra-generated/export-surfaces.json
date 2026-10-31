@@ -41,6 +41,8 @@
         "ChatToolUse",
         "ChatTranscript",
         "ChatTurn",
+        "CmdError",
+        "CmdErrorDetails",
         "DocumentMetadata",
         "MotionPlan",
         "MotionPlanKeyframe",
@@ -54,7 +56,6 @@
         "RowTextUpdate",
         "Sketch",
         "SketchDocument",
-        "SketchEditError",
         "Storyboard",
         "StoryboardDocument",
         "StoryboardItem",
@@ -117,6 +118,20 @@
           "kind": "value",
           "group": "",
           "source": "ChatTurn",
+          "protocol": false
+        },
+        {
+          "name": "CmdError",
+          "kind": "value",
+          "group": "",
+          "source": "CmdError",
+          "protocol": false
+        },
+        {
+          "name": "CmdErrorDetails",
+          "kind": "value",
+          "group": "",
+          "source": "CmdErrorDetails",
           "protocol": false
         },
         {
@@ -209,13 +224,6 @@
           "group": "",
           "source": "SketchDocument",
           "protocol": true
-        },
-        {
-          "name": "SketchEditError",
-          "kind": "value",
-          "group": "",
-          "source": "SketchEditError",
-          "protocol": false
         },
         {
           "name": "Storyboard",
@@ -405,6 +413,8 @@
         "ChatToolUse",
         "ChatTranscript",
         "ChatTurn",
+        "CmdError",
+        "CmdErrorDetails",
         "DocumentMetadata",
         "MotionPlan",
         "MotionPlanKeyframe",
@@ -418,7 +428,6 @@
         "RowTextUpdate",
         "Sketch",
         "SketchDocument",
-        "SketchEditError",
         "Storyboard",
         "StoryboardDocument",
         "StoryboardItem",
@@ -437,6 +446,8 @@
         "ChatToolUse",
         "ChatTranscript",
         "ChatTurn",
+        "CmdError",
+        "CmdErrorDetails",
         "DocumentMetadata",
         "MotionPlan",
         "MotionPlanKeyframe",
@@ -450,7 +461,6 @@
         "RowTextUpdate",
         "Sketch",
         "SketchDocument",
-        "SketchEditError",
         "Storyboard",
         "StoryboardDocument",
         "StoryboardItem",
@@ -513,6 +523,20 @@
           "kind": "value",
           "group": "",
           "source": "chat_turn",
+          "protocol": false
+        },
+        {
+          "name": "CmdError",
+          "kind": "value",
+          "group": "",
+          "source": "cmd_error",
+          "protocol": false
+        },
+        {
+          "name": "CmdErrorDetails",
+          "kind": "value",
+          "group": "",
+          "source": "cmd_error_details",
           "protocol": false
         },
         {
@@ -605,13 +629,6 @@
           "group": "",
           "source": "sketch_document",
           "protocol": true
-        },
-        {
-          "name": "SketchEditError",
-          "kind": "value",
-          "group": "",
-          "source": "sketch_edit_error",
-          "protocol": false
         },
         {
           "name": "Storyboard",
@@ -801,6 +818,8 @@
         "chat_tool_use",
         "chat_transcript",
         "chat_turn",
+        "cmd_error",
+        "cmd_error_details",
         "context",
         "document_metadata",
         "motion_plan",
@@ -815,7 +834,6 @@
         "row_text_update",
         "sketch",
         "sketch_document",
-        "sketch_edit_error",
         "storyboard",
         "storyboard_document",
         "storyboard_item",
@@ -835,6 +853,8 @@
         "ChatToolUse",
         "ChatTranscript",
         "ChatTurn",
+        "CmdError",
+        "CmdErrorDetails",
         "DocumentMetadata",
         "MotionPlan",
         "MotionPlanKeyframe",
@@ -848,7 +868,6 @@
         "RowTextUpdate",
         "Sketch",
         "SketchDocument",
-        "SketchEditError",
         "Storyboard",
         "StoryboardDocument",
         "StoryboardItem",
@@ -911,6 +930,20 @@
           "kind": "value",
           "group": "",
           "source": "Sources/CutReadyContracts/chat_turn.swift",
+          "protocol": false
+        },
+        {
+          "name": "CmdError",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/cmd_error.swift",
+          "protocol": false
+        },
+        {
+          "name": "CmdErrorDetails",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/cmd_error_details.swift",
           "protocol": false
         },
         {
@@ -1003,13 +1036,6 @@
           "group": "",
           "source": "Sources/CutReadyContracts/sketch_document.swift",
           "protocol": true
-        },
-        {
-          "name": "SketchEditError",
-          "kind": "value",
-          "group": "",
-          "source": "Sources/CutReadyContracts/sketch_edit_error.swift",
-          "protocol": false
         },
         {
           "name": "Storyboard",
@@ -1199,6 +1225,8 @@
         "Sources/CutReadyContracts/chat_tool_use.swift",
         "Sources/CutReadyContracts/chat_transcript.swift",
         "Sources/CutReadyContracts/chat_turn.swift",
+        "Sources/CutReadyContracts/cmd_error.swift",
+        "Sources/CutReadyContracts/cmd_error_details.swift",
         "Sources/CutReadyContracts/document_metadata.swift",
         "Sources/CutReadyContracts/motion_plan.swift",
         "Sources/CutReadyContracts/motion_plan_keyframe.swift",
@@ -1212,7 +1240,6 @@
         "Sources/CutReadyContracts/row_text_update.swift",
         "Sources/CutReadyContracts/sketch.swift",
         "Sources/CutReadyContracts/sketch_document.swift",
-        "Sources/CutReadyContracts/sketch_edit_error.swift",
         "Sources/CutReadyContracts/storyboard.swift",
         "Sources/CutReadyContracts/storyboard_document.swift",
         "Sources/CutReadyContracts/storyboard_item.swift",
@@ -1232,6 +1259,8 @@
         "ChatToolUse",
         "ChatTranscript",
         "ChatTurn",
+        "CmdError",
+        "CmdErrorDetails",
         "DocumentMetadata",
         "MotionPlan",
         "MotionPlanKeyframe",
@@ -1245,7 +1274,6 @@
         "RowTextUpdate",
         "Sketch",
         "SketchDocument",
-        "SketchEditError",
         "Storyboard",
         "StoryboardDocument",
         "StoryboardItem",
@@ -1308,6 +1336,20 @@
           "kind": "value",
           "group": "",
           "source": "./chat-turn",
+          "protocol": false
+        },
+        {
+          "name": "CmdError",
+          "kind": "value",
+          "group": "",
+          "source": "./cmd-error",
+          "protocol": false
+        },
+        {
+          "name": "CmdErrorDetails",
+          "kind": "value",
+          "group": "",
+          "source": "./cmd-error-details",
           "protocol": false
         },
         {
@@ -1400,13 +1442,6 @@
           "group": "",
           "source": "./sketch-document",
           "protocol": true
-        },
-        {
-          "name": "SketchEditError",
-          "kind": "value",
-          "group": "",
-          "source": "./sketch-edit-error",
-          "protocol": false
         },
         {
           "name": "Storyboard",
@@ -1596,6 +1631,8 @@
         "./chat-tool-use",
         "./chat-transcript",
         "./chat-turn",
+        "./cmd-error",
+        "./cmd-error-details",
         "./document-metadata",
         "./motion-plan",
         "./motion-plan-keyframe",
@@ -1609,7 +1646,6 @@
         "./row-text-update",
         "./sketch",
         "./sketch-document",
-        "./sketch-edit-error",
         "./storyboard",
         "./storyboard-document",
         "./storyboard-item",

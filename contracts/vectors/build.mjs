@@ -356,6 +356,10 @@ const roundTripVectors = [
 
 const updateRow = (row_index, cells) => ({ row_index, ...cells });
 
+// A CmdError as vectors pin it: `code` plus typed `details`. `message` is
+// human-readable text each runtime words for itself, so adapters omit it.
+const cmdError = (code, details) => (details ? { code, details } : { code });
+
 const updateRowTextVectors = [
   {
     name: "edit time keeps microseconds",
@@ -418,7 +422,7 @@ const updateRowTextVectors = [
   {
     name: "locked cell rejects a change",
     input: { sketch: lockedFixture, update: updateRow(1, { narrative: "Changed." }), now: NOW },
-    expectedError: { code: "locked_cell", row_index: 1, field: "narrative" },
+    expectedError: cmdError("locked_cell", { row_index: 1, field: "narrative" }),
   },
   {
     name: "locked cell accepts an unchanged value",
@@ -428,42 +432,42 @@ const updateRowTextVectors = [
   {
     name: "locked row rejects a change",
     input: { sketch: lockedFixture, update: updateRow(2, { time: "0:45" }), now: NOW },
-    expectedError: { code: "locked_row", row_index: 2 },
+    expectedError: cmdError("locked_row", { row_index: 2 }),
   },
   {
     name: "locked sketch rejects every edit",
     input: { sketch: { ...unlockedFixture, locked: true }, update: updateRow(0, { narrative: "First." }), now: NOW },
-    expectedError: { code: "locked_document" },
+    expectedError: cmdError("locked_document"),
   },
   {
     name: "row index outside the table is rejected",
     input: { sketch: lockedFixture, update: updateRow(3, { narrative: "Missing." }), now: NOW },
-    expectedError: { code: "row_not_found", row_index: 3 },
+    expectedError: cmdError("row_not_found", { row_index: 3 }),
   },
   {
     name: "locked sketch takes precedence over a missing row",
     input: { sketch: { ...unlockedFixture, locked: true }, update: updateRow(9, { narrative: "Missing." }), now: NOW },
-    expectedError: { code: "locked_document" },
+    expectedError: cmdError("locked_document"),
   },
   {
     name: "row lock takes precedence over a cell lock",
     input: { sketch: precedenceFixture, update: updateRow(0, { narrative: "Changed." }), now: NOW },
-    expectedError: { code: "locked_row", row_index: 0 },
+    expectedError: cmdError("locked_row", { row_index: 0 }),
   },
   {
     name: "locked cells are checked in column order",
     input: { sketch: precedenceFixture, update: updateRow(1, { time: "0:25", narrative: "Changed." }), now: NOW },
-    expectedError: { code: "locked_cell", row_index: 1, field: "time" },
+    expectedError: cmdError("locked_cell", { row_index: 1, field: "time" }),
   },
   {
     name: "locked cell rejects a differently composed value",
     input: { sketch: composedFixture, update: updateRow(0, { time: "A\u030a 0:10" }), now: NOW },
-    expectedError: { code: "locked_cell", row_index: 0, field: "time" },
+    expectedError: cmdError("locked_cell", { row_index: 0, field: "time" }),
   },
   {
     name: "locked row rejects a differently composed value",
     input: { sketch: composedFixture, update: updateRow(1, { narrative: "Cafe\u0301." }), now: NOW },
-    expectedError: { code: "locked_row", row_index: 1 },
+    expectedError: cmdError("locked_row", { row_index: 1 }),
   },
 ];
 
@@ -478,12 +482,12 @@ const reorderRowsVectors = [
   {
     name: "reorder that changes a locked row is rejected",
     input: { sketch: lockedFixture, order: [2, 1, 0], now: NOW },
-    expectedError: { code: "locked_row", row_index: 2 },
+    expectedError: cmdError("locked_row", { row_index: 2 }),
   },
   {
     name: "reorder that changes a locked cell is rejected",
     input: { sketch: lockedFixture, order: [1, 0, 2], now: NOW },
-    expectedError: { code: "locked_cell", row_index: 1, field: "narrative" },
+    expectedError: cmdError("locked_cell", { row_index: 1, field: "narrative" }),
   },
   {
     name: "reorder around locked rows keeps locks in place",
@@ -495,32 +499,32 @@ const reorderRowsVectors = [
   {
     name: "earlier locked cell fires before a later locked row",
     input: { sketch: lockedFixture, order: [0, 2, 1], now: NOW },
-    expectedError: { code: "locked_cell", row_index: 1, field: "narrative" },
+    expectedError: cmdError("locked_cell", { row_index: 1, field: "narrative" }),
   },
   {
     name: "screenshot lock also guards the visual",
     input: { sketch: screenshotLockFixture, order: [1, 0], now: NOW },
-    expectedError: { code: "locked_cell", row_index: 0, field: "screenshot" },
+    expectedError: cmdError("locked_cell", { row_index: 0, field: "screenshot" }),
   },
   {
     name: "visual lock also guards the screenshot",
     input: { sketch: visualLockFixture, order: [1, 0], now: NOW },
-    expectedError: { code: "locked_cell", row_index: 0, field: "visual" },
+    expectedError: cmdError("locked_cell", { row_index: 0, field: "visual" }),
   },
   {
     name: "locked row protects fields a runtime does not model",
     input: { sketch: hiddenFieldFixture, order: [1, 0], now: NOW },
-    expectedError: { code: "locked_row", row_index: 0 },
+    expectedError: cmdError("locked_row", { row_index: 0 }),
   },
   {
     name: "locked sketch takes precedence over an invalid order",
     input: { sketch: { ...unlockedFixture, locked: true }, order: [0, 0], now: NOW },
-    expectedError: { code: "locked_document" },
+    expectedError: cmdError("locked_document"),
   },
   {
     name: "reorder that is not a permutation is rejected",
     input: { sketch: unlockedFixture, order: [0, 0], now: NOW },
-    expectedError: { code: "invalid_reorder" },
+    expectedError: cmdError("invalid_reorder"),
   },
 ];
 

@@ -1663,8 +1663,10 @@
         },
         "expectedError": {
           "code": "locked_cell",
-          "row_index": 1,
-          "field": "narrative"
+          "details": {
+            "row_index": 1,
+            "field": "narrative"
+          }
         },
         "operation": "reorderRows",
         "stage": "callable"
@@ -1735,7 +1737,9 @@
         },
         "expectedError": {
           "code": "locked_row",
-          "row_index": 0
+          "details": {
+            "row_index": 0
+          }
         },
         "operation": "reorderRows",
         "stage": "callable"
@@ -2208,8 +2212,10 @@
         },
         "expectedError": {
           "code": "locked_cell",
-          "row_index": 1,
-          "field": "narrative"
+          "details": {
+            "row_index": 1,
+            "field": "narrative"
+          }
         },
         "operation": "reorderRows",
         "stage": "callable"
@@ -2309,7 +2315,9 @@
         },
         "expectedError": {
           "code": "locked_row",
-          "row_index": 2
+          "details": {
+            "row_index": 2
+          }
         },
         "operation": "reorderRows",
         "stage": "callable"
@@ -2449,8 +2457,10 @@
         },
         "expectedError": {
           "code": "locked_cell",
-          "row_index": 0,
-          "field": "screenshot"
+          "details": {
+            "row_index": 0,
+            "field": "screenshot"
+          }
         },
         "operation": "reorderRows",
         "stage": "callable"
@@ -2521,8 +2531,10 @@
         },
         "expectedError": {
           "code": "locked_cell",
-          "row_index": 0,
-          "field": "visual"
+          "details": {
+            "row_index": 0,
+            "field": "visual"
+          }
         },
         "operation": "reorderRows",
         "stage": "callable"
@@ -3773,8 +3785,10 @@
         },
         "expectedError": {
           "code": "locked_cell",
-          "row_index": 1,
-          "field": "narrative"
+          "details": {
+            "row_index": 1,
+            "field": "narrative"
+          }
         },
         "operation": "updateRowText",
         "stage": "callable"
@@ -3844,8 +3858,10 @@
         },
         "expectedError": {
           "code": "locked_cell",
-          "row_index": 0,
-          "field": "time"
+          "details": {
+            "row_index": 0,
+            "field": "time"
+          }
         },
         "operation": "updateRowText",
         "stage": "callable"
@@ -3915,8 +3931,10 @@
         },
         "expectedError": {
           "code": "locked_cell",
-          "row_index": 1,
-          "field": "time"
+          "details": {
+            "row_index": 1,
+            "field": "time"
+          }
         },
         "operation": "updateRowText",
         "stage": "callable"
@@ -4015,7 +4033,9 @@
         },
         "expectedError": {
           "code": "locked_row",
-          "row_index": 2
+          "details": {
+            "row_index": 2
+          }
         },
         "operation": "updateRowText",
         "stage": "callable"
@@ -4085,7 +4105,9 @@
         },
         "expectedError": {
           "code": "locked_row",
-          "row_index": 1
+          "details": {
+            "row_index": 1
+          }
         },
         "operation": "updateRowText",
         "stage": "callable"
@@ -4487,7 +4509,9 @@
         },
         "expectedError": {
           "code": "row_not_found",
-          "row_index": 3
+          "details": {
+            "row_index": 3
+          }
         },
         "operation": "updateRowText",
         "stage": "callable"
@@ -4556,7 +4580,9 @@
         },
         "expectedError": {
           "code": "locked_row",
-          "row_index": 0
+          "details": {
+            "row_index": 0
+          }
         },
         "operation": "updateRowText",
         "stage": "callable"
@@ -5703,6 +5729,8 @@
     "ChatParticipant",
     "ChatToolUse",
     "ChatTurn",
+    "CmdError",
+    "CmdErrorDetails",
     "DocumentMetadata",
     "MotionPlan",
     "MotionPlanKeyframe",

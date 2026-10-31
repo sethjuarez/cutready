@@ -7,7 +7,8 @@ Portable CutReady document contracts, written in TypeSpec and emitted by [Typra]
 | Path | Role |
 | --- | --- |
 | `sketch.tsp` | `.sk` document models: `Sketch`, `PlanningRow`, locks, narration, motion |
-| `edits.tsp` | `SketchDocument` operations, `PlanningTiming`, and the shared edit error payload |
+| `edits.tsp` | `SketchDocument` operations and `PlanningTiming` |
+| `errors.tsp` | `CmdError`, the `{code, message, details}` envelope every runtime reports |
 | `storyboard.tsp` | `.sb` document models plus canonical round-trip and legacy-upgrade operations |
 | `vectors/build.mjs` | Readable vector fixtures; writes `vectors.tsp` |
 | `generated/` | Swift model package and Markdown reference (do not edit) |

@@ -26,6 +26,9 @@ pub mod document {
         parse_duration_seconds, reorder_rows, update_row_text, RowTextUpdate, SketchEditError,
     };
     pub use crate::models::sketch::{PlanningRow, Sketch, Storyboard};
+    /// The generated contract types the document API returns, as this crate
+    /// links them.
+    pub use cutready_contracts::{CmdError, SaveContext};
 }
 
 const CUTREADY_DIAGNOSTICS_ENV: &str = "CUTREADY_DIAGNOSTICS";

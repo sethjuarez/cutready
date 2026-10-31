@@ -37,20 +37,14 @@ impl VectorError {
 
 impl From<SketchEditError> for VectorError {
     fn from(err: SketchEditError) -> Self {
-        let mut payload = json!({ "code": err.code() });
-        match &err {
-            SketchEditError::LockedRow { row_index }
-            | SketchEditError::RowNotFound { row_index } => {
-                payload["row_index"] = json!(row_index);
-            }
-            SketchEditError::LockedCell { row_index, field } => {
-                payload["row_index"] = json!(row_index);
-                payload["field"] = json!(field);
-            }
-            _ => {}
+        let cmd = document::CmdError::from(&err);
+        let mut payload = cmd.to_value(&document::SaveContext::default());
+        // Vectors pin `code` and `details`; `message` is each runtime's own wording.
+        if let Some(fields) = payload.as_object_mut() {
+            fields.remove("message");
         }
         Self {
-            message: err.to_string(),
+            message: cmd.message,
             payload: Some(payload),
         }
     }

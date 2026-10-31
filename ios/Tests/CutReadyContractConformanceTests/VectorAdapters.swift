@@ -94,16 +94,18 @@ enum VectorAdapters {
     }
   }
 
+  // CmdError as vectors pin it: `code` plus typed `details`; `message` is
+  // each runtime's own wording, so it is omitted.
   private static func payload(for error: MobileEditError) -> [String: Any] {
     switch error {
     case .lockedDocument:
       return ["code": "locked_document"]
     case .lockedRow(let index):
-      return ["code": "locked_row", "row_index": index]
+      return ["code": "locked_row", "details": ["row_index": index]]
     case .lockedCell(let index, let field):
-      return ["code": "locked_cell", "row_index": index, "field": field.rawValue]
+      return ["code": "locked_cell", "details": ["row_index": index, "field": field.rawValue]]
     case .rowNotFound(let index):
-      return ["code": "row_not_found", "row_index": index]
+      return ["code": "row_not_found", "details": ["row_index": index]]
     case .invalidReorder:
       return ["code": "invalid_reorder"]
     case .invalidStoryboardReorder:

@@ -8,7 +8,7 @@ options:
     root-namespace: "CutReady.Contracts"
     additional-roots:
       - "CutReady.Contracts.RowTextUpdate"
-      - "CutReady.Contracts.SketchEditError"
+      - "CutReady.Contracts.CmdError"
       - "CutReady.Contracts.Storyboard"
       - "CutReady.Contracts.ChatArtifact"
       - "CutReady.Contracts.ChatTranscript"

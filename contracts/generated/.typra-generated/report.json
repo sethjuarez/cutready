@@ -3,7 +3,7 @@
   "version": 1,
   "generatedAt": "1970-01-01T00:00:00.000Z",
   "summary": {
-    "emittedFiles": 191,
+    "emittedFiles": 201,
     "skippedFiles": 0,
     "staleMarkerOwnedRemovals": 0,
     "preservedUnmarkedSkippedFiles": 0,
@@ -78,6 +78,16 @@
     {
       "outputRoot": "../crates/cutready-contracts/src/generated_tests",
       "path": "../crates/cutready-contracts/src/generated_tests/chat_turn_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/cmd_error_details_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/cmd_error_test.rs",
       "marker": true
     },
     {
@@ -207,6 +217,16 @@
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/cmd_error_details.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/cmd_error.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
       "path": "../crates/cutready-contracts/src/model/context.rs",
       "marker": true
     },
@@ -273,11 +293,6 @@
     {
       "outputRoot": "../crates/cutready-contracts/src/model",
       "path": "../crates/cutready-contracts/src/model/sketch_document.rs",
-      "marker": true
-    },
-    {
-      "outputRoot": "../crates/cutready-contracts/src/model",
-      "path": "../crates/cutready-contracts/src/model/sketch_edit_error.rs",
       "marker": true
     },
     {
@@ -367,6 +382,16 @@
     },
     {
       "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/cmd-error-details.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/cmd-error.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
       "path": "../src/contracts/generated/model/context.ts",
       "marker": true
     },
@@ -437,11 +462,6 @@
     },
     {
       "outputRoot": "../src/contracts/generated/model",
-      "path": "../src/contracts/generated/model/sketch-edit-error.ts",
-      "marker": true
-    },
-    {
-      "outputRoot": "../src/contracts/generated/model",
       "path": "../src/contracts/generated/model/sketch.ts",
       "marker": true
     },
@@ -503,6 +523,16 @@
     {
       "outputRoot": "../src/contracts/generated/tests",
       "path": "../src/contracts/generated/tests/chat-turn.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/cmd-error-details.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/cmd-error.test.ts",
       "marker": true
     },
     {
@@ -642,6 +672,16 @@
     },
     {
       "outputRoot": "generated/markdown",
+      "path": "generated/markdown/CmdError.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/CmdErrorDetails.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
       "path": "generated/markdown/DocumentMetadata.md",
       "marker": true
     },
@@ -708,11 +748,6 @@
     {
       "outputRoot": "generated/markdown",
       "path": "generated/markdown/SketchDocument.md",
-      "marker": true
-    },
-    {
-      "outputRoot": "generated/markdown",
-      "path": "generated/markdown/SketchEditError.md",
       "marker": true
     },
     {
@@ -792,6 +827,16 @@
     },
     {
       "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/cmd_error_details.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/cmd_error.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
       "path": "generated/swift/Sources/CutReadyContracts/document_metadata.swift",
       "marker": true
     },
@@ -848,11 +893,6 @@
     {
       "outputRoot": "generated/swift",
       "path": "generated/swift/Sources/CutReadyContracts/sketch_document.swift",
-      "marker": true
-    },
-    {
-      "outputRoot": "generated/swift",
-      "path": "generated/swift/Sources/CutReadyContracts/sketch_edit_error.swift",
       "marker": true
     },
     {
@@ -923,6 +963,16 @@
     {
       "outputRoot": "generated/swift",
       "path": "generated/swift/Tests/CutReadyContractsTests/ChatTurnTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/CmdErrorDetailsTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/CmdErrorTests.swift",
       "marker": true
     },
     {
