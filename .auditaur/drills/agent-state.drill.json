@@ -19,6 +19,14 @@
     {
       "name": "imported chats are listed and reopen in the chat",
       "steps": [
+        { "name": "Enter the dummy key for the mock connection (no real provider)", "click": { "testId": "activity-settings" } },
+        { "click": { "testId": "settings-scope-app" } },
+        { "click": { "testId": "settings-tab-ai" } },
+        { "click": { "testId": "settings-ai-tab-connections" } },
+        { "expect": "input[placeholder=\"Enter your API key\"]", "toBeVisible": true, "timeoutMs": 15000 },
+        { "fill": "input[placeholder=\"Enter your API key\"]", "value": "drill-dummy-key" },
+        { "expect": "body", "toContainText": "Key saved", "timeoutMs": 10000 },
+        { "click": { "testId": "settings-close" } },
         { "click": { "role": "button", "name": "Session History", "exact": true } },
         { "expectSpan": "list_chat_sessions", "status": "ok", "name": "backend span (frontend IPC is bypassed for privacy)" },
         { "expect": { "role": "button", "name": "Retro notes", "nth": 0 }, "toBeVisible": true },

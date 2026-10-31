@@ -1,5 +1,6 @@
 {
   "prefix": "cutready-agent-state-drill-",
+  "mockLlm": true,
   "notes": [{ "path": "plan.md", "body": "# Launch plan\n" }],
   "files": [
     { "path": ".chats/plan.chat", "json": { "title": "Plan the launch", "created_at": "2025-06-01T10:00:00Z", "updated_at": "2025-06-01T10:05:00Z", "messages": [{ "role": "user", "content": "Draft a launch plan" }, { "role": "assistant", "content": "Here is a plan with three beats." }] } },
