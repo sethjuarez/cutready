@@ -297,6 +297,8 @@ interface AgentChatResult {
     completion_tokens: number;
     total_tokens: number;
   };
+  /** The user stopped the run; messages and response are empty. */
+  cancelled?: boolean;
 }
 
 interface AgentModelRoutePreview {
@@ -1578,6 +1580,15 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
 
       // Activity logging now handled by real-time agent-event listener
       if (abortedRef.current || activePreflightSendIdRef.current !== sendId) return;
+      if (result.cancelled) {
+        if (!silent) {
+          setChatMessages(newMessages);
+          void persistChatSession(sessionId, newMessages).catch((persistError) => {
+            console.warn("Could not save chat session:", persistError);
+          });
+        }
+        return;
+      }
 
       // Use the backend's full conversation (with correct tool_call/tool_result ordering)
       // but restore display-friendly user messages. The backend/reference resolver may

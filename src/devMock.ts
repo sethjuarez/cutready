@@ -922,12 +922,12 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         tool_call_id: "mock_tc_1",
       };
       // Delay the return so streaming events fire first.
-      return new Promise((resolve, reject) => setTimeout(() => {
+      return new Promise((resolve) => setTimeout(() => {
         if (clientRunId && activeMockAgentRuns.get(clientRunId) === mockRun) {
           activeMockAgentRuns.delete(clientRunId);
         }
         if (mockRun.cancelled) {
-          reject(new Error("Agent run cancelled"));
+          resolve({ messages: [], response: "", cancelled: true });
           return;
         }
         resolve({
