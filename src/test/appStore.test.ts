@@ -39,6 +39,15 @@ describe("chat persistence", () => {
     expect(useAppStore.getState().chatSessionPath).toBe("session-123");
   });
 
+  it("keeps a send error when the failed turn's messages are kept", () => {
+    useAppStore.setState({ chatMessages: [], chatError: null });
+
+    useAppStore.getState().setChatError("Provider returned 500");
+    useAppStore.getState().setChatMessages([{ role: "user", content: "Plan the demo" }]);
+
+    expect(useAppStore.getState().chatError).toBe("Provider returned 500");
+  });
+
   it("restores a stored transcript into the active conversation", () => {
     const transcript = [
       { role: "user", content: "Open the saved conversation" },
