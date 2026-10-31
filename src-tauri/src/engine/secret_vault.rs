@@ -31,6 +31,34 @@ pub fn resolve_and_migrate(app_data_dir: &Path) -> io::Result<PathBuf> {
     resolve_and_migrate_with(app_data_dir, |from, to| std::fs::rename(from, to))
 }
 
+/// Env var a drill fixture sets so debug builds use a throwaway vault folder.
+pub const DRILL_VAULT_DIR_ENV: &str = "CUTREADY_DRILL_VAULT_DIR";
+
+/// The throwaway vault folder drills ask for. Release builds never honor it, so a
+/// stray env var can't point a shipped app away from the user's vault.
+pub fn drill_vault_dir() -> Option<PathBuf> {
+    #[cfg(debug_assertions)]
+    {
+        drill_vault_dir_from(std::env::var_os(DRILL_VAULT_DIR_ENV))
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        None
+    }
+}
+
+#[cfg_attr(not(debug_assertions), allow(dead_code))]
+fn drill_vault_dir_from(value: Option<OsString>) -> Option<PathBuf> {
+    let dir = PathBuf::from(value?);
+    (dir.is_absolute()).then_some(dir)
+}
+
+/// Returns `<dir>/vault.hold` in the drill folder, creating it; no migration.
+pub fn drill_vault_path(dir: &Path) -> io::Result<PathBuf> {
+    std::fs::create_dir_all(dir)?;
+    Ok(dir.join(VAULT_FILE))
+}
+
 fn resolve_and_migrate_with(
     app_data_dir: &Path,
     rename: impl Fn(&Path, &Path) -> io::Result<()>,
@@ -88,6 +116,38 @@ mod tests {
 
     fn app_dir(root: &tempfile::TempDir) -> PathBuf {
         root.path().join("com.cutready.app")
+    }
+
+    #[test]
+    fn drill_vault_dir_needs_an_absolute_path() {
+        assert_eq!(drill_vault_dir_from(None), None);
+        assert_eq!(drill_vault_dir_from(Some(OsString::new())), None);
+        assert_eq!(drill_vault_dir_from(Some("relative/vault".into())), None);
+        let root = tempfile::tempdir().unwrap();
+        assert_eq!(
+            drill_vault_dir_from(Some(root.path().as_os_str().to_owned())),
+            Some(root.path().to_path_buf())
+        );
+    }
+
+    #[test]
+    fn drill_vault_path_creates_the_folder_and_skips_migration() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("drill-vault");
+        let path = drill_vault_path(&dir).unwrap();
+        assert_eq!(path, dir.join("vault.hold"));
+        assert!(dir.is_dir());
+        assert!(!path.exists());
+    }
+
+    // Run with `cargo test --release`: shipped builds must ignore the drill override.
+    #[cfg(not(debug_assertions))]
+    #[test]
+    fn release_builds_ignore_the_drill_vault_dir() {
+        let root = tempfile::tempdir().unwrap();
+        std::env::set_var(DRILL_VAULT_DIR_ENV, root.path());
+        assert_eq!(drill_vault_dir(), None);
+        std::env::remove_var(DRILL_VAULT_DIR_ENV);
     }
 
     #[test]
