@@ -243,6 +243,7 @@ After the agentive `azure_oauth` module lands, CutReady's migration should also:
 
 ## Testing & Validation
 
+- **Gate**: `npm run check` = `check:frontend` (tsc, contract typecheck, Vitest) + `check:rust` (clippy, `cargo test --workspace --locked`). `.github/workflows/ci.yml` runs the same scripts on every pull request.
 - **Build**: `npm run build` (tsc + vite)
 - **TypeScript check**: `npx tsc --noEmit`
 - **Rust tests**: `cargo test --workspace` (from the repo root, covers `src-tauri` plus the `crates/*` harness crates). Use `cargo test -p <crate>` to target one crate.
