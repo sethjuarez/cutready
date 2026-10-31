@@ -38,6 +38,8 @@
         { "expectLog": "[agent_chat_with_tools] start" },
         { "expectLog": "engine=prompty agent=" },
         { "name": "mock got a streamed request with the dummy key", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-mock-llm", "e.path === '/chat/completions' && e.model === 'drill-mock' && e.stream && e.authorized"] },
+        { "name": "the dummy key went to the throwaway drill vault", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "drill-vault:vault.hold", "exists"] },
+        { "name": "the Stronghold salt stayed with the throwaway vault", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "drill-vault:salt.txt", "exists"] },
         { "expectNoErrors": true }
       ]
     },
@@ -69,12 +71,13 @@
         { "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Send (Enter)\"]", "toBeVisible": true, "timeoutMs": 30000, "name": "composer returns to idle" },
         { "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]", "toHaveCount": 0 },
         { "expectLog": "[agent_chat_with_tools] cancelled" },
-        { "name": "the model stream is aborted", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-mock-llm", "e.aborted === true && e.tag === 'slow'"] }
+        { "name": "a user stop is an outcome, not a command error", "expectSpan": "agent_chat_with_tools", "status": "ok" },
+        { "name": "the model stream is aborted", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-mock-llm", "e.aborted === true && e.tag === 'slow'"] },
+        { "expectNoErrors": true }
       ]
     },
     {
       "name": "shows a provider error and recovers",
-      "fixme": "setChatMessages clears chatError, so the error card never renders (appStore.ts setChatMessages; ChatPanel send catch)",
       "timeoutMs": 150000,
       "steps": [
         { "expect": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]", "toBeVisible": true, "timeoutMs": 30000 },
@@ -88,6 +91,7 @@
         { "fill": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]", "value": "Say hello again." },
         { "click": "[data-testid=\"secondary-chat-panel\"] button[title=\"Send (Enter)\"]" },
         { "expect": "[data-testid=\"secondary-chat-panel\"] [data-testid=\"chat-messages-scroll\"]", "toContainText": "MOCK-REPLY-OK", "timeoutMs": 30000 },
+        { "name": "the next send clears the error card", "expect": { "testId": "secondary-chat-panel" }, "not": true, "toContainText": "Something went wrong" },
         { "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]", "toHaveCount": 0, "timeoutMs": 30000 }
       ]
     }

@@ -1,4 +1,5 @@
 {
+  "realVault": true,
   "prefix": "cutready-harness-drill-",
   "globalSettings": { "seed": { "aiAgentExecutionEngine": "prompty" } },
   "sketches": [

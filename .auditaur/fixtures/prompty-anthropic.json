@@ -1,4 +1,5 @@
 {
+  "realVault": true,
   "prefix": "cutready-anthropic-battle-",
   "globalSettings": {
     "seed": {

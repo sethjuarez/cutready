@@ -1,4 +1,5 @@
 {
+  "realVault": true,
   "prefix": "cutready-chat-drill-",
   "globalSettings": { "seed": { "aiAgentExecutionEngine": "prompty" } },
   "notes": [

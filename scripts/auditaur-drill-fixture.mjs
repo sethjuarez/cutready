@@ -51,8 +51,12 @@
 //                  CUTREADY_SCRATCH) for dialog import sources and export targets; reset rebuilds it
 //   mockLlm        true: starts scripts/auditaur-mock-llm.mjs on 127.0.0.1 and seeds an OpenAI
 //                  provider (model drill-mock) pointing at it as the active and default provider.
-//                  No key is stored: the suite sets a dummy OPENAI_API_KEY in its env. Teardown
-//                  stops the server.
+//                  No key is seeded: tests type a dummy key in Settings, which lands in the
+//                  throwaway drill vault. Teardown stops the server.
+//   realVault      true: debug builds use the user's real credential vault (for @live suites that
+//                  need real provider keys). Otherwise setup points CUTREADY_DRILL_VAULT_DIR at a
+//                  throwaway folder (target/auditaur-drill/vault, expect-file prefix `drill-vault:`)
+//                  that setup and teardown wipe.
 //
 //   node scripts/auditaur-drill-fixture.mjs expect-mock-llm <js expression over entry>
 //   (some request the mock logged matches, e.g. "e.toolResult?.includes('X')"; retries for 5s)
@@ -80,6 +84,8 @@ const STATE = join(DRILL_DIR, "state.json");
 const BACKUP_DIR = join(DRILL_DIR, "backup");
 const PRISTINE_DIR = join(DRILL_DIR, "pristine");
 const BASELINE_DRAFTLINE_DIR = join(DRILL_DIR, "baseline-draftline");
+// Debug builds keep credentials here instead of the user's vault (CUTREADY_DRILL_VAULT_DIR).
+const DRILL_VAULT_DIR = join(DRILL_DIR, "vault");
 const COLLABORATOR = { name: "Drill Collaborator", email: "collaborator@drill.test" };
 const SEEDER = { name: "Drill Seed", email: "seed@drill.test" };
 
@@ -143,9 +149,15 @@ function setup(specPath) {
   }
   // Every launch refreshes OAuth and rewrites the credential vault; keep the user's real one intact.
   // Back up both locations: the app moves a legacy vault into the app data folder on first use.
+  // The backup stays as a safety net even when the app uses the throwaway drill vault.
   for (const path of vaultPaths()) {
     backup(state, path);
     saveState();
+  }
+  rmSync(DRILL_VAULT_DIR, { recursive: true, force: true });
+  if (!spec.realVault) {
+    mkdirSync(DRILL_VAULT_DIR, { recursive: true });
+    appendFileSync(envFile, `CUTREADY_DRILL_VAULT_DIR=${DRILL_VAULT_DIR}\n`);
   }
   if (state.stores.settingsSeed) {
     backup(state, globalSettingsPath());
@@ -224,6 +236,7 @@ function teardown() {
   for (const root of state.extraRoots ?? []) rmSync(root, { recursive: true, force: true });
   rmSync(PRISTINE_DIR, { recursive: true, force: true });
   rmSync(BASELINE_DRAFTLINE_DIR, { recursive: true, force: true });
+  rmSync(DRILL_VAULT_DIR, { recursive: true, force: true });
   if (failed) throw new Error(`restore failed; backups kept in ${BACKUP_DIR}`);
   rmSync(BACKUP_DIR, { recursive: true, force: true });
   rmSync(STATE, { force: true });
@@ -738,6 +751,7 @@ function expectRemote(message) {
 // Fixture-relative path, `app-data:<file>` for CutReady's app data folder, or `scratch:<file>`.
 function resolveExpectPath(file) {
   if (file.startsWith("app-data:")) return join(appDataDir(), file.slice(9));
+  if (file.startsWith("drill-vault:")) return join(DRILL_VAULT_DIR, file.slice(12));
   if (file.startsWith("scratch:")) return join(scratchPath(fixtureRoot()), file.slice(8));
   return join(fixtureRoot(), file);
 }

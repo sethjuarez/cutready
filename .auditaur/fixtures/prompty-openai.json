@@ -1,4 +1,5 @@
 {
+  "realVault": true,
   "prefix": "cutready-openai-battle-",
   "globalSettings": {
     "seed": {
