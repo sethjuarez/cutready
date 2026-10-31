@@ -23,6 +23,7 @@
         { "fill": { "role": "combobox", "name": "Search commands" }, "value": "Open Workspace Terminal" },
         { "press": "Enter", "target": { "role": "combobox", "name": "Search commands" } },
         { "name": "a terminal session opened (terminal_open streams over a Channel, so it is not in recorded IPC)", "expect": { "role": "button", "name": "Close Terminal" }, "toBeVisible": true, "timeoutMs": 30000 },
+        { "name": "the shell session is ready (keys typed while it starts are dropped)", "expect": { "text": "Starting terminal..." }, "toHaveCount": 0, "timeoutMs": 30000 },
         { "click": { "label": "Terminal input" } },
         { "type": { "label": "Terminal input" }, "value": "node -e \"require('fs').writeFileSync('drill-terminal.txt','drill-ok')\"" },
         { "press": "Enter", "target": { "label": "Terminal input" } },

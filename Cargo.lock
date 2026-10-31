@@ -510,9 +510,9 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "auditaur-collector"
-version = "0.4.30"
+version = "0.4.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df788eec0de482aca016de89f4f5515216481fd068429dd86d732f71f368ee48"
+checksum = "72d3151510dbbc9f7e83637826167dcdf023fb15104e26af1bd5b83750f6ad7c"
 dependencies = [
  "auditaur-core",
  "rusqlite",
@@ -523,9 +523,9 @@ dependencies = [
 
 [[package]]
 name = "auditaur-core"
-version = "0.4.30"
+version = "0.4.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6995be9127773d771c5e2b5c15495849250ce12d991fc282abae114b229149ed"
+checksum = "10f52467edf9db02e7084281e022bab096fbed4697b8dad8ff505c76a078dcab"
 dependencies = [
  "directories",
  "serde",
@@ -3687,7 +3687,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.5",
+ "socket2 0.5.10",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -3707,7 +3707,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
@@ -6368,7 +6368,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.6.5",
+ "socket2 0.5.10",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -6407,7 +6407,7 @@ dependencies = [
  "cfg_aliases 0.2.2",
  "libc",
  "once_cell",
- "socket2 0.6.5",
+ "socket2 0.5.10",
  "tracing",
  "windows-sys 0.61.2",
 ]
@@ -8284,9 +8284,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-auditaur"
-version = "0.4.30"
+version = "0.4.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77504648b90511fecdabbf03231b6400dcc8d610dba88bb06bd7f99da28522e9"
+checksum = "273d7aee024f8fb7e7553c18121bf15435774357819828de367a572e80ddcc66"
 dependencies = [
  "auditaur-collector",
  "auditaur-core",
@@ -8314,9 +8314,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-auditaur-macros"
-version = "0.4.30"
+version = "0.4.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b89c7e9998a1904d53d6b1ae82ae68fbfb860fd4c26c512c170421f2b837487c"
+checksum = "506ca0dae53e6888c24f15577fcebed300cc6363d76c143d39f3d5c5e9a20710"
 dependencies = [
  "proc-macro-crate 3.5.0",
  "proc-macro2",

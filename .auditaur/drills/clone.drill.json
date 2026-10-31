@@ -18,7 +18,6 @@
   "tests": [
     {
       "name": "clones a workspace from a remote URL",
-      "fixme": "AR-40: fill does not expand ${CUTREADY_REMOTE_URL}, so the app receives the literal placeholder",
       "steps": [
         { "press": "Control+Shift+P" },
         { "fill": { "role": "combobox", "name": "Search commands" }, "value": "Go to Home" },
