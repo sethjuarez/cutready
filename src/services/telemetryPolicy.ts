@@ -105,19 +105,43 @@ export function isSensitiveTauriEvent(event: string) {
   return SENSITIVE_TAURI_EVENTS.has(event);
 }
 
+// A typed remote URL can carry credentials (https://user:token@host/repo.git) in any
+// payload (add_remote, workspace settings), so drop the userinfo and keep the rest.
+// Greedy through the authority so a raw `@` in the password is scrubbed too.
+const URL_USERINFO_PATTERN = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#]+@/gi;
+const scrubUrlCredentials = (text: string) => text.replace(URL_USERINFO_PATTERN, "$1[credentials]@");
+
+function scrubPayloadUrls(value: unknown): unknown {
+  if (typeof value === "string") return value.includes("://") ? scrubUrlCredentials(value) : value;
+  if (Array.isArray(value)) {
+    const scrubbed = value.map(scrubPayloadUrls);
+    return scrubbed.some((item, index) => item !== value[index]) ? scrubbed : value;
+  }
+  if (value && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
+    let changed = false;
+    const scrubbed: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      scrubbed[key] = scrubPayloadUrls(item);
+      changed ||= scrubbed[key] !== item;
+    }
+    return changed ? scrubbed : value;
+  }
+  return value;
+}
+
 export const redactTelemetryPayload: AuditaurRedactPayload = (payload, { kind, name }) => {
-  if (kind === "eventPayload") return isSensitiveTauriEvent(name) ? OMITTED_PAYLOAD : payload;
+  if (kind === "eventPayload") return isSensitiveTauriEvent(name) ? OMITTED_PAYLOAD : scrubPayloadUrls(payload);
   if (SENSITIVE_INVOKE_COMMANDS.has(name)) return OMITTED_PAYLOAD;
   // A note result can't be tied back to its path, so omit every note body.
   if (CHAT_ARTIFACT_NOTE_COMMANDS.has(name) && (kind === "invokeResult" || isSensitiveInvokeCommand(name, payload))) {
     return OMITTED_PAYLOAD;
   }
-  return payload;
+  return scrubPayloadUrls(payload);
 };
 
-// Git/Draftline errors from ordinary commands can echo the contributor's email.
+// Git/Draftline errors from ordinary commands can echo the contributor's email or a remote URL.
 const EMAIL_PATTERN = /[\w.+-]+@[\w-]+(?:\.[\w-]+)*/g;
-const scrubEmails = (text: string) => text.replace(EMAIL_PATTERN, "[email]");
+const scrubEmails = (text: string) => scrubUrlCredentials(text).replace(EMAIL_PATTERN, "[email]");
 
 export const redactTelemetryErrorMessage: AuditaurRedactErrorMessage = (message, { name }) =>
   isSensitiveInvokeCommand(name) || isSensitiveTauriEvent(name) ? OMITTED_PAYLOAD : scrubEmails(message);

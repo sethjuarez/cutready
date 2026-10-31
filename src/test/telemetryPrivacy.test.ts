@@ -38,6 +38,25 @@ describe("recorded telemetry (Auditaur helpers)", () => {
     expect(recorded("invokeArgs", "update_note", { relativePath: "chat-artifacts/a.cv", content: "x" })).not.toContain("a.cv");
   });
 
+  test("remote URL credentials are dropped from payloads and errors, keeping the URL", () => {
+    const url = "https://drill-user:drill-secret@example.invalid/repo.git";
+    const args = recorded("invokeArgs", "add_remote", { request: { name: "origin", url } });
+    expect(args).toContain("https://[credentials]@example.invalid/repo.git");
+    expect(args).not.toMatch(/drill-user|drill-secret/);
+    const settings = recorded("invokeArgs", "set_workspace_settings", { settings: { repoRemoteUrl: url } });
+    expect(settings).not.toContain("drill-secret");
+    expect(recorded("invokeResult", "list_remotes", [{ name: "origin", url: "file:///C:/x/remote.git" }])).toContain(
+      "file:///C:/x/remote.git",
+    );
+    expect(recordedError("fetch", `fatal: unable to access '${url}'`)).toBe(
+      "fatal: unable to access 'https://[credentials]@example.invalid/repo.git'",
+    );
+    const rawAt = recorded("invokeArgs", "add_remote", { url: "https://user:p@ss@example.invalid/repo.git" });
+    expect(rawAt).toContain("https://[credentials]@example.invalid/repo.git");
+    expect(rawAt).not.toContain("ss@");
+    expect(recordedConsole("error", "Push failed:", url).body).not.toContain("drill-secret");
+  });
+
   test("saved feedback text and diagnostics are redacted but entries stay countable", () => {
     const shown = recorded("invokeResult", "list_feedback", [
       { category: "Bug", feedback: "secret plan", date: "2026-01-02", debug_log: "ada@example.com" },
