@@ -1,0 +1,85 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "Switching the runtime harness in Settings changes which harness executes chat turns.",
+  "setup": [
+    { "name": "Create fixture on the Prompty harness", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/harness.json"] }
+  ],
+  "teardown": [
+    { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "tests": [
+    {
+      "name": "agentive harness runs chat turns",
+      "tags": ["@harness", "@live"],
+      "timeoutMs": 60000,
+      "description": "Needs a signed-in model connection. agent_chat_with_tools skips frontend IPC telemetry (sensitive), so the backend start log proves which harness ran.",
+      "steps": [
+        { "expect": { "testId": "activity-settings" }, "toBeVisible": true, "timeoutMs": 45000 },
+        { "click": { "testId": "activity-settings" } },
+        { "expect": { "testId": "settings-tab-ai" }, "toBeVisible": true },
+        { "click": { "testId": "settings-tab-ai" } },
+        { "expect": { "testId": "settings-ai-tab-agent" }, "toBeVisible": true },
+        { "click": { "testId": "settings-ai-tab-agent" } },
+        { "expect": "[data-testid=\"harness-option-prompty\"][data-selected=\"true\"]", "toBeVisible": true, "timeoutMs": 15000 },
+        { "expect": "[data-testid=\"harness-option-agentive\"]:disabled, [data-testid=\"harness-option-agentive\"] button:disabled", "toHaveCount": 0 },
+        { "click": { "testId": "harness-option-agentive" } },
+        { "expect": "[data-testid=\"harness-option-agentive\"][data-selected=\"true\"]", "toBeVisible": true },
+        { "expect": { "testId": "harness-unavailable-warning" }, "toHaveCount": 0 },
+        { "screenshot": "agentive-selected" },
+        { "click": { "testId": "settings-close" } },
+        { "click": { "testId": "activity-chat" } },
+        { "expect": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]", "toBeVisible": true, "timeoutMs": 20000 },
+        { "fill": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]", "value": "Reply with the single word READY and nothing else." },
+        { "click": "[data-testid=\"secondary-chat-panel\"] button[title=\"Send (Enter)\"]" },
+        { "expectLog": "[agent_chat_with_tools] start", "timeoutMs": 30000 },
+        { "expectLog": "engine=agentive agent=" },
+        { "expectLog": "engine=prompty agent=", "not": true },
+        { "expect": "body", "not": true, "toContainText": "Something went wrong" },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "copilot-sdk harness runs chat turns after sign-in",
+      "tags": ["@harness", "@human"],
+      "timeoutMs": 780000,
+      "description": "Needs the GitHub Copilot CLI installed; a human signs in to Copilot.",
+      "steps": [
+        { "click": { "testId": "activity-settings" } },
+        { "expect": { "testId": "settings-tab-ai" }, "toBeVisible": true },
+        { "click": { "testId": "settings-tab-ai" } },
+        { "expect": { "testId": "settings-ai-tab-agent" }, "toBeVisible": true },
+        { "click": { "testId": "settings-ai-tab-agent" } },
+        { "expect": { "testId": "harness-option-copilot-sdk" }, "toBeVisible": true, "timeoutMs": 15000 },
+        { "expect": { "testId": "copilot-connect" }, "toBeVisible": true },
+        { "expect": "[data-testid=\"copilot-connect\"][data-state=\"not-installed\"]", "toHaveCount": 0 },
+        { "screenshot": "copilot-before-sign-in" },
+        {
+          "gate": {
+            "name": "Sign in to GitHub Copilot",
+            "instructions": "Click Sign in on the GitHub Copilot card (opens your browser), or run `copilot login` in a terminal. Continue once the account is authorized.",
+            "timeoutMs": 600000,
+            "choices": [
+              { "id": "signed-in", "label": "Copilot account is authorized", "outcome": "continue" },
+              { "id": "skip", "label": "Copilot is not available here", "outcome": "skip" },
+              { "id": "fail", "label": "Sign-in failed", "outcome": "fail" }
+            ]
+          }
+        },
+        { "click": { "testId": "copilot-recheck" } },
+        { "expect": "[data-testid=\"copilot-connect\"][data-state=\"signed-in\"]", "toBeVisible": true, "timeoutMs": 30000 },
+        { "click": "[data-testid=\"harness-option-copilot-sdk\"] > button" },
+        { "expect": "[data-testid=\"harness-option-copilot-sdk\"][data-selected=\"true\"]", "toBeVisible": true },
+        { "expect": { "testId": "harness-unavailable-warning" }, "toHaveCount": 0 },
+        { "screenshot": "copilot-selected" },
+        { "click": { "testId": "settings-close" } },
+        { "click": { "testId": "activity-chat" } },
+        { "expect": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]", "toBeVisible": true, "timeoutMs": 20000 },
+        { "fill": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]", "value": "Reply with the single word READY and nothing else." },
+        { "click": "[data-testid=\"secondary-chat-panel\"] button[title=\"Send (Enter)\"]" },
+        { "expectLog": "[agent_chat_with_tools] start", "timeoutMs": 90000 },
+        { "expectLog": "engine=copilot-sdk agent=" },
+        { "expectLog": "engine=prompty agent=", "not": true }
+      ]
+    }
+  ]
+}

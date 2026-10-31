@@ -1,0 +1,7 @@
+{
+  "prefix": "cutready-identity-drill-",
+  "appStores": [{ "file": "identity.json", "clear": true }],
+  "sketches": [
+    { "path": "intro.sk", "title": "Identity Drill Fixture", "narrative": "A sketch so the first snapshot has content." }
+  ]
+}

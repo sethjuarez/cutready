@@ -751,6 +751,7 @@ function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; 
                 }}
                 className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 py-1.5 text-left"
                 title={isDatabasePath(file.path) && file.status !== "deleted" ? `View database: ${file.path}` : `View diff: ${file.path}`}
+                aria-label={isDatabasePath(file.path) && file.status !== "deleted" ? `View database: ${file.path}` : `View diff: ${file.path}`}
               >
                 <span className="truncate text-[12px] font-medium text-[rgb(var(--color-text))]">{filename}</span>
                 {(file.additions > 0 || file.deletions > 0) && (
@@ -770,8 +771,9 @@ function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; 
                   });
                   if (confirmed) await discardFile(file.path);
                 }}
-                className="shrink-0 rounded p-0.5 text-[rgb(var(--color-text-secondary))] opacity-0 transition-colors hover:text-error group-hover:opacity-100"
+                className="shrink-0 rounded p-0.5 text-[rgb(var(--color-text-secondary))] opacity-0 transition-colors hover:text-error focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
                 title={`Discard changes to ${file.path}`}
+                aria-label={`Discard changes to ${file.path}`}
               >
                 <X className="h-3 w-3" />
               </button>

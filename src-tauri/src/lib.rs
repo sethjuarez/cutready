@@ -540,12 +540,18 @@ pub fn run() {
             }
 
             // Stronghold: encrypted vault for secrets (API keys, tokens).
-            // Salt file auto-created in app_local_data_dir on first run.
-            let salt_path = app
-                .path()
-                .app_local_data_dir()
-                .expect("could not resolve app local data path")
-                .join("salt.txt");
+            // Salt file auto-created in app_local_data_dir on first run; drills keep it
+            // beside their throwaway vault (debug builds only).
+            let salt_path = match engine::secret_vault::drill_vault_dir() {
+                Some(dir) => {
+                    engine::secret_vault::drill_vault_path(&dir)?.with_file_name("salt.txt")
+                }
+                None => app
+                    .path()
+                    .app_local_data_dir()
+                    .expect("could not resolve app local data path")
+                    .join("salt.txt"),
+            };
             app.handle()
                 .plugin(tauri_plugin_stronghold::Builder::with_argon2(&salt_path).build())?;
 
@@ -628,6 +634,7 @@ pub fn run() {
             commands::project::create_project_folder,
             commands::project::open_project_folder,
             commands::project::get_startup_project_path,
+            commands::secrets::secret_vault_path,
             commands::project::get_current_project,
             commands::project::close_project,
             commands::project::get_recent_projects,

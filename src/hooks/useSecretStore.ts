@@ -70,7 +70,6 @@ function runExclusive<T>(operation: () => Promise<T>): Promise<T> {
   return result;
 }
 
-const VAULT_FILE = "vault.hold";
 const VAULT_PASS = "com.cutready.app";
 const CLIENT_NAME = "cutready";
 
@@ -95,9 +94,9 @@ function delay(ms: number) {
 
 async function initStrongholdOnce(): Promise<void> {
   const { Stronghold } = await import("@tauri-apps/plugin-stronghold");
-  const { appDataDir } = await import("@tauri-apps/api/path");
-  const dir = await appDataDir();
-  const vaultPath = `${dir}${VAULT_FILE}`;
+  const { invoke } = await import("../services/tauri");
+  // The backend resolves the path and moves a vault left beside the app data folder by older builds.
+  const vaultPath = await invoke<string>("secret_vault_path");
   _stronghold = await withTimeout(
     Stronghold.load(vaultPath, VAULT_PASS),
     STRONGHOLD_TIMEOUT_MS,

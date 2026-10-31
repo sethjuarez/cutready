@@ -1,0 +1,75 @@
+{
+  "prefix": "cutready-visuals-drill-",
+  "files": [
+    {
+      "path": "launch.sk",
+      "json": {
+        "title": "Launch Visuals",
+        "description": "",
+        "rows": [
+          {
+            "time": "~10s",
+            "narrative": "Introduce the launch plan.",
+            "demo_actions": "",
+            "screenshot": null,
+            "visual": ".cutready/visuals/launch-intro.json"
+          }
+        ],
+        "state": "draft",
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z"
+      }
+    },
+    {
+      "path": ".cutready/visuals/launch-intro.json",
+      "json": {
+        "version": "2.0",
+        "scene": {
+          "type": "player",
+          "width": 960,
+          "height": 540,
+          "fps": 30,
+          "background": "$background",
+          "children": [
+            "panel",
+            "title"
+          ]
+        },
+        "elements": {
+          "panel": {
+            "id": "panel",
+            "type": "rect",
+            "layout": {
+              "zIndex": 0
+            },
+            "props": {
+              "type": "rect",
+              "x": 80,
+              "y": 80,
+              "width": 800,
+              "height": 380,
+              "fill": "$surface",
+              "rx": 24
+            }
+          },
+          "title": {
+            "id": "title",
+            "type": "text",
+            "layout": {
+              "zIndex": 1
+            },
+            "props": {
+              "type": "text",
+              "content": "VISUAL-DRILL Launch",
+              "x": 480,
+              "y": 260,
+              "fontSize": 48,
+              "fill": "$foreground",
+              "textAnchor": "middle"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

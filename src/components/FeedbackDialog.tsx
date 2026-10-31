@@ -250,6 +250,7 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
           value={feedback}
           onChange={(e) => setFeedback(e.target.value)}
           placeholder="What's on your mind?"
+          aria-label="Feedback"
           rows={4}
           className="w-full px-3 py-2.5 rounded-lg bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-[13px] text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 resize-none"
         />

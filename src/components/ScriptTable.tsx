@@ -4,6 +4,7 @@ import { usePopover } from "../hooks/usePopover";
 import {
   DndContext,
   closestCenter,
+  KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
@@ -12,6 +13,7 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
+  sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
@@ -164,6 +166,17 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
   const lightboxImageRef = useRef<HTMLImageElement | null>(null);
   const [lightboxPreviewWidth, setLightboxPreviewWidth] = useState(0);
   const [visualLightbox, setVisualLightbox] = useState<{ visualPath: string; rowIndex: number } | null>(null);
+  const visualDialogRef = useRef<HTMLDivElement | null>(null);
+  const isVisualLightboxOpen = visualLightbox !== null;
+  // Move focus into the visual lightbox when it opens and back to the opener when it closes.
+  useEffect(() => {
+    if (!isVisualLightboxOpen) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    visualDialogRef.current?.focus();
+    return () => {
+      if (opener?.isConnected) opener.focus();
+    };
+  }, [isVisualLightboxOpen]);
   const [nudgeInput, setNudgeInput] = useState("");
   const [lightboxMode, setLightboxMode] = useState<"preview" | "edit">("preview");
   const [spotAuthoringMode, setSpotAuthoringMode] = useState<"motion" | "typing">("motion");
@@ -292,6 +305,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
   // Ensure at least one row exists (materialize instead of phantom displayRows)
@@ -1113,7 +1127,11 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
           }}
         >
           <div
-            className="relative flex flex-col rounded-xl overflow-hidden shadow-2xl bg-[rgb(var(--color-surface))]"
+            role="dialog"
+            aria-label={`Row ${visualLightbox.rowIndex + 1} visual`}
+            ref={visualDialogRef}
+            tabIndex={-1}
+            className="relative flex flex-col rounded-xl overflow-hidden shadow-2xl bg-[rgb(var(--color-surface))] outline-none"
             style={{ width: "calc(100vw - 60px)", height: "calc(100vh - 60px)" }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1128,6 +1146,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   <div className="flex items-center rounded-lg bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] p-0.5">
                     <button
                       onClick={() => setLightboxMode("preview")}
+                      aria-pressed={lightboxMode === "preview"}
                       className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors ${
                         lightboxMode === "preview"
                           ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))]"
@@ -1138,6 +1157,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                     </button>
                     <button
                       onClick={() => setLightboxMode("edit")}
+                      aria-pressed={lightboxMode === "edit"}
                       className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors ${
                         lightboxMode === "edit"
                           ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))]"
@@ -1158,6 +1178,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   <button
                     onClick={() => saveEditorChanges(editorDsl)}
                     title="Save changes"
+                    aria-label="Save visual changes"
                     className="p-1.5 rounded-lg text-[rgb(var(--color-accent))] hover:text-[rgb(var(--color-accent-hover))] hover:bg-[rgb(var(--color-surface))] transition-colors"
                   >
                     <Check className="w-4 h-4" />
@@ -1166,6 +1187,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                 {/* Close button */}
                 <button
                   onClick={closeLightbox}
+                  aria-label="Close visual"
                   className="p-1.5 rounded-lg text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors"
                 >
                   <X className="w-5 h-5" />
@@ -1395,6 +1417,7 @@ function SortableRow({
     <>
     <tr
       ref={setNodeRef}
+      data-testid={`planning-row-${idx + 1}`}
       style={{ ...style, backgroundColor: isHighlighted ? undefined : rowBg }}
       className={`card-row group hover:shadow-sm ${isSorting ? "" : "transition-all"} ${isHighlighted ? "ai-highlight-row" : ""} ${rowLocked ? "ring-1 ring-[rgb(var(--color-warning))]/15" : ""}`}
       onKeyDown={(e) => {
@@ -1428,6 +1451,7 @@ function SortableRow({
             className={`${hasAnyLock(row) ? "cursor-default text-[rgb(var(--color-warning))]" : "cursor-grab active:cursor-grabbing text-[rgb(var(--color-text-secondary))]"} flex items-center justify-center h-full`}
             {...attributes}
             {...listeners}
+            aria-label={`Move row ${idx + 1}`}
           >
             {/* Row number (visible by default), drag icon on hover */}
             <span className="text-[0.625rem] font-medium opacity-40 group-hover:hidden">{rowLocked ? <Lock className="w-3 h-3 opacity-80" /> : idx + 1}</span>
@@ -1448,13 +1472,14 @@ function SortableRow({
             value={row.time}
             onChange={(v) => updateRow(idx, "time", v)}
             placeholder="~30s"
+            label={`Row ${idx + 1} time`}
             readOnly={readOnly || timeLocked}
             onAddRow={isLastRow && !readOnly && !hasAnyLock(row) ? () => addRow(idx) : undefined}
             hasActionRail={!readOnly && !rowLocked && !!onCellLockChange}
           />
           {!readOnly && !rowLocked && onCellLockChange && (
             <CellActionRail persistent={timeLocked}>
-              <CellLockButton locked={timeLocked} onClick={() => onCellLockChange(idx, "time", !timeLocked)} />
+              <CellLockButton locked={timeLocked} label={`row ${idx + 1} time`} onClick={() => onCellLockChange(idx, "time", !timeLocked)} />
             </CellActionRail>
           )}
         </div>
@@ -1465,6 +1490,7 @@ function SortableRow({
             value={row.narrative}
             onChange={(v) => updateRow(idx, "narrative", v)}
             placeholder="What to say..."
+            label={`Row ${idx + 1} narrative`}
             readOnly={readOnly || narrativeLocked}
             onAddRow={isLastRow && !readOnly && !hasAnyLock(row) ? () => addRow(idx) : undefined}
             hasActionRail={!readOnly && (!!onCellLockChange || !!onSparkle)}
@@ -1477,7 +1503,7 @@ function SortableRow({
                 )} />
               )}
               {!rowLocked && onCellLockChange && (
-                <CellLockButton locked={narrativeLocked} onClick={() => onCellLockChange(idx, "narrative", !narrativeLocked)} />
+                <CellLockButton locked={narrativeLocked} label={`row ${idx + 1} narrative`} onClick={() => onCellLockChange(idx, "narrative", !narrativeLocked)} />
               )}
             </CellActionRail>
           )}
@@ -1489,6 +1515,7 @@ function SortableRow({
             value={row.demo_actions}
             onChange={(v) => updateRow(idx, "demo_actions", v)}
             placeholder="What to do..."
+            label={`Row ${idx + 1} actions`}
             readOnly={readOnly || actionsLocked}
             onAddRow={isLastRow && !readOnly && !hasAnyLock(row) ? () => addRow(idx) : undefined}
             hasActionRail={!readOnly && (!!onCellLockChange || !!onSparkle)}
@@ -1501,7 +1528,7 @@ function SortableRow({
                 )} />
               )}
               {!rowLocked && onCellLockChange && (
-                <CellLockButton locked={actionsLocked} onClick={() => onCellLockChange(idx, "demo_actions", !actionsLocked)} />
+                <CellLockButton locked={actionsLocked} label={`row ${idx + 1} actions`} onClick={() => onCellLockChange(idx, "demo_actions", !actionsLocked)} />
               )}
             </CellActionRail>
           )}
@@ -1602,11 +1629,12 @@ function SortableRow({
                   key={`${row.visual}-v${visualVersion}`}
                 />
               </Suspense>
-              {!mediaLocked && <div className="absolute inset-0 bg-[rgb(var(--color-media-control-bg)/0.4)] opacity-0 group-hover/vis:opacity-100 transition-opacity flex items-center justify-center gap-1.5 rounded-md" onClick={(e) => e.stopPropagation()}>
+              {!mediaLocked && <div className="absolute inset-0 bg-[rgb(var(--color-media-control-bg)/0.4)] opacity-0 group-hover/vis:opacity-100 focus-within:opacity-100 transition-opacity flex items-center justify-center gap-1.5 rounded-md" onClick={(e) => e.stopPropagation()}>
                 <button
                   onClick={() => onVisualClick(row.visual!, idx)}
                   className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-media-control-bg)/0.4)]"
                   title="Preview visual (click to edit)"
+                  aria-label={`Preview visual for row ${idx + 1}`}
                 >
                   <Maximize2 className="w-3.5 h-3.5" />
                 </button>
@@ -1615,6 +1643,7 @@ function SortableRow({
                     onClick={() => onGenerateVisual(idx)}
                     className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-accent)/0.8)]"
                     title="Regenerate visual with AI"
+                    aria-label={`Regenerate visual for row ${idx + 1}`}
                   >
                     <Sparkles className="w-3.5 h-3.5" />
                   </button>
@@ -1624,6 +1653,7 @@ function SortableRow({
                     onClick={() => onRemoveVisual?.(idx)}
                     className="p-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.2)] text-[rgb(var(--color-media-control-fg))] hover:bg-[rgb(var(--color-error)/0.8)]"
                     title="Remove visual"
+                    aria-label={`Remove visual for row ${idx + 1}`}
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -1758,6 +1788,7 @@ function SortableRow({
                     : "border-transparent text-[rgb(var(--color-text-secondary))] hover:border-[rgb(var(--color-border))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-accent))]"
                 }`}
                 title={rowLocked ? "Unlock row" : "Lock row"}
+                aria-label={`${rowLocked ? "Unlock" : "Lock"} row ${idx + 1}`}
               >
                 {rowLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
               </button>
@@ -1766,6 +1797,7 @@ function SortableRow({
               onClick={() => addRow(idx)}
               className="p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
               title="Add row below"
+              aria-label={`Add row below row ${idx + 1}`}
             >
               <Plus className="w-3 h-3" />
             </button>}
@@ -1773,6 +1805,7 @@ function SortableRow({
               onClick={() => deleteRow(idx)}
               className="p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:text-error transition-colors"
               title="Delete row"
+              aria-label={`Delete row ${idx + 1}`}
             >
               <X className="w-3 h-3" />
             </button>}
@@ -1823,6 +1856,7 @@ function LocalInput({
   value,
   onChange,
   placeholder,
+  label,
   readOnly,
   onAddRow,
   hasActionRail = false,
@@ -1830,6 +1864,7 @@ function LocalInput({
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
+  label?: string;
   readOnly: boolean;
   onAddRow?: () => void;
   hasActionRail?: boolean;
@@ -1859,6 +1894,7 @@ function LocalInput({
         }
       }}
       placeholder={placeholder}
+      aria-label={label}
       readOnly={readOnly}
       className={`w-full bg-transparent text-xs py-0.5 rounded outline-none transition-colors focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 placeholder:text-[rgb(var(--color-text-secondary))]/40 ${hasActionRail ? "pl-1 pr-5" : "px-1"}`}
     />
@@ -1901,6 +1937,7 @@ function MarkdownCell({
   value,
   onChange,
   placeholder,
+  label,
   readOnly,
   onAddRow,
   hasActionRail = false,
@@ -1908,6 +1945,7 @@ function MarkdownCell({
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
+  label?: string;
   readOnly: boolean;
   onAddRow?: () => void;
   hasActionRail?: boolean;
@@ -1961,6 +1999,9 @@ function MarkdownCell({
     return (
       <div
         data-cell
+        role="textbox"
+        aria-readonly={readOnly || undefined}
+        aria-label={label}
         tabIndex={readOnly ? undefined : 0}
         className={`md-cell-preview min-h-[1.5rem] rounded outline-none transition-colors ${hasActionRail ? "pr-7" : ""} ${!readOnly ? "cursor-text focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40" : ""}`}
         onClick={() => {
@@ -2005,6 +2046,7 @@ function MarkdownCell({
       onChange={(e) => handleChange(e.target.value)}
       onBlur={() => setIsEditing(false)}
       placeholder={placeholder}
+      aria-label={label}
       rows={1}
       className={`md-cell-editor w-full bg-transparent p-0 rounded outline-none resize-none ring-1 ring-[rgb(var(--color-accent))]/40 placeholder:text-[rgb(var(--color-text-secondary))]/40 ${hasActionRail ? "pr-7" : "pr-0"}`}
       onKeyDown={(e) => {
@@ -2071,7 +2113,8 @@ function SparkleButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function CellLockButton({ locked, onClick, className = "" }: { locked: boolean; onClick: () => void; className?: string }) {
+function CellLockButton({ locked, onClick, label, className = "" }: { locked: boolean; onClick: () => void; label?: string; className?: string }) {
+  const name = `${locked ? "Unlock" : "Lock"} ${label ?? "cell"}`;
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onClick(); }}
@@ -2081,7 +2124,7 @@ function CellLockButton({ locked, onClick, className = "" }: { locked: boolean; 
           : "border-transparent text-[rgb(var(--color-text-secondary))] hover:border-[rgb(var(--color-border))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-accent))]"
       } ${className}`}
       title={locked ? "Unlock cell" : "Lock cell"}
-      aria-label={locked ? "Unlock cell" : "Lock cell"}
+      aria-label={name}
     >
       {locked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
     </button>

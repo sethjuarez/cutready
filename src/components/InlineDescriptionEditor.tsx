@@ -7,6 +7,8 @@ import { continueMarkdownList } from "../utils/markdownList";
 interface InlineDescriptionEditorProps {
   value: string;
   placeholder: string;
+  /** Accessible name for the preview and the textarea. */
+  label?: string;
   disabled?: boolean;
   rows?: number;
   className?: string;
@@ -21,6 +23,7 @@ interface InlineDescriptionEditorProps {
 export function InlineDescriptionEditor({
   value,
   placeholder,
+  label,
   disabled = false,
   rows = 4,
   className = "",
@@ -173,6 +176,7 @@ export function InlineDescriptionEditor({
               }
             }}
             placeholder={placeholder}
+            aria-label={label}
             rows={rows}
             readOnly={disabled}
             className={textareaClassName}
@@ -194,6 +198,7 @@ export function InlineDescriptionEditor({
         <div
           tabIndex={disabled ? -1 : 0}
           role={disabled ? undefined : "button"}
+          aria-label={label}
           onClick={() => { if (!disabled) setEditingState(true); }}
           onFocus={() => { if (!disabled) setEditingState(true); }}
           className={previewClassName}

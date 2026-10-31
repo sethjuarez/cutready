@@ -1989,6 +1989,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeChatArtifactPath: null,
         chatMessages: [],
         chatSessionPath: null,
+        chatError: null,
+        chatLoading: false,
+        chatInputDraft: "",
       });
       await get().loadSketches();
       await get().loadStoryboards();
@@ -2560,7 +2563,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   importAsset: async () => {
     try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
+      const { open } = await import("../dialogs");
       const selected = await open({
         multiple: false,
         filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg"] }],
@@ -2640,7 +2643,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   // ── Chat actions ──────────────────────────────────────────
 
   setChatMessages: (messages) => {
-    set({ chatMessages: messages, chatError: null });
+    // Callers clear chatError explicitly (send, retry, dismiss, session switch); a failed
+    // send sets the error and then keeps the user's message, so this must not wipe it.
+    set({ chatMessages: messages });
   },
 
   restoreChatSession: (sessionId, messages) => {

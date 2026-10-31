@@ -1,0 +1,103 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "Editing a storyboard's title and description, sequencing sketches and sections, and locking it is saved to the .sb file. Each test starts from the seeded project.",
+  "tags": ["@storyboard", "@authoring"],
+  "setup": [
+    { "name": "Create a project with a one-sketch storyboard and a spare sketch", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/storyboard.json"] }
+  ],
+  "teardown": [
+    { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "beforeEach": [
+    { "name": "Drop pending autosaves and per-test UI state", "clearStorage": true },
+    { "name": "a project is open", "expect": { "testId": "explorer-import-menu" }, "toBeVisible": true, "timeoutMs": 45000 },
+    { "name": "Restore the seeded project", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "reset"] },
+    { "name": "Reload the restored project with clean UI state", "clearStorage": true },
+    { "expect": { "testId": "explorer-item-tour.sb" }, "toBeVisible": true, "timeoutMs": 45000 }
+  ],
+  "tests": [
+    {
+      "name": "opens a storyboard from the explorer",
+      "steps": [
+        { "click": { "testId": "explorer-item-tour.sb" } },
+        { "expect": { "label": "Storyboard title" }, "toHaveValue": "Product Tour" },
+        { "expect": { "role": "button", "name": "Remove Aurora Onboarding from storyboard", "exact": true }, "toExist": true },
+        { "expectIpc": "get_storyboard", "status": "ok" },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "renames the storyboard title",
+      "steps": [
+        { "click": { "testId": "explorer-item-tour.sb" } },
+        { "fill": { "label": "Storyboard title" }, "value": "Partner Product Tour" },
+        { "press": "Enter", "target": { "label": "Storyboard title" } },
+        { "expectIpc": "update_storyboard", "status": "ok" },
+        { "name": "the storyboard file has the new title", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "tour.sb", "doc.title === 'Partner Product Tour'"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "writes the storyboard description",
+      "steps": [
+        { "click": { "testId": "explorer-item-tour.sb" } },
+        { "click": { "role": "button", "name": "Storyboard description", "exact": true } },
+        { "fill": { "role": "textbox", "name": "Storyboard description", "exact": true }, "value": "End-to-end tour for partner onboarding." },
+        { "press": "Control+Enter", "target": { "role": "textbox", "name": "Storyboard description", "exact": true } },
+        { "name": "the storyboard file has the description", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "tour.sb", "doc.description === 'End-to-end tour for partner onboarding.'"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "adds an existing sketch",
+      "steps": [
+        { "click": { "testId": "explorer-item-tour.sb" } },
+        { "click": { "role": "button", "name": "Add Existing", "exact": true } },
+        { "fill": { "label": "Search sketches" }, "value": "Falcon" },
+        { "click": { "role": "button", "name": "Add Falcon Checkout" } },
+        { "expectIpc": "add_sketch_to_storyboard", "status": "ok" },
+        { "expect": { "role": "button", "name": "Remove Falcon Checkout from storyboard", "exact": true }, "toExist": true },
+        { "name": "the storyboard sequences both sketches", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "tour.sb", "doc.items.map((item) => item.path).join() === 'intro.sk,checkout.sk'"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "adds a named section",
+      "steps": [
+        { "click": { "testId": "explorer-item-tour.sb" } },
+        { "click": { "role": "button", "name": "Section", "exact": true } },
+        { "expectIpc": "add_section_to_storyboard", "status": "ok" },
+        { "click": { "role": "button", "name": "Edit section title: New Section", "exact": true } },
+        { "fill": { "label": "Section title", "exact": true }, "value": "Wrap-up" },
+        { "press": "Enter", "target": { "label": "Section title", "exact": true } },
+        { "name": "the storyboard ends with the named section", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "tour.sb", "doc.items.length === 2 && doc.items[1].type === 'section' && doc.items[1].title === 'Wrap-up'"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "removes a sketch after confirming",
+      "steps": [
+        { "click": { "testId": "explorer-item-tour.sb" } },
+        { "click": { "role": "button", "name": "Remove Aurora Onboarding from storyboard", "exact": true } },
+        { "expect": { "role": "dialog", "name": "Remove sketch?" }, "toBeVisible": true },
+        { "click": { "role": "button", "name": "Remove", "exact": true } },
+        { "expectIpc": "remove_sketch_from_storyboard", "status": "ok" },
+        { "name": "the sketch is gone from the storyboard but kept in the project", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "tour.sb", "!doc.items.some((item) => item.path === 'intro.sk')"] },
+        { "name": "the sketch file still exists", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "intro.sk", "exists"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "locks the storyboard",
+      "steps": [
+        { "click": { "testId": "explorer-item-tour.sb" } },
+        { "click": { "role": "button", "name": "Lock storyboard", "exact": true } },
+        { "expectIpc": "set_storyboard_lock", "status": "ok" },
+        { "expect": { "role": "button", "name": "Unlock storyboard", "exact": true }, "toBeVisible": true },
+        { "expect": { "role": "button", "name": "Add Existing", "exact": true }, "toHaveCount": 0 },
+        { "name": "the storyboard file is locked", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "tour.sb", "doc.locked === true"] },
+        { "expectNoErrors": true }
+      ]
+    }
+  ]
+}

@@ -124,6 +124,7 @@ export function DocumentToolbar({
               label="Export"
               icon={<Download className="h-3.5 w-3.5" />}
               actions={exportActions}
+              testId="document-export-menu"
             />
           )}
         </>
@@ -186,6 +187,7 @@ function ToolbarOverflowMenu({ groups }: { groups: ToolbarOverflowGroup[] }) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="More document actions"
+        data-testid={groups.some((group) => group.id === "export") ? "document-export-menu" : undefined}
         title={hasEnabledAction ? "More document actions" : "No document actions available"}
       >
         <MoreHorizontal className="h-3.5 w-3.5" />
@@ -261,6 +263,8 @@ interface ToolbarMenuProps {
   label: string;
   icon: ReactNode;
   actions: DocumentToolbarAction[];
+  /** Shared with the overflow menu so drills reach export actions at any toolbar width. */
+  testId?: string;
 }
 
 interface ToolbarOverflowGroup {
@@ -270,7 +274,7 @@ interface ToolbarOverflowGroup {
   actions: DocumentToolbarAction[];
 }
 
-function ToolbarMenu({ label, icon, actions }: ToolbarMenuProps) {
+function ToolbarMenu({ label, icon, actions, testId }: ToolbarMenuProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const enabled = actions.length > 0;
@@ -311,6 +315,7 @@ function ToolbarMenu({ label, icon, actions }: ToolbarMenuProps) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`${label} actions`}
+        data-testid={testId}
         title={hasEnabledAction ? `${label} actions` : disabledTitle}
       >
         {icon}

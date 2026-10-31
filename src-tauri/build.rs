@@ -27,8 +27,15 @@ fn main() {
 fn emit_github_oauth_client_id() {
     const KEY: &str = "CUTREADY_GITHUB_OAUTH_CLIENT_ID";
     println!("cargo:rerun-if-env-changed={KEY}");
-    println!("cargo:rerun-if-changed=../.env");
-    println!("cargo:rerun-if-changed=.env");
+    // Cargo treats a missing rerun-if-changed path as always stale, which would
+    // recompile the app on every build; only watch .env files that exist.
+    // (After creating a new .env, touch build.rs to pick it up.)
+    for path in ["../.env", ".env"] {
+        if std::path::Path::new(path).exists() {
+            println!("cargo:rerun-if-changed={path}");
+        }
+    }
+    println!("cargo:rerun-if-changed=build.rs");
 
     if let Ok(value) = std::env::var(KEY) {
         let value = value.trim();

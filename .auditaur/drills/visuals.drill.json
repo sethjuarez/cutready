@@ -1,0 +1,58 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "A row's visual renders from .cutready/visuals and edits made in the visual editor are saved back to its document.",
+  "tags": ["@visuals", "@authoring"],
+  "setup": [
+    { "name": "Create a project with a sketch row that has a visual", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/visuals.json"] }
+  ],
+  "teardown": [
+    { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "beforeEach": [
+    { "name": "Drop pending autosaves and per-test UI state", "clearStorage": true },
+    { "name": "a project is open", "expect": { "testId": "explorer-import-menu" }, "toBeVisible": true, "timeoutMs": 45000 },
+    { "name": "Restore the seeded project", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "reset"] },
+    { "name": "Reload the restored project with clean UI state", "clearStorage": true },
+    { "expect": { "testId": "explorer-item-launch.sk" }, "toBeVisible": true, "timeoutMs": 45000 }
+  ],
+  "tests": [
+    {
+      "name": "a row visual renders in the sketch and its preview",
+      "steps": [
+        { "click": { "testId": "explorer-item-launch.sk" }, "timeoutMs": 45000 },
+        { "expect": { "label": "Sketch title" }, "toHaveValue": "Launch Visuals" },
+        { "expectIpc": "get_visual", "status": "ok" },
+        { "click": { "role": "button", "name": "Preview visual for row 1" } },
+        { "expect": { "role": "dialog", "name": "Row 1 visual" }, "toBeVisible": true },
+        { "name": "focus moves into the visual dialog", "expectValue": "document.activeElement?.getAttribute('aria-label')", "toEqual": "Row 1 visual" },
+        { "expect": { "role": "dialog", "name": "Row 1 visual" }, "toContainText": "VISUAL-DRILL Launch", "timeoutMs": 10000 },
+        { "expect": "body", "not": true, "toContainText": "Invalid visual" },
+        { "click": { "role": "button", "name": "Close visual" } },
+        { "expect": { "role": "dialog", "name": "Row 1 visual" }, "toBeHidden": true },
+        { "name": "focus returns to the preview button", "expectValue": "document.activeElement?.getAttribute('aria-label')", "toEqual": "Preview visual for row 1" },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "an edited visual is saved to its document",
+      "steps": [
+        { "click": { "testId": "explorer-item-launch.sk" }, "timeoutMs": 45000 },
+        { "expect": { "label": "Sketch title" }, "toHaveValue": "Launch Visuals" },
+        { "click": { "role": "button", "name": "Preview visual for row 1" } },
+        { "expect": { "role": "dialog", "name": "Row 1 visual" }, "toBeVisible": true },
+        { "click": { "role": "button", "name": "Edit", "exact": true } },
+        { "click": { "role": "treeitem", "name": "title" }, "timeoutMs": 15000 },
+        { "click": { "role": "button", "name": "Show Inspector" } },
+        { "expect": { "role": "textbox", "name": "Text", "exact": true }, "toHaveValue": "VISUAL-DRILL Launch" },
+        { "fill": { "role": "textbox", "name": "Text", "exact": true }, "value": "VISUAL-DRILL Launch Day" },
+        { "expect": { "role": "dialog", "name": "Row 1 visual" }, "toContainText": "Unsaved" },
+        { "click": { "role": "button", "name": "Save visual changes" } },
+        { "expectIpc": "write_visual_doc", "status": "ok" },
+        { "name": "the visual document has the new title text", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", ".cutready/visuals/launch-intro.json", "doc.elements.title.props.content === 'VISUAL-DRILL Launch Day' && doc.elements.panel.props.type === 'rect'"] },
+        { "click": { "role": "button", "name": "Close visual" } },
+        { "expect": { "role": "dialog", "name": "Row 1 visual" }, "toBeHidden": true },
+        { "expectNoErrors": true }
+      ]
+    }
+  ]
+}

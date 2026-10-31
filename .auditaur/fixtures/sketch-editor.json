@@ -1,0 +1,19 @@
+{
+  "prefix": "cutready-sketch-editor-drill-",
+  "files": [
+    {
+      "path": "walkthrough.sk",
+      "json": {
+        "title": "Dashboard Walkthrough",
+        "description": "",
+        "rows": [
+          { "time": "~20s", "narrative": "Open the sales dashboard.", "demo_actions": "Click Dashboards.", "screenshot": null },
+          { "time": "~30s", "narrative": "Filter to the west region.", "demo_actions": "Pick West in the region filter.", "screenshot": null }
+        ],
+        "state": "draft",
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z"
+      }
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "An unavailable saved harness is flagged in Settings, and switching to Prompty clears it. The live chat turn is in settings-live.drill.json.",
+  "tags": ["@settings", "@harness"],
+  "setup": [
+    { "name": "Create fixture with an unavailable harness", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/settings.json"] }
+  ],
+  "teardown": [
+    { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "beforeEach": [
+    { "name": "Drop pending autosaves and per-test UI state", "clearStorage": true },
+    { "name": "a project is open", "expect": { "testId": "explorer-import-menu" }, "toBeVisible": true, "timeoutMs": 45000 },
+    { "name": "Restore the seeded project", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "reset"] },
+    { "name": "Reload the restored project with clean UI state", "clearStorage": true },
+    { "expect": { "testId": "explorer-item-intro.sk" }, "toBeVisible": true, "timeoutMs": 45000 }
+  ],
+  "tests": [
+    {
+      "name": "flags an unavailable harness and switches to Prompty",
+      "steps": [
+        { "expect": { "testId": "activity-settings" }, "toBeVisible": true, "timeoutMs": 45000 },
+        { "click": { "testId": "activity-settings" } },
+        { "expect": { "testId": "settings-tab-ai" }, "toBeVisible": true },
+        { "click": { "testId": "settings-tab-ai" } },
+        { "expect": { "testId": "settings-ai-tab-agent" }, "toBeVisible": true },
+        { "click": { "testId": "settings-ai-tab-agent" } },
+        { "expect": { "testId": "harness-picker" }, "toBeVisible": true },
+        { "expect": { "testId": "harness-option-prompty" }, "toBeVisible": true },
+        { "expect": { "testId": "harness-picker" }, "toContainText": "Runtime Harness" },
+        { "expect": "body", "toContainText": "never silently downgraded" },
+        { "expect": { "testId": "harness-unavailable-warning" }, "toContainText": "the run will fail" },
+        { "expect": { "testId": "harness-switch-fallback" }, "toContainText": "Switch to Prompty" },
+        { "click": { "testId": "harness-switch-fallback" } },
+        { "expect": "[data-testid=\"harness-option-prompty\"][data-selected=\"true\"]", "toBeVisible": true },
+        { "expect": { "testId": "harness-unavailable-warning" }, "toBeHidden": true },
+        { "screenshot": "settings-after-switch" },
+        { "expect": "body", "not": true, "toContainText": "Something went wrong" },
+        { "expectNoErrors": true }
+      ]
+    }
+  ]
+}

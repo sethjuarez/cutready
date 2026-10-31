@@ -432,7 +432,7 @@ pub async fn get_database_preview(
 }
 
 /// Return a read-only preview of the local agent-state database.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn get_agent_state_database_preview(
     state: State<'_, AppState>,
 ) -> Result<DatabasePreview, String> {

@@ -147,7 +147,7 @@ export function MemoryTab() {
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity shrink-0">
                     <button
                       onClick={() => {
                         if (isEditing) {
@@ -158,12 +158,14 @@ export function MemoryTab() {
                         }
                       }}
                       className="px-1.5 py-0.5 text-[10px] rounded hover:bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text-secondary))]"
+                      aria-label={`${isEditing ? "Cancel editing" : "Edit"} memory: ${m.content}`}
                     >
                       {isEditing ? "Cancel" : "Edit"}
                     </button>
                     <button
                       onClick={() => handleDelete(idx)}
                       className="px-1.5 py-0.5 text-[10px] rounded hover:bg-error/10 text-error"
+                      aria-label={`Delete memory: ${m.content}`}
                     >
                       Delete
                     </button>
@@ -177,6 +179,7 @@ export function MemoryTab() {
                       onChange={(e) => setEditContent(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") handleUpdate(idx); if (e.key === "Escape") setEditingIndex(null); }}
                       className="flex-1 px-2 py-1 text-xs rounded bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text))] focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40"
+                      aria-label="Memory content"
                       autoFocus
                     />
                     <button

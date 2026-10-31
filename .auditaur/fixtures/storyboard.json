@@ -1,0 +1,22 @@
+{
+  "prefix": "cutready-storyboard-drill-",
+  "sketches": [
+    { "path": "intro.sk", "title": "Aurora Onboarding", "narrative": "Welcome tour." },
+    { "path": "checkout.sk", "title": "Falcon Checkout", "narrative": "Checkout walkthrough." }
+  ],
+  "files": [
+    {
+      "path": "tour.sb",
+      "json": {
+        "title": "Product Tour",
+        "description": "",
+        "locked": false,
+        "items": [
+          { "type": "sketch_ref", "path": "intro.sk" }
+        ],
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z"
+      }
+    }
+  ]
+}

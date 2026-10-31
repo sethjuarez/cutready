@@ -1,0 +1,66 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "Creating and opening a workspace from Home through the native folder picker. Each test starts back in the seeded project with a fresh scratch folder.",
+  "tags": ["@dialogs", "@projects", "@local"],
+  "setup": [
+    { "name": "Create a project plus a scratch folder holding another workspace", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/workspace-dialogs.json"] }
+  ],
+  "teardown": [
+    { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "beforeEach": [
+    { "name": "Drop pending autosaves and per-test UI state", "clearStorage": true },
+    { "name": "a project is open", "expect": { "testId": "explorer-import-menu" }, "toBeVisible": true, "timeoutMs": 45000 },
+    { "name": "Restore the seeded project, recents and scratch folder", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "reset"] },
+    { "name": "Reload the restored project with clean UI state", "clearStorage": true },
+    { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 45000 }
+  ],
+  "tests": [
+    {
+      "name": "creates a new workspace in a chosen folder",
+      "steps": [
+        { "press": "Control+Shift+P" },
+        { "fill": { "role": "combobox", "name": "Search commands" }, "value": "Go to Home" },
+        { "press": "Enter", "target": { "role": "combobox", "name": "Search commands" } },
+        { "click": { "role": "button", "name": "New Workspace" } },
+        { "fill": { "label": "Workspace name" }, "value": "Partner Pitch" },
+        { "dialog": "open", "respond": "${CUTREADY_SCRATCH}", "expectOptions": { "directory": true, "multiple": false, "title": "Choose location for new workspace" } },
+        { "click": { "role": "button", "name": "Choose Folder", "exact": true } },
+        { "expectIpc": "create_project_folder", "status": "ok" },
+        { "expect": { "testId": "explorer-item-plan.md" }, "toHaveCount": 0, "timeoutMs": 30000 },
+        { "name": "the workspace folder was created", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "scratch:partner-pitch", "exists"] },
+        { "name": "it is now the most recent workspace", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "app-data:recent-projects.json", "doc.recent_projects[0].path.endsWith('partner-pitch')"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "cancelling the folder picker creates nothing",
+      "steps": [
+        { "press": "Control+Shift+P" },
+        { "fill": { "role": "combobox", "name": "Search commands" }, "value": "Go to Home" },
+        { "press": "Enter", "target": { "role": "combobox", "name": "Search commands" } },
+        { "click": { "role": "button", "name": "New Workspace" } },
+        { "fill": { "label": "Workspace name" }, "value": "Partner Pitch" },
+        { "dialog": "open", "respond": null },
+        { "click": { "role": "button", "name": "Choose Folder", "exact": true } },
+        { "expectIpc": "create_project_folder", "not": true },
+        { "name": "no folder appeared", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "scratch:partner-pitch", "absent"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "opens an existing workspace folder",
+      "steps": [
+        { "press": "Control+Shift+P" },
+        { "fill": { "role": "combobox", "name": "Search commands" }, "value": "Go to Home" },
+        { "press": "Enter", "target": { "role": "combobox", "name": "Search commands" } },
+        { "dialog": "open", "respond": "${CUTREADY_SCRATCH}/existing", "expectOptions": { "directory": true, "title": "Open workspace folder" } },
+        { "click": { "role": "button", "name": "Open Workspace" } },
+        { "expectIpc": "open_project_folder", "status": "ok" },
+        { "expect": { "testId": "explorer-item-partner-tour.sk" }, "toBeVisible": true, "timeoutMs": 30000 },
+        { "expect": { "testId": "explorer-item-plan.md" }, "toHaveCount": 0 },
+        { "expectNoErrors": true }
+      ]
+    }
+  ]
+}

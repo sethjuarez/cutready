@@ -287,7 +287,7 @@ export function AppLayout() {
         icon: <Download className="w-4 h-4" />,
         handler: async () => {
           try {
-            const { save } = await import("@tauri-apps/plugin-dialog");
+            const { save } = await import("../dialogs");
             const dest = await save({
               defaultPath: `cutready-logs-${new Date().toISOString().replace(/[:.]/g, "-")}.zip`,
               filters: [{ name: "Zip Archive", extensions: ["zip"] }],

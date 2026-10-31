@@ -1,0 +1,51 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "Home lists recent workspaces: picking one reopens it, and removing one drops it from the recent list.",
+  "tags": ["@projects", "@local"],
+  "setup": [
+    { "name": "Create a project with two recent workspaces", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/recent-projects.json"] }
+  ],
+  "teardown": [
+    { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "beforeEach": [
+    { "name": "Drop pending autosaves and per-test UI state", "clearStorage": true },
+    { "name": "a project is open", "expect": { "testId": "explorer-import-menu" }, "toBeVisible": true, "timeoutMs": 45000 },
+    { "name": "Restore the seeded project", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "reset"] },
+    { "name": "Reload the restored project with clean UI state", "clearStorage": true },
+    { "expect": { "testId": "explorer-item-launch.sk" }, "toBeVisible": true, "timeoutMs": 45000 }
+  ],
+  "tests": [
+    {
+      "name": "removing a workspace drops it from recents",
+      "steps": [
+        { "expect": { "testId": "explorer-item-launch.sk" }, "toBeVisible": true, "timeoutMs": 45000 },
+        { "press": "Control+Shift+P" },
+        { "fill": { "role": "combobox", "name": "Search commands" }, "value": "Go to Home" },
+        { "press": "Enter", "target": { "role": "combobox", "name": "Search commands" } },
+        { "expect": { "role": "button", "name": "retired workspace" }, "toBeVisible": true },
+        { "click": { "role": "button", "name": "retired from recent" } },
+        { "expectIpc": "remove_recent_project", "status": "ok" },
+        { "expect": { "role": "button", "name": "retired workspace" }, "toHaveCount": 0 },
+        { "expect": { "role": "button", "name": "archive workspace" }, "toBeVisible": true },
+        { "name": "the recent store forgot it", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "app-data:recent-projects.json", "!doc.recent_projects.some((p) => p.path.endsWith('-retired')) && doc.recent_projects.some((p) => p.path.endsWith('-archive'))"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "picking a recent workspace reopens it",
+      "steps": [
+        { "press": "Control+Shift+P" },
+        { "fill": { "role": "combobox", "name": "Search commands" }, "value": "Go to Home" },
+        { "press": "Enter", "target": { "role": "combobox", "name": "Search commands" } },
+        { "expect": { "role": "button", "name": "archive workspace" }, "toBeVisible": true },
+        { "click": { "role": "button", "name": "archive workspace" } },
+        { "expectIpc": "open_project_folder", "status": "ok" },
+        { "expect": { "testId": "explorer-item-archive.sk" }, "toBeVisible": true, "timeoutMs": 30000 },
+        { "expect": { "testId": "explorer-item-launch.sk" }, "toHaveCount": 0 },
+        { "name": "it is now the most recent workspace", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "app-data:recent-projects.json", "doc.recent_projects[0].path.endsWith('-archive')"] },
+        { "expectNoErrors": true }
+      ]
+    }
+  ]
+}

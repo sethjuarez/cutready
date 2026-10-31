@@ -1,0 +1,98 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "Switching, creating, renaming and deleting projects in a multi-project repo, and moving an asset between them, updates the shell and the repo without a reload fallback.",
+  "tags": ["@projects", "@local"],
+  "setup": [
+    { "name": "Create a two-project repo", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/project-switch.json"] }
+  ],
+  "teardown": [
+    { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "beforeEach": [
+    { "name": "Drop pending autosaves and per-test UI state", "clearStorage": true },
+    { "name": "a project is open", "expect": { "testId": "explorer-import-menu" }, "toBeVisible": true, "timeoutMs": 45000 },
+    { "name": "Restore the seeded project", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "reset"] },
+    { "name": "Reload the restored project with clean UI state", "clearStorage": true },
+    { "expect": { "testId": "explorer-item-alpha.sk" }, "toBeVisible": true, "timeoutMs": 45000 }
+  ],
+  "tests": [
+    {
+      "name": "switches to beta and back to alpha",
+      "steps": [
+        { "expect": { "testId": "project-switcher-title-trigger" }, "toBeVisible": true, "timeoutMs": 45000 },
+        { "expect": { "testId": "project-switcher-title-trigger" }, "toContainText": "Alpha Project" },
+        { "click": { "testId": "project-switcher-title-trigger" } },
+        { "expect": { "testId": "project-switcher-option-beta" }, "toBeVisible": true },
+        { "click": { "testId": "project-switcher-option-beta" } },
+        { "expect": { "testId": "project-switcher-title-trigger" }, "toContainText": "Beta Project" },
+        { "click": { "testId": "project-switcher-title-trigger" } },
+        { "expect": { "testId": "project-switcher-option-alpha" }, "toBeVisible": true },
+        { "click": { "testId": "project-switcher-option-alpha" } },
+        { "expect": { "testId": "project-switcher-title-trigger" }, "toContainText": "Alpha Project" },
+        { "expect": "body", "not": true, "toContainText": "Something went wrong" },
+        { "expect": "body", "not": true, "toContainText": "Reload interface" },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "moves a sketch to another project",
+      "steps": [
+        { "expect": { "testId": "explorer-item-alpha.sk" }, "toBeVisible": true, "timeoutMs": 15000 },
+        { "name": "open the sketch's context menu", "click": { "testId": "explorer-item-alpha.sk" }, "button": "right" },
+        { "click": { "role": "menuitem", "name": "Move to", "exact": true } },
+        { "click": { "role": "menuitem", "name": "Beta Project", "exact": true } },
+        { "expectIpc": "transfer_asset", "status": "ok", "timeoutMs": 15000 },
+        { "expect": { "testId": "explorer-item-alpha.sk" }, "toHaveCount": 0 },
+        { "name": "the sketch is in beta", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "beta/alpha.sk", "doc.title === 'Alpha Sketch'"] },
+        { "name": "the sketch left alpha", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "alpha/alpha.sk", "absent"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "creates a project in the repo",
+      "steps": [
+        { "click": { "testId": "project-switcher-title-trigger" } },
+        { "click": { "role": "button", "name": "New Project", "exact": true } },
+        { "fill": { "label": "New project name" }, "value": "Gamma Launch" },
+        { "press": "Enter", "target": { "label": "New project name" } },
+        { "expectIpc": "create_project_in_repo", "status": "ok", "timeoutMs": 15000 },
+        { "expect": { "testId": "project-switcher-title-trigger" }, "toContainText": "Gamma Launch", "timeoutMs": 15000 },
+        { "name": "the manifest lists the project", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", ".cutready/projects.json", "doc.projects.some((p) => p.name === 'Gamma Launch' && p.path === 'gamma-launch')"] },
+        { "name": "the project folder exists", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "gamma-launch", "exists"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "renames the current project",
+      "steps": [
+        { "click": { "testId": "project-switcher-title-trigger" } },
+        { "hover": { "testId": "project-switcher-option-alpha" } },
+        { "click": { "role": "button", "name": "Rename Alpha Project", "exact": true } },
+        { "fill": { "label": "Project name", "exact": true }, "value": "Alpha Pilot" },
+        { "click": { "role": "button", "name": "Save project name", "exact": true } },
+        { "expectIpc": "rename_project", "status": "ok", "timeoutMs": 15000 },
+        { "expect": { "testId": "project-switcher-title-trigger" }, "toContainText": "Alpha Pilot", "timeoutMs": 15000 },
+        { "name": "the manifest has the new name and path", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", ".cutready/projects.json", "doc.projects.some((p) => p.name === 'Alpha Pilot' && p.path === 'alpha-pilot') && !doc.projects.some((p) => p.path === 'alpha')"] },
+        { "name": "the folder moved", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "alpha", "absent"] },
+        { "name": "close the project list", "click": { "testId": "project-switcher-title-trigger" } },
+        { "expect": { "testId": "project-switcher-option-alpha-pilot" }, "toHaveCount": 0 },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "deletes another project and its files",
+      "steps": [
+        { "click": { "testId": "project-switcher-title-trigger" } },
+        { "hover": { "testId": "project-switcher-option-beta" } },
+        { "click": { "role": "button", "name": "Delete Beta Project", "exact": true } },
+        { "click": { "role": "button", "name": "Delete files", "exact": true } },
+        { "expectIpc": "delete_project", "status": "ok", "timeoutMs": 15000 },
+        { "expect": { "testId": "project-switcher-option-beta" }, "toHaveCount": 0 },
+        { "name": "the manifest no longer lists beta", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", ".cutready/projects.json", "!doc.projects.some((p) => p.path === 'beta')"] },
+        { "name": "beta's files are gone", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "beta", "absent"] },
+        { "expect": { "testId": "project-switcher-title-trigger" }, "toContainText": "Alpha Project" },
+        { "expectNoErrors": true }
+      ]
+    }
+  ]
+}

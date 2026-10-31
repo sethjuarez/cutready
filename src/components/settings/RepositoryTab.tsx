@@ -12,6 +12,10 @@ export function RepositoryTab({ settings, updateSetting }: {
   const [testStatus, setTestStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
   const [testMessage, setTestMessage] = useState("");
   const [detectedRemote, setDetectedRemote] = useState<{ name: string; url: string } | null>(null);
+  // Workspace settings are project files, so a typed URL is kept only after it is accepted as a remote
+  // (add_remote rejects URLs with embedded credentials).
+  const [remoteUrlDraft, setRemoteUrlDraft] = useState(settings.repoRemoteUrl);
+  useEffect(() => setRemoteUrlDraft(settings.repoRemoteUrl), [settings.repoRemoteUrl]);
 
   useEffect(() => {
     listDraftlineRemotes()
@@ -36,8 +40,9 @@ export function RepositoryTab({ settings, updateSetting }: {
       if (hasOrigin) {
         setTestStatus("success");
         setTestMessage("Remote is configured and accessible.");
-      } else if (settings.repoRemoteUrl) {
-        await addDraftlineRemote("origin", settings.repoRemoteUrl);
+      } else if (remoteUrlDraft) {
+        await addDraftlineRemote("origin", remoteUrlDraft);
+        updateSetting("repoRemoteUrl", remoteUrlDraft);
         setTestStatus("success");
         setTestMessage("Remote 'origin' added successfully.");
       } else {
@@ -91,8 +96,8 @@ export function RepositoryTab({ settings, updateSetting }: {
         <div className="flex gap-2">
           <input
             type="text"
-            value={settings.repoRemoteUrl}
-            onChange={(e) => updateSetting("repoRemoteUrl", e.target.value)}
+            value={remoteUrlDraft}
+            onChange={(e) => setRemoteUrlDraft(e.target.value)}
             placeholder="https://github.com/user/repo.git"
             className={inputClass + " flex-1"}
           />

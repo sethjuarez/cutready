@@ -17,32 +17,12 @@ import {
   type UnlistenFn,
 } from "@tauri-apps/api/event";
 import { getAuditaurClient, initializeAuditaur } from "./auditaur";
+import { isSensitiveInvokeCommand, isSensitiveTauriEvent } from "./telemetryPolicy";
+
+export { isSensitiveInvokeCommand, isSensitiveTauriEvent };
 
 type AuditaurInvokeArgs = Record<string, unknown>;
 const TAURI_SERIALIZE_TO_IPC_KEY = "__TAURI_TO_IPC_KEY__";
-
-const SENSITIVE_INVOKE_COMMANDS = new Set([
-  "agent_chat_with_tools",
-  "azure_browser_auth_complete",
-  "azure_device_code_poll",
-  "azure_token_refresh",
-  "clear_contributor_identity",
-  "get_contributor_identity",
-  "github_device_code_poll",
-  "read_narration_asset",
-  "save_feedback",
-  "save_narration_recording",
-  "set_contributor_identity",
-]);
-const SENSITIVE_TAURI_EVENTS = new Set(["agent-event"]);
-
-export function isSensitiveInvokeCommand(command: string) {
-  return SENSITIVE_INVOKE_COMMANDS.has(command);
-}
-
-export function isSensitiveTauriEvent(event: string) {
-  return SENSITIVE_TAURI_EVENTS.has(event);
-}
 
 function isTauriRuntime() {
   return typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
@@ -68,7 +48,7 @@ async function getAuditaur() {
 }
 
 export async function invoke<T>(cmd: string, args?: InvokeArgs, options?: InvokeOptions): Promise<T> {
-  if (isSensitiveInvokeCommand(cmd)) {
+  if (isSensitiveInvokeCommand(cmd, args)) {
     return options ? rawInvoke<T>(cmd, args, options) : rawInvoke<T>(cmd, args);
   }
 

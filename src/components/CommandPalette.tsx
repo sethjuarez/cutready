@@ -116,6 +116,7 @@ export function CommandPalette({
             aria-activedescendant={filteredCommands[selectedIndex] ? `cmd-${filteredCommands[selectedIndex].id}` : undefined}
             className="flex-1 bg-transparent border-none outline-none text-[rgb(var(--color-text))] text-sm py-1"
             placeholder="Type a command..."
+            aria-label="Search commands"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -125,6 +126,7 @@ export function CommandPalette({
           <button
             className="flex items-center justify-center w-6 h-6 rounded text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors shrink-0"
             onClick={onClose}
+            aria-label="Close command palette"
           >
             <X className="w-3.5 h-3.5" />
           </button>

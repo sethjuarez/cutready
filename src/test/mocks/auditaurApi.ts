@@ -12,6 +12,11 @@ export type AuditaurFrontendConfig = {
   serviceName: string;
 };
 
+// Unit tests mock @tauri-apps/plugin-dialog directly, so the drill wrapper is a pass-through here.
+export function withDrillDialogs<T>(dialog: T): T {
+  return dialog;
+}
+
 export async function initAuditaur(_config: AuditaurFrontendConfig): Promise<AuditaurClient> {
   return {
     invoke: async () => {

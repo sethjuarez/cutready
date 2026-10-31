@@ -1,0 +1,15 @@
+{
+  "prefix": "cutready-clone-drill-",
+  "notes": [
+    { "path": "plan.md", "body": "# Launch plan\n\nDraft agenda.\n" }
+  ],
+  "appStores": [
+    { "file": "recent-projects.json" }
+  ],
+  "remote": { "seedSave": "Shared launch plan" },
+  "scratch": {
+    "notes": [
+      { "path": "README.md", "body": "Clone destination for drills.\n" }
+    ]
+  }
+}

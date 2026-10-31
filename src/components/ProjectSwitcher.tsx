@@ -268,6 +268,7 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
                 <div key={p.path} className="flex items-center gap-1 px-2 py-1">
                   <input
                     ref={renameInputRef}
+                    aria-label="Project name"
                     value={renameValue}
                     onChange={(e) => setRenameValue(e.target.value)}
                     onKeyDown={(e) => {
@@ -279,6 +280,7 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
                   <button
                     onClick={handleRename}
                     disabled={!renameValue.trim()}
+                    aria-label="Save project name"
                     className="text-[11px] px-1.5 py-0.5 rounded bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] disabled:opacity-40"
                   >
                     ✓
@@ -360,8 +362,9 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
                     setRenamingPath(p.path);
                     setRenameValue(p.name);
                   }}
-                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[rgb(var(--color-surface))] transition-opacity"
+                  className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-0.5 rounded hover:bg-[rgb(var(--color-surface))] transition-opacity"
                   title="Rename project"
+                  aria-label={`Rename ${p.name}`}
                 >
                   <Pencil className="w-2.5 h-2.5" />
                 </button>
@@ -372,7 +375,7 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
                       setRenamingPath(null);
                       setDeletingPath(p.path);
                     }}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:bg-error/10 hover:text-error transition-opacity"
+                    className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-0.5 rounded text-[rgb(var(--color-text-secondary))] hover:bg-error/10 hover:text-error transition-opacity"
                     title="Delete project"
                     aria-label={`Delete ${p.name}`}
                   >
@@ -423,6 +426,7 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
               <div className="flex items-center gap-1 px-2 py-1.5">
                 <input
                   ref={inputRef}
+                  aria-label="New project name"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   onKeyDown={(e) => {

@@ -1310,6 +1310,22 @@ pub async fn agent_chat_with_tools(
                     );
                 }
             }
+            // A user stop is an outcome, not a failure; the caller keeps its own transcript.
+            if cancelled {
+                return Ok(AgentChatResult {
+                    messages: Vec::new(),
+                    response: String::new(),
+                    provider: effective_provider,
+                    model: effective_model,
+                    execution_engine: harness_id,
+                    agent_id,
+                    run_id,
+                    elapsed_ms,
+                    reasoning_effort: effective_reasoning_effort,
+                    usage: Usage::default(),
+                    cancelled: true,
+                });
+            }
             return Err(err);
         }
     };
@@ -1325,6 +1341,7 @@ pub async fn agent_chat_with_tools(
         elapsed_ms: started.elapsed().as_millis(),
         reasoning_effort: effective_reasoning_effort,
         usage: result.usage,
+        cancelled: false,
     })
 }
 
@@ -1414,6 +1431,8 @@ pub struct AgentChatResult {
     pub elapsed_ms: u128,
     pub reasoning_effort: Option<String>,
     pub usage: Usage,
+    /// The user stopped the run; `messages` and `response` are empty.
+    pub cancelled: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -1532,7 +1551,7 @@ pub async fn delete_memory(index: usize, state: tauri::State<'_, AppState>) -> R
 }
 
 /// Update a memory's content by index.
-#[tauri::command]
+#[auditaur_command(skip_all, err)]
 pub async fn update_memory(
     index: usize,
     content: String,

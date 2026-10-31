@@ -1,0 +1,6 @@
+{
+  "prefix": "cutready-github-drill-",
+  "sketches": [
+    { "path": "github-auth-drill.sk", "title": "GitHub auth drill", "narrative": "Disposable project for GitHub auth validation." }
+  ]
+}

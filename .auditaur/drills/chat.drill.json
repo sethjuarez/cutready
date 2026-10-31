@@ -1,0 +1,85 @@
+{
+  "$schema": "https://auditaur.dev/schemas/drill.schema.json",
+  "description": "Live Prompty chat turns: tool reads, cancellation, and recovery, with fixture secrets kept out of telemetry. Needs a configured AI provider.",
+  "tags": ["@live", "@chat"],
+  "setup": [
+    { "name": "Create fixture with marked secrets", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "setup", ".auditaur/fixtures/chat.json"] }
+  ],
+  "teardown": [
+    { "name": "Remove fixture", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "teardown"], "always": true }
+  ],
+  "tests": [
+    { "name": "opens the chat panel", "steps": [
+        { "expect": { "testId": "activity-chat" }, "toBeVisible": true, "timeoutMs": 45000 },
+        { "click": { "testId": "activity-chat" } },
+        { "expect": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]", "toBeVisible": true, "timeoutMs": 60000 }
+    ] },
+    {
+      "name": "reads a note",
+      "timeoutMs": 180000,
+      "steps": [
+        { "fill": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]", "value": "Read the note brief.md and reply with ONLY the launch codename it contains, nothing else." },
+        { "click": "[data-testid=\"secondary-chat-panel\"] button[title=\"Send (Enter)\"]" },
+        { "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]", "toBeVisible": true, "timeoutMs": 12000, "name": "turn starts" },
+        { "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]", "toHaveCount": 0, "timeoutMs": 120000, "name": "turn finishes" },
+        { "expect": "[data-testid=\"secondary-chat-panel\"] [data-testid=\"chat-messages-scroll\"]", "toContainText": "ZULU-7781" },
+        { "expectSpan": "agent_chat_with_tools", "status": "ok", "count": 1, "name": "backend command span succeeded (args skipped)" },
+        { "expectLog": "engine=prompty agent=" },
+        { "expectLog": "engine=agentive agent=", "not": true },
+        { "expectNoErrors": true },
+        { "expectNoTelemetry": { "pattern": "ZULU-7781|CIPHER-3096|CIPHER-8042" } }
+      ]
+    },
+    {
+      "name": "reads several files",
+      "timeoutMs": 180000,
+      "steps": [
+        { "click": "[data-testid=\"secondary-chat-panel\"] button[aria-label=\"New Chat\"]" },
+        { "expect": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]", "toBeVisible": true, "timeoutMs": 15000 },
+        { "fill": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]", "value": "List the project files, then read intro.sk and demo.sk. Reply with the exact title of each sketch, one per line." },
+        { "click": "[data-testid=\"secondary-chat-panel\"] button[title=\"Send (Enter)\"]" },
+        { "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]", "toBeVisible": true, "timeoutMs": 12000, "name": "turn starts" },
+        { "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]", "toHaveCount": 0, "timeoutMs": 120000, "name": "turn finishes" },
+        { "expect": "[data-testid=\"secondary-chat-panel\"] [data-testid=\"chat-messages-scroll\"]", "toContainText": "Aurora Onboarding" },
+        { "expect": "[data-testid=\"secondary-chat-panel\"] [data-testid=\"chat-messages-scroll\"]", "toContainText": "Falcon Checkout" },
+        { "expectLog": "engine=prompty agent=" },
+        { "expectLog": "engine=agentive agent=", "not": true },
+        { "expectNoErrors": true },
+        { "expectNoTelemetry": { "pattern": "ZULU-7781|CIPHER-3096|CIPHER-8042" } }
+      ]
+    },
+    {
+      "name": "cancels a long turn",
+      "timeoutMs": 180000,
+      "steps": [
+        { "click": "[data-testid=\"secondary-chat-panel\"] button[aria-label=\"New Chat\"]" },
+        { "expect": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]", "toBeVisible": true, "timeoutMs": 15000 },
+        { "fill": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]", "value": "Write an extremely long, exhaustively detailed 2000-word narration script for a product demo about relational databases. Keep going with as much detail as possible." },
+        { "click": "[data-testid=\"secondary-chat-panel\"] button[title=\"Send (Enter)\"]" },
+        { "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]", "toBeVisible": true, "timeoutMs": 12000, "name": "turn starts" },
+        { "sleep": 2500 },
+        { "click": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]" },
+        { "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]", "toHaveCount": 0, "timeoutMs": 15000, "name": "turn stops" },
+        { "expectNoErrors": true },
+        { "expectNoTelemetry": { "pattern": "ZULU-7781|CIPHER-3096|CIPHER-8042" } }
+      ]
+    },
+    {
+      "name": "recovers after cancel",
+      "timeoutMs": 180000,
+      "steps": [
+        { "click": "[data-testid=\"secondary-chat-panel\"] button[aria-label=\"New Chat\"]" },
+        { "expect": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]", "toBeVisible": true, "timeoutMs": 15000 },
+        { "fill": "[data-testid=\"secondary-chat-panel\"] textarea[placeholder^=\"Ask about your demo plan\"]", "value": "Read the note brief.md and reply with ONLY the launch codename it contains, nothing else." },
+        { "click": "[data-testid=\"secondary-chat-panel\"] button[title=\"Send (Enter)\"]" },
+        { "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]", "toBeVisible": true, "timeoutMs": 12000, "name": "turn starts" },
+        { "expect": "[data-testid=\"secondary-chat-panel\"] button[title=\"Stop generation\"]", "toHaveCount": 0, "timeoutMs": 120000, "name": "turn finishes" },
+        { "expect": "[data-testid=\"secondary-chat-panel\"] [data-testid=\"chat-messages-scroll\"]", "toContainText": "ZULU-7781" },
+        { "expectLog": "engine=prompty agent=" },
+        { "expectLog": "engine=agentive agent=", "not": true },
+        { "expectNoErrors": true },
+        { "expectNoTelemetry": { "pattern": "ZULU-7781|CIPHER-3096|CIPHER-8042" } }
+      ]
+    }
+  ]
+}

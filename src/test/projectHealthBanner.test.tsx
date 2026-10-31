@@ -33,6 +33,23 @@ describe("ProjectHealthBanner", () => {
     expect(dismissRecovery).toHaveBeenCalledOnce();
   });
 
+  it("names recovery operations as Draftline reports them, in plain words", () => {
+    for (const [operation, label] of [
+      ["DiscardChanges", "A discard was interrupted"],
+      ["SwitchVariation", "A branch switch was interrupted"],
+      ["RestoreVersionAsNewSave", "A restore was interrupted"],
+      ["ApplyShelf", "A shelf restore was interrupted"],
+    ]) {
+      useAppStore.setState({
+        projectHealth: { ...HEALTHY_PROJECT, recovery: { operation_id: "op", operation, completed: false } as never },
+      });
+      const { unmount } = render(<ProjectHealthBanner />);
+      expect(screen.getByTestId("project-health-recovery")).toHaveTextContent(label);
+      expect(screen.getByTestId("project-health-recovery")).not.toHaveTextContent(operation);
+      unmount();
+    }
+  });
+
   it("shows no actions when another folder owns the recovery", () => {
     useAppStore.setState({ projectHealth: { ...HEALTHY_PROJECT, recovery, recoveryInOtherFolder: true } });
     render(<ProjectHealthBanner />);
