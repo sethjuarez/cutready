@@ -37,7 +37,16 @@ fn result(response: Option<Value>) -> Value {
 #[test]
 fn edit_document_vectors_hold_over_mcp() {
     let vectors = edit_document_vectors();
-    assert_eq!(vectors.len(), 19, "every EditDocument vector runs");
+    let golden = vectors
+        .iter()
+        .filter(|v| v["name"].as_str().unwrap().starts_with("golden_"))
+        .count();
+    assert_eq!(
+        vectors.len() - golden,
+        19,
+        "every hand-written EditDocument vector runs"
+    );
+    assert_eq!(golden, 16, "every golden-seeded EditDocument vector runs");
     for vector in vectors {
         let name = vector["name"].as_str().unwrap();
         let request = &vector["input"]["request"];
