@@ -3094,6 +3094,7 @@ mod tests {
             adapter.changed_files().unwrap();
             let change = crate::engine::draftline_adapter::StructureChange::begin(
                 &view.repo_root,
+                &crate::engine::write_lock::RepoLock::for_path(&view.repo_root),
                 "Edit project",
                 [view.root.clone()],
             )

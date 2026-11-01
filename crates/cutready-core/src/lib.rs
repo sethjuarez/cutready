@@ -12,6 +12,7 @@ pub mod assets;
 pub mod document;
 pub mod edit_ops;
 pub mod edit_session;
+pub mod identity;
 pub mod import;
 pub mod models;
 pub mod notes;

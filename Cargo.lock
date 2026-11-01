@@ -1642,6 +1642,7 @@ dependencies = [
  "cutready-contracts",
  "cutready-core",
  "cutready-desktop-io",
+ "cutready-versioning",
  "dirs 6.0.0",
  "draftline",
  "futures-util",
@@ -1741,6 +1742,17 @@ dependencies = [
  "tempfile",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "cutready-versioning"
+version = "0.1.0"
+dependencies = [
+ "cutready-core",
+ "draftline",
+ "git2",
+ "serde",
+ "tempfile",
 ]
 
 [[package]]

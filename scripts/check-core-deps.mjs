@@ -1,5 +1,6 @@
 // Guards cutready-core's dependency graph so the core stays host-neutral and
-// keeps building for iOS (architecture v3 §5). `cargo tree -p` resolves
+// keeps building for iOS (architecture v3 §5), and keeps cutready-versioning
+// free of the desktop shell. `cargo tree -p` resolves
 // features for core alone, unlike workspace-unified `cargo metadata`.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -13,6 +14,13 @@ export const FORBIDDEN = [
   { pattern: /^(rusqlite|libsqlite3-sys)$/, reason: "storage goes through the OpLogStore port" },
   { pattern: /^reqwest$/, reason: "network access belongs to hosts" },
   { pattern: /^(draftline|cutready)$/, reason: "core must not depend on the app or Draftline" },
+];
+
+export const VERSIONING_PACKAGE = "cutready-versioning";
+
+export const VERSIONING_FORBIDDEN = [
+  { pattern: /^tauri/, reason: "versioning must not depend on the desktop shell" },
+  { pattern: /^cutready$/, reason: "versioning must not depend on the app" },
 ];
 
 const FORBIDDEN_FEATURES = [
@@ -40,11 +48,19 @@ export function parseTree(output) {
 }
 
 export function checkCoreDeps(packages) {
+  return findForbidden(packages, FORBIDDEN, FORBIDDEN_FEATURES);
+}
+
+export function checkVersioningDeps(packages) {
+  return findForbidden(packages, VERSIONING_FORBIDDEN, []);
+}
+
+function findForbidden(packages, forbidden, forbiddenFeatures) {
   const problems = [];
   for (const [name, features] of packages) {
-    const rule = FORBIDDEN.find(({ pattern }) => pattern.test(name));
+    const rule = forbidden.find(({ pattern }) => pattern.test(name));
     if (rule) problems.push(`${name}: ${rule.reason}`);
-    for (const banned of FORBIDDEN_FEATURES) {
+    for (const banned of forbiddenFeatures) {
       if (banned.name === name && features.has(banned.feature)) {
         problems.push(`${name} feature "${banned.feature}": ${banned.reason}`);
       }
@@ -53,24 +69,37 @@ export function checkCoreDeps(packages) {
   return problems;
 }
 
-function main() {
+function tree(pkg) {
   const output = execFileSync(
     "cargo",
-    ["tree", "-p", CORE_PACKAGE, "-e", "normal,build", "--target", "all", "--prefix", "none", "-f", TREE_FORMAT, "--locked", "--color", "never"],
+    ["tree", "-p", pkg, "-e", "normal,build", "--target", "all", "--prefix", "none", "-f", TREE_FORMAT, "--locked", "--color", "never"],
     { encoding: "utf8" },
   );
   const packages = parseTree(output);
-  if (!packages.has(CORE_PACKAGE)) {
-    console.error(`check-core-deps: ${CORE_PACKAGE} not found in cargo tree output.`);
+  if (!packages.has(pkg)) {
+    console.error(`check-core-deps: ${pkg} not found in cargo tree output.`);
     process.exit(1);
   }
-  const problems = checkCoreDeps(packages);
-  if (problems.length > 0) {
-    console.error(`${CORE_PACKAGE} has forbidden dependencies:`);
-    for (const problem of problems) console.error(`  - ${problem}`);
-    process.exit(1);
+  return packages;
+}
+
+function main() {
+  let failed = false;
+  for (const [pkg, check, label] of [
+    [CORE_PACKAGE, checkCoreDeps, "Core"],
+    [VERSIONING_PACKAGE, checkVersioningDeps, "Versioning"],
+  ]) {
+    const packages = tree(pkg);
+    const problems = check(packages);
+    if (problems.length > 0) {
+      console.error(`${pkg} has forbidden dependencies:`);
+      for (const problem of problems) console.error(`  - ${problem}`);
+      failed = true;
+    } else {
+      console.log(`${label} dependencies OK: ${packages.size} packages.`);
+    }
   }
-  console.log(`Core dependencies OK: ${packages.size} packages.`);
+  if (failed) process.exit(1);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main();

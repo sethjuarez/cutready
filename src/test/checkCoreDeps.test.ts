@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error - plain .mjs script without type declarations
-import { checkCoreDeps, parseTree } from "../../scripts/check-core-deps.mjs";
+import { checkCoreDeps, checkVersioningDeps, parseTree } from "../../scripts/check-core-deps.mjs";
 
 const clean = `cutready-core v0.1.0 (C:\\repo\\crates\\cutready-core)||
 chrono v0.4.45|alloc,serde,std|
@@ -39,6 +39,19 @@ draftline v0.10.1||`;
 
   it("fails on lines it cannot parse", () => {
     expect(() => parseTree(`${clean}\nsomething unexpected`)).toThrow(/unreadable/);
+  });
+
+  it("lets versioning use git and Draftline but not the desktop shell", () => {
+    const versioning = parseTree(`cutready-versioning v0.1.0 (C:\\repo\\crates\\cutready-versioning)||
+draftline v0.10.2||
+tokio v1.47.0|process,rt|
+libgit2-sys v0.18.0||
+cutready-core v0.1.0 (C:\\repo\\crates\\cutready-core)||`);
+    expect(checkVersioningDeps(versioning)).toEqual([]);
+    const dirty = parseTree(`cutready-versioning v0.1.0||
+tauri v2.5.0|default|
+cutready v0.9.0 (C:\\repo\\src-tauri)||`);
+    expect(checkVersioningDeps(dirty).map((p: string) => p.split(":")[0])).toEqual(["tauri", "cutready"]);
   });
 
   it("allows tokio but not its process feature", () => {

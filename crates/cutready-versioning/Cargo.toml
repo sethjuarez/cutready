@@ -1,0 +1,18 @@
+[package]
+name = "cutready-versioning"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "CutReady's Draftline facade: content policy, remotes, history and authored structure saves. Takes identity and the write lock through cutready-core, so it never depends on Tauri."
+
+[lib]
+name = "cutready_versioning"
+
+[dependencies]
+cutready-core = { path = "../cutready-core" }
+draftline = "0.10.2"
+git2 = { version = "0.21", default-features = false }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "3"

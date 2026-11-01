@@ -1,0 +1,2323 @@
+//! CutReady's Draftline-backed versioning service.
+//!
+//! This crate keeps CutReady's content policy, remote credential behavior, and
+//! product-facing naming in one place while Draftline owns the versioning and
+//! collaboration mechanics. Hosts hand it the acting identity and the write
+//! lock through `cutready-core`, so it never reaches into the desktop shell.
+
+use std::marker::PhantomData;
+use std::path::{Path, PathBuf};
+
+use draftline::{
+    ApplyIncomingReport, ApplyIncomingResult, ChangeSet, ContentPolicy, Contributor,
+    ContributorProfile, FolderFix, FolderState, HistoryEntry, MergeConflictResolution,
+    MergeIncomingReport, MergeIncomingResult, MergeIncomingToken, PreflightReport, PreviewFile,
+    PublishResult, PullRequestProvider, RemoteCredential, RemoteEndpoint, RemoteOptions,
+    Result as DraftlineResult, SendPreflight, SendRequest, SendResult, Shelf, SwitchPolicy,
+    SyncStatus, Variation, VariationId, VariationMetadata, VariationSummary, Version, VersionDiff,
+    VersionId, VersionPreview, Workspace, WorkspaceSummary,
+};
+
+use serde::Serialize;
+
+use cutready_core::identity::{IdentitySource, ResolvedIdentity};
+use cutready_core::{Lock, LockGuard};
+
+const EXCLUDED_RUNTIME_PATHS: &[&str] = &[
+    ".chats",
+    ".cutready/recordings",
+    ".cutready/agent-state.db",
+    ".cutready/memory.json",
+    ".cutready/locks.json",
+];
+
+const CUTREADY_CONTENT_EXTENSIONS: &[&str] = &[
+    "sk", "sb", "md", "cv", "png", "jpg", "jpeg", "webp", "webm", "ogg", "oga", "mp3", "wav",
+    "m4a", "flac",
+];
+const CUTREADY_INCLUDED_PATHS: &[&str] = &[
+    ".cutready/projects.json",
+    ".cutready/visuals",
+    ".cutready/screenshots",
+    ".cutready/narration",
+];
+const CUTREADY_LARGE_FILE_THRESHOLD_BYTES: u64 = 50 * 1024 * 1024;
+
+/// Branch namespace CutReady owns inside a developer's code repository. Only
+/// applied to hybrid projects so standalone projects keep their existing variations.
+pub const CUTREADY_VARIATION_NAMESPACE: &str = "cutready/";
+
+/// Prefix a user-supplied variation name with CutReady's namespace when the
+/// project is hybrid and the name isn't already namespaced.
+pub fn namespaced_variation_name(hybrid: bool, name: &str) -> String {
+    let trimmed = name.trim();
+    if !hybrid || trimmed.starts_with(CUTREADY_VARIATION_NAMESPACE) {
+        return name.to_string();
+    }
+    format!("{CUTREADY_VARIATION_NAMESPACE}{trimmed}")
+}
+
+/// CutReady-facing facade over a Draftline workspace.
+pub struct CutReadyDraftlineAdapter {
+    workspace: Workspace,
+}
+
+impl CutReadyDraftlineAdapter {
+    /// Open or initialize a Draftline workspace for a CutReady project.
+    ///
+    /// A folder inside an existing repository joins it (no nested `.git`) and
+    /// lists only `cutready/*` variations plus the default and current branch.
+    pub fn open_project(root: impl AsRef<Path>) -> DraftlineResult<Self> {
+        let root = root.as_ref();
+        let policy = cutready_content_policy()?;
+        let workspace = match Workspace::init_with_policy(root, policy.clone()) {
+            // A commit moved the managed folder (or the root's content) here.
+            Err(error) => Self::adopt_renamed_folder(root, policy).ok_or(error)??,
+            result => result?,
+        };
+        let workspace = if workspace.scope().as_os_str().is_empty() {
+            workspace
+        } else {
+            workspace.with_variation_namespace(CUTREADY_VARIATION_NAMESPACE)?
+        };
+        Ok(Self { workspace })
+    }
+
+    /// Write the real content of managed files still holding the LFS pointer
+    /// HEAD stores. True when anything was written.
+    pub fn smudge_pointer_files(&self) -> DraftlineResult<bool> {
+        self.workspace.smudge_pointer_files()
+    }
+
+    /// True when Draftline has never managed `root` or any folder in its
+    /// repository, so opening it would start managing it.
+    pub fn is_unmanaged(root: &Path) -> bool {
+        matches!(
+            Workspace::probe_with_namespace(root, CUTREADY_VARIATION_NAMESPACE).map(|p| p.state),
+            Ok(FolderState::Unmanaged | FolderState::NotARepository)
+        )
+    }
+
+    /// When `root` is gone because a commit renamed the managed folder, the
+    /// managed folder and where it went, both relative to the repository.
+    /// Also covers a root project whose content a commit moved into a
+    /// subfolder: the root still exists, but the project now lives there.
+    pub fn renamed_project_folder(root: &Path) -> Option<(PathBuf, PathBuf)> {
+        let probe = Workspace::probe_with_namespace(root, CUTREADY_VARIATION_NAMESPACE).ok()?;
+        let from = probe.folder.clone()?;
+        let managed = probe.repository?.join(&from);
+        let moved_out_of_root = from.as_os_str().is_empty()
+            && probe.state == FolderState::Ready
+            && same_existing_path(&managed, &probe.requested);
+        if !moved_out_of_root && !same_missing_path(&managed, &probe.requested) {
+            return None;
+        }
+        probe
+            .suggestions
+            .into_iter()
+            .find_map(|suggestion| match suggestion.fix {
+                FolderFix::ManageRenamedFolder { folder } => Some((from.clone(), folder)),
+                _ => None,
+            })
+    }
+
+    /// Manage `root` with its history when a commit renamed the managed
+    /// folder to `root`. `None` when `root` isn't where it went.
+    fn adopt_renamed_folder(
+        root: &Path,
+        policy: ContentPolicy,
+    ) -> Option<DraftlineResult<Workspace>> {
+        let probe = Workspace::probe_with_namespace(root, CUTREADY_VARIATION_NAMESPACE).ok()?;
+        let repository = probe.repository?;
+        let old = repository.join(probe.folder?);
+        let (_, to) = Self::renamed_project_folder(&old)?;
+        if !same_existing_path(&repository.join(&to), root) {
+            return None;
+        }
+        Some(Workspace::apply_folder_fix_with_namespace(
+            &old,
+            policy,
+            CUTREADY_VARIATION_NAMESPACE,
+            &FolderFix::ManageRenamedFolder { folder: to },
+        ))
+    }
+
+    pub fn clone_project_with_options(
+        remote_url: &str,
+        path: impl AsRef<Path>,
+        options: &mut RemoteOptions<'_>,
+    ) -> DraftlineResult<Self> {
+        let policy = cutready_content_policy()?;
+        let workspace =
+            Workspace::clone_workspace_with_policy_and_options(remote_url, path, policy, options)?;
+        Ok(Self { workspace })
+    }
+
+    /// Git work-tree root. Draftline paths are relative to this root.
+    pub fn root(&self) -> &Path {
+        self.workspace.root()
+    }
+
+    /// Alias of [`Self::root`] that reads clearly next to [`Self::scope`].
+    pub fn git_root(&self) -> &Path {
+        self.workspace.root()
+    }
+
+    /// The project folder relative to the git work tree; empty when standalone.
+    pub fn scope(&self) -> &Path {
+        self.workspace.scope()
+    }
+
+    /// True when the project is a folder inside a larger code repository.
+    pub fn is_hybrid(&self) -> bool {
+        !self.workspace.scope().as_os_str().is_empty()
+    }
+
+    fn variation_name(&self, name: &str) -> String {
+        namespaced_variation_name(self.is_hybrid(), name)
+    }
+
+    pub fn inspect_changes(&self) -> DraftlineResult<ChangeSet> {
+        self.workspace.changes()
+    }
+
+    pub fn discard_changes(&self) -> DraftlineResult<ChangeSet> {
+        self.workspace.discard_changes()
+    }
+
+    pub fn discard_file(
+        &self,
+        path: impl AsRef<Path>,
+    ) -> DraftlineResult<Option<draftline::ChangedFile>> {
+        self.workspace.discard_file(path)
+    }
+
+    pub fn shelve_changes(&self, name: &str) -> DraftlineResult<Shelf> {
+        self.workspace.shelve_changes(name)
+    }
+
+    pub fn list_shelves(&self) -> DraftlineResult<Vec<Shelf>> {
+        self.workspace.list_shelves()
+    }
+
+    pub fn apply_shelf(&self, id: &str) -> DraftlineResult<Shelf> {
+        self.workspace.apply_shelf(id)
+    }
+
+    pub fn delete_shelf(&self, id: &str) -> DraftlineResult<()> {
+        self.workspace.delete_shelf(id)
+    }
+
+    pub fn workspace_summary(&self) -> DraftlineResult<WorkspaceSummary> {
+        self.workspace.workspace_summary()
+    }
+
+    /// Unattributed save, for tests only: app saves must name the acting user.
+    #[cfg(test)]
+    pub fn save_version(&self, label: &str) -> DraftlineResult<Version> {
+        self.workspace.save_version(label)
+    }
+
+    pub fn save_version_with_profile(
+        &self,
+        label: &str,
+        profile: &ContributorProfile,
+    ) -> DraftlineResult<Version> {
+        self.workspace.save_version_with_profile(label, profile)
+    }
+
+    pub fn changed_files(&self) -> DraftlineResult<Vec<draftline::ChangedFile>> {
+        self.workspace.changed_files()
+    }
+
+    pub fn save_files_with_profile<I, P>(
+        &self,
+        paths: I,
+        label: &str,
+        profile: &ContributorProfile,
+    ) -> DraftlineResult<Version>
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        self.workspace
+            .save_files_with_profile(paths, label, profile)
+    }
+
+    pub fn versions(&self) -> DraftlineResult<Vec<Version>> {
+        self.workspace.versions()
+    }
+
+    pub fn full_history(&self) -> DraftlineResult<Vec<HistoryEntry>> {
+        self.workspace.full_history()
+    }
+
+    pub fn preview_version(&self, version: &VersionId) -> DraftlineResult<VersionPreview> {
+        self.workspace.preview_version(version)
+    }
+
+    pub fn preview_version_file(
+        &self,
+        version: &VersionId,
+        path: impl AsRef<Path>,
+    ) -> DraftlineResult<Option<PreviewFile>> {
+        self.workspace.preview_version_file(version, path)
+    }
+
+    pub fn create_variation_from(
+        &self,
+        version: &VersionId,
+        name: &str,
+    ) -> DraftlineResult<Variation> {
+        self.workspace
+            .create_variation_from(version, self.variation_name(name))
+    }
+
+    pub fn current_variation(&self) -> DraftlineResult<String> {
+        self.workspace.current_variation()
+    }
+
+    pub fn variations(&self) -> DraftlineResult<Vec<Variation>> {
+        self.workspace.variations()
+    }
+
+    pub fn variation_summaries(&self) -> DraftlineResult<Vec<VariationSummary>> {
+        self.workspace.variation_summaries()
+    }
+
+    pub fn create_variation_from_with_metadata(
+        &self,
+        version: &VersionId,
+        name: &str,
+        label: Option<&str>,
+        slug: Option<&str>,
+    ) -> DraftlineResult<Variation> {
+        self.workspace.create_variation_from_with_metadata(
+            version,
+            self.variation_name(name),
+            cutready_variation_metadata(label, slug),
+        )
+    }
+
+    pub fn variation_metadata(
+        &self,
+        variation: &VariationId,
+    ) -> DraftlineResult<VariationMetadata> {
+        self.workspace.variation_metadata(variation)
+    }
+
+    pub fn set_variation_metadata(
+        &self,
+        variation: &VariationId,
+        label: Option<&str>,
+        slug: Option<&str>,
+    ) -> DraftlineResult<Variation> {
+        self.workspace
+            .set_variation_metadata(variation, cutready_variation_metadata(label, slug))
+    }
+
+    pub fn delete_variation(&self, variation: &VariationId) -> DraftlineResult<()> {
+        self.workspace.delete_variation(variation)
+    }
+
+    pub fn preflight_switch_variation(
+        &self,
+        variation: &VariationId,
+    ) -> DraftlineResult<PreflightReport> {
+        self.workspace.preflight_switch_variation(variation)
+    }
+
+    pub fn switch_variation(&self, variation: &VariationId) -> DraftlineResult<Variation> {
+        self.workspace
+            .switch_variation(variation, SwitchPolicy::AbortIfDirty)
+    }
+
+    pub fn switch_variation_with_policy(
+        &self,
+        variation: &VariationId,
+        policy: SwitchPolicy,
+    ) -> DraftlineResult<Variation> {
+        self.workspace.switch_variation(variation, policy)
+    }
+
+    pub fn restore_version_as_new_save(
+        &self,
+        version: &VersionId,
+        label: &str,
+    ) -> DraftlineResult<Version> {
+        self.workspace.restore_version_as_new_save(version, label)
+    }
+
+    pub fn diff_versions(&self, from: &VersionId, to: &VersionId) -> DraftlineResult<VersionDiff> {
+        self.workspace.diff_versions(from, to)
+    }
+
+    pub fn diff_version_to_workspace(&self, version: &VersionId) -> DraftlineResult<VersionDiff> {
+        self.workspace.diff_version_to_workspace(version)
+    }
+
+    pub fn add_remote(&self, name: &str, url: &str) -> DraftlineResult<RemoteEndpoint> {
+        self.workspace.add_remote(name, url)
+    }
+
+    pub fn remotes(&self) -> DraftlineResult<Vec<RemoteEndpoint>> {
+        self.workspace.remotes()
+    }
+
+    pub fn fetch_remote_with_options(
+        &self,
+        remote: &str,
+        options: &mut RemoteOptions<'_>,
+    ) -> DraftlineResult<()> {
+        self.workspace.fetch_remote_with_options(remote, options)
+    }
+
+    pub fn sync_status(&self, remote: &str) -> DraftlineResult<SyncStatus> {
+        self.workspace.sync_status(remote)
+    }
+
+    /// Compare the current branch with the remote base branch (e.g. `main`)
+    /// from the last fetch. Only meaningful for hybrid projects working on a
+    /// branch other than the base; returns `None` for standalone projects, on
+    /// the base itself, or when the base can't be determined.
+    pub fn base_status(&self, remote: &str) -> DraftlineResult<Option<SyncStatus>> {
+        if !self.is_hybrid() {
+            return Ok(None);
+        }
+        let status = match self.workspace.base_status(remote) {
+            Ok(status) => status,
+            Err(draftline::DraftlineError::SendBaseUnknown) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        if status.variation == self.current_variation()? {
+            return Ok(None);
+        }
+        Ok(Some(status))
+    }
+
+    /// Preflight bringing the latest remote base into the current branch.
+    /// Conflicts outside the project folder are reported in
+    /// `developer_conflicts` and yield no token.
+    pub fn preflight_merge_base(&self, remote: &str) -> DraftlineResult<MergeIncomingReport> {
+        self.workspace.preflight_merge_base(remote)
+    }
+
+    pub fn preflight_apply_incoming(&self, remote: &str) -> DraftlineResult<ApplyIncomingReport> {
+        self.workspace.preflight_apply_incoming(remote)
+    }
+
+    pub fn apply_incoming_with_options(
+        &self,
+        remote: &str,
+        options: &mut RemoteOptions<'_>,
+    ) -> DraftlineResult<ApplyIncomingResult> {
+        self.workspace.apply_incoming(remote, options)
+    }
+
+    pub fn preflight_merge_incoming(&self, remote: &str) -> DraftlineResult<MergeIncomingReport> {
+        self.workspace.preflight_merge_incoming(remote)
+    }
+
+    pub fn merge_incoming_with_options(
+        &self,
+        token: MergeIncomingToken,
+        label: &str,
+        options: &mut RemoteOptions<'_>,
+    ) -> DraftlineResult<MergeIncomingResult> {
+        self.workspace.merge_incoming(token, label, options)
+    }
+
+    pub fn merge_incoming_with_resolutions_and_options(
+        &self,
+        token: MergeIncomingToken,
+        label: &str,
+        resolutions: Vec<MergeConflictResolution>,
+        options: &mut RemoteOptions<'_>,
+    ) -> DraftlineResult<MergeIncomingResult> {
+        self.workspace
+            .merge_incoming_with_resolutions(token, label, resolutions, options)
+    }
+
+    pub fn publish_changes_with_options(
+        &self,
+        remote: &str,
+        options: &mut RemoteOptions<'_>,
+    ) -> DraftlineResult<PublishResult> {
+        self.workspace.publish_changes_with_options(remote, options)
+    }
+
+    /// Check what Send would do without pushing or creating a branch. Fetches
+    /// the base; run it off the async runtime.
+    pub fn preflight_send(
+        &self,
+        remote: &str,
+        request: &SendRequest,
+        options: &mut RemoteOptions<'_>,
+    ) -> DraftlineResult<SendPreflight> {
+        self.workspace.preflight_send(remote, request, options)
+    }
+
+    /// Push the current branch and open (or reuse) a pull request. Blocks on
+    /// network I/O through `provider`; run it off the async runtime.
+    pub fn send_for_review(
+        &self,
+        remote: &str,
+        request: &SendRequest,
+        provider: &mut dyn PullRequestProvider,
+        options: &mut RemoteOptions<'_>,
+    ) -> DraftlineResult<SendResult> {
+        self.workspace.send(remote, request, provider, options)
+    }
+}
+
+/// Build the content policy needed for a safe CutReady Draftline spike.
+/// Whether two paths that may no longer exist name the same location: their
+/// parents resolve to the same folder and their names match (ignoring case on
+/// Windows).
+fn same_existing_path(a: &Path, b: &Path) -> bool {
+    matches!((a.canonicalize(), b.canonicalize()), (Ok(a), Ok(b)) if a == b)
+}
+
+fn same_missing_path(a: &Path, b: &Path) -> bool {
+    let (Some(a_name), Some(b_name)) = (a.file_name(), b.file_name()) else {
+        return false;
+    };
+    let names_match = if cfg!(windows) {
+        a_name.to_string_lossy().to_lowercase() == b_name.to_string_lossy().to_lowercase()
+    } else {
+        a_name == b_name
+    };
+    let parent = |path: &Path| path.parent().and_then(|parent| parent.canonicalize().ok());
+    names_match && parent(a).is_some() && parent(a) == parent(b)
+}
+
+pub fn cutready_content_policy() -> DraftlineResult<ContentPolicy> {
+    ContentPolicy::new()
+        .include_paths(CUTREADY_INCLUDED_PATHS)?
+        .include_extensions(CUTREADY_CONTENT_EXTENSIONS)?
+        .exclude_paths(EXCLUDED_RUNTIME_PATHS)
+        .map(|policy| policy.with_large_file_threshold(CUTREADY_LARGE_FILE_THRESHOLD_BYTES))
+}
+
+pub fn cutready_variation_metadata(label: Option<&str>, slug: Option<&str>) -> VariationMetadata {
+    let mut metadata = VariationMetadata::new();
+    if let Some(label) = label {
+        metadata = metadata.with_label(label);
+    }
+    if let Some(slug) = slug {
+        metadata = metadata.with_slug(slug);
+    }
+    metadata
+}
+
+pub fn cutready_remote_options(github_token: Option<String>) -> RemoteOptions<'static> {
+    RemoteOptions::new().with_credentials(move |request| {
+        if let Some(token) = github_token.as_ref() {
+            if request.allows_username_password && is_github_remote_url(request.url) {
+                return Ok(RemoteCredential::UsernamePassword {
+                    username: "x-access-token".to_string(),
+                    password: token.clone(),
+                });
+            }
+        }
+
+        if request.allows_ssh_key {
+            return Ok(RemoteCredential::SshAgent {
+                username: request.username_from_url.unwrap_or("git").to_string(),
+            });
+        }
+
+        Ok(RemoteCredential::Default)
+    })
+}
+
+pub fn is_github_remote_url(url: &str) -> bool {
+    let normalized = url.trim().to_ascii_lowercase();
+    normalized.starts_with("https://github.com/")
+        || normalized.starts_with("ssh://git@github.com/")
+        || normalized.starts_with("git@github.com:")
+}
+
+/// Read a project's git remote URLs without opening a Draftline workspace,
+/// which would claim the checkout for this folder.
+pub fn read_remote_urls(root: &Path) -> Result<Vec<String>, git2::Error> {
+    let repo = git2::Repository::discover(root)?;
+    let names = repo.remotes()?;
+    Ok(names
+        .iter()
+        .flatten()
+        .flatten()
+        .filter_map(|name| repo.find_remote(name).ok())
+        .filter_map(|remote| remote.url().ok().map(str::to_string))
+        .collect())
+}
+
+/// Remaining CutReady-owned integration gaps after Draftline owns versioning.
+pub fn draftline_integration_gaps() -> &'static [&'static str] {
+    &[]
+}
+
+/// Who recorded a change: the acting user as author, CutReady as the tool that saved it.
+pub fn contributor_profile_for(author: ResolvedIdentity) -> ContributorProfile {
+    ContributorProfile::new(
+        Contributor {
+            name: author.name,
+            email: author.email,
+        },
+        Contributor {
+            name: "CutReady".to_string(),
+            email: Some("app@cutready.local".to_string()),
+        },
+    )
+}
+
+/// Shown when CutReady keeps a workspace change pending instead of saving it anonymously.
+pub const STRUCTURE_SNAPSHOT_DEFERRED_HINT: &str =
+    "Add your name and email in Settings › Profile to save it as a version.";
+
+/// Shown when a workspace change touched files that already had unsaved edits.
+pub const STRUCTURE_SNAPSHOT_UNSAVED_HINT: &str =
+    "It touched files with unsaved edits, so save a version to record them together.";
+
+/// Why an automatic save stayed in pending changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeferReason {
+    /// CutReady doesn't know who is acting.
+    Identity,
+    /// The change touched files with unsaved edits a version would sweep in.
+    UnsavedEdits,
+}
+
+/// Result of saving a workspace-structure change automatically.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StructureSnapshot {
+    /// Recorded as a new version under the acting user.
+    Saved,
+    /// Nothing to record.
+    Clean,
+    /// Left in pending changes; the user's next save records it.
+    Deferred {
+        reason: DeferReason,
+        message: String,
+    },
+}
+
+/// A workspace-structure edit (projects, manifest, settings) that CutReady saves
+/// as its own version, authored by the acting user.
+///
+/// Call [`StructureChange::begin`] with the repository write lock before mutating, naming the repo-relative
+/// files or folders the edit touches (`.` for the whole workspace). Only those
+/// paths are saved, so unrelated pending work stays pending. The save is
+/// deferred instead when CutReady doesn't know who is acting, or when those
+/// paths already had unsaved edits that the version would otherwise sweep in.
+pub struct StructureChange {
+    _write_guard: Box<dyn LockGuard>,
+    /// The desktop write lock is reentrant per thread, so the change must stay
+    /// on the thread that took it (async commands can't hold it across `.await`).
+    _not_send: PhantomData<*const ()>,
+    message: String,
+    scope: Vec<PathBuf>,
+    removed: Vec<PathBuf>,
+    pending_before: Vec<PathBuf>,
+    /// The folder's path inside the git work tree, so CutReady-relative paths
+    /// line up with Draftline's work-tree-relative ones in hybrid projects.
+    workspace_scope: PathBuf,
+}
+
+impl StructureChange {
+    pub fn begin<I, P>(
+        repo_root: &Path,
+        lock: &dyn Lock,
+        message: impl Into<String>,
+        scope: I,
+    ) -> Result<Self, String>
+    where
+        I: IntoIterator<Item = P>,
+        P: Into<PathBuf>,
+    {
+        let write_guard = lock
+            .acquire()
+            .map_err(|e| format!("Could not lock the workspace for writing: {}", e.message))?;
+        Self::begin_with_guard(repo_root, message, scope, write_guard)
+    }
+
+    pub fn begin_with_guard<I, P>(
+        repo_root: &Path,
+        message: impl Into<String>,
+        scope: I,
+        write_guard: Box<dyn LockGuard>,
+    ) -> Result<Self, String>
+    where
+        I: IntoIterator<Item = P>,
+        P: Into<PathBuf>,
+    {
+        let adapter =
+            CutReadyDraftlineAdapter::open_project(repo_root).map_err(|e| e.to_string())?;
+        let pending_before = adapter
+            .changed_files()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|file| file.path)
+            .collect();
+        let workspace_scope = adapter.scope().to_path_buf();
+        let scope = scope
+            .into_iter()
+            .map(|path| in_workspace_scope(&workspace_scope, path.into()))
+            .collect();
+        Ok(Self {
+            _write_guard: write_guard,
+            _not_send: PhantomData,
+            message: message.into(),
+            scope,
+            removed: Vec::new(),
+            pending_before,
+            workspace_scope,
+        })
+    }
+
+    /// Add a path the edit created, such as a new project folder.
+    pub fn touching(mut self, path: impl Into<PathBuf>) -> Self {
+        let path = in_workspace_scope(&self.workspace_scope, path.into());
+        self.scope.push(path);
+        self
+    }
+
+    /// Add a path the edit deleted. Unsaved edits there are gone, so they
+    /// don't defer the save.
+    pub fn removing(mut self, path: impl Into<PathBuf>) -> Self {
+        let path = in_workspace_scope(&self.workspace_scope, path.into());
+        self.removed.push(path);
+        self
+    }
+
+    pub fn finish(
+        self,
+        repo_root: &Path,
+        author: Result<ResolvedIdentity, String>,
+    ) -> Result<StructureSnapshot, String> {
+        let adapter =
+            CutReadyDraftlineAdapter::open_project(repo_root).map_err(|e| e.to_string())?;
+        let touched: Vec<PathBuf> = adapter
+            .changed_files()
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|file| file.path)
+            .filter(|path| self.covers(path) || covered(&self.removed, path))
+            .collect();
+        if touched.is_empty() {
+            return Ok(StructureSnapshot::Clean);
+        }
+        let message = &self.message;
+        let author = match author {
+            Ok(author)
+                if !author.needs_setup
+                    && author.name_source == IdentitySource::Profile
+                    && author.email_source == Some(IdentitySource::Profile)
+                    && author.profile.as_ref().is_some_and(|profile| {
+                        !profile.name.trim().is_empty()
+                            && profile
+                                .email
+                                .as_deref()
+                                .is_some_and(|email| !email.trim().is_empty())
+                    }) =>
+            {
+                author
+            }
+            Ok(_) => {
+                return Ok(StructureSnapshot::Deferred {
+                    reason: DeferReason::Identity,
+                    message: format!(
+                    "\"{message}\" is in your pending changes. {STRUCTURE_SNAPSHOT_DEFERRED_HINT}"
+                ),
+                })
+            }
+            Err(reason) => {
+                let reason = reason.trim().trim_end_matches('.');
+                return Ok(StructureSnapshot::Deferred {
+                    reason: DeferReason::Identity,
+                    message: format!(
+                        "\"{message}\" is in your pending changes. {reason}. {STRUCTURE_SNAPSHOT_DEFERRED_HINT}"
+                    ),
+                });
+            }
+        };
+        if self.pending_before.iter().any(|path| self.covers(path)) {
+            return Ok(StructureSnapshot::Deferred {
+                reason: DeferReason::UnsavedEdits,
+                message: format!(
+                    "\"{message}\" is in your pending changes. {STRUCTURE_SNAPSHOT_UNSAVED_HINT}"
+                ),
+            });
+        }
+        adapter
+            .save_files_with_profile(&touched, message, &contributor_profile_for(author))
+            .map(|_| StructureSnapshot::Saved)
+            .map_err(|e| e.to_string())
+    }
+
+    fn covers(&self, path: &Path) -> bool {
+        covered(&self.scope, path)
+    }
+}
+
+/// Map a path relative to the CutReady folder onto the git work tree. `.` stays
+/// as-is: Draftline only reports changes inside the folder anyway.
+fn in_workspace_scope(workspace_scope: &Path, path: PathBuf) -> PathBuf {
+    if workspace_scope.as_os_str().is_empty() || path.as_os_str() == "." {
+        path
+    } else {
+        workspace_scope.join(path)
+    }
+}
+
+fn covered(scope: &[PathBuf], path: &Path) -> bool {
+    scope
+        .iter()
+        .any(|scope| scope.as_os_str() == "." || path.starts_with(scope))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cutready_core::testing::MemoryLock;
+
+    fn write(path: impl AsRef<Path>, contents: &str) {
+        if let Some(parent) = path.as_ref().parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(path, contents).unwrap();
+    }
+
+    fn read(path: impl AsRef<Path>) -> String {
+        std::fs::read_to_string(path).unwrap()
+    }
+
+    #[cfg(target_os = "windows")]
+    fn hide_test_command_window(command: &mut std::process::Command) {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    fn hide_test_command_window(_command: &mut std::process::Command) {}
+
+    fn run_git(root: &Path, args: &[&str]) {
+        let mut command = std::process::Command::new("git");
+        hide_test_command_window(&mut command);
+        let output = command
+            .current_dir(root)
+            .args(args)
+            .output()
+            .unwrap_or_else(|e| panic!("failed to run git {args:?}: {e}"));
+        assert!(
+            output.status.success(),
+            "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn init_legacy_git_repo(root: &Path) {
+        run_git(root, &["init", "--initial-branch=main"]);
+    }
+
+    fn configure_identity(root: &Path, name: &str, email: &str) {
+        run_git(root, &["config", "user.name", name]);
+        run_git(root, &["config", "user.email", email]);
+    }
+
+    fn commit_all(root: &Path, message: &str) {
+        run_git(root, &["add", "--all"]);
+        run_git(root, &["commit", "-m", message]);
+    }
+
+    fn init_bare_main_remote(path: &Path) {
+        let parent = path.parent().unwrap_or_else(|| Path::new("."));
+        std::fs::create_dir_all(parent).unwrap();
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        run_git(parent, &["init", "--bare", "--initial-branch=main", &name]);
+    }
+
+    #[test]
+    fn narrow_cutready_flow_runs_through_draftline() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root.join("intro.sk"), r#"{"title":"Intro"}"#);
+        write(root.join("demo.sb"), r#"{"title":"Demo"}"#);
+        write(root.join("planning.md"), "# Plan\n");
+        write(
+            root.join(".cutready/visuals/frame.json"),
+            r#"{"kind":"frame"}"#,
+        );
+        write(
+            root.join(".cutready/projects.json"),
+            r#"{"projects":[{"path":"demo","name":"Demo"}]}"#,
+        );
+        write(root.join(".cutready/locks.json"), r#"{"notes":{}}"#);
+        write(root.join(".cutready/ui-state.json"), r#"{"panel":"runs"}"#);
+
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+
+        let initial_changes = adapter.inspect_changes().unwrap();
+        let changed_paths: Vec<_> = initial_changes
+            .files
+            .iter()
+            .map(|file| file.path.as_path())
+            .collect();
+        assert!(changed_paths.contains(&Path::new("intro.sk")));
+        assert!(changed_paths.contains(&Path::new("demo.sb")));
+        assert!(changed_paths.contains(&Path::new("planning.md")));
+        assert!(changed_paths.contains(&Path::new(".cutready/projects.json")));
+        assert!(changed_paths.contains(&Path::new(".cutready/visuals/frame.json")));
+        assert!(!changed_paths.contains(&Path::new(".cutready/locks.json")));
+        assert!(!changed_paths.contains(&Path::new(".cutready/ui-state.json")));
+
+        let version = adapter.save_version("Draftline spike save").unwrap();
+        assert!(adapter.inspect_changes().unwrap().is_empty());
+
+        write(root.join("intro.sk"), r#"{"title":"Intro updated"}"#);
+        let update = adapter.inspect_changes().unwrap();
+        assert_eq!(update.files.len(), 1);
+        assert_eq!(update.files[0].path.as_path(), Path::new("intro.sk"));
+
+        let updated = adapter.save_version("Update intro sketch").unwrap();
+        let preview = adapter.preview_version(updated.id()).unwrap();
+        let preview_paths: Vec<_> = preview
+            .files
+            .iter()
+            .map(|file| file.path.as_path())
+            .collect();
+        assert!(preview_paths.contains(&Path::new("intro.sk")));
+        assert!(preview_paths.contains(&Path::new(".cutready/projects.json")));
+        assert!(!preview_paths.contains(&Path::new(".cutready/locks.json")));
+        assert!(!preview_paths.contains(&Path::new(".cutready/ui-state.json")));
+
+        let intro_preview = adapter
+            .preview_version_file(updated.id(), "intro.sk")
+            .unwrap()
+            .unwrap();
+        assert!(intro_preview
+            .content
+            .as_deref()
+            .is_some_and(|content| content.contains("Intro updated")));
+        assert!(adapter
+            .preview_version_file(updated.id(), ".cutready/ui-state.json")
+            .unwrap()
+            .is_none());
+
+        let variation = adapter
+            .create_variation_from_with_metadata(
+                version.id(),
+                "draftline-spike-alt",
+                Some("Alternate timeline"),
+                Some("alternate-timeline"),
+            )
+            .unwrap();
+        assert!(!variation.is_current);
+        assert_eq!(variation.display_label(), "Alternate timeline");
+        assert_eq!(
+            adapter
+                .variation_metadata(variation.id())
+                .unwrap()
+                .slug
+                .as_deref(),
+            Some("alternate-timeline")
+        );
+
+        let relabeled = adapter
+            .set_variation_metadata(
+                variation.id(),
+                Some("Relabeled alternate"),
+                Some("relabeled-alternate"),
+            )
+            .unwrap();
+        assert_eq!(relabeled.display_label(), "Relabeled alternate");
+
+        let switched = adapter.switch_variation(variation.id()).unwrap();
+        assert_eq!(switched.name, "draftline-spike-alt");
+        assert!(switched.is_current);
+
+        let status = adapter.sync_status("origin").unwrap();
+        assert_eq!(status.variation, "draftline-spike-alt");
+        assert!(matches!(
+            status.state,
+            draftline::SyncState::NoRemoteVersion
+        ));
+    }
+
+    #[test]
+    fn content_policy_tracks_cutready_extensions_without_explicit_file_roots() {
+        let policy = cutready_content_policy().unwrap();
+
+        assert!(policy.tracks("intro.sk").unwrap());
+        assert!(policy.tracks("storyboards/demo.sb").unwrap());
+        assert!(policy.tracks("notes/planning.md").unwrap());
+        assert!(policy.tracks("reference.png").unwrap());
+        assert!(policy.tracks("voiceover.webm").unwrap());
+        assert!(policy.tracks("workspace-audio/take.m4a").unwrap());
+        assert!(policy.tracks(".cutready/visuals/frame.json").unwrap());
+        assert!(policy.tracks(".cutready/projects.json").unwrap());
+        assert!(policy.tracks(".cutready/screenshots/demo.webp").unwrap());
+        assert!(policy.tracks(".cutready/narration/row.webm").unwrap());
+        assert!(!policy.tracks(".cutready/ui-state.json").unwrap());
+        assert!(!policy.tracks(".cutready/locks.json").unwrap());
+    }
+
+    #[test]
+    fn project_manifest_edits_are_tracked_content() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(
+            root.join(".cutready/projects.json"),
+            r#"{"projects":[{"path":"demo-a","name":"Demo A"},{"path":"demo-b","name":"Demo B"}]}"#,
+        );
+
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        adapter.save_version("Initial workspace manifest").unwrap();
+
+        write(
+            root.join(".cutready/projects.json"),
+            r#"{"projects":[{"path":"demo-a","name":"Demo A"}]}"#,
+        );
+
+        let changes = adapter.inspect_changes().unwrap();
+        assert!(changes
+            .files
+            .iter()
+            .any(|file| file.path.as_path() == Path::new(".cutready/projects.json")));
+    }
+
+    #[test]
+    fn shelf_lifecycle_replaces_git_stash_for_tracked_content() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root.join("intro.sk"), r#"{"title":"Base"}"#);
+        write(root.join(".cutready/ui-state.json"), r#"{"panel":"base"}"#);
+
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        adapter.save_version("Base").unwrap();
+
+        write(root.join("intro.sk"), r#"{"title":"Shelved"}"#);
+        write(root.join(".cutready/ui-state.json"), r#"{"panel":"dirty"}"#);
+
+        let shelf = adapter.shelve_changes("cutready-stash").unwrap();
+        assert_eq!(shelf.id, "cutready-stash");
+        assert_eq!(read(root.join("intro.sk")), r#"{"title":"Base"}"#);
+        assert_eq!(
+            read(root.join(".cutready/ui-state.json")),
+            r#"{"panel":"dirty"}"#
+        );
+
+        let shelves = adapter.list_shelves().unwrap();
+        assert_eq!(shelves.len(), 1);
+        assert_eq!(shelves[0].id, "cutready-stash");
+
+        adapter.apply_shelf("cutready-stash").unwrap();
+        assert_eq!(read(root.join("intro.sk")), r#"{"title":"Shelved"}"#);
+        adapter.delete_shelf("cutready-stash").unwrap();
+        assert!(adapter.list_shelves().unwrap().is_empty());
+    }
+
+    #[test]
+    fn dirty_variation_switch_preflights_and_preserves_work() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root.join("intro.sk"), r#"{"title":"Base"}"#);
+        write(root.join(".cutready/ui-state.json"), r#"{"panel":"runs"}"#);
+
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        let base = adapter.save_version("Base").unwrap();
+        let alternate = adapter
+            .create_variation_from_with_metadata(
+                base.id(),
+                "alternate",
+                Some("Alternate"),
+                Some("alternate"),
+            )
+            .unwrap();
+
+        write(root.join("intro.sk"), r#"{"title":"Dirty"}"#);
+        write(root.join(".cutready/ui-state.json"), r#"{"panel":"dirty"}"#);
+
+        let report = adapter.preflight_switch_variation(alternate.id()).unwrap();
+        assert!(!report.can_proceed);
+        assert_eq!(report.dirty_files.len(), 1);
+        assert_eq!(report.dirty_files[0].path.as_path(), Path::new("intro.sk"));
+        assert_eq!(report.untracked_assets.len(), 0);
+
+        let error = adapter.switch_variation(alternate.id()).unwrap_err();
+        assert!(matches!(
+            error,
+            draftline::DraftlineError::PreflightFailed(_)
+        ));
+        assert_eq!(read(root.join("intro.sk")), r#"{"title":"Dirty"}"#);
+        assert_eq!(
+            read(root.join(".cutready/ui-state.json")),
+            r#"{"panel":"dirty"}"#
+        );
+
+        let switched = adapter
+            .switch_variation_with_policy(
+                alternate.id(),
+                SwitchPolicy::SaveFirst {
+                    label: "Save dirty work before switching".to_string(),
+                },
+            )
+            .unwrap();
+        assert_eq!(switched.name, "alternate");
+        assert_eq!(adapter.current_variation().unwrap(), "alternate");
+        assert_eq!(
+            read(root.join(".cutready/ui-state.json")),
+            r#"{"panel":"dirty"}"#
+        );
+    }
+
+    #[test]
+    fn profile_save_before_switch_credits_the_acting_user() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root.join("intro.sk"), r#"{"title":"Base"}"#);
+
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        let base = adapter.save_version("Base").unwrap();
+        let alternate = adapter
+            .create_variation_from_with_metadata(
+                base.id(),
+                "alternate",
+                Some("Alternate"),
+                Some("alternate"),
+            )
+            .unwrap();
+
+        write(root.join("intro.sk"), r#"{"title":"Dirty"}"#);
+        let profile = ContributorProfile::new(
+            draftline::Contributor {
+                name: "Jess".to_string(),
+                email: Some("jess@example.com".to_string()),
+            },
+            draftline::Contributor {
+                name: "CutReady".to_string(),
+                email: Some("app@cutready.local".to_string()),
+            },
+        );
+        let saved = adapter
+            .save_version_with_profile("Save dirty work before switching", &profile)
+            .unwrap();
+        assert_eq!(saved.author.email.as_deref(), Some("jess@example.com"));
+        assert_eq!(saved.saved_by.email.as_deref(), Some("app@cutready.local"));
+
+        let switched = adapter
+            .switch_variation_with_policy(alternate.id(), SwitchPolicy::AbortIfDirty)
+            .unwrap();
+        assert_eq!(switched.name, "alternate");
+    }
+
+    #[test]
+    fn discard_changes_preserves_excluded_runtime_state() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root.join("intro.sk"), r#"{"title":"Base"}"#);
+        write(root.join(".cutready/ui-state.json"), r#"{"panel":"base"}"#);
+
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        adapter.save_version("Base").unwrap();
+
+        write(root.join("intro.sk"), r#"{"title":"Dirty"}"#);
+        write(root.join("planning.md"), "# new tracked note\n");
+        write(root.join(".cutready/ui-state.json"), r#"{"panel":"dirty"}"#);
+
+        let discarded = adapter.discard_changes().unwrap();
+        let discarded_paths: Vec<_> = discarded
+            .files
+            .iter()
+            .map(|file| file.path.as_path())
+            .collect();
+
+        assert!(discarded_paths.contains(&Path::new("intro.sk")));
+        assert!(discarded_paths.contains(&Path::new("planning.md")));
+        assert_eq!(read(root.join("intro.sk")), r#"{"title":"Base"}"#);
+        assert!(!root.join("planning.md").exists());
+        assert_eq!(
+            read(root.join(".cutready/ui-state.json")),
+            r#"{"panel":"dirty"}"#
+        );
+    }
+
+    #[test]
+    fn discard_file_resets_only_requested_tracked_content() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root.join("intro.sk"), r#"{"title":"Base intro"}"#);
+        write(root.join("demo.sb"), r#"{"title":"Base demo"}"#);
+
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        adapter.save_version("Base").unwrap();
+
+        write(root.join("intro.sk"), r#"{"title":"Dirty intro"}"#);
+        write(root.join("demo.sb"), r#"{"title":"Dirty demo"}"#);
+
+        let discarded = adapter.discard_file("intro.sk").unwrap().unwrap();
+
+        assert_eq!(discarded.path.as_path(), Path::new("intro.sk"));
+        assert_eq!(read(root.join("intro.sk")), r#"{"title":"Base intro"}"#);
+        assert_eq!(read(root.join("demo.sb")), r#"{"title":"Dirty demo"}"#);
+    }
+
+    #[test]
+    fn created_variation_is_listed_after_reopening_workspace() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root.join("intro.sk"), r#"{"title":"Base"}"#);
+
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        let base = adapter.save_version("Base").unwrap();
+        adapter
+            .create_variation_from_with_metadata(
+                base.id(),
+                "persistent-alt",
+                Some("Persistent Alt"),
+                Some("persistent-alt"),
+            )
+            .unwrap();
+
+        let reopened = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        let names: Vec<_> = reopened
+            .variations()
+            .unwrap()
+            .into_iter()
+            .map(|variation| variation.name)
+            .collect();
+
+        assert!(
+            names.iter().any(|name| name == "persistent-alt"),
+            "created variation should survive reopening; got {names:?}"
+        );
+    }
+
+    #[test]
+    fn delete_variation_removes_non_current_variation() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root.join("intro.sk"), r#"{"title":"Base"}"#);
+
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        let base = adapter.save_version("Base").unwrap();
+        let alternate = adapter
+            .create_variation_from_with_metadata(
+                base.id(),
+                "delete-me",
+                Some("Delete me"),
+                Some("delete-me"),
+            )
+            .unwrap();
+
+        adapter.delete_variation(alternate.id()).unwrap();
+        let names: Vec<_> = adapter
+            .variations()
+            .unwrap()
+            .into_iter()
+            .map(|variation| variation.name)
+            .collect();
+
+        assert!(!names.iter().any(|name| name == "delete-me"));
+    }
+
+    #[test]
+    fn restore_version_as_new_save_requires_clean_workspace() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root.join("intro.sk"), r#"{"title":"One"}"#);
+
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        let first = adapter.save_version("First").unwrap();
+        write(root.join("intro.sk"), r#"{"title":"Two"}"#);
+        adapter.save_version("Second").unwrap();
+
+        write(root.join("planning.md"), "# unsaved\n");
+        let error = adapter
+            .restore_version_as_new_save(first.id(), "Restore first")
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            draftline::DraftlineError::PreflightFailed(_)
+        ));
+        assert_eq!(read(root.join("planning.md")), "# unsaved\n");
+    }
+
+    #[test]
+    fn restore_version_as_new_save_restores_tracked_content_without_runtime_state() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root.join("intro.sk"), r#"{"title":"One"}"#);
+        write(root.join(".cutready/ui-state.json"), r#"{"panel":"one"}"#);
+
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        let first = adapter.save_version("First").unwrap();
+        write(root.join("intro.sk"), r#"{"title":"Two"}"#);
+        write(root.join(".cutready/ui-state.json"), r#"{"panel":"two"}"#);
+        adapter.save_version("Second").unwrap();
+
+        let restored = adapter
+            .restore_version_as_new_save(first.id(), "Restore first")
+            .unwrap();
+
+        assert_eq!(read(root.join("intro.sk")), r#"{"title":"One"}"#);
+        assert_eq!(
+            read(root.join(".cutready/ui-state.json")),
+            r#"{"panel":"two"}"#
+        );
+        let restored_preview = adapter
+            .preview_version_file(restored.id(), "intro.sk")
+            .unwrap()
+            .unwrap();
+        assert!(restored_preview
+            .content
+            .as_deref()
+            .is_some_and(|content| content.contains("\"One\"")));
+    }
+
+    #[test]
+    fn remote_options_support_local_publish_and_fetch_path() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("workspace");
+        let remote = temp.path().join("remote.git");
+        init_bare_main_remote(&remote);
+
+        write(root.join("intro.sk"), r#"{"title":"Intro"}"#);
+        let adapter = CutReadyDraftlineAdapter::open_project(&root).unwrap();
+        adapter.save_version("Initial").unwrap();
+        adapter
+            .add_remote("origin", remote.to_str().unwrap())
+            .unwrap();
+
+        let mut publish_options = cutready_remote_options(None);
+        let published = adapter
+            .publish_changes_with_options("origin", &mut publish_options)
+            .unwrap();
+        assert_eq!(published.remote, "origin");
+        assert_eq!(published.published_versions, 1);
+
+        let mut fetch_options = cutready_remote_options(Some("unused-token".to_string()));
+        adapter
+            .fetch_remote_with_options("origin", &mut fetch_options)
+            .unwrap();
+        let status = adapter.sync_status("origin").unwrap();
+        assert!(matches!(status.state, draftline::SyncState::UpToDate));
+    }
+
+    #[test]
+    fn github_remote_url_detection_accepts_only_github_hosts() {
+        assert!(is_github_remote_url(
+            "https://github.com/sethjuarez/cutready.git"
+        ));
+        assert!(is_github_remote_url(
+            "git@github.com:sethjuarez/cutready.git"
+        ));
+        assert!(is_github_remote_url(
+            "ssh://git@github.com/sethjuarez/cutready.git"
+        ));
+        assert!(!is_github_remote_url(
+            "https://github.example.com/sethjuarez/cutready.git"
+        ));
+        assert!(!is_github_remote_url(
+            "https://example.com/github.com/sethjuarez/cutready.git"
+        ));
+    }
+
+    #[test]
+    fn existing_plain_git_project_opens_as_draftline_workspace() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        init_legacy_git_repo(root);
+        configure_identity(root, "Legacy User", "legacy@example.com");
+        write(root.join("intro.sk"), r#"{"title":"Legacy intro"}"#);
+        write(root.join("demo.sb"), r#"{"title":"Legacy board"}"#);
+        write(root.join("notes.md"), "# Legacy notes\n");
+        write(root.join(".cutready/locks.json"), r#"{"notes":{}}"#);
+        commit_all(root, "legacy cutready snapshot");
+
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+
+        assert!(root.join(".git/draftline").exists());
+        assert!(adapter.inspect_changes().unwrap().is_empty());
+        let summary = adapter.workspace_summary().unwrap();
+        assert!(!summary.versions.is_empty());
+
+        write(root.join("intro.sk"), r#"{"title":"Legacy intro updated"}"#);
+        let changes = adapter.inspect_changes().unwrap();
+        assert_eq!(changes.files.len(), 1);
+        assert_eq!(changes.files[0].path.as_path(), Path::new("intro.sk"));
+    }
+
+    #[test]
+    fn sync_status_reports_incoming_versions_after_fetch() {
+        let temp = tempfile::tempdir().unwrap();
+        let remote = temp.path().join("remote.git");
+        init_bare_main_remote(&remote);
+
+        let first_root = temp.path().join("first");
+        write(first_root.join("intro.sk"), r#"{"title":"One"}"#);
+        let first = CutReadyDraftlineAdapter::open_project(&first_root).unwrap();
+        configure_identity(&first_root, "Seth", "seth@example.com");
+        first
+            .add_remote("origin", remote.to_str().unwrap())
+            .unwrap();
+        first.save_version("One").unwrap();
+        first
+            .publish_changes_with_options("origin", &mut cutready_remote_options(None))
+            .unwrap();
+
+        let second_root = temp.path().join("second");
+        let second = CutReadyDraftlineAdapter::clone_project_with_options(
+            remote.to_str().unwrap(),
+            &second_root,
+            &mut cutready_remote_options(None),
+        )
+        .unwrap();
+        configure_identity(&second_root, "Maria", "maria@example.com");
+
+        write(first_root.join("intro.sk"), r#"{"title":"Two"}"#);
+        first.save_version("Two").unwrap();
+        first
+            .publish_changes_with_options("origin", &mut cutready_remote_options(None))
+            .unwrap();
+
+        second
+            .fetch_remote_with_options("origin", &mut cutready_remote_options(None))
+            .unwrap();
+        let status = second.sync_status("origin").unwrap();
+        assert!(matches!(
+            status.state,
+            draftline::SyncState::IncomingAvailable
+        ));
+        assert_eq!(status.behind, 1);
+        assert_eq!(status.incoming.len(), 1);
+        assert_eq!(status.incoming[0].label, "Two");
+    }
+
+    #[test]
+    fn publish_refuses_when_remote_has_incoming_changes() {
+        let temp = tempfile::tempdir().unwrap();
+        let remote = temp.path().join("remote.git");
+        init_bare_main_remote(&remote);
+
+        let first_root = temp.path().join("first");
+        write(first_root.join("intro.sk"), r#"{"title":"One"}"#);
+        let first = CutReadyDraftlineAdapter::open_project(&first_root).unwrap();
+        configure_identity(&first_root, "Seth", "seth@example.com");
+        first
+            .add_remote("origin", remote.to_str().unwrap())
+            .unwrap();
+        first.save_version("One").unwrap();
+        first
+            .publish_changes_with_options("origin", &mut cutready_remote_options(None))
+            .unwrap();
+
+        let second_root = temp.path().join("second");
+        let second = CutReadyDraftlineAdapter::clone_project_with_options(
+            remote.to_str().unwrap(),
+            &second_root,
+            &mut cutready_remote_options(None),
+        )
+        .unwrap();
+        configure_identity(&second_root, "Maria", "maria@example.com");
+        write(second_root.join("intro.sk"), r#"{"title":"Remote two"}"#);
+        second.save_version("Remote two").unwrap();
+        second
+            .publish_changes_with_options("origin", &mut cutready_remote_options(None))
+            .unwrap();
+
+        write(first_root.join("intro.sk"), r#"{"title":"Local two"}"#);
+        first.save_version("Local two").unwrap();
+        first
+            .fetch_remote_with_options("origin", &mut cutready_remote_options(None))
+            .unwrap();
+        let status = first.sync_status("origin").unwrap();
+        assert!(matches!(status.state, draftline::SyncState::NeedsMerge));
+
+        let error = first
+            .publish_changes_with_options("origin", &mut cutready_remote_options(None))
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            draftline::DraftlineError::SyncNeedsMerge(_)
+        ));
+    }
+
+    #[test]
+    fn two_client_remote_conflict_drill_preserves_resolved_content_and_runtime_state() {
+        let temp = tempfile::tempdir().unwrap();
+        let remote = temp.path().join("remote.git");
+        init_bare_main_remote(&remote);
+
+        let first_root = temp.path().join("first");
+        write(
+            first_root.join("intro.sk"),
+            r#"{"title":"Intro","description":"Base","rows":[{"time":"0:00","duration_seconds":5,"narrative":"Base narration","demo_actions":"Base action","screenshot":"screenshots/base.png","visual":".cutready/visuals/base.json"}]}"#,
+        );
+        write(
+            first_root.join("demo.sb"),
+            r#"{"title":"Demo","description":"Base board","items":[{"type":"sketch","path":"intro.sk"}]}"#,
+        );
+        write(first_root.join("notes.md"), "# Demo notes\n\nBase note.\n");
+        write(
+            first_root.join(".cutready/visuals/base.json"),
+            r#"{"version":"2.0","scene":{"title":"Base"}}"#,
+        );
+        write(
+            first_root.join(".chats/legacy.chat"),
+            r#"{"title":"Legacy"}"#,
+        );
+        write(
+            first_root.join(".cutready/memory.json"),
+            r#"{"memories":[]}"#,
+        );
+        write(first_root.join(".cutready/locks.json"), r#"{"notes":{}}"#);
+
+        let first = CutReadyDraftlineAdapter::open_project(&first_root).unwrap();
+        configure_identity(&first_root, "Seth", "seth@example.com");
+        first
+            .add_remote("origin", remote.to_str().unwrap())
+            .unwrap();
+        first.save_version("Initial demo project").unwrap();
+        first
+            .publish_changes_with_options("origin", &mut cutready_remote_options(None))
+            .unwrap();
+
+        let second_root = temp.path().join("second");
+        let second = CutReadyDraftlineAdapter::clone_project_with_options(
+            remote.to_str().unwrap(),
+            &second_root,
+            &mut cutready_remote_options(None),
+        )
+        .unwrap();
+        configure_identity(&second_root, "Maria", "maria@example.com");
+
+        write(
+            second_root.join("intro.sk"),
+            r#"{"title":"Intro from remote","description":"Remote description","rows":[{"time":"0:00","duration_seconds":8,"narrative":"Remote narration","demo_actions":"Remote action","screenshot":"screenshots/remote.png","visual":".cutready/visuals/remote.json"}]}"#,
+        );
+        write(
+            second_root.join("demo.sb"),
+            r#"{"title":"Remote board","description":"Remote board description","items":[{"type":"section","title":"Remote setup"},{"type":"sketch","path":"intro.sk"}]}"#,
+        );
+        write(
+            second_root.join("notes.md"),
+            "# Demo notes\n\nRemote note.\n",
+        );
+        write(
+            second_root.join(".cutready/visuals/remote.json"),
+            r#"{"version":"2.0","scene":{"title":"Remote"}}"#,
+        );
+        second.save_version("Remote collaboration edits").unwrap();
+        second
+            .publish_changes_with_options("origin", &mut cutready_remote_options(None))
+            .unwrap();
+
+        write(
+            first_root.join("intro.sk"),
+            r#"{"title":"Intro from local","description":"Local description","rows":[{"time":"0:00","duration_seconds":13,"narrative":"Local narration","demo_actions":"Local action","screenshot":"screenshots/local.png","visual":".cutready/visuals/local.json"}]}"#,
+        );
+        write(
+            first_root.join("demo.sb"),
+            r#"{"title":"Local board","description":"Local board description","items":[{"type":"sketch","path":"intro.sk"},{"type":"section","title":"Local close"}]}"#,
+        );
+        write(first_root.join("notes.md"), "# Demo notes\n\nLocal note.\n");
+        write(
+            first_root.join(".cutready/visuals/local.json"),
+            r#"{"version":"2.0","scene":{"title":"Local"}}"#,
+        );
+        first.save_version("Local collaboration edits").unwrap();
+        first
+            .fetch_remote_with_options("origin", &mut cutready_remote_options(None))
+            .unwrap();
+
+        let report = first.preflight_merge_incoming("origin").unwrap();
+        assert!(!report.can_merge_cleanly);
+        assert!(report
+            .conflicts
+            .iter()
+            .any(|conflict| conflict.path == Path::new("intro.sk")));
+        assert!(report
+            .conflicts
+            .iter()
+            .any(|conflict| conflict.path == Path::new("demo.sb")));
+        assert!(report
+            .conflicts
+            .iter()
+            .any(|conflict| conflict.path == Path::new("notes.md")));
+        let token = report.token.unwrap();
+
+        let resolved_sketch = r#"{"title":"Resolved intro","description":"Combined description","rows":[{"time":"0:00","duration_seconds":13,"narrative":"Local narration + remote note","demo_actions":"Remote action","screenshot":"screenshots/local.png","visual":".cutready/visuals/remote.json"}]}"#;
+        let resolved_storyboard = r#"{"title":"Resolved board","description":"Combined board","items":[{"type":"section","title":"Remote setup"},{"type":"sketch","path":"intro.sk"},{"type":"section","title":"Local close"}]}"#;
+        let resolved_notes = "# Demo notes\n\nLocal note.\n\nRemote note.\n";
+        let result = first
+            .merge_incoming_with_resolutions_and_options(
+                token,
+                "Resolve collaboration drill",
+                vec![
+                    MergeConflictResolution::new(
+                        "intro.sk",
+                        draftline::MergeResolutionChoice::UseContent {
+                            content: resolved_sketch.to_string(),
+                        },
+                    ),
+                    MergeConflictResolution::new(
+                        "demo.sb",
+                        draftline::MergeResolutionChoice::UseContent {
+                            content: resolved_storyboard.to_string(),
+                        },
+                    ),
+                    MergeConflictResolution::new(
+                        "notes.md",
+                        draftline::MergeResolutionChoice::UseContent {
+                            content: resolved_notes.to_string(),
+                        },
+                    ),
+                ],
+                &mut cutready_remote_options(None),
+            )
+            .unwrap();
+
+        assert!(result
+            .merged_files
+            .iter()
+            .any(|path| path == Path::new("intro.sk")));
+        assert_eq!(read(first_root.join("intro.sk")), resolved_sketch);
+        assert_eq!(read(first_root.join("demo.sb")), resolved_storyboard);
+        // Draftline materializes merged files through a git checkout, which honors
+        // core.autocrlf on Windows.
+        assert_eq!(
+            read(first_root.join("notes.md")).replace("\r\n", "\n"),
+            resolved_notes
+        );
+        assert!(read(first_root.join(".cutready/visuals/local.json")).contains("Local"));
+        assert!(read(first_root.join(".cutready/visuals/remote.json")).contains("Remote"));
+        assert!(first_root.join(".chats/legacy.chat").exists());
+        assert!(first_root.join(".cutready/memory.json").exists());
+        assert!(!first_root.join(".git/cutready/locks.json").exists());
+        assert!(first.inspect_changes().unwrap().is_empty());
+    }
+
+    fn acting_as(name: &str, email: Option<&str>) -> ResolvedIdentity {
+        use cutready_core::identity::{Identity, IdentitySource};
+        ResolvedIdentity {
+            name: name.into(),
+            email: email.map(str::to_string),
+            name_source: IdentitySource::Profile,
+            email_source: email.map(|_| IdentitySource::Profile),
+            profile: email.map(|email| Identity {
+                name: name.into(),
+                email: Some(email.into()),
+            }),
+            needs_setup: email.is_none(),
+        }
+    }
+
+    const MANIFEST: &str = ".cutready/projects.json";
+
+    struct Head {
+        id: git2::Oid,
+        author: String,
+        committer: String,
+        paths: Vec<String>,
+    }
+
+    fn head(root: &Path) -> Head {
+        let repo = git2::Repository::open(root).unwrap();
+        let commit = repo.head().unwrap().peel_to_commit().unwrap();
+        let parent_tree = commit.parent(0).ok().map(|parent| parent.tree().unwrap());
+        let diff = repo
+            .diff_tree_to_tree(parent_tree.as_ref(), Some(&commit.tree().unwrap()), None)
+            .unwrap();
+        let paths = diff
+            .deltas()
+            .filter_map(|delta| delta.new_file().path().or(delta.old_file().path()))
+            .map(|path| path.to_string_lossy().replace('\\', "/"))
+            .collect();
+        let author = commit.author();
+        let committer = commit.committer();
+        let result = Head {
+            id: commit.id(),
+            author: format!("{} <{}>", author.name().unwrap(), author.email().unwrap()),
+            committer: format!(
+                "{} <{}>",
+                committer.name().unwrap(),
+                committer.email().unwrap()
+            ),
+            paths,
+        };
+        result
+    }
+
+    fn pending(adapter: &CutReadyDraftlineAdapter) -> Vec<String> {
+        adapter
+            .changed_files()
+            .unwrap()
+            .into_iter()
+            .map(|file| file.path.to_string_lossy().replace('\\', "/"))
+            .collect()
+    }
+
+    fn grace() -> Result<ResolvedIdentity, String> {
+        Ok(acting_as("Grace Hopper", Some("grace@example.com")))
+    }
+
+    /// A saved workspace with a manifest and one project, attributed to Ada.
+    fn structure_repo(root: &Path) -> CutReadyDraftlineAdapter {
+        write(
+            root.join(MANIFEST),
+            r#"{"projects":[{"path":"demo","name":"Demo"}]}"#,
+        );
+        write(root.join("demo/intro.sk"), "{}");
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        configure_identity(root, "Git Config", "git-config@example.com");
+        adapter
+            .save_version_with_profile(
+                "Initial",
+                &contributor_profile_for(acting_as("Ada Lovelace", Some("ada@example.com"))),
+            )
+            .unwrap();
+        adapter
+    }
+
+    fn add_project(root: &Path) {
+        write(
+            root.join(MANIFEST),
+            r#"{"projects":[{"path":"demo","name":"Demo"},{"path":"extra","name":"Extra"}]}"#,
+        );
+    }
+
+    #[test]
+    fn structure_change_is_authored_by_the_acting_user() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+
+        let change = StructureChange::begin(
+            root,
+            &MemoryLock::default(),
+            "Add Extra to workspace",
+            [MANIFEST],
+        )
+        .unwrap();
+        add_project(root);
+        let result = change.finish(root, grace()).unwrap();
+
+        assert_eq!(result, StructureSnapshot::Saved);
+        assert!(pending(&adapter).is_empty());
+        let head = head(root);
+        assert_eq!(
+            head.author, "Grace Hopper <grace@example.com>",
+            "profile beats git config"
+        );
+        assert_eq!(head.committer, "CutReady <app@cutready.local>");
+    }
+
+    #[test]
+    fn structure_change_holds_the_write_lock_until_dropped() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        structure_repo(root);
+        let lock = MemoryLock::default();
+        let change =
+            StructureChange::begin(root, &lock, "Add Extra to workspace", [MANIFEST]).unwrap();
+
+        let (started_tx, started_rx) = mpsc::channel();
+        let (acquired_tx, acquired_rx) = mpsc::channel();
+        let writer_lock = lock.clone();
+        let writer = std::thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            let _guard = writer_lock.acquire().unwrap();
+            let _ = acquired_tx.send(());
+        });
+
+        started_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert!(acquired_rx.recv_timeout(Duration::from_millis(50)).is_err());
+
+        drop(change);
+        acquired_rx.recv_timeout(Duration::from_secs(30)).unwrap();
+        writer.join().unwrap();
+    }
+
+    #[test]
+    fn structure_change_leaves_unrelated_pending_work_alone() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+        write(root.join("demo/notes.md"), "draft");
+
+        let change = StructureChange::begin(
+            root,
+            &MemoryLock::default(),
+            "Add Extra to workspace",
+            [MANIFEST],
+        )
+        .unwrap();
+        add_project(root);
+        let result = change.finish(root, grace()).unwrap();
+
+        assert_eq!(result, StructureSnapshot::Saved);
+        assert_eq!(head(root).paths, vec![MANIFEST.to_string()]);
+        assert_eq!(pending(&adapter), vec!["demo/notes.md".to_string()]);
+    }
+
+    #[test]
+    fn structure_change_defers_when_its_files_had_unsaved_edits() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+        write(root.join(MANIFEST), r#"{"projects":[]}"#);
+        let before = head(root).id;
+
+        let change = StructureChange::begin(
+            root,
+            &MemoryLock::default(),
+            "Add Extra to workspace",
+            [MANIFEST],
+        )
+        .unwrap();
+        add_project(root);
+        let result = change.finish(root, grace()).unwrap();
+
+        assert_eq!(
+            result,
+            StructureSnapshot::Deferred {
+                reason: DeferReason::UnsavedEdits,
+                message: format!(
+                    "\"Add Extra to workspace\" is in your pending changes. {STRUCTURE_SNAPSHOT_UNSAVED_HINT}"
+                ),
+            }
+        );
+        assert_eq!(head(root).id, before);
+        assert_eq!(pending(&adapter), vec![MANIFEST.to_string()]);
+    }
+
+    #[test]
+    fn whole_workspace_change_defers_on_any_unsaved_edit() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        structure_repo(root);
+        write(root.join("demo/notes.md"), "draft");
+        let before = head(root).id;
+
+        let change = StructureChange::begin(
+            root,
+            &MemoryLock::default(),
+            "Organize workspace projects",
+            ["."],
+        )
+        .unwrap();
+        add_project(root);
+        let result = change.finish(root, grace()).unwrap();
+
+        assert!(matches!(
+            result,
+            StructureSnapshot::Deferred {
+                reason: DeferReason::UnsavedEdits,
+                ..
+            }
+        ));
+        assert_eq!(head(root).id, before);
+    }
+
+    #[test]
+    fn structure_change_records_moved_project_folders() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+
+        let change = StructureChange::begin(
+            root,
+            &MemoryLock::default(),
+            "Rename workspace project",
+            [MANIFEST, "demo"],
+        )
+        .unwrap();
+        std::fs::rename(root.join("demo"), root.join("renamed")).unwrap();
+        write(
+            root.join(MANIFEST),
+            r#"{"projects":[{"path":"renamed","name":"Renamed"}]}"#,
+        );
+        let result = change.touching("renamed").finish(root, grace()).unwrap();
+
+        assert_eq!(result, StructureSnapshot::Saved);
+        assert!(pending(&adapter).is_empty(), "{:?}", pending(&adapter));
+        let mut paths = head(root).paths;
+        paths.sort();
+        assert_eq!(paths, vec![MANIFEST, "demo/intro.sk", "renamed/intro.sk"]);
+    }
+
+    #[test]
+    fn deleting_a_project_with_unsaved_edits_still_saves() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+        write(root.join("demo/intro.sk"), r#"{"title":"unsaved"}"#);
+
+        let change = StructureChange::begin(
+            root,
+            &MemoryLock::default(),
+            "Delete workspace project",
+            [MANIFEST],
+        )
+        .unwrap();
+        std::fs::remove_dir_all(root.join("demo")).unwrap();
+        write(root.join(MANIFEST), r#"{"projects":[]}"#);
+        let result = change.removing("demo").finish(root, grace()).unwrap();
+
+        assert_eq!(result, StructureSnapshot::Saved);
+        assert!(pending(&adapter).is_empty(), "{:?}", pending(&adapter));
+    }
+
+    #[test]
+    fn renaming_only_the_display_name_ignores_dirty_project_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+        write(root.join("demo/intro.sk"), r#"{"title":"unsaved"}"#);
+
+        let change = StructureChange::begin(
+            root,
+            &MemoryLock::default(),
+            "Rename workspace project",
+            [MANIFEST],
+        )
+        .unwrap();
+        write(
+            root.join(MANIFEST),
+            r#"{"projects":[{"path":"demo","name":"Renamed"}]}"#,
+        );
+        let result = change.finish(root, grace()).unwrap();
+
+        assert_eq!(result, StructureSnapshot::Saved);
+        assert_eq!(pending(&adapter), vec!["demo/intro.sk".to_string()]);
+    }
+
+    #[test]
+    fn structure_change_defers_without_an_email() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+        let before = head(root).id;
+
+        let change = StructureChange::begin(
+            root,
+            &MemoryLock::default(),
+            "Add Extra to workspace",
+            [MANIFEST],
+        )
+        .unwrap();
+        add_project(root);
+        let result = change.finish(root, Ok(acting_as("sejuare", None))).unwrap();
+
+        assert_eq!(
+            result,
+            StructureSnapshot::Deferred {
+                reason: DeferReason::Identity,
+                message: format!(
+                    "\"Add Extra to workspace\" is in your pending changes. {STRUCTURE_SNAPSHOT_DEFERRED_HINT}"
+                ),
+            }
+        );
+        assert_eq!(head(root).id, before, "no anonymous commit");
+        assert_eq!(pending(&adapter), vec![MANIFEST.to_string()]);
+    }
+
+    #[test]
+    fn structure_change_defers_when_only_git_config_identity_is_available() {
+        use cutready_core::identity::IdentitySource;
+
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+
+        let change = StructureChange::begin(
+            root,
+            &MemoryLock::default(),
+            "Add Extra to workspace",
+            [MANIFEST],
+        )
+        .unwrap();
+        add_project(root);
+        let author = ResolvedIdentity {
+            name: "Git Config".into(),
+            email: Some("git-config@example.com".into()),
+            name_source: IdentitySource::GitConfig,
+            email_source: Some(IdentitySource::GitConfig),
+            profile: None,
+            needs_setup: false,
+        };
+        let result = change.finish(root, Ok(author)).unwrap();
+
+        assert!(matches!(
+            result,
+            StructureSnapshot::Deferred {
+                reason: DeferReason::Identity,
+                ..
+            }
+        ));
+        assert_eq!(head(root).author, "Ada Lovelace <ada@example.com>");
+        assert_eq!(pending(&adapter), vec![MANIFEST.to_string()]);
+    }
+
+    #[test]
+    fn structure_change_defers_when_profile_email_would_fall_back_to_git_config() {
+        use cutready_core::identity::{Identity, IdentitySource};
+
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+
+        let change = StructureChange::begin(
+            root,
+            &MemoryLock::default(),
+            "Add Extra to workspace",
+            [MANIFEST],
+        )
+        .unwrap();
+        add_project(root);
+        let author = ResolvedIdentity {
+            name: "Grace Hopper".into(),
+            email: Some("git-config@example.com".into()),
+            name_source: IdentitySource::Profile,
+            email_source: Some(IdentitySource::GitConfig),
+            profile: Some(Identity {
+                name: "Grace Hopper".into(),
+                email: None,
+            }),
+            needs_setup: false,
+        };
+        let result = change.finish(root, Ok(author)).unwrap();
+
+        assert!(matches!(
+            result,
+            StructureSnapshot::Deferred {
+                reason: DeferReason::Identity,
+                ..
+            }
+        ));
+        assert_eq!(head(root).author, "Ada Lovelace <ada@example.com>");
+        assert_eq!(pending(&adapter), vec![MANIFEST.to_string()]);
+    }
+
+    #[test]
+    fn structure_change_defers_when_the_profile_is_unreadable() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        structure_repo(root);
+        let before = head(root).id;
+
+        let change = StructureChange::begin(
+            root,
+            &MemoryLock::default(),
+            "Add Extra to workspace",
+            [MANIFEST],
+        )
+        .unwrap();
+        add_project(root);
+        let result = change
+            .finish(
+                root,
+                Err("Couldn't read your saved profile: bad json.".into()),
+            )
+            .unwrap();
+
+        assert_eq!(
+            result,
+            StructureSnapshot::Deferred {
+                reason: DeferReason::Identity,
+                message: format!(
+                    "\"Add Extra to workspace\" is in your pending changes. Couldn't read your saved profile: bad json. {STRUCTURE_SNAPSHOT_DEFERRED_HINT}"
+                ),
+            }
+        );
+        assert_eq!(head(root).id, before);
+    }
+
+    #[test]
+    fn structure_change_is_clean_when_its_files_are_not_versioned() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let adapter = structure_repo(root);
+        write(root.join("demo/notes.md"), "draft");
+
+        let change = StructureChange::begin(
+            root,
+            &MemoryLock::default(),
+            "Update workspace settings",
+            [".cutready/settings.json"],
+        )
+        .unwrap();
+        write(root.join(".cutready/settings.json"), r#"{"theme":"dark"}"#);
+        let result = change.finish(root, Err("no profile".into())).unwrap();
+
+        assert_eq!(result, StructureSnapshot::Clean);
+        assert_eq!(pending(&adapter), vec!["demo/notes.md".to_string()]);
+    }
+
+    /// A developer's code repository (`main`, README + src/app.rs) with a
+    /// CutReady folder at `cutready/` that is not yet versioned.
+    fn code_repo_with_cutready_folder(code: &Path) -> git2::Repository {
+        let mut options = git2::RepositoryInitOptions::new();
+        options.initial_head("main");
+        let repo = git2::Repository::init_opts(code, &options).unwrap();
+        {
+            let mut config = repo.config().unwrap();
+            config.set_str("user.name", "Dev").unwrap();
+            config.set_str("user.email", "dev@example.com").unwrap();
+        }
+        write(code.join("README.md"), "# Contoso\n");
+        write(code.join("src/app.rs"), "fn main() {}\n");
+        dev_commit(&repo, &["README.md", "src/app.rs"], "Initial code");
+        write(code.join("cutready/intro.sk"), r#"{"title":"Intro"}"#);
+        repo
+    }
+
+    fn dev_commit(repo: &git2::Repository, paths: &[&str], message: &str) -> git2::Oid {
+        let mut index = repo.index().unwrap();
+        for path in paths {
+            index.add_path(Path::new(path)).unwrap();
+        }
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let signature = git2::Signature::now("Dev", "dev@example.com").unwrap();
+        let parent = repo.head().ok().and_then(|head| head.peel_to_commit().ok());
+        let parents: Vec<&git2::Commit> = parent.iter().collect();
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            message,
+            &tree,
+            &parents,
+        )
+        .unwrap()
+    }
+
+    fn variation_names(adapter: &CutReadyDraftlineAdapter) -> Vec<String> {
+        adapter
+            .variations()
+            .unwrap()
+            .into_iter()
+            .map(|variation| variation.name)
+            .collect()
+    }
+
+    #[test]
+    fn hybrid_project_joins_enclosing_repo_without_nested_git() {
+        let temp = tempfile::tempdir().unwrap();
+        let code = temp.path();
+        code_repo_with_cutready_folder(code);
+        let folder = code.join("cutready");
+
+        let adapter = CutReadyDraftlineAdapter::open_project(&folder).unwrap();
+
+        assert!(!folder.join(".git").exists(), "no nested repository");
+        assert!(adapter.is_hybrid());
+        assert_eq!(adapter.scope(), Path::new("cutready"));
+        assert_eq!(
+            adapter.git_root().canonicalize().unwrap(),
+            code.canonicalize().unwrap()
+        );
+        assert_eq!(pending(&adapter), vec!["cutready/intro.sk".to_string()]);
+    }
+
+    #[test]
+    fn hybrid_save_leaves_developer_index_and_code_files_alone() {
+        let temp = tempfile::tempdir().unwrap();
+        let code = temp.path();
+        let repo = code_repo_with_cutready_folder(code);
+        // Developer work in progress: a staged edit and an unstaged edit.
+        write(code.join("src/app.rs"), "fn main() { staged(); }\n");
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("src/app.rs")).unwrap();
+        index.write().unwrap();
+        write(code.join("README.md"), "# Contoso (unstaged)\n");
+        let dev_head = repo.head().unwrap().peel_to_commit().unwrap().id();
+
+        let adapter = CutReadyDraftlineAdapter::open_project(code.join("cutready")).unwrap();
+        adapter.save_version("CutReady save").unwrap();
+
+        let saved = head(code);
+        assert_ne!(saved.id, dev_head);
+        // The first save also commits the root `.draftline` folder marker.
+        assert_eq!(
+            saved.paths,
+            vec![".draftline".to_string(), "cutready/intro.sk".to_string()]
+        );
+
+        let repo = git2::Repository::open(code).unwrap();
+        let head_tree = repo.head().unwrap().peel_to_tree().unwrap();
+        let staged: Vec<String> = repo
+            .diff_tree_to_index(Some(&head_tree), None, None)
+            .unwrap()
+            .deltas()
+            .filter_map(|delta| {
+                delta
+                    .new_file()
+                    .path()
+                    .map(|p| p.to_string_lossy().replace('\\', "/"))
+            })
+            .collect();
+        assert_eq!(
+            staged,
+            vec!["src/app.rs".to_string()],
+            "staged edit stays staged"
+        );
+        assert_eq!(
+            head_tree
+                .get_path(Path::new("src/app.rs"))
+                .unwrap()
+                .to_object(&repo)
+                .unwrap()
+                .peel_to_blob()
+                .unwrap()
+                .content(),
+            b"fn main() {}\n",
+            "staged edit is not committed"
+        );
+        assert_eq!(read(code.join("src/app.rs")), "fn main() { staged(); }\n");
+        assert_eq!(read(code.join("README.md")), "# Contoso (unstaged)\n");
+    }
+
+    #[test]
+    fn hybrid_variations_hide_developer_branches() {
+        let temp = tempfile::tempdir().unwrap();
+        let code = temp.path();
+        let repo = code_repo_with_cutready_folder(code);
+        let tip = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.branch("feature/x", &tip, false).unwrap();
+        repo.branch("cutready/alt", &tip, false).unwrap();
+        repo.branch("dev/current", &tip, false).unwrap();
+        repo.set_head("refs/heads/dev/current").unwrap();
+
+        let adapter = CutReadyDraftlineAdapter::open_project(code.join("cutready")).unwrap();
+        let names = variation_names(&adapter);
+
+        assert!(names.contains(&"main".to_string()), "{names:?}");
+        assert!(names.contains(&"cutready/alt".to_string()), "{names:?}");
+        assert!(names.contains(&"dev/current".to_string()), "{names:?}");
+        assert!(!names.contains(&"feature/x".to_string()), "{names:?}");
+    }
+
+    #[test]
+    fn hybrid_variation_creation_uses_cutready_namespace() {
+        let temp = tempfile::tempdir().unwrap();
+        let code = temp.path();
+        code_repo_with_cutready_folder(code);
+        let adapter = CutReadyDraftlineAdapter::open_project(code.join("cutready")).unwrap();
+        let version = adapter.save_version("CutReady save").unwrap();
+
+        let plain = adapter.create_variation_from(version.id(), "alt").unwrap();
+        let labeled = adapter
+            .create_variation_from_with_metadata(version.id(), "take-two", Some("Take two"), None)
+            .unwrap();
+        let already = adapter
+            .create_variation_from(version.id(), "cutready/kept")
+            .unwrap();
+
+        assert_eq!(plain.name, "cutready/alt");
+        assert_eq!(labeled.name, "cutready/take-two");
+        assert_eq!(already.name, "cutready/kept");
+        let repo = git2::Repository::open(code).unwrap();
+        assert!(repo
+            .find_branch("cutready/alt", git2::BranchType::Local)
+            .is_ok());
+        assert!(repo.find_branch("alt", git2::BranchType::Local).is_err());
+        assert!(variation_names(&adapter).contains(&"cutready/alt".to_string()));
+    }
+
+    #[test]
+    fn developer_commits_touching_the_folder_appear_in_versions() {
+        let temp = tempfile::tempdir().unwrap();
+        let code = temp.path();
+        let repo = code_repo_with_cutready_folder(code);
+        let adapter = CutReadyDraftlineAdapter::open_project(code.join("cutready")).unwrap();
+        adapter.save_version("CutReady save").unwrap();
+
+        write(code.join("cutready/intro.sk"), r#"{"title":"Dev tweak"}"#);
+        dev_commit(&repo, &["cutready/intro.sk"], "Dev edits intro");
+
+        let labels: Vec<String> = adapter
+            .versions()
+            .unwrap()
+            .into_iter()
+            .map(|version| version.label)
+            .collect();
+        assert!(
+            labels.iter().any(|label| label == "Dev edits intro"),
+            "{labels:?}"
+        );
+        assert!(
+            labels.iter().any(|label| label == "CutReady save"),
+            "{labels:?}"
+        );
+    }
+
+    #[test]
+    fn standalone_project_is_not_namespaced() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        write(root.join("intro.sk"), "{}");
+        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
+        configure_identity(root, "Dev", "dev@example.com");
+        let version = adapter.save_version("Initial").unwrap();
+        let repo = git2::Repository::open(root).unwrap();
+        let tip = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.branch("feature/x", &tip, false).unwrap();
+
+        assert!(!adapter.is_hybrid());
+        assert!(adapter.scope().as_os_str().is_empty());
+        assert_eq!(pending(&adapter), Vec::<String>::new());
+        let created = adapter.create_variation_from(version.id(), "alt").unwrap();
+        assert_eq!(created.name, "alt");
+        let names = variation_names(&adapter);
+        assert!(names.contains(&"feature/x".to_string()), "{names:?}");
+        assert!(names.contains(&"alt".to_string()), "{names:?}");
+    }
+
+    #[test]
+    fn namespaced_variation_name_only_prefixes_hybrid_names() {
+        assert_eq!(namespaced_variation_name(false, "alt"), "alt");
+        assert_eq!(namespaced_variation_name(true, "alt"), "cutready/alt");
+        assert_eq!(namespaced_variation_name(true, " alt "), "cutready/alt");
+        assert_eq!(
+            namespaced_variation_name(true, "cutready/alt"),
+            "cutready/alt"
+        );
+    }
+
+    #[test]
+    fn hybrid_structure_change_saves_manifest_under_the_folder() {
+        let temp = tempfile::tempdir().unwrap();
+        let code = temp.path();
+        code_repo_with_cutready_folder(code);
+        let folder = code.join("cutready");
+        write(
+            folder.join(MANIFEST),
+            r#"{"projects":[{"path":"demo","name":"Demo"}]}"#,
+        );
+        let adapter = CutReadyDraftlineAdapter::open_project(&folder).unwrap();
+        adapter.save_version("Initial").unwrap();
+
+        let change = StructureChange::begin(
+            &folder,
+            &MemoryLock::default(),
+            "Add Extra to workspace",
+            [MANIFEST],
+        )
+        .unwrap();
+        add_project(&folder);
+        let result = change.finish(&folder, grace()).unwrap();
+
+        assert_eq!(result, StructureSnapshot::Saved);
+        assert_eq!(head(code).paths, vec![format!("cutready/{MANIFEST}")]);
+        assert!(pending(&adapter).is_empty());
+    }
+}

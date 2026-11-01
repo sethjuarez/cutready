@@ -158,7 +158,7 @@ src-tauri/
 │   │   ├── memory.rs              # Agent memory (core, procedural, archival)
 │   │   ├── animation.rs           # Elucim animation rendering / video export
 │   │   ├── project.rs             # Folder-based project I/O, safe_resolve()
-│   │   ├── draftline_adapter.rs   # Draftline-backed persistence/versioning facade
+│   │   ├── draftline_adapter.rs   # Re-export of crates/cutready-versioning (Draftline facade)
 │   │   ├── github_pull_requests.rs # GitHub PR provider for hybrid Send for review
 │   │   └── export.rs              # FCPXML generation, folder assembly
 │   ├── models/                    # Core data types
