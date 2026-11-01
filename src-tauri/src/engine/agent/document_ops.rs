@@ -3,7 +3,7 @@
 //! Tools build the document they want (and check locks with the agent's own
 //! wording first); this module turns the change into the ops that describe it
 //! so the writer, and later the run log, see the edit's intent rather than a
-//! whole-file replacement. The tool dispatcher holds `workspace_write_lock`.
+//! whole-file replacement. The tool dispatcher holds the repository write lock.
 
 use std::path::Path;
 

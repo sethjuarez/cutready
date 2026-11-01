@@ -59,8 +59,8 @@ pub async fn import_docx(
     conflict: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let conflict = conflict.as_deref().unwrap_or("check");
     let data = fs::read(&file_path).map_err(|e| format!("Failed to read file: {e}"))?;
     let markdown = import::docx_to_markdown(&data, &StdFiles::new(&root), chrono::Utc::now())?;
@@ -93,8 +93,8 @@ pub async fn import_pdf(
     conflict: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let conflict = conflict.as_deref().unwrap_or("check");
     let data = fs::read(&file_path).map_err(|e| format!("Failed to read file: {e}"))?;
     let markdown = import::pdf_to_markdown(&data)?;
@@ -127,8 +127,8 @@ pub async fn import_pptx(
     conflict: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let conflict = conflict.as_deref().unwrap_or("check");
     let data = fs::read(&file_path).map_err(|e| format!("Failed to read file: {e}"))?;
     let markdown = import::pptx_to_markdown(&data, &StdFiles::new(&root), chrono::Utc::now())?;
@@ -161,8 +161,8 @@ pub async fn import_markdown(
     conflict: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let conflict = conflict.as_deref().unwrap_or("check");
     let overwrite = conflict == "overwrite";
     let source_path = Path::new(&file_path);
@@ -202,8 +202,8 @@ pub async fn import_sketch(
     conflict: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let conflict = conflict.as_deref().unwrap_or("check");
     let overwrite = conflict == "overwrite";
     let source_path = Path::new(&file_path);
@@ -245,8 +245,8 @@ pub async fn import_storyboard(
     conflict: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let conflict = conflict.as_deref().unwrap_or("check");
     let source_path = Path::new(&file_path);
     let data = fs::read_to_string(source_path).map_err(|e| format!("Failed to read file: {e}"))?;

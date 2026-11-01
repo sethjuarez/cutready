@@ -611,7 +611,7 @@ pub enum StructureSnapshot {
 /// deferred instead when CutReady doesn't know who is acting, or when those
 /// paths already had unsaved edits that the version would otherwise sweep in.
 pub struct StructureChange {
-    _write_guard: std::sync::MutexGuard<'static, ()>,
+    _write_guard: crate::engine::write_lock::WriteGuard,
     message: String,
     scope: Vec<PathBuf>,
     removed: Vec<PathBuf>,
@@ -631,7 +631,7 @@ impl StructureChange {
         I: IntoIterator<Item = P>,
         P: Into<PathBuf>,
     {
-        let write_guard = crate::engine::workspace_write_lock::lock()?;
+        let write_guard = crate::engine::write_lock::lock(repo_root)?;
         Self::begin_with_guard(repo_root, message, scope, write_guard)
     }
 
@@ -639,7 +639,7 @@ impl StructureChange {
         repo_root: &Path,
         message: impl Into<String>,
         scope: I,
-        write_guard: std::sync::MutexGuard<'static, ()>,
+        write_guard: crate::engine::write_lock::WriteGuard,
     ) -> Result<Self, String>
     where
         I: IntoIterator<Item = P>,
@@ -1714,11 +1714,10 @@ mod tests {
 
         let (started_tx, started_rx) = mpsc::channel();
         let (acquired_tx, acquired_rx) = mpsc::channel();
+        let lock_root = root.to_path_buf();
         let writer = std::thread::spawn(move || {
             started_tx.send(()).unwrap();
-            let _guard = crate::engine::workspace_write_lock::lock().unwrap();
-            // Never panic while holding the process-wide lock: that would
-            // poison it for every other test in this binary.
+            let _guard = crate::engine::write_lock::lock(&lock_root).unwrap();
             let _ = acquired_tx.send(());
         });
 
@@ -1726,7 +1725,6 @@ mod tests {
         assert!(acquired_rx.recv_timeout(Duration::from_millis(50)).is_err());
 
         drop(change);
-        // Other tests share the lock in parallel, so allow for contention.
         acquired_rx.recv_timeout(Duration::from_secs(30)).unwrap();
         writer.join().unwrap();
     }

@@ -143,8 +143,8 @@ pub async fn list_project_narration_assets(
 
 #[auditaur_command(skip_all, err)]
 pub async fn delete_orphaned_narration_assets(state: State<'_, AppState>) -> Result<u32, String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let narration_root = root.join(".cutready").join("narration");
     let mut assets = Vec::new();
     collect_project_audio_assets(&root, &narration_root, &mut assets).map_err(|e| e.to_string())?;
@@ -225,7 +225,6 @@ pub async fn save_narration_recording(
     narration_plan: Option<NarrationPlan>,
     state: State<'_, AppState>,
 ) -> Result<Sketch, String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     const MAX_NARRATION_BYTES: usize = 50 * 1024 * 1024;
 
     if audio_data.is_empty() {
@@ -236,6 +235,7 @@ pub async fn save_narration_recording(
     }
 
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     persist_narration_asset(
         &root,
         &sketch_path,
@@ -384,7 +384,7 @@ pub async fn synthesize_narration_recording(
 
     let duration_ms = probe_audio_duration_ms(&result.audio, &result.mime_type);
 
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     persist_narration_asset(
         &root,
         &request.sketch_path,

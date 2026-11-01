@@ -2495,14 +2495,17 @@ pub fn relocate_project_state(
     }
 
     // Everything under the old state dir except the destination itself (which is
-    // nested inside the source during single→multi conversion). Directory-entry
+    // nested inside the source during single→multi conversion) and the
+    // repository write lock, which stays put and may be held. Directory-entry
     // read errors are propagated rather than silently skipped, so a partially
     // readable source is never mistaken for a fully relocated one.
     let mut entries: Vec<std::path::PathBuf> = Vec::new();
     for entry in std::fs::read_dir(&old_dir).map_err(|e| ProjectError::Io(e.to_string()))? {
         let entry = entry.map_err(|e| ProjectError::Io(e.to_string()))?;
         let path = entry.path();
-        if path != new_dir {
+        if path != new_dir
+            && entry.file_name() != std::ffi::OsStr::new(crate::engine::write_lock::LOCK_FILENAME)
+        {
             entries.push(path);
         }
     }
@@ -4812,6 +4815,28 @@ mod tests {
                 .unwrap();
         assert_eq!(gamma_sessions.sessions.len(), 1);
         assert_eq!(gamma_sessions.sessions[0].session_id, "s-gamma");
+    }
+
+    #[test]
+    fn single_to_multi_relocation_leaves_the_held_write_lock_in_place() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        git2::Repository::init(root).unwrap();
+        seed_chat_session(root, root, "s1", "Live run");
+
+        let _guard = crate::engine::write_lock::lock(root).unwrap();
+        let lock_file = crate::engine::write_lock::lock_file(root);
+        assert_eq!(
+            lock_file.parent().unwrap(),
+            std::fs::canonicalize(git_state_dir(root, root)).unwrap()
+        );
+
+        relocate_project_state(root, root, &root.join("demo")).unwrap();
+
+        assert!(lock_file.exists());
+        assert!(git_state_dir(root, &root.join("demo"))
+            .join("agent-state.db")
+            .exists());
     }
 
     #[test]

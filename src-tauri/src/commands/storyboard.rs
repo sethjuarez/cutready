@@ -57,8 +57,8 @@ pub async fn create_storyboard(
     title: String,
     state: State<'_, AppState>,
 ) -> Result<Storyboard, String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     if abs_path.exists() {
@@ -96,8 +96,8 @@ pub async fn update_storyboard(
     metadata: Option<DocumentMetadata>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let ops = update_storyboard_ops(title, description, metadata);
     edit_storyboard(&root, &relative_path, &ops)?;
     Ok(())
@@ -129,8 +129,8 @@ pub async fn set_storyboard_lock(
     locked: bool,
     state: State<'_, AppState>,
 ) -> Result<Storyboard, String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     // Sketches first, then the storyboard, as before: one file per write
@@ -146,8 +146,8 @@ pub async fn delete_storyboard(
     relative_path: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     project::delete_storyboard(&abs_path, &root).map_err(|e| e.to_string())?;
@@ -160,8 +160,8 @@ pub async fn rename_storyboard(
     new_path: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     project::rename_project_asset(&root, &old_path, &new_path).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -181,8 +181,8 @@ pub async fn add_sketch_to_storyboard(
     position: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     project::safe_resolve(&root, &storyboard_path).map_err(|e| e.to_string())?;
     // Validate sketch_path too (even though it's stored as a reference)
     project::safe_resolve(&root, &sketch_path).map_err(|e| e.to_string())?;
@@ -203,8 +203,8 @@ pub async fn remove_sketch_from_storyboard(
     position: usize,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     remove_item_at(&root, &storyboard_path, position)
 }
 
@@ -230,8 +230,8 @@ pub async fn add_section_to_storyboard(
     position: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let item = StoryboardItem::Section {
         title,
         description: description.unwrap_or_default(),
@@ -252,8 +252,8 @@ pub async fn reorder_storyboard_items(
     items: Vec<StoryboardItem>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let op = json!({ "kind": "set_storyboard_items", "items": items });
     edit_storyboard(&root, &storyboard_path, &[op])?;
     Ok(())

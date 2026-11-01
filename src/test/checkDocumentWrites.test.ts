@@ -56,6 +56,19 @@ describe("check-document-writes", () => {
     expect(problems).toEqual([expect.stringContaining("commands/sketch.rs:2: raw filesystem write")]);
   });
 
+  it("rejects the retired in-process write mutex, even in tests", () => {
+    const problems = checkDocumentWrites([
+      {
+        path: "commands/export.rs",
+        text: "// workspace_write_lock was here\nfn f() {\n    let _g = crate::engine::workspace_write_lock::lock()?;\n}\n#[cfg(test)]\nmod tests { fn t(l: State<ProjectLock>) {} }",
+      },
+    ]);
+    expect(problems).toEqual([
+      expect.stringContaining("commands/export.rs:3: workspace_write_lock is gone"),
+      expect.stringContaining("commands/export.rs:6: ProjectLock is gone"),
+    ]);
+  });
+
   it("rejects project helpers that write the filesystem themselves", () => {
     const text = delegatingProject.replace(
       "document_writer::replace_sketch(path, s)?;",

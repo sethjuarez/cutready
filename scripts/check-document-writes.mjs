@@ -5,6 +5,8 @@
 // (project::rename_project_asset, commands/project.rs transfer_asset, agent
 // project copies) aren't
 // edits; they join multi-file transactions in 4.9.
+// Writes serialize on the repository file lock (engine/write_lock.rs, 4.9c);
+// the old in-process workspace mutex must not come back.
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,6 +40,9 @@ export const DELEGATING_HELPERS = [
 ];
 
 export const ASSET_MARKER = "// asset write";
+
+/** The in-process write mutex that engine/write_lock.rs replaced. */
+const IN_PROCESS_LOCK = /\b(workspace_write_lock|ProjectLock)\b/g;
 
 const LEGACY_CALL = /(?<!\bfn\s+)\b(?:project::)?(write_sketch|write_storyboard|write_note)\s*\(/g;
 const FS_MUTATION =
@@ -151,6 +156,12 @@ export function checkDocumentWrites(files) {
           `${path}:${lineOf(code, call.index)}: ${call[1]} bypasses the document writer; use engine::document_writer`,
         );
       }
+    }
+
+    for (const use of maskNonCode(normalized).matchAll(IN_PROCESS_LOCK)) {
+      problems.push(
+        `${path}:${lineOf(normalized, use.index)}: ${use[1]} is gone; take engine::write_lock::lock(root)`,
+      );
     }
 
     const lines = normalized.split("\n");

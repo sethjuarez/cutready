@@ -1,14 +1,14 @@
 //! The desktop's single write path for project documents (`.sk`, `.sb`, `.md`).
 //!
 //! Every edit is a run-scoped transaction through
-//! `cutready_core::edit_session::EditSession`: the project's file lock, op-log
-//! reconcile, the op batch against the bytes on disk, a pending op-log entry,
-//! the atomic write, then the commit. The op log (`op-log.db`) and the lock
-//! (`write.lock`) live in the project's runtime state dir under the git dir,
+//! `cutready_core::edit_session::EditSession`: the repository write lock
+//! ([`write_lock`]), op-log reconcile, the op batch against the bytes on
+//! disk, a pending op-log entry, the atomic write, then the commit. The op log
+//! (`op-log.db`) lives in the project's runtime state dir under the git dir,
 //! next to `agent-state.db`. App edits join a per-process "user" run; agent
 //! tool calls made inside [`in_agent_run`] join that agent run's own run.
 //! `scripts/check-document-writes.mjs` keeps raw document writes out of the
-//! rest of the app. Callers hold `workspace_write_lock`.
+//! rest of the app. Callers may already hold the (reentrant) write lock.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -22,13 +22,13 @@ pub use cutready_core::edit_session::Expected;
 use cutready_core::edit_session::{EditSession, NoteLockPolicy, Reconciled};
 use cutready_core::models::sketch::{Sketch, Storyboard};
 use cutready_core::{OpLogStore, PortError, PortErrorKind};
-use cutready_desktop_io::{FileLock, SqliteOpLogStore, StdFiles, SystemClock};
+use cutready_desktop_io::{SqliteOpLogStore, StdFiles, SystemClock};
 use serde_json::{json, Value};
 
 use crate::engine::project::{self, ProjectError};
+use crate::engine::write_lock::{self, RepoLock};
 
 const OP_LOG_FILENAME: &str = "op-log.db";
-const LOCK_FILENAME: &str = "write.lock";
 const USER_ACTOR: &str = "user";
 const AGENT_ACTOR: &str = "agent";
 
@@ -172,14 +172,12 @@ pub fn replace_note(root: &Path, abs: &Path, content: &str) -> Result<Written, W
     replace(root, abs, DocumentKind::Note, op)
 }
 
-/// Remove a document file under `root`, holding the project's write lock so
+/// Remove a document file under `root`, holding the repository write lock so
 /// it never interleaves with another process's write. A missing file is
 /// already deleted. Not yet logged: review of deletes arrives with Keep/Undo.
 pub fn delete(root: &Path, path: &Path) -> Result<(), WriteError> {
-    use cutready_core::Lock as _;
     kind_of(path)?;
-    let lock = FileLock::new(state_dir(root).join(LOCK_FILENAME))?;
-    let _guard = lock.acquire()?;
+    let _guard = write_lock::lock(root).map_err(ProjectError::Io)?;
     match std::fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -272,7 +270,7 @@ struct Ports {
     root: PathBuf,
     state_dir: PathBuf,
     files: StdFiles,
-    lock: FileLock,
+    lock: RepoLock,
     log: SqliteOpLogStore,
     clock: SystemClock,
 }
@@ -293,7 +291,7 @@ impl Ports {
         Ok(Self {
             root: root.to_path_buf(),
             files: StdFiles::new(root),
-            lock: FileLock::new(state_dir.join(LOCK_FILENAME))?,
+            lock: RepoLock::for_path(root),
             log: SqliteOpLogStore::open(&state_dir.join(OP_LOG_FILENAME))?,
             clock: SystemClock,
             state_dir,

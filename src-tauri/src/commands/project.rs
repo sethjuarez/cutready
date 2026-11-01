@@ -84,9 +84,10 @@ pub async fn create_project_folder(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<ProjectView, String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = PathBuf::from(&path);
+    // Lock after init, so the lock lands in the new repository's git dir.
     let view = project::init_project_folder(&root).map_err(|e| e.to_string())?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
 
     // Set repo view (new project = repo root is project root)
     {
@@ -379,8 +380,8 @@ pub async fn rename_project_asset(
     new_path: String,
     state: State<'_, AppState>,
 ) -> Result<project::RenameProjectAssetPlan, String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     project::rename_project_asset(&root, &old_path, &new_path).map_err(|e| e.to_string())
 }
 
@@ -865,7 +866,7 @@ pub async fn rename_project(
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let root = repo_root(&state)?;
-    let write_guard = crate::engine::workspace_write_lock::lock()?;
+    let write_guard = crate::engine::write_lock::lock(&root)?;
 
     // Single-project mode: renaming the sole project triggers migration
     if project_path == "." && !project::is_multi_project(&root) {

@@ -36,8 +36,8 @@ pub async fn create_sketch(
     title: String,
     state: State<'_, AppState>,
 ) -> Result<Sketch, String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     if abs_path.exists() {
@@ -64,8 +64,8 @@ pub async fn update_sketch(
     metadata: Option<DocumentMetadata>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let ops = update_sketch_ops(description, rows, metadata);
     document_writer::edit(&root, &relative_path, Expected::Unchecked, &ops)?;
     Ok(())
@@ -100,8 +100,8 @@ pub async fn update_sketch_title(
     title: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let op = json!({ "kind": "set_title", "title": title });
     document_writer::edit(&root, &relative_path, Expected::Unchecked, &[op])?;
     Ok(())
@@ -112,8 +112,8 @@ pub async fn delete_sketch(
     relative_path: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     project::delete_sketch(&abs_path, &root).map_err(|e| e.to_string())?;
@@ -140,8 +140,8 @@ pub async fn get_sketch(
     relative_path: String,
     state: State<'_, AppState>,
 ) -> Result<Sketch, String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     // Use migration-aware read: inline visuals → external files
@@ -154,8 +154,8 @@ pub async fn set_sketch_lock(
     locked: bool,
     state: State<'_, AppState>,
 ) -> Result<Sketch, String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let op = json!({ "kind": "set_lock", "locked": locked });
     Ok(document_writer::edit_sketch(
         &root,
@@ -172,8 +172,8 @@ pub async fn set_planning_row_lock(
     locked: bool,
     state: State<'_, AppState>,
 ) -> Result<Sketch, String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     let row_id = row_id_at(&abs_path, index)?;
@@ -194,8 +194,8 @@ pub async fn set_planning_cell_lock(
     locked: bool,
     state: State<'_, AppState>,
 ) -> Result<Sketch, String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
     let row_id = row_id_at(&abs_path, index)?;
@@ -239,8 +239,8 @@ pub async fn write_visual_doc(
     document: serde_json::Value,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     let abs = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
     let document = normalize_visual_document_for_save(&document)?;
     let json = serde_json::to_string_pretty(&document)
@@ -255,8 +255,8 @@ pub async fn rename_sketch(
     new_path: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
     project::rename_project_asset(&root, &old_path, &new_path).map_err(|e| e.to_string())?;
     Ok(())
 }
