@@ -54,6 +54,12 @@ pub use cmd_error::*;
 pub mod row_text_update;
 pub use row_text_update::*;
 
+pub mod edit_op;
+pub use edit_op::*;
+
+pub mod content_edit;
+pub use content_edit::*;
+
 pub mod chat_participant;
 pub use chat_participant::*;
 
@@ -77,6 +83,9 @@ pub use chat_promotion::*;
 
 pub mod chat_artifact_document;
 pub use chat_artifact_document::*;
+
+pub mod edit_service;
+pub use edit_service::*;
 
 pub mod planning_timing;
 pub use planning_timing::*;

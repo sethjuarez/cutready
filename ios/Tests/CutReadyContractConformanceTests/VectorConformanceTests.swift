@@ -124,7 +124,377 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "ChatArtifactDocument", operation: "roundTrip", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector9PlanningTimingParseDurationSecondsAFractionNeedsALeadingDigit() async throws {
+  func testVector9EditServiceApplySketchOpsACellLockWithoutARowIsRejected() async throws {
+    guard let vectorData = "{\"name\":\"a cell lock without a row is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"set_lock\",\"field\":\"time\",\"locked\":true}],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"invalid_op\",\"details\":{\"op_index\":0}},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector10EditServiceApplySketchOpsARejectedOpFailsTheWholeBatch() async throws {
+    guard let vectorData = "{\"name\":\"a rejected op fails the whole batch\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"ops\":[{\"kind\":\"set_title\",\"title\":\"Not kept\"},{\"kind\":\"set_row_text\",\"row_id\":\"row-2\",\"narrative\":\"Changed.\"}],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_cell\",\"details\":{\"row_index\":1,\"field\":\"narrative\",\"op_index\":1}},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector11EditServiceApplySketchOpsAnEarlierRejectedOpWinsOverALaterMalformedOne() async throws {
+    guard let vectorData = "{\"name\":\"an earlier rejected op wins over a later malformed one\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":true,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"set_title\",\"title\":\"Locked\"},{\"kind\":\"set_mood\",\"mood\":\"calm\"}],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_document\",\"details\":{\"op_index\":0}},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector12EditServiceApplySketchOpsAnEmptyBatchLeavesTheDocumentUnchanged() async throws {
+    guard let vectorData = "{\"name\":\"an empty batch leaves the document unchanged\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector13EditServiceApplySketchOpsAnOpOfAnUnknownKindIsRejected() async throws {
+    guard let vectorData = "{\"name\":\"an op of an unknown kind is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"set_title\",\"title\":\"Kept?\"},{\"kind\":\"set_mood\",\"mood\":\"calm\"}],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"invalid_op\",\"details\":{\"op_index\":1}},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector14EditServiceApplySketchOpsContentEditsAfterLockingTheSketchInTheSameBatchAreRejected() async throws {
+    guard let vectorData = "{\"name\":\"content edits after locking the sketch in the same batch are rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"set_lock\",\"locked\":true},{\"kind\":\"set_title\",\"title\":\"Too late\"}],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_document\",\"details\":{\"op_index\":1}},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector15EditServiceApplySketchOpsDeleteRowRemovesTheRowWithThatId() async throws {
+    guard let vectorData = "{\"name\":\"delete_row removes the row with that id\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"delete_row\",\"row_id\":\"row-1\"}],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector16EditServiceApplySketchOpsDeleteRowWhileARowIsLockedIsRejected() async throws {
+    guard let vectorData = "{\"name\":\"delete_row while a row is locked is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"ops\":[{\"kind\":\"delete_row\",\"row_id\":\"row-1\"}],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_row_count\",\"details\":{\"op_index\":0}},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector17EditServiceApplySketchOpsInsertRowAfterAnUnknownRowIsRejected() async throws {
+    guard let vectorData = "{\"name\":\"insert_row after an unknown row is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"insert_row\",\"after_row_id\":\"missing\",\"row\":{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"new-row\",\"time\":\"0:05\",\"narrative\":\"New.\",\"demo_actions\":\"Wave.\"}}],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"row_not_found\",\"details\":{\"row_id\":\"missing\",\"op_index\":0}},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector18EditServiceApplySketchOpsInsertRowWhileARowIsLockedIsRejected() async throws {
+    guard let vectorData = "{\"name\":\"insert_row while a row is locked is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"ops\":[{\"kind\":\"insert_row\",\"after_row_id\":\"row-3\",\"row\":{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"new-row\",\"time\":\"0:05\",\"narrative\":\"New.\",\"demo_actions\":\"Wave.\"}}],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_row_count\",\"details\":{\"op_index\":0}},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector19EditServiceApplySketchOpsInsertRowWithANullAnchorInsertsFirstUnlocked() async throws {
+    guard let vectorData = "{\"name\":\"insert_row with a null anchor inserts first, unlocked\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"insert_row\",\"after_row_id\":null,\"row\":{\"locked\":true,\"locks\":{\"time\":true,\"narrative\":true,\"demo_actions\":true,\"screenshot\":true,\"visual\":true,\"design_plan\":true},\"screenshot\":null,\"id\":\"new-row\",\"time\":\"0:05\",\"narrative\":\"New.\",\"demo_actions\":\"Wave.\"}}],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"new-row\",\"time\":\"0:05\",\"narrative\":\"New.\",\"demo_actions\":\"Wave.\"},{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector20EditServiceApplySketchOpsInsertRowWithATakenIdIsRejected() async throws {
+    guard let vectorData = "{\"name\":\"insert_row with a taken id is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"insert_row\",\"after_row_id\":\"row-2\",\"row\":{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"row-1\",\"time\":\"0:05\",\"narrative\":\"New.\",\"demo_actions\":\"Wave.\"}}],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"duplicate_row_id\",\"details\":{\"row_index\":2,\"row_id\":\"row-1\",\"op_index\":0}},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector21EditServiceApplySketchOpsInsertedRowWithoutAnIdGetsOneAsInDecode() async throws {
+    guard let vectorData = "{\"name\":\"inserted row without an id gets one as in decode\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"insert_row\",\"after_row_id\":\"row-1\",\"row\":{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05\",\"narrative\":\"New.\",\"demo_actions\":\"Wave.\"}}],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"row-2-2\",\"time\":\"0:05\",\"narrative\":\"New.\",\"demo_actions\":\"Wave.\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector22EditServiceApplySketchOpsLockedSketchRejectsContentEdits() async throws {
+    guard let vectorData = "{\"name\":\"locked sketch rejects content edits\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":true,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"set_metadata\",\"metadata\":{\"fields\":{}}}],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_document\",\"details\":{\"op_index\":0}},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector23EditServiceApplySketchOpsOpsAddressRowsByIdAfterAReorderInTheSameBatch() async throws {
+    guard let vectorData = "{\"name\":\"ops address rows by id after a reorder in the same batch\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"reorder_rows\",\"row_ids\":[\"row-2\",\"row-1\"]},{\"kind\":\"set_row_text\",\"row_id\":\"row-1\",\"narrative\":\"First, now last.\"}],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"},{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First, now last.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector24EditServiceApplySketchOpsReorderRowsAroundLockedRowsKeepsLocksInPlace() async throws {
+    guard let vectorData = "{\"name\":\"reorder_rows around locked rows keeps locks in place\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"row-4\",\"time\":\"0:40\",\"narrative\":\"Spare.\",\"demo_actions\":\"Wrap up.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"ops\":[{\"kind\":\"reorder_rows\",\"row_ids\":[\"row-4\",\"row-2\",\"row-3\",\"row-1\"]}],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"row-4\",\"time\":\"0:40\",\"narrative\":\"Spare.\",\"demo_actions\":\"Wrap up.\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"},{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector25EditServiceApplySketchOpsReorderRowsThatMissesARowIsRejected() async throws {
+    guard let vectorData = "{\"name\":\"reorder_rows that misses a row is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"reorder_rows\",\"row_ids\":[\"row-2\",\"missing\"]}],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"invalid_reorder\",\"details\":{\"op_index\":0}},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector26EditServiceApplySketchOpsReplaceRowsKeepsLockStateWithEachPosition() async throws {
+    guard let vectorData = "{\"name\":\"replace_rows keeps lock state with each position\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"replace_rows\",\"rows\":[{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"new-row\",\"time\":\"0:05\",\"narrative\":\"New.\",\"demo_actions\":\"Wave.\"}]}],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"new-row\",\"time\":\"0:05\",\"narrative\":\"New.\",\"demo_actions\":\"Wave.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector27EditServiceApplySketchOpsSetDescriptionReplacesAndClearsTheDescription() async throws {
+    guard let vectorData = "{\"name\":\"set_description replaces and clears the description\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":{\"root\":{\"children\":[{\"type\":\"paragraph\",\"children\":[{\"text\":\"Intro scene\"}]}]}},\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:20\",\"duration_seconds\":20,\"narrative\":\"Open the workspace.\",\"demo_actions\":\"Click **Open**.\",\"visual\":\".cutready/visuals/abc123def456.json\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25,\"label\":\"Open button\"},{\"rank\":2,\"x\":0.75,\"y\":0.5}],\"typing_spots\":[{\"x\":0.25,\"y\":0.5,\"width\":0.5,\"height\":0.125,\"text\":\"demo-project\",\"start_offset_ms\":300,\"characters_per_second\":18.5,\"show_cursor\":true,\"font_family\":\"mono\",\"font_scale\":1.25}],\"motion_plan\":{\"kind\":\"wide_hold_then_push\",\"keyframes\":[{\"time_ms\":0,\"scale\":1.25,\"x\":0.5,\"y\":0.5,\"easing\":\"linear\"},{\"time_ms\":1500,\"scale\":1.75,\"x\":0.5,\"y\":0.25,\"easing\":\"ease_in_out\"}],\"rationale\":\"Hold wide, then push toward the Open button.\"},\"design_plan\":\"Title card with the product name.\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":4200,\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\"},\"narration_plan\":{\"source_text\":\"Open the workspace.\",\"voice\":\"en-US-Harper:MAI-Voice-2\",\"locale\":\"en-US\",\"ssml\":\"<speak>Open the workspace.</speak>\",\"baseline_style\":\"friendly\",\"pronunciation_overrides\":{\"CutReady\":\"cut ready\"},\"beats\":[{\"text\":\"Open the workspace.\",\"emphasis\":\"moderate\",\"style_degree\":1.5,\"pause_after_ms\":250}],\"generated_at\":\"2026-06-28T20:06:00Z\"}}],\"state\":\"refined\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"developers\"}}},\"ops\":[{\"kind\":\"set_description\",\"description\":{\"root\":{\"children\":[]}}},{\"kind\":\"set_description\",\"description\":null}],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:20\",\"duration_seconds\":20,\"narrative\":\"Open the workspace.\",\"demo_actions\":\"Click **Open**.\",\"visual\":\".cutready/visuals/abc123def456.json\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25,\"label\":\"Open button\"},{\"rank\":2,\"x\":0.75,\"y\":0.5}],\"typing_spots\":[{\"x\":0.25,\"y\":0.5,\"width\":0.5,\"height\":0.125,\"text\":\"demo-project\",\"start_offset_ms\":300,\"characters_per_second\":18.5,\"show_cursor\":true,\"font_family\":\"mono\",\"font_scale\":1.25}],\"motion_plan\":{\"kind\":\"wide_hold_then_push\",\"keyframes\":[{\"time_ms\":0,\"scale\":1.25,\"x\":0.5,\"y\":0.5,\"easing\":\"linear\"},{\"time_ms\":1500,\"scale\":1.75,\"x\":0.5,\"y\":0.25,\"easing\":\"ease_in_out\"}],\"rationale\":\"Hold wide, then push toward the Open button.\"},\"design_plan\":\"Title card with the product name.\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":4200,\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\"},\"narration_plan\":{\"source_text\":\"Open the workspace.\",\"voice\":\"en-US-Harper:MAI-Voice-2\",\"locale\":\"en-US\",\"ssml\":\"<speak>Open the workspace.</speak>\",\"baseline_style\":\"friendly\",\"pronunciation_overrides\":{\"CutReady\":\"cut ready\"},\"beats\":[{\"text\":\"Open the workspace.\",\"emphasis\":\"moderate\",\"style_degree\":1.5,\"pause_after_ms\":250}],\"generated_at\":\"2026-06-28T20:06:00Z\"}}],\"state\":\"refined\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"metadata\":{\"fields\":{\"audience\":\"developers\"}}},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector28EditServiceApplySketchOpsSetLockLocksACellAndAWholeRow() async throws {
+    guard let vectorData = "{\"name\":\"set_lock locks a cell and a whole row\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"set_lock\",\"row_id\":\"row-1\",\"field\":\"narrative\",\"locked\":true},{\"kind\":\"set_lock\",\"row_id\":\"row-2\",\"locked\":true}],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":true,\"locks\":{\"time\":true,\"narrative\":true,\"demo_actions\":true,\"screenshot\":true,\"visual\":true,\"design_plan\":true},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector29EditServiceApplySketchOpsSetLockUnlocksALockedSketchAndEverythingInIt() async throws {
+    guard let vectorData = "{\"name\":\"set_lock unlocks a locked sketch and everything in it\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"ops\":[{\"kind\":\"set_lock\",\"locked\":true},{\"kind\":\"set_lock\",\"locked\":false}],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector30EditServiceApplySketchOpsSetMetadataReplacesTheMetadata() async throws {
+    guard let vectorData = "{\"name\":\"set_metadata replaces the metadata\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":{\"root\":{\"children\":[{\"type\":\"paragraph\",\"children\":[{\"text\":\"Intro scene\"}]}]}},\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:20\",\"duration_seconds\":20,\"narrative\":\"Open the workspace.\",\"demo_actions\":\"Click **Open**.\",\"visual\":\".cutready/visuals/abc123def456.json\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25,\"label\":\"Open button\"},{\"rank\":2,\"x\":0.75,\"y\":0.5}],\"typing_spots\":[{\"x\":0.25,\"y\":0.5,\"width\":0.5,\"height\":0.125,\"text\":\"demo-project\",\"start_offset_ms\":300,\"characters_per_second\":18.5,\"show_cursor\":true,\"font_family\":\"mono\",\"font_scale\":1.25}],\"motion_plan\":{\"kind\":\"wide_hold_then_push\",\"keyframes\":[{\"time_ms\":0,\"scale\":1.25,\"x\":0.5,\"y\":0.5,\"easing\":\"linear\"},{\"time_ms\":1500,\"scale\":1.75,\"x\":0.5,\"y\":0.25,\"easing\":\"ease_in_out\"}],\"rationale\":\"Hold wide, then push toward the Open button.\"},\"design_plan\":\"Title card with the product name.\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":4200,\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\"},\"narration_plan\":{\"source_text\":\"Open the workspace.\",\"voice\":\"en-US-Harper:MAI-Voice-2\",\"locale\":\"en-US\",\"ssml\":\"<speak>Open the workspace.</speak>\",\"baseline_style\":\"friendly\",\"pronunciation_overrides\":{\"CutReady\":\"cut ready\"},\"beats\":[{\"text\":\"Open the workspace.\",\"emphasis\":\"moderate\",\"style_degree\":1.5,\"pause_after_ms\":250}],\"generated_at\":\"2026-06-28T20:06:00Z\"}}],\"state\":\"refined\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"developers\"}}},\"ops\":[{\"kind\":\"set_metadata\",\"metadata\":{\"fields\":{\"audience\":\"admins\",\"length\":\"short\"}}}],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":{\"root\":{\"children\":[{\"type\":\"paragraph\",\"children\":[{\"text\":\"Intro scene\"}]}]}},\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:20\",\"duration_seconds\":20,\"narrative\":\"Open the workspace.\",\"demo_actions\":\"Click **Open**.\",\"visual\":\".cutready/visuals/abc123def456.json\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25,\"label\":\"Open button\"},{\"rank\":2,\"x\":0.75,\"y\":0.5}],\"typing_spots\":[{\"x\":0.25,\"y\":0.5,\"width\":0.5,\"height\":0.125,\"text\":\"demo-project\",\"start_offset_ms\":300,\"characters_per_second\":18.5,\"show_cursor\":true,\"font_family\":\"mono\",\"font_scale\":1.25}],\"motion_plan\":{\"kind\":\"wide_hold_then_push\",\"keyframes\":[{\"time_ms\":0,\"scale\":1.25,\"x\":0.5,\"y\":0.5,\"easing\":\"linear\"},{\"time_ms\":1500,\"scale\":1.75,\"x\":0.5,\"y\":0.25,\"easing\":\"ease_in_out\"}],\"rationale\":\"Hold wide, then push toward the Open button.\"},\"design_plan\":\"Title card with the product name.\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":4200,\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\"},\"narration_plan\":{\"source_text\":\"Open the workspace.\",\"voice\":\"en-US-Harper:MAI-Voice-2\",\"locale\":\"en-US\",\"ssml\":\"<speak>Open the workspace.</speak>\",\"baseline_style\":\"friendly\",\"pronunciation_overrides\":{\"CutReady\":\"cut ready\"},\"beats\":[{\"text\":\"Open the workspace.\",\"emphasis\":\"moderate\",\"style_degree\":1.5,\"pause_after_ms\":250}],\"generated_at\":\"2026-06-28T20:06:00Z\"}}],\"state\":\"refined\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"metadata\":{\"fields\":{\"audience\":\"admins\",\"length\":\"short\"}}},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector31EditServiceApplySketchOpsSetRowTextEditsTheRowWithThatIdAndRecomputesDuration() async throws {
+    guard let vectorData = "{\"name\":\"set_row_text edits the row with that id and recomputes duration\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"ops\":[{\"kind\":\"set_row_text\",\"row_id\":\"row-1\",\"time\":\"0:15\",\"narrative\":\"Open CutReady.\"}],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:15\",\"duration_seconds\":15,\"narrative\":\"Open CutReady.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector32EditServiceApplySketchOpsSetRowTextOnALockedCellIsRejected() async throws {
+    guard let vectorData = "{\"name\":\"set_row_text on a locked cell is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"ops\":[{\"kind\":\"set_row_text\",\"row_id\":\"row-2\",\"narrative\":\"Changed.\"}],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_cell\",\"details\":{\"row_index\":1,\"field\":\"narrative\",\"op_index\":0}},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector33EditServiceApplySketchOpsSetRowTextOnALockedRowIsRejected() async throws {
+    guard let vectorData = "{\"name\":\"set_row_text on a locked row is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"ops\":[{\"kind\":\"set_row_text\",\"row_id\":\"row-3\",\"time\":\"0:45\"}],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_row\",\"details\":{\"row_index\":2,\"op_index\":0}},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector34EditServiceApplySketchOpsSetScreenshotAndSetVisualSetAndClearAssetReferences() async throws {
+    guard let vectorData = "{\"name\":\"set_screenshot and set_visual set and clear asset references\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"set_screenshot\",\"row_id\":\"row-1\",\"screenshot\":\"screenshots/first.png\"},{\"kind\":\"set_screenshot\",\"row_id\":\"row-2\",\"screenshot\":null},{\"kind\":\"set_visual\",\"row_id\":\"row-1\",\"visual\":\".cutready/visuals/first.json\"}],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/first.png\",\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\",\"visual\":\".cutready/visuals/first.json\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector35EditServiceApplySketchOpsSetTitleKeepsUnknownDocumentFields() async throws {
+    guard let vectorData = "{\"name\":\"set_title keeps unknown document fields\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"ops\":[{\"kind\":\"set_title\",\"title\":\"Renamed\"}],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Renamed\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector36EditServiceApplySketchOpsSetVisualOnARowWithALockedScreenshotIsRejected() async throws {
+    guard let vectorData = "{\"name\":\"set_visual on a row with a locked screenshot is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":true,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/shared.png\",\"time\":\"0:10\",\"narrative\":\"A.\",\"demo_actions\":\"\",\"visual\":\".cutready/visuals/one.json\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/shared.png\",\"time\":\"0:10\",\"narrative\":\"A.\",\"demo_actions\":\"\",\"visual\":\".cutready/visuals/two.json\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"set_visual\",\"row_id\":\"row-1\",\"visual\":null}],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_cell\",\"details\":{\"row_index\":0,\"field\":\"screenshot\",\"op_index\":0}},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector37EditServiceApplySketchOpsUnknownRowIdIsRejected() async throws {
+    guard let vectorData = "{\"name\":\"unknown row id is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"ops\":[{\"kind\":\"set_row_text\",\"row_id\":\"missing\",\"narrative\":\"Gone.\"}],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"row_not_found\",\"details\":{\"row_id\":\"missing\",\"op_index\":0}},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector38EditServiceApplySketchOpsUpdateRowOnALockedRowIsRejected() async throws {
+    guard let vectorData = "{\"name\":\"update_row on a locked row is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"ops\":[{\"kind\":\"update_row\",\"row\":{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Changed.\",\"demo_actions\":\"Close.\"}}],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_row\",\"details\":{\"row_index\":2,\"op_index\":0}},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector39EditServiceApplySketchOpsUpdateRowReplacesTheRowAndKeepsItsLockState() async throws {
+    guard let vectorData = "{\"name\":\"update_row replaces the row and keeps its lock state\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"ops\":[{\"kind\":\"update_row\",\"row\":{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"row-1\",\"time\":\"0:12\",\"duration_seconds\":12,\"narrative\":\"Rewritten.\",\"demo_actions\":\"Click.\",\"design_plan\":\"Plan.\",\"newer_field\":1}}],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"row-1\",\"time\":\"0:12\",\"duration_seconds\":12,\"narrative\":\"Rewritten.\",\"demo_actions\":\"Click.\",\"design_plan\":\"Plan.\",\"newer_field\":1},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"applySketchOps\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "applySketchOps", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector40EditServiceDocumentVersionAscii() async throws {
+    guard let vectorData = "{\"name\":\"ascii\",\"input\":{\"content\":\"{\\\"title\\\":\\\"Intro\\\"}\\n\"},\"expected\":\"sha256:c621f460fcbcc295d522c8407e3dbd8f529ff3ad8793764e69503692826533dd\",\"operation\":\"documentVersion\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "documentVersion", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector41EditServiceDocumentVersionEmptyDocument() async throws {
+    guard let vectorData = "{\"name\":\"empty document\",\"input\":{\"content\":\"\"},\"expected\":\"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"operation\":\"documentVersion\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "documentVersion", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector42EditServiceDocumentVersionUtf8BytesNotCodeUnits() async throws {
+    guard let vectorData = "{\"name\":\"utf-8 bytes, not code units\",\"input\":{\"content\":\"Caf\u{e9} \u{1f3ac}\\r\\n\"},\"expected\":\"sha256:5f854afee30c777ed5867d2169fefcf9319a1e7b1945dba052d49dc823262cc9\",\"operation\":\"documentVersion\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "documentVersion", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector43EditServiceEditSketchContentACurrentVersionStillEnforcesTheEditPolicy() async throws {
+    guard let vectorData = "{\"name\":\"a current version still enforces the edit policy\",\"input\":{\"content\":\"{\\\"title\\\":\\\"Contract sketch\\\",\\\"locked\\\":true,\\\"description\\\":null,\\\"rows\\\":[{\\\"id\\\":\\\"row-1\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":null,\\\"time\\\":\\\"0:10\\\",\\\"narrative\\\":\\\"First.\\\",\\\"demo_actions\\\":\\\"Open.\\\",\\\"future_row_field\\\":\\\"first\\\"},{\\\"id\\\":\\\"row-2\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":\\\"screenshots/second.png\\\",\\\"time\\\":\\\"0:20\\\",\\\"narrative\\\":\\\"Second.\\\",\\\"demo_actions\\\":\\\"Click.\\\"}],\\\"state\\\":\\\"draft\\\",\\\"created_at\\\":\\\"2026-06-28T20:00:00Z\\\",\\\"updated_at\\\":\\\"2026-06-28T20:20:00Z\\\"}\",\"expected_version\":\"sha256:0954839672a12a14252836cdb04beab7052711fcb6985fcc03d33d1d8354106f\",\"ops\":[{\"kind\":\"set_title\",\"title\":\"No\"}],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_document\",\"details\":{\"op_index\":0}},\"operation\":\"editSketchContent\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "editSketchContent", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector44EditServiceEditSketchContentAStaleVersionReportsTheCurrentOneBeforeAnyOpRuns() async throws {
+    guard let vectorData = "{\"name\":\"a stale version reports the current one before any op runs\",\"input\":{\"content\":\"{\\\"title\\\":\\\"Contract sketch\\\",\\\"locked\\\":false,\\\"description\\\":null,\\\"rows\\\":[{\\\"id\\\":\\\"row-1\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":null,\\\"time\\\":\\\"0:10\\\",\\\"narrative\\\":\\\"First.\\\",\\\"demo_actions\\\":\\\"Open.\\\",\\\"future_row_field\\\":\\\"first\\\"},{\\\"id\\\":\\\"row-2\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":\\\"screenshots/second.png\\\",\\\"time\\\":\\\"0:20\\\",\\\"narrative\\\":\\\"Second.\\\",\\\"demo_actions\\\":\\\"Click.\\\"}],\\\"state\\\":\\\"draft\\\",\\\"created_at\\\":\\\"2026-06-28T20:00:00Z\\\",\\\"updated_at\\\":\\\"2026-06-28T20:20:00Z\\\"}\",\"expected_version\":\"sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\",\"ops\":[{\"kind\":\"set_mood\"}],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"stale_document\",\"details\":{\"current_version\":\"sha256:a89f31f168d3c78b74b7c3a254e8a4f6fbc66c346a450bf11949a98c6ae94015\"}},\"operation\":\"editSketchContent\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "editSketchContent", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector45EditServiceEditSketchContentAnEmptyBatchReturnsTheFileUnchanged() async throws {
+    guard let vectorData = "{\"name\":\"an empty batch returns the file unchanged\",\"input\":{\"content\":\"{\\\"title\\\":\\\"Contract sketch\\\",\\\"locked\\\":false,\\\"description\\\":null,\\\"rows\\\":[{\\\"id\\\":\\\"row-1\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":null,\\\"time\\\":\\\"0:10\\\",\\\"narrative\\\":\\\"First.\\\",\\\"demo_actions\\\":\\\"Open.\\\",\\\"future_row_field\\\":\\\"first\\\"},{\\\"id\\\":\\\"row-2\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":\\\"screenshots/second.png\\\",\\\"time\\\":\\\"0:20\\\",\\\"narrative\\\":\\\"Second.\\\",\\\"demo_actions\\\":\\\"Click.\\\"}],\\\"state\\\":\\\"draft\\\",\\\"created_at\\\":\\\"2026-06-28T20:00:00Z\\\",\\\"updated_at\\\":\\\"2026-06-28T20:20:00Z\\\"}\",\"expected_version\":\"sha256:a89f31f168d3c78b74b7c3a254e8a4f6fbc66c346a450bf11949a98c6ae94015\",\"ops\":[],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"content\":\"{\\\"title\\\":\\\"Contract sketch\\\",\\\"locked\\\":false,\\\"description\\\":null,\\\"rows\\\":[{\\\"id\\\":\\\"row-1\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":null,\\\"time\\\":\\\"0:10\\\",\\\"narrative\\\":\\\"First.\\\",\\\"demo_actions\\\":\\\"Open.\\\",\\\"future_row_field\\\":\\\"first\\\"},{\\\"id\\\":\\\"row-2\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":\\\"screenshots/second.png\\\",\\\"time\\\":\\\"0:20\\\",\\\"narrative\\\":\\\"Second.\\\",\\\"demo_actions\\\":\\\"Click.\\\"}],\\\"state\\\":\\\"draft\\\",\\\"created_at\\\":\\\"2026-06-28T20:00:00Z\\\",\\\"updated_at\\\":\\\"2026-06-28T20:20:00Z\\\"}\",\"version\":\"sha256:a89f31f168d3c78b74b7c3a254e8a4f6fbc66c346a450bf11949a98c6ae94015\"},\"operation\":\"editSketchContent\",\"stage\":\"callable\"}".data(using: .utf8),
+      let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
+    else {
+      XCTFail("failed to parse embedded vector")
+      return
+    }
+    _ = await VectorRunner.runVector(contract: "EditService", operation: "editSketchContent", vector: vector, sync: true, seam: seam())
+  }
+
+  func testVector46PlanningTimingParseDurationSecondsAFractionNeedsALeadingDigit() async throws {
     guard let vectorData = "{\"name\":\"a fraction needs a leading digit\",\"input\":{\"time\":\"5 .5m\"},\"expected\":300,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -134,7 +504,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector10PlanningTimingParseDurationSecondsASecondFractionIsNotPartOfTheNumber() async throws {
+  func testVector47PlanningTimingParseDurationSecondsASecondFractionIsNotPartOfTheNumber() async throws {
     guard let vectorData = "{\"name\":\"a second fraction is not part of the number\",\"input\":{\"time\":\"1.5.5m\"},\"expected\":330,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -144,7 +514,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector11PlanningTimingParseDurationSecondsAUnitMayBeFollowedByANonASCIILetter() async throws {
+  func testVector48PlanningTimingParseDurationSecondsAUnitMayBeFollowedByANonASCIILetter() async throws {
     guard let vectorData = "{\"name\":\"a unit may be followed by a non-ASCII letter\",\"input\":{\"time\":\"5s\u{3b1}\"},\"expected\":5,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -154,7 +524,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector12PlanningTimingParseDurationSecondsAUnitMayNotRunIntoTheNextPair() async throws {
+  func testVector49PlanningTimingParseDurationSecondsAUnitMayNotRunIntoTheNextPair() async throws {
     guard let vectorData = "{\"name\":\"a unit may not run into the next pair\",\"input\":{\"time\":\"5 m5s\"},\"expected\":5,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -164,7 +534,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector13PlanningTimingParseDurationSecondsApproximateSeconds() async throws {
+  func testVector50PlanningTimingParseDurationSecondsApproximateSeconds() async throws {
     guard let vectorData = "{\"name\":\"approximate seconds\",\"input\":{\"time\":\"~25s\"},\"expected\":25,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -174,7 +544,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector14PlanningTimingParseDurationSecondsBareFractionRoundsHalfUp() async throws {
+  func testVector51PlanningTimingParseDurationSecondsBareFractionRoundsHalfUp() async throws {
     guard let vectorData = "{\"name\":\"bare fraction rounds half up\",\"input\":{\"time\":\"2.5\"},\"expected\":3,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -184,7 +554,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector15PlanningTimingParseDurationSecondsBareNumberOfSeconds() async throws {
+  func testVector52PlanningTimingParseDurationSecondsBareNumberOfSeconds() async throws {
     guard let vectorData = "{\"name\":\"bare number of seconds\",\"input\":{\"time\":\"90\"},\"expected\":90,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -194,7 +564,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector16PlanningTimingParseDurationSecondsClockHoursMinutesAndSeconds() async throws {
+  func testVector53PlanningTimingParseDurationSecondsClockHoursMinutesAndSeconds() async throws {
     guard let vectorData = "{\"name\":\"clock hours, minutes, and seconds\",\"input\":{\"time\":\"1:02:03\"},\"expected\":3723,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -204,7 +574,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector17PlanningTimingParseDurationSecondsClockMinutesAndSeconds() async throws {
+  func testVector54PlanningTimingParseDurationSecondsClockMinutesAndSeconds() async throws {
     guard let vectorData = "{\"name\":\"clock minutes and seconds\",\"input\":{\"time\":\"1:30\"},\"expected\":90,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -214,7 +584,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector18PlanningTimingParseDurationSecondsClockPartMayBeOneDigit() async throws {
+  func testVector55PlanningTimingParseDurationSecondsClockPartMayBeOneDigit() async throws {
     guard let vectorData = "{\"name\":\"clock part may be one digit\",\"input\":{\"time\":\"0:5\"},\"expected\":5,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -224,7 +594,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector19PlanningTimingParseDurationSecondsClockPartOf60OrMoreIsNotAClock() async throws {
+  func testVector56PlanningTimingParseDurationSecondsClockPartOf60OrMoreIsNotAClock() async throws {
     guard let vectorData = "{\"name\":\"clock part of 60 or more is not a clock\",\"input\":{\"time\":\"1:60\"},\"expected\":null,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -234,7 +604,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector20PlanningTimingParseDurationSecondsEmptyLabel() async throws {
+  func testVector57PlanningTimingParseDurationSecondsEmptyLabel() async throws {
     guard let vectorData = "{\"name\":\"empty label\",\"input\":{\"time\":\"\"},\"expected\":null,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -244,7 +614,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector21PlanningTimingParseDurationSecondsExponentsAreNotNumbers() async throws {
+  func testVector58PlanningTimingParseDurationSecondsExponentsAreNotNumbers() async throws {
     guard let vectorData = "{\"name\":\"exponents are not numbers\",\"input\":{\"time\":\"1e3s\"},\"expected\":3,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -254,7 +624,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector22PlanningTimingParseDurationSecondsFractionalSecondsRoundHalfUp() async throws {
+  func testVector59PlanningTimingParseDurationSecondsFractionalSecondsRoundHalfUp() async throws {
     guard let vectorData = "{\"name\":\"fractional seconds round half up\",\"input\":{\"time\":\"2.5s\"},\"expected\":3,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -264,7 +634,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector23PlanningTimingParseDurationSecondsFractionalUnits() async throws {
+  func testVector60PlanningTimingParseDurationSecondsFractionalUnits() async throws {
     guard let vectorData = "{\"name\":\"fractional units\",\"input\":{\"time\":\"1.25m\"},\"expected\":75,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -274,7 +644,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector24PlanningTimingParseDurationSecondsLabelWithoutADuration() async throws {
+  func testVector61PlanningTimingParseDurationSecondsLabelWithoutADuration() async throws {
     guard let vectorData = "{\"name\":\"label without a duration\",\"input\":{\"time\":\"TBD\"},\"expected\":null,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -284,7 +654,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector25PlanningTimingParseDurationSecondsLargestUint32() async throws {
+  func testVector62PlanningTimingParseDurationSecondsLargestUint32() async throws {
     guard let vectorData = "{\"name\":\"largest uint32\",\"input\":{\"time\":\"4294967295\"},\"expected\":4294967295,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -294,7 +664,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector26PlanningTimingParseDurationSecondsLongUnitNames() async throws {
+  func testVector63PlanningTimingParseDurationSecondsLongUnitNames() async throws {
     guard let vectorData = "{\"name\":\"long unit names\",\"input\":{\"time\":\"2 minutes 15 seconds\"},\"expected\":135,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -304,7 +674,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector27PlanningTimingParseDurationSecondsNonBreakingSpaceSeparatesAUnit() async throws {
+  func testVector64PlanningTimingParseDurationSecondsNonBreakingSpaceSeparatesAUnit() async throws {
     guard let vectorData = "{\"name\":\"non-breaking space separates a unit\",\"input\":{\"time\":\"5\u{a0}s\"},\"expected\":5,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -314,7 +684,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector28PlanningTimingParseDurationSecondsOnlyASCIIDigitsCount() async throws {
+  func testVector65PlanningTimingParseDurationSecondsOnlyASCIIDigitsCount() async throws {
     guard let vectorData = "{\"name\":\"only ASCII digits count\",\"input\":{\"time\":\"\u{663}\u{660}s\"},\"expected\":null,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -324,7 +694,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector29PlanningTimingParseDurationSecondsRoundsDownToTheLargestUint32() async throws {
+  func testVector66PlanningTimingParseDurationSecondsRoundsDownToTheLargestUint32() async throws {
     guard let vectorData = "{\"name\":\"rounds down to the largest uint32\",\"input\":{\"time\":\"4294967295.4\"},\"expected\":4294967295,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -334,7 +704,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector30PlanningTimingParseDurationSecondsRoundsUpPastUint32() async throws {
+  func testVector67PlanningTimingParseDurationSecondsRoundsUpPastUint32() async throws {
     guard let vectorData = "{\"name\":\"rounds up past uint32\",\"input\":{\"time\":\"4294967295.5\"},\"expected\":null,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -344,7 +714,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector31PlanningTimingParseDurationSecondsTextAroundUnitPairsIsIgnored() async throws {
+  func testVector68PlanningTimingParseDurationSecondsTextAroundUnitPairsIsIgnored() async throws {
     guard let vectorData = "{\"name\":\"text around unit pairs is ignored\",\"input\":{\"time\":\"about 2 min\"},\"expected\":120,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -354,7 +724,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector32PlanningTimingParseDurationSecondsTooLargeForUint32() async throws {
+  func testVector69PlanningTimingParseDurationSecondsTooLargeForUint32() async throws {
     guard let vectorData = "{\"name\":\"too large for uint32\",\"input\":{\"time\":\"4294967296\"},\"expected\":null,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -364,7 +734,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector33PlanningTimingParseDurationSecondsUnicodeLowercasingCanExpandACharacter() async throws {
+  func testVector70PlanningTimingParseDurationSecondsUnicodeLowercasingCanExpandACharacter() async throws {
     guard let vectorData = "{\"name\":\"Unicode lowercasing can expand a character\",\"input\":{\"time\":\"5 s\u{130}\"},\"expected\":null,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -374,7 +744,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector34PlanningTimingParseDurationSecondsUnicodeLowercasingCanJoinAUnitToAWord() async throws {
+  func testVector71PlanningTimingParseDurationSecondsUnicodeLowercasingCanJoinAUnitToAWord() async throws {
     guard let vectorData = "{\"name\":\"Unicode lowercasing can join a unit to a word\",\"input\":{\"time\":\"5s\u{212a}\"},\"expected\":null,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -384,7 +754,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector35PlanningTimingParseDurationSecondsUnitFollowedByAWordCharacterDoesNotCount() async throws {
+  func testVector72PlanningTimingParseDurationSecondsUnitFollowedByAWordCharacterDoesNotCount() async throws {
     guard let vectorData = "{\"name\":\"unit followed by a word character does not count\",\"input\":{\"time\":\"5sec2\"},\"expected\":null,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -394,7 +764,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector36PlanningTimingParseDurationSecondsUnitPairsAreRoundedAfterSumming() async throws {
+  func testVector73PlanningTimingParseDurationSecondsUnitPairsAreRoundedAfterSumming() async throws {
     guard let vectorData = "{\"name\":\"unit pairs are rounded after summing\",\"input\":{\"time\":\"0.4s 0.4s\"},\"expected\":1,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -404,7 +774,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector37PlanningTimingParseDurationSecondsUnitPairsAreSummed() async throws {
+  func testVector74PlanningTimingParseDurationSecondsUnitPairsAreSummed() async throws {
     guard let vectorData = "{\"name\":\"unit pairs are summed\",\"input\":{\"time\":\"1h 2m 3s\"},\"expected\":3723,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -414,7 +784,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector38PlanningTimingParseDurationSecondsWhitespaceCaseAndTheApproximateMarkAreIgnored() async throws {
+  func testVector75PlanningTimingParseDurationSecondsWhitespaceCaseAndTheApproximateMarkAreIgnored() async throws {
     guard let vectorData = "{\"name\":\"whitespace, case, and the approximate mark are ignored\",\"input\":{\"time\":\"  ~ 45 SEC  \"},\"expected\":45,\"operation\":\"parseDurationSeconds\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -424,7 +794,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "PlanningTiming", operation: "parseDurationSeconds", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector39SketchDocumentReorderRowsEarlierLockedCellFiresBeforeALaterLockedRow() async throws {
+  func testVector76SketchDocumentReorderRowsEarlierLockedCellFiresBeforeALaterLockedRow() async throws {
     guard let vectorData = "{\"name\":\"earlier locked cell fires before a later locked row\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"order\":[0,2,1],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_cell\",\"details\":{\"row_index\":1,\"field\":\"narrative\"}},\"operation\":\"reorderRows\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -434,7 +804,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "reorderRows", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector40SketchDocumentReorderRowsLockedRowProtectsFieldsARuntimeDoesNotModel() async throws {
+  func testVector77SketchDocumentReorderRowsLockedRowProtectsFieldsARuntimeDoesNotModel() async throws {
     guard let vectorData = "{\"name\":\"locked row protects fields a runtime does not model\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Same.\",\"demo_actions\":\"Same.\",\"future_row_field\":\"a\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Same.\",\"demo_actions\":\"Same.\",\"future_row_field\":\"b\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"order\":[1,0],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_row\",\"details\":{\"row_index\":0}},\"operation\":\"reorderRows\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -444,7 +814,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "reorderRows", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector41SketchDocumentReorderRowsLockedSketchTakesPrecedenceOverAnInvalidOrder() async throws {
+  func testVector78SketchDocumentReorderRowsLockedSketchTakesPrecedenceOverAnInvalidOrder() async throws {
     guard let vectorData = "{\"name\":\"locked sketch takes precedence over an invalid order\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":true,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"order\":[0,0],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_document\"},\"operation\":\"reorderRows\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -454,7 +824,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "reorderRows", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector42SketchDocumentReorderRowsReorderAroundLockedRowsKeepsLocksInPlace() async throws {
+  func testVector79SketchDocumentReorderRowsReorderAroundLockedRowsKeepsLocksInPlace() async throws {
     guard let vectorData = "{\"name\":\"reorder around locked rows keeps locks in place\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"row-4\",\"time\":\"0:40\",\"narrative\":\"Spare.\",\"demo_actions\":\"Wrap up.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"order\":[3,1,2,0],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"row-4\",\"time\":\"0:40\",\"narrative\":\"Spare.\",\"demo_actions\":\"Wrap up.\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"},{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"reorderRows\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -464,7 +834,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "reorderRows", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector43SketchDocumentReorderRowsReorderMovesWholeRowsIncludingUnknownFields() async throws {
+  func testVector80SketchDocumentReorderRowsReorderMovesWholeRowsIncludingUnknownFields() async throws {
     guard let vectorData = "{\"name\":\"reorder moves whole rows including unknown fields\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"order\":[1,0],\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"},{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"},\"operation\":\"reorderRows\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -474,7 +844,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "reorderRows", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector44SketchDocumentReorderRowsReorderThatChangesALockedCellIsRejected() async throws {
+  func testVector81SketchDocumentReorderRowsReorderThatChangesALockedCellIsRejected() async throws {
     guard let vectorData = "{\"name\":\"reorder that changes a locked cell is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"order\":[1,0,2],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_cell\",\"details\":{\"row_index\":1,\"field\":\"narrative\"}},\"operation\":\"reorderRows\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -484,7 +854,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "reorderRows", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector45SketchDocumentReorderRowsReorderThatChangesALockedRowIsRejected() async throws {
+  func testVector82SketchDocumentReorderRowsReorderThatChangesALockedRowIsRejected() async throws {
     guard let vectorData = "{\"name\":\"reorder that changes a locked row is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"order\":[2,1,0],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_row\",\"details\":{\"row_index\":2}},\"operation\":\"reorderRows\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -494,7 +864,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "reorderRows", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector46SketchDocumentReorderRowsReorderThatIsNotAPermutationIsRejected() async throws {
+  func testVector83SketchDocumentReorderRowsReorderThatIsNotAPermutationIsRejected() async throws {
     guard let vectorData = "{\"name\":\"reorder that is not a permutation is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"order\":[0,0],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"invalid_reorder\"},\"operation\":\"reorderRows\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -504,7 +874,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "reorderRows", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector47SketchDocumentReorderRowsScreenshotLockAlsoGuardsTheVisual() async throws {
+  func testVector84SketchDocumentReorderRowsScreenshotLockAlsoGuardsTheVisual() async throws {
     guard let vectorData = "{\"name\":\"screenshot lock also guards the visual\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":true,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/shared.png\",\"time\":\"0:10\",\"narrative\":\"A.\",\"demo_actions\":\"\",\"visual\":\".cutready/visuals/one.json\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/shared.png\",\"time\":\"0:10\",\"narrative\":\"A.\",\"demo_actions\":\"\",\"visual\":\".cutready/visuals/two.json\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"order\":[1,0],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_cell\",\"details\":{\"row_index\":0,\"field\":\"screenshot\"}},\"operation\":\"reorderRows\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -514,7 +884,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "reorderRows", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector48SketchDocumentReorderRowsVisualLockAlsoGuardsTheScreenshot() async throws {
+  func testVector85SketchDocumentReorderRowsVisualLockAlsoGuardsTheScreenshot() async throws {
     guard let vectorData = "{\"name\":\"visual lock also guards the screenshot\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":true,\"design_plan\":false},\"screenshot\":\"screenshots/one.png\",\"time\":\"0:10\",\"narrative\":\"A.\",\"demo_actions\":\"\",\"visual\":\".cutready/visuals/shared.json\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/two.png\",\"time\":\"0:10\",\"narrative\":\"A.\",\"demo_actions\":\"\",\"visual\":\".cutready/visuals/shared.json\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"order\":[1,0],\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_cell\",\"details\":{\"row_index\":0,\"field\":\"visual\"}},\"operation\":\"reorderRows\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -524,7 +894,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "reorderRows", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector49SketchDocumentRoundTripAnAssignedIdSkipsIdsAlreadyInUse() async throws {
+  func testVector86SketchDocumentRoundTripAnAssignedIdSkipsIdsAlreadyInUse() async throws {
     guard let vectorData = "{\"name\":\"an assigned id skips ids already in use\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Row 1.\",\"demo_actions\":\"\",\"id\":\"row-2\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Row 2.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Row 3.\",\"demo_actions\":\"\",\"id\":\"row-2-2\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Row 1.\",\"demo_actions\":\"\",\"id\":\"row-2\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Row 2.\",\"demo_actions\":\"\",\"id\":\"row-2-3\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Row 3.\",\"demo_actions\":\"\",\"id\":\"row-2-2\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"roundTrip\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -534,7 +904,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "roundTrip", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector50SketchDocumentRoundTripCanonicalDesktopSketchIsUnchanged() async throws {
+  func testVector87SketchDocumentRoundTripCanonicalDesktopSketchIsUnchanged() async throws {
     guard let vectorData = "{\"name\":\"canonical desktop sketch is unchanged\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":{\"root\":{\"children\":[{\"type\":\"paragraph\",\"children\":[{\"text\":\"Intro scene\"}]}]}},\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:20\",\"duration_seconds\":20,\"narrative\":\"Open the workspace.\",\"demo_actions\":\"Click **Open**.\",\"visual\":\".cutready/visuals/abc123def456.json\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25,\"label\":\"Open button\"},{\"rank\":2,\"x\":0.75,\"y\":0.5}],\"typing_spots\":[{\"x\":0.25,\"y\":0.5,\"width\":0.5,\"height\":0.125,\"text\":\"demo-project\",\"start_offset_ms\":300,\"characters_per_second\":18.5,\"show_cursor\":true,\"font_family\":\"mono\",\"font_scale\":1.25}],\"motion_plan\":{\"kind\":\"wide_hold_then_push\",\"keyframes\":[{\"time_ms\":0,\"scale\":1.25,\"x\":0.5,\"y\":0.5,\"easing\":\"linear\"},{\"time_ms\":1500,\"scale\":1.75,\"x\":0.5,\"y\":0.25,\"easing\":\"ease_in_out\"}],\"rationale\":\"Hold wide, then push toward the Open button.\"},\"design_plan\":\"Title card with the product name.\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":4200,\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\"},\"narration_plan\":{\"source_text\":\"Open the workspace.\",\"voice\":\"en-US-Harper:MAI-Voice-2\",\"locale\":\"en-US\",\"ssml\":\"<speak>Open the workspace.</speak>\",\"baseline_style\":\"friendly\",\"pronunciation_overrides\":{\"CutReady\":\"cut ready\"},\"beats\":[{\"text\":\"Open the workspace.\",\"emphasis\":\"moderate\",\"style_degree\":1.5,\"pause_after_ms\":250}],\"generated_at\":\"2026-06-28T20:06:00Z\"}}],\"state\":\"refined\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"developers\"}}}},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":{\"root\":{\"children\":[{\"type\":\"paragraph\",\"children\":[{\"text\":\"Intro scene\"}]}]}},\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:20\",\"duration_seconds\":20,\"narrative\":\"Open the workspace.\",\"demo_actions\":\"Click **Open**.\",\"visual\":\".cutready/visuals/abc123def456.json\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25,\"label\":\"Open button\"},{\"rank\":2,\"x\":0.75,\"y\":0.5}],\"typing_spots\":[{\"x\":0.25,\"y\":0.5,\"width\":0.5,\"height\":0.125,\"text\":\"demo-project\",\"start_offset_ms\":300,\"characters_per_second\":18.5,\"show_cursor\":true,\"font_family\":\"mono\",\"font_scale\":1.25}],\"motion_plan\":{\"kind\":\"wide_hold_then_push\",\"keyframes\":[{\"time_ms\":0,\"scale\":1.25,\"x\":0.5,\"y\":0.5,\"easing\":\"linear\"},{\"time_ms\":1500,\"scale\":1.75,\"x\":0.5,\"y\":0.25,\"easing\":\"ease_in_out\"}],\"rationale\":\"Hold wide, then push toward the Open button.\"},\"design_plan\":\"Title card with the product name.\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":4200,\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\"},\"narration_plan\":{\"source_text\":\"Open the workspace.\",\"voice\":\"en-US-Harper:MAI-Voice-2\",\"locale\":\"en-US\",\"ssml\":\"<speak>Open the workspace.</speak>\",\"baseline_style\":\"friendly\",\"pronunciation_overrides\":{\"CutReady\":\"cut ready\"},\"beats\":[{\"text\":\"Open the workspace.\",\"emphasis\":\"moderate\",\"style_degree\":1.5,\"pause_after_ms\":250}],\"generated_at\":\"2026-06-28T20:06:00Z\"}}],\"state\":\"refined\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"developers\"}}},\"operation\":\"roundTrip\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -544,7 +914,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "roundTrip", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector51SketchDocumentRoundTripDuplicateRowIdsAreRejected() async throws {
+  func testVector88SketchDocumentRoundTripDuplicateRowIdsAreRejected() async throws {
     guard let vectorData = "{\"name\":\"duplicate row ids are rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Row 1.\",\"demo_actions\":\"\",\"id\":\"intro\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Row 2.\",\"demo_actions\":\"\",\"id\":\"body\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Row 3.\",\"demo_actions\":\"\",\"id\":\"intro\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}},\"expectedError\":{\"code\":\"duplicate_row_id\",\"details\":{\"row_index\":2,\"row_id\":\"intro\"}},\"operation\":\"roundTrip\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -554,7 +924,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "roundTrip", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector52SketchDocumentRoundTripEmptyAndNullRowIdsCountAsMissing() async throws {
+  func testVector89SketchDocumentRoundTripEmptyAndNullRowIdsCountAsMissing() async throws {
     guard let vectorData = "{\"name\":\"empty and null row ids count as missing\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Row 1.\",\"demo_actions\":\"\",\"id\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Row 2.\",\"demo_actions\":\"\",\"id\":null}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Row 1.\",\"demo_actions\":\"\",\"id\":\"row-1\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Row 2.\",\"demo_actions\":\"\",\"id\":\"row-2\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"roundTrip\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -564,7 +934,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "roundTrip", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector53SketchDocumentRoundTripExistingRowIdsAreKept() async throws {
+  func testVector90SketchDocumentRoundTripExistingRowIdsAreKept() async throws {
     guard let vectorData = "{\"name\":\"existing row ids are kept\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Row 1.\",\"demo_actions\":\"\",\"id\":\"intro\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Row 2.\",\"demo_actions\":\"\",\"id\":\"6f1c0d2e-9a4b-4c3d-8e2f-1a2b3c4d5e6f\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Row 1.\",\"demo_actions\":\"\",\"id\":\"intro\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Row 2.\",\"demo_actions\":\"\",\"id\":\"6f1c0d2e-9a4b-4c3d-8e2f-1a2b3c4d5e6f\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"roundTrip\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -574,7 +944,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "roundTrip", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector54SketchDocumentRoundTripLegacyMinimalSketchGainsCanonicalDefaults() async throws {
+  func testVector91SketchDocumentRoundTripLegacyMinimalSketchGainsCanonicalDefaults() async throws {
     guard let vectorData = "{\"name\":\"legacy minimal sketch gains canonical defaults\",\"input\":{\"sketch\":{\"title\":\"Legacy\",\"rows\":[{\"time\":\"~30s\",\"narrative\":\"Legacy row.\",\"demo_actions\":\"\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\"}}],\"state\":\"sketch\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}},\"expected\":{\"title\":\"Legacy\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"row-1\",\"time\":\"~30s\",\"narrative\":\"Legacy row.\",\"demo_actions\":\"\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\",\"duration_ms\":null}}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"roundTrip\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -584,7 +954,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "roundTrip", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector55SketchDocumentRoundTripNullAndEmptyOptionalValuesAreOmitted() async throws {
+  func testVector92SketchDocumentRoundTripNullAndEmptyOptionalValuesAreOmitted() async throws {
     guard let vectorData = "{\"name\":\"null and empty optional values are omitted\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05\",\"duration_seconds\":null,\"narrative\":\"Sparse row.\",\"demo_actions\":\"Wait.\",\"visual\":null,\"design_plan\":null,\"motion_points\":null,\"typing_spots\":[],\"motion_plan\":{\"kind\":\"subtle_push\",\"keyframes\":[],\"rationale\":null},\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":null,\"leading_silence_ms\":null,\"trailing_silence_ms\":null,\"silence_threshold_db\":null,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\"},\"narration_plan\":{\"source_text\":\"Sparse row.\",\"voice\":\"en-US-Harper:MAI-Voice-2\",\"locale\":\"en-US\",\"ssml\":\"<speak>Sparse row.</speak>\",\"baseline_style\":null,\"pronunciation_overrides\":{},\"beats\":[],\"generated_at\":\"2026-06-28T20:06:00Z\"}}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{}}}},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05\",\"narrative\":\"Sparse row.\",\"demo_actions\":\"Wait.\",\"motion_plan\":{\"kind\":\"subtle_push\"},\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":null,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\"},\"narration_plan\":{\"source_text\":\"Sparse row.\",\"voice\":\"en-US-Harper:MAI-Voice-2\",\"locale\":\"en-US\",\"ssml\":\"<speak>Sparse row.</speak>\",\"generated_at\":\"2026-06-28T20:06:00Z\"}}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"roundTrip\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -594,7 +964,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "roundTrip", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector56SketchDocumentRoundTripNullMetadataFieldsLoadAsAbsent() async throws {
+  func testVector93SketchDocumentRoundTripNullMetadataFieldsLoadAsAbsent() async throws {
     guard let vectorData = "{\"name\":\"null metadata fields load as absent\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":null}}},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"roundTrip\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -604,7 +974,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "roundTrip", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector57SketchDocumentRoundTripNullOptionalFieldsLoadAsAbsent() async throws {
+  func testVector94SketchDocumentRoundTripNullOptionalFieldsLoadAsAbsent() async throws {
     guard let vectorData = "{\"name\":\"null optional fields load as absent\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":null,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":null,\"locks\":null,\"screenshot\":null,\"time\":\"0:05\",\"narrative\":\"Null row.\",\"demo_actions\":\"Wait.\",\"future_row_field\":null,\"typing_spots\":null,\"motion_plan\":{\"kind\":\"subtle_push\",\"keyframes\":null},\"narration_plan\":{\"source_text\":\"Null row.\",\"voice\":\"en-US-Harper:MAI-Voice-2\",\"locale\":\"en-US\",\"ssml\":\"<speak>Null row.</speak>\",\"pronunciation_overrides\":null,\"beats\":null,\"generated_at\":\"2026-06-28T20:06:00Z\"}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":null,\"narrative\":true,\"demo_actions\":null,\"screenshot\":null,\"visual\":null,\"design_plan\":null},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Null cell lock.\",\"demo_actions\":\"Wait.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":null,\"future_document_field\":{\"kept\":null}}},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05\",\"narrative\":\"Null row.\",\"demo_actions\":\"Wait.\",\"future_row_field\":null,\"motion_plan\":{\"kind\":\"subtle_push\"},\"narration_plan\":{\"source_text\":\"Null row.\",\"voice\":\"en-US-Harper:MAI-Voice-2\",\"locale\":\"en-US\",\"ssml\":\"<speak>Null row.</speak>\",\"generated_at\":\"2026-06-28T20:06:00Z\"}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Null cell lock.\",\"demo_actions\":\"Wait.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":{\"kept\":null}},\"operation\":\"roundTrip\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -614,7 +984,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "roundTrip", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector58SketchDocumentRoundTripRowsWithoutAnIdGetTheirOneBasedPosition() async throws {
+  func testVector95SketchDocumentRoundTripRowsWithoutAnIdGetTheirOneBasedPosition() async throws {
     guard let vectorData = "{\"name\":\"rows without an id get their one-based position\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Row 1.\",\"demo_actions\":\"\",\"id\":\"intro\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Row 2.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Row 3.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Row 1.\",\"demo_actions\":\"\",\"id\":\"intro\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Row 2.\",\"demo_actions\":\"\",\"id\":\"row-2\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Row 3.\",\"demo_actions\":\"\",\"id\":\"row-3\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"roundTrip\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -624,7 +994,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "roundTrip", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector59SketchDocumentRoundTripTimestampsAreSavedAsUTC() async throws {
+  func testVector96SketchDocumentRoundTripTimestampsAreSavedAsUTC() async throws {
     guard let vectorData = "{\"name\":\"timestamps are saved as UTC\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05\",\"narrative\":\"Offset.\",\"demo_actions\":\"\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":4200,\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T22:05:00.5+02:00\"}}],\"state\":\"draft\",\"created_at\":\"2026-06-28T22:00:00+02:00\",\"updated_at\":\"2026-06-28T20:20:00.123456789Z\"}},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05\",\"narrative\":\"Offset.\",\"demo_actions\":\"\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":4200,\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00.500Z\"}}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00.123456789Z\"},\"operation\":\"roundTrip\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -634,7 +1004,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "roundTrip", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector60SketchDocumentRoundTripUnknownSketchAndRowFieldsArePreserved() async throws {
+  func testVector97SketchDocumentRoundTripUnknownSketchAndRowFieldsArePreserved() async throws {
     guard let vectorData = "{\"name\":\"unknown sketch and row fields are preserved\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]}},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"roundTrip\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -644,7 +1014,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "roundTrip", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector61SketchDocumentUpdateRowTextEditTimeKeepsMicroseconds() async throws {
+  func testVector98SketchDocumentUpdateRowTextEditTimeKeepsMicroseconds() async throws {
     guard let vectorData = "{\"name\":\"edit time keeps microseconds\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":1,\"demo_actions\":\"Double-click.\"},\"now\":\"2026-07-01T09:30:00.123456Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Double-click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00.123456Z\"},\"operation\":\"updateRowText\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -654,7 +1024,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "updateRowText", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector62SketchDocumentUpdateRowTextLockedCellAcceptsAnUnchangedValue() async throws {
+  func testVector99SketchDocumentUpdateRowTextLockedCellAcceptsAnUnchangedValue() async throws {
     guard let vectorData = "{\"name\":\"locked cell accepts an unchanged value\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":1,\"narrative\":\"Locked narration.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"updateRowText\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -664,7 +1034,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "updateRowText", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector63SketchDocumentUpdateRowTextLockedCellRejectsAChange() async throws {
+  func testVector100SketchDocumentUpdateRowTextLockedCellRejectsAChange() async throws {
     guard let vectorData = "{\"name\":\"locked cell rejects a change\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":1,\"narrative\":\"Changed.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_cell\",\"details\":{\"row_index\":1,\"field\":\"narrative\"}},\"operation\":\"updateRowText\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -674,7 +1044,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "updateRowText", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector64SketchDocumentUpdateRowTextLockedCellRejectsADifferentlyComposedValue() async throws {
+  func testVector101SketchDocumentUpdateRowTextLockedCellRejectsADifferentlyComposedValue() async throws {
     guard let vectorData = "{\"name\":\"locked cell rejects a differently composed value\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":true,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"\u{c5} 0:10\",\"duration_seconds\":10,\"narrative\":\"Time locked.\",\"demo_actions\":\"\"},{\"id\":\"row-2\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Caf\u{e9}.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":0,\"time\":\"A\u{30a} 0:10\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_cell\",\"details\":{\"row_index\":0,\"field\":\"time\"}},\"operation\":\"updateRowText\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -684,7 +1054,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "updateRowText", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector65SketchDocumentUpdateRowTextLockedCellsAreCheckedInColumnOrder() async throws {
+  func testVector102SketchDocumentUpdateRowTextLockedCellsAreCheckedInColumnOrder() async throws {
     guard let vectorData = "{\"name\":\"locked cells are checked in column order\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Row lock wins.\",\"demo_actions\":\"Hold.\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":true,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Two locked cells.\",\"demo_actions\":\"Hold.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":1,\"time\":\"0:25\",\"narrative\":\"Changed.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_cell\",\"details\":{\"row_index\":1,\"field\":\"time\"}},\"operation\":\"updateRowText\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -694,7 +1064,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "updateRowText", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector66SketchDocumentUpdateRowTextLockedRowRejectsAChange() async throws {
+  func testVector103SketchDocumentUpdateRowTextLockedRowRejectsAChange() async throws {
     guard let vectorData = "{\"name\":\"locked row rejects a change\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":2,\"time\":\"0:45\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_row\",\"details\":{\"row_index\":2}},\"operation\":\"updateRowText\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -704,7 +1074,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "updateRowText", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector67SketchDocumentUpdateRowTextLockedRowRejectsADifferentlyComposedValue() async throws {
+  func testVector104SketchDocumentUpdateRowTextLockedRowRejectsADifferentlyComposedValue() async throws {
     guard let vectorData = "{\"name\":\"locked row rejects a differently composed value\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":true,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"\u{c5} 0:10\",\"duration_seconds\":10,\"narrative\":\"Time locked.\",\"demo_actions\":\"\"},{\"id\":\"row-2\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Caf\u{e9}.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":1,\"narrative\":\"Cafe\u{301}.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_row\",\"details\":{\"row_index\":1}},\"operation\":\"updateRowText\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -714,7 +1084,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "updateRowText", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector68SketchDocumentUpdateRowTextLockedSketchRejectsEveryEdit() async throws {
+  func testVector105SketchDocumentUpdateRowTextLockedSketchRejectsEveryEdit() async throws {
     guard let vectorData = "{\"name\":\"locked sketch rejects every edit\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":true,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":0,\"narrative\":\"First.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_document\"},\"operation\":\"updateRowText\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -724,7 +1094,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "updateRowText", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector69SketchDocumentUpdateRowTextLockedSketchTakesPrecedenceOverAMissingRow() async throws {
+  func testVector106SketchDocumentUpdateRowTextLockedSketchTakesPrecedenceOverAMissingRow() async throws {
     guard let vectorData = "{\"name\":\"locked sketch takes precedence over a missing row\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":true,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":9,\"narrative\":\"Missing.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_document\"},\"operation\":\"updateRowText\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -734,7 +1104,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "updateRowText", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector70SketchDocumentUpdateRowTextNarrativeEditPreservesDesktopOnlyAndUnknownFields() async throws {
+  func testVector107SketchDocumentUpdateRowTextNarrativeEditPreservesDesktopOnlyAndUnknownFields() async throws {
     guard let vectorData = "{\"name\":\"narrative edit preserves desktop-only and unknown fields\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":0,\"narrative\":\"Open the CutReady app.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the CutReady app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"updateRowText\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -744,7 +1114,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "updateRowText", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector71SketchDocumentUpdateRowTextRowIndexOutsideTheTableIsRejected() async throws {
+  func testVector108SketchDocumentUpdateRowTextRowIndexOutsideTheTableIsRejected() async throws {
     guard let vectorData = "{\"name\":\"row index outside the table is rejected\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":3,\"narrative\":\"Missing.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"row_not_found\",\"details\":{\"row_index\":3}},\"operation\":\"updateRowText\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -754,7 +1124,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "updateRowText", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector72SketchDocumentUpdateRowTextRowLockTakesPrecedenceOverACellLock() async throws {
+  func testVector109SketchDocumentUpdateRowTextRowLockTakesPrecedenceOverACellLock() async throws {
     guard let vectorData = "{\"name\":\"row lock takes precedence over a cell lock\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Row lock wins.\",\"demo_actions\":\"Hold.\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":true,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Two locked cells.\",\"demo_actions\":\"Hold.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":0,\"narrative\":\"Changed.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expectedError\":{\"code\":\"locked_row\",\"details\":{\"row_index\":0}},\"operation\":\"updateRowText\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -764,7 +1134,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "updateRowText", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector73SketchDocumentUpdateRowTextTimeEditRecomputesDurationSeconds() async throws {
+  func testVector110SketchDocumentUpdateRowTextTimeEditRecomputesDurationSeconds() async throws {
     guard let vectorData = "{\"name\":\"time edit recomputes duration_seconds\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":0,\"time\":\"0:15\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:15\",\"duration_seconds\":15,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"updateRowText\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -774,7 +1144,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "updateRowText", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector74SketchDocumentUpdateRowTextUnchangedTimeKeepsDurationSeconds() async throws {
+  func testVector111SketchDocumentUpdateRowTextUnchangedTimeKeepsDurationSeconds() async throws {
     guard let vectorData = "{\"name\":\"unchanged time keeps duration_seconds\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05 - 0:19\",\"duration_seconds\":14,\"narrative\":\"Imported scene.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"update\":{\"row_index\":0,\"time\":\"0:05 - 0:19\",\"narrative\":\"Imported scene, edited.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05 - 0:19\",\"duration_seconds\":14,\"narrative\":\"Imported scene, edited.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"},\"operation\":\"updateRowText\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -784,7 +1154,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "updateRowText", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector75SketchDocumentUpdateRowTextUnlockedCellsOnARowWithALockedCellAreEditable() async throws {
+  func testVector112SketchDocumentUpdateRowTextUnlockedCellsOnARowWithALockedCellAreEditable() async throws {
     guard let vectorData = "{\"name\":\"unlocked cells on a row with a locked cell are editable\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":1,\"time\":\"0:25\",\"demo_actions\":\"Type the project name.\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:25\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type the project name.\",\"duration_seconds\":25},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"updateRowText\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -794,7 +1164,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "updateRowText", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector76SketchDocumentUpdateRowTextUnparseableTimeEditRemovesDurationSeconds() async throws {
+  func testVector113SketchDocumentUpdateRowTextUnparseableTimeEditRemovesDurationSeconds() async throws {
     guard let vectorData = "{\"name\":\"unparseable time edit removes duration_seconds\",\"input\":{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"update\":{\"row_index\":0,\"time\":\"TBD\"},\"now\":\"2026-07-01T09:30:00Z\"},\"expected\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"TBD\",\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"operation\":\"updateRowText\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -804,7 +1174,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "SketchDocument", operation: "updateRowText", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector77StoryboardDocumentRoundTripCanonicalDesktopStoryboardIsUnchanged() async throws {
+  func testVector114StoryboardDocumentRoundTripCanonicalDesktopStoryboardIsUnchanged() async throws {
     guard let vectorData = "{\"name\":\"canonical desktop storyboard is unchanged\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"End-to-end launch demo.\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"description\":\"Get signed in.\",\"sketches\":[\"flows/login.sk\",\"flows/workspace.sk\"]},{\"type\":\"section\",\"title\":\"Wrap-up\",\"sketches\":[]},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"partners\"}},\"future_storyboard_field\":{\"owner\":\"ios\",\"tags\":[\"a\",\"b\"]}}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"End-to-end launch demo.\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"description\":\"Get signed in.\",\"sketches\":[\"flows/login.sk\",\"flows/workspace.sk\"]},{\"type\":\"section\",\"title\":\"Wrap-up\",\"sketches\":[]},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"partners\"}},\"future_storyboard_field\":{\"owner\":\"ios\",\"tags\":[\"a\",\"b\"]}},\"operation\":\"roundTrip\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -814,7 +1184,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "StoryboardDocument", operation: "roundTrip", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector78StoryboardDocumentRoundTripTimestampsAreSavedAsUTC() async throws {
+  func testVector115StoryboardDocumentRoundTripTimestampsAreSavedAsUTC() async throws {
     guard let vectorData = "{\"name\":\"timestamps are saved as UTC\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[],\"created_at\":\"2026-06-28T22:00:00+02:00\",\"updated_at\":\"2026-06-28T20:20:00.123456789Z\"}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00.123456789Z\"},\"operation\":\"roundTrip\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -824,7 +1194,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "StoryboardDocument", operation: "roundTrip", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector79StoryboardDocumentUpgradeCanonicalStoryboardIsAlreadyCurrent() async throws {
+  func testVector116StoryboardDocumentUpgradeCanonicalStoryboardIsAlreadyCurrent() async throws {
     guard let vectorData = "{\"name\":\"canonical storyboard is already current\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"End-to-end launch demo.\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"description\":\"Get signed in.\",\"sketches\":[\"flows/login.sk\",\"flows/workspace.sk\"]},{\"type\":\"section\",\"title\":\"Wrap-up\",\"sketches\":[]},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"partners\"}},\"future_storyboard_field\":{\"owner\":\"ios\",\"tags\":[\"a\",\"b\"]}}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"End-to-end launch demo.\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"description\":\"Get signed in.\",\"sketches\":[\"flows/login.sk\",\"flows/workspace.sk\"]},{\"type\":\"section\",\"title\":\"Wrap-up\",\"sketches\":[]},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"partners\"}},\"future_storyboard_field\":{\"owner\":\"ios\",\"tags\":[\"a\",\"b\"]}},\"operation\":\"upgrade\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -834,7 +1204,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "StoryboardDocument", operation: "upgrade", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector80StoryboardDocumentUpgradeItemsWinOverALegacySketchesListWhichIsDropped() async throws {
+  func testVector117StoryboardDocumentUpgradeItemsWinOverALegacySketchesListWhichIsDropped() async throws {
     guard let vectorData = "{\"name\":\"items win over a legacy sketches list, which is dropped\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"sketches\":[\"stale.sk\"]}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -844,7 +1214,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "StoryboardDocument", operation: "upgrade", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector81StoryboardDocumentUpgradeLegacySketchesListBecomesSketchReferences() async throws {
+  func testVector118StoryboardDocumentUpgradeLegacySketchesListBecomesSketchReferences() async throws {
     guard let vectorData = "{\"name\":\"legacy sketches list becomes sketch references\",\"input\":{\"storyboard\":{\"title\":\"Legacy\",\"sketches\":[\"intro.sk\",\"outro.sk\"],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}},\"expected\":{\"title\":\"Legacy\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -854,7 +1224,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "StoryboardDocument", operation: "upgrade", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector82StoryboardDocumentUpgradeMissingItemsAndSketchesBecomeAnEmptySequence() async throws {
+  func testVector119StoryboardDocumentUpgradeMissingItemsAndSketchesBecomeAnEmptySequence() async throws {
     guard let vectorData = "{\"name\":\"missing items and sketches become an empty sequence\",\"input\":{\"storyboard\":{\"title\":\"Empty\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}},\"expected\":{\"title\":\"Empty\",\"description\":\"\",\"locked\":false,\"items\":[],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -864,7 +1234,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "StoryboardDocument", operation: "upgrade", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector83StoryboardDocumentUpgradeNullAndEmptyOptionalValuesTakeCanonicalDefaults() async throws {
+  func testVector120StoryboardDocumentUpgradeNullAndEmptyOptionalValuesTakeCanonicalDefaults() async throws {
     guard let vectorData = "{\"name\":\"null and empty optional values take canonical defaults\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":null,\"locked\":null,\"items\":[{\"type\":\"section\",\"title\":\"Setup\",\"description\":null,\"sketches\":[\"intro.sk\"]},{\"type\":\"section\",\"title\":\"Empty\",\"description\":\"\",\"sketches\":[]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{}}}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"intro.sk\"]},{\"type\":\"section\",\"title\":\"Empty\",\"sketches\":[]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -874,7 +1244,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "StoryboardDocument", operation: "upgrade", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector84StoryboardDocumentUpgradeNullItemsFallBackToTheLegacySketchesList() async throws {
+  func testVector121StoryboardDocumentUpgradeNullItemsFallBackToTheLegacySketchesList() async throws {
     guard let vectorData = "{\"name\":\"null items fall back to the legacy sketches list\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":null,\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"sketches\":[\"intro.sk\"]}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -884,7 +1254,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "StoryboardDocument", operation: "upgrade", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector85StoryboardDocumentUpgradeSectionWithoutSketchesBecomesAnEmptySection() async throws {
+  func testVector122StoryboardDocumentUpgradeSectionWithoutSketchesBecomesAnEmptySection() async throws {
     guard let vectorData = "{\"name\":\"section without sketches becomes an empty section\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"section\",\"title\":\"Later\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"section\",\"title\":\"Later\",\"sketches\":[]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {
@@ -894,7 +1264,7 @@ final class VectorConformanceTests: XCTestCase {
     _ = await VectorRunner.runVector(contract: "StoryboardDocument", operation: "upgrade", vector: vector, sync: true, seam: seam())
   }
 
-  func testVector86StoryboardDocumentUpgradeSketchItemTypeBecomesSketchRef() async throws {
+  func testVector123StoryboardDocumentUpgradeSketchItemTypeBecomesSketchRef() async throws {
     guard let vectorData = "{\"name\":\"sketch item type becomes sketch_ref\",\"input\":{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}},\"expected\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"operation\":\"upgrade\",\"stage\":\"callable\"}".data(using: .utf8),
       let vector = try JSONSerialization.jsonObject(with: vectorData) as? [String: Any]
     else {

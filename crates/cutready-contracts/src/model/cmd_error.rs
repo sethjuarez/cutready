@@ -16,6 +16,8 @@ pub enum CmdErrorCode {
     RowNotFound,
     InvalidReorder,
     DuplicateRowId,
+    InvalidOp,
+    StaleDocument,
     /// Unknown variant (open enum — accepts any string).
     Other(String),
 }
@@ -36,6 +38,8 @@ impl std::fmt::Display for CmdErrorCode {
             Self::RowNotFound => write!(f, "row_not_found"),
             Self::InvalidReorder => write!(f, "invalid_reorder"),
             Self::DuplicateRowId => write!(f, "duplicate_row_id"),
+            Self::InvalidOp => write!(f, "invalid_op"),
+            Self::StaleDocument => write!(f, "stale_document"),
             Self::Other(s) => write!(f, "{}", s),
         }
     }
@@ -51,6 +55,8 @@ impl CmdErrorCode {
             "row_not_found" => Some(Self::RowNotFound),
             "invalid_reorder" => Some(Self::InvalidReorder),
             "duplicate_row_id" => Some(Self::DuplicateRowId),
+            "invalid_op" => Some(Self::InvalidOp),
+            "stale_document" => Some(Self::StaleDocument),
             other => Some(Self::Other(other.to_string())),
         }
     }
@@ -77,6 +83,12 @@ impl CmdErrorCode {
         if s.eq_ignore_ascii_case("duplicate_row_id") {
             return Some(Self::DuplicateRowId);
         }
+        if s.eq_ignore_ascii_case("invalid_op") {
+            return Some(Self::InvalidOp);
+        }
+        if s.eq_ignore_ascii_case("stale_document") {
+            return Some(Self::StaleDocument);
+        }
         Some(Self::Other(s.to_string()))
     }
 
@@ -89,6 +101,8 @@ impl CmdErrorCode {
             Self::RowNotFound => "row_not_found",
             Self::InvalidReorder => "invalid_reorder",
             Self::DuplicateRowId => "duplicate_row_id",
+            Self::InvalidOp => "invalid_op",
+            Self::StaleDocument => "stale_document",
             Self::Other(s) => s.as_str(),
         }
     }

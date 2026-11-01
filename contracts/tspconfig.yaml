@@ -9,6 +9,7 @@ options:
     additional-roots:
       - "CutReady.Contracts.RowTextUpdate"
       - "CutReady.Contracts.CmdError"
+      - "CutReady.Contracts.EditOp"
       - "CutReady.Contracts.Storyboard"
       - "CutReady.Contracts.ChatArtifact"
       - "CutReady.Contracts.ChatTranscript"

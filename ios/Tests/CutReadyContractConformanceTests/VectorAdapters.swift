@@ -52,7 +52,13 @@ enum VectorAdapters {
     let desktopOnlyChatArtifacts =
       "Saved chat documents are authored by the desktop chat promotion flow today; "
       + "bind these vectors when the companion can create or edit .cv chat documents."
+    let ownEditPath =
+      "The companion keeps its own positional sketch edits (SketchDocument vectors) for now; "
+      + "bind these when it applies typed EditOps through the shared core."
     return [
+      "EditService.applySketchOps": ownEditPath,
+      "EditService.documentVersion": ownEditPath,
+      "EditService.editSketchContent": ownEditPath,
       "ChatArtifactDocument.promote": desktopOnlyChatArtifacts,
       "ChatArtifactDocument.roundTrip": desktopOnlyChatArtifacts,
       "StoryboardDocument.roundTrip": viewOnlyStoryboards,

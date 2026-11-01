@@ -13,6 +13,8 @@ public struct CmdErrorCode: RawRepresentable, Equatable, Hashable, Codable {
   public static let rowNotFound = CmdErrorCode(rawValue: "row_not_found")
   public static let invalidReorder = CmdErrorCode(rawValue: "invalid_reorder")
   public static let duplicateRowId = CmdErrorCode(rawValue: "duplicate_row_id")
+  public static let invalidOp = CmdErrorCode(rawValue: "invalid_op")
+  public static let staleDocument = CmdErrorCode(rawValue: "stale_document")
   public static func parse(_ value: String) throws -> CmdErrorCode {
     switch value {
     case "locked_document": return .lockedDocument
@@ -22,6 +24,8 @@ public struct CmdErrorCode: RawRepresentable, Equatable, Hashable, Codable {
     case "row_not_found": return .rowNotFound
     case "invalid_reorder": return .invalidReorder
     case "duplicate_row_id": return .duplicateRowId
+    case "invalid_op": return .invalidOp
+    case "stale_document": return .staleDocument
     default: return CmdErrorCode(rawValue: value)
     }
   }

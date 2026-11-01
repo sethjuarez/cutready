@@ -43,7 +43,12 @@
         "ChatTurn",
         "CmdError",
         "CmdErrorDetails",
+        "ContentEdit",
+        "DeleteRowOp",
         "DocumentMetadata",
+        "EditOp",
+        "EditService",
+        "InsertRowOp",
         "MotionPlan",
         "MotionPlanKeyframe",
         "MotionPoint",
@@ -53,7 +58,16 @@
         "PlanningCellLocks",
         "PlanningRow",
         "PlanningTiming",
+        "ReorderRowsOp",
+        "ReplaceRowsOp",
         "RowTextUpdate",
+        "SetDescriptionOp",
+        "SetLockOp",
+        "SetMetadataOp",
+        "SetRowTextOp",
+        "SetScreenshotOp",
+        "SetTitleOp",
+        "SetVisualOp",
         "Sketch",
         "SketchDocument",
         "Storyboard",
@@ -61,7 +75,8 @@
         "StoryboardItem",
         "StoryboardSection",
         "StoryboardSketchRef",
-        "TypingSpot"
+        "TypingSpot",
+        "UpdateRowOp"
       ],
       "exports": [
         {
@@ -135,10 +150,45 @@
           "protocol": false
         },
         {
+          "name": "ContentEdit",
+          "kind": "value",
+          "group": "",
+          "source": "ContentEdit",
+          "protocol": false
+        },
+        {
+          "name": "DeleteRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
+          "protocol": false
+        },
+        {
           "name": "DocumentMetadata",
           "kind": "value",
           "group": "",
           "source": "DocumentMetadata",
+          "protocol": false
+        },
+        {
+          "name": "EditOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
+          "protocol": false
+        },
+        {
+          "name": "EditService",
+          "kind": "type",
+          "group": "",
+          "source": "EditService",
+          "protocol": true
+        },
+        {
+          "name": "InsertRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
           "protocol": false
         },
         {
@@ -205,10 +255,73 @@
           "protocol": true
         },
         {
+          "name": "ReorderRowsOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
+          "protocol": false
+        },
+        {
+          "name": "ReplaceRowsOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
+          "protocol": false
+        },
+        {
           "name": "RowTextUpdate",
           "kind": "value",
           "group": "",
           "source": "RowTextUpdate",
+          "protocol": false
+        },
+        {
+          "name": "SetDescriptionOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
+          "protocol": false
+        },
+        {
+          "name": "SetLockOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
+          "protocol": false
+        },
+        {
+          "name": "SetMetadataOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
+          "protocol": false
+        },
+        {
+          "name": "SetRowTextOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
+          "protocol": false
+        },
+        {
+          "name": "SetScreenshotOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
+          "protocol": false
+        },
+        {
+          "name": "SetTitleOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
+          "protocol": false
+        },
+        {
+          "name": "SetVisualOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
           "protocol": false
         },
         {
@@ -266,6 +379,13 @@
           "group": "",
           "source": "TypingSpot",
           "protocol": false
+        },
+        {
+          "name": "UpdateRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
+          "protocol": false
         }
       ],
       "groups": [],
@@ -294,6 +414,55 @@
               "returns": "ChatArtifact",
               "params": {
                 "artifact": "ChatArtifact"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            }
+          ]
+        },
+        {
+          "name": "EditService",
+          "group": "",
+          "symbol": "EditService",
+          "source": "EditService",
+          "methods": [
+            {
+              "name": "applySketchOps",
+              "returns": "Sketch",
+              "params": {
+                "now": "string",
+                "ops": "EditOp[]",
+                "sketch": "Sketch"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "documentVersion",
+              "returns": "string",
+              "params": {
+                "content": "string"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "editSketchContent",
+              "returns": "ContentEdit",
+              "params": {
+                "content": "string",
+                "expected_version": "string",
+                "now": "string",
+                "ops": "EditOp[]"
               },
               "optional": false,
               "sync": true,
@@ -415,7 +584,10 @@
         "ChatTurn",
         "CmdError",
         "CmdErrorDetails",
+        "ContentEdit",
         "DocumentMetadata",
+        "EditOp",
+        "EditService",
         "MotionPlan",
         "MotionPlanKeyframe",
         "MotionPoint",
@@ -448,7 +620,12 @@
         "ChatTurn",
         "CmdError",
         "CmdErrorDetails",
+        "ContentEdit",
+        "DeleteRowOp",
         "DocumentMetadata",
+        "EditOp",
+        "EditService",
+        "InsertRowOp",
         "MotionPlan",
         "MotionPlanKeyframe",
         "MotionPoint",
@@ -458,7 +635,16 @@
         "PlanningCellLocks",
         "PlanningRow",
         "PlanningTiming",
+        "ReorderRowsOp",
+        "ReplaceRowsOp",
         "RowTextUpdate",
+        "SetDescriptionOp",
+        "SetLockOp",
+        "SetMetadataOp",
+        "SetRowTextOp",
+        "SetScreenshotOp",
+        "SetTitleOp",
+        "SetVisualOp",
         "Sketch",
         "SketchDocument",
         "Storyboard",
@@ -466,7 +652,8 @@
         "StoryboardItem",
         "StoryboardSection",
         "StoryboardSketchRef",
-        "TypingSpot"
+        "TypingSpot",
+        "UpdateRowOp"
       ],
       "exports": [
         {
@@ -540,10 +727,45 @@
           "protocol": false
         },
         {
+          "name": "ContentEdit",
+          "kind": "value",
+          "group": "",
+          "source": "content_edit",
+          "protocol": false
+        },
+        {
+          "name": "DeleteRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
+          "protocol": false
+        },
+        {
           "name": "DocumentMetadata",
           "kind": "value",
           "group": "",
           "source": "document_metadata",
+          "protocol": false
+        },
+        {
+          "name": "EditOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
+          "protocol": false
+        },
+        {
+          "name": "EditService",
+          "kind": "type",
+          "group": "",
+          "source": "edit_service",
+          "protocol": true
+        },
+        {
+          "name": "InsertRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
           "protocol": false
         },
         {
@@ -610,10 +832,73 @@
           "protocol": true
         },
         {
+          "name": "ReorderRowsOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
+          "protocol": false
+        },
+        {
+          "name": "ReplaceRowsOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
+          "protocol": false
+        },
+        {
           "name": "RowTextUpdate",
           "kind": "value",
           "group": "",
           "source": "row_text_update",
+          "protocol": false
+        },
+        {
+          "name": "SetDescriptionOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
+          "protocol": false
+        },
+        {
+          "name": "SetLockOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
+          "protocol": false
+        },
+        {
+          "name": "SetMetadataOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
+          "protocol": false
+        },
+        {
+          "name": "SetRowTextOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
+          "protocol": false
+        },
+        {
+          "name": "SetScreenshotOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
+          "protocol": false
+        },
+        {
+          "name": "SetTitleOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
+          "protocol": false
+        },
+        {
+          "name": "SetVisualOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
           "protocol": false
         },
         {
@@ -671,6 +956,13 @@
           "group": "",
           "source": "typing_spot",
           "protocol": false
+        },
+        {
+          "name": "UpdateRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
+          "protocol": false
         }
       ],
       "groups": [],
@@ -699,6 +991,55 @@
               "returns": "ChatArtifact",
               "params": {
                 "artifact": "ChatArtifact"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            }
+          ]
+        },
+        {
+          "name": "EditService",
+          "group": "",
+          "symbol": "EditService",
+          "source": "edit_service",
+          "methods": [
+            {
+              "name": "applySketchOps",
+              "returns": "Sketch",
+              "params": {
+                "now": "string",
+                "ops": "EditOp[]",
+                "sketch": "Sketch"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "documentVersion",
+              "returns": "string",
+              "params": {
+                "content": "string"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "editSketchContent",
+              "returns": "ContentEdit",
+              "params": {
+                "content": "string",
+                "expected_version": "string",
+                "now": "string",
+                "ops": "EditOp[]"
               },
               "optional": false,
               "sync": true,
@@ -820,8 +1161,11 @@
         "chat_turn",
         "cmd_error",
         "cmd_error_details",
+        "content_edit",
         "context",
         "document_metadata",
+        "edit_op",
+        "edit_service",
         "motion_plan",
         "motion_plan_keyframe",
         "motion_point",
@@ -855,7 +1199,12 @@
         "ChatTurn",
         "CmdError",
         "CmdErrorDetails",
+        "ContentEdit",
+        "DeleteRowOp",
         "DocumentMetadata",
+        "EditOp",
+        "EditService",
+        "InsertRowOp",
         "MotionPlan",
         "MotionPlanKeyframe",
         "MotionPoint",
@@ -865,7 +1214,16 @@
         "PlanningCellLocks",
         "PlanningRow",
         "PlanningTiming",
+        "ReorderRowsOp",
+        "ReplaceRowsOp",
         "RowTextUpdate",
+        "SetDescriptionOp",
+        "SetLockOp",
+        "SetMetadataOp",
+        "SetRowTextOp",
+        "SetScreenshotOp",
+        "SetTitleOp",
+        "SetVisualOp",
         "Sketch",
         "SketchDocument",
         "Storyboard",
@@ -873,7 +1231,8 @@
         "StoryboardItem",
         "StoryboardSection",
         "StoryboardSketchRef",
-        "TypingSpot"
+        "TypingSpot",
+        "UpdateRowOp"
       ],
       "exports": [
         {
@@ -947,10 +1306,45 @@
           "protocol": false
         },
         {
+          "name": "ContentEdit",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/content_edit.swift",
+          "protocol": false
+        },
+        {
+          "name": "DeleteRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
           "name": "DocumentMetadata",
           "kind": "value",
           "group": "",
           "source": "Sources/CutReadyContracts/document_metadata.swift",
+          "protocol": false
+        },
+        {
+          "name": "EditOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
+          "name": "EditService",
+          "kind": "type",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_service.swift",
+          "protocol": true
+        },
+        {
+          "name": "InsertRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
           "protocol": false
         },
         {
@@ -1017,10 +1411,73 @@
           "protocol": true
         },
         {
+          "name": "ReorderRowsOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
+          "name": "ReplaceRowsOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
           "name": "RowTextUpdate",
           "kind": "value",
           "group": "",
           "source": "Sources/CutReadyContracts/row_text_update.swift",
+          "protocol": false
+        },
+        {
+          "name": "SetDescriptionOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
+          "name": "SetLockOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
+          "name": "SetMetadataOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
+          "name": "SetRowTextOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
+          "name": "SetScreenshotOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
+          "name": "SetTitleOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
+          "name": "SetVisualOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
           "protocol": false
         },
         {
@@ -1078,6 +1535,13 @@
           "group": "",
           "source": "Sources/CutReadyContracts/typing_spot.swift",
           "protocol": false
+        },
+        {
+          "name": "UpdateRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
         }
       ],
       "groups": [],
@@ -1106,6 +1570,55 @@
               "returns": "ChatArtifact",
               "params": {
                 "artifact": "ChatArtifact"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            }
+          ]
+        },
+        {
+          "name": "EditService",
+          "group": "",
+          "symbol": "EditService",
+          "source": "Sources/CutReadyContracts/edit_service.swift",
+          "methods": [
+            {
+              "name": "applySketchOps",
+              "returns": "Sketch",
+              "params": {
+                "now": "string",
+                "ops": "EditOp[]",
+                "sketch": "Sketch"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "documentVersion",
+              "returns": "string",
+              "params": {
+                "content": "string"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "editSketchContent",
+              "returns": "ContentEdit",
+              "params": {
+                "content": "string",
+                "expected_version": "string",
+                "now": "string",
+                "ops": "EditOp[]"
               },
               "optional": false,
               "sync": true,
@@ -1227,7 +1740,10 @@
         "Sources/CutReadyContracts/chat_turn.swift",
         "Sources/CutReadyContracts/cmd_error.swift",
         "Sources/CutReadyContracts/cmd_error_details.swift",
+        "Sources/CutReadyContracts/content_edit.swift",
         "Sources/CutReadyContracts/document_metadata.swift",
+        "Sources/CutReadyContracts/edit_op.swift",
+        "Sources/CutReadyContracts/edit_service.swift",
         "Sources/CutReadyContracts/motion_plan.swift",
         "Sources/CutReadyContracts/motion_plan_keyframe.swift",
         "Sources/CutReadyContracts/motion_point.swift",
@@ -1261,7 +1777,12 @@
         "ChatTurn",
         "CmdError",
         "CmdErrorDetails",
+        "ContentEdit",
+        "DeleteRowOp",
         "DocumentMetadata",
+        "EditOp",
+        "EditService",
+        "InsertRowOp",
         "MotionPlan",
         "MotionPlanKeyframe",
         "MotionPoint",
@@ -1271,7 +1792,16 @@
         "PlanningCellLocks",
         "PlanningRow",
         "PlanningTiming",
+        "ReorderRowsOp",
+        "ReplaceRowsOp",
         "RowTextUpdate",
+        "SetDescriptionOp",
+        "SetLockOp",
+        "SetMetadataOp",
+        "SetRowTextOp",
+        "SetScreenshotOp",
+        "SetTitleOp",
+        "SetVisualOp",
         "Sketch",
         "SketchDocument",
         "Storyboard",
@@ -1279,7 +1809,8 @@
         "StoryboardItem",
         "StoryboardSection",
         "StoryboardSketchRef",
-        "TypingSpot"
+        "TypingSpot",
+        "UpdateRowOp"
       ],
       "exports": [
         {
@@ -1353,10 +1884,45 @@
           "protocol": false
         },
         {
+          "name": "ContentEdit",
+          "kind": "value",
+          "group": "",
+          "source": "./content-edit",
+          "protocol": false
+        },
+        {
+          "name": "DeleteRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
+          "protocol": false
+        },
+        {
           "name": "DocumentMetadata",
           "kind": "value",
           "group": "",
           "source": "./document-metadata",
+          "protocol": false
+        },
+        {
+          "name": "EditOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
+          "protocol": false
+        },
+        {
+          "name": "EditService",
+          "kind": "type",
+          "group": "",
+          "source": "./edit-service",
+          "protocol": true
+        },
+        {
+          "name": "InsertRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
           "protocol": false
         },
         {
@@ -1423,10 +1989,73 @@
           "protocol": true
         },
         {
+          "name": "ReorderRowsOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
+          "protocol": false
+        },
+        {
+          "name": "ReplaceRowsOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
+          "protocol": false
+        },
+        {
           "name": "RowTextUpdate",
           "kind": "value",
           "group": "",
           "source": "./row-text-update",
+          "protocol": false
+        },
+        {
+          "name": "SetDescriptionOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
+          "protocol": false
+        },
+        {
+          "name": "SetLockOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
+          "protocol": false
+        },
+        {
+          "name": "SetMetadataOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
+          "protocol": false
+        },
+        {
+          "name": "SetRowTextOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
+          "protocol": false
+        },
+        {
+          "name": "SetScreenshotOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
+          "protocol": false
+        },
+        {
+          "name": "SetTitleOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
+          "protocol": false
+        },
+        {
+          "name": "SetVisualOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
           "protocol": false
         },
         {
@@ -1484,6 +2113,13 @@
           "group": "",
           "source": "./typing-spot",
           "protocol": false
+        },
+        {
+          "name": "UpdateRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
+          "protocol": false
         }
       ],
       "groups": [],
@@ -1512,6 +2148,55 @@
               "returns": "ChatArtifact",
               "params": {
                 "artifact": "ChatArtifact"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            }
+          ]
+        },
+        {
+          "name": "EditService",
+          "group": "",
+          "symbol": "EditService",
+          "source": "./edit-service",
+          "methods": [
+            {
+              "name": "applySketchOps",
+              "returns": "Sketch",
+              "params": {
+                "now": "string",
+                "ops": "EditOp[]",
+                "sketch": "Sketch"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "documentVersion",
+              "returns": "string",
+              "params": {
+                "content": "string"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "editSketchContent",
+              "returns": "ContentEdit",
+              "params": {
+                "content": "string",
+                "expected_version": "string",
+                "now": "string",
+                "ops": "EditOp[]"
               },
               "optional": false,
               "sync": true,
@@ -1633,7 +2318,10 @@
         "./chat-turn",
         "./cmd-error",
         "./cmd-error-details",
+        "./content-edit",
         "./document-metadata",
+        "./edit-op",
+        "./edit-service",
         "./motion-plan",
         "./motion-plan-keyframe",
         "./motion-point",

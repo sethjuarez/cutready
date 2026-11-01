@@ -29,14 +29,18 @@ public struct CmdErrorDetails: TypraModel {
   public var rowIndex: UInt32? = nil
   public var field: PlanningCellField? = nil
   public var rowId: String? = nil
+  public var opIndex: UInt32? = nil
+  public var currentVersion: String? = nil
   /// Undeclared fields captured on load and written back on save (unknown-field passthrough).
   public var additionalProperties: [String: Any] = [:]
-  static let additionalPropertiesKnownKeys: Set<String> = ["row_index", "field", "row_id"]
+  static let additionalPropertiesKnownKeys: Set<String> = ["row_index", "field", "row_id", "op_index", "current_version"]
 
-  public init(rowIndex: UInt32? = nil, field: PlanningCellField? = nil, rowId: String? = nil, additionalProperties: [String: Any] = [:]) {
+  public init(rowIndex: UInt32? = nil, field: PlanningCellField? = nil, rowId: String? = nil, opIndex: UInt32? = nil, currentVersion: String? = nil, additionalProperties: [String: Any] = [:]) {
     self.rowIndex = rowIndex
     self.field = field
     self.rowId = rowId
+    self.opIndex = opIndex
+    self.currentVersion = currentVersion
     self.additionalProperties = additionalProperties
   }
 
@@ -52,6 +56,12 @@ public struct CmdErrorDetails: TypraModel {
     if let value = object["row_id"] {
       instance.rowId = try TypraRuntime.string(value, field: "row_id")
     }
+    if let value = object["op_index"] {
+      instance.opIndex = try TypraRuntime.uint32(value, field: "op_index")
+    }
+    if let value = object["current_version"] {
+      instance.currentVersion = try TypraRuntime.string(value, field: "current_version")
+    }
     instance.additionalProperties = object.filter { !Self.additionalPropertiesKnownKeys.contains($0.key) }
     return instance
   }
@@ -66,6 +76,12 @@ public struct CmdErrorDetails: TypraModel {
     }
     if let value = self.rowId {
       result["row_id"] = value
+    }
+    if let value = self.opIndex {
+      result["op_index"] = value
+    }
+    if let value = self.currentVersion {
+      result["current_version"] = value
     }
     for (key, value) in self.additionalProperties where !Self.additionalPropertiesKnownKeys.contains(key) {
       result[key] = value

@@ -3,5 +3,6 @@ import "./sketch.tsp";
 import "./storyboard.tsp";
 import "./errors.tsp";
 import "./edits.tsp";
+import "./ops.tsp";
 import "./chat_artifact.tsp";
 import "./vectors.tsp";

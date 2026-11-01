@@ -19,6 +19,8 @@ mod storyboard_test;
 mod cmd_error_details_test;
 mod cmd_error_test;
 mod row_text_update_test;
+mod edit_op_test;
+mod content_edit_test;
 mod chat_participant_test;
 mod chat_artifact_source_test;
 mod chat_tool_use_test;

@@ -21,14 +21,20 @@ union CmdErrorCode {
   /** A locked cell's value would change. Screenshot and visual locks guard both cells. */
   lockedCell: "locked_cell",
 
-  /** `details.row_index` is outside the planning table. */
+  /** `details.row_index` is outside the planning table, or no row has `details.row_id`. */
   rowNotFound: "row_not_found",
 
-  /** `order` is not a permutation of the current row indices. */
+  /** `order` (or `row_ids`) is not a permutation of the current rows. */
   invalidReorder: "invalid_reorder",
 
   /** Two rows share `details.row_id`; `details.row_index` is the second. Decode and save reject it. */
   duplicateRowId: "duplicate_row_id",
+
+  /** An op is malformed, for example a cell lock without a row. */
+  invalidOp: "invalid_op",
+
+  /** The document changed since the edit was computed; `details.current_version` is its version now. */
+  staleDocument: "stale_document",
 
   /** Codes from newer runtimes load and save unchanged. */
   string,
@@ -42,8 +48,14 @@ model CmdErrorDetails {
   /** The locked cell, for `locked_cell`. */
   field?: PlanningCellField;
 
-  /** The repeated row id, for `duplicate_row_id`. */
+  /** The repeated row id for `duplicate_row_id`; the missing one for `row_not_found`. */
   row_id?: string;
+
+  /** Zero-based position of the rejected op in an `EditService` batch. */
+  op_index?: uint32;
+
+  /** The document version on disk, for `stale_document`. */
+  current_version?: string;
 
   /** Detail fields from newer runtimes survive load and save. */
   ...Record<unknown>;

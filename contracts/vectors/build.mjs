@@ -11,6 +11,7 @@
 //   `description`; older storyboard shapes are covered by the upgrade vectors;
 // - chat artifacts omit a blank `summary` and empty `tool_uses`.
 // Floats are non-integral binary fractions so every runtime prints them identically.
+import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -957,6 +958,285 @@ const chatArtifactPromoteVectors = [
 ];
 
 // TypeSpec strings interpret backslash escapes, so JSON's own escapes are doubled.
+// EditService.applySketchOps. Rows are addressed by the ids decode assigns
+// (`row-1`, `row-2`, ...). Every rejection reports the failing op's index.
+const opError = (op_index, code, details = {}) => cmdError(code, { ...details, op_index });
+const allLocks = () => ({ time: true, narrative: true, demo_actions: true, screenshot: true, visual: true, design_plan: true });
+const newRow = (fields = {}) => row({ id: "new-row", time: "0:05", narrative: "New.", demo_actions: "Wave.", ...fields });
+
+const applySketchOpsVectors = [
+  {
+    name: "set_title keeps unknown document fields",
+    input: { sketch: lockedFixture, ops: [{ kind: "set_title", title: "Renamed" }], now: NOW },
+    expected: edited(lockedFixture, (s) => {
+      s.title = "Renamed";
+    }),
+  },
+  {
+    name: "set_description replaces and clears the description",
+    input: {
+      sketch: desktopSketch,
+      ops: [
+        { kind: "set_description", description: { root: { children: [] } } },
+        { kind: "set_description", description: null },
+      ],
+      now: NOW,
+    },
+    expected: edited(desktopSketch, (s) => {
+      s.description = null;
+    }),
+  },
+  {
+    name: "set_metadata replaces the metadata",
+    input: { sketch: desktopSketch, ops: [{ kind: "set_metadata", metadata: { fields: { audience: "admins", length: "short" } } }], now: NOW },
+    expected: edited(desktopSketch, (s) => {
+      s.metadata = { fields: { audience: "admins", length: "short" } };
+    }),
+  },
+  {
+    name: "set_row_text edits the row with that id and recomputes duration",
+    input: { sketch: lockedFixture, ops: [{ kind: "set_row_text", row_id: "row-1", time: "0:15", narrative: "Open CutReady." }], now: NOW },
+    expected: edited(lockedFixture, (s) => {
+      s.rows[0].time = "0:15";
+      s.rows[0].duration_seconds = 15;
+      s.rows[0].narrative = "Open CutReady.";
+    }),
+  },
+  {
+    name: "ops address rows by id after a reorder in the same batch",
+    input: {
+      sketch: unlockedFixture,
+      ops: [
+        { kind: "reorder_rows", row_ids: ["row-2", "row-1"] },
+        { kind: "set_row_text", row_id: "row-1", narrative: "First, now last." },
+      ],
+      now: NOW,
+    },
+    expected: edited(unlockedFixture, (s) => {
+      s.rows = [s.rows[1], s.rows[0]];
+      s.rows[1].narrative = "First, now last.";
+    }),
+  },
+  {
+    name: "set_row_text on a locked cell is rejected",
+    input: { sketch: lockedFixture, ops: [{ kind: "set_row_text", row_id: "row-2", narrative: "Changed." }], now: NOW },
+    expectedError: opError(0, "locked_cell", { row_index: 1, field: "narrative" }),
+  },
+  {
+    name: "set_row_text on a locked row is rejected",
+    input: { sketch: lockedFixture, ops: [{ kind: "set_row_text", row_id: "row-3", time: "0:45" }], now: NOW },
+    expectedError: opError(0, "locked_row", { row_index: 2 }),
+  },
+  {
+    name: "unknown row id is rejected",
+    input: { sketch: lockedFixture, ops: [{ kind: "set_row_text", row_id: "missing", narrative: "Gone." }], now: NOW },
+    expectedError: opError(0, "row_not_found", { row_id: "missing" }),
+  },
+  {
+    name: "set_screenshot and set_visual set and clear asset references",
+    input: {
+      sketch: unlockedFixture,
+      ops: [
+        { kind: "set_screenshot", row_id: "row-1", screenshot: "screenshots/first.png" },
+        { kind: "set_screenshot", row_id: "row-2", screenshot: null },
+        { kind: "set_visual", row_id: "row-1", visual: ".cutready/visuals/first.json" },
+      ],
+      now: NOW,
+    },
+    expected: edited(unlockedFixture, (s) => {
+      s.rows[0].screenshot = "screenshots/first.png";
+      s.rows[0].visual = ".cutready/visuals/first.json";
+      s.rows[1].screenshot = null;
+    }),
+  },
+  {
+    name: "set_visual on a row with a locked screenshot is rejected",
+    input: { sketch: screenshotLockFixture, ops: [{ kind: "set_visual", row_id: "row-1", visual: null }], now: NOW },
+    expectedError: opError(0, "locked_cell", { row_index: 0, field: "screenshot" }),
+  },
+  {
+    name: "insert_row with a null anchor inserts first, unlocked",
+    input: { sketch: unlockedFixture, ops: [{ kind: "insert_row", after_row_id: null, row: { ...newRow(), locked: true, locks: allLocks() } }], now: NOW },
+    expected: edited(unlockedFixture, (s) => {
+      s.rows.unshift(newRow());
+    }),
+  },
+  {
+    name: "inserted row without an id gets one as in decode",
+    input: { sketch: unlockedFixture, ops: [{ kind: "insert_row", after_row_id: "row-1", row: (({ id: _id, ...r }) => r)(newRow()) }], now: NOW },
+    expected: edited(unlockedFixture, (s) => {
+      s.rows.splice(1, 0, newRow({ id: "row-2-2" }));
+    }),
+  },
+  {
+    name: "insert_row after an unknown row is rejected",
+    input: { sketch: unlockedFixture, ops: [{ kind: "insert_row", after_row_id: "missing", row: newRow() }], now: NOW },
+    expectedError: opError(0, "row_not_found", { row_id: "missing" }),
+  },
+  {
+    name: "insert_row with a taken id is rejected",
+    input: { sketch: unlockedFixture, ops: [{ kind: "insert_row", after_row_id: "row-2", row: newRow({ id: "row-1" }) }], now: NOW },
+    expectedError: opError(0, "duplicate_row_id", { row_index: 2, row_id: "row-1" }),
+  },
+  {
+    name: "insert_row while a row is locked is rejected",
+    input: { sketch: lockedFixture, ops: [{ kind: "insert_row", after_row_id: "row-3", row: newRow() }], now: NOW },
+    expectedError: opError(0, "locked_row_count"),
+  },
+  {
+    name: "delete_row removes the row with that id",
+    input: { sketch: unlockedFixture, ops: [{ kind: "delete_row", row_id: "row-1" }], now: NOW },
+    expected: edited(unlockedFixture, (s) => {
+      s.rows.shift();
+    }),
+  },
+  {
+    name: "delete_row while a row is locked is rejected",
+    input: { sketch: lockedFixture, ops: [{ kind: "delete_row", row_id: "row-1" }], now: NOW },
+    expectedError: opError(0, "locked_row_count"),
+  },
+  {
+    name: "reorder_rows around locked rows keeps locks in place",
+    input: { sketch: lockedFixtureWithSpare, ops: [{ kind: "reorder_rows", row_ids: ["row-4", "row-2", "row-3", "row-1"] }], now: NOW },
+    expected: edited(lockedFixtureWithSpare, (s) => {
+      s.rows = [s.rows[3], s.rows[1], s.rows[2], s.rows[0]];
+    }),
+  },
+  {
+    name: "reorder_rows that misses a row is rejected",
+    input: { sketch: unlockedFixture, ops: [{ kind: "reorder_rows", row_ids: ["row-2", "missing"] }], now: NOW },
+    expectedError: opError(0, "invalid_reorder"),
+  },
+  {
+    name: "update_row replaces the row and keeps its lock state",
+    input: {
+      sketch: lockedFixture,
+      ops: [{ kind: "update_row", row: { ...row({ id: "row-1", time: "0:12", duration_seconds: 12, narrative: "Rewritten.", demo_actions: "Click.", design_plan: "Plan." }), locked: true, newer_field: 1 } }],
+      now: NOW,
+    },
+    expected: edited(lockedFixture, (s) => {
+      s.rows[0] = { ...row({ id: "row-1", time: "0:12", duration_seconds: 12, narrative: "Rewritten.", demo_actions: "Click.", design_plan: "Plan." }), newer_field: 1 };
+    }),
+  },
+  {
+    name: "update_row on a locked row is rejected",
+    input: { sketch: lockedFixture, ops: [{ kind: "update_row", row: { ...lockedFixture.rows[2], narrative: "Changed." } }], now: NOW },
+    expectedError: opError(0, "locked_row", { row_index: 2 }),
+  },
+  {
+    name: "replace_rows keeps lock state with each position",
+    input: { sketch: unlockedFixture, ops: [{ kind: "replace_rows", rows: [newRow({ locked: true })] }], now: NOW },
+    expected: edited(unlockedFixture, (s) => {
+      s.rows = [newRow()];
+    }),
+  },
+  {
+    name: "set_lock locks a cell and a whole row",
+    input: {
+      sketch: unlockedFixture,
+      ops: [
+        { kind: "set_lock", row_id: "row-1", field: "narrative", locked: true },
+        { kind: "set_lock", row_id: "row-2", locked: true },
+      ],
+      now: NOW,
+    },
+    expected: edited(unlockedFixture, (s) => {
+      s.rows[0].locks.narrative = true;
+      s.rows[1].locked = true;
+      s.rows[1].locks = allLocks();
+    }),
+  },
+  {
+    name: "set_lock unlocks a locked sketch and everything in it",
+    input: { sketch: lockedFixture, ops: [{ kind: "set_lock", locked: true }, { kind: "set_lock", locked: false }], now: NOW },
+    expected: edited(lockedFixture, (s) => {
+      for (const r of s.rows) {
+        r.locked = false;
+        r.locks = noLocks();
+      }
+    }),
+  },
+  {
+    name: "a cell lock without a row is rejected",
+    input: { sketch: unlockedFixture, ops: [{ kind: "set_lock", field: "time", locked: true }], now: NOW },
+    expectedError: opError(0, "invalid_op"),
+  },
+  {
+    name: "content edits after locking the sketch in the same batch are rejected",
+    input: { sketch: unlockedFixture, ops: [{ kind: "set_lock", locked: true }, { kind: "set_title", title: "Too late" }], now: NOW },
+    expectedError: opError(1, "locked_document"),
+  },
+  {
+    name: "a rejected op fails the whole batch",
+    input: {
+      sketch: lockedFixture,
+      ops: [
+        { kind: "set_title", title: "Not kept" },
+        { kind: "set_row_text", row_id: "row-2", narrative: "Changed." },
+      ],
+      now: NOW,
+    },
+    expectedError: opError(1, "locked_cell", { row_index: 1, field: "narrative" }),
+  },
+  {
+    name: "locked sketch rejects content edits",
+    input: { sketch: { ...unlockedFixture, locked: true }, ops: [{ kind: "set_metadata", metadata: { fields: {} } }], now: NOW },
+    expectedError: opError(0, "locked_document"),
+  },
+  {
+    name: "an op of an unknown kind is rejected",
+    input: { sketch: unlockedFixture, ops: [{ kind: "set_title", title: "Kept?" }, { kind: "set_mood", mood: "calm" }], now: NOW },
+    expectedError: opError(1, "invalid_op"),
+  },
+  {
+    name: "an earlier rejected op wins over a later malformed one",
+    input: { sketch: { ...unlockedFixture, locked: true }, ops: [{ kind: "set_title", title: "Locked" }, { kind: "set_mood", mood: "calm" }], now: NOW },
+    expectedError: opError(0, "locked_document"),
+  },
+  {
+    name: "an empty batch leaves the document unchanged",
+    input: { sketch: unlockedFixture, ops: [], now: NOW },
+    expected: unlockedFixture,
+  },
+];
+
+const documentVersion = (name, content) => ({
+  name,
+  input: { content },
+  expected: `sha256:${createHash("sha256").update(content, "utf8").digest("hex")}`,
+});
+
+const documentVersionVectors = [
+  documentVersion("empty document", ""),
+  documentVersion("ascii", '{"title":"Intro"}\n'),
+  documentVersion("utf-8 bytes, not code units", "Caf\u00e9 \u{1f3ac}\r\n"),
+];
+
+const sha = (content) => `sha256:${createHash("sha256").update(content, "utf8").digest("hex")}`;
+
+// Content-changing writes depend on serde's exact bytes, so they are pinned by
+// the applySketchOps vectors plus cutready-core unit tests; these pin the
+// version gate and the no-op path.
+const onDisk = JSON.stringify(unlockedFixture);
+const lockedOnDisk = JSON.stringify({ ...unlockedFixture, locked: true });
+const editSketchContentVectors = [
+  {
+    name: "an empty batch returns the file unchanged",
+    input: { content: onDisk, expected_version: sha(onDisk), ops: [], now: NOW },
+    expected: { content: onDisk, version: sha(onDisk) },
+  },
+  {
+    name: "a stale version reports the current one before any op runs",
+    input: { content: onDisk, expected_version: sha("{}"), ops: [{ kind: "set_mood" }], now: NOW },
+    expectedError: cmdError("stale_document", { current_version: sha(onDisk) }),
+  },
+  {
+    name: "a current version still enforces the edit policy",
+    input: { content: lockedOnDisk, expected_version: sha(lockedOnDisk), ops: [{ kind: "set_title", title: "No" }], now: NOW },
+    expectedError: opError(0, "locked_document"),
+  },
+];
+
 const tspConst = (name, vectors) =>
   `const ${name} = """\n${JSON.stringify(vectors, null, 2).replaceAll("\\", "\\\\")}\n""";\n`;
 
@@ -972,6 +1252,9 @@ writeFileSync(
     tspConst("UpdateRowTextVectors", updateRowTextVectors),
     tspConst("ReorderRowsVectors", reorderRowsVectors),
     tspConst("ParseDurationSecondsVectors", parseDurationSecondsVectors),
+    tspConst("ApplySketchOpsVectors", applySketchOpsVectors),
+    tspConst("DocumentVersionVectors", documentVersionVectors),
+    tspConst("EditSketchContentVectors", editSketchContentVectors),
     tspConst("StoryboardRoundTripVectors", storyboardRoundTripVectors),
     tspConst("StoryboardUpgradeVectors", storyboardUpgradeVectors),
     tspConst("ChatArtifactRoundTripVectors", chatArtifactRoundTripVectors),

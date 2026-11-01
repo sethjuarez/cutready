@@ -13,6 +13,14 @@
       "seamKind": "protocol-adapter"
     },
     {
+      "contract": "EditService",
+      "target": "markdown",
+      "group": "",
+      "symbol": "EditService",
+      "generatedSource": "EditService",
+      "seamKind": "protocol-adapter"
+    },
+    {
       "contract": "PlanningTiming",
       "target": "markdown",
       "group": "",
@@ -42,6 +50,14 @@
       "group": "",
       "symbol": "ChatArtifactDocument",
       "generatedSource": "chat_artifact_document",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "EditService",
+      "target": "rust",
+      "group": "",
+      "symbol": "EditService",
+      "generatedSource": "edit_service",
       "seamKind": "protocol-adapter"
     },
     {
@@ -77,6 +93,14 @@
       "seamKind": "protocol-adapter"
     },
     {
+      "contract": "EditService",
+      "target": "swift",
+      "group": "",
+      "symbol": "EditService",
+      "generatedSource": "Sources/CutReadyContracts/edit_service.swift",
+      "seamKind": "protocol-adapter"
+    },
+    {
       "contract": "PlanningTiming",
       "target": "swift",
       "group": "",
@@ -106,6 +130,14 @@
       "group": "",
       "symbol": "ChatArtifactDocument",
       "generatedSource": "./chat-artifact-document",
+      "seamKind": "protocol-adapter"
+    },
+    {
+      "contract": "EditService",
+      "target": "typescript",
+      "group": "",
+      "symbol": "EditService",
+      "generatedSource": "./edit-service",
       "seamKind": "protocol-adapter"
     },
     {

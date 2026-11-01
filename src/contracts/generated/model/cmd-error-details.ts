@@ -12,6 +12,8 @@ export class CmdErrorDetails {
   row_index?: number | undefined;
   field?: PlanningCellField | undefined;
   row_id?: string | undefined;
+  op_index?: number | undefined;
+  current_version?: string | undefined;
   /** Fields not declared by the schema, preserved verbatim across load/save (#336). */
   additionalProperties: Record<string, unknown> = Object.create(null);
 
@@ -21,6 +23,8 @@ export class CmdErrorDetails {
       case "row_index":
       case "field":
       case "row_id":
+      case "op_index":
+      case "current_version":
         return true;
       default:
         return false;
@@ -36,6 +40,12 @@ export class CmdErrorDetails {
     }
     if (init?.row_id !== undefined) {
       this.row_id = init.row_id;
+    }
+    if (init?.op_index !== undefined) {
+      this.op_index = init.op_index;
+    }
+    if (init?.current_version !== undefined) {
+      this.current_version = init.current_version;
     }
     if (init?.additionalProperties !== undefined) {
       this.additionalProperties = Object.assign(
@@ -66,6 +76,15 @@ export class CmdErrorDetails {
     }
     if (data["row_id"] !== undefined && data["row_id"] !== null) {
       instance.row_id = String(data["row_id"]);
+    }
+    if (data["op_index"] !== undefined && data["op_index"] !== null) {
+      instance.op_index = Number(data["op_index"]);
+    }
+    if (
+      data["current_version"] !== undefined &&
+      data["current_version"] !== null
+    ) {
+      instance.current_version = String(data["current_version"]);
     }
 
     instance.additionalProperties = Object.create(null);
@@ -101,6 +120,12 @@ export class CmdErrorDetails {
     }
     if (obj.row_id !== undefined && obj.row_id !== null) {
       result["row_id"] = obj.row_id;
+    }
+    if (obj.op_index !== undefined && obj.op_index !== null) {
+      result["op_index"] = obj.op_index;
+    }
+    if (obj.current_version !== undefined && obj.current_version !== null) {
+      result["current_version"] = obj.current_version;
     }
 
     const extras = obj.additionalProperties ?? {};
