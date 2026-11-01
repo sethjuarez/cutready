@@ -145,7 +145,7 @@ fn versions_order_by_semver() {
     );
     assert_eq!(
         compare_versions("1.2.0+build.5", "1.2.0"),
-        Some(Ordering::Greater)
+        Some(Ordering::Equal)
     );
     assert_eq!(compare_versions("1.2", "1.2.0"), None);
 }

@@ -206,5 +206,5 @@ fn read(file: &Path) -> Result<Registration, DiscoveryError> {
 pub fn compare_versions(a: &str, b: &str) -> Option<Ordering> {
     let a = semver::Version::parse(a).ok()?;
     let b = semver::Version::parse(b).ok()?;
-    Some(a.cmp(&b))
+    Some(a.cmp_precedence(&b))
 }
