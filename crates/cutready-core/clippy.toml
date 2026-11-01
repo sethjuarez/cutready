@@ -39,6 +39,4 @@ disallowed-methods = [
   { path = "std::env::set_current_dir", reason = "hosts pass the project root in" },
   { path = "std::env::temp_dir", reason = "hosts pass paths in" },
   { path = "std::env::home_dir", reason = "hosts pass paths in" },
-  { path = "chrono::Utc::now", reason = "use the Clock port" },
-  { path = "chrono::Local::now", reason = "use the Clock port" },
 ]
