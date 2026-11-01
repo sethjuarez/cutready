@@ -42,6 +42,8 @@ describe("check-ipc-imports", () => {
     expect(countInvokes('// import { invoke } from "../services/tauri";\ninvoke("x");')).toBeNull();
     expect(countInvokes('import * as $tauri from "@tauri-apps/api/core";\n$tauri.invoke("x");')).toBe(1);
     expect(countInvokes('import { invoke as $call } from "@tauri-apps/api/core";\n$call("x"); a$call("y");')).toBe(1);
+    expect(countInvokes('import/* note */ * as tauri from "@tauri-apps/api/core";\ntauri.invoke("x");')).toBe(1);
+    expect(countInvokes('import {\n  // backend call\n  invoke,\n} from "@tauri-apps/api/core";\ninvoke("x");')).toBe(1);
   });
 
   it("caps existing importers and rejects new ones", () => {

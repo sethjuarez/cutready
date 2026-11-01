@@ -7,6 +7,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 export const CAP_FILE = "scripts/ipc-imports.json";
 
@@ -23,35 +24,29 @@ export function isExempt(path) {
   );
 }
 
-const IMPORT = /import\s*(?:type\s*)?\{([^}]*)\}\s*from\s*["']([^"']+)["']/g;
-const NAMESPACE_IMPORT = /import\s*\*\s*as\s+([\w$]+)\s+from\s*["']([^"']+)["']/g;
-
 function isTauriCore(specifier) {
   return specifier === "@tauri-apps/api/core" || /(^|\/)(services\/)?tauri$/.test(specifier);
 }
 
-/** Matches of `pattern` in `text` that start in code, not in a comment or string. */
-function codeMatches(text, pattern) {
-  const code = maskCode(text);
-  return [...text.matchAll(pattern)].filter((match) => code.startsWith("import", match.index));
-}
-
 /** Local names `invoke` is imported as, or [] when the file doesn't import it. */
 export function invokeNames(text) {
+  const source = ts.createSourceFile("file.tsx", text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TSX);
   const names = [];
-  for (const [, specifiers, from] of codeMatches(text, IMPORT)) {
-    if (!isTauriCore(from)) continue;
-    for (const specifier of specifiers.split(",")) {
-      const match = /^\s*invoke(?:\s+as\s+([\w$]+))?\s*$/.exec(specifier);
-      if (match) names.push(match[1] ?? "invoke");
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    if (!isTauriCore(statement.moduleSpecifier.text)) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (!bindings) continue;
+    if (ts.isNamespaceImport(bindings)) {
+      names.push(`${bindings.name.text}.invoke`);
+      continue;
     }
-  }
-  for (const [, namespace, from] of codeMatches(text, NAMESPACE_IMPORT)) {
-    if (isTauriCore(from)) names.push(`${namespace}.invoke`);
+    for (const element of bindings.elements) {
+      if ((element.propertyName ?? element.name).text === "invoke") names.push(element.name.text);
+    }
   }
   return names;
 }
-
 /**
  * `text` with comments and string/template text blanked (template `${…}`
  * code kept), so calls are only counted in code. Offsets are preserved.
