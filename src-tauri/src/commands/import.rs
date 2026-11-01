@@ -11,7 +11,10 @@ use std::path::{Path, PathBuf};
 
 use tauri::State;
 
-use crate::engine::{import, project};
+use cutready_core::import;
+use cutready_desktop_io::StdFiles;
+
+use crate::engine::project;
 use crate::AppState;
 
 /// Helper: get the project root from current state.
@@ -59,7 +62,7 @@ pub async fn import_docx(
     let root = project_root(&state)?;
     let conflict = conflict.as_deref().unwrap_or("check");
     let data = fs::read(&file_path).map_err(|e| format!("Failed to read file: {e}"))?;
-    let markdown = import::docx_to_markdown(&data, &root)?;
+    let markdown = import::docx_to_markdown(&data, &StdFiles::new(&root), chrono::Utc::now())?;
 
     let filename = Path::new(&file_path)
         .file_stem()
@@ -127,7 +130,7 @@ pub async fn import_pptx(
     let root = project_root(&state)?;
     let conflict = conflict.as_deref().unwrap_or("check");
     let data = fs::read(&file_path).map_err(|e| format!("Failed to read file: {e}"))?;
-    let markdown = import::pptx_to_markdown(&data, &root)?;
+    let markdown = import::pptx_to_markdown(&data, &StdFiles::new(&root), chrono::Utc::now())?;
 
     let filename = Path::new(&file_path)
         .file_stem()

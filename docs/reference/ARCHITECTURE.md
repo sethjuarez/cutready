@@ -156,7 +156,6 @@ src-tauri/
 │   │   │   ├── tools.rs           # Domain tools (sketch/storyboard/visual/web)
 │   │   │   └── web.rs             # Web page fetching for agent tools
 │   │   ├── memory.rs              # Agent memory (core, procedural, archival)
-│   │   ├── import.rs              # .docx/.pdf/.pptx import
 │   │   ├── animation.rs           # Elucim animation rendering / video export
 │   │   ├── project.rs             # Folder-based project I/O, safe_resolve()
 │   │   ├── draftline_adapter.rs   # Draftline-backed persistence/versioning facade

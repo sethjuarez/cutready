@@ -1,29 +1,28 @@
 //! Document import: .docx → markdown, .pdf → markdown, .pptx → sketch rows.
-//! Extracts embedded images and saves them to .cutready/screenshots/.
+//! Extracts embedded images and saves them to .cutready/screenshots/ through
+//! the [`Files`] port. `now` names the extracted images (core never reads
+//! the clock).
 
 use std::io::{Cursor, Read};
 use std::path::Path;
 
-/// Ensure the screenshots directory exists and return its path.
-fn screenshots_dir(project_root: &Path) -> Result<std::path::PathBuf, String> {
-    let dir = project_root.join(".cutready").join("screenshots");
-    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create screenshots dir: {e}"))?;
-    Ok(dir)
-}
+use chrono::{DateTime, Utc};
+
+use crate::ports::Files;
 
 /// Save raw image bytes to .cutready/screenshots/ with a unique name.
 fn save_image(
-    project_root: &Path,
+    files: &dyn Files,
     prefix: &str,
     index: usize,
     data: &[u8],
     ext: &str,
 ) -> Result<String, String> {
-    let dir = screenshots_dir(project_root)?;
-    let filename = format!("{prefix}-{index}.{ext}");
-    let abs_path = dir.join(&filename);
-    std::fs::write(&abs_path, data).map_err(|e| format!("Failed to write image: {e}"))?;
-    Ok(format!(".cutready/screenshots/{filename}"))
+    let rel_path = format!(".cutready/screenshots/{prefix}-{index}.{ext}");
+    files
+        .write_atomic(Path::new(&rel_path), data)
+        .map_err(|e| format!("Failed to write image: {e}"))?;
+    Ok(rel_path)
 }
 
 /// Guess image extension from zip entry name.
@@ -42,8 +41,12 @@ fn image_ext(name: &str) -> &str {
 }
 
 /// Extract text and images from a .docx file and return markdown.
-/// Images are saved to project_root/.cutready/screenshots/.
-pub fn docx_to_markdown(data: &[u8], project_root: &Path) -> Result<String, String> {
+/// Images are saved to .cutready/screenshots/.
+pub fn docx_to_markdown(
+    data: &[u8],
+    files: &dyn Files,
+    now: DateTime<Utc>,
+) -> Result<String, String> {
     let cursor = Cursor::new(data);
     let mut archive = match zip::ZipArchive::new(cursor) {
         Ok(a) => a,
@@ -72,7 +75,7 @@ pub fn docx_to_markdown(data: &[u8], project_root: &Path) -> Result<String, Stri
         return Err("This document is DRM-protected (Microsoft Information Protection). Please open it in Word, save an unprotected copy (File → Save As), and import that instead.".to_string());
     }
 
-    let prefix = format!("docx-{}", chrono::Utc::now().format("%Y%m%d%H%M%S"));
+    let prefix = format!("docx-{}", now.format("%Y%m%d%H%M%S"));
 
     // Extract images from word/media/
     let mut image_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
@@ -88,7 +91,7 @@ pub fn docx_to_markdown(data: &[u8], project_root: &Path) -> Result<String, Stri
         }
         if !img_data.is_empty() {
             let ext = image_ext(media_name);
-            if let Ok(rel_path) = save_image(project_root, &prefix, idx, &img_data, ext) {
+            if let Ok(rel_path) = save_image(files, &prefix, idx, &img_data, ext) {
                 let basename = media_name.rsplit('/').next().unwrap_or(media_name);
                 image_map.insert(basename.to_string(), rel_path);
             }
@@ -242,11 +245,15 @@ pub fn pdf_to_markdown(data: &[u8]) -> Result<String, String> {
 
 /// Extract slides from a .pptx file as markdown.
 /// Each slide becomes a section with its content, speaker notes, and images.
-pub fn pptx_to_markdown(data: &[u8], project_root: &Path) -> Result<String, String> {
+pub fn pptx_to_markdown(
+    data: &[u8],
+    files: &dyn Files,
+    now: DateTime<Utc>,
+) -> Result<String, String> {
     let cursor = Cursor::new(data);
     let mut archive = zip::ZipArchive::new(cursor).map_err(|e| format!("Invalid .pptx: {e}"))?;
 
-    let prefix = format!("pptx-{}", chrono::Utc::now().format("%Y%m%d%H%M%S"));
+    let prefix = format!("pptx-{}", now.format("%Y%m%d%H%M%S"));
 
     // Pre-extract all media files from ppt/media/
     let media_entries: Vec<String> = (0..archive.len())
@@ -297,13 +304,7 @@ pub fn pptx_to_markdown(data: &[u8], project_root: &Path) -> Result<String, Stri
             .trim_end_matches(".xml");
         let rels_name = format!("ppt/slides/_rels/slide{slide_num}.xml.rels");
         let image_path = if let Ok(rels_xml) = read_zip_text(&mut archive, &rels_name) {
-            find_first_image_from_rels(
-                &rels_xml,
-                &media_data,
-                project_root,
-                &prefix,
-                &mut img_counter,
-            )
+            find_first_image_from_rels(&rels_xml, &media_data, files, &prefix, &mut img_counter)
         } else {
             None
         };
@@ -411,7 +412,7 @@ fn parse_rels_for_media(rels_xml: &str, out: &mut std::collections::HashMap<Stri
 fn find_first_image_from_rels(
     rels_xml: &str,
     media_data: &std::collections::HashMap<String, Vec<u8>>,
-    project_root: &Path,
+    files: &dyn Files,
     prefix: &str,
     counter: &mut usize,
 ) -> Option<String> {
@@ -436,7 +437,7 @@ fn find_first_image_from_rels(
                     let basename = target.rsplit('/').next().unwrap_or(&target).to_string();
                     if let Some(data) = media_data.get(&basename) {
                         let ext = image_ext(&basename);
-                        if let Ok(path) = save_image(project_root, prefix, *counter, data, ext) {
+                        if let Ok(path) = save_image(files, prefix, *counter, data, ext) {
                             *counter += 1;
                             return Some(path);
                         }

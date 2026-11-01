@@ -64,6 +64,7 @@ harness-prompty = { path = "../crates/harness-prompty" }
 # generated types directly where it has adopted them, such as `.cv` chat artifacts.
 cutready-contracts = { path = "../crates/cutready-contracts" }
 cutready-core = { path = "../crates/cutready-core" }
+cutready-desktop-io = { path = "../crates/cutready-desktop-io" }
 draftline = "0.10.2"
 # Already in the tree through Draftline; used directly to read the git config
 # identity that contributor attribution falls back to.

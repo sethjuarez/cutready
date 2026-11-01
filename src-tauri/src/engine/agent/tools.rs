@@ -17,12 +17,12 @@ use crate::engine::agent::execution::{
 use crate::engine::draftline_adapter::{DeferReason, StructureChange, StructureSnapshot};
 use crate::engine::identity;
 use crate::engine::project;
-use crate::engine::visual_document::{
+use cutready_core::models::sketch::{PlanningRow, Sketch};
+use cutready_core::sketch_edits;
+use cutready_core::visual_document::{
     normalize_visual_document_for_save, normalize_visual_to_v2, validate_agentic_visual,
     validate_dsl_doc, visual_to_renderable_v1,
 };
-use cutready_core::models::sketch::{PlanningRow, Sketch};
-use cutready_core::sketch_edits;
 
 // `ToolDefinition` (the wire shape of the tool contract) now lives in the
 // `harness-contract` crate. Re-exported here so the concrete tool

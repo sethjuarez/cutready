@@ -71,7 +71,7 @@ The backend is organized as independent engines:
 | Draftline | `engine/draftline_adapter.rs` + `commands/draftline.rs` | ✅ | Draftline-backed persistence, history, diff, save, restore, remotes, merge/apply flows |
 | GitHub PRs | `engine/github_pull_requests.rs` | ✅ | Draftline `PullRequestProvider` for hybrid Send for review |
 | Agent | `engine/agent/` | ✅ | Multi-agent AI system (runner, tools, LLM client) |
-| Import | `engine/import.rs` | ✅ | .docx/.pdf/.pptx import to sketches/notes |
+| Import | `cutready_core::import` | ✅ | .docx/.pdf/.pptx parsing; `commands/import.rs` wires it to `StdFiles` |
 | Memory | `engine/memory.rs` | ✅ | Agent memory system (core, procedural, archival) |
 | Recording | `engine/recording.rs` | 🧪 | Experimental screen, camera, microphone, and system-audio capture with local-only take storage |
 | Automation | `engine/automation.rs` | 🔲 | Replay actions via Playwright sidecar + windows-rs UIA |
@@ -114,7 +114,7 @@ All models derive `Serialize` + `Deserialize` for JSON IPC and file storage. Use
 ## Core and Ports
 
 - `crates/cutready-core` is the host-neutral document core (architecture v3). It reaches the outside world only through the traits in `src/ports/` (`Files`, `Clock`, `Log`, `Lock`, `Secrets`, `OpLogStore`), addresses documents by project-relative paths (`path::project_relative`, as strict as `safe_resolve`), and denies direct `std::fs`, `SystemTime`, `env::var` and `Command` through its `clippy.toml`.
-- Core owns the canonical document bytes: `cutready_core::document` (codec, inline-visual migration, port-based `load_*`/`save_*`) and `cutready_core::sketch_edits`. `engine::project` keeps thin absolute-path shims over the same codec. Golden files in `crates/cutready-core/tests/golden/` pin the bytes from both paths (`tests/goldens.rs` and `src-tauri/src/engine/document_goldens.rs`; regenerate with `UPDATE_GOLDENS=1` only when a unit intends a format change).
+- Core owns the canonical document bytes: `cutready_core::document` (codec, inline-visual migration, port-based `load_*`/`save_*`) and `cutready_core::sketch_edits`, plus `assets` (screenshot/visual reference extract and rewrite), `notes` (note load/save, lock manifest) and `visual_document` (Elucim visual normalization). `engine::project` keeps thin absolute-path shims over the same codec. Golden files in `crates/cutready-core/tests/golden/` pin the bytes from both paths (`tests/goldens.rs` and `src-tauri/src/engine/document_goldens.rs`; regenerate with `UPDATE_GOLDENS=1` only when a unit intends a format change).
 - `crates/cutready-desktop-io` holds the desktop port implementations shared by the app, CLI and MCP server. `cutready_core::testing` has in-memory fakes for tests.
 - `npm run check:core` (part of `check:rust`) rejects Tauri, `windows*`, git2, rusqlite, reqwest, Draftline, the app crate and tokio's `process` feature in core's graph, then runs `cargo check -p cutready-core --target aarch64-apple-ios`. Install the target locally with `rustup target add aarch64-apple-ios`.
 

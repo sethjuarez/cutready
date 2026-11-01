@@ -6,8 +6,8 @@
 //! tool layer share this codec, so the durable visual-format policy is not
 //! tied to the model-facing tool dispatcher.
 //!
-//! Extracted verbatim from `engine::agent::tools` (issue #267); behavior is
-//! unchanged.
+//! Extracted verbatim from the desktop agent tools (issue #267) and moved
+//! into core unchanged (architecture v3, unit 4.4).
 
 use serde_json::{json, Value};
 
@@ -53,14 +53,14 @@ const V2_LAYOUT_KEYS: &[&str] = &[
     "zIndex",
 ];
 
-pub(crate) fn normalize_visual_document_for_save(visual: &Value) -> Result<Value, String> {
+pub fn normalize_visual_document_for_save(visual: &Value) -> Result<Value, String> {
     let mut normalized = normalize_visual_to_v2(visual)?;
     ensure_default_state_machine_for_timelines(&mut normalized)?;
     validate_agentic_visual(&normalized)?;
     Ok(normalized)
 }
 
-pub(crate) fn normalize_visual_to_v2(visual: &Value) -> Result<Value, String> {
+pub fn normalize_visual_to_v2(visual: &Value) -> Result<Value, String> {
     match visual.get("version") {
         Some(Value::String(version)) if version == "2.0" => {
             let mut normalized = visual.clone();
@@ -229,7 +229,7 @@ fn reserve_unique_id(base: &str, existing: &std::collections::HashSet<String>) -
     }
 }
 
-pub(crate) fn visual_to_renderable_v1(visual: &Value) -> Result<Value, String> {
+pub fn visual_to_renderable_v1(visual: &Value) -> Result<Value, String> {
     match visual.get("version").and_then(|v| v.as_str()) {
         Some("1.0") => Ok(visual.clone()),
         Some("2.0") => migrate_v2_visual_to_v1(visual),
@@ -939,7 +939,7 @@ fn validate_v2_transition(
     Ok(())
 }
 
-pub(crate) fn validate_agentic_visual(visual: &Value) -> Result<(), String> {
+pub fn validate_agentic_visual(visual: &Value) -> Result<(), String> {
     let mut errors = Vec::new();
     validate_dsl_doc(visual, &mut errors);
     if !errors.is_empty() {
@@ -1095,7 +1095,7 @@ fn node_type_name(v: &Value) -> &'static str {
 }
 
 /// Validate a DSL document object, collecting errors into the provided Vec.
-pub(crate) fn validate_dsl_doc(visual: &Value, errors: &mut Vec<String>) {
+pub fn validate_dsl_doc(visual: &Value, errors: &mut Vec<String>) {
     if visual.get("version").and_then(|v| v.as_str()) == Some("2.0") {
         if let Err(e) = validate_v2_doc(visual) {
             errors.push(e);
