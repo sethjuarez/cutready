@@ -2,13 +2,15 @@
 //!
 //! Storyboards are `.sb` files, identified by relative path from project root.
 
-use chrono::Utc;
+use serde_json::{json, Value};
 use std::path::Path;
 use tauri::State;
 use tauri_plugin_auditaur::auditaur_command;
 
+use crate::engine::document_writer::{self, Expected, WriteError};
 use crate::engine::project;
 use crate::AppState;
+use cutready_core::edit_ops::{ContentEditError, OpRejection};
 use cutready_core::models::sketch::{
     DocumentMetadata, Storyboard, StoryboardItem, StoryboardSummary,
 };
@@ -38,12 +40,15 @@ fn set_referenced_sketches_lock(
             continue;
         }
 
-        let mut sketch = project::read_sketch(&abs_path).map_err(|e| e.to_string())?;
-        sketch.set_locked_recursive(locked);
-        sketch.updated_at = Utc::now();
-        project::write_sketch(&sketch, &abs_path, root).map_err(|e| e.to_string())?;
+        let op = json!({ "kind": "set_lock", "locked": locked });
+        document_writer::edit(root, &sketch_path, Expected::Unchecked, &[op])?;
     }
     Ok(())
+}
+
+/// Apply storyboard ops the way the legacy commands did: whatever is on disk.
+fn edit_storyboard(root: &Path, rel: &str, ops: &[Value]) -> Result<Storyboard, WriteError> {
+    document_writer::edit_storyboard(root, rel, Expected::Unchecked, ops)
 }
 
 #[tauri::command]
@@ -61,9 +66,15 @@ pub async fn create_storyboard(
     }
 
     let storyboard = Storyboard::new(title, chrono::Utc::now());
-    project::write_storyboard(&storyboard, &abs_path, &root).map_err(|e| e.to_string())?;
-
-    Ok(storyboard)
+    let op = json!({ "kind": "replace_storyboard", "storyboard": storyboard });
+    document_writer::edit_storyboard(&root, &relative_path, Expected::Absent, &[op]).map_err(
+        |err| match err {
+            WriteError::Edit(ContentEditError::Stale(_)) => {
+                format!("File already exists: {relative_path}")
+            }
+            other => other.to_string(),
+        },
+    )
 }
 
 #[tauri::command]
@@ -87,24 +98,29 @@ pub async fn update_storyboard(
 ) -> Result<(), String> {
     let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
-    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
-
-    let mut sb = project::read_storyboard(&abs_path).map_err(|e| e.to_string())?;
-    project::ensure_storyboard_unlocked(&sb).map_err(|e| e.to_string())?;
-
-    if let Some(t) = title {
-        sb.title = t;
-    }
-    if let Some(d) = description {
-        sb.description = d;
-    }
-    if let Some(m) = metadata {
-        sb.metadata = m;
-    }
-    sb.updated_at = Utc::now();
-
-    project::write_storyboard(&sb, &abs_path, &root).map_err(|e| e.to_string())?;
+    let ops = update_storyboard_ops(title, description, metadata);
+    edit_storyboard(&root, &relative_path, &ops)?;
     Ok(())
+}
+
+/// The fields `update_storyboard` sets. Every update marks the storyboard
+/// edited and, like any storyboard edit, needs it unlocked.
+fn update_storyboard_ops(
+    title: Option<String>,
+    description: Option<String>,
+    metadata: Option<DocumentMetadata>,
+) -> Vec<Value> {
+    let mut ops = vec![json!({ "kind": "touch" })];
+    if let Some(title) = title {
+        ops.push(json!({ "kind": "set_title", "title": title }));
+    }
+    if let Some(description) = description {
+        ops.push(json!({ "kind": "set_description", "description": description }));
+    }
+    if let Some(metadata) = metadata {
+        ops.push(json!({ "kind": "set_metadata", "metadata": metadata }));
+    }
+    ops
 }
 
 #[tauri::command]
@@ -117,12 +133,12 @@ pub async fn set_storyboard_lock(
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
-    let mut sb = project::read_storyboard(&abs_path).map_err(|e| e.to_string())?;
-    sb.locked = locked;
-    sb.updated_at = Utc::now();
+    // Sketches first, then the storyboard, as before: one file per write
+    // until multi-file edits land.
+    let sb = project::read_storyboard(&abs_path).map_err(|e| e.to_string())?;
     set_referenced_sketches_lock(&root, &sb, locked)?;
-    project::write_storyboard(&sb, &abs_path, &root).map_err(|e| e.to_string())?;
-    Ok(sb)
+    let op = json!({ "kind": "set_lock", "locked": locked });
+    Ok(edit_storyboard(&root, &relative_path, &[op])?)
 }
 
 #[tauri::command]
@@ -167,7 +183,7 @@ pub async fn add_sketch_to_storyboard(
 ) -> Result<(), String> {
     let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
-    let sb_abs = project::safe_resolve(&root, &storyboard_path).map_err(|e| e.to_string())?;
+    project::safe_resolve(&root, &storyboard_path).map_err(|e| e.to_string())?;
     // Validate sketch_path too (even though it's stored as a reference)
     project::safe_resolve(&root, &sketch_path).map_err(|e| e.to_string())?;
 
@@ -176,18 +192,8 @@ pub async fn add_sketch_to_storyboard(
         log::warn!("Sketch file not found: {}", sketch_path);
     }
 
-    let mut sb = project::read_storyboard(&sb_abs).map_err(|e| e.to_string())?;
-    project::ensure_storyboard_unlocked(&sb).map_err(|e| e.to_string())?;
-
     let item = StoryboardItem::SketchRef { path: sketch_path };
-    match position {
-        Some(pos) if pos < sb.items.len() => sb.items.insert(pos, item),
-        _ => sb.items.push(item),
-    }
-
-    sb.updated_at = Utc::now();
-    project::write_storyboard(&sb, &sb_abs, &root).map_err(|e| e.to_string())?;
-
+    edit_storyboard(&root, &storyboard_path, &[insert_item_op(position, &item)])?;
     Ok(())
 }
 
@@ -199,20 +205,21 @@ pub async fn remove_sketch_from_storyboard(
 ) -> Result<(), String> {
     let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
-    let sb_abs = project::safe_resolve(&root, &storyboard_path).map_err(|e| e.to_string())?;
+    remove_item_at(&root, &storyboard_path, position)
+}
 
-    let mut sb = project::read_storyboard(&sb_abs).map_err(|e| e.to_string())?;
-    project::ensure_storyboard_unlocked(&sb).map_err(|e| e.to_string())?;
-
-    if position >= sb.items.len() {
-        return Err("Position out of range".into());
+/// Any rejection other than the lock means the position was out of range.
+fn remove_item_at(root: &Path, rel: &str, position: usize) -> Result<(), String> {
+    let op = json!({ "kind": "remove_storyboard_item", "index": position });
+    match edit_storyboard(root, rel, &[op]) {
+        Ok(_) => Ok(()),
+        Err(WriteError::Edit(ContentEditError::Op(err)))
+            if err.rejection != OpRejection::LockedStoryboard =>
+        {
+            Err("Position out of range".into())
+        }
+        Err(err) => Err(err.to_string()),
     }
-
-    sb.items.remove(position);
-    sb.updated_at = Utc::now();
-
-    project::write_storyboard(&sb, &sb_abs, &root).map_err(|e| e.to_string())?;
-    Ok(())
 }
 
 #[tauri::command]
@@ -225,26 +232,18 @@ pub async fn add_section_to_storyboard(
 ) -> Result<(), String> {
     let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
-    let sb_abs = project::safe_resolve(&root, &storyboard_path).map_err(|e| e.to_string())?;
-
-    let mut sb = project::read_storyboard(&sb_abs).map_err(|e| e.to_string())?;
-    project::ensure_storyboard_unlocked(&sb).map_err(|e| e.to_string())?;
-
     let item = StoryboardItem::Section {
         title,
         description: description.unwrap_or_default(),
         sketches: Vec::new(),
     };
-
-    match position {
-        Some(pos) if pos < sb.items.len() => sb.items.insert(pos, item),
-        _ => sb.items.push(item),
-    }
-
-    sb.updated_at = Utc::now();
-    project::write_storyboard(&sb, &sb_abs, &root).map_err(|e| e.to_string())?;
-
+    edit_storyboard(&root, &storyboard_path, &[insert_item_op(position, &item)])?;
     Ok(())
+}
+
+/// Insert at `position`, or append when it's missing or past the end.
+fn insert_item_op(position: Option<usize>, item: &StoryboardItem) -> Value {
+    json!({ "kind": "insert_storyboard_item", "index": position, "item": item })
 }
 
 #[tauri::command]
@@ -255,20 +254,15 @@ pub async fn reorder_storyboard_items(
 ) -> Result<(), String> {
     let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
-    let sb_abs = project::safe_resolve(&root, &storyboard_path).map_err(|e| e.to_string())?;
-
-    let mut sb = project::read_storyboard(&sb_abs).map_err(|e| e.to_string())?;
-    project::ensure_storyboard_unlocked(&sb).map_err(|e| e.to_string())?;
-    sb.items = items;
-    sb.updated_at = Utc::now();
-
-    project::write_storyboard(&sb, &sb_abs, &root).map_err(|e| e.to_string())?;
+    let op = json!({ "kind": "set_storyboard_items", "items": items });
+    edit_storyboard(&root, &storyboard_path, &[op])?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
     use cutready_core::models::sketch::{PlanningRow, Sketch};
 
     #[test]
@@ -305,5 +299,139 @@ mod tests {
         assert!(!unlocked.locked);
         assert!(!unlocked.rows[0].locked);
         assert!(!unlocked.rows[0].locks.any());
+    }
+
+    fn new_storyboard(root: &Path) -> Storyboard {
+        let storyboard = Storyboard::new("Demo", Utc::now());
+        let op = json!({ "kind": "replace_storyboard", "storyboard": storyboard });
+        document_writer::edit_storyboard(root, "demo.sb", Expected::Absent, &[op]).unwrap()
+    }
+
+    fn sketch_ref(path: &str) -> StoryboardItem {
+        StoryboardItem::SketchRef { path: path.into() }
+    }
+
+    #[test]
+    fn items_insert_at_a_position_or_append() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        new_storyboard(root);
+
+        edit_storyboard(
+            root,
+            "demo.sb",
+            &[insert_item_op(None, &sketch_ref("a.sk"))],
+        )
+        .unwrap();
+        edit_storyboard(
+            root,
+            "demo.sb",
+            &[insert_item_op(Some(0), &sketch_ref("b.sk"))],
+        )
+        .unwrap();
+        let sb = edit_storyboard(
+            root,
+            "demo.sb",
+            &[insert_item_op(Some(9), &sketch_ref("c.sk"))],
+        )
+        .unwrap();
+
+        let paths: Vec<_> = sb
+            .items
+            .iter()
+            .map(|item| match item {
+                StoryboardItem::SketchRef { path } => path.as_str(),
+                _ => "",
+            })
+            .collect();
+        assert_eq!(paths, ["b.sk", "a.sk", "c.sk"]);
+    }
+
+    #[test]
+    fn removing_past_the_end_reports_out_of_range() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        new_storyboard(root);
+        edit_storyboard(
+            root,
+            "demo.sb",
+            &[insert_item_op(None, &sketch_ref("a.sk"))],
+        )
+        .unwrap();
+
+        assert_eq!(
+            remove_item_at(root, "demo.sb", 1).unwrap_err(),
+            "Position out of range"
+        );
+        remove_item_at(root, "demo.sb", 0).unwrap();
+        let sb = project::read_storyboard(&root.join("demo.sb")).unwrap();
+        assert!(sb.items.is_empty());
+    }
+
+    #[test]
+    fn a_locked_storyboard_rejects_edits_with_the_lock_message() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        new_storyboard(root);
+        edit_storyboard(
+            root,
+            "demo.sb",
+            &[insert_item_op(None, &sketch_ref("a.sk"))],
+        )
+        .unwrap();
+        edit_storyboard(
+            root,
+            "demo.sb",
+            &[json!({ "kind": "set_lock", "locked": true })],
+        )
+        .unwrap();
+        let before = std::fs::read(root.join("demo.sb")).unwrap();
+
+        let locked = project::ensure_storyboard_unlocked(
+            &project::read_storyboard(&root.join("demo.sb")).unwrap(),
+        )
+        .unwrap_err()
+        .to_string();
+        assert_eq!(remove_item_at(root, "demo.sb", 0).unwrap_err(), locked);
+        let update = update_storyboard_ops(Some("New".into()), None, None);
+        assert_eq!(
+            edit_storyboard(root, "demo.sb", &update)
+                .unwrap_err()
+                .to_string(),
+            locked
+        );
+        assert_eq!(std::fs::read(root.join("demo.sb")).unwrap(), before);
+    }
+
+    #[test]
+    fn update_sets_only_the_given_fields_and_marks_the_storyboard_edited() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let created = new_storyboard(root);
+
+        let sb = edit_storyboard(
+            root,
+            "demo.sb",
+            &update_storyboard_ops(None, Some("About".into()), None),
+        )
+        .unwrap();
+
+        assert_eq!(sb.title, "Demo");
+        assert_eq!(sb.description, "About");
+        assert!(sb.updated_at >= created.updated_at);
+    }
+
+    #[test]
+    fn creating_over_an_existing_storyboard_fails() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        new_storyboard(root);
+        let storyboard = Storyboard::new("Again", Utc::now());
+        let op = json!({ "kind": "replace_storyboard", "storyboard": storyboard });
+
+        let err =
+            document_writer::edit_storyboard(root, "demo.sb", Expected::Absent, &[op]).unwrap_err();
+
+        assert!(matches!(err, WriteError::Edit(ContentEditError::Stale(_))));
     }
 }

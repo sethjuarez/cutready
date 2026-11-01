@@ -23,6 +23,6 @@ pub trait EditService: Send + Sync {
     fn apply_storyboard_ops(&self, storyboard: &Storyboard, ops: &Vec<EditOp>, now: &String) -> Result<Storyboard, Box<dyn std::error::Error + Send + Sync>>;
     /// The version an edit was computed against: `sha256:` plus the lowercase hex SHA-256 of the document's bytes on disk. A write whose expected version differs fails with `stale_document`.
     fn document_version(&self, content: &String) -> Result<String, Box<dyn std::error::Error + Send + Sync>>;
-    /// The host write path for every project document. A version mismatch fails with `stale_document` (with `details.current_version` when the file exists). A missing file must start with its kind's replacement op, otherwise the batch is `invalid_op`. The result is the canonical bytes to write and their version. An empty batch returns `content` unchanged.
+    /// The host write path for every project document. A version mismatch fails with `stale_document` (with `details.current_version` when the file exists). A missing file must start with its kind's replacement op, otherwise the batch is `invalid_op`. A batch that starts with the replacement op doesn't read the old bytes, so it can overwrite a file that no longer parses. The result is the canonical bytes to write and their version. An empty batch returns `content` unchanged.
     fn edit_document(&self, request: &DocumentEditRequest) -> Result<DocumentEdit, Box<dyn std::error::Error + Send + Sync>>;
 }

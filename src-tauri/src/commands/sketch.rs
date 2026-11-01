@@ -2,13 +2,21 @@
 //!
 //! Sketches are `.sk` files in the project folder, identified by relative path.
 
+use std::path::Path;
+
 use tauri::State;
 use tauri_plugin_auditaur::auditaur_command;
 
+use serde_json::{json, Value};
+
+use crate::engine::document_writer::{self, Expected, WriteError};
 use crate::engine::project;
 use crate::models::script::ProjectView;
 use crate::AppState;
-use cutready_core::models::sketch::{DocumentMetadata, PlanningCellLocks, Sketch, SketchSummary};
+use cutready_core::edit_ops::ContentEditError;
+use cutready_core::models::sketch::{
+    DocumentMetadata, PlanningCellLocks, PlanningRow, Sketch, SketchSummary,
+};
 use cutready_core::visual_document::normalize_visual_document_for_save;
 
 /// Helper: get the project root from current state.
@@ -36,10 +44,16 @@ pub async fn create_sketch(
         return Err(format!("File already exists: {relative_path}"));
     }
 
-    let sketch = Sketch::new(title, chrono::Utc::now());
-    project::write_sketch(&sketch, &abs_path, &root).map_err(|e| e.to_string())?;
+    create_sketch_at(&root, &relative_path, title)
+}
 
-    Ok(sketch)
+fn create_sketch_at(root: &Path, rel: &str, title: String) -> Result<Sketch, String> {
+    let sketch = Sketch::new(title, chrono::Utc::now());
+    let op = json!({ "kind": "replace_sketch", "sketch": sketch });
+    document_writer::edit_sketch(root, rel, Expected::Absent, &[op]).map_err(|err| match err {
+        WriteError::Edit(ContentEditError::Stale(_)) => format!("File already exists: {rel}"),
+        other => other.to_string(),
+    })
 }
 
 #[auditaur_command(skip_all, err)]
@@ -52,27 +66,32 @@ pub async fn update_sketch(
 ) -> Result<(), String> {
     let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
-    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+    let ops = update_sketch_ops(description, rows, metadata);
+    document_writer::edit(&root, &relative_path, Expected::Unchecked, &ops)?;
+    Ok(())
+}
 
-    let mut sketch = project::read_sketch(&abs_path).map_err(|e| e.to_string())?;
-    let now = chrono::Utc::now();
-
-    if let Some(desc) = description {
-        project::ensure_sketch_unlocked(&sketch).map_err(|e| e.to_string())?;
-        sketch.description = desc;
+/// The fields `update_sketch` sets, in the legacy order. Every update marks
+/// the sketch edited, even one that changes nothing.
+fn update_sketch_ops(
+    description: Option<Value>,
+    rows: Option<Vec<PlanningRow>>,
+    metadata: Option<DocumentMetadata>,
+) -> Vec<Value> {
+    let mut ops = Vec::new();
+    if let Some(description) = description {
+        ops.push(json!({ "kind": "set_description", "description": description }));
     }
-    if let Some(r) = rows {
-        cutready_core::sketch_edits::replace_rows(&mut sketch, r, now)
-            .map_err(|e| e.to_string())?;
+    if let Some(rows) = rows {
+        ops.push(json!({ "kind": "replace_rows", "rows": rows }));
     }
     if let Some(metadata) = metadata {
-        project::ensure_sketch_unlocked(&sketch).map_err(|e| e.to_string())?;
-        sketch.metadata = metadata;
+        ops.push(json!({ "kind": "set_metadata", "metadata": metadata }));
     }
-    sketch.updated_at = now;
-
-    project::write_sketch(&sketch, &abs_path, &root).map_err(|e| e.to_string())?;
-    Ok(())
+    if ops.is_empty() {
+        ops.push(json!({ "kind": "touch" }));
+    }
+    ops
 }
 
 #[tauri::command]
@@ -83,14 +102,8 @@ pub async fn update_sketch_title(
 ) -> Result<(), String> {
     let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
-    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
-
-    let mut sketch = project::read_sketch(&abs_path).map_err(|e| e.to_string())?;
-    project::ensure_sketch_unlocked(&sketch).map_err(|e| e.to_string())?;
-    sketch.title = title;
-    sketch.updated_at = chrono::Utc::now();
-
-    project::write_sketch(&sketch, &abs_path, &root).map_err(|e| e.to_string())?;
+    let op = json!({ "kind": "set_title", "title": title });
+    document_writer::edit(&root, &relative_path, Expected::Unchecked, &[op])?;
     Ok(())
 }
 
@@ -143,13 +156,13 @@ pub async fn set_sketch_lock(
 ) -> Result<Sketch, String> {
     let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
-    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
-
-    let mut sketch = project::read_sketch(&abs_path).map_err(|e| e.to_string())?;
-    sketch.set_locked_recursive(locked);
-    sketch.updated_at = chrono::Utc::now();
-    project::write_sketch(&sketch, &abs_path, &root).map_err(|e| e.to_string())?;
-    Ok(sketch)
+    let op = json!({ "kind": "set_lock", "locked": locked });
+    Ok(document_writer::edit_sketch(
+        &root,
+        &relative_path,
+        Expected::Unchecked,
+        &[op],
+    )?)
 }
 
 #[tauri::command]
@@ -163,14 +176,14 @@ pub async fn set_planning_row_lock(
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
-    let mut sketch = project::read_sketch(&abs_path).map_err(|e| e.to_string())?;
-    if index >= sketch.rows.len() {
-        return Err(format!("Row {} does not exist", index + 1));
-    }
-    sketch.rows[index].set_locked_recursive(locked);
-    sketch.updated_at = chrono::Utc::now();
-    project::write_sketch(&sketch, &abs_path, &root).map_err(|e| e.to_string())?;
-    Ok(sketch)
+    let row_id = row_id_at(&abs_path, index)?;
+    let op = json!({ "kind": "set_lock", "row_id": row_id, "locked": locked });
+    Ok(document_writer::edit_sketch(
+        &root,
+        &relative_path,
+        Expected::Unchecked,
+        &[op],
+    )?)
 }
 
 #[tauri::command]
@@ -185,18 +198,27 @@ pub async fn set_planning_cell_lock(
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
-    let mut sketch = project::read_sketch(&abs_path).map_err(|e| e.to_string())?;
-    if index >= sketch.rows.len() {
-        return Err(format!("Row {} does not exist", index + 1));
-    }
-    let mut locks: PlanningCellLocks = sketch.rows[index].locks.clone();
-    if !locks.set(&field, locked) {
+    let row_id = row_id_at(&abs_path, index)?;
+    if !PlanningCellLocks::default().set(&field, locked) {
         return Err(format!("Unknown planning cell field: {field}"));
     }
-    sketch.rows[index].locks = locks;
-    sketch.updated_at = chrono::Utc::now();
-    project::write_sketch(&sketch, &abs_path, &root).map_err(|e| e.to_string())?;
-    Ok(sketch)
+    let op = json!({ "kind": "set_lock", "row_id": row_id, "field": field, "locked": locked });
+    Ok(document_writer::edit_sketch(
+        &root,
+        &relative_path,
+        Expected::Unchecked,
+        &[op],
+    )?)
+}
+
+/// The stable id of the row at a legacy row index.
+fn row_id_at(abs_path: &Path, index: usize) -> Result<String, String> {
+    let sketch = project::read_sketch(abs_path).map_err(|e| e.to_string())?;
+    sketch
+        .rows
+        .get(index)
+        .map(|row| row.id.clone())
+        .ok_or_else(|| format!("Row {} does not exist", index + 1))
 }
 
 /// Read a visual JSON file and return its content.
@@ -223,6 +245,7 @@ pub async fn write_visual_doc(
     let document = normalize_visual_document_for_save(&document)?;
     let json = serde_json::to_string_pretty(&document)
         .map_err(|e| format!("Failed to serialize visual: {e}"))?;
+    // asset write: visual JSON, not a document
     std::fs::write(&abs, json).map_err(|e| format!("Failed to write visual: {e}"))
 }
 
@@ -255,5 +278,116 @@ mod tests {
             std::path::PathBuf::from("D:/workspace/demos/product-tour")
         );
         assert_ne!(document_root_from_project_view(&view), view.repo_root);
+    }
+
+    fn read(root: &Path) -> Sketch {
+        project::read_sketch(&root.join("intro.sk")).unwrap()
+    }
+
+    fn edit(root: &Path, ops: &[Value]) -> Result<Sketch, WriteError> {
+        document_writer::edit_sketch(root, "intro.sk", Expected::Unchecked, ops)
+    }
+
+    #[test]
+    fn creating_over_an_existing_sketch_reports_it_exists() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        create_sketch_at(root, "intro.sk", "Intro".into()).unwrap();
+        let before = std::fs::read(root.join("intro.sk")).unwrap();
+
+        assert_eq!(
+            create_sketch_at(root, "intro.sk", "Again".into()).unwrap_err(),
+            "File already exists: intro.sk"
+        );
+        assert_eq!(std::fs::read(root.join("intro.sk")).unwrap(), before);
+    }
+
+    #[test]
+    fn an_empty_update_still_marks_the_sketch_edited() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let created = create_sketch_at(root, "intro.sk", "Intro".into()).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+
+        let updated = edit(root, &update_sketch_ops(None, None, None)).unwrap();
+
+        assert!(updated.updated_at > created.updated_at);
+        assert_eq!(updated.title, "Intro");
+    }
+
+    #[test]
+    fn update_replaces_rows_and_description() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        create_sketch_at(root, "intro.sk", "Intro".into()).unwrap();
+        let mut row = PlanningRow::new();
+        row.narrative = "Hello".into();
+
+        edit(
+            root,
+            &update_sketch_ops(Some(json!("About")), Some(vec![row]), None),
+        )
+        .unwrap();
+
+        let sketch = read(root);
+        assert_eq!(sketch.description, json!("About"));
+        assert_eq!(sketch.rows.len(), 1);
+        assert_eq!(sketch.rows[0].narrative, "Hello");
+    }
+
+    #[test]
+    fn row_and_cell_locks_address_rows_by_index() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        create_sketch_at(root, "intro.sk", "Intro".into()).unwrap();
+        edit(
+            root,
+            &update_sketch_ops(
+                None,
+                Some(vec![PlanningRow::new(), PlanningRow::new()]),
+                None,
+            ),
+        )
+        .unwrap();
+        let abs = root.join("intro.sk");
+
+        let second = row_id_at(&abs, 1).unwrap();
+        let op =
+            json!({ "kind": "set_lock", "row_id": second, "field": "narrative", "locked": true });
+        edit(root, &[op]).unwrap();
+        let sketch = read(root);
+        assert!(!sketch.rows[0].locks.any());
+        assert!(sketch.rows[1].locks.narrative);
+
+        assert_eq!(row_id_at(&abs, 2).unwrap_err(), "Row 3 does not exist");
+    }
+
+    #[test]
+    fn locking_the_sketch_locks_every_row() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        create_sketch_at(root, "intro.sk", "Intro".into()).unwrap();
+        edit(
+            root,
+            &update_sketch_ops(None, Some(vec![PlanningRow::new()]), None),
+        )
+        .unwrap();
+
+        let locked = edit(root, &[json!({ "kind": "set_lock", "locked": true })]).unwrap();
+
+        assert!(locked.locked);
+        assert!(locked.rows[0].locked);
+        assert!(read(root).locked);
+    }
+
+    #[test]
+    fn delete_removes_the_sketch() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        create_sketch_at(root, "intro.sk", "Intro".into()).unwrap();
+
+        project::delete_sketch(&root.join("intro.sk"), root).unwrap();
+
+        assert!(!root.join("intro.sk").exists());
     }
 }
