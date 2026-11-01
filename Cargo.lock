@@ -1640,6 +1640,7 @@ dependencies = [
  "chrono",
  "comrak",
  "cutready-contracts",
+ "cutready-core",
  "dirs 6.0.0",
  "draftline",
  "futures-util",
@@ -1706,7 +1707,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
- "cutready",
+ "cutready-core",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -1721,6 +1722,8 @@ dependencies = [
  "cutready-contracts",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
 ]
 
 [[package]]

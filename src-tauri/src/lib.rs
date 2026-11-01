@@ -19,18 +19,6 @@ mod engine;
 mod models;
 mod util;
 
-/// Portable `.sk` document API, exposed for the contract conformance suite in
-/// `crates/cutready-contracts`.
-pub mod document {
-    pub use crate::engine::sketch_edits::{
-        parse_duration_seconds, reorder_rows, update_row_text, RowTextUpdate, SketchEditError,
-    };
-    pub use crate::models::sketch::{PlanningRow, Sketch, Storyboard};
-    /// The generated contract types the document API returns, as this crate
-    /// links them.
-    pub use cutready_contracts::{CmdError, SaveContext};
-}
-
 const CUTREADY_DIAGNOSTICS_ENV: &str = "CUTREADY_DIAGNOSTICS";
 const AUDITAUR_ENV: &str = "AUDITAUR";
 const SETTINGS_FILE: &str = "settings.json";

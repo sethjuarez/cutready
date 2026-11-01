@@ -8,8 +8,10 @@ use tauri::State;
 use tauri_plugin_auditaur::auditaur_command;
 
 use crate::engine::project;
-use crate::models::sketch::{DocumentMetadata, Storyboard, StoryboardItem, StoryboardSummary};
 use crate::AppState;
+use cutready_core::models::sketch::{
+    DocumentMetadata, Storyboard, StoryboardItem, StoryboardSummary,
+};
 
 /// Helper: get the project root from current state.
 fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
@@ -58,7 +60,7 @@ pub async fn create_storyboard(
         return Err(format!("File already exists: {relative_path}"));
     }
 
-    let storyboard = Storyboard::new(title);
+    let storyboard = Storyboard::new(title, chrono::Utc::now());
     project::write_storyboard(&storyboard, &abs_path, &root).map_err(|e| e.to_string())?;
 
     Ok(storyboard)
@@ -267,13 +269,13 @@ pub async fn reorder_storyboard_items(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::sketch::{PlanningRow, Sketch};
+    use cutready_core::models::sketch::{PlanningRow, Sketch};
 
     #[test]
     fn storyboard_lock_cascades_to_referenced_sketches() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
-        let mut sketch = Sketch::new("Intro");
+        let mut sketch = Sketch::new("Intro", chrono::Utc::now());
         sketch.rows.push(PlanningRow::new());
         project::write_sketch(&sketch, &root.join("intro.sk"), root).unwrap();
 

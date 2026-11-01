@@ -8,9 +8,7 @@ on:
     paths:
       - "contracts/**"
       - "crates/cutready-contracts/**"
-      - "src-tauri/src/models/sketch.rs"
-      - "src-tauri/src/engine/sketch_edits.rs"
-      - "src-tauri/src/lib.rs"
+      - "crates/cutready-core/**"
       - "ios/Package.swift"
       - "ios/Sources/CutReadyMobileCore/**"
       - "ios/Tests/CutReadyContractConformanceTests/**"
@@ -33,9 +31,7 @@ on:
     paths:
       - "contracts/**"
       - "crates/cutready-contracts/**"
-      - "src-tauri/src/models/sketch.rs"
-      - "src-tauri/src/engine/sketch_edits.rs"
-      - "src-tauri/src/lib.rs"
+      - "crates/cutready-core/**"
       - "ios/Package.swift"
       - "ios/Sources/CutReadyMobileCore/**"
       - "ios/Tests/CutReadyContractConformanceTests/**"

@@ -3,7 +3,7 @@
 //! `model/` and `generated_tests/` are emitted from `contracts/*.tsp`; do not
 //! edit them by hand. Run `npm run generate` in `contracts/` instead.
 //! `vector_adapters.rs` binds the contract's `@vector` operations to the
-//! desktop's production document code.
+//! production document code in `cutready-core`.
 
 #[rustfmt::skip]
 pub mod model;

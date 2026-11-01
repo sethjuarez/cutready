@@ -16,8 +16,11 @@ use tempfile::TempDir;
 
 use crate::engine::agent::execution::{FunctionCall, ToolCall, ToolExecutionStatus};
 use crate::engine::agent::tools::execute_tool;
-use crate::engine::{project, sketch_edits};
-use crate::models::sketch::{DocumentMetadata, PlanningRow, Sketch, Storyboard, StoryboardItem};
+use crate::engine::project;
+use cutready_core::models::sketch::{
+    DocumentMetadata, PlanningRow, Sketch, Storyboard, StoryboardItem,
+};
+use cutready_core::sketch_edits;
 
 fn golden_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../crates/cutready-core/tests/golden")
@@ -232,7 +235,7 @@ fn sketch_save_nulls_roundtrip() {
 #[test]
 fn sketch_create() {
     let p = Project::new();
-    let mut sketch = Sketch::new("New sketch");
+    let mut sketch = Sketch::new("New sketch", chrono::Utc::now());
     sketch.created_at = fixed_now();
     sketch.updated_at = fixed_now();
     p.save_sketch("flows/new.sk", &sketch);
@@ -399,7 +402,7 @@ fn storyboard_read_upgrades_legacy() {
 #[test]
 fn storyboard_create() {
     let p = Project::new();
-    let mut storyboard = Storyboard::new("New board");
+    let mut storyboard = Storyboard::new("New board", chrono::Utc::now());
     storyboard.created_at = fixed_now();
     storyboard.updated_at = fixed_now();
     p.save_storyboard("boards/new.sb", &storyboard);

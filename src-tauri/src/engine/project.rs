@@ -16,9 +16,12 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 use crate::engine::draftline_adapter::CutReadyDraftlineAdapter;
-use crate::engine::sketch_edits;
 use crate::models::script::{ProjectEntry, ProjectManifest, ProjectView, RepoView};
-use crate::models::sketch::{NoteSummary, Sketch, SketchSummary, Storyboard, StoryboardSummary};
+use cutready_core::document;
+use cutready_core::models::sketch::{
+    NoteSummary, Sketch, SketchSummary, Storyboard, StoryboardSummary,
+};
+use cutready_core::sketch_edits;
 
 const LOCKS_PATH: &str = ".cutready/locks.json";
 
@@ -1019,22 +1022,17 @@ pub fn write_visual(
     project_root: &Path,
     visual: &serde_json::Value,
 ) -> Result<String, ProjectError> {
-    use sha2::{Digest, Sha256};
+    let file = document::visual_file(visual)?;
+    write_visual_file(project_root, &file)?;
+    Ok(file.path)
+}
 
-    let json =
-        serde_json::to_string_pretty(visual).map_err(|e| ProjectError::Serialize(e.to_string()))?;
-
-    let digest = Sha256::digest(json.as_bytes());
-    let short_hash: String = digest.iter().take(6).map(|b| format!("{b:02x}")).collect();
-    let rel_path = format!(".cutready/visuals/{short_hash}.json");
-    let abs_path = project_root.join(&rel_path);
-
+fn write_visual_file(project_root: &Path, file: &document::VisualFile) -> Result<(), ProjectError> {
+    let abs_path = project_root.join(&file.path);
     if let Some(parent) = abs_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
     }
-
-    std::fs::write(&abs_path, &json).map_err(|e| ProjectError::Io(e.to_string()))?;
-    Ok(rel_path)
+    std::fs::write(&abs_path, &file.json).map_err(|e| ProjectError::Io(e.to_string()))
 }
 
 /// Read an elucim visual from a relative path.
@@ -1061,8 +1059,7 @@ pub fn write_sketch(
         std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
     }
 
-    let json =
-        serde_json::to_string_pretty(sketch).map_err(|e| ProjectError::Serialize(e.to_string()))?;
+    let json = document::sketch_to_json(sketch)?;
     std::fs::write(path, json).map_err(|e| ProjectError::Io(e.to_string()))?;
 
     Ok(())
@@ -1085,8 +1082,8 @@ fn ensure_sketch_has_no_locked_content(sketch: &Sketch) -> Result<(), ProjectErr
 
 #[cfg(test)]
 pub fn validate_rows_update_allowed(
-    existing: &[crate::models::sketch::PlanningRow],
-    updated: &[crate::models::sketch::PlanningRow],
+    existing: &[cutready_core::models::sketch::PlanningRow],
+    updated: &[cutready_core::models::sketch::PlanningRow],
 ) -> Result<(), ProjectError> {
     sketch_edits::check_rows_update(existing, updated).map_err(ProjectError::from)
 }
@@ -1114,28 +1111,16 @@ fn read_sketch_inner(path: &Path, project_root: Option<&Path>) -> Result<Sketch,
         return Err(ProjectError::NotFound(path.to_string_lossy().into_owned()));
     }
     let data = std::fs::read_to_string(path).map_err(|e| ProjectError::Io(e.to_string()))?;
-    let mut sketch: Sketch =
-        serde_json::from_str(&data).map_err(|e| ProjectError::Deserialize(e.to_string()))?;
+    let mut sketch = document::sketch_from_json(&data)?;
 
     // Migrate inline visuals to external files when project root is available
     if let Some(root) = project_root {
-        let mut migrated = false;
-        for row in &mut sketch.rows {
-            if let Some(ref visual) = row.visual {
-                if visual.is_object() {
-                    match write_visual(root, visual) {
-                        Ok(rel_path) => {
-                            row.visual = Some(serde_json::Value::String(rel_path));
-                            migrated = true;
-                        }
-                        Err(e) => {
-                            eprintln!("[read_sketch] Failed to migrate inline visual: {e}");
-                        }
-                    }
-                }
-            }
+        let migration =
+            document::externalize_inline_visuals(&mut sketch, |file| write_visual_file(root, file));
+        for e in &migration.failures {
+            eprintln!("[read_sketch] Failed to migrate inline visual: {e}");
         }
-        if migrated {
+        if migration.changed {
             // Rewrite .sk file with path references instead of inline blobs
             if let Err(e) = write_sketch(&sketch, path, root) {
                 eprintln!("[read_sketch] Failed to rewrite migrated sketch: {e}");
@@ -1994,8 +1979,7 @@ pub fn write_storyboard(
         std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
     }
 
-    let json =
-        serde_json::to_string_pretty(sb).map_err(|e| ProjectError::Serialize(e.to_string()))?;
+    let json = document::storyboard_to_json(sb)?;
     std::fs::write(path, json).map_err(|e| ProjectError::Io(e.to_string()))?;
 
     Ok(())
@@ -2016,8 +2000,7 @@ pub fn read_storyboard(path: &Path) -> Result<Storyboard, ProjectError> {
         return Err(ProjectError::NotFound(path.to_string_lossy().into_owned()));
     }
     let data = std::fs::read_to_string(path).map_err(|e| ProjectError::Io(e.to_string()))?;
-    let (storyboard, upgraded) = Storyboard::from_json_upgraded(&data)
-        .map_err(|e| ProjectError::Deserialize(e.to_string()))?;
+    let (storyboard, upgraded) = document::storyboard_from_json(&data)?;
     if upgraded {
         save_upgraded_storyboard(&storyboard, path);
     }
@@ -2027,7 +2010,7 @@ pub fn read_storyboard(path: &Path) -> Result<Storyboard, ProjectError> {
 /// Persist a storyboard whose older on-disk shape was just upgraded on read.
 /// Best effort: a failed write leaves the old file, which upgrades again next read.
 fn save_upgraded_storyboard(storyboard: &Storyboard, path: &Path) {
-    match serde_json::to_string_pretty(storyboard) {
+    match document::storyboard_to_json(storyboard) {
         Ok(json) => {
             if let Err(err) = std::fs::write(path, json) {
                 log::warn!(
@@ -3274,6 +3257,16 @@ pub enum ProjectError {
     Draftline(String),
 }
 
+impl From<document::DocumentError> for ProjectError {
+    fn from(err: document::DocumentError) -> Self {
+        match err {
+            document::DocumentError::Port(e) => ProjectError::Io(e.to_string()),
+            document::DocumentError::Parse(e) => ProjectError::Deserialize(e),
+            document::DocumentError::Serialize(e) => ProjectError::Serialize(e),
+        }
+    }
+}
+
 impl From<sketch_edits::SketchEditError> for ProjectError {
     fn from(err: sketch_edits::SketchEditError) -> Self {
         ProjectError::Locked(err.to_string())
@@ -3629,7 +3622,7 @@ mod tests {
     fn write_and_read_sketch() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        let sketch = Sketch::new("My Sketch");
+        let sketch = Sketch::new("My Sketch", chrono::Utc::now());
         let path = root.join("intro.sk");
 
         write_sketch(&sketch, &path, root).unwrap();
@@ -3643,7 +3636,7 @@ mod tests {
     fn write_sketch_creates_subdirs() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        let sketch = Sketch::new("Nested");
+        let sketch = Sketch::new("Nested", chrono::Utc::now());
         let path = root.join("flows").join("login.sk");
 
         write_sketch(&sketch, &path, root).unwrap();
@@ -3850,7 +3843,7 @@ mod tests {
     fn delete_sketch_removes_file() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        let sketch = Sketch::new("Delete Me");
+        let sketch = Sketch::new("Delete Me", chrono::Utc::now());
         let path = root.join("temp.sk");
 
         write_sketch(&sketch, &path, root).unwrap();
@@ -3864,7 +3857,7 @@ mod tests {
     fn delete_sketch_removes_storyboard_references() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        let sketch = Sketch::new("Delete Me");
+        let sketch = Sketch::new("Delete Me", chrono::Utc::now());
         let sketch_path = root.join("delete-me.sk");
         write_sketch(&sketch, &sketch_path, root).unwrap();
 
@@ -3874,15 +3867,15 @@ mod tests {
             title: "Demo".into(),
             description: String::new(),
             locked: false,
-            metadata: crate::models::sketch::DocumentMetadata::default(),
+            metadata: cutready_core::models::sketch::DocumentMetadata::default(),
             items: vec![
-                crate::models::sketch::StoryboardItem::SketchRef {
+                cutready_core::models::sketch::StoryboardItem::SketchRef {
                     path: "intro.sk".into(),
                 },
-                crate::models::sketch::StoryboardItem::SketchRef {
+                cutready_core::models::sketch::StoryboardItem::SketchRef {
                     path: "delete-me.sk".into(),
                 },
-                crate::models::sketch::StoryboardItem::Section {
+                cutready_core::models::sketch::StoryboardItem::Section {
                     title: "Build".into(),
                     description: String::new(),
                     sketches: vec!["delete-me.sk".into(), "keep-me.sk".into()],
@@ -3908,15 +3901,15 @@ mod tests {
     fn delete_sketch_rejects_locked_referencing_storyboard() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        let sketch = Sketch::new("Delete Me");
+        let sketch = Sketch::new("Delete Me", chrono::Utc::now());
         let sketch_path = root.join("delete-me.sk");
         write_sketch(&sketch, &sketch_path, root).unwrap();
 
-        let mut storyboard = Storyboard::new("Locked Board");
+        let mut storyboard = Storyboard::new("Locked Board", chrono::Utc::now());
         storyboard.locked = true;
         storyboard
             .items
-            .push(crate::models::sketch::StoryboardItem::SketchRef {
+            .push(cutready_core::models::sketch::StoryboardItem::SketchRef {
                 path: "delete-me.sk".into(),
             });
         let storyboard_path = root.join("locked.sb");
@@ -3935,7 +3928,7 @@ mod tests {
     fn delete_sketch_rejects_locked_sketch() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        let mut sketch = Sketch::new("Keep Me");
+        let mut sketch = Sketch::new("Keep Me", chrono::Utc::now());
         sketch.locked = true;
         let path = root.join("locked.sk");
 
@@ -3950,8 +3943,8 @@ mod tests {
     fn delete_sketch_rejects_locked_row_or_cell() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        let mut sketch = Sketch::new("Keep Row");
-        let mut row = crate::models::sketch::PlanningRow::new();
+        let mut sketch = Sketch::new("Keep Row", chrono::Utc::now());
+        let mut row = cutready_core::models::sketch::PlanningRow::new();
         row.locks.narrative = true;
         sketch.rows.push(row);
         let path = root.join("locked-row.sk");
@@ -3967,7 +3960,7 @@ mod tests {
     fn rename_sketch_moves_file() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        let sketch = Sketch::new("Rename Me");
+        let sketch = Sketch::new("Rename Me", chrono::Utc::now());
         let old_path = root.join("old.sk");
         let new_path = root.join("new.sk");
 
@@ -3984,7 +3977,7 @@ mod tests {
     fn rename_sketch_rejects_locked_sketch() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        let mut sketch = Sketch::new("Keep Name");
+        let mut sketch = Sketch::new("Keep Name", chrono::Utc::now());
         sketch.locked = true;
         let old_path = root.join("locked.sk");
         let new_path = root.join("renamed.sk");
@@ -4001,17 +3994,22 @@ mod tests {
     fn rename_project_asset_updates_storyboard_sketch_references() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        write_sketch(&Sketch::new("Old"), &root.join("old.sk"), root).unwrap();
+        write_sketch(
+            &Sketch::new("Old", chrono::Utc::now()),
+            &root.join("old.sk"),
+            root,
+        )
+        .unwrap();
 
-        let mut storyboard = Storyboard::new("Demo");
+        let mut storyboard = Storyboard::new("Demo", chrono::Utc::now());
         storyboard
             .items
-            .push(crate::models::sketch::StoryboardItem::SketchRef {
+            .push(cutready_core::models::sketch::StoryboardItem::SketchRef {
                 path: "old.sk".into(),
             });
         storyboard
             .items
-            .push(crate::models::sketch::StoryboardItem::Section {
+            .push(cutready_core::models::sketch::StoryboardItem::Section {
                 title: "Part".into(),
                 description: String::new(),
                 sketches: vec!["old.sk".into(), "keep.sk".into()],
@@ -4035,13 +4033,18 @@ mod tests {
     fn rename_project_asset_rejects_locked_referencing_storyboard() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        write_sketch(&Sketch::new("Old"), &root.join("old.sk"), root).unwrap();
+        write_sketch(
+            &Sketch::new("Old", chrono::Utc::now()),
+            &root.join("old.sk"),
+            root,
+        )
+        .unwrap();
 
-        let mut storyboard = Storyboard::new("Locked");
+        let mut storyboard = Storyboard::new("Locked", chrono::Utc::now());
         storyboard.locked = true;
         storyboard
             .items
-            .push(crate::models::sketch::StoryboardItem::SketchRef {
+            .push(cutready_core::models::sketch::StoryboardItem::SketchRef {
                 path: "old.sk".into(),
             });
         write_storyboard(&storyboard, &root.join("locked.sb"), root).unwrap();
@@ -4097,8 +4100,8 @@ mod tests {
         std::fs::create_dir_all(root.join(".cutready/screenshots")).unwrap();
         std::fs::write(root.join(".cutready/screenshots/old.png"), b"png").unwrap();
 
-        let mut sketch = Sketch::new("Shot");
-        let mut row = crate::models::sketch::PlanningRow::new();
+        let mut sketch = Sketch::new("Shot", chrono::Utc::now());
+        let mut row = cutready_core::models::sketch::PlanningRow::new();
         row.screenshot = Some(".cutready/screenshots/old.png".into());
         sketch.rows.push(row);
         write_sketch(&sketch, &root.join("shot.sk"), root).unwrap();
@@ -4135,8 +4138,8 @@ mod tests {
         std::fs::create_dir_all(root.join(".cutready/screenshots")).unwrap();
         std::fs::write(root.join(".cutready/screenshots/old.png"), b"png").unwrap();
 
-        let mut sketch = Sketch::new("Shot");
-        let mut row = crate::models::sketch::PlanningRow::new();
+        let mut sketch = Sketch::new("Shot", chrono::Utc::now());
+        let mut row = cutready_core::models::sketch::PlanningRow::new();
         row.screenshot = Some(".cutready/screenshots/old.png".into());
         row.locks.screenshot = true;
         sketch.rows.push(row);
@@ -4161,8 +4164,8 @@ mod tests {
         std::fs::create_dir_all(root.join(".cutready/visuals")).unwrap();
         std::fs::write(root.join(".cutready/visuals/old.json"), b"{}").unwrap();
 
-        let mut sketch = Sketch::new("Visual");
-        let mut row = crate::models::sketch::PlanningRow::new();
+        let mut sketch = Sketch::new("Visual", chrono::Utc::now());
+        let mut row = cutready_core::models::sketch::PlanningRow::new();
         row.visual = Some(serde_json::Value::String(
             ".cutready/visuals/old.json".into(),
         ));
@@ -4238,7 +4241,7 @@ mod tests {
 
     #[test]
     fn row_update_rejects_locked_cell_change() {
-        let mut old = crate::models::sketch::PlanningRow::new();
+        let mut old = cutready_core::models::sketch::PlanningRow::new();
         old.narrative = "Keep this".into();
         old.locks.narrative = true;
 
@@ -4254,9 +4257,24 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
 
-        write_sketch(&Sketch::new("A"), &root.join("a.sk"), root).unwrap();
-        write_sketch(&Sketch::new("B"), &root.join("b.sk"), root).unwrap();
-        write_sketch(&Sketch::new("C"), &root.join("sub").join("c.sk"), root).unwrap();
+        write_sketch(
+            &Sketch::new("A", chrono::Utc::now()),
+            &root.join("a.sk"),
+            root,
+        )
+        .unwrap();
+        write_sketch(
+            &Sketch::new("B", chrono::Utc::now()),
+            &root.join("b.sk"),
+            root,
+        )
+        .unwrap();
+        write_sketch(
+            &Sketch::new("C", chrono::Utc::now()),
+            &root.join("sub").join("c.sk"),
+            root,
+        )
+        .unwrap();
 
         let summaries = scan_sketches(root).unwrap();
         assert_eq!(summaries.len(), 3);
@@ -4272,7 +4290,12 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
 
-        write_sketch(&Sketch::new("Visible"), &root.join("visible.sk"), root).unwrap();
+        write_sketch(
+            &Sketch::new("Visible", chrono::Utc::now()),
+            &root.join("visible.sk"),
+            root,
+        )
+        .unwrap();
         // Put a sketch in .git — should be skipped
         let hidden = root.join(".git").join("hidden.sk");
         std::fs::create_dir_all(hidden.parent().unwrap()).unwrap();
@@ -4294,7 +4317,7 @@ mod tests {
     fn write_and_read_storyboard() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
-        let sb = Storyboard::new("Full Demo");
+        let sb = Storyboard::new("Full Demo", chrono::Utc::now());
         let path = root.join("demo.sb");
 
         write_storyboard(&sb, &path, root).unwrap();
@@ -4348,8 +4371,18 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
 
-        write_storyboard(&Storyboard::new("A"), &root.join("a.sb"), root).unwrap();
-        write_storyboard(&Storyboard::new("B"), &root.join("b.sb"), root).unwrap();
+        write_storyboard(
+            &Storyboard::new("A", chrono::Utc::now()),
+            &root.join("a.sb"),
+            root,
+        )
+        .unwrap();
+        write_storyboard(
+            &Storyboard::new("B", chrono::Utc::now()),
+            &root.join("b.sb"),
+            root,
+        )
+        .unwrap();
 
         let summaries = scan_storyboards(root).unwrap();
         assert_eq!(summaries.len(), 2);
@@ -4361,7 +4394,12 @@ mod tests {
         let root = tmp.path();
 
         assert!(!sketch_file_exists("intro.sk", root));
-        write_sketch(&Sketch::new("Intro"), &root.join("intro.sk"), root).unwrap();
+        write_sketch(
+            &Sketch::new("Intro", chrono::Utc::now()),
+            &root.join("intro.sk"),
+            root,
+        )
+        .unwrap();
         assert!(sketch_file_exists("intro.sk", root));
     }
 

@@ -1,10 +1,14 @@
 // Binds the SketchDocument and StoryboardDocument @vector operations
-// (contracts/edits.tsp, contracts/storyboard.tsp) to the desktop's production
-// document code: serde for decode/save and engine::sketch_edits for edits. Included by the generated conformance suite
-// via #[path].
+// (contracts/edits.tsp, contracts/storyboard.tsp) to cutready-core's production
+// document code: `document` for decode/save and `sketch_edits` for edits.
+// Included by the generated conformance suite via #[path].
 #![allow(dead_code, unused_variables, clippy::all)]
 
-use cutready_lib::document::{self, RowTextUpdate, Sketch, SketchEditError, Storyboard};
+// The library copy of the contract types, as cutready-core links them.
+use cutready_core::contracts::{CmdError as CoreCmdError, SaveContext as CoreSaveContext};
+use cutready_core::document;
+use cutready_core::models::sketch::Sketch;
+use cutready_core::sketch_edits::{self, RowTextUpdate, SketchEditError};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::future::Future;
@@ -37,8 +41,8 @@ impl VectorError {
 
 impl From<SketchEditError> for VectorError {
     fn from(err: SketchEditError) -> Self {
-        let cmd = document::CmdError::from(&err);
-        let mut payload = cmd.to_value(&document::SaveContext::default());
+        let cmd = CoreCmdError::from(&err);
+        let mut payload = cmd.to_value(&CoreSaveContext::default());
         // Vectors pin `code` and `details`; `message` is each runtime's own wording.
         if let Some(fields) = payload.as_object_mut() {
             fields.remove("message");
@@ -72,14 +76,15 @@ impl Adapter {
 }
 
 fn decode(input: &Value) -> Result<Sketch, VectorError> {
-    serde_json::from_value(input.get("sketch").cloned().unwrap_or(Value::Null))
+    let raw = input.get("sketch").cloned().unwrap_or(Value::Null);
+    document::sketch_from_json(&raw.to_string())
         .map_err(|e| VectorError::harness(format!("decode sketch: {e}")))
 }
 
-// Same serializer as project::write_sketch. Re-parse the text (not
-// serde_json::to_value) so f32 fields compare in their shortest decimal form.
+// The canonical sketch bytes. Re-parse the text (not serde_json::to_value) so
+// f32 fields compare in their shortest decimal form.
 fn save(sketch: &Sketch) -> Result<Value, VectorError> {
-    let text = serde_json::to_string_pretty(sketch)
+    let text = document::sketch_to_json(sketch)
         .map_err(|e| VectorError::harness(format!("save sketch: {e}")))?;
     serde_json::from_str(&text).map_err(|e| VectorError::harness(format!("reparse sketch: {e}")))
 }
@@ -116,7 +121,7 @@ fn update_row_text(input: &Value, _ctx: &Context) -> Result<Value, VectorError> 
         narrative: text(&update, "narrative"),
         demo_actions: text(&update, "demo_actions"),
     };
-    document::update_row_text(&mut sketch, &update, now(input)?)?;
+    sketch_edits::update_row_text(&mut sketch, &update, now(input)?)?;
     save(&sketch)
 }
 
@@ -130,34 +135,34 @@ fn reorder_rows(input: &Value, _ctx: &Context) -> Result<Value, VectorError> {
         .map(|v| index(Some(v)))
         .collect::<Option<Vec<_>>>()
         .ok_or_else(|| VectorError::harness("order must hold row indices"))?;
-    document::reorder_rows(&mut sketch, &order, now(input)?)?;
+    sketch_edits::reorder_rows(&mut sketch, &order, now(input)?)?;
     save(&sketch)
 }
 
-// Same serializer as project::write_storyboard.
+// Decode and save canonically, without the legacy upgrade.
 fn storyboard_round_trip(input: &Value, _ctx: &Context) -> Result<Value, VectorError> {
-    let storyboard: Storyboard =
+    let storyboard: cutready_core::models::sketch::Storyboard =
         serde_json::from_value(input.get("storyboard").cloned().unwrap_or(Value::Null))
             .map_err(|e| VectorError::harness(format!("decode storyboard: {e}")))?;
-    let text = serde_json::to_string_pretty(&storyboard)
+    let text = document::storyboard_to_json(&storyboard)
         .map_err(|e| VectorError::harness(format!("save storyboard: {e}")))?;
     serde_json::from_str(&text)
         .map_err(|e| VectorError::harness(format!("reparse storyboard: {e}")))
 }
 
-// Same path as project::read_storyboard: upgrade raw JSON, decode, save canonically.
+// Same path as document::load_storyboard: upgrade raw JSON, decode, save canonically.
 fn storyboard_upgrade(input: &Value, _ctx: &Context) -> Result<Value, VectorError> {
     let raw = input.get("storyboard").cloned().unwrap_or(Value::Null);
-    let (storyboard, _) = Storyboard::from_json_upgraded(&raw.to_string())
+    let (storyboard, _) = document::storyboard_from_json(&raw.to_string())
         .map_err(|e| VectorError::harness(format!("upgrade storyboard: {e}")))?;
-    let text = serde_json::to_string_pretty(&storyboard)
+    let text = document::storyboard_to_json(&storyboard)
         .map_err(|e| VectorError::harness(format!("save storyboard: {e}")))?;
     serde_json::from_str(&text)
         .map_err(|e| VectorError::harness(format!("reparse storyboard: {e}")))
 }
 fn parse_duration_seconds(input: &Value, _ctx: &Context) -> Result<Value, VectorError> {
     let time = text(input, "time").ok_or_else(|| VectorError::harness("time is required"))?;
-    Ok(document::parse_duration_seconds(&time).map_or(Value::Null, |seconds| json!(seconds)))
+    Ok(sketch_edits::parse_duration_seconds(&time).map_or(Value::Null, |seconds| json!(seconds)))
 }
 
 fn compact_string(value: Option<&Value>) -> Option<String> {
@@ -450,10 +455,7 @@ fn push_assistant(
     }
     let mut turn = Map::new();
     turn.insert("role".to_string(), Value::String("assistant".to_string()));
-    turn.insert(
-        "text".to_string(),
-        Value::String(text.unwrap_or_default()),
-    );
+    turn.insert("text".to_string(), Value::String(text.unwrap_or_default()));
     if !tools.is_empty() {
         turn.insert("tool_uses".to_string(), Value::Array(tools));
     }
@@ -562,10 +564,7 @@ pub fn waivers() -> HashMap<&'static str, &'static str> {
 
 pub fn adapters() -> HashMap<&'static str, Adapter> {
     HashMap::from([
-        (
-            "ChatArtifactDocument.promote",
-            Adapter::sync(chat_promote),
-        ),
+        ("ChatArtifactDocument.promote", Adapter::sync(chat_promote)),
         (
             "ChatArtifactDocument.roundTrip",
             Adapter::sync(chat_round_trip),

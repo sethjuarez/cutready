@@ -82,6 +82,13 @@ impl Files for MemoryFiles {
 }
 
 /// A clock that returns a fixed instant until moved.
+/// A fixed instant for tests that need a timestamp but don't care which.
+pub fn test_now() -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339("2026-01-02T03:04:05Z")
+        .expect("valid timestamp")
+        .with_timezone(&Utc)
+}
+
 pub struct FixedClock(Mutex<DateTime<Utc>>);
 
 impl FixedClock {

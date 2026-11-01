@@ -205,7 +205,7 @@ pub async fn import_sketch(
     let source_path = Path::new(&file_path);
     let data = fs::read_to_string(source_path).map_err(|e| format!("Failed to read file: {e}"))?;
 
-    let mut sketch: crate::models::sketch::Sketch =
+    let mut sketch: cutready_core::models::sketch::Sketch =
         serde_json::from_str(&data).map_err(|e| format!("Invalid sketch file: {e}"))?;
 
     let filename = source_path
@@ -247,7 +247,7 @@ pub async fn import_storyboard(
     let source_path = Path::new(&file_path);
     let data = fs::read_to_string(source_path).map_err(|e| format!("Failed to read file: {e}"))?;
 
-    let (storyboard, _) = crate::models::sketch::Storyboard::from_json_upgraded(&data)
+    let (storyboard, _) = cutready_core::models::sketch::Storyboard::from_json_upgraded(&data)
         .map_err(|e| format!("Invalid storyboard file: {e}"))?;
 
     let filename = source_path
@@ -309,7 +309,7 @@ fn copy_asset(source_root: &Path, dest_root: &Path, relative_path: &str, overwri
 
 /// Copy all screenshots and visuals referenced by a sketch's planning rows.
 fn copy_sketch_assets(
-    sketch: &mut crate::models::sketch::Sketch,
+    sketch: &mut cutready_core::models::sketch::Sketch,
     source_root: &Path,
     dest_root: &Path,
     overwrite: bool,

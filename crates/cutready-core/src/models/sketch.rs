@@ -371,8 +371,7 @@ pub struct Sketch {
 }
 
 impl Sketch {
-    pub fn new(title: impl Into<String>) -> Self {
-        let now = Utc::now();
+    pub fn new(title: impl Into<String>, now: DateTime<Utc>) -> Self {
         Self {
             title: title.into(),
             locked: false,
@@ -444,8 +443,7 @@ pub struct Storyboard {
 }
 
 impl Storyboard {
-    pub fn new(title: impl Into<String>) -> Self {
-        let now = Utc::now();
+    pub fn new(title: impl Into<String>, now: DateTime<Utc>) -> Self {
         Self {
             title: title.into(),
             description: String::new(),
@@ -540,7 +538,7 @@ pub fn upgrade_storyboard_json(value: &mut serde_json::Value) -> bool {
     let before = doc.clone();
 
     let legacy = doc.remove("sketches");
-    if doc.get("items").map_or(true, Value::is_null) {
+    if doc.get("items").is_none_or(Value::is_null) {
         let items = legacy
             .as_ref()
             .and_then(Value::as_array)
@@ -566,7 +564,7 @@ pub fn upgrade_storyboard_json(value: &mut serde_json::Value) -> bool {
                     {
                         item.remove("description");
                     }
-                    if item.get("sketches").map_or(true, Value::is_null) {
+                    if item.get("sketches").is_none_or(Value::is_null) {
                         item.insert("sketches".into(), json!([]));
                     }
                 }
@@ -574,10 +572,10 @@ pub fn upgrade_storyboard_json(value: &mut serde_json::Value) -> bool {
             }
         }
     }
-    if doc.get("description").map_or(true, Value::is_null) {
+    if doc.get("description").is_none_or(Value::is_null) {
         doc.insert("description".into(), json!(""));
     }
-    if doc.get("locked").map_or(true, Value::is_null) {
+    if doc.get("locked").is_none_or(Value::is_null) {
         doc.insert("locked".into(), json!(false));
     }
     if doc.get("metadata").is_some_and(Value::is_null) {
@@ -716,10 +714,11 @@ pub struct NoteSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::test_now;
 
     #[test]
     fn sketch_new_defaults() {
-        let sketch = Sketch::new("Getting Started Guide");
+        let sketch = Sketch::new("Getting Started Guide", test_now());
         assert_eq!(sketch.title, "Getting Started Guide");
         assert_eq!(sketch.description, serde_json::Value::Null);
         assert!(sketch.rows.is_empty());
@@ -728,7 +727,7 @@ mod tests {
 
     #[test]
     fn sketch_lock_cascades_to_rows_and_cells() {
-        let mut sketch = Sketch::new("Demo");
+        let mut sketch = Sketch::new("Demo", test_now());
         sketch.rows.push(PlanningRow::new());
 
         sketch.set_locked_recursive(true);
@@ -751,7 +750,7 @@ mod tests {
 
     #[test]
     fn sketch_roundtrip() {
-        let mut sketch = Sketch::new("Test Sketch");
+        let mut sketch = Sketch::new("Test Sketch", test_now());
         sketch.rows.push(PlanningRow {
             locked: false,
             locks: PlanningCellLocks::default(),
@@ -986,7 +985,7 @@ mod tests {
                 emphasis: Some("moderate".into()),
                 pause_after_ms: Some(250),
             }],
-            generated_at: Utc::now(),
+            generated_at: test_now(),
         });
 
         let serialized = serde_json::to_value(&row).unwrap();
@@ -1093,7 +1092,7 @@ mod tests {
 
     #[test]
     fn sketch_summary_from_sketch() {
-        let mut sketch = Sketch::new("Summary Test");
+        let mut sketch = Sketch::new("Summary Test", test_now());
         sketch.rows.push(PlanningRow::new());
         sketch.rows.push(PlanningRow::new());
         let summary = SketchSummary::from_sketch(&sketch, "test.sk");
@@ -1105,7 +1104,7 @@ mod tests {
 
     #[test]
     fn sketch_summary_roundtrip() {
-        let sketch = Sketch::new("Roundtrip");
+        let sketch = Sketch::new("Roundtrip", test_now());
         let summary = SketchSummary::from_sketch(&sketch, "roundtrip.sk");
         let json = serde_json::to_string(&summary).unwrap();
         let parsed: SketchSummary = serde_json::from_str(&json).unwrap();
@@ -1115,7 +1114,7 @@ mod tests {
 
     #[test]
     fn storyboard_new_defaults() {
-        let sb = Storyboard::new("Product Demo");
+        let sb = Storyboard::new("Product Demo", test_now());
         assert_eq!(sb.title, "Product Demo");
         assert!(sb.description.is_empty());
         assert!(!sb.locked);
@@ -1139,8 +1138,8 @@ mod tests {
                     sketches: vec!["setup.sk".into(), "first-run.sk".into()],
                 },
             ],
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: test_now(),
+            updated_at: test_now(),
             unknown_fields: Default::default(),
         };
 
@@ -1188,7 +1187,7 @@ mod tests {
 
     #[test]
     fn storyboard_summary_from_storyboard() {
-        let mut sb = Storyboard::new("Test");
+        let mut sb = Storyboard::new("Test", test_now());
         sb.items.push(StoryboardItem::SketchRef {
             path: "a.sk".into(),
         });
@@ -1207,7 +1206,7 @@ mod tests {
 
     #[test]
     fn storyboard_summary_roundtrip() {
-        let sb = Storyboard::new("Roundtrip");
+        let sb = Storyboard::new("Roundtrip", test_now());
         let summary = StoryboardSummary::from_storyboard(&sb, "roundtrip.sb");
         let json = serde_json::to_string(&summary).unwrap();
         let parsed: StoryboardSummary = serde_json::from_str(&json).unwrap();
@@ -1260,7 +1259,7 @@ mod tests {
 
     #[test]
     fn storyboard_removes_sketch_references_from_items_and_sections() {
-        let now = Utc::now();
+        let now = test_now();
         let mut storyboard = Storyboard {
             title: "Demo".into(),
             description: String::new(),
@@ -1300,7 +1299,7 @@ mod tests {
         let entry = VersionEntry {
             id: "abc123".into(),
             message: "Add introduction section".into(),
-            timestamp: Utc::now(),
+            timestamp: test_now(),
             summary: "1 section added".into(),
         };
         let json = serde_json::to_string(&entry).unwrap();

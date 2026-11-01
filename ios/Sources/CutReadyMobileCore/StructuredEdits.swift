@@ -51,8 +51,7 @@ public enum StoryboardStructuredEdit: Equatable, Sendable {
     case reorderSketchReferences([String])
 }
 
-/// Structured edits and their lock policy. Mirrors the desktop's
-/// `engine::sketch_edits`; both are pinned by the `SketchDocument` contract
+/// Structured edits and their lock policy. Mirrors `cutready_core::sketch_edits`; both are pinned by the `SketchDocument` contract
 /// vectors in contracts/.
 public enum MobileEdits {
     public static func apply(_ edit: SketchStructuredEdit, to sketch: inout Sketch, now: Date = Date()) throws {

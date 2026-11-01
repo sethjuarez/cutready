@@ -8,8 +8,11 @@
 
 #![deny(clippy::disallowed_methods, clippy::disallowed_types)]
 
+pub mod document;
+pub mod models;
 pub mod path;
 pub mod ports;
+pub mod sketch_edits;
 pub mod testing;
 
 pub use cutready_contracts as contracts;

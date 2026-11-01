@@ -7,8 +7,8 @@ use tauri_plugin_auditaur::auditaur_command;
 
 use crate::engine::project;
 use crate::models::script::ProjectView;
-use crate::models::sketch::NoteSummary;
 use crate::AppState;
+use cutready_core::models::sketch::NoteSummary;
 
 /// Helper: get the project root from current state.
 fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
