@@ -6,6 +6,7 @@
 //! applies the same rules as the iOS companion.
 
 use chrono::{DateTime, Utc};
+use cutready_contracts::{CmdError, CmdErrorCode, CmdErrorDetails, PlanningCellField};
 
 use crate::models::sketch::{PlanningRow, Sketch};
 
@@ -35,17 +36,46 @@ pub enum SketchEditError {
 }
 
 impl SketchEditError {
-    /// Stable code shared with the iOS companion (`SketchEditErrorCode`).
-    pub fn code(&self) -> &'static str {
+    /// Stable code shared with the iOS companion (`CmdErrorCode`).
+    pub fn code(&self) -> CmdErrorCode {
         match self {
-            Self::LockedDocument => "locked_document",
-            Self::LockedRowCount => "locked_row_count",
-            Self::LockedRow { .. } => "locked_row",
-            Self::LockedCell { .. } => "locked_cell",
-            Self::RowNotFound { .. } => "row_not_found",
-            Self::InvalidReorder => "invalid_reorder",
+            Self::LockedDocument => CmdErrorCode::LockedDocument,
+            Self::LockedRowCount => CmdErrorCode::LockedRowCount,
+            Self::LockedRow { .. } => CmdErrorCode::LockedRow,
+            Self::LockedCell { .. } => CmdErrorCode::LockedCell,
+            Self::RowNotFound { .. } => CmdErrorCode::RowNotFound,
+            Self::InvalidReorder => CmdErrorCode::InvalidReorder,
         }
     }
+}
+
+/// The contract's `CmdError` envelope (`contracts/errors.tsp`) for an edit
+/// rejection: the stable code, the human message, and typed details.
+impl From<&SketchEditError> for CmdError {
+    fn from(err: &SketchEditError) -> Self {
+        let details = match err {
+            SketchEditError::LockedRow { row_index }
+            | SketchEditError::RowNotFound { row_index } => Some(CmdErrorDetails {
+                row_index: Some(contract_index(*row_index)),
+                ..Default::default()
+            }),
+            SketchEditError::LockedCell { row_index, field } => Some(CmdErrorDetails {
+                row_index: Some(contract_index(*row_index)),
+                field: PlanningCellField::from_str_opt(field),
+                ..Default::default()
+            }),
+            _ => None,
+        };
+        CmdError {
+            code: err.code(),
+            message: err.to_string(),
+            details,
+        }
+    }
+}
+
+fn contract_index(row_index: usize) -> u32 {
+    u32::try_from(row_index).unwrap_or(u32::MAX)
 }
 
 /// Text cells to replace on one row. `None` leaves a cell untouched.
@@ -329,6 +359,44 @@ fn field_matches(old: &PlanningRow, new: &PlanningRow, field: &str) -> bool {
 mod tests {
     use super::*;
 
+    #[test]
+    fn edit_errors_map_to_the_contract_envelope() {
+        let err = SketchEditError::LockedCell {
+            row_index: 1,
+            field: "demo_actions",
+        };
+        let cmd = CmdError::from(&err);
+        assert_eq!(cmd.code, CmdErrorCode::LockedCell);
+        assert_eq!(cmd.message, err.to_string());
+        assert_eq!(
+            cmd.details,
+            Some(CmdErrorDetails {
+                row_index: Some(1),
+                field: Some(PlanningCellField::DemoActions),
+                ..Default::default()
+            })
+        );
+
+        let cmd = CmdError::from(&SketchEditError::LockedRowCount);
+        assert_eq!(cmd.code.as_str(), "locked_row_count");
+        assert_eq!(cmd.details, None);
+    }
+
+    #[test]
+    fn newer_error_codes_and_details_survive_a_round_trip() {
+        use cutready_contracts::{LoadContext, SaveContext};
+
+        let wire = serde_json::json!({
+            "code": "stale_document",
+            "message": "The sketch changed on disk.",
+            "details": { "row_index": 2, "field": "narrative", "expected_hash": "abc" }
+        });
+        let cmd = CmdError::load_from_value(&wire, &LoadContext::default());
+        assert_eq!(cmd.code, CmdErrorCode::Other("stale_document".into()));
+        assert_eq!(cmd.details.as_ref().unwrap().row_index, Some(2));
+        assert_eq!(cmd.to_value(&SaveContext::default()), wire);
+    }
+
     fn sketch_with(rows: Vec<PlanningRow>) -> Sketch {
         let mut sketch = Sketch::new("Edits");
         sketch.rows = rows;
@@ -375,7 +443,7 @@ mod tests {
         )
         .unwrap_err();
 
-        assert_eq!(err.code(), "locked_cell");
+        assert_eq!(err.code(), CmdErrorCode::LockedCell);
         assert_eq!(sketch.rows[0].narrative, "Keep");
         assert_eq!(sketch.updated_at, before);
     }

@@ -1635,8 +1635,10 @@ const UpdateRowTextVectors = """
     },
     "expectedError": {
       "code": "locked_cell",
-      "row_index": 1,
-      "field": "narrative"
+      "details": {
+        "row_index": 1,
+        "field": "narrative"
+      }
     }
   },
   {
@@ -1870,7 +1872,9 @@ const UpdateRowTextVectors = """
     },
     "expectedError": {
       "code": "locked_row",
-      "row_index": 2
+      "details": {
+        "row_index": 2
+      }
     }
   },
   {
@@ -2008,7 +2012,9 @@ const UpdateRowTextVectors = """
     },
     "expectedError": {
       "code": "row_not_found",
-      "row_index": 3
+      "details": {
+        "row_index": 3
+      }
     }
   },
   {
@@ -2116,7 +2122,9 @@ const UpdateRowTextVectors = """
     },
     "expectedError": {
       "code": "locked_row",
-      "row_index": 0
+      "details": {
+        "row_index": 0
+      }
     }
   },
   {
@@ -2171,8 +2179,10 @@ const UpdateRowTextVectors = """
     },
     "expectedError": {
       "code": "locked_cell",
-      "row_index": 1,
-      "field": "time"
+      "details": {
+        "row_index": 1,
+        "field": "time"
+      }
     }
   },
   {
@@ -2227,8 +2237,10 @@ const UpdateRowTextVectors = """
     },
     "expectedError": {
       "code": "locked_cell",
-      "row_index": 0,
-      "field": "time"
+      "details": {
+        "row_index": 0,
+        "field": "time"
+      }
     }
   },
   {
@@ -2283,7 +2295,9 @@ const UpdateRowTextVectors = """
     },
     "expectedError": {
       "code": "locked_row",
-      "row_index": 1
+      "details": {
+        "row_index": 1
+      }
     }
   }
 ]
@@ -2465,7 +2479,9 @@ const ReorderRowsVectors = """
     },
     "expectedError": {
       "code": "locked_row",
-      "row_index": 2
+      "details": {
+        "row_index": 2
+      }
     }
   },
   {
@@ -2550,8 +2566,10 @@ const ReorderRowsVectors = """
     },
     "expectedError": {
       "code": "locked_cell",
-      "row_index": 1,
-      "field": "narrative"
+      "details": {
+        "row_index": 1,
+        "field": "narrative"
+      }
     }
   },
   {
@@ -2818,8 +2836,10 @@ const ReorderRowsVectors = """
     },
     "expectedError": {
       "code": "locked_cell",
-      "row_index": 1,
-      "field": "narrative"
+      "details": {
+        "row_index": 1,
+        "field": "narrative"
+      }
     }
   },
   {
@@ -2875,8 +2895,10 @@ const ReorderRowsVectors = """
     },
     "expectedError": {
       "code": "locked_cell",
-      "row_index": 0,
-      "field": "screenshot"
+      "details": {
+        "row_index": 0,
+        "field": "screenshot"
+      }
     }
   },
   {
@@ -2932,8 +2954,10 @@ const ReorderRowsVectors = """
     },
     "expectedError": {
       "code": "locked_cell",
-      "row_index": 0,
-      "field": "visual"
+      "details": {
+        "row_index": 0,
+        "field": "visual"
+      }
     }
   },
   {
@@ -2989,7 +3013,9 @@ const ReorderRowsVectors = """
     },
     "expectedError": {
       "code": "locked_row",
-      "row_index": 0
+      "details": {
+        "row_index": 0
+      }
     }
   },
   {

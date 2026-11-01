@@ -45,11 +45,14 @@ pub use storyboard_item::*;
 pub mod storyboard;
 pub use storyboard::*;
 
+pub mod cmd_error_details;
+pub use cmd_error_details::*;
+
+pub mod cmd_error;
+pub use cmd_error::*;
+
 pub mod row_text_update;
 pub use row_text_update::*;
-
-pub mod sketch_edit_error;
-pub use sketch_edit_error::*;
 
 pub mod chat_participant;
 pub use chat_participant::*;
