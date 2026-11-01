@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
+import { useSyncStore } from "../stores/syncStore";
 import { ArrowLeftRight, ChevronDown, Check, Cloud, Plus, RefreshCw } from "lucide-react";
 import { UnsavedWorkspaceDialog } from "./UnsavedWorkspaceDialog";
 import { useConfirmDialog } from "./ConfirmDialog";
@@ -15,21 +16,21 @@ import {
  * Shows active timeline with sync badge, dropdown for all timelines.
  */
 export function TimelineSelector() {
-  const timelines = useAppStore((s) => s.timelines);
-  const switchTimeline = useAppStore((s) => s.switchTimeline);
-  const createTimeline = useAppStore((s) => s.createTimeline);
-  const graphNodes = useAppStore((s) => s.graphNodes);
-  const isDirty = useAppStore((s) => s.isDirty);
-  const discardChanges = useAppStore((s) => s.discardChanges);
-  const stashChanges = useAppStore((s) => s.stashChanges);
-  const hasStash = useAppStore((s) => s.hasStash);
-  const deleteTimeline = useAppStore((s) => s.deleteTimeline);
-  const startedBranchFromSnapshot = useAppStore((s) => s.startedBranchFromSnapshot);
-  const currentRemote = useAppStore((s) => s.currentRemote);
-  const remoteBranches = useAppStore((s) => s.remoteBranches);
-  const remoteBranchesLoading = useAppStore((s) => s.remoteBranchesLoading);
-  const loadRemoteBranches = useAppStore((s) => s.loadRemoteBranches);
-  const checkoutRemoteTimeline = useAppStore((s) => s.checkoutRemoteTimeline);
+  const timelines = useVersioningStore((s) => s.timelines);
+  const switchTimeline = useVersioningStore((s) => s.switchTimeline);
+  const createTimeline = useVersioningStore((s) => s.createTimeline);
+  const graphNodes = useVersioningStore((s) => s.graphNodes);
+  const isDirty = useVersioningStore((s) => s.isDirty);
+  const discardChanges = useVersioningStore((s) => s.discardChanges);
+  const stashChanges = useVersioningStore((s) => s.stashChanges);
+  const hasStash = useVersioningStore((s) => s.hasStash);
+  const deleteTimeline = useVersioningStore((s) => s.deleteTimeline);
+  const startedBranchFromSnapshot = useVersioningStore((s) => s.startedBranchFromSnapshot);
+  const currentRemote = useSyncStore((s) => s.currentRemote);
+  const remoteBranches = useSyncStore((s) => s.remoteBranches);
+  const remoteBranchesLoading = useSyncStore((s) => s.remoteBranchesLoading);
+  const loadRemoteBranches = useSyncStore((s) => s.loadRemoteBranches);
+  const checkoutRemoteTimeline = useSyncStore((s) => s.checkoutRemoteTimeline);
 
   const [open, setOpen] = useState(false);
   const [pendingSwitch, setPendingSwitch] = useState<string | null>(null);
@@ -355,7 +356,7 @@ export function TimelineSelector() {
         onCancel={() => setPendingSwitch(null)}
         onSaveFirst={() => {
           if (!pendingSwitch) return;
-          useAppStore.setState({ pendingTimelineAfterSave: pendingSwitch, snapshotPromptOpen: true });
+          useVersioningStore.setState({ pendingTimelineAfterSave: pendingSwitch, snapshotPromptOpen: true });
           setPendingSwitch(null);
         }}
         onShelveAndContinue={hasStash ? undefined : async () => {

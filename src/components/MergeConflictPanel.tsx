@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { ArrowLeftRight } from "lucide-react";
-import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 import type { ConflictFile, FileResolution } from "../types/sketch";
 import { SemanticConflictResolver } from "./SemanticConflictResolver";
 
@@ -13,11 +13,11 @@ import { SemanticConflictResolver } from "./SemanticConflictResolver";
  * - Other: raw ours/theirs picker
  */
 export function MergeConflictPanel() {
-  const mergeSource = useAppStore((s) => s.mergeSource);
-  const mergeTarget = useAppStore((s) => s.mergeTarget);
-  const mergeConflicts = useAppStore((s) => s.mergeConflicts);
-  const applyMergeResolution = useAppStore((s) => s.applyMergeResolution);
-  const cancelMerge = useAppStore((s) => s.cancelMerge);
+  const mergeSource = useVersioningStore((s) => s.mergeSource);
+  const mergeTarget = useVersioningStore((s) => s.mergeTarget);
+  const mergeConflicts = useVersioningStore((s) => s.mergeConflicts);
+  const applyMergeResolution = useVersioningStore((s) => s.applyMergeResolution);
+  const cancelMerge = useVersioningStore((s) => s.cancelMerge);
 
   // Track resolved content per file path
   const [resolutions, setResolutions] = useState<Record<string, string>>({});

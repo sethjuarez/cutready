@@ -23,6 +23,8 @@ import {
   type DraftlineVariationCreatePreflight,
 } from "../services/draftlineVersioning";
 import { errorMessage, useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
+import { useSyncStore } from "../stores/syncStore";
 import type { DiffEntry } from "../types/sketch";
 import type { ProjectEntry, ProjectView } from "../types/project";
 import { draftlineToRepoPath, hybridVariationName } from "../utils/draftlinePaths";
@@ -69,12 +71,12 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
   const projects = useAppStore((s) => s.projects);
   const currentProject = useAppStore((s) => s.currentProject);
   const isMultiProject = useAppStore((s) => s.isMultiProject);
-  const graphNodes = useAppStore((s) => s.graphNodes);
-  const timelines = useAppStore((s) => s.timelines);
-  const isDirty = useAppStore((s) => s.isDirty);
-  const changedFiles = useAppStore((s) => s.changedFiles);
-  const startTimelineFromSnapshot = useAppStore((s) => s.startTimelineFromSnapshot);
-  const checkoutRemoteTimeline = useAppStore((s) => s.checkoutRemoteTimeline);
+  const graphNodes = useVersioningStore((s) => s.graphNodes);
+  const timelines = useVersioningStore((s) => s.timelines);
+  const isDirty = useVersioningStore((s) => s.isDirty);
+  const changedFiles = useVersioningStore((s) => s.changedFiles);
+  const startTimelineFromSnapshot = useVersioningStore((s) => s.startTimelineFromSnapshot);
+  const checkoutRemoteTimeline = useSyncStore((s) => s.checkoutRemoteTimeline);
   const openTab = useAppStore((s) => s.openTab);
 
   const [entries, setEntries] = useState<DiffEntry[] | null>(null);

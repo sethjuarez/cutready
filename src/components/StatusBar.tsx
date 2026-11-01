@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { MessageSquare } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 
 interface StatusBarProps {
   onFeedback?: () => void;
@@ -9,7 +10,7 @@ interface StatusBarProps {
 export function StatusBar({ onFeedback }: StatusBarProps) {
   const [version, setVersion] = useState("");
   const currentProject = useAppStore((s) => s.currentProject);
-  const changedFilesCount = useAppStore((s) => s.changedFiles.length);
+  const changedFilesCount = useVersioningStore((s) => s.changedFiles.length);
 
   useEffect(() => {
     import("@tauri-apps/api/app")

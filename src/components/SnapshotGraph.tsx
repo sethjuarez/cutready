@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import type { GraphNode } from "../types/sketch";
-import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
+import { useSyncStore } from "../stores/syncStore";
 
 /* ── Layout constants ─────────────────────────────────────────────── */
 const ROW_H = 48; // px per commit row
@@ -219,8 +220,8 @@ export function SnapshotGraph({
   onNodeClick,
 }: Props) {
   const [hovered, setHovered] = useState<string | null>(null);
-  const currentRemote = useAppStore((s) => s.currentRemote);
-  const diffWorkingTree = useAppStore((s) => s.diffWorkingTree);
+  const currentRemote = useSyncStore((s) => s.currentRemote);
+  const diffWorkingTree = useVersioningStore((s) => s.diffWorkingTree);
   const expanded = variant === "expanded";
   const z = expanded ? Math.min(1.6, Math.max(0.7, zoom)) : 1;
   const rowH = expanded ? Math.round(54 * z) : ROW_H;

@@ -1,5 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
+import { useSyncStore } from "../stores/syncStore";
 import { useSettings } from "../hooks/useSettings";
 import { Check, ArrowUp, ArrowDown, AlertTriangle, GitMerge, Globe, RefreshCw, UserRound } from "lucide-react";
 import { isContributorIdentityRequired } from "../services/identity";
@@ -11,22 +13,22 @@ import { isDraftlineGuidanceMessage } from "../services/draftlineErrors";
  * Progressive disclosure: invisible to solo users.
  */
 export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) {
-  const currentRemote = useAppStore((s) => s.currentRemote);
-  const syncStatus = useAppStore((s) => s.syncStatus);
-  const incomingCommits = useAppStore((s) => s.incomingCommits);
-  const isSyncing = useAppStore((s) => s.isSyncing);
-  const syncError = useAppStore((s) => s.syncError);
-  const detectRemote = useAppStore((s) => s.detectRemote);
-  const fetchFromRemote = useAppStore((s) => s.fetchFromRemote);
-  const pushToRemote = useAppStore((s) => s.pushToRemote);
-  const pullFromRemote = useAppStore((s) => s.pullFromRemote);
-  const syncWithRemote = useAppStore((s) => s.syncWithRemote);
+  const currentRemote = useSyncStore((s) => s.currentRemote);
+  const syncStatus = useSyncStore((s) => s.syncStatus);
+  const incomingCommits = useSyncStore((s) => s.incomingCommits);
+  const isSyncing = useSyncStore((s) => s.isSyncing);
+  const syncError = useSyncStore((s) => s.syncError);
+  const detectRemote = useSyncStore((s) => s.detectRemote);
+  const fetchFromRemote = useSyncStore((s) => s.fetchFromRemote);
+  const pushToRemote = useSyncStore((s) => s.pushToRemote);
+  const pullFromRemote = useSyncStore((s) => s.pullFromRemote);
+  const syncWithRemote = useSyncStore((s) => s.syncWithRemote);
   const isHybrid = useAppStore((s) => s.currentProject?.hybrid === true);
-  const baseStatus = useAppStore((s) => s.baseStatus);
-  const getUpdatesFromBase = useAppStore((s) => s.getUpdatesFromBase);
+  const baseStatus = useSyncStore((s) => s.baseStatus);
+  const getUpdatesFromBase = useSyncStore((s) => s.getUpdatesFromBase);
   const { settings } = useSettings();
   const [showIncoming, setShowIncoming] = useState(false);
-  const timelines = useAppStore((s) => s.timelines);
+  const timelines = useVersioningStore((s) => s.timelines);
   const activeTimeline = timelines.find((t) => t.is_active);
 
   // Detect remote on mount (if the user configured one in settings or one exists in git)
@@ -333,7 +335,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
             <span className="truncate">{syncError}</span>
           )}
           <button
-            onClick={() => useAppStore.setState({ syncError: null })}
+            onClick={() => useSyncStore.setState({ syncError: null })}
             className="ml-auto shrink-0 opacity-60 hover:opacity-100"
           >✕</button>
         </div>

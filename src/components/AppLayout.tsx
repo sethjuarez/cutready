@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore, type AppView } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
 import { useContributorIdentity } from "../hooks/useContributorIdentity";
@@ -71,7 +72,7 @@ export function AppLayout() {
   const showSecondaryPanel = useAppStore((s) => s.showSecondaryPanel);
   const chatFocusMode = useAppStore((s) => s.chatFocusMode);
   const setChatFocusMode = useAppStore((s) => s.setChatFocusMode);
-  const isMerging = useAppStore((s) => s.isMerging);
+  const isMerging = useVersioningStore((s) => s.isMerging);
   const projectSwitching = useAppStore((s) => s.projectSwitching);
   const currentProject = useAppStore((s) => s.currentProject);
 
@@ -251,8 +252,8 @@ export function AppLayout() {
         keybinding: "Ctrl+S",
         icon: <Bookmark className="w-4 h-4" />,
         handler: () => {
-          const { currentProject, promptSnapshot } = useAppStore.getState();
-          if (currentProject) promptSnapshot();
+          const { currentProject } = useAppStore.getState();
+          if (currentProject) useVersioningStore.getState().promptSnapshot();
         },
       },
       {
@@ -366,9 +367,9 @@ export function AppLayout() {
       }
       if (mod && (e.key === "S" || e.key === "s")) {
         e.preventDefault();
-        const { currentProject, promptSnapshot } = useAppStore.getState();
+        const { currentProject } = useAppStore.getState();
         if (currentProject) {
-          promptSnapshot();
+          useVersioningStore.getState().promptSnapshot();
         }
       }
     };

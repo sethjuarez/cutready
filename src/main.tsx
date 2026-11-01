@@ -24,9 +24,13 @@ if (isViteDevelopment && !(window as any).__TAURI_INTERNALS__) {
 }
 
 if (isViteDevelopment) {
-  // Expose appStore for dev tooling and screenshot scripts.
+  // Expose the domain stores for dev tooling and screenshot scripts.
   const { useAppStore } = await import("./stores/appStore");
   (window as any).__appStore = useAppStore;
+  const { useVersioningStore } = await import("./stores/versioningStore");
+  (window as any).__versioningStore = useVersioningStore;
+  const { useSyncStore } = await import("./stores/syncStore");
+  (window as any).__syncStore = useSyncStore;
   const { useToastStore } = await import("./stores/toastStore");
   (window as any).__toastStore = useToastStore;
 }

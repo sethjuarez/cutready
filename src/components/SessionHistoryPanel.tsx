@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { History, MessageSquare, MoreHorizontal, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import { invoke } from "../services/tauri";
 import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 import { useToastStore } from "../stores/toastStore";
 import { getContributorIdentity } from "../services/identity";
 import { promoteChatArtifact } from "../contracts/chatPromotion";
@@ -42,7 +43,7 @@ export function SessionHistoryPanel({ onOpenChat }: { onOpenChat: () => void }) 
   const newChatSession = useAppStore((state) => state.newChatSession);
   const loadChatArtifacts = useAppStore((state) => state.loadChatArtifacts);
   const openChatArtifact = useAppStore((state) => state.openChatArtifact);
-  const refreshChangedFiles = useAppStore((state) => state.refreshChangedFiles);
+  const refreshChangedFiles = useVersioningStore((state) => state.refreshChangedFiles);
   const showToast = useToastStore((state) => state.show);
   const { confirm, confirmationDialog } = useConfirmDialog();
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);

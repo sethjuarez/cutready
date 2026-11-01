@@ -8,6 +8,7 @@ import { open, save } from "../dialogs";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, Check, Film, Image as ImageIcon, Mic2 } from "lucide-react";
 import { registerEditorFlush, shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
 import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
@@ -1093,8 +1094,8 @@ export function SketchForm() {
             useAppStore.setState({ activeSketch: sketch });
           }
         }
-        await useAppStore.getState().checkDirty();
-        await useAppStore.getState().refreshChangedFiles();
+        await useVersioningStore.getState().checkDirty();
+        await useVersioningStore.getState().refreshChangedFiles();
         return true;
       } catch (err) {
         console.error(`[SketchForm] Failed to save pending sketch edits (${reason}):`, err);
@@ -1288,7 +1289,8 @@ export function SketchForm() {
     try {
       const sketch = await invoke<Sketch>("set_sketch_lock", { relativePath: activeSketchPath, locked });
       applySketchFromLockCommand(sketch);
-      const { loadSketches, refreshChangedFiles, checkDirty } = useAppStore.getState();
+      const { loadSketches } = useAppStore.getState();
+      const { refreshChangedFiles, checkDirty } = useVersioningStore.getState();
       await loadSketches();
       await checkDirty();
       await refreshChangedFiles();
@@ -1302,7 +1304,7 @@ export function SketchForm() {
     try {
       const sketch = await invoke<Sketch>("set_planning_row_lock", { relativePath: activeSketchPath, index, locked });
       applySketchFromLockCommand(sketch);
-      const { refreshChangedFiles, checkDirty } = useAppStore.getState();
+      const { refreshChangedFiles, checkDirty } = useVersioningStore.getState();
       await checkDirty();
       await refreshChangedFiles();
     } catch (err) {
@@ -1315,7 +1317,7 @@ export function SketchForm() {
     try {
       const sketch = await invoke<Sketch>("set_planning_cell_lock", { relativePath: activeSketchPath, index, field, locked });
       applySketchFromLockCommand(sketch);
-      const { refreshChangedFiles, checkDirty } = useAppStore.getState();
+      const { refreshChangedFiles, checkDirty } = useVersioningStore.getState();
       await checkDirty();
       await refreshChangedFiles();
     } catch (err) {
@@ -1813,7 +1815,8 @@ Rules:
       return null;
     }
     setLocalRows(updatedRows);
-    const { refreshChangedFiles, checkDirty, addActivityEntries } = useAppStore.getState();
+    const { addActivityEntries } = useAppStore.getState();
+    const { refreshChangedFiles, checkDirty } = useVersioningStore.getState();
     await checkDirty();
     await refreshChangedFiles();
     addActivityEntries([{
@@ -1833,7 +1836,8 @@ Rules:
   ]);
 
   const refreshAfterNarrationGeneration = useCallback(async (message: string, level: "success" | "error" = "success") => {
-    const { loadSketches, loadNarrationAssets, refreshChangedFiles, checkDirty, addActivityEntries } = useAppStore.getState();
+    const { loadSketches, loadNarrationAssets, addActivityEntries } = useAppStore.getState();
+    const { refreshChangedFiles, checkDirty } = useVersioningStore.getState();
     await loadSketches();
     await loadNarrationAssets();
     await checkDirty();
@@ -2057,7 +2061,8 @@ Rules:
         trailingSilenceMs: take.trailingSilenceMs,
         silenceThresholdDb: take.silenceThresholdDb,
       });
-      const { loadSketches, loadNarrationAssets, refreshChangedFiles, checkDirty, addActivityEntries } = useAppStore.getState();
+      const { loadSketches, loadNarrationAssets, addActivityEntries } = useAppStore.getState();
+      const { refreshChangedFiles, checkDirty } = useVersioningStore.getState();
       // Publish the saved take only while its sketch is still active, so a take
       // that finishes saving after the user switched sketches cannot overwrite a
       // different document.
@@ -2274,7 +2279,7 @@ Rules:
         content: `Exported "${activeSketch.title}" to video`,
         level: "success",
       }]);
-      await useAppStore.getState().refreshChangedFiles();
+      await useVersioningStore.getState().refreshChangedFiles();
       try {
         await openPath(result.path);
       } catch (openErr) {

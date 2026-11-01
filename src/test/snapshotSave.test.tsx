@@ -10,18 +10,18 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import { SnapshotDialog } from "../components/SnapshotDialog";
-import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 
-const originalSaveVersion = useAppStore.getState().saveVersion;
-const originalLoadGraphData = useAppStore.getState().loadGraphData;
-const originalLoadTimelines = useAppStore.getState().loadTimelines;
+const originalSaveVersion = useVersioningStore.getState().saveVersion;
+const originalLoadGraphData = useVersioningStore.getState().loadGraphData;
+const originalLoadTimelines = useVersioningStore.getState().loadTimelines;
 
 describe("snapshot save naming flow", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     mockInvoke.mockReset();
     act(() => {
-      useAppStore.setState({
+      useVersioningStore.setState({
         snapshotPromptOpen: false,
         pendingNavAfterSave: null,
         pendingTimelineAfterSave: null,
@@ -35,16 +35,16 @@ describe("snapshot save naming flow", () => {
   });
 
   it("quickSave opens the naming prompt instead of creating an auto-named snapshot", async () => {
-    await useAppStore.getState().quickSave();
+    await useVersioningStore.getState().quickSave();
 
-    expect(useAppStore.getState().snapshotPromptOpen).toBe(true);
+    expect(useVersioningStore.getState().snapshotPromptOpen).toBe(true);
     expect(mockInvoke).not.toHaveBeenCalled();
   });
 
   it("canceling the snapshot dialog does not save", async () => {
     const saveVersion = vi.fn();
     act(() => {
-      useAppStore.setState({
+      useVersioningStore.setState({
         snapshotPromptOpen: true,
         saveVersion,
       });
@@ -54,7 +54,7 @@ describe("snapshot save naming flow", () => {
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(saveVersion).not.toHaveBeenCalled();
-    expect(useAppStore.getState().snapshotPromptOpen).toBe(false);
+    expect(useVersioningStore.getState().snapshotPromptOpen).toBe(false);
   });
 
   it("shows who the snapshot will be saved as", async () => {
@@ -69,7 +69,7 @@ describe("snapshot save naming flow", () => {
         }
       : undefined);
     act(() => {
-      useAppStore.setState({ snapshotPromptOpen: true, saveVersion: vi.fn() });
+      useVersioningStore.setState({ snapshotPromptOpen: true, saveVersion: vi.fn() });
     });
 
     render(<SnapshotDialog />);
@@ -99,7 +99,7 @@ describe("snapshot save naming flow", () => {
     });
     const saveVersion = vi.fn(async () => { calls.push("saveVersion"); });
     act(() => {
-      useAppStore.setState({
+      useVersioningStore.setState({
         snapshotPromptOpen: true,
         saveVersion,
         loadGraphData: vi.fn(async () => {}),
@@ -121,7 +121,7 @@ describe("snapshot save naming flow", () => {
 
     expect(mockInvoke).toHaveBeenCalledWith("set_contributor_identity", { name: "Ada Lovelace", email: "ada@example.com" });
     expect(calls.indexOf("set_contributor_identity")).toBeLessThan(calls.indexOf("saveVersion"));
-    expect(useAppStore.getState().snapshotPromptOpen).toBe(false);
+    expect(useVersioningStore.getState().snapshotPromptOpen).toBe(false);
   });
 
   it("keeps Save disabled until the identity resolves", async () => {
@@ -131,7 +131,7 @@ describe("snapshot save naming flow", () => {
       : Promise.resolve(undefined));
     const saveVersion = vi.fn();
     act(() => {
-      useAppStore.setState({ snapshotPromptOpen: true, saveVersion });
+      useVersioningStore.setState({ snapshotPromptOpen: true, saveVersion });
     });
 
     render(<SnapshotDialog />);
@@ -162,7 +162,7 @@ describe("snapshot save naming flow", () => {
     });
     const saveVersion = vi.fn();
     act(() => {
-      useAppStore.setState({ snapshotPromptOpen: true, saveVersion });
+      useVersioningStore.setState({ snapshotPromptOpen: true, saveVersion });
     });
 
     render(<SnapshotDialog />);

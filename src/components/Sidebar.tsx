@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 import { House, Settings, Images, LayoutList, MessageSquare, MessageSquareMore, GitCompareArrows, Mic2 } from "lucide-react";
 import type { AppView } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 import { UpdateAvailableButton } from "./UpdateAvailableButton";
 import { activityButtonClass } from "./shellStyles";
 
@@ -45,7 +46,7 @@ export function Sidebar({
   const view = useAppStore((s) => s.view);
   const setView = useAppStore((s) => s.setView);
   const currentProject = useAppStore((s) => s.currentProject);
-  const changedFilesCount = useAppStore((s) => s.changedFiles.length);
+  const changedFilesCount = useVersioningStore((s) => s.changedFiles.length);
 
   return (
     <nav className="no-select flex w-12 flex-col items-center gap-1.5 border-r border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] px-1.5 py-3">

@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { BUILT_IN_AGENTS, resolveAgentPrompt } from "../agents/builtInAgents";
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 import { useToastStore } from "../stores/toastStore";
 import { useAiApplyGateStore } from "../stores/aiApplyGateStore";
 import { useSettings, type AgentPreset } from "./useSettings";
@@ -106,8 +107,8 @@ export function useBackgroundAgentAction() {
   const openSketch = useAppStore((s) => s.openSketch);
   const openStoryboard = useAppStore((s) => s.openStoryboard);
   const openNote = useAppStore((s) => s.openNote);
-  const checkDirty = useAppStore((s) => s.checkDirty);
-  const refreshChangedFiles = useAppStore((s) => s.refreshChangedFiles);
+  const checkDirty = useVersioningStore((s) => s.checkDirty);
+  const refreshChangedFiles = useVersioningStore((s) => s.refreshChangedFiles);
   const addActivityEntries = useAppStore((s) => s.addActivityEntries);
 
   const agents = useMemo(() => [...BUILT_IN_AGENTS, ...(settings.aiAgents || [])], [settings.aiAgents]);

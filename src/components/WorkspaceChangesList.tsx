@@ -1,12 +1,12 @@
 import { useEffect } from "react";
-import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 
 const MAX_LISTED = 8;
 
 /** The unsaved files a discard or shelve would affect, refreshed when shown. */
 export function WorkspaceChangesList() {
-  const changedFiles = useAppStore((s) => s.changedFiles);
-  const refreshChangedFiles = useAppStore((s) => s.refreshChangedFiles);
+  const changedFiles = useVersioningStore((s) => s.changedFiles);
+  const refreshChangedFiles = useVersioningStore((s) => s.refreshChangedFiles);
 
   useEffect(() => {
     void refreshChangedFiles();

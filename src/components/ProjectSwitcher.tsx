@@ -1,6 +1,7 @@
 import { invoke } from "../services/tauri";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 import type { ProjectEntry } from "../types/project";
 import { Folder, ChevronDown, Pencil, Check, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { DecisionDialog } from "./DecisionDialog";
@@ -18,8 +19,8 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
   const createProjectInRepo = useAppStore((s) => s.createProjectInRepo);
   const deleteProjectFromRepo = useAppStore((s) => s.deleteProjectFromRepo);
   const loadProjects = useAppStore((s) => s.loadProjects);
-  const isMerging = useAppStore((s) => s.isMerging);
-  const cancelMerge = useAppStore((s) => s.cancelMerge);
+  const isMerging = useVersioningStore((s) => s.isMerging);
+  const cancelMerge = useVersioningStore((s) => s.cancelMerge);
 
   const [isOpen, setIsOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
