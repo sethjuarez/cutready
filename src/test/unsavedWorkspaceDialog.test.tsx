@@ -1,17 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { UnsavedWorkspaceDialog } from "../components/UnsavedWorkspaceDialog";
-import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 
-const originalRefresh = useAppStore.getState().refreshChangedFiles;
+const originalRefresh = useVersioningStore.getState().refreshChangedFiles;
 
 describe("UnsavedWorkspaceDialog", () => {
   afterEach(() => {
-    useAppStore.setState({ changedFiles: [], refreshChangedFiles: originalRefresh, hasStash: false });
+    useVersioningStore.setState({ changedFiles: [], refreshChangedFiles: originalRefresh, hasStash: false });
   });
 
   function renderDialog(onShelveAndContinue?: () => void) {
-    useAppStore.setState({
+    useVersioningStore.setState({
       changedFiles: [
         { path: "intro.sk", status: "modified", additions: 1, deletions: 0 },
         { path: "notes/plan.md", status: "added", additions: 3, deletions: 0 },
@@ -35,7 +35,7 @@ describe("UnsavedWorkspaceDialog", () => {
     const list = screen.getByTestId("workspace-changes-list");
     expect(list).toHaveTextContent("intro.sk");
     expect(list).toHaveTextContent("notes/plan.md");
-    expect(useAppStore.getState().refreshChangedFiles).toHaveBeenCalled();
+    expect(useVersioningStore.getState().refreshChangedFiles).toHaveBeenCalled();
   });
 
   it("offers Shelve only when a handler is given", () => {
@@ -52,10 +52,10 @@ describe("UnsavedWorkspaceDialog", () => {
 });
 
 describe("stashChanges", () => {
-  afterEach(() => useAppStore.setState({ hasStash: false }));
+  afterEach(() => useVersioningStore.setState({ hasStash: false }));
 
   it("refuses to overwrite an existing shelf", async () => {
-    useAppStore.setState({ hasStash: true });
-    await expect(useAppStore.getState().stashChanges()).resolves.toBe(false);
+    useVersioningStore.setState({ hasStash: true });
+    await expect(useVersioningStore.getState().stashChanges()).resolves.toBe(false);
   });
 });

@@ -16,6 +16,8 @@ import { onWorkspaceSnapshotDeferred } from "./services/identity";
 import { isMac } from "./utils/platform";
 
 import { useAppStore } from "./stores/appStore";
+import { useVersioningStore } from "./stores/versioningStore";
+import { useSyncStore } from "./stores/syncStore";
 import { useToastStore } from "./stores/toastStore";
 import { useUpdateStore } from "./stores/updateStore";
 
@@ -87,17 +89,18 @@ function App() {
       try {
         do {
           rerun = false;
-          const store = useAppStore.getState();
-          if (store.currentProject) {
+          if (useAppStore.getState().currentProject) {
+            const versioning = useVersioningStore.getState();
+            const sync = useSyncStore.getState();
             await Promise.all([
-              store.checkDirty(),
-              store.refreshChangedFiles(),
-              store.loadVersions(),
-              store.loadGraphData(),
-              store.loadTimelines(),
-              store.refreshSyncStatus(),
-              store.refreshIncomingCommits(),
-              store.checkProjectHealth({ probeContent: false }),
+              versioning.checkDirty(),
+              versioning.refreshChangedFiles(),
+              versioning.loadVersions(),
+              versioning.loadGraphData(),
+              versioning.loadTimelines(),
+              sync.refreshSyncStatus(),
+              sync.refreshIncomingCommits(),
+              versioning.checkProjectHealth({ probeContent: false }),
             ]);
           }
         } while (rerun && !disposed);

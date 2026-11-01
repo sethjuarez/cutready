@@ -1,4 +1,4 @@
-import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 import { RotateCcw, X } from "lucide-react";
 
 /**
@@ -6,14 +6,14 @@ import { RotateCcw, X } from "lucide-react";
  * Rendered below the graph when a diff is active.
  */
 export function SnapshotDiffPanel() {
-  const diffResult = useAppStore((s) => s.diffResult);
-  const diffSelection = useAppStore((s) => s.diffSelection);
+  const diffResult = useVersioningStore((s) => s.diffResult);
+  const diffSelection = useVersioningStore((s) => s.diffSelection);
 
   if (!diffResult || !diffSelection) return null;
 
   const totalAdded = diffResult.reduce((s, e) => s + e.additions, 0);
   const totalRemoved = diffResult.reduce((s, e) => s + e.deletions, 0);
-  const close = () => useAppStore.setState({ diffResult: null, diffSelection: null });
+  const close = () => useVersioningStore.setState({ diffResult: null, diffSelection: null });
   const title = diffSelection.to === "working" ? "Unsaved changes" : "Snapshot comparison";
   const description = diffSelection.to === "working"
     ? "These files have changed since your last saved snapshot."

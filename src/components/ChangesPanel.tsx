@@ -18,6 +18,8 @@ import {
   GitBranch,
 } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
+import { useSyncStore } from "../stores/syncStore";
 import { SnapshotGraph } from "./SnapshotGraph";
 import { SnapshotDiffPanel } from "./SnapshotDiffPanel";
 import { IncomingPreview, SyncBar } from "./SyncBar";
@@ -28,33 +30,33 @@ import { firstParentTimelineNodes } from "../utils/timelineNodes";
 import { draftlineToRepoPath } from "../utils/draftlinePaths";
 
 export function ChangesPanel() {
-  const changedFiles = useAppStore((s) => s.changedFiles);
-  const isDirty = useAppStore((s) => s.isDirty);
-  const promptSnapshot = useAppStore((s) => s.promptSnapshot);
-  const refreshChangedFiles = useAppStore((s) => s.refreshChangedFiles);
-  const graphNodes = useAppStore((s) => s.graphNodes);
-  const isRewound = useAppStore((s) => s.isRewound);
-  const checkDirty = useAppStore((s) => s.checkDirty);
+  const changedFiles = useVersioningStore((s) => s.changedFiles);
+  const isDirty = useVersioningStore((s) => s.isDirty);
+  const promptSnapshot = useVersioningStore((s) => s.promptSnapshot);
+  const refreshChangedFiles = useVersioningStore((s) => s.refreshChangedFiles);
+  const graphNodes = useVersioningStore((s) => s.graphNodes);
+  const isRewound = useVersioningStore((s) => s.isRewound);
+  const checkDirty = useVersioningStore((s) => s.checkDirty);
   const openTab = useAppStore((s) => s.openTab);
-  const checkRewound = useAppStore((s) => s.checkRewound);
-  const navigateToSnapshot = useAppStore((s) => s.navigateToSnapshot);
-  const discardChanges = useAppStore((s) => s.discardChanges);
-  const deleteTimeline = useAppStore((s) => s.deleteTimeline);
-  const switchTimeline = useAppStore((s) => s.switchTimeline);
-  const loadGraphData = useAppStore((s) => s.loadGraphData);
-  const timelines = useAppStore((s) => s.timelines);
-  const loadTimelines = useAppStore((s) => s.loadTimelines);
-  const renameLegacyMasterTimeline = useAppStore((s) => s.renameLegacyMasterTimeline);
-  const baseRename = useAppStore((s) => s.baseRename);
-  const currentRemote = useAppStore((s) => s.currentRemote);
-  const syncStatus = useAppStore((s) => s.syncStatus);
-  const syncError = useAppStore((s) => s.syncError);
-  const incomingCommits = useAppStore((s) => s.incomingCommits);
-  const saving = useAppStore((s) => s.saving);
+  const checkRewound = useVersioningStore((s) => s.checkRewound);
+  const navigateToSnapshot = useVersioningStore((s) => s.navigateToSnapshot);
+  const discardChanges = useVersioningStore((s) => s.discardChanges);
+  const deleteTimeline = useVersioningStore((s) => s.deleteTimeline);
+  const switchTimeline = useVersioningStore((s) => s.switchTimeline);
+  const loadGraphData = useVersioningStore((s) => s.loadGraphData);
+  const timelines = useVersioningStore((s) => s.timelines);
+  const loadTimelines = useVersioningStore((s) => s.loadTimelines);
+  const renameLegacyMasterTimeline = useVersioningStore((s) => s.renameLegacyMasterTimeline);
+  const baseRename = useSyncStore((s) => s.baseRename);
+  const currentRemote = useSyncStore((s) => s.currentRemote);
+  const syncStatus = useSyncStore((s) => s.syncStatus);
+  const syncError = useSyncStore((s) => s.syncError);
+  const incomingCommits = useSyncStore((s) => s.incomingCommits);
+  const saving = useVersioningStore((s) => s.saving);
   const currentProject = useAppStore((s) => s.currentProject);
   const isMultiProject = useAppStore((s) => s.isMultiProject);
   const projects = useAppStore((s) => s.projects);
-  const startedBranchFromSnapshot = useAppStore((s) => s.startedBranchFromSnapshot);
+  const startedBranchFromSnapshot = useVersioningStore((s) => s.startedBranchFromSnapshot);
   const hasRemote = !!currentRemote;
 
   const [changesExpanded, setChangesExpanded] = useState(true);
@@ -723,7 +725,7 @@ function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; 
   const openTab = useAppStore((s) => s.openTab);
   const openDatabase = useAppStore((s) => s.openDatabase);
   const currentProject = useAppStore((s) => s.currentProject);
-  const discardFile = useAppStore((s) => s.discardFile);
+  const discardFile = useVersioningStore((s) => s.discardFile);
   const { confirm, confirmationDialog } = useConfirmDialog();
 
   return (

@@ -3,7 +3,7 @@ import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SendForReviewDialog } from "../components/SendForReviewDialog";
 import { ToastContainer } from "../components/ToastContainer";
-import { useAppStore } from "../stores/appStore";
+import { useSyncStore } from "../stores/syncStore";
 import { useToastStore } from "../stores/toastStore";
 
 vi.mock("@tauri-apps/plugin-shell", () => ({
@@ -12,9 +12,9 @@ vi.mock("@tauri-apps/plugin-shell", () => ({
 
 describe("Send for review UI", () => {
   afterEach(() => {
-    useAppStore.setState({
+    useSyncStore.setState({
       sendForReviewPrompt: null,
-      sendForReview: useAppStore.getInitialState().sendForReview,
+      sendForReview: useSyncStore.getInitialState().sendForReview,
     });
     useToastStore.setState({ toasts: [] });
     vi.mocked(shellOpen).mockClear();
@@ -22,7 +22,7 @@ describe("Send for review UI", () => {
 
   it("prefills the pull request title and sends the edited title and description", () => {
     const sendForReview = vi.fn(async () => {});
-    useAppStore.setState({ sendForReviewPrompt: { defaultTitle: "Tighten intro" }, sendForReview });
+    useSyncStore.setState({ sendForReviewPrompt: { defaultTitle: "Tighten intro" }, sendForReview });
 
     render(<SendForReviewDialog />);
 
@@ -37,13 +37,13 @@ describe("Send for review UI", () => {
 
   it("cancels without sending", () => {
     const sendForReview = vi.fn(async () => {});
-    useAppStore.setState({ sendForReviewPrompt: { defaultTitle: "Tighten intro" }, sendForReview });
+    useSyncStore.setState({ sendForReviewPrompt: { defaultTitle: "Tighten intro" }, sendForReview });
 
     render(<SendForReviewDialog />);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(sendForReview).not.toHaveBeenCalled();
-    expect(useAppStore.getState().sendForReviewPrompt).toBeNull();
+    expect(useSyncStore.getState().sendForReviewPrompt).toBeNull();
   });
 
   it("opens a toast link in the system browser", () => {

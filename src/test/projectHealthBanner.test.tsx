@@ -1,18 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ProjectHealthBanner } from "../components/ProjectHealthBanner";
-import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 import { HEALTHY_PROJECT } from "../services/draftlineVersioning";
 
 const recovery = { operation_id: "op-1", operation: "save_version", completed: false } as never;
 
 describe("ProjectHealthBanner", () => {
   afterEach(() => {
-    useAppStore.setState({ projectHealth: HEALTHY_PROJECT, projectHealthBusy: false });
+    useVersioningStore.setState({ projectHealth: HEALTHY_PROJECT, projectHealthBusy: false });
   });
 
   it("renders nothing for a healthy project", () => {
-    useAppStore.setState({ projectHealth: HEALTHY_PROJECT });
+    useVersioningStore.setState({ projectHealth: HEALTHY_PROJECT });
     const { container } = render(<ProjectHealthBanner />);
     expect(container).toBeEmptyDOMElement();
   });
@@ -20,7 +20,7 @@ describe("ProjectHealthBanner", () => {
   it("offers Finish and Dismiss for an interrupted operation", () => {
     const resolveRecovery = vi.fn().mockResolvedValue(undefined);
     const dismissRecovery = vi.fn().mockResolvedValue(undefined);
-    useAppStore.setState({
+    useVersioningStore.setState({
       projectHealth: { ...HEALTHY_PROJECT, recovery },
       resolveRecovery,
       dismissRecovery,
@@ -40,7 +40,7 @@ describe("ProjectHealthBanner", () => {
       ["RestoreVersionAsNewSave", "A restore was interrupted"],
       ["ApplyShelf", "A shelf restore was interrupted"],
     ]) {
-      useAppStore.setState({
+      useVersioningStore.setState({
         projectHealth: { ...HEALTHY_PROJECT, recovery: { operation_id: "op", operation, completed: false } as never },
       });
       const { unmount } = render(<ProjectHealthBanner />);
@@ -51,14 +51,14 @@ describe("ProjectHealthBanner", () => {
   });
 
   it("shows no actions when another folder owns the recovery", () => {
-    useAppStore.setState({ projectHealth: { ...HEALTHY_PROJECT, recovery, recoveryInOtherFolder: true } });
+    useVersioningStore.setState({ projectHealth: { ...HEALTHY_PROJECT, recovery, recoveryInOtherFolder: true } });
     render(<ProjectHealthBanner />);
     expect(screen.getByTestId("project-health-recovery")).toBeInTheDocument();
     expect(screen.queryByText("Finish")).toBeNull();
   });
 
   it("offers Clear lock for a stale lock and disables actions while busy", () => {
-    useAppStore.setState({
+    useVersioningStore.setState({
       projectHealth: { ...HEALTHY_PROJECT, staleLock: { operation: "switch_variation", processId: 42 } },
       projectHealthBusy: true,
     });
@@ -69,7 +69,7 @@ describe("ProjectHealthBanner", () => {
 
   it("offers Download for files whose content is missing", () => {
     const retryContentDownload = vi.fn().mockResolvedValue(undefined);
-    useAppStore.setState({
+    useVersioningStore.setState({
       projectHealth: { ...HEALTHY_PROJECT, missingContent: ["a.png", "b.png"] },
       retryContentDownload,
     });

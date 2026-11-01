@@ -17,6 +17,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 import { ProjectSwitcher } from "../components/ProjectSwitcher";
 import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 
 const project = {
   root: "D:\\workspace\\alpha",
@@ -30,7 +31,7 @@ const projects = [
 ];
 
 const originalSwitchProject = useAppStore.getState().switchProject;
-const originalDiscardChanges = useAppStore.getState().discardChanges;
+const originalDiscardChanges = useVersioningStore.getState().discardChanges;
 const originalLoadProjects = useAppStore.getState().loadProjects;
 const originalDeleteProjectFromRepo = useAppStore.getState().deleteProjectFromRepo;
 const mockSwitchProject = vi.fn(() => Promise.resolve());
@@ -45,16 +46,18 @@ describe("ProjectSwitcher safety gates", () => {
     act(() => {
       useAppStore.setState({
         switchProject: originalSwitchProject,
-        discardChanges: originalDiscardChanges,
         loadProjects: originalLoadProjects,
         deleteProjectFromRepo: originalDeleteProjectFromRepo,
         currentProject: null,
         projects: [],
         isMultiProject: false,
+        loading: false,
+      });
+      useVersioningStore.setState({
+        discardChanges: originalDiscardChanges,
         isDirty: false,
         isMerging: false,
         snapshotPromptOpen: false,
-        loading: false,
       });
     });
   });
@@ -63,11 +66,13 @@ describe("ProjectSwitcher safety gates", () => {
     act(() => {
       useAppStore.setState({
         switchProject: mockSwitchProject,
-        discardChanges: mockDiscardChanges,
         loadProjects: () => Promise.resolve(),
         currentProject: project,
         projects,
         isMultiProject: true,
+      });
+      useVersioningStore.setState({
+        discardChanges: mockDiscardChanges,
         isDirty: true,
       });
     });
@@ -84,7 +89,7 @@ describe("ProjectSwitcher safety gates", () => {
 
     expect(mockSwitchProject).toHaveBeenCalledWith("beta");
     expect(screen.queryByText("Save changes before continuing?")).not.toBeInTheDocument();
-    expect(useAppStore.getState().snapshotPromptOpen).toBe(false);
+    expect(useVersioningStore.getState().snapshotPromptOpen).toBe(false);
   });
 
   it("switches away from the active project before deleting it", async () => {
@@ -126,6 +131,8 @@ describe("ProjectSwitcher safety gates", () => {
         currentProject: project,
         projects,
         isMultiProject: true,
+      });
+      useVersioningStore.setState({
         isMerging: true,
       });
     });
@@ -146,7 +153,7 @@ describe("ProjectSwitcher safety gates", () => {
       fireEvent.click(screen.getByRole("button", { name: "Cancel merge and switch" }));
     });
 
-    expect(useAppStore.getState().isMerging).toBe(false);
+    expect(useVersioningStore.getState().isMerging).toBe(false);
     expect(mockSwitchProject).toHaveBeenCalledWith("beta");
   });
 
@@ -158,6 +165,8 @@ describe("ProjectSwitcher safety gates", () => {
         currentProject: project,
         projects,
         isMultiProject: true,
+      });
+      useVersioningStore.setState({
         isMerging: true,
         isDirty: true,
       });
@@ -179,7 +188,7 @@ describe("ProjectSwitcher safety gates", () => {
       fireEvent.click(screen.getByRole("button", { name: "Cancel merge and switch" }));
     });
 
-    expect(useAppStore.getState().isMerging).toBe(false);
+    expect(useVersioningStore.getState().isMerging).toBe(false);
     expect(mockSwitchProject).toHaveBeenCalledWith("beta");
     expect(screen.queryByText("Save changes before continuing?")).not.toBeInTheDocument();
   });

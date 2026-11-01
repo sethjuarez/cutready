@@ -1,6 +1,6 @@
 import { AlertTriangle, Archive, Download, Lock } from "lucide-react";
 import type { ReactNode } from "react";
-import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 import { recoveryInOtherFolderMessage } from "../services/draftlineErrors";
 
 const OPERATION_LABELS: Record<string, string> = {
@@ -64,14 +64,14 @@ function BannerRow({ icon, testId, children }: { icon: ReactNode; testId: string
  * with the action that fixes each.
  */
 export function ProjectHealthBanner() {
-  const health = useAppStore((s) => s.projectHealth);
-  const busy = useAppStore((s) => s.projectHealthBusy);
-  const resolveRecovery = useAppStore((s) => s.resolveRecovery);
-  const dismissRecovery = useAppStore((s) => s.dismissRecovery);
-  const clearStaleLock = useAppStore((s) => s.clearStaleLock);
-  const retryContentDownload = useAppStore((s) => s.retryContentDownload);
-  const hasStash = useAppStore((s) => s.hasStash);
-  const popStash = useAppStore((s) => s.popStash);
+  const health = useVersioningStore((s) => s.projectHealth);
+  const busy = useVersioningStore((s) => s.projectHealthBusy);
+  const resolveRecovery = useVersioningStore((s) => s.resolveRecovery);
+  const dismissRecovery = useVersioningStore((s) => s.dismissRecovery);
+  const clearStaleLock = useVersioningStore((s) => s.clearStaleLock);
+  const retryContentDownload = useVersioningStore((s) => s.retryContentDownload);
+  const hasStash = useVersioningStore((s) => s.hasStash);
+  const popStash = useVersioningStore((s) => s.popStash);
   const warningIcon = <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--color-warning))]" />;
 
   return (

@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import type { GraphNode } from "../types/sketch";
 import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
+import { useSyncStore } from "../stores/syncStore";
 import { useConfirmDialog } from "./ConfirmDialog";
 import {
   FullHistoryGraph,
@@ -29,22 +31,22 @@ import { UnsavedWorkspaceDialog } from "./UnsavedWorkspaceDialog";
 import { firstParentTimelineNodes } from "../utils/timelineNodes";
 
 export function HistoryGraphTab() {
-  const graphNodes = useAppStore((s) => s.graphNodes);
-  const timelines = useAppStore((s) => s.timelines);
-  const loadGraphData = useAppStore((s) => s.loadGraphData);
-  const loadTimelines = useAppStore((s) => s.loadTimelines);
-  const checkDirty = useAppStore((s) => s.checkDirty);
-  const checkRewound = useAppStore((s) => s.checkRewound);
-  const navigateToSnapshot = useAppStore((s) => s.navigateToSnapshot);
-  const switchTimeline = useAppStore((s) => s.switchTimeline);
-  const discardChanges = useAppStore((s) => s.discardChanges);
-  const stashChanges = useAppStore((s) => s.stashChanges);
-  const hasStash = useAppStore((s) => s.hasStash);
-  const deleteTimeline = useAppStore((s) => s.deleteTimeline);
-  const currentRemote = useAppStore((s) => s.currentRemote);
-  const syncStatus = useAppStore((s) => s.syncStatus);
+  const graphNodes = useVersioningStore((s) => s.graphNodes);
+  const timelines = useVersioningStore((s) => s.timelines);
+  const loadGraphData = useVersioningStore((s) => s.loadGraphData);
+  const loadTimelines = useVersioningStore((s) => s.loadTimelines);
+  const checkDirty = useVersioningStore((s) => s.checkDirty);
+  const checkRewound = useVersioningStore((s) => s.checkRewound);
+  const navigateToSnapshot = useVersioningStore((s) => s.navigateToSnapshot);
+  const switchTimeline = useVersioningStore((s) => s.switchTimeline);
+  const discardChanges = useVersioningStore((s) => s.discardChanges);
+  const stashChanges = useVersioningStore((s) => s.stashChanges);
+  const hasStash = useVersioningStore((s) => s.hasStash);
+  const deleteTimeline = useVersioningStore((s) => s.deleteTimeline);
+  const currentRemote = useSyncStore((s) => s.currentRemote);
+  const syncStatus = useSyncStore((s) => s.syncStatus);
   const currentProject = useAppStore((s) => s.currentProject);
-  const startedBranchFromSnapshot = useAppStore(
+  const startedBranchFromSnapshot = useVersioningStore(
     (s) => s.startedBranchFromSnapshot,
   );
 
@@ -477,7 +479,7 @@ export function HistoryGraphTab() {
         onCancel={() => setPendingSwitch(null)}
         onSaveFirst={() => {
           if (!pendingSwitch) return;
-          useAppStore.setState({
+          useVersioningStore.setState({
             pendingTimelineAfterSave: pendingSwitch,
             snapshotPromptOpen: true,
           });

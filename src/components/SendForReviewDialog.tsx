@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { GitPullRequest } from "lucide-react";
-import { useAppStore } from "../stores/appStore";
+import { useSyncStore } from "../stores/syncStore";
 import { PromptDialog } from "./PromptDialog";
 
 /**
@@ -8,9 +8,9 @@ import { PromptDialog } from "./PromptDialog";
  * branch and opens (or updates) a pull request on the code host.
  */
 export function SendForReviewDialog() {
-  const prompt = useAppStore((s) => s.sendForReviewPrompt);
-  const sendForReview = useAppStore((s) => s.sendForReview);
-  const cancelSendForReview = useAppStore((s) => s.cancelSendForReview);
+  const prompt = useSyncStore((s) => s.sendForReviewPrompt);
+  const sendForReview = useSyncStore((s) => s.sendForReview);
+  const cancelSendForReview = useSyncStore((s) => s.cancelSendForReview);
 
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");

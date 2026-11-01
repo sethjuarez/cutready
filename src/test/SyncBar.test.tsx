@@ -19,16 +19,18 @@ vi.mock("../hooks/useSettings", () => ({
 
 import { SyncBar } from "../components/SyncBar";
 import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
+import { useSyncStore } from "../stores/syncStore";
 
 const originalState = {
-  detectRemote: useAppStore.getState().detectRemote,
-  fetchFromRemote: useAppStore.getState().fetchFromRemote,
-  pullFromRemote: useAppStore.getState().pullFromRemote,
-  pushToRemote: useAppStore.getState().pushToRemote,
-  syncWithRemote: useAppStore.getState().syncWithRemote,
+  detectRemote: useSyncStore.getState().detectRemote,
+  fetchFromRemote: useSyncStore.getState().fetchFromRemote,
+  pullFromRemote: useSyncStore.getState().pullFromRemote,
+  pushToRemote: useSyncStore.getState().pushToRemote,
+  syncWithRemote: useSyncStore.getState().syncWithRemote,
 };
 
-const originalGetUpdatesFromBase = useAppStore.getState().getUpdatesFromBase;
+const originalGetUpdatesFromBase = useSyncStore.getState().getUpdatesFromBase;
 
 describe("SyncBar", () => {
   afterEach(() => {
@@ -36,14 +38,18 @@ describe("SyncBar", () => {
     mockInvoke.mockReset();
     act(() => {
       useAppStore.setState({
+        currentProject: null,
+      });
+      useVersioningStore.setState({
+        timelines: [],
+      });
+      useSyncStore.setState({
         ...originalState,
         currentRemote: null,
         syncStatus: null,
         syncError: null,
         baseStatus: null,
-        currentProject: null,
         getUpdatesFromBase: originalGetUpdatesFromBase,
-        timelines: [],
         isSyncing: false,
       });
     });
@@ -55,10 +61,12 @@ describe("SyncBar", () => {
     const syncWithRemote = vi.fn(() => Promise.resolve());
 
     act(() => {
-      useAppStore.setState({
+      useVersioningStore.setState({
+        timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 1, color_index: 0 }],
+      });
+      useSyncStore.setState({
         currentRemote: { name: "origin", url: "https://github.com/example/repo.git" },
         syncStatus: { ahead: 3, behind: 0 },
-        timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 1, color_index: 0 }],
         detectRemote: vi.fn(() => Promise.resolve()),
         fetchFromRemote: vi.fn(() => Promise.resolve()),
         pushToRemote,
@@ -83,10 +91,12 @@ describe("SyncBar", () => {
 
   it("hides the primary action when sync status is unavailable", () => {
     act(() => {
-      useAppStore.setState({
+      useVersioningStore.setState({
+        timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 1, color_index: 0 }],
+      });
+      useSyncStore.setState({
         currentRemote: { name: "origin", url: "https://github.com/example/repo.git" },
         syncStatus: null,
-        timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 1, color_index: 0 }],
         detectRemote: vi.fn(() => Promise.resolve()),
         fetchFromRemote: vi.fn(() => Promise.resolve()),
       });
@@ -99,11 +109,13 @@ describe("SyncBar", () => {
 
   it("shows GitHub sign-in guidance for remote auth failures", () => {
     act(() => {
-      useAppStore.setState({
+      useVersioningStore.setState({
+        timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 1, color_index: 0 }],
+      });
+      useSyncStore.setState({
         currentRemote: { name: "origin", url: "https://github.com/example/repo.git" },
         syncStatus: { ahead: 1, behind: 0 },
         syncError: "GitHub rejected the remote operation. Reconnect GitHub in Settings, then try again.",
-        timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 1, color_index: 0 }],
         detectRemote: vi.fn(() => Promise.resolve()),
         fetchFromRemote: vi.fn(() => Promise.resolve()),
       });
@@ -119,10 +131,14 @@ describe("SyncBar", () => {
     act(() => {
       useAppStore.setState({
         currentProject: { root: "D:\\app\\cutready", name: "cutready", repo_root: "D:\\app\\cutready", hybrid: true },
+      });
+      useVersioningStore.setState({
+        timelines: [{ name: "cutready/launch", label: "cutready/launch", is_active: true, snapshot_count: 1, color_index: 0 }],
+      });
+      useSyncStore.setState({
         currentRemote: { name: "origin", url: "https://github.com/example/repo.git" },
         syncStatus: { ahead: 0, behind: 0 },
         baseStatus: { ahead: 1, behind: 2, base: "main" },
-        timelines: [{ name: "cutready/launch", label: "cutready/launch", is_active: true, snapshot_count: 1, color_index: 0 }],
         detectRemote: vi.fn(() => Promise.resolve()),
         fetchFromRemote: vi.fn(() => Promise.resolve()),
         getUpdatesFromBase,
@@ -142,10 +158,14 @@ describe("SyncBar", () => {
     act(() => {
       useAppStore.setState({
         currentProject: { root: "D:\\demo", name: "demo", repo_root: "D:\\demo", hybrid: false },
+      });
+      useVersioningStore.setState({
+        timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 1, color_index: 0 }],
+      });
+      useSyncStore.setState({
         currentRemote: { name: "origin", url: "https://github.com/example/repo.git" },
         syncStatus: { ahead: 0, behind: 0 },
         baseStatus: { ahead: 0, behind: 5, base: "main" },
-        timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 1, color_index: 0 }],
         detectRemote: vi.fn(() => Promise.resolve()),
         fetchFromRemote: vi.fn(() => Promise.resolve()),
       });
@@ -161,9 +181,13 @@ describe("SyncBar", () => {
     act(() => {
       useAppStore.setState({
         currentProject: { root: "D:\\app\\cutready", name: "cutready", repo_root: "D:\\app\\cutready", hybrid: true },
+      });
+      useVersioningStore.setState({
+        timelines: [{ name: "cutready/launch", label: "cutready/launch", is_active: true, snapshot_count: 1, color_index: 0 }],
+      });
+      useSyncStore.setState({
         currentRemote: { name: "origin", url: "https://github.com/example/repo.git" },
         syncStatus: { ahead: 2, behind: 0 },
-        timelines: [{ name: "cutready/launch", label: "cutready/launch", is_active: true, snapshot_count: 1, color_index: 0 }],
         detectRemote: vi.fn(() => Promise.resolve()),
         fetchFromRemote: vi.fn(() => Promise.resolve()),
         pushToRemote,
@@ -182,11 +206,13 @@ describe("SyncBar", () => {
   it("shows plain-language Draftline guidance as-is even when it mentions a GitHub path", () => {
     const message = "An interrupted change has to be finished in the other folder that started it (D:\\github\\deck). Open that folder in CutReady to finish it, then try again.";
     act(() => {
-      useAppStore.setState({
+      useVersioningStore.setState({
+        timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 1, color_index: 0 }],
+      });
+      useSyncStore.setState({
         currentRemote: { name: "origin", url: "https://github.com/example/repo.git" },
         syncStatus: { ahead: 1, behind: 0 },
         syncError: message,
-        timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 1, color_index: 0 }],
         detectRemote: vi.fn(() => Promise.resolve()),
         fetchFromRemote: vi.fn(() => Promise.resolve()),
       });

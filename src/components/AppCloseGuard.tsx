@@ -2,14 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DecisionDialog } from "./DecisionDialog";
 import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 
 type CloseReason = "dirty" | "merge";
 
 export function AppCloseGuard() {
   const currentProject = useAppStore((state) => state.currentProject);
-  const isDirty = useAppStore((state) => state.isDirty);
-  const isMerging = useAppStore((state) => state.isMerging);
-  const cancelMerge = useAppStore((state) => state.cancelMerge);
+  const isDirty = useVersioningStore((state) => state.isDirty);
+  const isMerging = useVersioningStore((state) => state.isMerging);
+  const cancelMerge = useVersioningStore((state) => state.cancelMerge);
   const appWindowRef = useRef<ReturnType<typeof getCurrentWindow> | null>(null);
   const allowCloseRef = useRef(false);
   const [closeReason, setCloseReason] = useState<CloseReason | null>(null);
@@ -69,7 +70,7 @@ export function AppCloseGuard() {
             variant: "danger",
             onSelect: async () => {
               cancelMerge();
-              if (useAppStore.getState().isDirty) {
+              if (useVersioningStore.getState().isDirty) {
                 setCloseReason("dirty");
                 return;
               }
@@ -94,7 +95,7 @@ export function AppCloseGuard() {
           label: "Save snapshot first",
           variant: "primary",
           onSelect: () => {
-            useAppStore.setState({ snapshotPromptOpen: true });
+            useVersioningStore.setState({ snapshotPromptOpen: true });
             setCloseReason(null);
           },
         },

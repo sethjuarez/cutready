@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Download, AlertCircle, UserRound } from "lucide-react";
 import { errorMessage, useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 import { PromptDialog } from "./PromptDialog";
 import { generateSnapshotName } from "../utils/snapshotName";
 import { useContributorIdentity } from "../hooks/useContributorIdentity";
@@ -14,15 +15,15 @@ const noticeIconClass = "mt-0.5 h-3.5 w-3.5 shrink-0 text-[rgb(var(--color-accen
  * Appears centered on screen regardless of which panel is active.
  */
 export function SnapshotDialog() {
-  const snapshotPromptOpen = useAppStore((s) => s.snapshotPromptOpen);
-  const isRewound = useAppStore((s) => s.isRewound);
-  const saveVersion = useAppStore((s) => s.saveVersion);
-  const loadGraphData = useAppStore((s) => s.loadGraphData);
-  const loadTimelines = useAppStore((s) => s.loadTimelines);
-  const navigateToSnapshot = useAppStore((s) => s.navigateToSnapshot);
-  const pendingNavAfterSave = useAppStore((s) => s.pendingNavAfterSave);
-  const pendingTimelineAfterSave = useAppStore((s) => s.pendingTimelineAfterSave);
-  const switchTimeline = useAppStore((s) => s.switchTimeline);
+  const snapshotPromptOpen = useVersioningStore((s) => s.snapshotPromptOpen);
+  const isRewound = useVersioningStore((s) => s.isRewound);
+  const saveVersion = useVersioningStore((s) => s.saveVersion);
+  const loadGraphData = useVersioningStore((s) => s.loadGraphData);
+  const loadTimelines = useVersioningStore((s) => s.loadTimelines);
+  const navigateToSnapshot = useVersioningStore((s) => s.navigateToSnapshot);
+  const pendingNavAfterSave = useVersioningStore((s) => s.pendingNavAfterSave);
+  const pendingTimelineAfterSave = useVersioningStore((s) => s.pendingTimelineAfterSave);
+  const switchTimeline = useVersioningStore((s) => s.switchTimeline);
   const isMultiProject = useAppStore((s) => s.isMultiProject);
 
   const [label, setLabel] = useState("");
@@ -50,7 +51,7 @@ export function SnapshotDialog() {
   }, [snapshotPromptOpen]);
 
   const close = useCallback(() => {
-    useAppStore.setState({
+    useVersioningStore.setState({
       snapshotPromptOpen: false,
       pendingNavAfterSave: null,
       pendingTimelineAfterSave: null,

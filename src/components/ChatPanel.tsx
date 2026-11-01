@@ -10,6 +10,7 @@ import { projectRelativeScreenshotPath } from "../utils/projectImage";
 import { contentTypeTone } from "../utils/contentTypeTheme";
 
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 import { useAiApplyGateStore } from "../stores/aiApplyGateStore";
 import { useToastStore } from "../stores/toastStore";
 import { loadProviderSecrets } from "../hooks/useSecretStore";
@@ -802,8 +803,8 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const loadNotes = useAppStore((s) => s.loadNotes);
   const loadChatArtifacts = useAppStore((s) => s.loadChatArtifacts);
   const loadStoryboards = useAppStore((s) => s.loadStoryboards);
-  const checkDirty = useAppStore((s) => s.checkDirty);
-  const refreshChangedFiles = useAppStore((s) => s.refreshChangedFiles);
+  const checkDirty = useVersioningStore((s) => s.checkDirty);
+  const refreshChangedFiles = useVersioningStore((s) => s.refreshChangedFiles);
   const openSketch = useAppStore((s) => s.openSketch);
   const openNote = useAppStore((s) => s.openNote);
   const openChatArtifact = useAppStore((s) => s.openChatArtifact);

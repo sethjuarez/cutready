@@ -3,7 +3,8 @@ import { Check, Undo2 } from "lucide-react";
 import { RunReview } from "../contracts/generated/model/run-review";
 import type { DocumentReview } from "../contracts/generated/model/document-review";
 import { invoke } from "../services/tauri";
-import { flushEditorWrites, useAppStore } from "../stores/appStore";
+import { flushEditorWrites } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 import { useToastStore } from "../stores/toastStore";
 import { useConfirmDialog } from "./ConfirmDialog";
 
@@ -47,7 +48,7 @@ export function PendingReviewPanel() {
       } else {
         // Unsaved edits must reach disk first so the undo merges against them.
         await flushEditorWrites();
-        const store = useAppStore.getState();
+        const store = useVersioningStore.getState();
         await store.replaceFileOnDisk(doc.doc, () => invoke("undo_run_document", args));
         await store.refreshChangedFiles();
       }

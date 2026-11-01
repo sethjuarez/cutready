@@ -34,10 +34,11 @@ export class DrillContext {
     if (!this.check(ok, label, detail)) throw new Error(`precondition failed: ${label}`);
   }
 
-  /** Call an appStore action exactly as the UI does. */
+  /** Call a store action (app, versioning, or sync) exactly as the UI does. */
   async act(action, ...args) {
     const value = await this.app.eval(`(async () => {
-      const store = window.__appStore.getState();
+      const stores = [window.__appStore, window.__versioningStore, window.__syncStore].map((s) => s.getState());
+      const store = stores.find((s) => typeof s[${json(action)}] === "function") ?? stores[0];
       try {
         const value = await store[${json(action)}](...${json(args)});
         return { ok: true, value: value === undefined ? null : JSON.parse(JSON.stringify(value)) };
@@ -63,7 +64,7 @@ export class DrillContext {
 
   async state(...keys) {
     return this.app.eval(`(() => {
-      const s = window.__appStore.getState();
+      const s = { ...window.__appStore.getState(), ...window.__versioningStore.getState(), ...window.__syncStore.getState() };
       const pick = ${json(keys)};
       const out = {};
       for (const k of pick) out[k] = s[k] === undefined ? null : JSON.parse(JSON.stringify(s[k]));
@@ -75,7 +76,7 @@ export class DrillContext {
   async settle(timeoutMs = 120_000) {
     const started = Date.now();
     while (Date.now() - started < timeoutMs) {
-      const busy = await this.app.eval(`(() => { const s = window.__appStore.getState(); return Boolean(s.loading || s.isSyncing || s.projectSwitching); })()`);
+      const busy = await this.app.eval(`(() => { const s = window.__appStore.getState(); return Boolean(s.loading || window.__syncStore.getState().isSyncing || s.projectSwitching); })()`);
       if (!busy) return;
       await delay(250);
     }
@@ -85,7 +86,8 @@ export class DrillContext {
   async open(path) {
     await this.toasts();
     await this.app.eval(`(async () => {
-      window.__appStore.setState({ error: null, syncError: null, adoptionPrompt: null });
+      window.__appStore.setState({ error: null, adoptionPrompt: null });
+      window.__syncStore.setState({ syncError: null });
       await window.__appStore.getState().openProject(${json(path)});
       return true;
     })()`);

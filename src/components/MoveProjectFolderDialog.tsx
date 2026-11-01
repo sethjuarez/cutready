@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FolderInput } from "lucide-react";
 import { Dialog } from "./Dialog";
 import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 import { moveProjectFolderErrorMessage } from "../services/draftlineErrors";
 import type { ProjectView } from "../types/project";
 
@@ -24,7 +25,7 @@ export function MoveProjectFolderDialog() {
   const open = useAppStore((s) => s.moveFolderDialogOpen);
   const setOpen = useAppStore((s) => s.setMoveFolderDialogOpen);
   const project = useAppStore((s) => s.currentProject);
-  const isDirty = useAppStore((s) => s.isDirty);
+  const isDirty = useVersioningStore((s) => s.isDirty);
   const moveProjectFolder = useAppStore((s) => s.moveProjectFolder);
   const [to, setTo] = useState("");
   const [busy, setBusy] = useState(false);

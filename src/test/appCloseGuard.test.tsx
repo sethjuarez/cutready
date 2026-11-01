@@ -32,6 +32,7 @@ vi.mock("@tauri-apps/api/window", () => ({
 
 import { AppCloseGuard } from "../components/AppCloseGuard";
 import { useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 
 const project = {
   root: "D:\\workspace\\demo",
@@ -47,6 +48,8 @@ describe("AppCloseGuard", () => {
     act(() => {
       useAppStore.setState({
         currentProject: null,
+      });
+      useVersioningStore.setState({
         isDirty: false,
         isMerging: false,
         snapshotPromptOpen: false,
@@ -59,7 +62,8 @@ describe("AppCloseGuard", () => {
 
   it("requires a decision before closing with unsaved snapshot changes", async () => {
     act(() => {
-      useAppStore.setState({ currentProject: project, isDirty: true });
+      useAppStore.setState({ currentProject: project });
+      useVersioningStore.setState({ isDirty: true });
     });
     render(<AppCloseGuard />);
     await act(async () => undefined);
@@ -76,13 +80,14 @@ describe("AppCloseGuard", () => {
       fireEvent.click(screen.getByRole("button", { name: "Save snapshot first" }));
     });
 
-    expect(useAppStore.getState().snapshotPromptOpen).toBe(true);
+    expect(useVersioningStore.getState().snapshotPromptOpen).toBe(true);
     expect(windowMock.close).not.toHaveBeenCalled();
   });
 
   it("can cancel an in-progress merge and then close", async () => {
     act(() => {
-      useAppStore.setState({ currentProject: project, isMerging: true });
+      useAppStore.setState({ currentProject: project });
+      useVersioningStore.setState({ isMerging: true });
     });
     render(<AppCloseGuard />);
     await act(async () => undefined);
@@ -99,13 +104,14 @@ describe("AppCloseGuard", () => {
       fireEvent.click(screen.getByRole("button", { name: "Cancel merge and quit" }));
     });
 
-    expect(useAppStore.getState().isMerging).toBe(false);
+    expect(useVersioningStore.getState().isMerging).toBe(false);
     expect(windowMock.close).toHaveBeenCalledTimes(1);
   });
 
   it("falls through to the dirty close gate after canceling a merge", async () => {
     act(() => {
-      useAppStore.setState({ currentProject: project, isMerging: true, isDirty: true });
+      useAppStore.setState({ currentProject: project });
+      useVersioningStore.setState({ isMerging: true, isDirty: true });
     });
     render(<AppCloseGuard />);
     await act(async () => undefined);
@@ -122,7 +128,7 @@ describe("AppCloseGuard", () => {
       fireEvent.click(screen.getByRole("button", { name: "Cancel merge and quit" }));
     });
 
-    expect(useAppStore.getState().isMerging).toBe(false);
+    expect(useVersioningStore.getState().isMerging).toBe(false);
     expect(windowMock.close).not.toHaveBeenCalled();
     expect(await screen.findByText("Quit with unsaved snapshot?")).toBeInTheDocument();
   });

@@ -61,7 +61,7 @@ export class AppSession {
   async installProbes() {
     // Wait for the dev-only store hooks, then record every toast (they expire in seconds).
     for (let i = 0; i < 60; i += 1) {
-      const ok = await this.eval(`Boolean(window.__appStore && window.__toastStore)`);
+      const ok = await this.eval(`Boolean(window.__appStore && window.__versioningStore && window.__syncStore && window.__toastStore)`);
       if (ok) break;
       await delay(500);
     }

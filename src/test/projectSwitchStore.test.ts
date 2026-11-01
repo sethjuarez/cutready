@@ -24,6 +24,8 @@ vi.mock("../services/githubSetup", () => ({
 }));
 
 import { registerEditorFlush, useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
+import { useSyncStore } from "../stores/syncStore";
 import { useToastStore } from "../stores/toastStore";
 import { setDraftlineWorkspacePath } from "../services/draftlineVersioning";
 import type { Sketch, SketchSummary } from "../types/sketch";
@@ -64,17 +66,23 @@ const originalState = {
   loadNotes: useAppStore.getState().loadNotes,
   loadProjects: useAppStore.getState().loadProjects,
   loadSidebarOrder: useAppStore.getState().loadSidebarOrder,
-  loadVersions: useAppStore.getState().loadVersions,
-  loadTimelines: useAppStore.getState().loadTimelines,
-  loadGraphData: useAppStore.getState().loadGraphData,
-  checkDirty: useAppStore.getState().checkDirty,
-  checkRewound: useAppStore.getState().checkRewound,
-  checkStash: useAppStore.getState().checkStash,
-  detectRemote: useAppStore.getState().detectRemote,
-  switchTimeline: useAppStore.getState().switchTimeline,
-  refreshSyncStatus: useAppStore.getState().refreshSyncStatus,
   openProject: useAppStore.getState().openProject,
   createProject: useAppStore.getState().createProject,
+};
+
+const originalVersioningState = {
+  loadVersions: useVersioningStore.getState().loadVersions,
+  loadTimelines: useVersioningStore.getState().loadTimelines,
+  loadGraphData: useVersioningStore.getState().loadGraphData,
+  checkDirty: useVersioningStore.getState().checkDirty,
+  checkRewound: useVersioningStore.getState().checkRewound,
+  checkStash: useVersioningStore.getState().checkStash,
+  switchTimeline: useVersioningStore.getState().switchTimeline,
+};
+
+const originalSyncState = {
+  detectRemote: useSyncStore.getState().detectRemote,
+  refreshSyncStatus: useSyncStore.getState().refreshSyncStatus,
 };
 
 describe("project switch store side effects", () => {
@@ -98,18 +106,24 @@ describe("project switch store side effects", () => {
       chatLoading: false,
       chatError: null,
       chatInputDraft: "",
-      isDirty: false,
       loading: false,
       projectSwitching: false,
+      adoptionPrompt: null,
+      error: null,
+    });
+    useVersioningStore.setState({
+      ...originalVersioningState,
+      isDirty: false,
       startedBranchFromSnapshot: null,
+      timelines: [],
+    });
+    useSyncStore.setState({
+      ...originalSyncState,
       currentRemote: null,
       remoteBranches: [],
       remoteBranchesLoading: false,
-      timelines: [],
       isSyncing: false,
       syncError: null,
-      adoptionPrompt: null,
-      error: null,
     });
   });
 
@@ -138,16 +152,18 @@ describe("project switch store side effects", () => {
       openTabs: [{ id: "sketch-old.sk", type: "sketch", path: "old.sk", title: "Old sketch" }],
       activeTabId: "sketch-old.sk",
       chatSessionPath: "cutready://legacy-chats/old.chat",
-      isDirty: true,
-      startedBranchFromSnapshot: { branchName: "from-old", snapshotId: "snapshot-1" },
       loadSketches: async () => useAppStore.setState({ sketches: [restoredSketchSummary] }),
       loadStoryboards: async () => useAppStore.setState({ storyboards: [] }),
       loadNotes: async () => useAppStore.setState({ notes: [] }),
       loadSidebarOrder: vi.fn(() => Promise.resolve()),
+    });
+    useVersioningStore.setState({
+      isDirty: true,
+      startedBranchFromSnapshot: { branchName: "from-old", snapshotId: "snapshot-1" },
       loadVersions: vi.fn(() => Promise.resolve()),
       loadTimelines: vi.fn(() => Promise.resolve()),
       loadGraphData: vi.fn(() => Promise.resolve()),
-      checkDirty: async () => useAppStore.setState({ isDirty: true }),
+      checkDirty: async () => useVersioningStore.setState({ isDirty: true }),
       checkRewound: vi.fn(() => Promise.resolve()),
       checkStash: vi.fn(() => Promise.resolve()),
     });
@@ -171,8 +187,8 @@ describe("project switch store side effects", () => {
       { id: "sketch-new.sk", type: "sketch", path: "new.sk", title: "New sketch" },
     ]);
     expect(useAppStore.getState().activeSketch).toEqual(restoredSketch);
-    expect(useAppStore.getState().isDirty).toBe(true);
-    expect(useAppStore.getState().startedBranchFromSnapshot).toEqual({
+    expect(useVersioningStore.getState().isDirty).toBe(true);
+    expect(useVersioningStore.getState().startedBranchFromSnapshot).toEqual({
       branchName: "from-old",
       snapshotId: "snapshot-1",
     });
@@ -211,12 +227,16 @@ describe("project switch store side effects", () => {
       loadStoryboards: async () => useAppStore.setState({ storyboards: [] }),
       loadNotes: async () => useAppStore.setState({ notes: [] }),
       loadSidebarOrder: vi.fn(() => Promise.resolve()),
+    });
+    useVersioningStore.setState({
       loadVersions: vi.fn(() => Promise.resolve()),
       loadTimelines: vi.fn(() => Promise.resolve()),
       loadGraphData: vi.fn(() => Promise.resolve()),
       checkDirty: vi.fn(() => Promise.resolve()),
       checkRewound: vi.fn(() => Promise.resolve()),
       checkStash: vi.fn(() => Promise.resolve()),
+    });
+    useSyncStore.setState({
       detectRemote: vi.fn(() => Promise.resolve()),
     });
 
@@ -309,11 +329,13 @@ describe("project switch store side effects", () => {
       currentProject: { root: "D:\\workspace", name: "workspace", repo_root: "D:\\workspace" },
       openProject,
       removeRecentProject,
+      moveFolderDialogOpen: true,
+    });
+    useVersioningStore.setState({
       checkDirty: async () => {
         order.push("checkDirty");
-        useAppStore.setState({ isDirty: false });
+        useVersioningStore.setState({ isDirty: false });
       },
-      moveFolderDialogOpen: true,
     });
 
     const result = await useAppStore.getState().moveProjectFolder("cutready");
@@ -347,7 +369,9 @@ describe("project switch store side effects", () => {
       openProject,
       closeProject,
       removeRecentProject: vi.fn(() => Promise.resolve()),
-      checkDirty: async () => useAppStore.setState({ isDirty: false }),
+    });
+    useVersioningStore.setState({
+      checkDirty: async () => useVersioningStore.setState({ isDirty: false }),
     });
     const show = vi.spyOn(useToastStore.getState(), "show");
 
@@ -366,8 +390,10 @@ describe("project switch store side effects", () => {
     useAppStore.setState({
       currentProject: { root: "D:\\workspace", name: "workspace", repo_root: "D:\\workspace" },
       openProject,
-      checkDirty: async () => useAppStore.setState({ isDirty: true }),
       moveFolderDialogOpen: true,
+    });
+    useVersioningStore.setState({
+      checkDirty: async () => useVersioningStore.setState({ isDirty: true }),
     });
     await expect(useAppStore.getState().moveProjectFolder("cutready")).rejects.toThrow(/Save your changes/);
     expect(mockInvoke).not.toHaveBeenCalledWith("move_project_folder", expect.anything());
@@ -377,7 +403,7 @@ describe("project switch store side effects", () => {
         ? Promise.reject({ code: "folder_move_refused", message: "cannot move the Draftline folder: occupied isn't empty" })
         : Promise.resolve(null),
     );
-    useAppStore.setState({ checkDirty: async () => useAppStore.setState({ isDirty: false }) });
+    useVersioningStore.setState({ checkDirty: async () => useVersioningStore.setState({ isDirty: false }) });
     await expect(useAppStore.getState().moveProjectFolder("occupied")).rejects.toMatchObject({ code: "folder_move_refused" });
     expect(openProject).not.toHaveBeenCalled();
     expect(useAppStore.getState().moveFolderDialogOpen).toBe(true);
@@ -403,24 +429,26 @@ describe("project switch store side effects", () => {
       }
     });
 
-    useAppStore.setState({
-      currentRemote: { name: "origin", url: "https://github.com/example/repo.git" },
+    useVersioningStore.setState({
       timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 1, color_index: 0 }],
       isDirty: false,
       switchTimeline,
       loadTimelines: vi.fn(() => Promise.resolve()),
       loadGraphData: vi.fn(() => Promise.resolve()),
+    });
+    useSyncStore.setState({
+      currentRemote: { name: "origin", url: "https://github.com/example/repo.git" },
       refreshSyncStatus: vi.fn(() => Promise.resolve()),
     });
 
-    await expect(useAppStore.getState().loadRemoteBranches()).resolves.toEqual([
+    await expect(useSyncStore.getState().loadRemoteBranches()).resolves.toEqual([
       { id: "teammate-option", name: "teammate-option", remote: "origin", head_message: undefined, head_author: undefined, head_timestamp: undefined },
     ]);
-    expect(useAppStore.getState().remoteBranches).toEqual([
+    expect(useSyncStore.getState().remoteBranches).toEqual([
       { id: "teammate-option", name: "teammate-option", remote: "origin", head_message: undefined, head_author: undefined, head_timestamp: undefined },
     ]);
 
-    await useAppStore.getState().checkoutRemoteTimeline("teammate-option");
+    await useSyncStore.getState().checkoutRemoteTimeline("teammate-option");
 
     expect(mockInvoke).toHaveBeenCalledWith("adopt_remote_variation", {
       request: { workspace_path: "D:\\workspace", remote: "origin", variation_id: "teammate-option" },
@@ -462,13 +490,15 @@ describe("project switch store side effects", () => {
       loadNotes: async () => useAppStore.setState({
         notes: [{ path: "keep.md", title: "Keep", size: 17, updated_at: "2026-01-01T00:00:00Z" }],
       }),
+    });
+    useVersioningStore.setState({
       loadTimelines: vi.fn(() => Promise.resolve()),
       loadVersions: vi.fn(() => Promise.resolve()),
       loadGraphData: vi.fn(() => Promise.resolve()),
       checkDirty: vi.fn(() => Promise.resolve()),
     });
 
-    await useAppStore.getState().switchTimeline("next");
+    await useVersioningStore.getState().switchTimeline("next");
 
     expect(mockPreflightDraftlineSwitchVariation).toHaveBeenCalledWith("next");
     expect(mockSwitchDraftlineVariation).toHaveBeenCalledWith("next");
@@ -542,14 +572,15 @@ describe("project switch store side effects", () => {
       { id: "sentinel", message: "kept", timestamp: "2026-01-01T00:00:00Z", summary: "kept" },
     ];
 
-    useAppStore.setState({ currentProject: oldProject, versions: [] });
+    useAppStore.setState({ currentProject: oldProject });
+    useVersioningStore.setState({ versions: [] });
 
-    const load = useAppStore.getState().loadVersions();
+    const load = useVersioningStore.getState().loadVersions();
 
     // The workspace closes while inspect is still pending.
     useAppStore.getState().closeProject();
     // A sentinel the new (empty) workspace owns; the stale load must not clobber it.
-    useAppStore.setState({ versions: sentinelVersions });
+    useVersioningStore.setState({ versions: sentinelVersions });
 
     // The tauri invoke bridge dispatches asynchronously, so wait until the
     // inspect request has actually been issued before resolving it.
@@ -576,6 +607,6 @@ describe("project switch store side effects", () => {
     });
     await load;
 
-    expect(useAppStore.getState().versions).toEqual(sentinelVersions);
+    expect(useVersioningStore.getState().versions).toEqual(sentinelVersions);
   });
 });

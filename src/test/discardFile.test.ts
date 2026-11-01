@@ -8,6 +8,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import { shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
+import { useVersioningStore } from "../stores/versioningStore";
 import { setDraftlineWorkspacePath } from "../services/draftlineVersioning";
 import type { Sketch } from "../types/sketch";
 
@@ -71,12 +72,14 @@ describe("discardFile", () => {
       notes: [],
       openTabs: [],
       activeTabId: null,
-      changedFiles: [],
-      isDirty: false,
       editorReloadKey: 0,
       editorReloadPath: null,
       splitTabs: [],
       splitActiveTabId: null,
+    });
+    useVersioningStore.setState({
+      changedFiles: [],
+      isDirty: false,
     });
   });
 
@@ -117,7 +120,7 @@ describe("discardFile", () => {
       activeTabId: "sketch:demo.sk",
     });
 
-    await useAppStore.getState().discardFile("demo.sk");
+    await useVersioningStore.getState().discardFile("demo.sk");
 
     expect(mockInvoke).toHaveBeenCalledWith("selected_discard", {
       request: { workspace_path: WORKSPACE, paths: ["demo.sk"] },
@@ -129,7 +132,7 @@ describe("discardFile", () => {
     expect(shouldSuppressEditorFlush("demo.sk")).toBe(true);
     vi.advanceTimersByTime(100);
     expect(shouldSuppressEditorFlush("demo.sk")).toBe(false);
-    expect(useAppStore.getState().isDirty).toBe(false);
+    expect(useVersioningStore.getState().isDirty).toBe(false);
   });
 
   it("matches repo-scoped changed paths to project-relative open editors", async () => {
@@ -175,7 +178,7 @@ describe("discardFile", () => {
     });
     setDraftlineWorkspacePath("D:\\repo\\project-a");
 
-    await useAppStore.getState().discardFile("project-a/demo.sk");
+    await useVersioningStore.getState().discardFile("project-a/demo.sk");
 
     expect(mockInvoke).toHaveBeenCalledWith("selected_discard", {
       request: { workspace_path: "D:\\repo\\project-a", paths: ["project-a/demo.sk"] },
@@ -224,7 +227,7 @@ describe("discardFile", () => {
       editorReloadKey: 3,
     });
 
-    await useAppStore.getState().discardFile("demo.sk");
+    await useVersioningStore.getState().discardFile("demo.sk");
 
     expect(useAppStore.getState().splitTabs).toEqual([
       { id: "split-sketch-demo.sk", type: "sketch", path: "demo.sk", title: "Demo" },
@@ -270,7 +273,7 @@ describe("discardFile", () => {
       splitActiveTabId: "split-sketch-new.sk",
     });
 
-    await useAppStore.getState().discardFile("new.sk");
+    await useVersioningStore.getState().discardFile("new.sk");
 
     expect(useAppStore.getState().openTabs).toEqual([
       { id: "note-notes.md", type: "note", path: "notes.md", title: "Notes" },
@@ -320,7 +323,7 @@ describe("discardFile", () => {
       splitActiveTabId: "split-storyboard-demo.sb",
     });
 
-    await useAppStore.getState().discardChanges();
+    await useVersioningStore.getState().discardChanges();
 
     expect(useAppStore.getState().openTabs).toEqual([]);
     expect(useAppStore.getState().splitTabs).toEqual([]);
