@@ -1704,6 +1704,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cutready-cli"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "cutready-core",
+ "cutready-desktop-io",
+ "git2",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "cutready-contracts"
 version = "0.1.0"
 dependencies = [
@@ -1737,6 +1749,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "cutready-core",
+ "git2",
  "rusqlite",
  "serde_json",
  "tempfile",

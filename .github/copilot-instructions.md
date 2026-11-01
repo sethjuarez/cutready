@@ -144,6 +144,7 @@ cutready/
 | --- | --- | --- |
 | engine/project.rs | ✅ Implemented | Folder-based project I/O, safe_resolve(), file scanning |
 | crates/cutready-versioning | ✅ Implemented | Draftline-backed versioning facade, content policy, remotes, history, diff, save, restore; no Tauri (`engine/draftline_adapter.rs` is a temporary re-export) |
+| crates/cutready-cli | ✅ Implemented | `cutready-cli edit/validate/mcp`: edits a project with the app closed through the core write path; MCP handshake checks `CONTRACT_VERSION` |
 | commands/draftline.rs | ✅ Implemented | Tauri command wrappers for Draftline context, credentials, events, and collaboration operations |
 | engine/github_pull_requests.rs | ✅ Implemented | GitHub `PullRequestProvider` for hybrid Send for review (blocking client; run off the async runtime) |
 | engine/agent/ | ✅ Implemented | Multi-agent AI system (Planner, Writer, Editor, Designer) |

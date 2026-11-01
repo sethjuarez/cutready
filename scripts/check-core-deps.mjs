@@ -1,6 +1,6 @@
 // Guards cutready-core's dependency graph so the core stays host-neutral and
 // keeps building for iOS (architecture v3 §5), and keeps cutready-versioning
-// free of the desktop shell. `cargo tree -p` resolves
+// and the cutready-cli command line free of the desktop shell. `cargo tree -p` resolves
 // features for core alone, unlike workspace-unified `cargo metadata`.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -21,6 +21,15 @@ export const VERSIONING_PACKAGE = "cutready-versioning";
 export const VERSIONING_FORBIDDEN = [
   { pattern: /^tauri/, reason: "versioning must not depend on the desktop shell" },
   { pattern: /^cutready$/, reason: "versioning must not depend on the app" },
+];
+
+export const CLI_PACKAGE = "cutready-cli";
+
+// The CLI and MCP server run with the app closed, so they must not pull in
+// the desktop shell or the app crate.
+export const CLI_FORBIDDEN = [
+  { pattern: /^tauri/, reason: "the CLI must run without the desktop shell" },
+  { pattern: /^cutready$/, reason: "the CLI must not depend on the app" },
 ];
 
 const FORBIDDEN_FEATURES = [
@@ -53,6 +62,10 @@ export function checkCoreDeps(packages) {
 
 export function checkVersioningDeps(packages) {
   return findForbidden(packages, VERSIONING_FORBIDDEN, []);
+}
+
+export function checkCliDeps(packages) {
+  return findForbidden(packages, CLI_FORBIDDEN, []);
 }
 
 function findForbidden(packages, forbidden, forbiddenFeatures) {
@@ -88,6 +101,7 @@ function main() {
   for (const [pkg, check, label] of [
     [CORE_PACKAGE, checkCoreDeps, "Core"],
     [VERSIONING_PACKAGE, checkVersioningDeps, "Versioning"],
+    [CLI_PACKAGE, checkCliDeps, "CLI"],
   ]) {
     const packages = tree(pkg);
     const problems = check(packages);
