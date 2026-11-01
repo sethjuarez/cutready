@@ -23,7 +23,7 @@ describe("check-document-writes", () => {
   it("accepts writer calls, allowlisted callers, marked assets and test fixtures", () => {
     const problems = checkDocumentWrites([
       { path: "engine/project.rs", text: delegatingProject },
-      { path: "engine/agent/tools.rs", text: "fn f() { project::write_sketch(&s, &p, r); }" },
+      { path: "engine/document_goldens.rs", text: "fn f() { project::write_sketch(&s, &p, r); }" },
       {
         path: "commands/note.rs",
         text: [

@@ -2,7 +2,8 @@
 // writes sketches, storyboards and notes through engine/document_writer.rs.
 // Callers that still use the legacy project::write_* helpers are listed below
 // until their own units move them. Byte-preserving moves and copies
-// (project::rename_project_asset, commands/project.rs transfer_asset) aren't
+// (project::rename_project_asset, commands/project.rs transfer_asset, agent
+// project copies) aren't
 // edits; they join multi-file transactions in 4.9.
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -13,12 +14,17 @@ export const SOURCE_ROOT = "src-tauri/src";
 /** Files that may still call project::write_sketch/write_storyboard/write_note. */
 export const LEGACY_WRITERS = new Map([
   ["engine/project.rs", "defines the helpers, which delegate to the writer"],
-  ["engine/agent/tools.rs", "moves with the agent tools in 4.8"],
   ["engine/document_goldens.rs", "test-only goldens"],
 ]);
 
 /** Document command files: raw fs mutations there must be marked asset writes. */
-export const DOCUMENT_COMMANDS = ["commands/sketch.rs", "commands/storyboard.rs", "commands/note.rs"];
+export const DOCUMENT_COMMANDS = [
+  "commands/sketch.rs",
+  "commands/storyboard.rs",
+  "commands/note.rs",
+  "engine/agent/tools.rs",
+  "engine/agent/document_ops.rs",
+];
 
 /** project.rs helpers that must stay thin wrappers over the writer. */
 export const DELEGATING_HELPERS = [

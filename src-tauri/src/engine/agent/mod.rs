@@ -3,6 +3,7 @@
 //! Core module providing the LLM client for chat completions with
 //! function calling, streaming, and the agentic tool loop.
 
+mod document_ops;
 pub mod execution;
 pub mod harness;
 pub mod llm;
