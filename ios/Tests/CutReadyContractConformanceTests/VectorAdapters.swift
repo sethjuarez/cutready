@@ -46,25 +46,26 @@ enum VectorAdapters {
   }
 
   static func waivers() -> [String: String] {
-    let viewOnlyStoryboards =
-      "The companion is view-only for storyboards today; desktop upgrades .sb files on read "
-      + "and saves them in the canonical shape. Bind these when iOS writes storyboards."
     let desktopOnlyChatArtifacts =
       "Saved chat documents are authored by the desktop chat promotion flow today; "
       + "bind these vectors when the companion can create or edit .cv chat documents."
-    let ownEditPath =
-      "The companion keeps its own positional sketch edits (SketchDocument vectors) for now; "
-      + "bind these when it applies typed EditOps through the shared core."
+    // Waived by operation key, so every vector of these operations is covered,
+    // including the golden-seeded `golden_*` cases.
+    let deferredUntilCanvasAndIos =
+      "Deferred until the canvas and iOS phases: the companion will implement the pure edit "
+      + "layer (typed EditOps, storyboard decode and canonical save, versions, undo) and pass "
+      + "these same vectors. Only the write path (lock, recovery, op log, Draftline) stays "
+      + "Rust-only."
     return [
-      "EditService.applySketchOps": ownEditPath,
-      "EditService.documentVersion": ownEditPath,
-      "EditService.applyStoryboardOps": ownEditPath,
-      "EditService.editDocument": ownEditPath,
-      "EditService.undoDocument": ownEditPath,
+      "EditService.applySketchOps": deferredUntilCanvasAndIos,
+      "EditService.documentVersion": deferredUntilCanvasAndIos,
+      "EditService.applyStoryboardOps": deferredUntilCanvasAndIos,
+      "EditService.editDocument": deferredUntilCanvasAndIos,
+      "EditService.undoDocument": deferredUntilCanvasAndIos,
       "ChatArtifactDocument.promote": desktopOnlyChatArtifacts,
       "ChatArtifactDocument.roundTrip": desktopOnlyChatArtifacts,
-      "StoryboardDocument.roundTrip": viewOnlyStoryboards,
-      "StoryboardDocument.upgrade": viewOnlyStoryboards,
+      "StoryboardDocument.roundTrip": deferredUntilCanvasAndIos,
+      "StoryboardDocument.upgrade": deferredUntilCanvasAndIos,
     ]
   }
 
