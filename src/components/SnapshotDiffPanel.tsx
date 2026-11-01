@@ -1,6 +1,5 @@
 import { useAppStore } from "../stores/appStore";
 import { RotateCcw, X } from "lucide-react";
-import { useConfirmDialog } from "./ConfirmDialog";
 
 /**
  * SnapshotDiffPanel — shows file-level changes between two snapshots.
@@ -9,26 +8,16 @@ import { useConfirmDialog } from "./ConfirmDialog";
 export function SnapshotDiffPanel() {
   const diffResult = useAppStore((s) => s.diffResult);
   const diffSelection = useAppStore((s) => s.diffSelection);
-  const restoreSnapshotAsNewSave = useAppStore((s) => s.restoreSnapshotAsNewSave);
-  const { confirm, confirmationDialog } = useConfirmDialog();
 
   if (!diffResult || !diffSelection) return null;
 
   const totalAdded = diffResult.reduce((s, e) => s + e.additions, 0);
   const totalRemoved = diffResult.reduce((s, e) => s + e.deletions, 0);
-  const canRestorePreview = diffSelection.to === "preview";
-  const restoreLabel = `Restore ${diffSelection.from.slice(0, 7)}`;
   const close = () => useAppStore.setState({ diffResult: null, diffSelection: null });
-  const title = diffSelection.to === "working"
-    ? "Unsaved changes"
-    : canRestorePreview
-      ? "Snapshot preview"
-      : "Snapshot comparison";
+  const title = diffSelection.to === "working" ? "Unsaved changes" : "Snapshot comparison";
   const description = diffSelection.to === "working"
     ? "These files have changed since your last saved snapshot."
-    : canRestorePreview
-      ? "This shows what would change if you restore the selected snapshot as a new save. Your current history is preserved; CutReady creates a new save with the older contents instead of deleting later saves."
-      : `This compares ${diffSelection.from.slice(0, 7)} to ${diffSelection.to.slice(0, 7)}.`;
+    : `This compares ${diffSelection.from.slice(0, 7)} to ${diffSelection.to.slice(0, 7)}.`;
 
   return (
     <div className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center px-4 py-6">
@@ -98,25 +87,7 @@ export function SnapshotDiffPanel() {
           >
             Cancel
           </button>
-          {canRestorePreview && (
-            <button
-              data-testid="restore-snapshot-as-new-save"
-              onClick={async () => {
-                const confirmed = await confirm({
-                  title: "Restore this snapshot?",
-                  message: "CutReady will create a new save with the selected snapshot contents. Your history is preserved, but your current workspace will change.",
-                  confirmLabel: "Restore as new save",
-                  variant: "warning",
-                });
-                if (confirmed) await restoreSnapshotAsNewSave(diffSelection.from, restoreLabel);
-              }}
-              className="rounded-lg bg-[rgb(var(--color-accent))] px-3 py-1.5 text-[11px] font-medium text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))]"
-            >
-              Restore as new save
-            </button>
-          )}
         </div>
-        {confirmationDialog}
       </div>
     </div>
   );

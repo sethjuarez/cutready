@@ -117,25 +117,6 @@ export default [
     },
   },
   {
-    id: "S06",
-    group: "standalone",
-    title: "Restore an old save as a new save",
-    async run(ctx) {
-      const { fx } = await openStandalone(ctx);
-      write(join(fx.folder, "intro.sk"), sketch("v2"));
-      await ctx.refresh();
-      await save(ctx, "v2");
-      const { versions } = await ctx.state("versions");
-      const first = versions[versions.length - 1];
-      const before = versions.length;
-      await ctx.act("restoreSnapshotAsNewSave", first.id, "Back to start");
-      const after = await ctx.state("versions", "isDirty");
-      ctx.check(read(join(fx.folder, "intro.sk")) === sketch("Intro"), "content matches the old save");
-      ctx.check(after.versions.length === before + 1, "restore added a save (history kept)", after.versions.length);
-      ctx.check(!after.isDirty, "clean after restore");
-    },
-  },
-  {
     id: "S07",
     group: "standalone",
     title: "Publish saves to the remote",

@@ -40,6 +40,7 @@ async fn command_name(
 - Commands are thin — they call into `engine/` modules for business logic.
 - Use `Result<T, String>` return types (Tauri serializes the error as a string to the frontend).
 - Register all commands via `.invoke_handler(tauri::generate_handler![...])` in `lib.rs`.
+- List every registered command under `supported` in `src-tauri/commands.json`. When you remove a command, move it to `unsupported` with a reason. `npm run check:commands` fails on any drift, and so does a frontend `invoke("x")` for a command that isn't supported.
 - Rust `snake_case` params auto-convert from frontend `camelCase` (e.g., `relativePath` → `relative_path`).
 
 ## Path Safety

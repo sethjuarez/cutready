@@ -2,10 +2,8 @@ import {
   createDraftlineClient,
   createDraftlineHostFacade,
   createMergeConflictViewModel,
-  createWholeFileUseContentResolutions,
   type ApplyIncomingReport,
   type ChangedFile,
-  type ConflictContentSource,
   type DraftlineHostFacade,
   type MergeConflictResolution,
   type MergeConflictViewModel,
@@ -15,11 +13,9 @@ import {
   type RecoveryState,
   type RemoteVariation,
   type RenameVariationResult,
-  type RestoreVersionTarget,
   type SwitchVariationResult,
   type SyncState,
   type SyncStatus as DraftlineSyncStatusDto,
-  type TargetedRestoreVersionResult,
   type VariationRenamePreflight,
   type VariationRenameToken,
   type VariationCreatePreflight,
@@ -35,7 +31,6 @@ import type { BaseStatus, ConflictFile, DiffEntry, GraphNode, IncomingCommit, Re
 
 export type DraftlineMergeIncomingToken = MergeIncomingToken;
 export type DraftlineMergeConflictResolution = MergeConflictResolution;
-export type DraftlineRestoreVersionTarget = RestoreVersionTarget;
 export type DraftlineVariationRenamePreflight = VariationRenamePreflight;
 export type DraftlineVariationRenameToken = VariationRenameToken;
 export type DraftlineRenameVariationResult = RenameVariationResult;
@@ -242,10 +237,6 @@ export async function previewDraftlineWorkspaceDiffFile(path: string): Promise<D
   };
 }
 
-export async function diffDraftlineVersions(from: string, to: string): Promise<DiffEntry[]> {
-  return versionDiffToDiffEntries(await facade().diffVersions(from, to));
-}
-
 export async function createDraftlineVariation(
   fromVersion: string,
   name: string,
@@ -341,19 +332,6 @@ export async function preflightDraftlineSwitchVariation(variation: string): Prom
 
 export async function switchDraftlineVariation(variation: string): Promise<SwitchVariationResult> {
   return facade().switchVariation(variation);
-}
-
-export async function restoreDraftlineVersionAsNewSave(version: string, label: string): Promise<string> {
-  const restored = await facade().restoreAsNewSave(version, label);
-  return restored.version.id;
-}
-
-export async function restoreDraftlineVersionAsNewSaveToVariation(
-  version: string,
-  label: string,
-  target: RestoreVersionTarget,
-): Promise<TargetedRestoreVersionResult> {
-  return facade().restoreAsNewSaveToVariation(version, label, target);
 }
 
 export async function listDraftlineRemotes(): Promise<RemoteInfo[]> {
@@ -456,13 +434,6 @@ export async function mergeDraftlineIncomingWithResolutions(
   return result.merge.version.id;
 }
 
-export function createDraftlineWholeFileUseContentResolutions(
-  report: MergeIncomingReport,
-  source: ConflictContentSource,
-): MergeConflictResolution[] {
-  return createWholeFileUseContentResolutions(report, source);
-}
-
 async function readDraftlineSyncStatus(remote: string): Promise<DraftlineSyncStatusDto> {
   return invoke<DraftlineSyncStatusDto>("get_sync_status", {
     request: { workspace_path: requireWorkspacePath(), remote },
@@ -516,10 +487,6 @@ export async function listDraftlineIncomingCommits(remote: string): Promise<Inco
   }));
 }
 
-export async function inspectDraftlineChanges() {
-  return facade().changes();
-}
-
 /** Problems an interrupted or crashed operation left behind, or missing large-file content. */
 export interface DraftlineProjectHealth {
   /** An operation that stopped part-way and must be finished or undone. */
@@ -538,10 +505,6 @@ export const HEALTHY_PROJECT: DraftlineProjectHealth = {
   staleLock: null,
   missingContent: [],
 };
-
-export function needsDraftlineAttention(health: DraftlineProjectHealth): boolean {
-  return !!health.recovery || !!health.staleLock || health.missingContent.length > 0;
-}
 
 export async function inspectDraftlineProjectHealth(
   options: { probeContent?: boolean } = {},

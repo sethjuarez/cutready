@@ -63,7 +63,7 @@ A crash and hybrid stress pass against 0.8.0 was clean: developer branch switch,
 | 6a Relabel a variation | Both | ➖ | None | G20 |
 | 7 Switch with unsaved work | Both | ⚠️ | `UnsavedWorkspaceDialog` | G7, G15 |
 | 8 Review history | Both | ✅ | `draftlineVersioning.test.ts` graph and diff tests | None |
-| 9 Restore | Both | ⚠️ | `restore_version_as_new_save_restores_tracked_content_without_runtime_state` | G1 |
+| 9 Restore | Both | ⚠️ | Restore starts a new branch from the save (`startTimelineFromSnapshot`); restore-as-new-save is unsupported (`src-tauri/commands.json`) | G1 |
 | 9a Restore hazards | Both | ⚠️ | Relies on Draftline preflight | G20 (tests) |
 
 ### Collaboration
