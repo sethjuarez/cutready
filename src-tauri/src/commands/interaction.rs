@@ -104,7 +104,7 @@ pub async fn prepare_browser(
     // storage, its `fwd_browser.lock()` blocks until the connection is stored
     // below and the guard is dropped.
     let mut browser = state.browser.lock().await;
-    let fwd_handle = tokio::spawn(async move {
+    let fwd_handle = crate::util::spawn::spawn_named("browser-event-forwarder", async move {
         let mut rx = event_rx;
         while let Some(event) = rx.recv().await {
             match event {

@@ -125,7 +125,7 @@ impl SidecarManager {
         let pending: Arc<Mutex<PendingMap>> = Arc::new(Mutex::new(HashMap::new()));
 
         let reader_pending = pending.clone();
-        let reader_handle = tokio::spawn(async move {
+        let reader_handle = crate::util::spawn::spawn_named("sidecar-reader", async move {
             Self::reader_loop(stdout, reader_pending, event_tx).await;
         });
 

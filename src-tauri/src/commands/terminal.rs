@@ -41,6 +41,8 @@ pub struct TerminalExitedEvent {
     session_id: String,
 }
 
+// The command macro adds its own parameters to this IPC signature.
+#[allow(clippy::too_many_arguments)]
 #[auditaur_command(skip_all, err)]
 pub async fn terminal_open(
     cols: u16,

@@ -4,6 +4,8 @@
 
 // Fixtures live on disk; the code under test only sees MemoryFiles.
 #![allow(clippy::disallowed_methods)]
+// Fixture helpers are test code; a failed unwrap is a failed test.
+#![allow(clippy::unwrap_used)]
 
 use std::fs;
 use std::path::{Path, PathBuf};

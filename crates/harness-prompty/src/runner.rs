@@ -708,24 +708,24 @@ impl ModelStreamPort for CutReadyModelStream {
             ModelStreamChunk::Thinking(content) => {
                 emit_host_event(&self.emit, AgentEvent::Thinking { content })
             }
-            ModelStreamChunk::Provider(value) => {
-                if value.get("type").and_then(Value::as_str) == Some("tool_call") {
-                    emit_host_event(
-                        &self.emit,
-                        AgentEvent::ToolCall {
-                            name: value
-                                .get("name")
-                                .and_then(Value::as_str)
-                                .unwrap_or("unknown")
-                                .to_string(),
-                            arguments: value
-                                .get("arguments")
-                                .and_then(Value::as_str)
-                                .unwrap_or("{}")
-                                .to_string(),
-                        },
-                    );
-                }
+            ModelStreamChunk::Provider(value)
+                if value.get("type").and_then(Value::as_str) == Some("tool_call") =>
+            {
+                emit_host_event(
+                    &self.emit,
+                    AgentEvent::ToolCall {
+                        name: value
+                            .get("name")
+                            .and_then(Value::as_str)
+                            .unwrap_or("unknown")
+                            .to_string(),
+                        arguments: value
+                            .get("arguments")
+                            .and_then(Value::as_str)
+                            .unwrap_or("{}")
+                            .to_string(),
+                    },
+                );
             }
             _ => {}
         }
@@ -1418,16 +1418,15 @@ fn sanitize_responses_replay_history(messages: Vec<ChatMessage>) -> (Vec<ChatMes
             continue;
         }
 
-        if message.role == "assistant" {
-            if message
+        if message.role == "assistant"
+            && message
                 .tool_calls
                 .as_ref()
                 .filter(|calls| !calls.is_empty())
                 .is_some()
-            {
-                dropped += 1;
-                continue;
-            }
+        {
+            dropped += 1;
+            continue;
         }
 
         if message.role == "tool" {

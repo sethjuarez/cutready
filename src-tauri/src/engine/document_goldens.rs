@@ -521,7 +521,12 @@ fn note_content() -> String {
 #[test]
 fn note_save() {
     let p = Project::new();
-    project::write_note(&p.path("notes/plan.md"), &note_content(), p.root()).unwrap();
+    crate::engine::document_writer::replace_note(
+        p.root(),
+        &p.path("notes/plan.md"),
+        &note_content(),
+    )
+    .unwrap();
     assert_golden("note_save", &p);
 }
 

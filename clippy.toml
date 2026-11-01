@@ -1,0 +1,3 @@
+# Tests may unwrap; production code returns errors or uses expect with a reason.
+allow-unwrap-in-tests = true
+

@@ -199,8 +199,7 @@ impl AgentHarness for AgentiveHarness {
         // out of order (spawn_blocking makes completion order nondeterministic). An
         // empty slot or missing entry maps to failure, so guardrail denials and
         // status-less outputs never inherit a blanket success.
-        let tool_status: Arc<Mutex<HashMap<String, VecDeque<Option<ToolExecutionStatus>>>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let tool_status: ToolStatusQueues = Arc::new(Mutex::new(HashMap::new()));
         let executor_status = tool_status.clone();
         let tool_executor = move |call: agentive::ToolCall| {
             let ctx = exec_ctx.clone();
@@ -508,6 +507,9 @@ fn to_host_usage(usage: &agentive::Usage) -> Usage {
     }
 }
 
+/// Execution statuses per tool-call id, one slot per call in request order.
+type ToolStatusQueues = Arc<Mutex<HashMap<String, VecDeque<Option<ToolExecutionStatus>>>>>;
+
 /// Map agentive's runner event onto CutReady's stable frontend event shape.
 ///
 /// Only the events that have a place in CutReady's DTO are forwarded. Runner
@@ -517,7 +519,7 @@ fn to_host_usage(usage: &agentive::Usage) -> Usage {
 /// metadata, ...) have no frontend representation and are ignored.
 fn map_runner_event(
     event: agentive::RunnerEvent,
-    tool_status: &Arc<Mutex<HashMap<String, VecDeque<Option<ToolExecutionStatus>>>>>,
+    tool_status: &ToolStatusQueues,
 ) -> Option<AgentEvent> {
     use agentive::RunnerEvent as Runner;
     match event {
@@ -590,6 +592,14 @@ fn context_items_to_system_prompt(items: &[ContextItem]) -> Option<String> {
     wrote_any.then_some(block)
 }
 
+/// Emit an `Error` event and return the same message as the run failure.
+fn fail(emit: &HarnessEventEmitter, message: String) -> Result<AgentRunResult, String> {
+    (*emit)(AgentEvent::Error {
+        message: message.clone(),
+    });
+    Err(message)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -659,8 +669,7 @@ mod tests {
     fn tool_result_status_is_resolved_from_the_recorded_outcome() {
         // The adapter records each explicit outcome by tool_call_id; the event
         // mapper must surface exactly that on AgentEvent::ToolResult.
-        let status_map: Arc<Mutex<HashMap<String, VecDeque<Option<ToolExecutionStatus>>>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let status_map: ToolStatusQueues = Arc::new(Mutex::new(HashMap::new()));
         status_map.lock().unwrap().insert(
             "call-ok".to_string(),
             VecDeque::from([Some(ToolExecutionStatus::Success)]),
@@ -735,8 +744,7 @@ mod tests {
         // The mapper pops one queued entry and drops the key once drained. A second
         // ToolResult carrying the same tool_call_id (reuse across calls) must not
         // inherit the prior success — it resolves to failure like any unrecorded call.
-        let status_map: Arc<Mutex<HashMap<String, VecDeque<Option<ToolExecutionStatus>>>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let status_map: ToolStatusQueues = Arc::new(Mutex::new(HashMap::new()));
         status_map.lock().unwrap().insert(
             "call-1".to_string(),
             VecDeque::from([Some(ToolExecutionStatus::Success)]),
@@ -781,8 +789,7 @@ mod tests {
         // Even when they finish out of order, the two result events (which agentive
         // emits in request order) each pop the front slot and recover their own
         // outcome — no overwrite, no completion-order dependence.
-        let status_map: Arc<Mutex<HashMap<String, VecDeque<Option<ToolExecutionStatus>>>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let status_map: ToolStatusQueues = Arc::new(Mutex::new(HashMap::new()));
 
         // Reserve two slots in request order: call #0 then call #1 (both unfilled).
         status_map
@@ -844,8 +851,7 @@ mod tests {
         // A slot reserved before execution but never filled — e.g. a status-less
         // host output, a decode failure, or a spawn_blocking join error — must
         // resolve to failure, never a blanket success.
-        let status_map: Arc<Mutex<HashMap<String, VecDeque<Option<ToolExecutionStatus>>>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let status_map: ToolStatusQueues = Arc::new(Mutex::new(HashMap::new()));
         status_map
             .lock()
             .unwrap()
@@ -913,12 +919,4 @@ mod tests {
         assert!(foundry_openai_v1_chat_url("").is_err());
         assert!(foundry_openai_v1_chat_url("/").is_err());
     }
-}
-
-/// Emit an `Error` event and return the same message as the run failure.
-fn fail(emit: &HarnessEventEmitter, message: String) -> Result<AgentRunResult, String> {
-    (*emit)(AgentEvent::Error {
-        message: message.clone(),
-    });
-    Err(message)
 }

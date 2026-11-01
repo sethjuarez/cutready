@@ -392,7 +392,7 @@ fn preview_agent_model_route_inner(
     }
     match resolve_agent_model_route_for_harness(&config, harness_id) {
         Ok(route) => Ok(Some(route)),
-        Err(error) if matches!(error, RouteError::HarnessOwnsProvider(_)) => Ok(None),
+        Err(RouteError::HarnessOwnsProvider(_)) => Ok(None),
         Err(error) => Err(error.to_string()),
     }
 }
@@ -730,7 +730,7 @@ pub async fn list_agent_runs(
     limit: Option<usize>,
 ) -> Result<Vec<AgentRunSummary>, String> {
     let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
+        let guard = state.current_project.lock().map_err(|e| e.to_string())?;
         let view = guard.as_ref().ok_or("No project open")?;
         (view.repo_root.clone(), view.root.clone())
     };
@@ -743,7 +743,7 @@ pub async fn get_agent_run(
     run_id: String,
 ) -> Result<Option<AgentRunDetail>, String> {
     let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
+        let guard = state.current_project.lock().map_err(|e| e.to_string())?;
         let view = guard.as_ref().ok_or("No project open")?;
         (view.repo_root.clone(), view.root.clone())
     };
@@ -757,7 +757,7 @@ pub async fn list_chat_sessions(
     offset: Option<usize>,
 ) -> Result<ChatSessionPage, String> {
     let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
+        let guard = state.current_project.lock().map_err(|e| e.to_string())?;
         let view = guard.as_ref().ok_or("No project open")?;
         (view.repo_root.clone(), view.root.clone())
     };
@@ -775,7 +775,7 @@ pub async fn get_chat_session(
     session_id: String,
 ) -> Result<Option<ChatSessionRecord>, String> {
     let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
+        let guard = state.current_project.lock().map_err(|e| e.to_string())?;
         let view = guard.as_ref().ok_or("No project open")?;
         (view.repo_root.clone(), view.root.clone())
     };
@@ -794,7 +794,7 @@ pub async fn save_chat_session(
         return Err("Chat session ID cannot be empty".into());
     }
     let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
+        let guard = state.current_project.lock().map_err(|e| e.to_string())?;
         let view = guard.as_ref().ok_or("No project open")?;
         (view.repo_root.clone(), view.root.clone())
     };
@@ -814,7 +814,7 @@ pub async fn delete_chat_session(
     session_id: String,
 ) -> Result<bool, String> {
     let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
+        let guard = state.current_project.lock().map_err(|e| e.to_string())?;
         let view = guard.as_ref().ok_or("No project open")?;
         (view.repo_root.clone(), view.root.clone())
     };
@@ -837,7 +837,7 @@ pub async fn delete_agent_run(
     run_id: String,
 ) -> Result<AgentStateMaintenanceResult, String> {
     let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
+        let guard = state.current_project.lock().map_err(|e| e.to_string())?;
         let view = guard.as_ref().ok_or("No project open")?;
         (view.repo_root.clone(), view.root.clone())
     };
@@ -850,7 +850,7 @@ pub async fn prune_agent_runs(
     keep_recent_completed: Option<usize>,
 ) -> Result<AgentStateMaintenanceResult, String> {
     let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
+        let guard = state.current_project.lock().map_err(|e| e.to_string())?;
         let view = guard.as_ref().ok_or("No project open")?;
         (view.repo_root.clone(), view.root.clone())
     };
@@ -874,7 +874,7 @@ pub async fn compact_agent_state_database(
         return Err("Cannot compact the agent-state database while an agent run is active".into());
     }
     let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
+        let guard = state.current_project.lock().map_err(|e| e.to_string())?;
         let view = guard.as_ref().ok_or("No project open")?;
         (view.repo_root.clone(), view.root.clone())
     };
@@ -884,7 +884,7 @@ pub async fn compact_agent_state_database(
 #[auditaur_command(skip_all, err)]
 pub async fn clear_saved_context(state: tauri::State<'_, AppState>) -> Result<usize, String> {
     let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
+        let guard = state.current_project.lock().map_err(|e| e.to_string())?;
         let view = guard.as_ref().ok_or("No project open")?;
         (view.repo_root.clone(), view.root.clone())
     };
@@ -947,7 +947,7 @@ pub async fn agent_chat_with_tools(
         );
     }
     let (repo_root, project_root) = {
-        let guard = state.current_project.lock().unwrap();
+        let guard = state.current_project.lock().map_err(|e| e.to_string())?;
         let view = guard.as_ref().ok_or("No project open")?;
         (view.repo_root.clone(), view.root.clone())
     };
@@ -1443,7 +1443,7 @@ pub struct AgentChatResult {
 #[auditaur_command(skip_all, err)]
 pub async fn get_memory_context(state: tauri::State<'_, AppState>) -> Result<String, String> {
     let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
+        let guard = state.current_project.lock().map_err(|e| e.to_string())?;
         let view = guard.as_ref().ok_or("No project open")?;
         (view.repo_root.clone(), view.root.clone())
     };
@@ -1464,7 +1464,7 @@ pub async fn archive_chat_session(
     // the active project when no matching pending origin exists. Only consume the
     // pending summary when it belongs to this session.
     let matched = {
-        let mut guard = state.last_chat_summary.lock().unwrap();
+        let mut guard = state.last_chat_summary.lock().map_err(|e| e.to_string())?;
         match guard.as_ref() {
             Some(p) if p.session_id == session_id => guard.take().map(|p| (p.repo_root, p.root)),
             _ => None,
@@ -1473,7 +1473,7 @@ pub async fn archive_chat_session(
     let (repo_root, root) = match matched {
         Some(roots) => roots,
         None => {
-            let guard = state.current_project.lock().unwrap();
+            let guard = state.current_project.lock().map_err(|e| e.to_string())?;
             let view = guard.as_ref().ok_or("No project open")?;
             (view.repo_root.clone(), view.root.clone())
         }
@@ -1503,25 +1503,22 @@ pub async fn update_chat_summary(
             std::path::PathBuf::from(root),
         )),
         _ => {
-            let guard = state.current_project.lock().unwrap();
+            let guard = state.current_project.lock().map_err(|e| e.to_string())?;
             guard
                 .as_ref()
                 .map(|v| (v.repo_root.clone(), v.root.clone()))
         }
     };
-    let mut pending = state.last_chat_summary.lock().unwrap();
-    match origin {
-        Some((repo_root, root)) => {
-            *pending = Some(crate::PendingChatSummary {
-                session_id,
-                summary,
-                repo_root,
-                root,
-            });
-        }
-        // No attributable origin for this update; leave any previously captured
-        // (already project-tagged) summary intact rather than dropping a valid one.
-        None => {}
+    let mut pending = state.last_chat_summary.lock().map_err(|e| e.to_string())?;
+    // Without an attributable origin, leave any previously captured (already
+    // project-tagged) summary intact rather than dropping a valid one.
+    if let Some((repo_root, root)) = origin {
+        *pending = Some(crate::PendingChatSummary {
+            session_id,
+            summary,
+            repo_root,
+            root,
+        });
     }
     Ok(())
 }
@@ -1532,7 +1529,7 @@ pub async fn list_memories(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<crate::engine::memory::MemoryDto>, String> {
     let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
+        let guard = state.current_project.lock().map_err(|e| e.to_string())?;
         let view = guard.as_ref().ok_or("No project open")?;
         (view.repo_root.clone(), view.root.clone())
     };
@@ -1543,7 +1540,7 @@ pub async fn list_memories(
 #[tauri::command]
 pub async fn delete_memory(index: usize, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
+        let guard = state.current_project.lock().map_err(|e| e.to_string())?;
         let view = guard.as_ref().ok_or("No project open")?;
         (view.repo_root.clone(), view.root.clone())
     };
@@ -1558,7 +1555,7 @@ pub async fn update_memory(
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
+        let guard = state.current_project.lock().map_err(|e| e.to_string())?;
         let view = guard.as_ref().ok_or("No project open")?;
         (view.repo_root.clone(), view.root.clone())
     };
@@ -1572,7 +1569,7 @@ pub async fn clear_memories(
     state: tauri::State<'_, AppState>,
 ) -> Result<usize, String> {
     let (repo_root, root) = {
-        let guard = state.current_project.lock().unwrap();
+        let guard = state.current_project.lock().map_err(|e| e.to_string())?;
         let view = guard.as_ref().ok_or("No project open")?;
         (view.repo_root.clone(), view.root.clone())
     };

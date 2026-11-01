@@ -1998,7 +1998,7 @@ fn background_music_filter_chain(
     }
     music_filters
         .last_mut()
-        .unwrap()
+        .expect("the music chain starts with filters")
         .outputs
         .push("music".into());
     FfmpegFilterChain::new(music_filters)

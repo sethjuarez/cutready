@@ -504,7 +504,7 @@ pub fn run() {
                 if let Ok(Some(urls)) = app.deep_link().get_current() {
                     let url_strings: Vec<String> = urls.iter().map(|u| u.to_string()).collect();
                     if !url_strings.is_empty() {
-                        tauri::async_runtime::spawn(async move {
+                        crate::util::spawn::spawn_named("deep-link-replay", async move {
                             // Give the webview time to initialize its event listeners
                             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                             for url_str in url_strings {
@@ -876,7 +876,11 @@ pub fn run() {
                     // one, which may have changed since the summary was captured).
                     let app = window.app_handle();
                     if let Some(state) = app.try_state::<AppState>() {
-                        let summary = state.last_chat_summary.lock().unwrap().take();
+                        let summary = state
+                            .last_chat_summary
+                            .lock()
+                            .ok()
+                            .and_then(|mut s| s.take());
                         if let Some(pending) = summary {
                             let _ = crate::engine::memory::archive_session(
                                 &pending.repo_root,

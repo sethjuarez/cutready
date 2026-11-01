@@ -1,6 +1,8 @@
 //! In-memory port implementations for tests and tools. They follow the same
 //! contracts as the desktop implementations (path rules, missing-file
 //! behavior, lock exclusivity) so core tests exercise real semantics.
+// A poisoned fake means a test already panicked; unwrapping its locks is fine.
+#![allow(clippy::unwrap_used)]
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

@@ -1,0 +1,11 @@
+# Clippy reads only the nearest clippy.toml, so this repeats the root's settings.
+# Tests may unwrap; production code returns errors or uses expect with a reason.
+allow-unwrap-in-tests = true
+
+# Background work is named so traces and panics say which task it was.
+disallowed-methods = [
+    { path = "tokio::spawn", reason = "use crate::util::spawn::spawn_named" },
+    { path = "tokio::task::spawn", reason = "use crate::util::spawn::spawn_named" },
+    { path = "tauri::async_runtime::spawn", reason = "use crate::util::spawn::spawn_named" },
+    { path = "std::thread::spawn", reason = "use crate::util::spawn::spawn_thread_named" },
+]

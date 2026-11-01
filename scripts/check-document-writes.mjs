@@ -32,7 +32,6 @@ export const DOCUMENT_COMMANDS = [
 export const DELEGATING_HELPERS = [
   "write_sketch",
   "write_storyboard",
-  "write_note",
   "delete_sketch",
   "delete_storyboard",
   "delete_note",

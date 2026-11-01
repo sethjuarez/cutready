@@ -277,19 +277,23 @@ pub fn capture_all_monitors(
         .collect::<Result<Vec<_>, String>>()?;
 
     // Encode + save in parallel threads (image data is Send)
-    let handles: Vec<_> = captures
+    let handles = captures
         .into_iter()
         .map(|(mid, img)| {
             let dir = dir.clone();
-            std::thread::spawn(move || -> Result<(u32, String), String> {
-                let filename = screenshot_filename();
-                let abs_path = dir.join(&filename);
-                save_jpeg(&img, &abs_path)?;
-                let rel_path = format!(".cutready/screenshots/{filename}");
-                Ok((mid, rel_path))
-            })
+            crate::util::spawn::spawn_thread_named(
+                format!("cutready-screenshot-{mid}"),
+                move || -> Result<(u32, String), String> {
+                    let filename = screenshot_filename();
+                    let abs_path = dir.join(&filename);
+                    save_jpeg(&img, &abs_path)?;
+                    let rel_path = format!(".cutready/screenshots/{filename}");
+                    Ok((mid, rel_path))
+                },
+            )
+            .map_err(|err| format!("Could not start the screenshot encoder: {err}"))
         })
-        .collect();
+        .collect::<Result<Vec<_>, String>>()?;
 
     let mut results = std::collections::HashMap::new();
     for h in handles {

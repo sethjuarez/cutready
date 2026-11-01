@@ -1,4 +1,7 @@
 //! Shared setup for the CLI integration tests.
+
+// Test helpers are test code; a failed unwrap is a failed test.
+#![allow(clippy::unwrap_used)]
 #![allow(dead_code)]
 
 use std::path::Path;

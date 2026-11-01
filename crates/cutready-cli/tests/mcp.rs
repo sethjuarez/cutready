@@ -1,6 +1,9 @@
 //! `cutready-cli mcp` runs the shared EditDocument vectors and the
 //! contract-version handshake.
 
+// Test helpers are test code; a failed unwrap is a failed test.
+#![allow(clippy::unwrap_used)]
+
 mod common;
 
 use common::*;

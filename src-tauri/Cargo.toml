@@ -118,3 +118,6 @@ windows-capture = "2.0.0"
 
 [dev-dependencies]
 httpmock = "0.7"
+
+[lints]
+workspace = true
