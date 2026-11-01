@@ -50,14 +50,79 @@ export function invokeNames(text) {
   return names;
 }
 
+/**
+ * `text` with comments and string/template text blanked (template `${…}`
+ * code kept), so calls are only counted in code. Offsets are preserved.
+ */
+export function maskCode(text) {
+  const out = [...text];
+  const blank = (from, to) => {
+    for (let i = from; i < to; i++) if (out[i] !== "\n") out[i] = " ";
+  };
+  // Each entry is "`" (inside template text) or a brace depth inside `${…}`.
+  const stack = [];
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    const inTemplate = stack.at(-1) === "`";
+    if (inTemplate) {
+      if (c === "\\") {
+        blank(i, i + 2);
+        i += 2;
+      } else if (c === "`") {
+        stack.pop();
+        i++;
+      } else if (c === "$" && text[i + 1] === "{") {
+        stack.push(0);
+        i += 2;
+      } else {
+        blank(i, i + 1);
+        i++;
+      }
+      continue;
+    }
+    if (c === "/" && text[i + 1] === "/") {
+      const end = text.indexOf("\n", i);
+      const stop = end === -1 ? text.length : end;
+      blank(i, stop);
+      i = stop;
+    } else if (c === "/" && text[i + 1] === "*") {
+      const end = text.indexOf("*/", i + 2);
+      const stop = end === -1 ? text.length : end + 2;
+      blank(i, stop);
+      i = stop;
+    } else if (c === '"' || c === "'") {
+      let j = i + 1;
+      while (j < text.length && text[j] !== c && text[j] !== "\n") j += text[j] === "\\" ? 2 : 1;
+      blank(i + 1, j);
+      i = j + 1;
+    } else if (c === "`") {
+      stack.push("`");
+      i++;
+    } else if (c === "{" && stack.length) {
+      stack[stack.length - 1]++;
+      i++;
+    } else if (c === "}" && stack.length) {
+      if (stack.at(-1) === 0) stack.pop();
+      else stack[stack.length - 1]--;
+      i++;
+    } else {
+      i++;
+    }
+  }
+  return out.join("");
+}
+
 /** Number of raw `invoke(` / `invoke<T>(` calls, or null when `invoke` isn't imported. */
 export function countInvokes(text) {
   const names = invokeNames(text);
   if (names.length === 0) return null;
-  const code = stripComments(text);
+  const code = maskCode(text);
   return names.reduce(
     (total, name) =>
-      total + [...code.matchAll(new RegExp(`\\b${name.replace(".", "\\s*\\.\\s*")}\\s*[<(]`, "g"))].length,
+      total +
+      [...code.matchAll(new RegExp(`(?<![\\w$])(?<!\\.\\s*)${name.replace(".", "\\s*\\.\\s*")}\\s*[<(]`, "g"))]
+        .length,
     0,
   );
 }

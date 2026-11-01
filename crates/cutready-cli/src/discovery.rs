@@ -133,12 +133,7 @@ pub fn register(dir: &Path, install: &Registration, force: bool) -> std::io::Res
         }
     };
     let tmp = dir.join(format!("{REGISTRY_FILE}.{}.tmp", std::process::id()));
-    let bytes = format!("{}\n", output::pretty(&install.to_install()));
-    {
-        let mut out = std::fs::File::create(&tmp)?;
-        std::io::Write::write_all(&mut out, bytes.as_bytes())?;
-        out.sync_all()?;
-    }
+    output::write_file(&tmp, &install.to_install())?;
     if let Err(err) = std::fs::rename(&tmp, &file) {
         let _ = std::fs::remove_file(&tmp);
         return Err(err);

@@ -36,7 +36,7 @@ fn main() -> ExitCode {
     match run(&args) {
         Ok(code) => code,
         Err(Usage(message)) => {
-            eprintln!("{message}\n\n{USAGE}");
+            eprintln!("{message}\n\n{USAGE}"); // plain text
             ExitCode::from(2)
         }
     }
@@ -123,14 +123,14 @@ fn run(args: &[String]) -> Result<ExitCode, Usage> {
             let mut server = match mcp::Server::new(&PathBuf::from(project), &clock) {
                 Ok(server) => server,
                 Err(err) => {
-                    eprintln!("cutready-cli mcp: {}", err.message());
+                    eprintln!("cutready-cli mcp: {}", err.message()); // plain text
                     return Ok(ExitCode::FAILURE);
                 }
             };
             let stdin = std::io::stdin().lock();
             let stdout = std::io::stdout().lock(); // mcp framing: the JSON-RPC stream
             if let Err(err) = server.serve(stdin, stdout) {
-                eprintln!("cutready-cli mcp: {err}");
+                eprintln!("cutready-cli mcp: {err}"); // plain text
                 return Ok(ExitCode::FAILURE);
             }
             Ok(if server.closed() {

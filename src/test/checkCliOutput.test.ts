@@ -53,10 +53,32 @@ describe("check-cli-output", () => {
     ]);
     expect(problems).toEqual([
       expect.stringMatching(/^edit\.rs:1: serde_json serialization/),
-      expect.stringMatching(/^edit\.rs:1: print!\/println!/),
+      expect.stringMatching(/^edit\.rs:1: print!\/println!\/eprint!\/eprintln!/),
       expect.stringMatching(/^review\.rs:1: impl Output/),
-      expect.stringMatching(/^project\.rs:1: stdout\(\)/),
-      expect.stringMatching(/^mcp\.rs:1: print!\/println!/),
+      expect.stringMatching(/^project\.rs:1: stdout\(\)\/stderr\(\)/),
+      expect.stringMatching(/^project\.rs:1: write_all/),
+      expect.stringMatching(/^mcp\.rs:1: print!\/println!\/eprint!\/eprintln!/),
+    ]);
+  });
+
+  it("rejects stderr, serializers, writers and raw to_output outside the boundary", () => {
+    const problems = checkCliOutput([
+      { path: "edit.rs", text: 'eprintln!("{}", value);' },
+      { path: "review.rs", text: "let mut s = serde_json::Serializer::new(out);" },
+      { path: "project.rs", text: 'fn emit(out: &mut impl Write) { writeln!(out, "{}", v); }' },
+      { path: "lib.rs", text: 'let v = run.to_output();\nstd::fs::write(p, v.to_string());' },
+      {
+        path: "discovery.rs",
+        text: 'fn fmt(&self, f: &mut Formatter) -> fmt::Result {\n    write!(\n        f,\n        "x"\n    )\n}',
+      },
+      { path: "main.rs", text: 'eprintln!("{USAGE}"); // plain text' },
+    ]);
+    expect(problems).toEqual([
+      expect.stringMatching(/^edit\.rs:1: print!\/println!\/eprint!\/eprintln!/),
+      expect.stringMatching(/^review\.rs:1: serde_json::Serializer/),
+      expect.stringMatching(/^project\.rs:1: write!\/writeln!/),
+      expect.stringMatching(/^project\.rs:1: io::Write/),
+      expect.stringMatching(/^lib\.rs:1: to_output\(\)/),
     ]);
   });
 });

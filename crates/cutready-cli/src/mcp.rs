@@ -14,7 +14,7 @@
 //! `cutready-cli review/keep/undo`.
 
 use std::collections::HashSet;
-use std::io::{BufRead, Write};
+use std::io::{BufRead, Write}; // mcp framing: the JSON-RPC stream
 use std::path::Path;
 
 use cutready_core::Clock;
@@ -72,6 +72,7 @@ impl<'c> Server<'c> {
 
     /// Reads requests from `input` until it closes (or the handshake fails),
     /// writing one response line per request.
+    // mcp framing: the JSON-RPC stream
     pub fn serve(&mut self, input: impl BufRead, mut output: impl Write) -> std::io::Result<()> {
         for line in input.lines() {
             let line = line?;
@@ -271,6 +272,7 @@ fn boxed(output: impl Output + 'static) -> Box<dyn Output> {
 
 /// MCP framing around a typed result: `structuredContent` plus its text.
 fn tool_result(output: &dyn Output, is_error: bool) -> Value {
+    // mcp framing
     let value = output.to_output();
     // mcp framing
     json!({

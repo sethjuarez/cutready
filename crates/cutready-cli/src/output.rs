@@ -32,6 +32,15 @@ pub fn pretty(output: &(impl Output + ?Sized)) -> String {
     format!("{:#}", output.to_output())
 }
 
+/// Writes a result as indented JSON plus a newline to a new file at `path`,
+/// synced to disk.
+pub fn write_file(path: &std::path::Path, output: &(impl Output + ?Sized)) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut file = std::fs::File::create(path)?;
+    writeln!(file, "{}", pretty(output))?;
+    file.sync_all()
+}
+
 /// What a failed command prints: `{error: CmdError}`.
 impl sealed::Sealed for Failure {}
 impl Output for Failure {

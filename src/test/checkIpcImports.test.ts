@@ -22,6 +22,19 @@ describe("check-ipc-imports", () => {
     expect(countInvokes('import { invoke } from "./ipc/sketches";\ninvoke();')).toBeNull();
     expect(countInvokes('import * as tauri from "../services/tauri";\ntauri.invoke("a"); tauri.listen("x");')).toBe(1);
     expect(countInvokes('import * as core from "@tauri-apps/api/core";\ncore.invoke<string>("a");')).toBe(1);
+    expect(countInvokes('import * as tauri from "../services/tauri";\ntauri . invoke("a");')).toBe(1);
+  });
+
+  it("ignores lookalikes in strings, templates and other objects", () => {
+    const text = [
+      'import * as tauri from "../services/tauri";',
+      'import { invoke } from "../services/tauri";',
+      'const s = "tauri.invoke(" + \'invoke("x")\';',
+      "const t = `tauri.invoke( ${await tauri.invoke(\"real\")} invoke(`;",
+      "other.tauri.invoke(\"x\"); api.invoke(\"y\"); reinvoke(\"z\");",
+      "return invoke(\"counted\");",
+    ].join("\n");
+    expect(countInvokes(text)).toBe(2);
   });
 
   it("caps existing importers and rejects new ones", () => {
