@@ -277,30 +277,60 @@ pub fn capture_all_monitors(
         .collect::<Result<Vec<_>, String>>()?;
 
     // Encode + save in parallel threads (image data is Send)
-    let handles = captures
-        .into_iter()
-        .map(|(mid, img)| {
-            let dir = dir.clone();
-            crate::util::spawn::spawn_thread_named(
-                format!("cutready-screenshot-{mid}"),
-                move || -> Result<(u32, String), String> {
-                    let filename = screenshot_filename();
-                    let abs_path = dir.join(&filename);
-                    save_jpeg(&img, &abs_path)?;
-                    let rel_path = format!(".cutready/screenshots/{filename}");
-                    Ok((mid, rel_path))
-                },
-            )
-            .map_err(|err| format!("Could not start the screenshot encoder: {err}"))
-        })
-        .collect::<Result<Vec<_>, String>>()?;
-
-    let mut results = std::collections::HashMap::new();
-    for h in handles {
-        let (mid, path) = h.join().map_err(|_| "Thread panicked".to_string())??;
-        results.insert(mid, path);
+    let mut handles = Vec::with_capacity(captures.len());
+    let mut spawn_error = None;
+    for (mid, img) in captures {
+        let dir = dir.clone();
+        match crate::util::spawn::spawn_thread_named(
+            format!("cutready-screenshot-{mid}"),
+            move || -> Result<(u32, String), String> {
+                let filename = screenshot_filename();
+                let abs_path = dir.join(&filename);
+                save_jpeg(&img, &abs_path)?;
+                let rel_path = format!(".cutready/screenshots/{filename}");
+                Ok((mid, rel_path))
+            },
+        ) {
+            Ok(handle) => handles.push(handle),
+            Err(err) => {
+                spawn_error = Some(format!("Could not start the screenshot encoder: {err}"));
+                break;
+            }
+        }
     }
-    Ok(results)
+
+    // Join every started encoder, even after a spawn failure, so no write
+    // outlives the caller's repository lock.
+    let joined = join_encoders(handles);
+    if let Some(err) = spawn_error {
+        return Err(err);
+    }
+    joined
+}
+
+fn join_encoders(
+    handles: Vec<std::thread::JoinHandle<Result<(u32, String), String>>>,
+) -> Result<std::collections::HashMap<u32, String>, String> {
+    let mut results = std::collections::HashMap::new();
+    let mut first_error = None;
+    for h in handles {
+        match h
+            .join()
+            .map_err(|_| "Thread panicked".to_string())
+            .and_then(|r| r)
+        {
+            Ok((mid, path)) => {
+                results.insert(mid, path);
+            }
+            Err(err) => {
+                first_error.get_or_insert(err);
+            }
+        }
+    }
+    match first_error {
+        Some(err) => Err(err),
+        None => Ok(results),
+    }
 }
 
 /// Capture the entire monitor and save to the project's screenshot directory.
@@ -344,4 +374,46 @@ pub fn crop_screenshot(
 
     let rel_path = format!(".cutready/screenshots/{filename}");
     Ok(rel_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::join_encoders;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+
+    fn spawn<F>(f: F) -> std::thread::JoinHandle<Result<(u32, String), String>>
+    where
+        F: FnOnce() -> Result<(u32, String), String> + Send + 'static,
+    {
+        crate::util::spawn::spawn_thread_named("test-encoder", f).unwrap()
+    }
+
+    #[test]
+    fn join_encoders_waits_for_every_thread_and_reports_the_first_error() {
+        let finished = Arc::new(AtomicBool::new(false));
+        let slow = Arc::clone(&finished);
+        let handles = vec![
+            spawn(|| Err("first failed".to_string())),
+            spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                slow.store(true, Ordering::SeqCst);
+                Ok((2, "b.jpg".to_string()))
+            }),
+        ];
+
+        assert_eq!(join_encoders(handles), Err("first failed".to_string()));
+        assert!(finished.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn join_encoders_collects_every_result() {
+        let handles = vec![
+            spawn(|| Ok((1, "a.jpg".to_string()))),
+            spawn(|| Ok((2, "b.jpg".to_string()))),
+        ];
+        let results = join_encoders(handles).unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[&2], "b.jpg");
+    }
 }

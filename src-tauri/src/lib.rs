@@ -876,11 +876,12 @@ pub fn run() {
                     // one, which may have changed since the summary was captured).
                     let app = window.app_handle();
                     if let Some(state) = app.try_state::<AppState>() {
+                        // A poisoned lock still holds the summary; archive it anyway.
                         let summary = state
                             .last_chat_summary
                             .lock()
-                            .ok()
-                            .and_then(|mut s| s.take());
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .take();
                         if let Some(pending) = summary {
                             let _ = crate::engine::memory::archive_session(
                                 &pending.repo_root,

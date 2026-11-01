@@ -11,7 +11,7 @@ applyTo: "src-tauri/**"
 - **Tauri v2** — not v1. Use Tauri v2 APIs, command signatures, and plugin system.
 - **Rust 2021 edition** with async via **Tokio**.
 - Dependencies managed in `src-tauri/Cargo.toml`.
-- **Lints**: every crate opts into the root `[workspace.lints]` (`[lints] workspace = true`): `unused_must_use`, clippy `unwrap_used`, `dbg_macro` and `todo` are denied, and `check:rust`/CI run clippy with `-D warnings`. Tests may unwrap (`allow-unwrap-in-tests`; integration-test helpers need `#![allow(clippy::unwrap_used)]`). Clippy reads only the nearest `clippy.toml`, so crate-level ones repeat the root's settings.
+- **Lints**: every crate opts into the root `[workspace.lints]` (`[lints] workspace = true`): `unused_must_use`, clippy `unwrap_used`, `dbg_macro` and `todo` are denied, and `check:rust`/CI run clippy with `-D warnings` (Linux via `check:rust`, plus Windows and macOS jobs for platform `cfg` code). Tests may unwrap (`allow-unwrap-in-tests`; integration-test helpers need `#![allow(clippy::unwrap_used)]`). Clippy reads only the nearest `clippy.toml`, so crate-level ones repeat the root's settings.
 - **Background work is named**: start tasks with `crate::util::spawn::spawn_named(name, fut)` and threads with `spawn_thread_named(name, f)`. `src-tauri/clippy.toml` rejects raw `tokio::spawn`, `tauri::async_runtime::spawn` and `std::thread::spawn`.
 
 ## Tauri Configuration
