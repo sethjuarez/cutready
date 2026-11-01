@@ -15,5 +15,5 @@ pub use error::{PortError, PortErrorKind};
 pub use files::Files;
 pub use lock::{Lock, LockGuard};
 pub use log::{Log, LogLevel};
-pub use op_log::{OpLogEntry, OpLogState, OpLogStore};
+pub use op_log::{NewOpLogEntry, OpLogEntry, OpLogState, OpLogStore};
 pub use secrets::Secrets;

@@ -12,12 +12,11 @@ pub enum OpLogState {
     Committed,
 }
 
-/// One document write inside a run. `ops` holds the contract `EditOp` list as
-/// JSON so this port doesn't change as ops are added.
+/// A document write about to happen inside a run. `ops` holds the contract
+/// edit operations as JSON until the typed `EditOp` contract lands (roadmap
+/// 4.6), when this becomes `Vec<EditOp>`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct OpLogEntry {
-    /// Assigned by the store on append; ignored on input.
-    pub seq: u64,
+pub struct NewOpLogEntry {
     pub run_id: String,
     /// Project-relative document path.
     pub doc: String,
@@ -25,15 +24,26 @@ pub struct OpLogEntry {
     pub ops: serde_json::Value,
     pub before_hash: String,
     pub after_hash: String,
+}
+
+/// A logged write. The store assigns `seq` and owns `state`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct OpLogEntry {
+    pub seq: u64,
     pub state: OpLogState,
+    #[serde(flatten)]
+    pub write: NewOpLogEntry,
 }
 
 /// Local, never-versioned record of document writes (SQLite on desktop, next
 /// to `agent-state.db`). Shape may grow when runs land (roadmap 4.9).
 pub trait OpLogStore: Send + Sync {
-    /// Appends an entry and returns its sequence number.
-    fn append(&self, entry: OpLogEntry) -> Result<u64, PortError>;
-    fn set_state(&self, seq: u64, state: OpLogState) -> Result<(), PortError>;
+    /// Logs a write as `Pending` before the document is replaced and returns
+    /// its sequence number.
+    fn append_pending(&self, write: NewOpLogEntry) -> Result<u64, PortError>;
+    /// Marks a pending write `Committed`. Committing twice is a no-op;
+    /// an unknown `seq` is `NotFound`. There is no way back to `Pending`.
+    fn commit(&self, seq: u64) -> Result<(), PortError>;
     /// Entries still `Pending`, oldest first.
     fn pending(&self) -> Result<Vec<OpLogEntry>, PortError>;
     /// All entries for a run, oldest first.

@@ -19,12 +19,18 @@ const FORBIDDEN_FEATURES = [
   { name: "tokio", feature: "process", reason: "core never spawns processes" },
 ];
 
-/** Parses `cargo tree --prefix none -f "{p} [{f}]"` output into packages. */
+export const TREE_FORMAT = "{p}|{f}|";
+
+/**
+ * Parses `cargo tree --prefix none -f "{p}|{f}|"` output into packages.
+ * Throws on any line it can't read, so a format change can't hide a package.
+ */
 export function parseTree(output) {
   const packages = new Map();
   for (const line of output.split(/\r?\n/)) {
-    const match = /^(\S+) v\S+.*?\[([^\]]*)\]/.exec(line.trim());
-    if (!match) continue;
+    if (!line.trim()) continue;
+    const match = /^(\S+) v[^|]*\|([^|]*)\|( \(\*\))?$/.exec(line.trim());
+    if (!match) throw new Error(`check-core-deps: unreadable cargo tree line: ${line}`);
     const [, name, features] = match;
     const set = packages.get(name) ?? new Set();
     for (const feature of features.split(",").filter(Boolean)) set.add(feature);
@@ -50,7 +56,7 @@ export function checkCoreDeps(packages) {
 function main() {
   const output = execFileSync(
     "cargo",
-    ["tree", "-p", CORE_PACKAGE, "-e", "normal,build", "--target", "all", "--prefix", "none", "-f", "{p} [{f}]", "--locked"],
+    ["tree", "-p", CORE_PACKAGE, "-e", "normal,build", "--target", "all", "--prefix", "none", "-f", TREE_FORMAT, "--locked"],
     { encoding: "utf8" },
   );
   const packages = parseTree(output);

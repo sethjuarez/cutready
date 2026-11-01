@@ -1,23 +1,20 @@
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use cutready_core::path::project_relative;
 use cutready_core::{Files, PortError, PortErrorKind};
 
 use crate::io_error;
 
-/// Files rooted at one project folder. Paths follow `project_relative`, and,
-/// like the app's `safe_resolve`, a path whose existing file or parent
-/// canonicalizes outside the root (for example through a symlink) is
-/// rejected.
+/// Files rooted at one project folder. Paths follow `project_relative`. In
+/// addition, the deepest part of a path that already exists must
+/// canonicalize inside the root, so a symlink or junction can't redirect a
+/// read or write (including directory creation) outside the project.
 #[derive(Debug, Clone)]
 pub struct StdFiles {
     root: PathBuf,
 }
-
-static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 impl StdFiles {
     pub fn new(root: impl Into<PathBuf>) -> Self {
@@ -31,25 +28,26 @@ impl StdFiles {
     fn resolve(&self, path: &Path) -> Result<(PathBuf, PathBuf), PortError> {
         let relative = project_relative(path)?;
         let resolved = self.root.join(&relative);
-        if let Ok(root) = self.root.canonicalize() {
-            let check = if resolved.exists() {
-                resolved.canonicalize().ok()
-            } else {
-                resolved.parent().and_then(|parent| {
-                    parent
-                        .canonicalize()
-                        .ok()
-                        .map(|p| p.join(resolved.file_name().unwrap_or_default()))
-                })
-            };
-            if let Some(canonical) = check {
-                if !canonical.starts_with(&root) {
-                    return Err(PortError::new(
-                        PortErrorKind::InvalidPath,
-                        format!("Path {} leaves the project folder.", path.display()),
-                    ));
-                }
+        let escapes = || {
+            PortError::new(
+                PortErrorKind::InvalidPath,
+                format!("Path {} leaves the project folder.", path.display()),
+            )
+        };
+        // A missing root has nothing inside it to escape through yet.
+        let Ok(root) = self.root.canonicalize() else {
+            return Ok((relative, resolved));
+        };
+        for ancestor in resolved.ancestors() {
+            if fs::symlink_metadata(ancestor).is_err() {
+                continue;
             }
+            // Dangling links fail to canonicalize and are rejected too.
+            let canonical = ancestor.canonicalize().map_err(|_| escapes())?;
+            if !canonical.starts_with(&root) {
+                return Err(escapes());
+            }
+            break;
         }
         Ok((relative, resolved))
     }
@@ -64,32 +62,30 @@ impl Files for StdFiles {
     fn write_atomic(&self, path: &Path, bytes: &[u8]) -> Result<(), PortError> {
         let (relative, full) = self.resolve(path)?;
         let parent = full.parent().unwrap_or(&self.root);
-        fs::create_dir_all(parent).map_err(|err| io_error(relative.display(), err))?;
-        // The temp file sits beside the target so the rename never crosses
-        // volumes; the dot prefix keeps it out of project scans.
+        let fail = |err| io_error(relative.display(), err);
+        fs::create_dir_all(parent).map_err(fail)?;
+        // A fresh, randomly named temp file beside the target (created with
+        // create_new, so it never follows an existing entry); the rename
+        // stays on one volume. Dropping it on error deletes it.
         let file_name = full.file_name().unwrap_or_default().to_string_lossy();
-        let temp = parent.join(format!(
-            ".{file_name}.{}.{}.tmp",
-            std::process::id(),
-            TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
-        ));
-        let result = (|| {
-            let mut file = fs::File::create(&temp)?;
-            file.write_all(bytes)?;
-            file.sync_all()?;
-            drop(file);
-            fs::rename(&temp, &full)
-        })();
-        if let Err(err) = result {
-            let _ = fs::remove_file(&temp);
-            return Err(io_error(relative.display(), err));
-        }
+        let mut temp = tempfile::Builder::new()
+            .prefix(&format!(".{file_name}."))
+            .suffix(".tmp")
+            .tempfile_in(parent)
+            .map_err(fail)?;
+        temp.write_all(bytes).map_err(fail)?;
+        temp.as_file().sync_all().map_err(fail)?;
+        temp.persist(&full).map_err(|err| fail(err.error))?;
         Ok(())
     }
 
     fn exists(&self, path: &Path) -> Result<bool, PortError> {
-        let (_, full) = self.resolve(path)?;
-        Ok(full.is_file())
+        let (relative, full) = self.resolve(path)?;
+        match fs::metadata(&full) {
+            Ok(metadata) => Ok(metadata.is_file()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
+            Err(err) => Err(io_error(relative.display(), err)),
+        }
     }
 
     fn remove(&self, path: &Path) -> Result<(), PortError> {
@@ -108,14 +104,11 @@ impl Files for StdFiles {
         } else {
             self.resolve(dir)?
         };
+        let fail = |err| io_error(relative.display(), err);
         let mut paths = Vec::new();
-        for entry in fs::read_dir(&full).map_err(|err| io_error(relative.display(), err))? {
-            let entry = entry.map_err(|err| io_error(relative.display(), err))?;
-            let is_file = entry
-                .file_type()
-                .map_err(|err| io_error(relative.display(), err))?
-                .is_file();
-            if is_file {
+        for entry in fs::read_dir(&full).map_err(fail)? {
+            let entry = entry.map_err(fail)?;
+            if entry.file_type().map_err(fail)?.is_file() {
                 paths.push(relative.join(entry.file_name()));
             }
         }
@@ -187,10 +180,26 @@ mod tests {
         fs::create_dir_all(&root).unwrap();
         fs::write(dir.path().join("secret.txt"), b"x").unwrap();
         std::os::unix::fs::symlink(dir.path(), root.join("escape")).unwrap();
+        std::os::unix::fs::symlink(dir.path().join("gone"), root.join("dangling")).unwrap();
         let files = StdFiles::new(&root);
+        for bad in [
+            "escape/secret.txt",
+            "escape/new/deeper/x.sk",
+            "dangling/x.sk",
+        ] {
+            assert_eq!(
+                files.read(Path::new(bad)).unwrap_err().kind,
+                PortErrorKind::InvalidPath,
+                "{bad}"
+            );
+        }
         assert_eq!(
-            files.read(Path::new("escape/secret.txt")).unwrap_err().kind,
+            files
+                .write_atomic(Path::new("escape/new/deeper/x.sk"), b"x")
+                .unwrap_err()
+                .kind,
             PortErrorKind::InvalidPath
         );
+        assert!(!dir.path().join("new").exists());
     }
 }

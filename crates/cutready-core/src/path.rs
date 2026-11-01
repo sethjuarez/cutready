@@ -6,11 +6,16 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::ports::{PortError, PortErrorKind};
 
-/// Normalizes a project-relative path. Rejects absolute paths, drive or UNC
-/// prefixes, and any `..` component, matching the desktop's `safe_resolve`.
+/// Normalizes a project-relative path. Rejects non-UTF-8 paths, absolute
+/// paths, drive or UNC prefixes, and any `..` component, matching the
+/// desktop's `safe_resolve`. Both `/` and `\` separate components on every
+/// platform, so a project written on Windows resolves the same on macOS and
+/// iOS (backslashes in file names are not supported).
 pub fn project_relative(path: impl AsRef<Path>) -> Result<PathBuf, PortError> {
     let path = path.as_ref();
-    let text = path.to_string_lossy();
+    let text = path
+        .to_str()
+        .ok_or_else(|| invalid(path, "is not valid UTF-8"))?;
     // Reject Windows-style absolute paths even when running on Unix, where
     // `Path` treats them as plain names.
     let bytes = text.as_bytes();
@@ -19,7 +24,7 @@ pub fn project_relative(path: impl AsRef<Path>) -> Result<PathBuf, PortError> {
         return Err(invalid(path, "must be relative to the project root"));
     }
     let mut normalized = PathBuf::new();
-    for component in Path::new(&*text.replace('\\', "/")).components() {
+    for component in Path::new(&text.replace('\\', "/")).components() {
         match component {
             Component::Normal(part) => normalized.push(part),
             Component::CurDir => {}

@@ -8,8 +8,10 @@ use crate::io_error;
 /// An exclusive OS file lock, so the app, CLI and MCP server serialize writes
 /// to the same project. Each acquire opens its own handle, which makes the
 /// lock exclusive between threads of one process as well as between
-/// processes. Keep the lock file in local runtime state (under the git dir),
-/// not in the project folder, so it never shows up as a change.
+/// processes. Every host must derive the same absolute path for a project
+/// (runs wire this from the project's runtime state dir under the git dir,
+/// roadmap 4.9); keep it out of the project folder so it never shows up as a
+/// change.
 #[derive(Debug, Clone)]
 pub struct FileLock {
     path: PathBuf,
@@ -26,8 +28,17 @@ impl Drop for FileLockGuard {
 }
 
 impl FileLock {
-    pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into() }
+    /// `path` must be absolute, so hosts with different working directories
+    /// can't end up holding different locks.
+    pub fn new(path: impl Into<PathBuf>) -> Result<Self, PortError> {
+        let path = path.into();
+        if !path.is_absolute() {
+            return Err(PortError::new(
+                PortErrorKind::InvalidPath,
+                format!("Lock path {} must be absolute.", path.display()),
+            ));
+        }
+        Ok(Self { path })
     }
 
     fn open(&self) -> Result<File, PortError> {
@@ -73,7 +84,7 @@ mod tests {
     #[test]
     fn second_holder_is_busy_until_the_first_drops() {
         let dir = tempfile::tempdir().unwrap();
-        let lock = FileLock::new(dir.path().join("state").join("write.lock"));
+        let lock = FileLock::new(dir.path().join("state").join("write.lock")).unwrap();
         let other = lock.clone();
 
         let guard = lock.acquire().unwrap();
@@ -83,9 +94,17 @@ mod tests {
     }
 
     #[test]
+    fn rejects_relative_lock_paths() {
+        assert_eq!(
+            FileLock::new("state/write.lock").unwrap_err().kind,
+            PortErrorKind::InvalidPath
+        );
+    }
+
+    #[test]
     fn acquire_waits_for_the_holder() {
         let dir = tempfile::tempdir().unwrap();
-        let lock = FileLock::new(dir.path().join("write.lock"));
+        let lock = FileLock::new(dir.path().join("write.lock")).unwrap();
         let guard = lock.acquire().unwrap();
 
         let (tx, rx) = mpsc::channel();

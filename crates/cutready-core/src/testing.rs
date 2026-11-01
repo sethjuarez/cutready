@@ -10,8 +10,8 @@ use chrono::{DateTime, Utc};
 
 use crate::path::project_relative;
 use crate::ports::{
-    Clock, Files, Lock, LockGuard, Log, LogLevel, OpLogEntry, OpLogState, OpLogStore, PortError,
-    PortErrorKind, Secrets,
+    Clock, Files, Lock, LockGuard, Log, LogLevel, NewOpLogEntry, OpLogEntry, OpLogState,
+    OpLogStore, PortError, PortErrorKind, Secrets,
 };
 
 /// Files held in a map keyed by normalized project-relative path.
@@ -193,15 +193,18 @@ pub struct MemoryOpLog {
 }
 
 impl OpLogStore for MemoryOpLog {
-    fn append(&self, mut entry: OpLogEntry) -> Result<u64, PortError> {
+    fn append_pending(&self, write: NewOpLogEntry) -> Result<u64, PortError> {
         let mut entries = self.entries.lock().unwrap();
-        entry.seq = entries.len() as u64 + 1;
-        let seq = entry.seq;
-        entries.push(entry);
+        let seq = entries.len() as u64 + 1;
+        entries.push(OpLogEntry {
+            seq,
+            state: OpLogState::Pending,
+            write,
+        });
         Ok(seq)
     }
 
-    fn set_state(&self, seq: u64, state: OpLogState) -> Result<(), PortError> {
+    fn commit(&self, seq: u64) -> Result<(), PortError> {
         let mut entries = self.entries.lock().unwrap();
         let entry = entries
             .iter_mut()
@@ -212,7 +215,7 @@ impl OpLogStore for MemoryOpLog {
                     format!("Op log entry {seq} not found."),
                 )
             })?;
-        entry.state = state;
+        entry.state = OpLogState::Committed;
         Ok(())
     }
 
@@ -233,7 +236,7 @@ impl OpLogStore for MemoryOpLog {
             .lock()
             .unwrap()
             .iter()
-            .filter(|entry| entry.run_id == run_id)
+            .filter(|entry| entry.write.run_id == run_id)
             .cloned()
             .collect())
     }
@@ -286,19 +289,18 @@ mod tests {
     #[test]
     fn memory_op_log_tracks_pending_writes() {
         let log = MemoryOpLog::default();
-        let entry = |run: &str| OpLogEntry {
-            seq: 0,
+        let entry = |run: &str| NewOpLogEntry {
             run_id: run.into(),
             doc: "intro.sk".into(),
             actor: "user".into(),
             ops: serde_json::json!([]),
             before_hash: "a".into(),
             after_hash: "b".into(),
-            state: OpLogState::Pending,
         };
-        let first = log.append(entry("r1")).unwrap();
-        let second = log.append(entry("r2")).unwrap();
-        log.set_state(first, OpLogState::Committed).unwrap();
+        let first = log.append_pending(entry("r1")).unwrap();
+        let second = log.append_pending(entry("r2")).unwrap();
+        log.commit(first).unwrap();
+        log.commit(first).unwrap();
 
         assert_eq!(
             log.pending()
@@ -309,10 +311,7 @@ mod tests {
             vec![second]
         );
         assert_eq!(log.entries_for_run("r1").unwrap()[0].seq, first);
-        assert_eq!(
-            log.set_state(99, OpLogState::Committed).unwrap_err().kind,
-            PortErrorKind::NotFound
-        );
+        assert_eq!(log.commit(99).unwrap_err().kind, PortErrorKind::NotFound);
     }
 
     #[test]

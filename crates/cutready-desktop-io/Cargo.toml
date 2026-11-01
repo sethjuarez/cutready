@@ -11,7 +11,5 @@ name = "cutready_desktop_io"
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 cutready-core = { path = "../cutready-core" }
-tracing = "0.1"
-
-[dev-dependencies]
 tempfile = "3"
+tracing = "0.1"
