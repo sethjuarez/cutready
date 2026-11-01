@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  checkEventImports,
   checkIpcImports,
   countInvokes,
+  eventImports,
+  isEventExempt,
   isExempt,
   updateCaps,
   // @ts-expect-error - plain .mjs script without type declarations
@@ -69,5 +72,42 @@ describe("check-ipc-imports", () => {
     expect(isExempt("src/ipc/events.ts")).toBe(true);
     expect(isExempt("src/test/app.test.tsx")).toBe(true);
     expect(isExempt("src/stores/appStore.ts")).toBe(false);
+  });
+
+  it("finds raw event imports but not types or lookalikes", () => {
+    expect(eventImports('import { invoke, listen } from "../services/tauri";')).toEqual(["listen"]);
+    expect(eventImports('import { emit as send, emitTo } from "@tauri-apps/api/event";')).toEqual(["emit", "emitTo"]);
+    expect(eventImports('import * as events from "@tauri-apps/api/event";')).toEqual(["events.*"]);
+    expect(eventImports('import { once } from "./tauri";')).toEqual(["once"]);
+    expect(eventImports('import type { UnlistenFn } from "@tauri-apps/api/event";')).toEqual([]);
+    expect(eventImports('import { type EventCallback, invoke } from "../services/tauri";')).toEqual([]);
+    expect(eventImports('import { listenEvent } from "../ipc/events";')).toEqual([]);
+    expect(eventImports('// import { listen } from "../services/tauri";')).toEqual([]);
+  });
+
+  it("catches re-exports, import-equals and dynamic loads", () => {
+    expect(eventImports('export { listen, invoke } from "../services/tauri";')).toEqual(["listen"]);
+    expect(eventImports('export * from "@tauri-apps/api/event";')).toEqual(["*"]);
+    expect(eventImports('export type { UnlistenFn } from "@tauri-apps/api/event";')).toEqual([]);
+    expect(eventImports('import events = require("@tauri-apps/api/event");')).toEqual(["events.*"]);
+    expect(eventImports('async function f() { const { listen: l, invoke } = await import("../services/tauri"); }')).toEqual(["listen"]);
+    expect(eventImports('const { emit } = require("@tauri-apps/api/event");')).toEqual(["emit"]);
+    expect(eventImports('async function f() { const api = await import("@tauri-apps/api/event"); }')).toEqual(["*"]);
+    expect(eventImports('void import("../services/tauri").then((m) => m.listen("x", f));')).toEqual(["*"]);
+    expect(eventImports('async function f() { const { invoke } = await import("../services/tauri"); }')).toEqual([]);
+  });
+
+  it("only lets the typed event module import raw event functions", () => {
+    expect(isEventExempt("src/ipc/events.ts")).toBe(true);
+    expect(isEventExempt("src/ipc/recording.ts")).toBe(false);
+    expect(isEventExempt("src/services/tauri.ts")).toBe(true);
+    expect(isEventExempt("src/test/app.test.tsx")).toBe(true);
+    expect(isEventExempt("src/components/App.tsx")).toBe(false);
+  });
+
+  it("rejects raw event imports outside the allowlist", () => {
+    expect(checkEventImports({ "src/a.tsx": ["listen"], "src/lib.ts": ["listen"] }, { "src/lib.ts": "library adapter" })).toEqual([
+      expect.stringMatching(/^src\/a\.tsx: imports listen; use listenEvent\/emitEvent/),
+    ]);
   });
 });

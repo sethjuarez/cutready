@@ -1,20 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { invoke, listen } from "../services/tauri";
+import { listenEvent } from "../ipc/events";
+import { recordingIpc } from "../ipc/recording";
 import { getCurrentWindow, LogicalPosition, PhysicalPosition } from "@tauri-apps/api/window";
 import { ChevronLeft, ChevronRight, GripVertical, Lock, PanelLeft, PanelRight, X } from "lucide-react";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { isMac } from "../utils/platform";
-import type { PrompterScript } from "../types/recording";
-
-interface RecordingPrompterParams {
-  document_title: string;
-  script: PrompterScript;
-  read_mode: boolean;
-  monitor_x: number;
-  monitor_y: number;
-  monitor_w: number;
-  monitor_h: number;
-}
+import type { RecordingPrompterParams } from "../types/recording";
 
 type PrompterSide = "left" | "right";
 
@@ -95,11 +86,11 @@ export function RecordingPrompterWindow() {
 
   const close = useCallback(async () => {
     await currentWindow.setIgnoreCursorEvents(false).catch(() => undefined);
-    await invoke("close_recording_prompter_window").catch(() => currentWindow.close());
+    await recordingIpc.closePrompterWindow().catch(() => currentWindow.close());
   }, [currentWindow]);
 
   useEffect(() => {
-    invoke<RecordingPrompterParams>("get_recording_prompter_params")
+    recordingIpc.prompterParams()
       .then((nextParams) => {
         setParams(nextParams);
         setIndex(0);
@@ -160,13 +151,13 @@ export function RecordingPrompterWindow() {
 
   useEffect(() => {
     const unlisteners = [
-      listen("recording-prompter-next", () => move(1)),
-      listen("recording-prompter-previous", () => move(-1)),
-      listen("recording-prompter-toggle-visibility", () => setVisible((value) => !value)),
-      listen("recording-prompter-toggle-mode", () => setReadMode((value) => !value)),
-      listen("recording-prompter-read", () => setReadMode(true)),
-      listen("recording-prompter-adjust", () => setReadMode(false)),
-      listen("recording-prompter-close", () => void close()),
+      listenEvent("recording-prompter-next", () => move(1)),
+      listenEvent("recording-prompter-previous", () => move(-1)),
+      listenEvent("recording-prompter-toggle-visibility", () => setVisible((value) => !value)),
+      listenEvent("recording-prompter-toggle-mode", () => setReadMode((value) => !value)),
+      listenEvent("recording-prompter-read", () => setReadMode(true)),
+      listenEvent("recording-prompter-adjust", () => setReadMode(false)),
+      listenEvent("recording-prompter-close", () => void close()),
     ];
 
     return () => {

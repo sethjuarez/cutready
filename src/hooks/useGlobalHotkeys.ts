@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { invoke, listen } from "../services/tauri";
+import { invoke } from "../services/tauri";
+import { listenEvent } from "../ipc/events";
 import { useAppStore } from "../stores/appStore";
 import { useSettings, useSettingsStore } from "../hooks/useSettings";
 import { useToastStore } from "../stores/toastStore";
@@ -15,7 +16,7 @@ export function useGlobalHotkeys() {
   const { settings, loaded } = useSettings();
 
   useEffect(() => {
-    const unlisten = listen("toggle-recording", () => {
+    const unlisten = listenEvent("toggle-recording", () => {
       const settings = useSettingsStore.getState().settings;
       if (!settings.featureRecording) return;
 

@@ -1,4 +1,5 @@
-import { invoke, listen } from "./tauri";
+import { invoke } from "./tauri";
+import { listenEvent } from "../ipc/events";
 
 export type IdentitySource = "profile" | "environment" | "git_config" | "system" | "fallback";
 
@@ -70,7 +71,7 @@ export type SnapshotDeferReason = "identity" | "unsaved_edits";
 export function onWorkspaceSnapshotDeferred(
   handler: (message: string, reason: SnapshotDeferReason) => void,
 ) {
-  return listen<{ message?: unknown; reason?: unknown }>(WORKSPACE_SNAPSHOT_DEFERRED_EVENT, (event) => {
+  return listenEvent(WORKSPACE_SNAPSHOT_DEFERRED_EVENT, (event) => {
     const message = event.payload?.message;
     const reason = event.payload?.reason === "unsaved_edits" ? "unsaved_edits" : "identity";
     if (typeof message === "string" && message.trim()) handler(message, reason);

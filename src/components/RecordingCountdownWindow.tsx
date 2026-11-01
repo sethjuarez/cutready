@@ -1,17 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { invoke, emit } from "../services/tauri";
+import { emitEvent } from "../ipc/events";
+import { recordingIpc } from "../ipc/recording";
 import { Keyboard } from "lucide-react";
-
-interface RecordingCountdownParams {
-  monitor_id: number;
-  monitor_w: number;
-  monitor_h: number;
-  monitor_x: number;
-  monitor_y: number;
-  countdown_seconds: number;
-  document_title: string;
-  attempt_id: number;
-}
+import type { RecordingCountdownParams } from "../types/recording";
 
 export function RecordingCountdownWindow() {
   const [params, setParams] = useState<RecordingCountdownParams | null>(null);
@@ -21,22 +12,22 @@ export function RecordingCountdownWindow() {
   const cancel = useCallback(async () => {
     if (cancelled) return;
     setCancelled(true);
-    await emit("recording-countdown-cancel", { attemptId: params?.attempt_id });
-    await invoke("close_recording_countdown_window");
+    await emitEvent("recording-countdown-cancel", { attemptId: params?.attempt_id });
+    await recordingIpc.closeCountdownWindow();
   }, [cancelled, params]);
 
   useEffect(() => {
     (async () => {
       try {
-        const next = await invoke<RecordingCountdownParams>("get_recording_countdown_params");
+        const next = await recordingIpc.countdownParams();
         setParams(next);
         setRemaining(Math.max(next.countdown_seconds, 1));
       } catch (err) {
         console.error("[RecordingCountdownWindow] Failed to get params:", err);
         // Params never loaded, so we cannot attribute this cancel to a specific
         // attempt; the control window falls back to its parked-countdown gate.
-        await emit("recording-countdown-cancel", {});
-        await invoke("close_recording_countdown_window");
+        await emitEvent("recording-countdown-cancel", {});
+        await recordingIpc.closeCountdownWindow();
       }
     })();
   }, []);

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { useSettings } from "../../hooks/useSettings";
 import { useRecordingDevices } from "../../hooks/useRecordingDevices";
-import { invoke } from "../../services/tauri";
+import { recordingIpc } from "../../ipc/recording";
 import { useToastStore } from "../../stores/toastStore";
 import { useConfirmDialog } from "../ConfirmDialog";
 import { inputClass } from "../../styles";
@@ -30,7 +30,7 @@ export function RecordingTab({
 
     setClearingRecordings(true);
     try {
-      const removed = await invoke<number>("clear_local_recordings");
+      const removed = await recordingIpc.clearLocalRecordings();
       useToastStore.getState().show(
         removed === 1 ? "Cleared 1 local recording item." : `Cleared ${removed} local recording items.`,
         3000,

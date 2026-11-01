@@ -200,3 +200,40 @@ export interface RecordingTake {
    */
   stop_diagnostic?: string;
 }
+
+/** What the recording control window opens with. */
+export interface RecordingControlParams {
+  take_id?: string | null;
+  document_title: string;
+  scope?: RecordingScope | null;
+}
+
+export interface RecordingAudioLevel {
+  available: boolean;
+  rms: number;
+  peak: number;
+  bytes: number;
+}
+
+/** What the countdown window opens with. */
+export interface RecordingCountdownParams {
+  monitor_id: number;
+  monitor_w: number;
+  monitor_h: number;
+  monitor_x: number;
+  monitor_y: number;
+  countdown_seconds: number;
+  document_title: string;
+  attempt_id: number;
+}
+
+/** What the prompter window opens with. */
+export interface RecordingPrompterParams {
+  document_title: string;
+  script: PrompterScript;
+  read_mode: boolean;
+  monitor_x: number;
+  monitor_y: number;
+  monitor_w: number;
+  monitor_h: number;
+}
