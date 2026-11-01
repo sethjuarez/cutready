@@ -28,13 +28,15 @@ public struct CmdErrorDetails: TypraModel {
   public static let shorthandProperty: String? = nil
   public var rowIndex: UInt32? = nil
   public var field: PlanningCellField? = nil
+  public var rowId: String? = nil
   /// Undeclared fields captured on load and written back on save (unknown-field passthrough).
   public var additionalProperties: [String: Any] = [:]
-  static let additionalPropertiesKnownKeys: Set<String> = ["row_index", "field"]
+  static let additionalPropertiesKnownKeys: Set<String> = ["row_index", "field", "row_id"]
 
-  public init(rowIndex: UInt32? = nil, field: PlanningCellField? = nil, additionalProperties: [String: Any] = [:]) {
+  public init(rowIndex: UInt32? = nil, field: PlanningCellField? = nil, rowId: String? = nil, additionalProperties: [String: Any] = [:]) {
     self.rowIndex = rowIndex
     self.field = field
+    self.rowId = rowId
     self.additionalProperties = additionalProperties
   }
 
@@ -47,6 +49,9 @@ public struct CmdErrorDetails: TypraModel {
     if let value = object["field"] {
       instance.field = try PlanningCellField.parse(try TypraRuntime.string(value, field: "field"))
     }
+    if let value = object["row_id"] {
+      instance.rowId = try TypraRuntime.string(value, field: "row_id")
+    }
     instance.additionalProperties = object.filter { !Self.additionalPropertiesKnownKeys.contains($0.key) }
     return instance
   }
@@ -58,6 +63,9 @@ public struct CmdErrorDetails: TypraModel {
     }
     if let value = self.field {
       result["field"] = value.rawValue
+    }
+    if let value = self.rowId {
+      result["row_id"] = value
     }
     for (key, value) in self.additionalProperties where !Self.additionalPropertiesKnownKeys.contains(key) {
       result[key] = value

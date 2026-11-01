@@ -1600,6 +1600,139 @@ null
 /// from a test, e.g. `run_sketch_document_conformance(&SketchDocumentImpl).await;` (or without `.await` when sync).
 pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>(seam: &S) {
     let ctx = crate::model::context::LoadContext::default();
+    // vector: an assigned id skips ids already in use
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "Row 1.",
+      "demo_actions": "",
+      "id": "row-2"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Row 2.",
+      "demo_actions": ""
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:30",
+      "narrative": "Row 3.",
+      "demo_actions": "",
+      "id": "row-2-2"
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let actual = seam.round_trip(&sketch)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "an assigned id skips ids already in use", error));
+        let expected = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "Row 1.",
+      "demo_actions": "",
+      "id": "row-2"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Row 2.",
+      "demo_actions": "",
+      "id": "row-2-3"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:30",
+      "narrative": "Row 3.",
+      "demo_actions": "",
+      "id": "row-2-2"
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("an assigned id skips ids already in use: expected parses");
+        assert_eq!(actual, expected, "an assigned id skips ids already in use misrouted");
+    }
     // vector: canonical desktop sketch is unchanged
     {
         let sketch = crate::model::Sketch::from_json(
@@ -1623,6 +1756,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   },
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -1755,6 +1889,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   },
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -1866,6 +2001,75 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         .expect("canonical desktop sketch is unchanged: expected parses");
         assert_eq!(actual, expected, "canonical desktop sketch is unchanged misrouted");
     }
+    // vector: duplicate row ids are rejected
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "Row 1.",
+      "demo_actions": "",
+      "id": "intro"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Row 2.",
+      "demo_actions": "",
+      "id": "body"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:30",
+      "narrative": "Row 3.",
+      "demo_actions": "",
+      "id": "intro"
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let result = seam.round_trip(&sketch);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "duplicate row ids are rejected");
+    }
     // vector: earlier locked cell fires before a later locked row
     {
         let sketch = crate::model::Sketch::from_json(
@@ -1876,6 +2080,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -1902,6 +2107,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -1917,6 +2123,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Type a name."
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -1973,6 +2180,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -1989,6 +2197,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "future_row_field": "first"
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -2038,6 +2247,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -2054,6 +2264,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "future_row_field": "first"
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -2078,6 +2289,210 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         )
         .expect("edit time keeps microseconds: expected parses");
         assert_eq!(actual, expected, "edit time keeps microseconds misrouted");
+    }
+    // vector: empty and null row ids count as missing
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "Row 1.",
+      "demo_actions": "",
+      "id": ""
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Row 2.",
+      "demo_actions": "",
+      "id": null
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let actual = seam.round_trip(&sketch)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "empty and null row ids count as missing", error));
+        let expected = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "Row 1.",
+      "demo_actions": "",
+      "id": "row-1"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Row 2.",
+      "demo_actions": "",
+      "id": "row-2"
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("empty and null row ids count as missing: expected parses");
+        assert_eq!(actual, expected, "empty and null row ids count as missing misrouted");
+    }
+    // vector: existing row ids are kept
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "Row 1.",
+      "demo_actions": "",
+      "id": "intro"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Row 2.",
+      "demo_actions": "",
+      "id": "6f1c0d2e-9a4b-4c3d-8e2f-1a2b3c4d5e6f"
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let actual = seam.round_trip(&sketch)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "existing row ids are kept", error));
+        let expected = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "Row 1.",
+      "demo_actions": "",
+      "id": "intro"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Row 2.",
+      "demo_actions": "",
+      "id": "6f1c0d2e-9a4b-4c3d-8e2f-1a2b3c4d5e6f"
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("existing row ids are kept: expected parses");
+        assert_eq!(actual, expected, "existing row ids are kept misrouted");
     }
     // vector: legacy minimal sketch gains canonical defaults
     {
@@ -2131,6 +2546,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         "design_plan": false
       },
       "screenshot": null,
+      "id": "row-1",
       "time": "~30s",
       "narrative": "Legacy row.",
       "demo_actions": "",
@@ -2168,6 +2584,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -2194,6 +2611,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -2209,6 +2627,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Type a name."
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -2262,6 +2681,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -2288,6 +2708,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -2303,6 +2724,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Type a name."
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -2342,6 +2764,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -2368,6 +2791,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -2383,6 +2807,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Type a name."
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -2439,6 +2864,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": true,
@@ -2455,6 +2881,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": ""
     },
     {
+      "id": "row-2",
       "locked": true,
       "locks": {
         "time": false,
@@ -2507,6 +2934,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": true,
       "locks": {
         "time": false,
@@ -2522,6 +2950,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Hold."
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": true,
@@ -2575,6 +3004,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": true,
       "locks": {
         "time": false,
@@ -2591,6 +3021,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "future_row_field": "a"
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -2643,6 +3074,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -2669,6 +3101,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -2684,6 +3117,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Type a name."
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -2740,6 +3174,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": true,
@@ -2756,6 +3191,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": ""
     },
     {
+      "id": "row-2",
       "locked": true,
       "locks": {
         "time": false,
@@ -2808,6 +3244,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -2824,6 +3261,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "future_row_field": "first"
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -2876,6 +3314,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -2892,6 +3331,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "future_row_field": "first"
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -2944,6 +3384,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -2960,6 +3401,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "future_row_field": "first"
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -3011,6 +3453,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -3037,6 +3480,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -3052,6 +3496,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Type a name."
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -3105,6 +3550,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -3131,6 +3577,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -3146,6 +3593,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Type a name."
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -3185,6 +3633,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -3253,6 +3702,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -3346,6 +3796,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": null,
       "locks": null,
       "screenshot": null,
@@ -3369,6 +3820,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": null,
@@ -3406,6 +3858,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -3432,6 +3885,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -3470,6 +3924,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -3496,6 +3951,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -3511,6 +3967,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Type a name."
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -3536,6 +3993,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         "design_plan": false
       },
       "screenshot": null,
+      "id": "row-4",
       "time": "0:40",
       "narrative": "Spare.",
       "demo_actions": "Wrap up."
@@ -3590,11 +4048,13 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         "design_plan": false
       },
       "screenshot": null,
+      "id": "row-4",
       "time": "0:40",
       "narrative": "Spare.",
       "demo_actions": "Wrap up."
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -3610,6 +4070,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Type a name."
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -3625,6 +4086,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Close."
     },
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -3675,6 +4137,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -3691,6 +4154,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "future_row_field": "first"
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -3739,6 +4203,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -3754,6 +4219,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Click."
     },
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -3790,6 +4256,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -3816,6 +4283,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -3831,6 +4299,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Type a name."
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -3887,6 +4356,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -3913,6 +4383,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -3928,6 +4399,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Type a name."
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -3984,6 +4456,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -4000,6 +4473,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "future_row_field": "first"
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -4051,6 +4525,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -4077,6 +4552,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -4092,6 +4568,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Type a name."
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -4148,6 +4625,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": true,
       "locks": {
         "time": false,
@@ -4163,6 +4641,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Hold."
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": true,
@@ -4205,6 +4684,138 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
         let result = seam.update_row_text(&sketch, &update, &now);
         assert!(result.is_err(), "{}: expected an error, got Ok", "row lock takes precedence over a cell lock");
     }
+    // vector: rows without an id get their one-based position
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "Row 1.",
+      "demo_actions": "",
+      "id": "intro"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Row 2.",
+      "demo_actions": ""
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:30",
+      "narrative": "Row 3.",
+      "demo_actions": ""
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let actual = seam.round_trip(&sketch)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "rows without an id get their one-based position", error));
+        let expected = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "Row 1.",
+      "demo_actions": "",
+      "id": "intro"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Row 2.",
+      "demo_actions": "",
+      "id": "row-2"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:30",
+      "narrative": "Row 3.",
+      "demo_actions": "",
+      "id": "row-3"
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("rows without an id get their one-based position: expected parses");
+        assert_eq!(actual, expected, "rows without an id get their one-based position misrouted");
+    }
     // vector: screenshot lock also guards the visual
     {
         let sketch = crate::model::Sketch::from_json(
@@ -4215,6 +4826,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -4231,6 +4843,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "visual": ".cutready/visuals/one.json"
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -4283,6 +4896,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -4309,6 +4923,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -4324,6 +4939,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Type a name."
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -4377,6 +4993,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -4403,6 +5020,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -4418,6 +5036,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Type a name."
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -4457,6 +5076,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -4502,6 +5122,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -4549,6 +5170,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -4600,6 +5222,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -4636,6 +5259,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -4662,6 +5286,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -4677,6 +5302,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Type a name."
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -4714,6 +5340,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -4740,6 +5367,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -4755,6 +5383,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Type a name."
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -4794,6 +5423,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -4820,6 +5450,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -4835,6 +5466,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Type a name."
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -4889,6 +5521,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -4915,6 +5548,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -4931,6 +5565,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "duration_seconds": 25
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -4970,6 +5605,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -4996,6 +5632,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -5011,6 +5648,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Type a name."
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -5064,6 +5702,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -5089,6 +5728,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -5104,6 +5744,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "demo_actions": "Type a name."
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": false,
@@ -5143,6 +5784,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -5159,6 +5801,7 @@ pub fn run_sketch_document_conformance<S: crate::model::SketchDocument + ?Sized>
       "visual": ".cutready/visuals/shared.json"
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,

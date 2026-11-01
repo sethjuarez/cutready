@@ -1590,8 +1590,9 @@ fn plan_sketch_asset_reference_rewrites(
             match std::fs::read(abs_path)
                 .map_err(|e| ProjectError::Io(e.to_string()))
                 .and_then(|original| {
-                    let mut sketch: Sketch = serde_json::from_slice(&original)
+                    let text = std::str::from_utf8(&original)
                         .map_err(|e| ProjectError::Deserialize(e.to_string()))?;
+                    let mut sketch = document::sketch_from_json(text)?;
                     let count = match kind {
                         RenameAssetKind::Screenshot => {
                             replace_sketch_screenshot_references(&mut sketch, old_rel, new_rel)?
@@ -1605,8 +1606,7 @@ fn plan_sketch_asset_reference_rewrites(
                         return Ok(None);
                     }
                     sketch.updated_at = chrono::Utc::now();
-                    let next = serde_json::to_vec_pretty(&sketch)
-                        .map_err(|e| ProjectError::Serialize(e.to_string()))?;
+                    let next = document::sketch_to_json(&sketch)?.into_bytes();
                     Ok(Some(PlannedFileWrite {
                         rel_path: rel_path.to_owned(),
                         abs_path: abs_path.to_path_buf(),
@@ -2985,6 +2985,9 @@ pub enum ProjectError {
     /// A Draftline refusal serialized as its Tauri command error JSON.
     #[error("{0}")]
     Draftline(String),
+    /// The document breaks an invariant (e.g. duplicate row ids).
+    #[error("{0}")]
+    Invalid(String),
 }
 
 impl From<document::DocumentError> for ProjectError {
@@ -2994,6 +2997,7 @@ impl From<document::DocumentError> for ProjectError {
             document::DocumentError::Parse(e) => ProjectError::Deserialize(e),
             document::DocumentError::Serialize(e) => ProjectError::Serialize(e),
             document::DocumentError::Locked(e) => ProjectError::Locked(e),
+            document::DocumentError::DuplicateRowId(e) => ProjectError::Invalid(e.to_string()),
         }
     }
 }

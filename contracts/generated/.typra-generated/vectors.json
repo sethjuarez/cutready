@@ -1590,6 +1590,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -1616,6 +1617,7 @@
                 }
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -1631,6 +1633,7 @@
                 "demo_actions": "Type a name."
               },
               {
+                "id": "row-3",
                 "locked": true,
                 "locks": {
                   "time": false,
@@ -1693,6 +1696,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": true,
                 "locks": {
                   "time": false,
@@ -1709,6 +1713,7 @@
                 "future_row_field": "a"
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -1766,6 +1771,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -1782,6 +1788,7 @@
                 "future_row_field": "first"
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -1835,6 +1842,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -1861,6 +1869,7 @@
                 }
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -1876,6 +1885,7 @@
                 "demo_actions": "Type a name."
               },
               {
+                "id": "row-3",
                 "locked": true,
                 "locks": {
                   "time": false,
@@ -1901,6 +1911,7 @@
                   "design_plan": false
                 },
                 "screenshot": null,
+                "id": "row-4",
                 "time": "0:40",
                 "narrative": "Spare.",
                 "demo_actions": "Wrap up."
@@ -1938,11 +1949,13 @@
                 "design_plan": false
               },
               "screenshot": null,
+              "id": "row-4",
               "time": "0:40",
               "narrative": "Spare.",
               "demo_actions": "Wrap up."
             },
             {
+              "id": "row-2",
               "locked": false,
               "locks": {
                 "time": false,
@@ -1958,6 +1971,7 @@
               "demo_actions": "Type a name."
             },
             {
+              "id": "row-3",
               "locked": true,
               "locks": {
                 "time": false,
@@ -1973,6 +1987,7 @@
               "demo_actions": "Close."
             },
             {
+              "id": "row-1",
               "locked": false,
               "locks": {
                 "time": false,
@@ -2032,6 +2047,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -2048,6 +2064,7 @@
                 "future_row_field": "first"
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -2079,6 +2096,7 @@
           "description": null,
           "rows": [
             {
+              "id": "row-2",
               "locked": false,
               "locks": {
                 "time": false,
@@ -2094,6 +2112,7 @@
               "demo_actions": "Click."
             },
             {
+              "id": "row-1",
               "locked": false,
               "locks": {
                 "time": false,
@@ -2139,6 +2158,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -2165,6 +2185,7 @@
                 }
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -2180,6 +2201,7 @@
                 "demo_actions": "Type a name."
               },
               {
+                "id": "row-3",
                 "locked": true,
                 "locks": {
                   "time": false,
@@ -2242,6 +2264,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -2268,6 +2291,7 @@
                 }
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -2283,6 +2307,7 @@
                 "demo_actions": "Type a name."
               },
               {
+                "id": "row-3",
                 "locked": true,
                 "locks": {
                   "time": false,
@@ -2344,6 +2369,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -2360,6 +2386,7 @@
                 "future_row_field": "first"
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -2413,6 +2440,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -2429,6 +2457,7 @@
                 "visual": ".cutready/visuals/one.json"
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -2487,6 +2516,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -2503,6 +2533,7 @@
                 "visual": ".cutready/visuals/shared.json"
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -2551,6 +2582,139 @@
       "returns": "Sketch",
       "sync": true,
       "vector": {
+        "name": "an assigned id skips ids already in use",
+        "input": {
+          "sketch": {
+            "title": "Contract sketch",
+            "locked": false,
+            "description": null,
+            "rows": [
+              {
+                "locked": false,
+                "locks": {
+                  "time": false,
+                  "narrative": false,
+                  "demo_actions": false,
+                  "screenshot": false,
+                  "visual": false,
+                  "design_plan": false
+                },
+                "screenshot": null,
+                "time": "0:10",
+                "narrative": "Row 1.",
+                "demo_actions": "",
+                "id": "row-2"
+              },
+              {
+                "locked": false,
+                "locks": {
+                  "time": false,
+                  "narrative": false,
+                  "demo_actions": false,
+                  "screenshot": false,
+                  "visual": false,
+                  "design_plan": false
+                },
+                "screenshot": null,
+                "time": "0:20",
+                "narrative": "Row 2.",
+                "demo_actions": ""
+              },
+              {
+                "locked": false,
+                "locks": {
+                  "time": false,
+                  "narrative": false,
+                  "demo_actions": false,
+                  "screenshot": false,
+                  "visual": false,
+                  "design_plan": false
+                },
+                "screenshot": null,
+                "time": "0:30",
+                "narrative": "Row 3.",
+                "demo_actions": "",
+                "id": "row-2-2"
+              }
+            ],
+            "state": "draft",
+            "created_at": "2026-06-28T20:00:00Z",
+            "updated_at": "2026-06-28T20:20:00Z"
+          }
+        },
+        "expected": {
+          "title": "Contract sketch",
+          "locked": false,
+          "description": null,
+          "rows": [
+            {
+              "locked": false,
+              "locks": {
+                "time": false,
+                "narrative": false,
+                "demo_actions": false,
+                "screenshot": false,
+                "visual": false,
+                "design_plan": false
+              },
+              "screenshot": null,
+              "time": "0:10",
+              "narrative": "Row 1.",
+              "demo_actions": "",
+              "id": "row-2"
+            },
+            {
+              "locked": false,
+              "locks": {
+                "time": false,
+                "narrative": false,
+                "demo_actions": false,
+                "screenshot": false,
+                "visual": false,
+                "design_plan": false
+              },
+              "screenshot": null,
+              "time": "0:20",
+              "narrative": "Row 2.",
+              "demo_actions": "",
+              "id": "row-2-3"
+            },
+            {
+              "locked": false,
+              "locks": {
+                "time": false,
+                "narrative": false,
+                "demo_actions": false,
+                "screenshot": false,
+                "visual": false,
+                "design_plan": false
+              },
+              "screenshot": null,
+              "time": "0:30",
+              "narrative": "Row 3.",
+              "demo_actions": "",
+              "id": "row-2-2"
+            }
+          ],
+          "state": "draft",
+          "created_at": "2026-06-28T20:00:00Z",
+          "updated_at": "2026-06-28T20:20:00Z"
+        },
+        "operation": "roundTrip",
+        "stage": "callable"
+      }
+    },
+    {
+      "contract": "SketchDocument",
+      "namespace": "CutReady.Contracts",
+      "group": "",
+      "operation": "roundTrip",
+      "params": {
+        "sketch": "Sketch"
+      },
+      "returns": "Sketch",
+      "sync": true,
+      "vector": {
         "name": "canonical desktop sketch is unchanged",
         "input": {
           "sketch": {
@@ -2572,6 +2736,7 @@
             },
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -2697,6 +2862,7 @@
           },
           "rows": [
             {
+              "id": "row-1",
               "locked": false,
               "locks": {
                 "time": false,
@@ -2817,6 +2983,293 @@
       "returns": "Sketch",
       "sync": true,
       "vector": {
+        "name": "duplicate row ids are rejected",
+        "input": {
+          "sketch": {
+            "title": "Contract sketch",
+            "locked": false,
+            "description": null,
+            "rows": [
+              {
+                "locked": false,
+                "locks": {
+                  "time": false,
+                  "narrative": false,
+                  "demo_actions": false,
+                  "screenshot": false,
+                  "visual": false,
+                  "design_plan": false
+                },
+                "screenshot": null,
+                "time": "0:10",
+                "narrative": "Row 1.",
+                "demo_actions": "",
+                "id": "intro"
+              },
+              {
+                "locked": false,
+                "locks": {
+                  "time": false,
+                  "narrative": false,
+                  "demo_actions": false,
+                  "screenshot": false,
+                  "visual": false,
+                  "design_plan": false
+                },
+                "screenshot": null,
+                "time": "0:20",
+                "narrative": "Row 2.",
+                "demo_actions": "",
+                "id": "body"
+              },
+              {
+                "locked": false,
+                "locks": {
+                  "time": false,
+                  "narrative": false,
+                  "demo_actions": false,
+                  "screenshot": false,
+                  "visual": false,
+                  "design_plan": false
+                },
+                "screenshot": null,
+                "time": "0:30",
+                "narrative": "Row 3.",
+                "demo_actions": "",
+                "id": "intro"
+              }
+            ],
+            "state": "draft",
+            "created_at": "2026-06-28T20:00:00Z",
+            "updated_at": "2026-06-28T20:20:00Z"
+          }
+        },
+        "expectedError": {
+          "code": "duplicate_row_id",
+          "details": {
+            "row_index": 2,
+            "row_id": "intro"
+          }
+        },
+        "operation": "roundTrip",
+        "stage": "callable"
+      }
+    },
+    {
+      "contract": "SketchDocument",
+      "namespace": "CutReady.Contracts",
+      "group": "",
+      "operation": "roundTrip",
+      "params": {
+        "sketch": "Sketch"
+      },
+      "returns": "Sketch",
+      "sync": true,
+      "vector": {
+        "name": "empty and null row ids count as missing",
+        "input": {
+          "sketch": {
+            "title": "Contract sketch",
+            "locked": false,
+            "description": null,
+            "rows": [
+              {
+                "locked": false,
+                "locks": {
+                  "time": false,
+                  "narrative": false,
+                  "demo_actions": false,
+                  "screenshot": false,
+                  "visual": false,
+                  "design_plan": false
+                },
+                "screenshot": null,
+                "time": "0:10",
+                "narrative": "Row 1.",
+                "demo_actions": "",
+                "id": ""
+              },
+              {
+                "locked": false,
+                "locks": {
+                  "time": false,
+                  "narrative": false,
+                  "demo_actions": false,
+                  "screenshot": false,
+                  "visual": false,
+                  "design_plan": false
+                },
+                "screenshot": null,
+                "time": "0:20",
+                "narrative": "Row 2.",
+                "demo_actions": "",
+                "id": null
+              }
+            ],
+            "state": "draft",
+            "created_at": "2026-06-28T20:00:00Z",
+            "updated_at": "2026-06-28T20:20:00Z"
+          }
+        },
+        "expected": {
+          "title": "Contract sketch",
+          "locked": false,
+          "description": null,
+          "rows": [
+            {
+              "locked": false,
+              "locks": {
+                "time": false,
+                "narrative": false,
+                "demo_actions": false,
+                "screenshot": false,
+                "visual": false,
+                "design_plan": false
+              },
+              "screenshot": null,
+              "time": "0:10",
+              "narrative": "Row 1.",
+              "demo_actions": "",
+              "id": "row-1"
+            },
+            {
+              "locked": false,
+              "locks": {
+                "time": false,
+                "narrative": false,
+                "demo_actions": false,
+                "screenshot": false,
+                "visual": false,
+                "design_plan": false
+              },
+              "screenshot": null,
+              "time": "0:20",
+              "narrative": "Row 2.",
+              "demo_actions": "",
+              "id": "row-2"
+            }
+          ],
+          "state": "draft",
+          "created_at": "2026-06-28T20:00:00Z",
+          "updated_at": "2026-06-28T20:20:00Z"
+        },
+        "operation": "roundTrip",
+        "stage": "callable"
+      }
+    },
+    {
+      "contract": "SketchDocument",
+      "namespace": "CutReady.Contracts",
+      "group": "",
+      "operation": "roundTrip",
+      "params": {
+        "sketch": "Sketch"
+      },
+      "returns": "Sketch",
+      "sync": true,
+      "vector": {
+        "name": "existing row ids are kept",
+        "input": {
+          "sketch": {
+            "title": "Contract sketch",
+            "locked": false,
+            "description": null,
+            "rows": [
+              {
+                "locked": false,
+                "locks": {
+                  "time": false,
+                  "narrative": false,
+                  "demo_actions": false,
+                  "screenshot": false,
+                  "visual": false,
+                  "design_plan": false
+                },
+                "screenshot": null,
+                "time": "0:10",
+                "narrative": "Row 1.",
+                "demo_actions": "",
+                "id": "intro"
+              },
+              {
+                "locked": false,
+                "locks": {
+                  "time": false,
+                  "narrative": false,
+                  "demo_actions": false,
+                  "screenshot": false,
+                  "visual": false,
+                  "design_plan": false
+                },
+                "screenshot": null,
+                "time": "0:20",
+                "narrative": "Row 2.",
+                "demo_actions": "",
+                "id": "6f1c0d2e-9a4b-4c3d-8e2f-1a2b3c4d5e6f"
+              }
+            ],
+            "state": "draft",
+            "created_at": "2026-06-28T20:00:00Z",
+            "updated_at": "2026-06-28T20:20:00Z"
+          }
+        },
+        "expected": {
+          "title": "Contract sketch",
+          "locked": false,
+          "description": null,
+          "rows": [
+            {
+              "locked": false,
+              "locks": {
+                "time": false,
+                "narrative": false,
+                "demo_actions": false,
+                "screenshot": false,
+                "visual": false,
+                "design_plan": false
+              },
+              "screenshot": null,
+              "time": "0:10",
+              "narrative": "Row 1.",
+              "demo_actions": "",
+              "id": "intro"
+            },
+            {
+              "locked": false,
+              "locks": {
+                "time": false,
+                "narrative": false,
+                "demo_actions": false,
+                "screenshot": false,
+                "visual": false,
+                "design_plan": false
+              },
+              "screenshot": null,
+              "time": "0:20",
+              "narrative": "Row 2.",
+              "demo_actions": "",
+              "id": "6f1c0d2e-9a4b-4c3d-8e2f-1a2b3c4d5e6f"
+            }
+          ],
+          "state": "draft",
+          "created_at": "2026-06-28T20:00:00Z",
+          "updated_at": "2026-06-28T20:20:00Z"
+        },
+        "operation": "roundTrip",
+        "stage": "callable"
+      }
+    },
+    {
+      "contract": "SketchDocument",
+      "namespace": "CutReady.Contracts",
+      "group": "",
+      "operation": "roundTrip",
+      "params": {
+        "sketch": "Sketch"
+      },
+      "returns": "Sketch",
+      "sync": true,
+      "vector": {
         "name": "legacy minimal sketch gains canonical defaults",
         "input": {
           "sketch": {
@@ -2860,6 +3313,7 @@
                 "design_plan": false
               },
               "screenshot": null,
+              "id": "row-1",
               "time": "~30s",
               "narrative": "Legacy row.",
               "demo_actions": "",
@@ -2904,6 +3358,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -2965,6 +3420,7 @@
           "description": null,
           "rows": [
             {
+              "id": "row-1",
               "locked": false,
               "locks": {
                 "time": false,
@@ -3065,6 +3521,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": null,
                 "locks": null,
                 "screenshot": null,
@@ -3088,6 +3545,7 @@
                 }
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": null,
@@ -3118,6 +3576,7 @@
           "description": null,
           "rows": [
             {
+              "id": "row-1",
               "locked": false,
               "locks": {
                 "time": false,
@@ -3144,6 +3603,7 @@
               }
             },
             {
+              "id": "row-2",
               "locked": false,
               "locks": {
                 "time": false,
@@ -3181,6 +3641,138 @@
       "returns": "Sketch",
       "sync": true,
       "vector": {
+        "name": "rows without an id get their one-based position",
+        "input": {
+          "sketch": {
+            "title": "Contract sketch",
+            "locked": false,
+            "description": null,
+            "rows": [
+              {
+                "locked": false,
+                "locks": {
+                  "time": false,
+                  "narrative": false,
+                  "demo_actions": false,
+                  "screenshot": false,
+                  "visual": false,
+                  "design_plan": false
+                },
+                "screenshot": null,
+                "time": "0:10",
+                "narrative": "Row 1.",
+                "demo_actions": "",
+                "id": "intro"
+              },
+              {
+                "locked": false,
+                "locks": {
+                  "time": false,
+                  "narrative": false,
+                  "demo_actions": false,
+                  "screenshot": false,
+                  "visual": false,
+                  "design_plan": false
+                },
+                "screenshot": null,
+                "time": "0:20",
+                "narrative": "Row 2.",
+                "demo_actions": ""
+              },
+              {
+                "locked": false,
+                "locks": {
+                  "time": false,
+                  "narrative": false,
+                  "demo_actions": false,
+                  "screenshot": false,
+                  "visual": false,
+                  "design_plan": false
+                },
+                "screenshot": null,
+                "time": "0:30",
+                "narrative": "Row 3.",
+                "demo_actions": ""
+              }
+            ],
+            "state": "draft",
+            "created_at": "2026-06-28T20:00:00Z",
+            "updated_at": "2026-06-28T20:20:00Z"
+          }
+        },
+        "expected": {
+          "title": "Contract sketch",
+          "locked": false,
+          "description": null,
+          "rows": [
+            {
+              "locked": false,
+              "locks": {
+                "time": false,
+                "narrative": false,
+                "demo_actions": false,
+                "screenshot": false,
+                "visual": false,
+                "design_plan": false
+              },
+              "screenshot": null,
+              "time": "0:10",
+              "narrative": "Row 1.",
+              "demo_actions": "",
+              "id": "intro"
+            },
+            {
+              "locked": false,
+              "locks": {
+                "time": false,
+                "narrative": false,
+                "demo_actions": false,
+                "screenshot": false,
+                "visual": false,
+                "design_plan": false
+              },
+              "screenshot": null,
+              "time": "0:20",
+              "narrative": "Row 2.",
+              "demo_actions": "",
+              "id": "row-2"
+            },
+            {
+              "locked": false,
+              "locks": {
+                "time": false,
+                "narrative": false,
+                "demo_actions": false,
+                "screenshot": false,
+                "visual": false,
+                "design_plan": false
+              },
+              "screenshot": null,
+              "time": "0:30",
+              "narrative": "Row 3.",
+              "demo_actions": "",
+              "id": "row-3"
+            }
+          ],
+          "state": "draft",
+          "created_at": "2026-06-28T20:00:00Z",
+          "updated_at": "2026-06-28T20:20:00Z"
+        },
+        "operation": "roundTrip",
+        "stage": "callable"
+      }
+    },
+    {
+      "contract": "SketchDocument",
+      "namespace": "CutReady.Contracts",
+      "group": "",
+      "operation": "roundTrip",
+      "params": {
+        "sketch": "Sketch"
+      },
+      "returns": "Sketch",
+      "sync": true,
+      "vector": {
         "name": "timestamps are saved as UTC",
         "input": {
           "sketch": {
@@ -3189,6 +3781,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -3227,6 +3820,7 @@
           "description": null,
           "rows": [
             {
+              "id": "row-1",
               "locked": false,
               "locks": {
                 "time": false,
@@ -3281,6 +3875,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -3307,6 +3902,7 @@
                 }
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -3322,6 +3918,7 @@
                 "demo_actions": "Type a name."
               },
               {
+                "id": "row-3",
                 "locked": true,
                 "locks": {
                   "time": false,
@@ -3352,6 +3949,7 @@
           "description": null,
           "rows": [
             {
+              "id": "row-1",
               "locked": false,
               "locks": {
                 "time": false,
@@ -3378,6 +3976,7 @@
               }
             },
             {
+              "id": "row-2",
               "locked": false,
               "locks": {
                 "time": false,
@@ -3393,6 +3992,7 @@
               "demo_actions": "Type a name."
             },
             {
+              "id": "row-3",
               "locked": true,
               "locks": {
                 "time": false,
@@ -3441,6 +4041,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -3457,6 +4058,7 @@
                 "future_row_field": "first"
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -3488,6 +4090,7 @@
           "description": null,
           "rows": [
             {
+              "id": "row-1",
               "locked": false,
               "locks": {
                 "time": false,
@@ -3504,6 +4107,7 @@
               "future_row_field": "first"
             },
             {
+              "id": "row-2",
               "locked": false,
               "locks": {
                 "time": false,
@@ -3548,6 +4152,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -3574,6 +4179,7 @@
                 }
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -3589,6 +4195,7 @@
                 "demo_actions": "Type a name."
               },
               {
+                "id": "row-3",
                 "locked": true,
                 "locks": {
                   "time": false,
@@ -3624,6 +4231,7 @@
           "description": null,
           "rows": [
             {
+              "id": "row-1",
               "locked": false,
               "locks": {
                 "time": false,
@@ -3650,6 +4258,7 @@
               }
             },
             {
+              "id": "row-2",
               "locked": false,
               "locks": {
                 "time": false,
@@ -3665,6 +4274,7 @@
               "demo_actions": "Type a name."
             },
             {
+              "id": "row-3",
               "locked": true,
               "locks": {
                 "time": false,
@@ -3713,6 +4323,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -3739,6 +4350,7 @@
                 }
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -3754,6 +4366,7 @@
                 "demo_actions": "Type a name."
               },
               {
+                "id": "row-3",
                 "locked": true,
                 "locks": {
                   "time": false,
@@ -3815,6 +4428,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": true,
@@ -3831,6 +4445,7 @@
                 "demo_actions": ""
               },
               {
+                "id": "row-2",
                 "locked": true,
                 "locks": {
                   "time": false,
@@ -3888,6 +4503,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": true,
                 "locks": {
                   "time": false,
@@ -3903,6 +4519,7 @@
                 "demo_actions": "Hold."
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": true,
@@ -3961,6 +4578,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -3987,6 +4605,7 @@
                 }
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -4002,6 +4621,7 @@
                 "demo_actions": "Type a name."
               },
               {
+                "id": "row-3",
                 "locked": true,
                 "locks": {
                   "time": false,
@@ -4062,6 +4682,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": true,
@@ -4078,6 +4699,7 @@
                 "demo_actions": ""
               },
               {
+                "id": "row-2",
                 "locked": true,
                 "locks": {
                   "time": false,
@@ -4134,6 +4756,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -4150,6 +4773,7 @@
                 "future_row_field": "first"
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -4203,6 +4827,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -4219,6 +4844,7 @@
                 "future_row_field": "first"
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -4272,6 +4898,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -4298,6 +4925,7 @@
                 }
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -4313,6 +4941,7 @@
                 "demo_actions": "Type a name."
               },
               {
+                "id": "row-3",
                 "locked": true,
                 "locks": {
                   "time": false,
@@ -4348,6 +4977,7 @@
           "description": null,
           "rows": [
             {
+              "id": "row-1",
               "locked": false,
               "locks": {
                 "time": false,
@@ -4374,6 +5004,7 @@
               }
             },
             {
+              "id": "row-2",
               "locked": false,
               "locks": {
                 "time": false,
@@ -4389,6 +5020,7 @@
               "demo_actions": "Type a name."
             },
             {
+              "id": "row-3",
               "locked": true,
               "locks": {
                 "time": false,
@@ -4437,6 +5069,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -4463,6 +5096,7 @@
                 }
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -4478,6 +5112,7 @@
                 "demo_actions": "Type a name."
               },
               {
+                "id": "row-3",
                 "locked": true,
                 "locks": {
                   "time": false,
@@ -4538,6 +5173,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": true,
                 "locks": {
                   "time": false,
@@ -4553,6 +5189,7 @@
                 "demo_actions": "Hold."
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": true,
@@ -4609,6 +5246,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -4635,6 +5273,7 @@
                 }
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -4650,6 +5289,7 @@
                 "demo_actions": "Type a name."
               },
               {
+                "id": "row-3",
                 "locked": true,
                 "locks": {
                   "time": false,
@@ -4685,6 +5325,7 @@
           "description": null,
           "rows": [
             {
+              "id": "row-1",
               "locked": false,
               "locks": {
                 "time": false,
@@ -4711,6 +5352,7 @@
               }
             },
             {
+              "id": "row-2",
               "locked": false,
               "locks": {
                 "time": false,
@@ -4726,6 +5368,7 @@
               "demo_actions": "Type a name."
             },
             {
+              "id": "row-3",
               "locked": true,
               "locks": {
                 "time": false,
@@ -4774,6 +5417,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -4807,6 +5451,7 @@
           "description": null,
           "rows": [
             {
+              "id": "row-1",
               "locked": false,
               "locks": {
                 "time": false,
@@ -4852,6 +5497,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -4878,6 +5524,7 @@
                 }
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -4893,6 +5540,7 @@
                 "demo_actions": "Type a name."
               },
               {
+                "id": "row-3",
                 "locked": true,
                 "locks": {
                   "time": false,
@@ -4929,6 +5577,7 @@
           "description": null,
           "rows": [
             {
+              "id": "row-1",
               "locked": false,
               "locks": {
                 "time": false,
@@ -4955,6 +5604,7 @@
               }
             },
             {
+              "id": "row-2",
               "locked": false,
               "locks": {
                 "time": false,
@@ -4971,6 +5621,7 @@
               "duration_seconds": 25
             },
             {
+              "id": "row-3",
               "locked": true,
               "locks": {
                 "time": false,
@@ -5019,6 +5670,7 @@
             "description": null,
             "rows": [
               {
+                "id": "row-1",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -5045,6 +5697,7 @@
                 }
               },
               {
+                "id": "row-2",
                 "locked": false,
                 "locks": {
                   "time": false,
@@ -5060,6 +5713,7 @@
                 "demo_actions": "Type a name."
               },
               {
+                "id": "row-3",
                 "locked": true,
                 "locks": {
                   "time": false,
@@ -5095,6 +5749,7 @@
           "description": null,
           "rows": [
             {
+              "id": "row-1",
               "locked": false,
               "locks": {
                 "time": false,
@@ -5120,6 +5775,7 @@
               }
             },
             {
+              "id": "row-2",
               "locked": false,
               "locks": {
                 "time": false,
@@ -5135,6 +5791,7 @@
               "demo_actions": "Type a name."
             },
             {
+              "id": "row-3",
               "locked": true,
               "locks": {
                 "time": false,

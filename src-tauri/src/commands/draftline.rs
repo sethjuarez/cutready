@@ -1273,7 +1273,7 @@ pub async fn merge_incoming(
 
 #[auditaur_command(skip_all)]
 pub async fn merge_incoming_with_resolutions(
-    request: contract::MergeIncomingWithResolutionsRequest,
+    mut request: contract::MergeIncomingWithResolutionsRequest,
     app: AppHandle,
     lock: State<'_, ProjectLock>,
 ) -> contract::TauriCommandResult<contract::MergeIncomingCommandResult> {
@@ -1281,11 +1281,51 @@ pub async fn merge_incoming_with_resolutions(
         .0
         .lock()
         .map_err(|error| context_error(error.to_string()))?;
+    canonicalize_sketch_resolutions(&mut request.resolutions)?;
     let mut context = context_for_commit(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::merge_incoming_with_resolutions_with_context(
         &mut context,
         request,
     ))
+}
+
+/// Whole-file `.sk` resolutions go through the sketch codec so merged sketches
+/// get row ids and never carry duplicates. Unparseable content passes through
+/// unchanged, as before.
+fn canonicalize_sketch_resolutions(
+    resolutions: &mut [draftline::MergeConflictResolution],
+) -> Result<(), contract::TauriCommandError> {
+    use cutready_core::document::{self, DocumentError};
+    for resolution in resolutions.iter_mut() {
+        let is_sketch = resolution.path.extension().and_then(|ext| ext.to_str()) == Some("sk");
+        if !is_sketch || resolution.field_path.is_some() {
+            continue;
+        }
+        let draftline::MergeResolutionChoice::UseContent { content } = &mut resolution.choice
+        else {
+            continue;
+        };
+        let canonical = match document::sketch_from_json(content) {
+            Ok(sketch) => document::sketch_to_json(&sketch),
+            Err(error) => Err(error),
+        };
+        match canonical {
+            Ok(json) => *content = json,
+            Err(DocumentError::DuplicateRowId(duplicate)) => {
+                return Err(contract::TauriCommandError {
+                    code: "duplicate_row_id".into(),
+                    message: format!("{}: {duplicate}", resolution.path.display()),
+                    details: Some(serde_json::json!({
+                        "path": resolution.path,
+                        "row_index": duplicate.row_index,
+                        "row_id": duplicate.row_id,
+                    })),
+                });
+            }
+            Err(_) => {}
+        }
+    }
+    Ok(())
 }
 
 fn redact_remote_url_credentials(url: &str) -> String {
@@ -1305,6 +1345,60 @@ fn redact_remote_url_credentials(url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn use_content(path: &str, content: &str) -> draftline::MergeConflictResolution {
+        draftline::MergeConflictResolution::new(
+            path,
+            draftline::MergeResolutionChoice::UseContent {
+                content: content.to_string(),
+            },
+        )
+    }
+
+    fn content_of(resolution: &draftline::MergeConflictResolution) -> &str {
+        match &resolution.choice {
+            draftline::MergeResolutionChoice::UseContent { content } => content,
+            _ => panic!("expected use_content"),
+        }
+    }
+
+    fn sketch_with_row_ids(ids: &[&str]) -> String {
+        let mut sketch = cutready_core::models::sketch::Sketch::new("T", chrono::Utc::now());
+        sketch.rows = ids
+            .iter()
+            .map(|id| {
+                let mut row = cutready_core::models::sketch::PlanningRow::new();
+                row.id = id.to_string();
+                row
+            })
+            .collect();
+        serde_json::to_string(&sketch).unwrap()
+    }
+
+    #[test]
+    fn sketch_resolutions_get_row_ids() {
+        let raw = sketch_with_row_ids(&["", "row-1"]);
+        let mut resolutions = vec![
+            use_content("intro.sk", &raw),
+            use_content("notes.md", "not json"),
+            use_content("broken.sk", "{"),
+        ];
+        canonicalize_sketch_resolutions(&mut resolutions).unwrap();
+        let sketch: serde_json::Value = serde_json::from_str(content_of(&resolutions[0])).unwrap();
+        assert_eq!(sketch["rows"][0]["id"], "row-1-2");
+        assert_eq!(sketch["rows"][1]["id"], "row-1");
+        assert_eq!(content_of(&resolutions[1]), "not json");
+        assert_eq!(content_of(&resolutions[2]), "{");
+    }
+
+    #[test]
+    fn sketch_resolutions_reject_duplicate_row_ids() {
+        let raw = sketch_with_row_ids(&["a", "a"]);
+        let mut resolutions = vec![use_content("intro.sk", &raw)];
+        let error = canonicalize_sketch_resolutions(&mut resolutions).unwrap_err();
+        assert_eq!(error.code, "duplicate_row_id");
+        assert_eq!(error.details.unwrap()["row_index"], 1);
+    }
     use crate::models::script::ProjectView;
     use draftline::Contributor;
 

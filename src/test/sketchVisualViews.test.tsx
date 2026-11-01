@@ -33,6 +33,7 @@ describe("SketchVisualViews", () => {
     expect(onChange).toHaveBeenCalledWith([
       rows[0],
       {
+        id: expect.any(String),
         time: "",
         narrative: "",
         demo_actions: "",

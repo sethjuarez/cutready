@@ -54,6 +54,7 @@ import { setRowTime } from "../utils/documentMetadata";
 import { useConfirmDialog } from "./ConfirmDialog";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { continueMarkdownList } from "../utils/markdownList";
+import { newPlanningRowId } from "../utils/planningRowId";
 
 
 const VisualCell = lazy(() => import("./VisualCell"));
@@ -112,7 +113,7 @@ function getRowColor(idx: number): string {
 }
 
 function emptyRow(): PlanningRow {
-  return { time: "", duration_seconds: null, narrative: "", demo_actions: "", screenshot: null };
+  return { id: newPlanningRowId(), time: "", duration_seconds: null, narrative: "", demo_actions: "", screenshot: null };
 }
 
 function isCellLocked(row: PlanningRow, field: PlanningCellField): boolean {

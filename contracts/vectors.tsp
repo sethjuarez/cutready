@@ -26,6 +26,7 @@ const RoundTripVectors = """
         },
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -151,6 +152,7 @@ const RoundTripVectors = """
       },
       "rows": [
         {
+          "id": "row-1",
           "locked": false,
           "locks": {
             "time": false,
@@ -301,6 +303,7 @@ const RoundTripVectors = """
             "design_plan": false
           },
           "screenshot": null,
+          "id": "row-1",
           "time": "~30s",
           "narrative": "Legacy row.",
           "demo_actions": "",
@@ -332,6 +335,7 @@ const RoundTripVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -358,6 +362,7 @@ const RoundTripVectors = """
             }
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -373,6 +378,7 @@ const RoundTripVectors = """
             "demo_actions": "Type a name."
           },
           {
+            "id": "row-3",
             "locked": true,
             "locks": {
               "time": false,
@@ -403,6 +409,7 @@ const RoundTripVectors = """
       "description": null,
       "rows": [
         {
+          "id": "row-1",
           "locked": false,
           "locks": {
             "time": false,
@@ -429,6 +436,7 @@ const RoundTripVectors = """
           }
         },
         {
+          "id": "row-2",
           "locked": false,
           "locks": {
             "time": false,
@@ -444,6 +452,7 @@ const RoundTripVectors = """
           "demo_actions": "Type a name."
         },
         {
+          "id": "row-3",
           "locked": true,
           "locks": {
             "time": false,
@@ -477,6 +486,7 @@ const RoundTripVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -515,6 +525,7 @@ const RoundTripVectors = """
       "description": null,
       "rows": [
         {
+          "id": "row-1",
           "locked": false,
           "locks": {
             "time": false,
@@ -556,6 +567,7 @@ const RoundTripVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -617,6 +629,7 @@ const RoundTripVectors = """
       "description": null,
       "rows": [
         {
+          "id": "row-1",
           "locked": false,
           "locks": {
             "time": false,
@@ -665,6 +678,7 @@ const RoundTripVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": null,
             "locks": null,
             "screenshot": null,
@@ -688,6 +702,7 @@ const RoundTripVectors = """
             }
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": null,
@@ -718,6 +733,7 @@ const RoundTripVectors = """
       "description": null,
       "rows": [
         {
+          "id": "row-1",
           "locked": false,
           "locks": {
             "time": false,
@@ -744,6 +760,7 @@ const RoundTripVectors = """
           }
         },
         {
+          "id": "row-2",
           "locked": false,
           "locks": {
             "time": false,
@@ -792,14 +809,9 @@ const RoundTripVectors = """
       "created_at": "2026-06-28T20:00:00Z",
       "updated_at": "2026-06-28T20:20:00Z"
     }
-  }
-]
-""";
-
-const UpdateRowTextVectors = """
-[
+  },
   {
-    "name": "edit time keeps microseconds",
+    "name": "existing row ids are kept",
     "input": {
       "sketch": {
         "title": "Contract sketch",
@@ -818,11 +830,505 @@ const UpdateRowTextVectors = """
             },
             "screenshot": null,
             "time": "0:10",
+            "narrative": "Row 1.",
+            "demo_actions": "",
+            "id": "intro"
+          },
+          {
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:20",
+            "narrative": "Row 2.",
+            "demo_actions": "",
+            "id": "6f1c0d2e-9a4b-4c3d-8e2f-1a2b3c4d5e6f"
+          }
+        ],
+        "state": "draft",
+        "created_at": "2026-06-28T20:00:00Z",
+        "updated_at": "2026-06-28T20:20:00Z"
+      }
+    },
+    "expected": {
+      "title": "Contract sketch",
+      "locked": false,
+      "description": null,
+      "rows": [
+        {
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": null,
+          "time": "0:10",
+          "narrative": "Row 1.",
+          "demo_actions": "",
+          "id": "intro"
+        },
+        {
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": null,
+          "time": "0:20",
+          "narrative": "Row 2.",
+          "demo_actions": "",
+          "id": "6f1c0d2e-9a4b-4c3d-8e2f-1a2b3c4d5e6f"
+        }
+      ],
+      "state": "draft",
+      "created_at": "2026-06-28T20:00:00Z",
+      "updated_at": "2026-06-28T20:20:00Z"
+    }
+  },
+  {
+    "name": "rows without an id get their one-based position",
+    "input": {
+      "sketch": {
+        "title": "Contract sketch",
+        "locked": false,
+        "description": null,
+        "rows": [
+          {
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:10",
+            "narrative": "Row 1.",
+            "demo_actions": "",
+            "id": "intro"
+          },
+          {
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:20",
+            "narrative": "Row 2.",
+            "demo_actions": ""
+          },
+          {
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:30",
+            "narrative": "Row 3.",
+            "demo_actions": ""
+          }
+        ],
+        "state": "draft",
+        "created_at": "2026-06-28T20:00:00Z",
+        "updated_at": "2026-06-28T20:20:00Z"
+      }
+    },
+    "expected": {
+      "title": "Contract sketch",
+      "locked": false,
+      "description": null,
+      "rows": [
+        {
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": null,
+          "time": "0:10",
+          "narrative": "Row 1.",
+          "demo_actions": "",
+          "id": "intro"
+        },
+        {
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": null,
+          "time": "0:20",
+          "narrative": "Row 2.",
+          "demo_actions": "",
+          "id": "row-2"
+        },
+        {
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": null,
+          "time": "0:30",
+          "narrative": "Row 3.",
+          "demo_actions": "",
+          "id": "row-3"
+        }
+      ],
+      "state": "draft",
+      "created_at": "2026-06-28T20:00:00Z",
+      "updated_at": "2026-06-28T20:20:00Z"
+    }
+  },
+  {
+    "name": "empty and null row ids count as missing",
+    "input": {
+      "sketch": {
+        "title": "Contract sketch",
+        "locked": false,
+        "description": null,
+        "rows": [
+          {
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:10",
+            "narrative": "Row 1.",
+            "demo_actions": "",
+            "id": ""
+          },
+          {
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:20",
+            "narrative": "Row 2.",
+            "demo_actions": "",
+            "id": null
+          }
+        ],
+        "state": "draft",
+        "created_at": "2026-06-28T20:00:00Z",
+        "updated_at": "2026-06-28T20:20:00Z"
+      }
+    },
+    "expected": {
+      "title": "Contract sketch",
+      "locked": false,
+      "description": null,
+      "rows": [
+        {
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": null,
+          "time": "0:10",
+          "narrative": "Row 1.",
+          "demo_actions": "",
+          "id": "row-1"
+        },
+        {
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": null,
+          "time": "0:20",
+          "narrative": "Row 2.",
+          "demo_actions": "",
+          "id": "row-2"
+        }
+      ],
+      "state": "draft",
+      "created_at": "2026-06-28T20:00:00Z",
+      "updated_at": "2026-06-28T20:20:00Z"
+    }
+  },
+  {
+    "name": "an assigned id skips ids already in use",
+    "input": {
+      "sketch": {
+        "title": "Contract sketch",
+        "locked": false,
+        "description": null,
+        "rows": [
+          {
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:10",
+            "narrative": "Row 1.",
+            "demo_actions": "",
+            "id": "row-2"
+          },
+          {
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:20",
+            "narrative": "Row 2.",
+            "demo_actions": ""
+          },
+          {
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:30",
+            "narrative": "Row 3.",
+            "demo_actions": "",
+            "id": "row-2-2"
+          }
+        ],
+        "state": "draft",
+        "created_at": "2026-06-28T20:00:00Z",
+        "updated_at": "2026-06-28T20:20:00Z"
+      }
+    },
+    "expected": {
+      "title": "Contract sketch",
+      "locked": false,
+      "description": null,
+      "rows": [
+        {
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": null,
+          "time": "0:10",
+          "narrative": "Row 1.",
+          "demo_actions": "",
+          "id": "row-2"
+        },
+        {
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": null,
+          "time": "0:20",
+          "narrative": "Row 2.",
+          "demo_actions": "",
+          "id": "row-2-3"
+        },
+        {
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": null,
+          "time": "0:30",
+          "narrative": "Row 3.",
+          "demo_actions": "",
+          "id": "row-2-2"
+        }
+      ],
+      "state": "draft",
+      "created_at": "2026-06-28T20:00:00Z",
+      "updated_at": "2026-06-28T20:20:00Z"
+    }
+  },
+  {
+    "name": "duplicate row ids are rejected",
+    "input": {
+      "sketch": {
+        "title": "Contract sketch",
+        "locked": false,
+        "description": null,
+        "rows": [
+          {
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:10",
+            "narrative": "Row 1.",
+            "demo_actions": "",
+            "id": "intro"
+          },
+          {
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:20",
+            "narrative": "Row 2.",
+            "demo_actions": "",
+            "id": "body"
+          },
+          {
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:30",
+            "narrative": "Row 3.",
+            "demo_actions": "",
+            "id": "intro"
+          }
+        ],
+        "state": "draft",
+        "created_at": "2026-06-28T20:00:00Z",
+        "updated_at": "2026-06-28T20:20:00Z"
+      }
+    },
+    "expectedError": {
+      "code": "duplicate_row_id",
+      "details": {
+        "row_index": 2,
+        "row_id": "intro"
+      }
+    }
+  }
+]
+""";
+
+const UpdateRowTextVectors = """
+[
+  {
+    "name": "edit time keeps microseconds",
+    "input": {
+      "sketch": {
+        "title": "Contract sketch",
+        "locked": false,
+        "description": null,
+        "rows": [
+          {
+            "id": "row-1",
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:10",
             "narrative": "First.",
             "demo_actions": "Open.",
             "future_row_field": "first"
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -854,6 +1360,7 @@ const UpdateRowTextVectors = """
       "description": null,
       "rows": [
         {
+          "id": "row-1",
           "locked": false,
           "locks": {
             "time": false,
@@ -870,6 +1377,7 @@ const UpdateRowTextVectors = """
           "future_row_field": "first"
         },
         {
+          "id": "row-2",
           "locked": false,
           "locks": {
             "time": false,
@@ -899,6 +1407,7 @@ const UpdateRowTextVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -925,6 +1434,7 @@ const UpdateRowTextVectors = """
             }
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -940,6 +1450,7 @@ const UpdateRowTextVectors = """
             "demo_actions": "Type a name."
           },
           {
+            "id": "row-3",
             "locked": true,
             "locks": {
               "time": false,
@@ -975,6 +1486,7 @@ const UpdateRowTextVectors = """
       "description": null,
       "rows": [
         {
+          "id": "row-1",
           "locked": false,
           "locks": {
             "time": false,
@@ -1001,6 +1513,7 @@ const UpdateRowTextVectors = """
           }
         },
         {
+          "id": "row-2",
           "locked": false,
           "locks": {
             "time": false,
@@ -1016,6 +1529,7 @@ const UpdateRowTextVectors = """
           "demo_actions": "Type a name."
         },
         {
+          "id": "row-3",
           "locked": true,
           "locks": {
             "time": false,
@@ -1049,6 +1563,7 @@ const UpdateRowTextVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -1075,6 +1590,7 @@ const UpdateRowTextVectors = """
             }
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -1090,6 +1606,7 @@ const UpdateRowTextVectors = """
             "demo_actions": "Type a name."
           },
           {
+            "id": "row-3",
             "locked": true,
             "locks": {
               "time": false,
@@ -1125,6 +1642,7 @@ const UpdateRowTextVectors = """
       "description": null,
       "rows": [
         {
+          "id": "row-1",
           "locked": false,
           "locks": {
             "time": false,
@@ -1151,6 +1669,7 @@ const UpdateRowTextVectors = """
           }
         },
         {
+          "id": "row-2",
           "locked": false,
           "locks": {
             "time": false,
@@ -1166,6 +1685,7 @@ const UpdateRowTextVectors = """
           "demo_actions": "Type a name."
         },
         {
+          "id": "row-3",
           "locked": true,
           "locks": {
             "time": false,
@@ -1199,6 +1719,7 @@ const UpdateRowTextVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -1225,6 +1746,7 @@ const UpdateRowTextVectors = """
             }
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -1240,6 +1762,7 @@ const UpdateRowTextVectors = """
             "demo_actions": "Type a name."
           },
           {
+            "id": "row-3",
             "locked": true,
             "locks": {
               "time": false,
@@ -1275,6 +1798,7 @@ const UpdateRowTextVectors = """
       "description": null,
       "rows": [
         {
+          "id": "row-1",
           "locked": false,
           "locks": {
             "time": false,
@@ -1300,6 +1824,7 @@ const UpdateRowTextVectors = """
           }
         },
         {
+          "id": "row-2",
           "locked": false,
           "locks": {
             "time": false,
@@ -1315,6 +1840,7 @@ const UpdateRowTextVectors = """
           "demo_actions": "Type a name."
         },
         {
+          "id": "row-3",
           "locked": true,
           "locks": {
             "time": false,
@@ -1348,6 +1874,7 @@ const UpdateRowTextVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -1381,6 +1908,7 @@ const UpdateRowTextVectors = """
       "description": null,
       "rows": [
         {
+          "id": "row-1",
           "locked": false,
           "locks": {
             "time": false,
@@ -1411,6 +1939,7 @@ const UpdateRowTextVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -1437,6 +1966,7 @@ const UpdateRowTextVectors = """
             }
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -1452,6 +1982,7 @@ const UpdateRowTextVectors = """
             "demo_actions": "Type a name."
           },
           {
+            "id": "row-3",
             "locked": true,
             "locks": {
               "time": false,
@@ -1488,6 +2019,7 @@ const UpdateRowTextVectors = """
       "description": null,
       "rows": [
         {
+          "id": "row-1",
           "locked": false,
           "locks": {
             "time": false,
@@ -1514,6 +2046,7 @@ const UpdateRowTextVectors = """
           }
         },
         {
+          "id": "row-2",
           "locked": false,
           "locks": {
             "time": false,
@@ -1530,6 +2063,7 @@ const UpdateRowTextVectors = """
           "duration_seconds": 25
         },
         {
+          "id": "row-3",
           "locked": true,
           "locks": {
             "time": false,
@@ -1563,6 +2097,7 @@ const UpdateRowTextVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -1589,6 +2124,7 @@ const UpdateRowTextVectors = """
             }
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -1604,6 +2140,7 @@ const UpdateRowTextVectors = """
             "demo_actions": "Type a name."
           },
           {
+            "id": "row-3",
             "locked": true,
             "locks": {
               "time": false,
@@ -1650,6 +2187,7 @@ const UpdateRowTextVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -1676,6 +2214,7 @@ const UpdateRowTextVectors = """
             }
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -1691,6 +2230,7 @@ const UpdateRowTextVectors = """
             "demo_actions": "Type a name."
           },
           {
+            "id": "row-3",
             "locked": true,
             "locks": {
               "time": false,
@@ -1726,6 +2266,7 @@ const UpdateRowTextVectors = """
       "description": null,
       "rows": [
         {
+          "id": "row-1",
           "locked": false,
           "locks": {
             "time": false,
@@ -1752,6 +2293,7 @@ const UpdateRowTextVectors = """
           }
         },
         {
+          "id": "row-2",
           "locked": false,
           "locks": {
             "time": false,
@@ -1767,6 +2309,7 @@ const UpdateRowTextVectors = """
           "demo_actions": "Type a name."
         },
         {
+          "id": "row-3",
           "locked": true,
           "locks": {
             "time": false,
@@ -1800,6 +2343,7 @@ const UpdateRowTextVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -1826,6 +2370,7 @@ const UpdateRowTextVectors = """
             }
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -1841,6 +2386,7 @@ const UpdateRowTextVectors = """
             "demo_actions": "Type a name."
           },
           {
+            "id": "row-3",
             "locked": true,
             "locks": {
               "time": false,
@@ -1886,6 +2432,7 @@ const UpdateRowTextVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -1902,6 +2449,7 @@ const UpdateRowTextVectors = """
             "future_row_field": "first"
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -1940,6 +2488,7 @@ const UpdateRowTextVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -1966,6 +2515,7 @@ const UpdateRowTextVectors = """
             }
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -1981,6 +2531,7 @@ const UpdateRowTextVectors = """
             "demo_actions": "Type a name."
           },
           {
+            "id": "row-3",
             "locked": true,
             "locks": {
               "time": false,
@@ -2026,6 +2577,7 @@ const UpdateRowTextVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -2042,6 +2594,7 @@ const UpdateRowTextVectors = """
             "future_row_field": "first"
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -2080,6 +2633,7 @@ const UpdateRowTextVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": true,
             "locks": {
               "time": false,
@@ -2095,6 +2649,7 @@ const UpdateRowTextVectors = """
             "demo_actions": "Hold."
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": true,
@@ -2136,6 +2691,7 @@ const UpdateRowTextVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": true,
             "locks": {
               "time": false,
@@ -2151,6 +2707,7 @@ const UpdateRowTextVectors = """
             "demo_actions": "Hold."
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": true,
@@ -2194,6 +2751,7 @@ const UpdateRowTextVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": true,
@@ -2210,6 +2768,7 @@ const UpdateRowTextVectors = """
             "demo_actions": ""
           },
           {
+            "id": "row-2",
             "locked": true,
             "locks": {
               "time": false,
@@ -2252,6 +2811,7 @@ const UpdateRowTextVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": true,
@@ -2268,6 +2828,7 @@ const UpdateRowTextVectors = """
             "demo_actions": ""
           },
           {
+            "id": "row-2",
             "locked": true,
             "locks": {
               "time": false,
@@ -2314,6 +2875,7 @@ const ReorderRowsVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -2330,6 +2892,7 @@ const ReorderRowsVectors = """
             "future_row_field": "first"
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -2361,6 +2924,7 @@ const ReorderRowsVectors = """
       "description": null,
       "rows": [
         {
+          "id": "row-2",
           "locked": false,
           "locks": {
             "time": false,
@@ -2376,6 +2940,7 @@ const ReorderRowsVectors = """
           "demo_actions": "Click."
         },
         {
+          "id": "row-1",
           "locked": false,
           "locks": {
             "time": false,
@@ -2406,6 +2971,7 @@ const ReorderRowsVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -2432,6 +2998,7 @@ const ReorderRowsVectors = """
             }
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -2447,6 +3014,7 @@ const ReorderRowsVectors = """
             "demo_actions": "Type a name."
           },
           {
+            "id": "row-3",
             "locked": true,
             "locks": {
               "time": false,
@@ -2493,6 +3061,7 @@ const ReorderRowsVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -2519,6 +3088,7 @@ const ReorderRowsVectors = """
             }
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -2534,6 +3104,7 @@ const ReorderRowsVectors = """
             "demo_actions": "Type a name."
           },
           {
+            "id": "row-3",
             "locked": true,
             "locks": {
               "time": false,
@@ -2581,6 +3152,7 @@ const ReorderRowsVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -2607,6 +3179,7 @@ const ReorderRowsVectors = """
             }
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -2622,6 +3195,7 @@ const ReorderRowsVectors = """
             "demo_actions": "Type a name."
           },
           {
+            "id": "row-3",
             "locked": true,
             "locks": {
               "time": false,
@@ -2647,6 +3221,7 @@ const ReorderRowsVectors = """
               "design_plan": false
             },
             "screenshot": null,
+            "id": "row-4",
             "time": "0:40",
             "narrative": "Spare.",
             "demo_actions": "Wrap up."
@@ -2684,11 +3259,13 @@ const ReorderRowsVectors = """
             "design_plan": false
           },
           "screenshot": null,
+          "id": "row-4",
           "time": "0:40",
           "narrative": "Spare.",
           "demo_actions": "Wrap up."
         },
         {
+          "id": "row-2",
           "locked": false,
           "locks": {
             "time": false,
@@ -2704,6 +3281,7 @@ const ReorderRowsVectors = """
           "demo_actions": "Type a name."
         },
         {
+          "id": "row-3",
           "locked": true,
           "locks": {
             "time": false,
@@ -2719,6 +3297,7 @@ const ReorderRowsVectors = """
           "demo_actions": "Close."
         },
         {
+          "id": "row-1",
           "locked": false,
           "locks": {
             "time": false,
@@ -2763,6 +3342,7 @@ const ReorderRowsVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -2789,6 +3369,7 @@ const ReorderRowsVectors = """
             }
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -2804,6 +3385,7 @@ const ReorderRowsVectors = """
             "demo_actions": "Type a name."
           },
           {
+            "id": "row-3",
             "locked": true,
             "locks": {
               "time": false,
@@ -2851,6 +3433,7 @@ const ReorderRowsVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -2867,6 +3450,7 @@ const ReorderRowsVectors = """
             "visual": ".cutready/visuals/one.json"
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -2910,6 +3494,7 @@ const ReorderRowsVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -2926,6 +3511,7 @@ const ReorderRowsVectors = """
             "visual": ".cutready/visuals/shared.json"
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -2969,6 +3555,7 @@ const ReorderRowsVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": true,
             "locks": {
               "time": false,
@@ -2985,6 +3572,7 @@ const ReorderRowsVectors = """
             "future_row_field": "a"
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -3027,6 +3615,7 @@ const ReorderRowsVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -3043,6 +3632,7 @@ const ReorderRowsVectors = """
             "future_row_field": "first"
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,
@@ -3081,6 +3671,7 @@ const ReorderRowsVectors = """
         "description": null,
         "rows": [
           {
+            "id": "row-1",
             "locked": false,
             "locks": {
               "time": false,
@@ -3097,6 +3688,7 @@ const ReorderRowsVectors = """
             "future_row_field": "first"
           },
           {
+            "id": "row-2",
             "locked": false,
             "locks": {
               "time": false,

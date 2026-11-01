@@ -45,6 +45,7 @@ import { getProviderSecret, setProviderSecret } from "../hooks/useSecretStore";
 import { buildPlainSsml, inferSpeechEndpoint, SPEECH_TOKEN_SCOPE } from "../services/narrationSpeech";
 import { validateGeneratedSsml } from "../services/narrationSsml";
 import { readClipboardImage } from "../utils/clipboardImage";
+import { newPlanningRowId } from "../utils/planningRowId";
 
 interface MonitorInfo {
   id: number;
@@ -2692,6 +2693,7 @@ The row already has a visual and design_plan. You may read the sketch for contex
                 <button
                   onClick={() => {
                     const newRow: PlanningRow = {
+                      id: newPlanningRowId(),
                       time: "",
                       narrative: "",
                       demo_actions: "",

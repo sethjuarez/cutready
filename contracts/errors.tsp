@@ -27,6 +27,9 @@ union CmdErrorCode {
   /** `order` is not a permutation of the current row indices. */
   invalidReorder: "invalid_reorder",
 
+  /** Two rows share `details.row_id`; `details.row_index` is the second. Decode and save reject it. */
+  duplicateRowId: "duplicate_row_id",
+
   /** Codes from newer runtimes load and save unchanged. */
   string,
 }
@@ -38,6 +41,9 @@ model CmdErrorDetails {
 
   /** The locked cell, for `locked_cell`. */
   field?: PlanningCellField;
+
+  /** The repeated row id, for `duplicate_row_id`. */
+  row_id?: string;
 
   /** Detail fields from newer runtimes survive load and save. */
   ...Record<unknown>;

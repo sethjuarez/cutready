@@ -31,6 +31,7 @@ classDiagram
         +string updated_at
     }
     class PlanningRow {
+        +string id
         +boolean locked
         +PlanningCellLocks locks
         +string time

@@ -7,6 +7,7 @@
   },
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -100,6 +101,7 @@
       }
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,
@@ -115,6 +117,7 @@
       "screenshot": null
     },
     {
+      "id": "row-3",
       "locked": true,
       "locks": {
         "time": true,

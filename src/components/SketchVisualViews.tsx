@@ -9,6 +9,7 @@ import { setRowTime } from "../utils/documentMetadata";
 import { invoke } from "../services/tauri";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { continueMarkdownList } from "../utils/markdownList";
+import { newPlanningRowId } from "../utils/planningRowId";
 import { useConfirmDialog } from "./ConfirmDialog";
 
 interface SketchVisualViewProps {
@@ -644,6 +645,7 @@ function updateRowField(
 
 function createEmptyRow(): PlanningRow {
   return {
+    id: newPlanningRowId(),
     time: "",
     narrative: "",
     demo_actions: "",

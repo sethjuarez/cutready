@@ -13,6 +13,7 @@ import { TypingSpot } from "./typing-spot";
 export class PlanningRow {
   static readonly shorthandProperty: string | undefined = undefined;
 
+  id?: string | undefined;
   locked?: boolean | undefined;
   locks?: PlanningCellLocks | undefined;
   time: string = "";
@@ -33,6 +34,7 @@ export class PlanningRow {
   /** True when `key` is a declared wire key of this model (including inherited fields). */
   protected isKnownWireKey(key: string): boolean {
     switch (key) {
+      case "id":
       case "locked":
       case "locks":
       case "time":
@@ -54,6 +56,9 @@ export class PlanningRow {
   }
 
   constructor(init?: Partial<PlanningRow>) {
+    if (init?.id !== undefined) {
+      this.id = init.id;
+    }
     if (init?.locked !== undefined) {
       this.locked = init.locked;
     }
@@ -111,6 +116,9 @@ export class PlanningRow {
 
     const instance = new PlanningRow();
 
+    if (data["id"] !== undefined && data["id"] !== null) {
+      instance.id = String(data["id"]);
+    }
     if (data["locked"] !== undefined && data["locked"] !== null) {
       instance.locked = Boolean(data["locked"]);
     }
@@ -291,6 +299,9 @@ export class PlanningRow {
 
     const result: Record<string, unknown> = {};
 
+    if (obj.id !== undefined && obj.id !== null) {
+      result["id"] = obj.id;
+    }
     if (obj.locked !== undefined && obj.locked !== null) {
       result["locked"] = obj.locked;
     }

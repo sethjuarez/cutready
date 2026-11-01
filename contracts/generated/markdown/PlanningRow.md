@@ -21,6 +21,7 @@ config:
 ---
 classDiagram
     class PlanningRow {
+        +string id
         +boolean locked
         +PlanningCellLocks locks
         +string time
@@ -111,6 +112,10 @@ demo_actions: Open the workspace.
 
 | Name | Type | Description |
 | ---- | ---- | ----------- |
+| id | string | Stable identity, unique within the sketch. Decode gives a row without one
+(legacy files) `row-{position}`, one-based, appending `-2`, `-3`, ... while
+that id is taken; save always writes it. Duplicate ids are rejected with
+`duplicate_row_id`. Hosts may mint any other unique string for new rows. |
 | locked | boolean | Whether the entire row is protected from edits. Saved as `false` when unset. |
 | locks | [PlanningCellLocks](../planningcelllocks/) | Saved with all six fields, even when nothing is locked. |
 | time | string | Human duration such as `~30s`, `0:20`, or `2m`. |

@@ -75,7 +75,14 @@ enum VectorAdapters {
 
   private static func sketch(from input: Any?) throws -> Sketch {
     let json = try object(field(input, "sketch"), "sketch")
-    return try SketchDocumentCodec.decode(try JSONSerialization.data(withJSONObject: json))
+    do {
+      return try SketchDocumentCodec.decode(try JSONSerialization.data(withJSONObject: json))
+    } catch SketchDocumentError.duplicateRowId(let index, let id) {
+      throw VectorError(
+        "duplicate row id",
+        payload: ["code": "duplicate_row_id", "details": ["row_index": index, "row_id": id]]
+      )
+    }
   }
 
   private static func save(_ sketch: Sketch) throws -> Any {

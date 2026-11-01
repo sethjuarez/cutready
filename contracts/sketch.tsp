@@ -80,6 +80,14 @@ model PlanningCellLocks {
  * Unknown fields must survive every runtime's decode -> save.
  */
 model PlanningRow {
+  /**
+   * Stable identity, unique within the sketch. Decode gives a row without one
+   * (legacy files) `row-{position}`, one-based, appending `-2`, `-3`, ... while
+   * that id is taken; save always writes it. Duplicate ids are rejected with
+   * `duplicate_row_id`. Hosts may mint any other unique string for new rows.
+   */
+  id?: string;
+
   /** Whether the entire row is protected from edits. Saved as `false` when unset. */
   locked?: boolean;
 
