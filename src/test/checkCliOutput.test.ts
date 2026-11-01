@@ -67,6 +67,11 @@ describe("check-cli-output", () => {
       { path: "review.rs", text: "let mut s = serde_json::Serializer::new(out);" },
       { path: "project.rs", text: 'fn emit(out: &mut impl Write) { writeln!(out, "{}", v); }' },
       { path: "lib.rs", text: 'let v = run.to_output();\nstd::fs::write(p, v.to_string());' },
+      { path: "edit.rs", text: 'fn emit(f: &mut Sink, value: &str) {\n    writeln!(f, "{}", value);\n}' },
+      {
+        path: "review.rs",
+        text: 'impl fmt::Display for E {\n    fn fmt(&self, f: &mut fmt::Formatter<\'_>) -> fmt::Result {\n        write!(out, "x")\n    }\n}',
+      },
       {
         path: "discovery.rs",
         text: 'fn fmt(&self, f: &mut Formatter) -> fmt::Result {\n    write!(\n        f,\n        "x"\n    )\n}',
@@ -79,6 +84,8 @@ describe("check-cli-output", () => {
       expect.stringMatching(/^project\.rs:1: write!\/writeln!/),
       expect.stringMatching(/^project\.rs:1: io::Write/),
       expect.stringMatching(/^lib\.rs:1: to_output\(\)/),
+      expect.stringMatching(/^edit\.rs:2: write!\/writeln!/),
+      expect.stringMatching(/^review\.rs:3: write!\/writeln!/),
     ]);
   });
 });

@@ -24,27 +24,29 @@ export function isExempt(path) {
 }
 
 const IMPORT = /import\s*(?:type\s*)?\{([^}]*)\}\s*from\s*["']([^"']+)["']/g;
-const NAMESPACE_IMPORT = /import\s*\*\s*as\s+(\w+)\s+from\s*["']([^"']+)["']/g;
+const NAMESPACE_IMPORT = /import\s*\*\s*as\s+([\w$]+)\s+from\s*["']([^"']+)["']/g;
 
 function isTauriCore(specifier) {
   return specifier === "@tauri-apps/api/core" || /(^|\/)(services\/)?tauri$/.test(specifier);
 }
 
-function stripComments(text) {
-  return text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
+/** Matches of `pattern` in `text` that start in code, not in a comment or string. */
+function codeMatches(text, pattern) {
+  const code = maskCode(text);
+  return [...text.matchAll(pattern)].filter((match) => code.startsWith("import", match.index));
 }
 
 /** Local names `invoke` is imported as, or [] when the file doesn't import it. */
 export function invokeNames(text) {
   const names = [];
-  for (const [, specifiers, from] of stripComments(text).matchAll(IMPORT)) {
+  for (const [, specifiers, from] of codeMatches(text, IMPORT)) {
     if (!isTauriCore(from)) continue;
     for (const specifier of specifiers.split(",")) {
-      const match = /^\s*invoke(?:\s+as\s+(\w+))?\s*$/.exec(specifier);
+      const match = /^\s*invoke(?:\s+as\s+([\w$]+))?\s*$/.exec(specifier);
       if (match) names.push(match[1] ?? "invoke");
     }
   }
-  for (const [, namespace, from] of stripComments(text).matchAll(NAMESPACE_IMPORT)) {
+  for (const [, namespace, from] of codeMatches(text, NAMESPACE_IMPORT)) {
     if (isTauriCore(from)) names.push(`${namespace}.invoke`);
   }
   return names;
@@ -121,7 +123,7 @@ export function countInvokes(text) {
   return names.reduce(
     (total, name) =>
       total +
-      [...code.matchAll(new RegExp(`(?<![\\w$])(?<!\\.\\s*)${name.replace(".", "\\s*\\.\\s*")}\\s*[<(]`, "g"))]
+      [...code.matchAll(new RegExp(`(?<![\\w$])(?<!\\.\\s*)${name.replace(/\$/g, "\\$").replace(".", "\\s*\\.\\s*")}\\s*[<(]`, "g"))]
         .length,
     0,
   );

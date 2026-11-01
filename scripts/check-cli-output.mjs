@@ -34,8 +34,8 @@ const HAND_BUILT = [
   [/\bserde_json::Serializer\b|\bSerializer::(new|pretty|with_formatter)\b/g, "serde_json::Serializer"],
   [/\be?print(ln)?!/g, "print!/println!/eprint!/eprintln!"],
   [/\bstd(out|err)\s*\(/g, "stdout()/stderr()"],
-  // Display impls write to their Formatter `f`; any other sink is an output path.
-  [/\bwrite(ln)?!\s*\((?!\s*f\s*,)/g, "write!/writeln!"],
+  // Allowed only to the Formatter of a `fn fmt` (see formatterWrites).
+  [/\bwrite(ln)?!\s*\(/g, "write!/writeln!"],
   [/\bWrite\b/g, "io::Write"],
   [/\.write_all\s*\(/g, "write_all"],
   [/\.to_output\s*\(/g, "to_output()"],
@@ -43,6 +43,28 @@ const HAND_BUILT = [
 ];
 function lineOf(text, index) {
   return text.slice(0, index).split("\n").length;
+}
+
+const FMT_FN = /\bfn\s+fmt\s*\(\s*&\s*self\s*,\s*(\w+)\s*:\s*&\s*mut\s+(?:(?:std|core)::)?(?:fmt::)?Formatter\b[^{]*\{/g;
+
+/** Offsets of `write!`/`writeln!` calls to the Formatter inside `fn fmt` bodies (Display/Debug impls). */
+export function formatterWrites(code) {
+  const allowed = new Set();
+  for (const match of code.matchAll(FMT_FN)) {
+    const [, formatter] = match;
+    let depth = 1;
+    let end = match.index + match[0].length;
+    while (end < code.length && depth > 0) {
+      if (code[end] === "{") depth++;
+      else if (code[end] === "}") depth--;
+      end++;
+    }
+    const body = code.slice(match.index, end);
+    for (const write of body.matchAll(new RegExp(`\\bwrite(ln)?!\\s*\\(\\s*${formatter}\\s*,`, "g"))) {
+      allowed.add(match.index + write.index);
+    }
+  }
+  return allowed;
 }
 
 /** Problems for `files` ({path, text}, paths relative to SOURCE_ROOT). */
@@ -55,8 +77,10 @@ export function checkCliOutput(files) {
     const markers = MARKERS[path] ?? [];
     const marked = (line) =>
       [lines[line - 1], lines[line - 2]].some((raw) => markers.some((marker) => raw?.includes(marker)));
+    const formatter = formatterWrites(code);
     for (const [pattern, name] of HAND_BUILT) {
       for (const match of code.matchAll(pattern)) {
+        if (formatter.has(match.index)) continue;
         const line = lineOf(code, match.index);
         if (marked(line)) continue;
         problems.push(

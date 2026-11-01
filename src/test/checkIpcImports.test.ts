@@ -37,6 +37,13 @@ describe("check-ipc-imports", () => {
     expect(countInvokes(text)).toBe(2);
   });
 
+  it("only counts real imports and supports $ identifiers", () => {
+    expect(countInvokes('const docs = "import * as tauri from \'@tauri-apps/api/core\'";\ntauri.invoke("x");')).toBeNull();
+    expect(countInvokes('// import { invoke } from "../services/tauri";\ninvoke("x");')).toBeNull();
+    expect(countInvokes('import * as $tauri from "@tauri-apps/api/core";\n$tauri.invoke("x");')).toBe(1);
+    expect(countInvokes('import { invoke as $call } from "@tauri-apps/api/core";\n$call("x"); a$call("y");')).toBe(1);
+  });
+
   it("caps existing importers and rejects new ones", () => {
     const caps = { "src/a.ts": 3, "src/b.ts": 2, "src/gone.ts": 1 };
     expect(checkIpcImports({ "src/a.ts": 3, "src/b.ts": 2, "src/gone.ts": 1 }, caps)).toEqual([]);
