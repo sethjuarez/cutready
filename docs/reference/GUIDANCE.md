@@ -59,7 +59,7 @@ Every document save is automatically versioned through Draftline. The user never
 - **Commit timeline** — a visual list of all saved versions with timestamps and auto-generated descriptions (e.g., _"Updated section 'API Setup'"_).
 - **Version preview** — click any version to see the document as it was at that point.
 - **Diff view** — compare any two versions side-by-side, with changes highlighted.
-- **Restore** — revert the document to a previous version (creates a new version, preserving history).
+- **Restore** — start a new branch from a previous version and switch to it (the current branch keeps its history).
 - **Projects in a code repo** — a CutReady folder inside a developer's repository works on `cutready/*` branches and shares via **Send for review** (a GitHub pull request).
 
 ### Sketch-to-Recording Bridge

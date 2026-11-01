@@ -370,8 +370,8 @@ my-demo-project/
 Draftline snapshots capture versioned content (sketches, storyboards, notes,
 the `.cutready/projects.json` workspace manifest, screenshots, visuals, and settings) while local runtime state remains outside
 normal project snapshots. Users can browse the timeline, preview any version,
-diff between versions, restore previous states as new saves, branch into
-variations, merge, and sync with remotes.
+diff between versions, restore a previous state by starting a new variation
+from it, merge, and sync with remotes.
 
 ```rust
 struct Recording {
@@ -731,7 +731,7 @@ fn generate_fcpxml(project: &Project, output_dir: &Path) -> Result<String> {
 
 ### 7. Draftline Versioning Engine
 
-Manages document version history, content policy, branch/variation graphs, shelves, sync, merge, and restore-as-new-save through the shared `draftline` crate. CutReady does not implement app-level git save/restore/diff paths.
+Manages document version history, content policy, branch/variation graphs, shelves, sync, merge, and restore through the shared `draftline` crate. CutReady does not implement app-level git save/restore/diff paths.
 
 **Core operations**:
 
@@ -744,14 +744,6 @@ fn open_project(root: impl AsRef<Path>) -> DraftlineResult<CutReadyDraftlineAdap
 
 fn save_version(adapter: &CutReadyDraftlineAdapter, message: &str) -> DraftlineResult<Version> {
     adapter.save_version(message)
-}
-
-fn restore_as_new_save(
-    adapter: &CutReadyDraftlineAdapter,
-    version_id: &VersionId,
-    message: &str,
-) -> DraftlineResult<Version> {
-    adapter.restore_version_as_new_save(version_id, message)
 }
 
 fn graph_overview(adapter: &CutReadyDraftlineAdapter) -> DraftlineResult<WorkspaceGraph> {
