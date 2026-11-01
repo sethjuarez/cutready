@@ -18,6 +18,11 @@
           "jsonpath": "$.package.version"
         },
         {
+          "type": "toml",
+          "path": "crates/cutready-cli/Cargo.toml",
+          "jsonpath": "$.package.version"
+        },
+        {
           "type": "json",
           "path": "src-tauri/tauri.conf.json",
           "jsonpath": "$.version"

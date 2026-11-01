@@ -69,8 +69,9 @@ CutReady uses [release-please](https://github.com/googleapis/release-please) for
 3. Merge the PR → release-please creates a GitHub Release + `v*` tag
 4. Build workflows produce platform artifacts (Windows, Linux, macOS)
 
-Version is tracked in three files (all updated automatically):
+Version is tracked in four files (all updated automatically):
 
 - `package.json` — primary (bumped by release-please `node` strategy)
 - `src-tauri/Cargo.toml` — Rust crate version (extra-file)
 - `src-tauri/tauri.conf.json` — Tauri app version (extra-file)
+- `crates/cutready-cli/Cargo.toml` — `cutready-cli` version, which discovery compares (extra-file)

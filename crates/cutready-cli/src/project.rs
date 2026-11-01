@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use cutready_core::contracts::{CmdError, SaveContext};
 use cutready_core::edit_ops::{self, ContentEditError};
-use cutready_core::edit_session::{kind_of, Applied, EditSession, Expected};
+use cutready_core::edit_session::{kind_of, Applied, EditSession, Expected, ReviewError};
 use cutready_core::{Clock, Files, OpLogStore, PortErrorKind};
 use cutready_desktop_io::repo_lock::RepoLock;
 use cutready_desktop_io::state_dir::{enclosing_git_dir, git_state_dir, OP_LOG_FILENAME};
@@ -43,6 +43,15 @@ impl Failure {
 
 impl From<&ContentEditError> for Failure {
     fn from(err: &ContentEditError) -> Self {
+        match CmdError::try_from(err) {
+            Ok(cmd) => Self::Contract(Box::new(cmd)),
+            Err(message) => Self::Other(message),
+        }
+    }
+}
+
+impl From<&ReviewError> for Failure {
+    fn from(err: &ReviewError) -> Self {
         match CmdError::try_from(err) {
             Ok(cmd) => Self::Contract(Box::new(cmd)),
             Err(message) => Self::Other(message),
@@ -169,6 +178,44 @@ impl Project {
         };
         self.session(clock)
             .apply(run_id, doc, expected, ops)
+            .map_err(|err| Failure::from(&err))
+    }
+
+    /// Runs with changes awaiting Keep or Undo, oldest first, in the
+    /// canonical `RunReview` wire form the app's review panel reads.
+    pub fn reviews(&self, clock: &dyn Clock) -> Result<Value, Failure> {
+        let ctx = SaveContext::default();
+        let reviews = self.session(clock).pending_reviews()?;
+        Ok(Value::Array(
+            reviews.iter().map(|review| review.to_value(&ctx)).collect(),
+        ))
+    }
+
+    /// Keeps a run's changes to `doc` through `through_seq` (from `reviews`);
+    /// `stale_review` if the run changed the document since.
+    pub fn keep(
+        &self,
+        clock: &dyn Clock,
+        run_id: &str,
+        doc: &str,
+        through_seq: u64,
+    ) -> Result<(), Failure> {
+        self.session(clock)
+            .keep(run_id, doc, through_seq)
+            .map_err(|err| Failure::from(&err))
+    }
+
+    /// Undoes a run's changes to `doc` through `through_seq`, keeping later
+    /// edits that don't overlap; `undo_conflict` when they do.
+    pub fn undo(
+        &self,
+        clock: &dyn Clock,
+        run_id: &str,
+        doc: &str,
+        through_seq: u64,
+    ) -> Result<(), Failure> {
+        self.session(clock)
+            .undo(run_id, doc, through_seq)
             .map_err(|err| Failure::from(&err))
     }
 }

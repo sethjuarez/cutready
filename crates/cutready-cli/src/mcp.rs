@@ -187,6 +187,21 @@ impl<'c> Server<'c> {
                     .apply(self.clock, ACTOR, run_id, path, expected, ops)
                     .map(|applied| applied_json(path, &applied))
             }
+            "review" => project.reviews(self.clock),
+            "keep" | "undo" => {
+                let run_id = string_arg(&args, "run_id")?;
+                let path = string_arg(&args, "path")?;
+                let through_seq = args
+                    .get("through_seq")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| invalid("through_seq is required: the review's through_seq"))?;
+                let resolved = if name == "keep" {
+                    project.keep(self.clock, run_id, path, through_seq)
+                } else {
+                    project.undo(self.clock, run_id, path, through_seq)
+                };
+                resolved.map(|()| json!({ "run_id": run_id, "path": path, "resolved": name }))
+            }
             other => return Err(invalid(&format!("Unknown tool {other}"))),
         };
         Ok(match result {
@@ -265,5 +280,29 @@ fn tools() -> Value {
                 "additionalProperties": false,
             },
         },
+        {
+            "name": "review",
+            "description": "List runs with changes nobody has kept or undone, oldest first: each run's documents with the through_seq keep and undo need.",
+            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+        },
+        review_tool("keep", "Keep a run's changes to one document. Fails with stale_review if the run changed it after the review you read."),
+        review_tool("undo", "Undo a run's changes to one document, keeping later edits that don't overlap. Fails with undo_conflict, changing nothing, when they do."),
     ])
+}
+
+fn review_tool(name: &str, description: &str) -> Value {
+    json!({
+        "name": name,
+        "description": description,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "run_id": { "type": "string" },
+                "path": { "type": "string", "description": "The review document's path." },
+                "through_seq": { "type": "integer", "minimum": 0, "description": "The review document's through_seq." },
+            },
+            "required": ["run_id", "path", "through_seq"],
+            "additionalProperties": false,
+        },
+    })
 }

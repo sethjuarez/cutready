@@ -142,7 +142,17 @@ fn the_handshake_advertises_the_contract_version() {
         .iter()
         .map(|tool| tool["name"].as_str().unwrap())
         .collect();
-    assert_eq!(names, ["read_document", "begin_run", "apply_ops"]);
+    assert_eq!(
+        names,
+        [
+            "read_document",
+            "begin_run",
+            "apply_ops",
+            "review",
+            "keep",
+            "undo"
+        ]
+    );
 }
 
 #[test]
