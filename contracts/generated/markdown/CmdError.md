@@ -33,6 +33,7 @@ classDiagram
         +uint32 op_index
         +string current_version
         +UndoConflict[] conflicts
+        +string path
     }
     CmdError *-- CmdErrorDetails
 ```

@@ -32,17 +32,19 @@ public struct CmdErrorDetails: TypraModel {
   public var opIndex: UInt32? = nil
   public var currentVersion: String? = nil
   public var conflicts: [UndoConflict]? = nil
+  public var path: String? = nil
   /// Undeclared fields captured on load and written back on save (unknown-field passthrough).
   public var additionalProperties: [String: Any] = [:]
-  static let additionalPropertiesKnownKeys: Set<String> = ["row_index", "field", "row_id", "op_index", "current_version", "conflicts"]
+  static let additionalPropertiesKnownKeys: Set<String> = ["row_index", "field", "row_id", "op_index", "current_version", "conflicts", "path"]
 
-  public init(rowIndex: UInt32? = nil, field: PlanningCellField? = nil, rowId: String? = nil, opIndex: UInt32? = nil, currentVersion: String? = nil, conflicts: [UndoConflict]? = nil, additionalProperties: [String: Any] = [:]) {
+  public init(rowIndex: UInt32? = nil, field: PlanningCellField? = nil, rowId: String? = nil, opIndex: UInt32? = nil, currentVersion: String? = nil, conflicts: [UndoConflict]? = nil, path: String? = nil, additionalProperties: [String: Any] = [:]) {
     self.rowIndex = rowIndex
     self.field = field
     self.rowId = rowId
     self.opIndex = opIndex
     self.currentVersion = currentVersion
     self.conflicts = conflicts
+    self.path = path
     self.additionalProperties = additionalProperties
   }
 
@@ -67,6 +69,9 @@ public struct CmdErrorDetails: TypraModel {
     if let value = object["conflicts"] {
       instance.conflicts = try TypraRuntime.array(value, field: "conflicts").enumerated().map { try UndoConflict.load($1, context: context.at("conflicts").atIndex($0)) }
     }
+    if let value = object["path"] {
+      instance.path = try TypraRuntime.string(value, field: "path")
+    }
     instance.additionalProperties = object.filter { !Self.additionalPropertiesKnownKeys.contains($0.key) }
     return instance
   }
@@ -90,6 +95,9 @@ public struct CmdErrorDetails: TypraModel {
     }
     if let value = self.conflicts {
       result["conflicts"] = try value.map { try $0.save(context) }
+    }
+    if let value = self.path {
+      result["path"] = value
     }
     for (key, value) in self.additionalProperties where !Self.additionalPropertiesKnownKeys.contains(key) {
       result[key] = value

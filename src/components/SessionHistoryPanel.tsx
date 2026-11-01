@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { History, MessageSquare, MoreHorizontal, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import { invoke } from "../services/tauri";
+import { commandErrorText } from "../services/commandErrors";
 import { useAppStore } from "../stores/appStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import { useToastStore } from "../stores/toastStore";
@@ -66,7 +67,7 @@ export function SessionHistoryPanel({ onOpenChat }: { onOpenChat: () => void }) 
       setSessions((current) => offset === 0 ? page.sessions : [...current, ...page.sessions]);
       setHasMore(page.has_more);
     } catch (err) {
-      setError(String(err));
+      setError(commandErrorText(err));
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -94,7 +95,7 @@ export function SessionHistoryPanel({ onOpenChat }: { onOpenChat: () => void }) 
       restoreChatSession(session.session_id, session.messages);
       onOpenChat();
     } catch (err) {
-      setError(`Could not open conversation: ${String(err)}`);
+      setError(`Could not open conversation: ${commandErrorText(err)}`);
     } finally {
       setOpeningId(null);
     }
@@ -120,7 +121,7 @@ export function SessionHistoryPanel({ onOpenChat }: { onOpenChat: () => void }) 
       window.dispatchEvent(new CustomEvent("cutready:chat-sessions-updated"));
       showToast("Conversation deleted.", 3000, "success");
     } catch (err) {
-      showToast(`Could not delete conversation: ${String(err)}`, 5000, "error");
+      showToast(`Could not delete conversation: ${commandErrorText(err)}`, 5000, "error");
     } finally {
       setWorkingId(null);
     }
@@ -184,7 +185,7 @@ export function SessionHistoryPanel({ onOpenChat }: { onOpenChat: () => void }) 
       window.dispatchEvent(new CustomEvent("cutready:chat-sessions-updated"));
       showToast(`Promoted chat to ${relativePath}`, 5000, "success");
     } catch (err) {
-      showToast(`Could not promote conversation: ${String(err)}`, 7000, "error");
+      showToast(`Could not promote conversation: ${commandErrorText(err)}`, 7000, "error");
     } finally {
       setWorkingId(null);
     }

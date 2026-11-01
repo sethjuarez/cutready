@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Database, RefreshCw, Table2 } from "lucide-react";
 import { invoke } from "../services/tauri";
+import { commandErrorText } from "../services/commandErrors";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { useConfirmDialog } from "./ConfirmDialog";
@@ -61,7 +62,7 @@ export function AgentStateDatabasePanel() {
     } catch (err) {
       setPreview(null);
       setHasActiveAgentRun(false);
-      setError(String(err));
+      setError(commandErrorText(err));
     } finally {
       setLoading(false);
     }
@@ -89,7 +90,7 @@ export function AgentStateDatabasePanel() {
       showToast(`Compacted database: ${formatBytes(result.size_before)} → ${formatBytes(result.size_after)}`, 3500, "success");
       await loadPreview();
     } catch (err) {
-      showToast(`Could not compact database: ${String(err)}`, 5000, "error");
+      showToast(`Could not compact database: ${commandErrorText(err)}`, 5000, "error");
     } finally {
       setCompacting(false);
     }

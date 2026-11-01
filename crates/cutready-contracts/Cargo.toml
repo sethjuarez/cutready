@@ -8,6 +8,10 @@ description = "Typra-generated CutReady document contracts plus the @vector conf
 [lib]
 name = "cutready_contracts"
 
+[features]
+# Serde impls for the generated models (`CmdError` crosses the Tauri IPC boundary).
+serde = []
+
 [dependencies]
 async-trait = "0.1"
 serde = { version = "1", features = ["derive"] }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type RefObject } from "react";
 import { invoke } from "../services/tauri";
+import { commandErrorText } from "../services/commandErrors";
 import {
   clearSuppressedEditorFlush,
   makeMainTabId,
@@ -331,7 +332,7 @@ export function FileTreeView() {
       const updated = result.updatedReferences.reduce((sum, ref) => sum + ref.count, 0);
       showToast(updated > 0 ? `Renamed and updated ${updated} reference${updated === 1 ? "" : "s"}.` : "Renamed file.", 3500, "success");
     } catch (err) {
-      showToast(`Rename failed: ${err}`, 5000, "error");
+      showToast(`Rename failed: ${commandErrorText(err)}`, 5000, "error");
     } finally {
       renameInFlightRef.current = false;
       suppressed.forEach(clearSuppressedEditorFlush);

@@ -6,6 +6,7 @@ import { invoke } from "../../services/tauri";
 import type { TokenResponse } from "../../types/auth";
 import { useToastStore } from "../../stores/toastStore";
 import { agentChat } from "../../services/agentChat";
+import { commandErrorText } from "../../services/commandErrors";
 import { buildProviderConfig, isAiProviderConfigured } from "../../utils/providerConfig";
 import { sanitizeDiagnosticsLog } from "../../utils/diagnosticsSanitizer";
 import { appendFeedbackAttachmentsSection, formatFeedbackAttachmentSize, formatFeedbackAttachmentsMarkdown, type FeedbackAttachmentMetadata } from "../../utils/feedbackAttachments";
@@ -444,7 +445,7 @@ export function FeedbackListTab() {
       }
     } catch (e) {
       ({ title, body } = buildFallbackIssue(entry, appVersion));
-      if (String(e).includes("timed out")) {
+      if (commandErrorText(e).includes("timed out")) {
         useToastStore.getState().show("AI formatting timed out; using a local issue template.", 4000, "warning");
       }
     }

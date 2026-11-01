@@ -33,14 +33,15 @@ Tauri commands are the primary IPC mechanism. Follow this pattern:
 async fn command_name(
     param: ParamType,
     state: tauri::State<'_, AppState>,
-) -> Result<ReturnType, String> {
+) -> Result<ReturnType, CmdError> {
     // Implementation
 }
 ```
 
 - Commands go in the `commands/` module (one file per engine domain).
 - Commands are thin — they call into `engine/` modules for business logic.
-- Use `Result<T, String>` return types (Tauri serializes the error as a string to the frontend).
+- Return `Result<T, CmdError>` (`commands::CmdError`, the Typra contract type from `contracts/errors.tsp`; see `docs/adr/0003-error-envelope.md`). The frontend receives `{ code, message, details? }`. Use code `command_failed` unless the frontend branches on the failure, then add a named code to the contract. `CmdError::from(string)` / `.map_err(cmd_err)` keeps call sites terse and always yields `command_failed` with the text verbatim, even JSON-shaped text. Only known Draftline boundaries (`ProjectError::Draftline` from opening or initializing a project) lift a serialized envelope, via `CmdError::from_draftline_envelope`. Frontend callers read the text with `commandErrorText(err)` (`src/services/commandErrors.ts`) or branch on `code`, never on the raw string.
+- `npm run check:command-errors` (in `check:rust`) caps the `Result<_, String>` commands left per module in `scripts/command-errors.json`. Caps only go down: run `node scripts/check-command-errors.mjs --update` after converting a module. `project.rs` and `agent.rs` are converted; only their sign-in/token commands stay String until auth changes get separate sign-off.
 - Register all commands via `.invoke_handler(tauri::generate_handler![...])` in `lib.rs`.
 - List every registered command under `supported` in `src-tauri/commands.json`. When you remove a command, move it to `unsupported` with a reason. `npm run check:commands` fails on any drift, and so does a frontend `invoke("x")` for a command that isn't supported.
 - Rust `snake_case` params auto-convert from frontend `camelCase` (e.g., `relativePath` → `relative_path`).
@@ -57,8 +58,8 @@ For long-running operations (recording progress, agent streaming, render progres
 #[tauri::command]
 async fn long_operation(
     channel: tauri::ipc::Channel<ProgressPayload>,
-) -> Result<(), String> {
-    channel.send(ProgressPayload { ... }).map_err(|e| e.to_string())?;
+) -> Result<(), CmdError> {
+    channel.send(ProgressPayload { ... }).map_err(|e| CmdError::from(e.to_string()))?;
     Ok(())
 }
 ```
@@ -173,7 +174,7 @@ cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
 - Use `anyhow::Result` for internal engine logic.
 - Use `thiserror` for typed error enums per engine.
-- Convert to `String` at the Tauri command boundary.
+- Convert to `CmdError` at the Tauri command boundary (internal helpers may keep returning `String`).
 
 ## Observability
 

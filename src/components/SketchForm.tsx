@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Channel, convertFileSrc, invoke } from "../services/tauri";
+import { Channel, commandErrorText, convertFileSrc, invoke } from "../services/tauri";
 import { listenEvent } from "../ipc/events";
 import { useRecordingTakeActivity } from "../hooks/useRecordingTakeActivity";
 import { recordingIpc } from "../ipc/recording";
@@ -2018,8 +2018,8 @@ Rules:
       useToastStore.getState().show(`Generated AI narration for ${generatedCount} row${generatedCount === 1 ? "" : "s"}`, 5000, "success");
     } catch (err) {
       console.warn("[SketchForm] Failed to generate sketch narration:", err);
-      useToastStore.getState().show(`Could not generate sketch narration: ${err}`, 7000, "error");
-      await refreshAfterNarrationGeneration(`AI narration generation failed: ${err}`, "error");
+      useToastStore.getState().show(`Could not generate sketch narration: ${commandErrorText(err)}`, 7000, "error");
+      await refreshAfterNarrationGeneration(`AI narration generation failed: ${commandErrorText(err)}`, "error");
     } finally {
       unlisten?.();
       setNarrationSavingRows((rows) => {
@@ -2350,7 +2350,7 @@ Rules:
       await handleExportVideo(rowsForExport, outputPath);
     } catch (err) {
       console.warn("[SketchForm] Failed to generate video:", err);
-      useToastStore.getState().show(`Could not generate video: ${err}`, 7000, "error");
+      useToastStore.getState().show(`Could not generate video: ${commandErrorText(err)}`, 7000, "error");
       setVideoExportProgress(null);
     }
   }, [

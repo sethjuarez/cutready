@@ -1,0 +1,21 @@
+{
+  "src-tauri/src/commands/agent.rs": 9,
+  "src-tauri/src/commands/diagnostics.rs": 4,
+  "src-tauri/src/commands/draftline.rs": 5,
+  "src-tauri/src/commands/export.rs": 5,
+  "src-tauri/src/commands/feedback.rs": 7,
+  "src-tauri/src/commands/github.rs": 4,
+  "src-tauri/src/commands/identity.rs": 3,
+  "src-tauri/src/commands/import.rs": 6,
+  "src-tauri/src/commands/interaction.rs": 5,
+  "src-tauri/src/commands/narration_preview.rs": 3,
+  "src-tauri/src/commands/note.rs": 15,
+  "src-tauri/src/commands/recording.rs": 18,
+  "src-tauri/src/commands/review.rs": 3,
+  "src-tauri/src/commands/screenshot.rs": 21,
+  "src-tauri/src/commands/secrets.rs": 1,
+  "src-tauri/src/commands/sketch.rs": 13,
+  "src-tauri/src/commands/storyboard.rs": 11,
+  "src-tauri/src/commands/terminal.rs": 5,
+  "src-tauri/src/commands/video_import.rs": 2
+}

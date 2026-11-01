@@ -8,6 +8,7 @@ use tauri::{Emitter, State};
 use tauri_plugin_auditaur::auditaur_command;
 use tauri_plugin_store::StoreExt;
 
+use super::{cmd_err, CmdError};
 use crate::engine::write_lock::RepoLock;
 use crate::engine::{
     agent_state::AgentStateStore,
@@ -41,7 +42,7 @@ fn project_and_repo_root(
 /// Supports `--project <path>`, `--project=<path>`, `--open-project <path>`,
 /// and `CUTREADY_PROJECT=<path>` for dev smoke tests and scripted launches.
 #[auditaur_command(skip_all, err)]
-pub async fn get_startup_project_path() -> Result<Option<String>, String> {
+pub async fn get_startup_project_path() -> Result<Option<String>, CmdError> {
     Ok(
         startup_project_path_from_args(std::env::args_os()).or_else(|| {
             std::env::var(STARTUP_PROJECT_ENV)
@@ -84,11 +85,11 @@ pub async fn create_project_folder(
     path: String,
     app: tauri::AppHandle,
     state: State<'_, AppState>,
-) -> Result<ProjectView, String> {
+) -> Result<ProjectView, CmdError> {
     let root = PathBuf::from(&path);
     let view =
         crate::engine::write_lock::with_setup_lock(&root, || project::init_project_folder(&root))?
-            .map_err(|e| e.to_string())?;
+            .map_err(CmdError::from)?;
 
     // Set repo view (new project = repo root is project root)
     {
@@ -116,7 +117,7 @@ pub async fn open_project_folder(
     adopt: Option<bool>,
     app: tauri::AppHandle,
     state: State<'_, AppState>,
-) -> Result<ProjectView, String> {
+) -> Result<ProjectView, CmdError> {
     let root = PathBuf::from(&path);
 
     // Always set repo view
@@ -124,7 +125,7 @@ pub async fn open_project_folder(
     let (repo, projects) = crate::engine::write_lock::with_setup_lock(&root, || {
         project::open_repo_with(&root, adopt.unwrap_or(false))
     })?
-    .map_err(|e| e.to_string())?;
+    .map_err(CmdError::from)?;
     {
         let mut repo_lock = state.current_repo.lock().map_err(|e| e.to_string())?;
         *repo_lock = Some(repo);
@@ -168,14 +169,14 @@ pub async fn open_project_folder(
 #[tauri::command]
 pub async fn get_current_project(
     state: State<'_, AppState>,
-) -> Result<Option<ProjectView>, String> {
+) -> Result<Option<ProjectView>, CmdError> {
     let current = state.current_project.lock().map_err(|e| e.to_string())?;
     Ok(current.clone())
 }
 
 /// Close the current project and repo.
 #[tauri::command]
-pub async fn close_project(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn close_project(state: State<'_, AppState>) -> Result<(), CmdError> {
     {
         let mut current = state.current_project.lock().map_err(|e| e.to_string())?;
         *current = None;
@@ -189,7 +190,7 @@ pub async fn close_project(state: State<'_, AppState>) -> Result<(), String> {
 
 /// Get recent projects from the store.
 #[auditaur_command(skip_all, err)]
-pub async fn get_recent_projects(app: tauri::AppHandle) -> Result<Vec<RecentProject>, String> {
+pub async fn get_recent_projects(app: tauri::AppHandle) -> Result<Vec<RecentProject>, CmdError> {
     let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
 
     let recent: Vec<RecentProject> = store
@@ -202,13 +203,13 @@ pub async fn get_recent_projects(app: tauri::AppHandle) -> Result<Vec<RecentProj
 
 /// Add a project to the recent projects list.
 #[tauri::command]
-pub async fn add_recent_project(path: String, app: tauri::AppHandle) -> Result<(), String> {
-    add_to_recent_projects(&app, &path, None).map_err(|e| e.to_string())
+pub async fn add_recent_project(path: String, app: tauri::AppHandle) -> Result<(), CmdError> {
+    add_to_recent_projects(&app, &path, None).map_err(cmd_err)
 }
 
 /// Remove a project from the recent projects list.
 #[tauri::command]
-pub async fn remove_recent_project(path: String, app: tauri::AppHandle) -> Result<(), String> {
+pub async fn remove_recent_project(path: String, app: tauri::AppHandle) -> Result<(), CmdError> {
     let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
 
     let mut recent: Vec<RecentProject> = store
@@ -229,7 +230,7 @@ pub async fn remove_recent_project(path: String, app: tauri::AppHandle) -> Resul
 
 /// Get the last parent folder used (for file dialogs).
 #[tauri::command]
-pub async fn get_last_parent_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+pub async fn get_last_parent_folder(app: tauri::AppHandle) -> Result<Option<String>, CmdError> {
     let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
 
     let folder: Option<String> = store
@@ -327,7 +328,7 @@ fn update_last_active_project(
 #[auditaur_command(skip_all, err)]
 pub async fn get_sidebar_order(
     state: State<'_, AppState>,
-) -> Result<project::SidebarOrder, String> {
+) -> Result<project::SidebarOrder, CmdError> {
     let (proj_root, rp_root) = project_and_repo_root(&state)?;
     Ok(project::read_sidebar_order(&rp_root, &proj_root))
 }
@@ -337,16 +338,16 @@ pub async fn get_sidebar_order(
 pub async fn set_sidebar_order(
     order: project::SidebarOrder,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<(), CmdError> {
     let (proj_root, rp_root) = project_and_repo_root(&state)?;
-    project::write_sidebar_order(&rp_root, &proj_root, &order).map_err(|e| e.to_string())
+    project::write_sidebar_order(&rp_root, &proj_root, &order).map_err(cmd_err)
 }
 
 /// Get workspace state (open tabs, active tab, chat session) for the current project.
 #[auditaur_command(skip_all, err)]
 pub async fn get_workspace_state(
     state: State<'_, AppState>,
-) -> Result<project::WorkspaceState, String> {
+) -> Result<project::WorkspaceState, CmdError> {
     let (proj_root, rp_root) = project_and_repo_root(&state)?;
     Ok(project::read_workspace_state(&rp_root, &proj_root))
 }
@@ -356,16 +357,18 @@ pub async fn get_workspace_state(
 pub async fn set_workspace_state(
     workspace: project::WorkspaceState,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<(), CmdError> {
     let (proj_root, rp_root) = project_and_repo_root(&state)?;
-    project::write_workspace_state(&rp_root, &proj_root, &workspace).map_err(|e| e.to_string())
+    project::write_workspace_state(&rp_root, &proj_root, &workspace).map_err(cmd_err)
 }
 
 /// List all files and directories in the project folder.
 #[tauri::command]
-pub async fn list_all_files(state: State<'_, AppState>) -> Result<Vec<project::FileEntry>, String> {
+pub async fn list_all_files(
+    state: State<'_, AppState>,
+) -> Result<Vec<project::FileEntry>, CmdError> {
     let root = project_root(&state)?;
-    project::scan_all_files(&root).map_err(|e| e.to_string())
+    project::scan_all_files(&root).map_err(cmd_err)
 }
 
 #[auditaur_command(skip_all, err)]
@@ -373,9 +376,9 @@ pub async fn preview_rename_project_asset(
     old_path: String,
     new_path: String,
     state: State<'_, AppState>,
-) -> Result<project::RenameProjectAssetPlan, String> {
+) -> Result<project::RenameProjectAssetPlan, CmdError> {
     let root = project_root(&state)?;
-    project::preview_rename_project_asset(&root, &old_path, &new_path).map_err(|e| e.to_string())
+    project::preview_rename_project_asset(&root, &old_path, &new_path).map_err(cmd_err)
 }
 
 #[auditaur_command(skip_all, err)]
@@ -383,10 +386,10 @@ pub async fn rename_project_asset(
     old_path: String,
     new_path: String,
     state: State<'_, AppState>,
-) -> Result<project::RenameProjectAssetPlan, String> {
+) -> Result<project::RenameProjectAssetPlan, CmdError> {
     let root = project_root(&state)?;
     let _write_guard = crate::engine::write_lock::lock(&root)?;
-    project::rename_project_asset(&root, &old_path, &new_path).map_err(|e| e.to_string())
+    project::rename_project_asset(&root, &old_path, &new_path).map_err(cmd_err)
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -424,7 +427,7 @@ pub struct DatabaseCellPreview {
 pub async fn get_database_preview(
     relative_path: String,
     state: State<'_, AppState>,
-) -> Result<DatabasePreview, String> {
+) -> Result<DatabasePreview, CmdError> {
     let (project_root, repo_root) = project_and_repo_root(&state)?;
     let project_path =
         project::safe_resolve(&project_root, &relative_path).map_err(|e| e.to_string())?;
@@ -433,17 +436,17 @@ pub async fn get_database_preview(
     } else {
         project::safe_resolve(&repo_root, &relative_path).map_err(|e| e.to_string())?
     };
-    read_database_preview(abs_path, relative_path)
+    read_database_preview(abs_path, relative_path).map_err(CmdError::from)
 }
 
 /// Return a read-only preview of the local agent-state database.
 #[auditaur_command(skip_all, err)]
 pub async fn get_agent_state_database_preview(
     state: State<'_, AppState>,
-) -> Result<DatabasePreview, String> {
+) -> Result<DatabasePreview, CmdError> {
     let (project_root, repo_root) = project_and_repo_root(&state)?;
     let abs_path = AgentStateStore::ensure_database_for_project(&repo_root, &project_root)?;
-    read_database_preview(abs_path, "agent-state.db".to_string())
+    read_database_preview(abs_path, "agent-state.db".to_string()).map_err(CmdError::from)
 }
 
 fn read_database_preview(
@@ -576,32 +579,8 @@ fn sqlite_value_to_preview(value: ValueRef<'_>) -> DatabaseCellPreview {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::ffi::OsString;
-
-    use super::startup_project_path_from_args;
-
-    #[test]
-    fn startup_project_path_parses_space_separated_flag() {
-        let path = startup_project_path_from_args([
-            OsString::from("cutready.exe"),
-            OsString::from("--project"),
-            OsString::from("D:\\cutready\\start-2026"),
-        ]);
-
-        assert_eq!(path.as_deref(), Some("D:\\cutready\\start-2026"));
-    }
-
-    #[test]
-    fn startup_project_path_parses_equals_flag() {
-        let path = startup_project_path_from_args([
-            OsString::from("cutready.exe"),
-            OsString::from("--open-project=D:\\cutready\\build-2026"),
-        ]);
-
-        assert_eq!(path.as_deref(), Some("D:\\cutready\\build-2026"));
-    }
-}
+#[path = "project_tests.rs"]
+mod tests;
 
 fn quote_sqlite_identifier(identifier: &str) -> String {
     format!("\"{}\"", identifier.replace('"', "\"\""))
@@ -660,9 +639,9 @@ fn safe_project_manifest_path(project_path: &str) -> Result<&Path, String> {
 #[auditaur_command(skip_all, err)]
 pub async fn inspect_workspace_manifest(
     state: State<'_, AppState>,
-) -> Result<project::WorkspaceManifestInspection, String> {
+) -> Result<project::WorkspaceManifestInspection, CmdError> {
     let root = repo_root(&state)?;
-    project::inspect_workspace_manifest(&root).map_err(|e| e.to_string())
+    project::inspect_workspace_manifest(&root).map_err(cmd_err)
 }
 
 /// Explicitly repair the current repo's workspace manifest from inspection output.
@@ -670,7 +649,7 @@ pub async fn inspect_workspace_manifest(
 pub async fn repair_workspace_manifest(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
-) -> Result<project::WorkspaceManifestRepair, String> {
+) -> Result<project::WorkspaceManifestRepair, CmdError> {
     let root = repo_root(&state)?;
     let change = StructureChange::begin(
         &root,
@@ -685,14 +664,14 @@ pub async fn repair_workspace_manifest(
 
 /// List all projects in the current repo.
 #[auditaur_command(skip_all, err)]
-pub async fn list_projects(state: State<'_, AppState>) -> Result<Vec<ProjectEntry>, String> {
+pub async fn list_projects(state: State<'_, AppState>) -> Result<Vec<ProjectEntry>, CmdError> {
     let root = repo_root(&state)?;
     Ok(project::list_projects(&root))
 }
 
 /// Whether the current repo has multiple projects.
 #[auditaur_command(skip_all, err)]
-pub async fn is_multi_project(state: State<'_, AppState>) -> Result<bool, String> {
+pub async fn is_multi_project(state: State<'_, AppState>) -> Result<bool, CmdError> {
     let root = repo_root(&state)?;
     Ok(project::is_multi_project(&root))
 }
@@ -703,7 +682,7 @@ pub async fn switch_project(
     project_path: String,
     app: tauri::AppHandle,
     state: State<'_, AppState>,
-) -> Result<ProjectView, String> {
+) -> Result<ProjectView, CmdError> {
     let root = repo_root(&state)?;
 
     // Validate the project exists in the manifest
@@ -783,7 +762,7 @@ pub async fn create_project_in_repo(
     description: Option<String>,
     app: tauri::AppHandle,
     state: State<'_, AppState>,
-) -> Result<ProjectEntry, String> {
+) -> Result<ProjectEntry, CmdError> {
     let root = repo_root(&state)?;
     let change = StructureChange::begin(
         &root,
@@ -805,7 +784,7 @@ pub async fn delete_project(
     delete_files: bool,
     app: tauri::AppHandle,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<(), CmdError> {
     let root = repo_root(&state)?;
     let change = StructureChange::begin(
         &root,
@@ -817,14 +796,20 @@ pub async fn delete_project(
 
     let mut manifest = project::read_manifest_result(&root).map_err(|e| e.to_string())?;
     let Some(existing_manifest) = manifest.as_ref() else {
-        return Err(format!("Project '{}' not found in repo", project_path));
+        return Err(cmd_err(format!(
+            "Project '{}' not found in repo",
+            project_path
+        )));
     };
     if !existing_manifest
         .projects
         .iter()
         .any(|p| p.path == project_path)
     {
-        return Err(format!("Project '{}' not found in repo", project_path));
+        return Err(cmd_err(format!(
+            "Project '{}' not found in repo",
+            project_path
+        )));
     }
 
     let removed = delete_files && project_path != ".";
@@ -866,7 +851,7 @@ pub async fn delete_project(
         }
     }
 
-    finish_structure_change(&app, &root, change)
+    Ok(finish_structure_change(&app, &root, change)?)
 }
 
 /// Rename a project. In single-project mode (path == "."), this migrates the
@@ -877,7 +862,7 @@ pub async fn rename_project(
     new_name: String,
     app: tauri::AppHandle,
     state: State<'_, AppState>,
-) -> Result<String, String> {
+) -> Result<String, CmdError> {
     let root = repo_root(&state)?;
     let write_guard = crate::engine::write_lock::lock(&root)?;
 
@@ -921,7 +906,7 @@ pub async fn rename_project(
         .iter()
         .any(|p| p.path == project_path)
     {
-        return Err(format!("Project '{}' not found in repo", project_path));
+        return Err(format!("Project '{}' not found in repo", project_path).into());
     }
 
     let mut change = StructureChange::begin_with_guard(
@@ -940,7 +925,7 @@ pub async fn rename_project(
         let old_dir = root.join(&project_path);
         let new_dir = root.join(&new_path);
         if new_dir.exists() {
-            return Err(format!("Directory '{}' already exists", new_path));
+            return Err(format!("Directory '{}' already exists", new_path).into());
         }
         // Relocate local runtime state (agent DB, memory, workspace/sidebar state)
         // before the content move so a live database (active run holding a lock)
@@ -954,9 +939,9 @@ pub async fn rename_project(
                     return Err(format!(
                         "Rename failed ({err}); runtime state could not be restored to {} ({state_err})",
                         old_dir.display()
-                    ));
+                    ).into());
                 }
-                return Err(err.to_string());
+                return Err(err.to_string().into());
             }
         }
         relocated_paths = Some((old_dir, new_dir));
@@ -994,12 +979,13 @@ pub async fn rename_project(
             // move content and runtime state back so nothing dangles.
             let stranded = rollback_move(&relocated_paths);
             if stranded.is_empty() {
-                return Err(err.to_string());
+                return Err(err.to_string().into());
             }
             return Err(format!(
                 "Manifest update failed ({err}); rollback incomplete, artifacts stranded at: {}",
                 stranded.join(", ")
-            ));
+            )
+            .into());
         }
     }
 
@@ -1025,7 +1011,7 @@ pub async fn migrate_to_multi_project(
     existing_name: String,
     app: tauri::AppHandle,
     state: State<'_, AppState>,
-) -> Result<ProjectEntry, String> {
+) -> Result<ProjectEntry, CmdError> {
     let root = repo_root(&state)?;
     let change = StructureChange::begin(
         &root,
@@ -1054,8 +1040,8 @@ pub async fn migrate_to_multi_project(
 /// `dest_rel`: path relative to the destination project root.
 /// `remove_source`: if true, delete the source after copying (move semantics).
 ///
-/// Returns `Err("FILE_EXISTS:<dest_rel>")` when the destination already exists,
-/// so the frontend can offer a "Save As" rename flow.
+/// Returns a `file_exists` error (see [`CmdError::file_exists`]) when the
+/// destination already exists, so the frontend can offer a "Save As" rename flow.
 #[tauri::command]
 pub async fn transfer_asset(
     source_rel: String,
@@ -1063,7 +1049,7 @@ pub async fn transfer_asset(
     dest_rel: String,
     remove_source: bool,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<(), CmdError> {
     const ALLOWED_EXTS: &[&str] = &[".sk", ".sb", ".md"];
 
     let (source_project_root, repo_root) = project_and_repo_root(&state)?;
@@ -1073,13 +1059,15 @@ pub async fn transfer_asset(
         return Err(format!(
             "Only .sk, .sb, and .md files can be transferred (got '{}')",
             source_rel
-        ));
+        )
+        .into());
     }
     if !ALLOWED_EXTS.iter().any(|ext| dest_rel.ends_with(ext)) {
         return Err(format!(
             "Destination must end with .sk, .sb, or .md (got '{}')",
             dest_rel
-        ));
+        )
+        .into());
     }
 
     // Resolve dest project root — validated against the manifest to prevent arbitrary paths
@@ -1100,10 +1088,10 @@ pub async fn transfer_asset(
     let dest = project::safe_resolve(&dest_project_root, &dest_rel).map_err(|e| e.to_string())?;
 
     if !source.exists() {
-        return Err(format!("Source file not found: '{}'", source_rel));
+        return Err(format!("Source file not found: '{}'", source_rel).into());
     }
     if dest.exists() {
-        return Err(format!("FILE_EXISTS:{}", dest_rel));
+        return Err(CmdError::file_exists(&dest_rel));
     }
 
     // Collect asset refs BEFORE moving (so we can read the source file)
@@ -1176,10 +1164,10 @@ pub async fn transfer_asset(
 /// On macOS: opens Terminal.app via `open -a Terminal`.
 /// On Linux: tries common terminal emulators in order.
 #[tauri::command]
-pub async fn open_in_terminal(path: String) -> Result<(), String> {
+pub async fn open_in_terminal(path: String) -> Result<(), CmdError> {
     let dir = std::path::PathBuf::from(&path);
     if !dir.exists() {
-        return Err(format!("Directory does not exist: {}", path));
+        return Err(format!("Directory does not exist: {}", path).into());
     }
 
     #[cfg(target_os = "windows")]
@@ -1231,10 +1219,9 @@ pub async fn open_in_terminal(path: String) -> Result<(), String> {
                 .ok()
         });
         if found.is_none() {
-            return Err(
-                "No terminal emulator found. Install gnome-terminal, konsole, or xterm."
-                    .to_string(),
-            );
+            return Err(CmdError::from(
+                "No terminal emulator found. Install gnome-terminal, konsole, or xterm.",
+            ));
         }
     }
 
@@ -1245,7 +1232,7 @@ pub async fn open_in_terminal(path: String) -> Result<(), String> {
 #[auditaur_command(skip_all, err)]
 pub async fn get_workspace_settings(
     state: State<'_, AppState>,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, CmdError> {
     let root = repo_root(&state)?;
     Ok(project::read_repo_settings(&root))
 }
@@ -1256,9 +1243,9 @@ pub async fn get_workspace_settings(
 pub async fn set_workspace_settings(
     settings: serde_json::Value,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<(), CmdError> {
     let root = repo_root(&state)?;
-    project::write_repo_settings(&root, &settings).map_err(|e| e.to_string())
+    project::write_repo_settings(&root, &settings).map_err(cmd_err)
 }
 
 /// Check if any recent project was cloned from a given GitHub repo.
@@ -1270,7 +1257,7 @@ pub async fn resolve_deep_link(
     owner: String,
     repo: String,
     app: tauri::AppHandle,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, CmdError> {
     let store = app.store(STORE_FILE).map_err(|e| e.to_string())?;
     let recent: Vec<crate::models::script::RecentProject> = store
         .get("recent_projects")

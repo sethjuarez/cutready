@@ -16,9 +16,10 @@ Commands used to fail with free-form strings, so clients matched on message text
 ## Consequences
 
 - New failure modes should add a named code and test cases to the contract. Unknown codes still deserialize (`CmdErrorCode::Other`) for forward compatibility.
-- Many existing app commands still return `String`. They move to `CmdError` as their modules are touched; `project.rs` and `agent.rs` are next.
+- Many existing app commands still return `String`. They move to `CmdError` as their modules are touched. `project.rs` and `agent.rs` moved in F7, keeping each old string as `message` under `command_failed`; only their sign-in/token commands still return `String`.
 
 ## Enforcement
 
 - Typra vectors assert `expectedError.code` and `details` for each failure they cover.
 - CLI tests deserialize the discovery failure into the generated `CommandFailure`; other CLI failure tests check `code` on the JSON. The CLI output ratchet (F2) extends this to every CLI and MCP output.
+- `npm run check:command-errors` caps the app commands per module that still return `Result<_, String>` (`scripts/command-errors.json`). Caps only go down.

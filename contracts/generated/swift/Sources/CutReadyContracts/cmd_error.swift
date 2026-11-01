@@ -22,6 +22,7 @@ public struct CmdErrorCode: RawRepresentable, Equatable, Hashable, Codable {
   public static let unreadableRegistration = CmdErrorCode(rawValue: "unreadable_registration")
   public static let missingBinary = CmdErrorCode(rawValue: "missing_binary")
   public static let contractMismatch = CmdErrorCode(rawValue: "contract_mismatch")
+  public static let fileExists = CmdErrorCode(rawValue: "file_exists")
   public static func parse(_ value: String) throws -> CmdErrorCode {
     switch value {
     case "locked_document": return .lockedDocument
@@ -40,6 +41,7 @@ public struct CmdErrorCode: RawRepresentable, Equatable, Hashable, Codable {
     case "unreadable_registration": return .unreadableRegistration
     case "missing_binary": return .missingBinary
     case "contract_mismatch": return .contractMismatch
+    case "file_exists": return .fileExists
     default: return CmdErrorCode(rawValue: value)
     }
   }

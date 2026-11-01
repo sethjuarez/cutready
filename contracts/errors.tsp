@@ -64,6 +64,9 @@ union CmdErrorCode {
   /** `cutready-cli discover`: the registered install speaks another edit contract. */
   contractMismatch: "contract_mismatch",
 
+  /** The desktop app would overwrite an existing file; `details.path` names it. */
+  fileExists: "file_exists",
+
   /** Codes from newer runtimes load and save unchanged. */
   string,
 }
@@ -87,6 +90,9 @@ model CmdErrorDetails {
 
   /** The entities that block an undo, for `undo_conflict`. */
   conflicts?: UndoConflict[];
+
+  /** The project-relative file that already exists, for `file_exists`. */
+  path?: string;
 
   /** Detail fields from newer runtimes survive load and save. */
   ...Record<unknown>;

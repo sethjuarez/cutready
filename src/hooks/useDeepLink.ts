@@ -14,6 +14,7 @@
 
 import { useEffect } from "react";
 import { invoke } from "../services/tauri";
+import { commandErrorText } from "../services/commandErrors";
 import { listenEvent } from "../ipc/events";
 import { open } from "../dialogs";
 import { sep } from "@tauri-apps/api/path";
@@ -103,7 +104,7 @@ async function handleDeepLink(url: string) {
     }
   } catch (err) {
     console.error("Deep link handling failed:", err);
-    toast(`Failed to open ${owner}/${repo}: ${err}`);
+    toast(`Failed to open ${owner}/${repo}: ${commandErrorText(err)}`);
   }
 }
 

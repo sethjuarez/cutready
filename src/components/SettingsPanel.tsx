@@ -3,6 +3,7 @@ import { X, MessageSquare, Download, Search, MonitorCog, Palette, Bot, Brain, Mi
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
 import { invoke } from "../services/tauri";
+import { commandErrorText } from "../services/commandErrors";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { buildProviderConfig, canFetchModelsFor, filterAgentCompatibleModels } from "../utils/providerConfig";
 import { persistConnectionTokens, clearConnectionTokens } from "../utils/agentProvider";
@@ -165,8 +166,8 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
       console.info({ ...traceDetails, phase: "success", model_count: result.length, agent_model_count: agentModels.length });
       setModels(agentModels);
     } catch (e) {
-      console.warn({ ...traceDetails, phase: "error", error: String(e) });
-      setModelError(String(e));
+      console.warn({ ...traceDetails, phase: "error", error: commandErrorText(e) });
+      setModelError(commandErrorText(e));
     } finally {
       setLoadingModels(false);
     }
