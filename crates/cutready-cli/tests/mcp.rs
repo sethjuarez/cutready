@@ -158,6 +158,23 @@ fn calls_before_initialize_are_refused() {
 }
 
 #[test]
+fn malformed_requests_are_refused_without_running() {
+    let dir = project();
+    let clock = clock("2026-07-01T09:30:00Z");
+    let mut server = Server::new(dir.path(), &clock).unwrap();
+    let mut old = initialize(None);
+    old["jsonrpc"] = json!("1.0");
+    let mut object_id = initialize(None);
+    object_id["id"] = json!({ "n": 1 });
+    for message in [old, object_id, json!([initialize(None)]), json!("ping")] {
+        let response = server.handle(&message).unwrap();
+        assert_eq!(response["error"]["code"], -32600, "{message}");
+    }
+    let response = server.handle(&call(2, "begin_run", json!({}))).unwrap();
+    assert_eq!(response["error"]["code"], -32002, "still not initialized");
+}
+
+#[test]
 fn apply_ops_needs_an_expected_version_and_an_mcp_run() {
     let dir = project();
     let clock = clock("2026-07-01T09:30:00Z");

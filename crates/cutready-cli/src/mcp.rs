@@ -84,15 +84,24 @@ impl<'c> Server<'c> {
 
     /// Handles one JSON-RPC message. Notifications get no response.
     pub fn handle(&mut self, message: &Value) -> Option<Value> {
-        let Some(method) = message.get("method").and_then(Value::as_str) else {
+        // JSON-RPC ids are strings or integers; anything else can't be echoed.
+        let id = message.get("id");
+        let valid_id = id.filter(|id| id.is_string() || id.is_i64() || id.is_u64());
+        let method = message.get("method").and_then(Value::as_str);
+        let (Some(method), true, true) = (
+            method,
+            message.get("jsonrpc") == Some(&json!("2.0")),
+            id.is_none() || valid_id.is_some(),
+        ) else {
             return Some(error(
-                message.get("id").cloned().unwrap_or(Value::Null),
+                valid_id.cloned().unwrap_or(Value::Null),
                 INVALID_REQUEST,
-                "Expected a JSON-RPC request object",
+                "Expected a JSON-RPC 2.0 request with a string or integer id",
                 None,
             ));
         };
-        let id = message.get("id").cloned()?;
+        // A notification: nothing to answer.
+        let id = valid_id.cloned()?;
         let params = message.get("params").cloned().unwrap_or_else(|| json!({}));
         let outcome = match method {
             "initialize" => self.initialize(&params),

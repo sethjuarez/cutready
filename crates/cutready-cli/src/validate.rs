@@ -13,7 +13,7 @@ use crate::project::{Failure, Project};
 pub fn validate(root: &Path, docs: &[String]) -> Result<(bool, Value), Failure> {
     let project = Project::open(root)?;
     let docs = if docs.is_empty() {
-        discover(project.root())
+        discover(project.root())?
     } else {
         docs.to_vec()
     };
@@ -52,20 +52,24 @@ fn check(project: &Project, doc: &str) -> Result<String, Failure> {
 }
 
 /// Project documents, skipping dot folders (`.git`, `.cutready`) and
-/// `node_modules`, as sorted project-relative paths.
-fn discover(root: &Path) -> Vec<String> {
+/// `node_modules`, as sorted project-relative paths. A folder it can't read
+/// fails the whole validation rather than skipping documents unseen.
+fn discover(root: &Path) -> Result<Vec<String>, Failure> {
+    let unreadable = |dir: &Path, err: std::io::Error| {
+        Failure::other(format!(
+            "Could not read {}: {err}",
+            root.join(dir).display()
+        ))
+    };
     let mut found = Vec::new();
     let mut pending = vec![PathBuf::new()];
     while let Some(dir) = pending.pop() {
-        let Ok(entries) = std::fs::read_dir(root.join(&dir)) else {
-            continue;
-        };
-        for entry in entries.flatten() {
+        let entries = std::fs::read_dir(root.join(&dir)).map_err(|e| unreadable(&dir, e))?;
+        for entry in entries {
+            let entry = entry.map_err(|e| unreadable(&dir, e))?;
             let name = entry.file_name().to_string_lossy().into_owned();
             let rel = dir.join(&name);
-            let Ok(kind) = entry.file_type() else {
-                continue;
-            };
+            let kind = entry.file_type().map_err(|e| unreadable(&rel, e))?;
             if kind.is_dir() {
                 if !name.starts_with('.') && name != "node_modules" {
                     pending.push(rel);
@@ -76,5 +80,5 @@ fn discover(root: &Path) -> Vec<String> {
         }
     }
     found.sort();
-    found
+    Ok(found)
 }
