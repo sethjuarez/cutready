@@ -63,6 +63,12 @@ impl Files for StdFiles {
         let (relative, full) = self.resolve(path)?;
         let parent = full.parent().unwrap_or(&self.root);
         let fail = |err| io_error(relative.display(), err);
+        // The nearest existing ancestor: every directory below it is new and
+        // its entry must be made durable too.
+        let mut existing = parent;
+        while !existing.is_dir() && existing != self.root {
+            existing = existing.parent().unwrap_or(&self.root);
+        }
         fs::create_dir_all(parent).map_err(fail)?;
         // A fresh, randomly named temp file beside the target (created with
         // create_new, so it never follows an existing entry); the rename
@@ -76,6 +82,14 @@ impl Files for StdFiles {
         temp.write_all(bytes).map_err(fail)?;
         temp.as_file().sync_all().map_err(fail)?;
         temp.persist(&full).map_err(|err| fail(err.error))?;
+        let mut dir = parent;
+        loop {
+            sync_dir(dir).map_err(fail)?;
+            if dir == existing {
+                break;
+            }
+            dir = dir.parent().unwrap_or(existing);
+        }
         Ok(())
     }
 
@@ -115,6 +129,19 @@ impl Files for StdFiles {
         paths.sort();
         Ok(paths)
     }
+}
+
+/// Makes new entries in `dir` durable. On Windows this is a no-op: NTFS
+/// journals renames and directory creation, and a directory can't be opened
+/// for flushing without backup semantics.
+#[cfg(unix)]
+fn sync_dir(dir: &Path) -> std::io::Result<()> {
+    fs::File::open(dir)?.sync_all()
+}
+
+#[cfg(not(unix))]
+fn sync_dir(_dir: &Path) -> std::io::Result<()> {
+    Ok(())
 }
 
 #[cfg(test)]

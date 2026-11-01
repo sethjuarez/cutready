@@ -11,7 +11,7 @@ use chrono::{DateTime, Utc};
 use crate::path::project_relative;
 use crate::ports::{
     Clock, Files, Lock, LockGuard, Log, LogLevel, NewOpLogEntry, OpLogEntry, OpLogState,
-    OpLogStore, PortError, PortErrorKind, Secrets,
+    OpLogStore, PortError, PortErrorKind, Run, Secrets,
 };
 
 /// Files held in a map keyed by normalized project-relative path.
@@ -196,10 +196,60 @@ impl Lock for MemoryLock {
 
 #[derive(Default)]
 pub struct MemoryOpLog {
+    runs: Mutex<Vec<Run>>,
     entries: Mutex<Vec<OpLogEntry>>,
 }
 
+impl MemoryOpLog {
+    fn set_state(&self, seq: u64, to: OpLogState) -> Result<(), PortError> {
+        let mut entries = self.entries.lock().unwrap();
+        let entry = entries
+            .iter_mut()
+            .find(|entry| entry.seq == seq)
+            .ok_or_else(|| {
+                PortError::new(
+                    PortErrorKind::NotFound,
+                    format!("Op log entry {seq} not found."),
+                )
+            })?;
+        match entry.state {
+            OpLogState::Pending => entry.state = to,
+            state if state == to => {}
+            state => {
+                return Err(PortError::new(
+                    PortErrorKind::Corrupt,
+                    format!("Op log entry {seq} is already {state:?}."),
+                ))
+            }
+        }
+        Ok(())
+    }
+}
+
 impl OpLogStore for MemoryOpLog {
+    fn begin_run(&self, actor: &str, started_at: DateTime<Utc>) -> Result<String, PortError> {
+        let mut runs = self.runs.lock().unwrap();
+        let id = format!("run-{}", runs.len() + 1);
+        runs.push(Run {
+            id: id.clone(),
+            actor: actor.into(),
+            started_at,
+        });
+        Ok(id)
+    }
+
+    fn run(&self, run_id: &str) -> Result<Run, PortError> {
+        self.runs
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|run| run.id == run_id)
+            .cloned()
+            .ok_or_else(|| {
+                PortError::new(PortErrorKind::NotFound, format!("Run {run_id} not found."))
+            })
+    }
+
     fn append_pending(&self, write: NewOpLogEntry) -> Result<u64, PortError> {
         let mut entries = self.entries.lock().unwrap();
         let seq = entries.len() as u64 + 1;
@@ -212,18 +262,11 @@ impl OpLogStore for MemoryOpLog {
     }
 
     fn commit(&self, seq: u64) -> Result<(), PortError> {
-        let mut entries = self.entries.lock().unwrap();
-        let entry = entries
-            .iter_mut()
-            .find(|entry| entry.seq == seq)
-            .ok_or_else(|| {
-                PortError::new(
-                    PortErrorKind::NotFound,
-                    format!("Op log entry {seq} not found."),
-                )
-            })?;
-        entry.state = OpLogState::Committed;
-        Ok(())
+        self.set_state(seq, OpLogState::Committed)
+    }
+
+    fn abandon(&self, seq: u64) -> Result<(), PortError> {
+        self.set_state(seq, OpLogState::Abandoned)
     }
 
     fn pending(&self) -> Result<Vec<OpLogEntry>, PortError> {
@@ -303,6 +346,8 @@ mod tests {
             ops: serde_json::json!([]),
             before_hash: "a".into(),
             after_hash: "b".into(),
+            at: Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap(),
+            baseline: None,
         };
         let first = log.append_pending(entry("r1")).unwrap();
         let second = log.append_pending(entry("r2")).unwrap();
@@ -319,6 +364,16 @@ mod tests {
         );
         assert_eq!(log.entries_for_run("r1").unwrap()[0].seq, first);
         assert_eq!(log.commit(99).unwrap_err().kind, PortErrorKind::NotFound);
+        assert_eq!(log.abandon(first).unwrap_err().kind, PortErrorKind::Corrupt);
+        log.abandon(second).unwrap();
+        log.abandon(second).unwrap();
+        assert!(log.pending().unwrap().is_empty());
+        assert_eq!(log.commit(second).unwrap_err().kind, PortErrorKind::Corrupt);
+
+        let at = Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap();
+        let run = log.begin_run("agent", at).unwrap();
+        assert_eq!(log.run(&run).unwrap().actor, "agent");
+        assert_eq!(log.run("nope").unwrap_err().kind, PortErrorKind::NotFound);
     }
 
     #[test]

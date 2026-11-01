@@ -9,7 +9,9 @@ pub trait Files: Send + Sync {
     fn read(&self, path: &Path) -> Result<Vec<u8>, PortError>;
 
     /// Replaces the file atomically (write a temp file, then rename), creating
-    /// parent directories as needed. Readers never see a partial file.
+    /// parent directories as needed. Readers never see a partial file, and
+    /// the new bytes survive a crash once this returns (the write transaction
+    /// commits its op-log entry right after).
     fn write_atomic(&self, path: &Path, bytes: &[u8]) -> Result<(), PortError>;
 
     fn exists(&self, path: &Path) -> Result<bool, PortError>;
