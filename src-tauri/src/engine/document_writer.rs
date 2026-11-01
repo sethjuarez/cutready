@@ -30,7 +30,7 @@ use serde_json::{json, Value};
 use crate::engine::project::{self, ProjectError};
 use crate::engine::write_lock::{self, RepoLock};
 
-const OP_LOG_FILENAME: &str = "op-log.db";
+use cutready_desktop_io::state_dir::OP_LOG_FILENAME;
 const AGENT_ACTOR: &str = "agent";
 
 /// Why a document write failed.

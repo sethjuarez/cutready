@@ -179,6 +179,18 @@ src-tauri/
         └── package.json
 ```
 
+### Command line and MCP server
+
+`crates/cutready-cli` builds `cutready-cli`, which edits a project with the app closed. It uses the same core write path (`EditSession`), repository lock and op log as the app, so its runs show up in the app's pending reviews.
+
+| Command | Purpose |
+| --- | --- |
+| `cutready-cli edit <project> <doc> --expected <version\|absent> [--ops <file>] [--run <id>]` | Apply a JSON array of EditOps as a `cli` run |
+| `cutready-cli validate <project> [<doc>...]` | Check that `.sk`, `.sb` and `.md` documents load |
+| `cutready-cli mcp <project>` | MCP server over stdio: `read_document`, `begin_run`, `apply_ops` as `mcp` runs |
+
+The MCP `initialize` handshake exchanges `capabilities.experimental.cutready.contractVersion` (`cutready_contracts::CONTRACT_VERSION`). A client that declares another version gets error `-32001` and the server stops. The CLI refuses folders outside a git repository rather than creating one. It must not depend on Tauri or the app crate (`scripts/check-core-deps.mjs`).
+
 ---
 
 ## Core Data Model

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error - plain .mjs script without type declarations
-import { checkCoreDeps, checkVersioningDeps, parseTree } from "../../scripts/check-core-deps.mjs";
+import { checkCliDeps, checkCoreDeps, checkVersioningDeps, parseTree } from "../../scripts/check-core-deps.mjs";
 
 const clean = `cutready-core v0.1.0 (C:\\repo\\crates\\cutready-core)||
 chrono v0.4.45|alloc,serde,std|
@@ -52,6 +52,18 @@ cutready-core v0.1.0 (C:\\repo\\crates\\cutready-core)||`);
 tauri v2.5.0|default|
 cutready v0.9.0 (C:\\repo\\src-tauri)||`);
     expect(checkVersioningDeps(dirty).map((p: string) => p.split(":")[0])).toEqual(["tauri", "cutready"]);
+  });
+
+  it("lets the CLI use SQLite and git but not the desktop shell or app", () => {
+    const cli = parseTree(`cutready-cli v0.1.0 (C:\\repo\\crates\\cutready-cli)||
+cutready-desktop-io v0.1.0||
+rusqlite v0.32.0|bundled|
+libgit2-sys v0.18.0||`);
+    expect(checkCliDeps(cli)).toEqual([]);
+    const dirty = parseTree(`cutready-cli v0.1.0||
+tauri v2.5.0|default|
+cutready v0.9.0 (C:\\repo\\src-tauri)||`);
+    expect(checkCliDeps(dirty).map((p: string) => p.split(":")[0])).toEqual(["tauri", "cutready"]);
   });
 
   it("allows tokio but not its process feature", () => {
