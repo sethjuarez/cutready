@@ -1705,12 +1705,14 @@ dependencies = [
 
 [[package]]
 name = "cutready-cli"
-version = "0.1.0"
+version = "1.37.0"
 dependencies = [
  "chrono",
  "cutready-core",
  "cutready-desktop-io",
+ "dirs 6.0.0",
  "git2",
+ "semver",
  "serde_json",
  "tempfile",
 ]

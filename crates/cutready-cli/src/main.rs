@@ -3,21 +3,32 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use cutready_cli::edit::{self, Expect};
-use cutready_cli::{mcp, validate, CONTRACT_VERSION};
+use cutready_cli::project::Project;
+use cutready_cli::{discovery, mcp, validate, CONTRACT_VERSION};
 use cutready_desktop_io::SystemClock;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 const USAGE: &str = "\
 Usage:
   cutready-cli edit <project> <document> --expected <version|absent> [--ops <file>] [--run <id>]
   cutready-cli validate <project> [<document>...]
+  cutready-cli review <project>
+  cutready-cli keep <project> <document> --run <id> --through <seq>
+  cutready-cli undo <project> <document> --run <id> --through <seq>
   cutready-cli mcp <project>
+  cutready-cli register [--force]
+  cutready-cli discover
   cutready-cli --version
 
 edit reads a JSON array of EditOps from --ops (or stdin) and applies it as a
 run CutReady shows for review. --expected is the version `validate` or the
 MCP read_document tool reported, or `absent` for a new document.
-mcp serves the project to an agent over stdio.";
+review lists runs awaiting Keep or Undo with each document's through_seq;
+keep and undo resolve one document of one run through that seq.
+mcp serves the project to an agent over stdio.
+register records this binary as the user's cutready-cli (a newer registered
+install wins unless --force); discover prints the registered one, failing
+if it is missing or speaks another edit contract.";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -60,6 +71,64 @@ fn run(args: &[String]) -> Result<ExitCode, Usage> {
             Ok(match validate::validate(&PathBuf::from(project), docs) {
                 Ok((ok, report)) => print_json(&report, ok),
                 Err(err) => print_json(&err.to_json(), false),
+            })
+        }
+        "review" => {
+            let [project] = rest else {
+                return Err(usage("review needs exactly one project folder"));
+            };
+            let result = Project::open(&PathBuf::from(project))
+                .and_then(|project| project.reviews(&SystemClock));
+            Ok(match result {
+                Ok(reviews) => print_json(&reviews, true),
+                Err(err) => print_json(&json!({ "error": err.to_json() }), false),
+            })
+        }
+        "keep" | "undo" => resolve_command(command, rest),
+        "register" => {
+            let force = match rest {
+                [] => false,
+                [flag] if flag == "--force" => true,
+                _ => return Err(usage("register takes only --force")),
+            };
+            let Some(dir) = discovery::default_dir() else {
+                eprintln!("cutready-cli register: no per-user config directory");
+                return Ok(ExitCode::FAILURE);
+            };
+            let result = discovery::Registration::current()
+                .and_then(|install| Ok((discovery::register(&dir, &install, force)?, install)));
+            Ok(match result {
+                Ok((outcome, install)) => {
+                    let mut out =
+                        json!({ "outcome": outcome.outcome(), "registered": install.to_json() });
+                    match &outcome {
+                        discovery::Registered::Replaced(previous) => {
+                            out["previous"] = previous.to_json()
+                        }
+                        discovery::Registered::KeptNewer(existing) => {
+                            out["registered"] = existing.to_json()
+                        }
+                        discovery::Registered::New => {}
+                    }
+                    print_json(&out, true)
+                }
+                Err(err) => print_json(&json!({ "error": { "message": err.to_string() } }), false),
+            })
+        }
+        "discover" => {
+            if !rest.is_empty() {
+                return Err(usage("discover takes no arguments"));
+            }
+            let Some(dir) = discovery::default_dir() else {
+                eprintln!("cutready-cli discover: no per-user config directory");
+                return Ok(ExitCode::FAILURE);
+            };
+            Ok(match discovery::discover(&dir, CONTRACT_VERSION) {
+                Ok(found) => print_json(&found.to_json(), true),
+                Err(err) => print_json(
+                    &json!({ "error": { "code": err.code(), "message": err.to_string() } }),
+                    false,
+                ),
             })
         }
         "mcp" => {
@@ -141,7 +210,51 @@ fn edit_command(args: &[String]) -> Result<ExitCode, Usage> {
     });
     Ok(match result {
         Ok(out) => print_json(&out, true),
-        Err(err) => print_json(&serde_json::json!({ "error": err.to_json() }), false),
+        Err(err) => print_json(&json!({ "error": err.to_json() }), false),
+    })
+}
+
+fn resolve_command(command: &str, args: &[String]) -> Result<ExitCode, Usage> {
+    let mut positional = Vec::new();
+    let mut run_id = None;
+    let mut through = None;
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        let mut value = |name: &str| {
+            iter.next()
+                .cloned()
+                .ok_or_else(|| usage(format!("{name} needs a value")))
+        };
+        match arg.as_str() {
+            "--run" => run_id = Some(value("--run")?),
+            "--through" => through = Some(value("--through")?),
+            flag if flag.starts_with("--") => return Err(usage(format!("Unknown option {flag}"))),
+            _ => positional.push(arg.clone()),
+        }
+    }
+    let [project, doc] = positional.as_slice() else {
+        return Err(usage(format!(
+            "{command} needs a project folder and a document"
+        )));
+    };
+    let run_id = run_id.ok_or_else(|| usage(format!("{command} needs --run <id>")))?;
+    let through_seq: u64 = through
+        .ok_or_else(|| usage(format!("{command} needs --through <seq>")))?
+        .parse()
+        .map_err(|_| usage("--through must be a non-negative integer"))?;
+    let result = Project::open(&PathBuf::from(project)).and_then(|project| {
+        if command == "keep" {
+            project.keep(&SystemClock, &run_id, doc, through_seq)
+        } else {
+            project.undo(&SystemClock, &run_id, doc, through_seq)
+        }
+    });
+    Ok(match result {
+        Ok(()) => print_json(
+            &json!({ "run_id": run_id, "path": doc, "resolved": command }),
+            true,
+        ),
+        Err(err) => print_json(&json!({ "error": err.to_json() }), false),
     })
 }
 

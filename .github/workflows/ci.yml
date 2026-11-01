@@ -107,3 +107,26 @@ jobs:
           key: ci-windows
 
       - run: cargo test --workspace --locked
+
+  # The CLI ships for macOS too (release.yml); build it and run its tests there.
+  cli-macos:
+    name: CLI (macOS)
+    needs: changes
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.rust == 'true' }}
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ci-macos-cli
+
+      - run: cargo build -p cutready-cli --locked
+
+      - run: cargo test -p cutready-cli --locked
+
+      - name: Smoke the binary
+        run: ./target/debug/cutready-cli --version

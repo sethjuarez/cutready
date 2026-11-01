@@ -5,6 +5,7 @@
 //! shows for review, exactly like its own agent's edits. Nothing here writes
 //! project files directly.
 
+pub mod discovery;
 pub mod edit;
 pub mod mcp;
 pub mod project;

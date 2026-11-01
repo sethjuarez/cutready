@@ -175,11 +175,78 @@ jobs:
             target/**/release/bundle/**/*.app.tar.gz
             target/**/release/bundle/**/*.sig
 
+  cli:
+    needs:
+      - resolve-tag
+      - test
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_run_id == '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: linux-x64
+            platform: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - key: windows-x64
+            platform: windows-latest
+            target: x86_64-pc-windows-msvc
+          - key: windows-arm64
+            platform: windows-latest
+            target: aarch64-pc-windows-msvc
+          - key: macos-silicon
+            platform: macos-latest
+            target: aarch64-apple-darwin
+          - key: macos-intel
+            platform: macos-latest
+            target: x86_64-apple-darwin
+
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+          key: release-cli-${{ matrix.key }}
+
+      - name: Build cutready-cli
+        run: cargo build --release --locked -p cutready-cli --target ${{ matrix.target }}
+
+      - name: Archive cutready-cli
+        shell: bash
+        env:
+          VERSION: ${{ needs.resolve-tag.outputs.version }}
+        run: |
+          mkdir -p cli-dist
+          dir="target/${{ matrix.target }}/release"
+          name="cutready-cli_${VERSION}_${{ matrix.key }}"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a "cli-dist/${name}.zip" "./${dir}/cutready-cli.exe"
+          else
+            tar -czf "cli-dist/${name}.tar.gz" -C "${dir}" cutready-cli
+          fi
+          ls -l cli-dist
+
+      - name: Upload cutready-cli
+        uses: actions/upload-artifact@v4
+        with:
+          name: cutready-cli-${{ matrix.key }}
+          if-no-files-found: error
+          path: cli-dist/*
+
   publish:
     needs:
       - resolve-tag
       - build
-    if: ${{ always() && needs.resolve-tag.result == 'success' && (needs.build.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.build_run_id != '')) }}
+      - cli
+    if: ${{ always() && needs.resolve-tag.result == 'success' && ((needs.build.result == 'success' && needs.cli.result == 'success') || (github.event_name == 'workflow_dispatch' && inputs.build_run_id != '')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -242,7 +309,7 @@ jobs:
 
           for (const file of walk(sourceDir)) {
             const name = stagedName(file);
-            if (!/\.(dmg|AppImage|deb|rpm|msi|exe|tar\.gz)(\.sig)?$/.test(name)) {
+            if (!/\.(dmg|AppImage|deb|rpm|msi|exe|tar\.gz|zip)(\.sig)?$/.test(name)) {
               continue;
             }
             const dest = path.join(outputDir, name);
@@ -271,6 +338,21 @@ jobs:
           for (const asset of homebrewAssets) {
             if (!fs.existsSync(path.join(outputDir, asset))) {
               throw new Error(`Missing Homebrew release asset: ${asset}`);
+            }
+          }
+
+          const version = process.env.VERSION;
+          const cliAssets = {
+            'linux-x64': 'tar.gz',
+            'windows-x64': 'zip',
+            'windows-arm64': 'zip',
+            'macos-silicon': 'tar.gz',
+            'macos-intel': 'tar.gz',
+          };
+          for (const [key, ext] of Object.entries(cliAssets)) {
+            const asset = `cutready-cli_${version}_${key}.${ext}`;
+            if (!fs.existsSync(path.join(outputDir, asset))) {
+              throw new Error(`Missing standalone CLI release asset: ${asset}`);
             }
           }
 

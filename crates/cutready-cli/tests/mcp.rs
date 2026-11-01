@@ -142,7 +142,17 @@ fn the_handshake_advertises_the_contract_version() {
         .iter()
         .map(|tool| tool["name"].as_str().unwrap())
         .collect();
-    assert_eq!(names, ["read_document", "begin_run", "apply_ops"]);
+    assert_eq!(
+        names,
+        [
+            "read_document",
+            "begin_run",
+            "apply_ops",
+            "review",
+            "keep",
+            "undo"
+        ]
+    );
 }
 
 #[test]
@@ -192,12 +202,14 @@ fn apply_ops_needs_an_expected_version_and_an_mcp_run() {
 
     let project = cutready_cli::project::Project::open(dir.path()).unwrap();
     let user_run = project.begin_run("user", &clock).unwrap();
-    let foreign = result(server.handle(&call(
-        3,
-        "apply_ops",
-        json!({ "run_id": user_run, "path": "a.md", "expected_version": null, "ops": ops }),
-    )));
-    assert_eq!(foreign["isError"], true, "{foreign}");
+    let foreign = server
+        .handle(&call(
+            3,
+            "apply_ops",
+            json!({ "run_id": user_run, "path": "a.md", "expected_version": null, "ops": ops }),
+        ))
+        .unwrap();
+    assert_eq!(foreign["error"]["code"], -32602, "{foreign}");
     assert!(!dir.path().join("a.md").exists());
 
     let read = result(server.handle(&call(4, "read_document", json!({ "path": "a.md" }))));

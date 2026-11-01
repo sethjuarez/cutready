@@ -187,9 +187,14 @@ src-tauri/
 | --- | --- |
 | `cutready-cli edit <project> <doc> --expected <version\|absent> [--ops <file>] [--run <id>]` | Apply a JSON array of EditOps as a `cli` run |
 | `cutready-cli validate <project> [<doc>...]` | Check that `.sk`, `.sb` and `.md` documents load |
-| `cutready-cli mcp <project>` | MCP server over stdio: `read_document`, `begin_run`, `apply_ops` as `mcp` runs |
+| `cutready-cli review <project>` | List runs awaiting Keep or Undo (`RunReview` JSON) |
+| `cutready-cli keep\|undo <project> <doc> --run <id> --through <seq>` | Resolve one document of one run |
+| `cutready-cli mcp <project>` | MCP server over stdio: `read_document`, `begin_run`, `apply_ops` (as `mcp` runs), `review`, `keep`, `undo` |
+| `cutready-cli register [--force]` / `discover` | Record this binary as the user's CLI / print the registered one |
 
-The MCP `initialize` handshake exchanges `capabilities.experimental.cutready.contractVersion` (`cutready_contracts::CONTRACT_VERSION`). A client that declares another version gets error `-32001` and the server stops. The CLI refuses folders outside a git repository rather than creating one. It must not depend on Tauri or the app crate (`scripts/check-core-deps.mjs`).
+The MCP `initialize` handshake exchanges `capabilities.experimental.cutready.contractVersion` (`cutready_contracts::CONTRACT_VERSION`). A client that declares another version gets error `-32001` and the server stops. An MCP connection sees and resolves only the runs it began; reviewing other runs is the user's job, in the app or with the `review`/`keep`/`undo` commands. The CLI refuses folders outside a git repository rather than creating one. It must not depend on Tauri or the app crate (`scripts/check-core-deps.mjs`).
+
+**Discovery.** `register` writes `<config dir>/cutready/cli.json` (`{path, version, contractVersion}`; `CUTREADY_CONFIG_DIR` overrides the directory). A newer install replaces an older one; an older one replaces it only if the registered binary is gone, or with `--force`. Clients read the file, check the binary exists and speaks their contract version, then start `cutready-cli mcp`, whose handshake checks again. Any mismatch fails closed. Releases attach a standalone `cutready-cli_<version>_<platform>` archive per platform; the app installer doesn't bundle it yet. The CLI's version follows the app's through release-please.
 
 ---
 

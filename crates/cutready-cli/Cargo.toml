@@ -1,6 +1,6 @@
 [package]
 name = "cutready-cli"
-version = "0.1.0"
+version = "1.37.0"
 edition = "2021"
 publish = false
 description = "The CutReady command line (`cutready-cli`): edit and validate project documents and serve them to agents over MCP (stdio), through the same core and op log as the app."
@@ -16,6 +16,8 @@ path = "src/main.rs"
 [dependencies]
 cutready-core = { path = "../cutready-core" }
 cutready-desktop-io = { path = "../cutready-desktop-io" }
+dirs = "6"
+semver = "1"
 serde_json = "1"
 
 [dev-dependencies]
