@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Database, KeyRound, Table2 } from "lucide-react";
 import { invoke } from "../services/tauri";
+import { commandErrorText } from "../services/commandErrors";
 
 interface DatabasePreview {
   path: string;
@@ -51,7 +52,7 @@ export function DatabaseViewer({ path }: { path: string }) {
         setSelectedTable(tableName ?? result.tables[0]?.name ?? null);
       })
       .catch((err) => {
-        if (!cancelled) setError(String(err));
+        if (!cancelled) setError(commandErrorText(err));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

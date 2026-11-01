@@ -25,6 +25,7 @@ import {
   type SidebarOrder,
 } from "../stores/appStore";
 import type { ProjectEntry } from "../types/project";
+import { commandErrorText, transferConflictPath } from "../services/commandErrors";
 import { ChatArtifactIcon, SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
@@ -751,7 +752,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
         "success",
       );
     } catch (err) {
-      showToast(`Rename failed: ${err}`, 4000, "error");
+      showToast(`Rename failed: ${commandErrorText(err)}`, 4000, "error");
     } finally {
       renameInFlightRef.current = false;
       window.setTimeout(() => suppressedPaths.forEach(clearSuppressedEditorFlush), 150);
@@ -821,9 +822,8 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
       }
       showToast(`${action === "move" ? "Moved" : "Copied"} "${sourceTitle}" to ${destProject.name}`, 3000, "success");
     } catch (err) {
-      const errMsg = String(err);
-      if (errMsg.startsWith("FILE_EXISTS:")) {
-        const destRelExisting = errMsg.replace("FILE_EXISTS:", "");
+      const destRelExisting = transferConflictPath(err);
+      if (destRelExisting !== null) {
         const filename = destRelExisting.split("/").pop() ?? sourceTitle;
         const dotIdx = filename.lastIndexOf(".");
         const ext = dotIdx >= 0 ? filename.slice(dotIdx) : "";
@@ -831,7 +831,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
         setTransferConflict({ action, type, sourcePath, sourceTitle, destProject, ext });
         setConflictName(stem);
       } else {
-        showToast(`Failed to ${action}: ${errMsg}`, 4000, "error");
+        showToast(`Failed to ${action}: ${commandErrorText(err)}`, 4000, "error");
       }
     }
   }, [loadSketches, loadNotes, loadStoryboards, closeTab, showToast]);

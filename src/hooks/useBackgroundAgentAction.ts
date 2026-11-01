@@ -6,6 +6,7 @@ import { useToastStore } from "../stores/toastStore";
 import { useAiApplyGateStore } from "../stores/aiApplyGateStore";
 import { useSettings, type AgentPreset } from "./useSettings";
 import { invoke } from "../services/tauri";
+import { commandErrorText } from "../services/commandErrors";
 import type { ChatMessage } from "../types/sketch";
 import { buildProviderConfig, normalizeReasoningEffort } from "../utils/providerConfig";
 import {
@@ -259,7 +260,7 @@ export function useBackgroundAgentAction() {
       }]);
       showToast(`${label} complete`, 3000, "success");
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = err instanceof Error ? err.message : commandErrorText(err);
       addActivityEntries([{
         id: crypto.randomUUID(),
         timestamp: new Date(),

@@ -13,7 +13,7 @@ import {
   Trash2,
   XCircle,
 } from "lucide-react";
-import { invoke } from "../services/tauri";
+import { commandErrorText, invoke } from "../services/tauri";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { useConfirmDialog } from "./ConfirmDialog";
@@ -136,7 +136,7 @@ export function AgentRunInspector() {
       const nextRuns = await invoke<AgentRunSummary[]>("list_agent_runs", { limit: 30 });
       setRuns(nextRuns);
     } catch (err) {
-      setError(String(err));
+      setError(commandErrorText(err));
     } finally {
       setLoadingRuns(false);
     }
@@ -171,7 +171,7 @@ export function AgentRunInspector() {
       showToast(`Deleted ${result.deleted_rows} run record${result.deleted_rows === 1 ? "" : "s"}`, 3000, "success");
       await loadRuns();
     } catch (err) {
-      showToast(`Could not delete run: ${String(err)}`, 5000, "error");
+      showToast(`Could not delete run: ${commandErrorText(err)}`, 5000, "error");
     } finally {
       setBusyRunId(null);
     }
@@ -191,7 +191,7 @@ export function AgentRunInspector() {
       showToast(`Pruned ${result.deleted_runs} run${result.deleted_runs === 1 ? "" : "s"} (${result.deleted_rows} rows)`, 3500, "success");
       await loadRuns();
     } catch (err) {
-      showToast(`Could not prune runs: ${String(err)}`, 5000, "error");
+      showToast(`Could not prune runs: ${commandErrorText(err)}`, 5000, "error");
     } finally {
       setMaintenanceBusy(false);
     }
@@ -214,7 +214,7 @@ export function AgentRunInspector() {
       const result = await invoke<AgentStateMaintenanceResult>("compact_agent_state_database");
       showToast(`Compacted database: ${formatBytes(result.size_before)} → ${formatBytes(result.size_after)}`, 3500, "success");
     } catch (err) {
-      showToast(`Could not compact database: ${String(err)}`, 5000, "error");
+      showToast(`Could not compact database: ${commandErrorText(err)}`, 5000, "error");
     } finally {
       setMaintenanceBusy(false);
     }
@@ -241,7 +241,7 @@ export function AgentRunInspector() {
         "success",
       );
     } catch (err) {
-      showToast(`Could not clear saved context: ${String(err)}`, 5000, "error");
+      showToast(`Could not clear saved context: ${commandErrorText(err)}`, 5000, "error");
     } finally {
       setMaintenanceBusy(false);
     }
@@ -339,7 +339,7 @@ export function AgentRunTab({ runId }: { runId: string }) {
         if (!cancelled) setDetail(nextDetail);
       })
       .catch((err) => {
-        if (!cancelled) setError(String(err));
+        if (!cancelled) setError(commandErrorText(err));
       })
       .finally(() => {
         if (!cancelled) setLoadingDetail(false);

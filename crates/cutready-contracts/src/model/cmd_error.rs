@@ -25,6 +25,7 @@ pub enum CmdErrorCode {
     UnreadableRegistration,
     MissingBinary,
     ContractMismatch,
+    FileExists,
     /// Unknown variant (open enum — accepts any string).
     Other(String),
 }
@@ -54,6 +55,7 @@ impl std::fmt::Display for CmdErrorCode {
             Self::UnreadableRegistration => write!(f, "unreadable_registration"),
             Self::MissingBinary => write!(f, "missing_binary"),
             Self::ContractMismatch => write!(f, "contract_mismatch"),
+            Self::FileExists => write!(f, "file_exists"),
             Self::Other(s) => write!(f, "{}", s),
         }
     }
@@ -78,6 +80,7 @@ impl CmdErrorCode {
             "unreadable_registration" => Some(Self::UnreadableRegistration),
             "missing_binary" => Some(Self::MissingBinary),
             "contract_mismatch" => Some(Self::ContractMismatch),
+            "file_exists" => Some(Self::FileExists),
             other => Some(Self::Other(other.to_string())),
         }
     }
@@ -131,6 +134,9 @@ impl CmdErrorCode {
         if s.eq_ignore_ascii_case("contract_mismatch") {
             return Some(Self::ContractMismatch);
         }
+        if s.eq_ignore_ascii_case("file_exists") {
+            return Some(Self::FileExists);
+        }
         Some(Self::Other(s.to_string()))
     }
 
@@ -152,6 +158,7 @@ impl CmdErrorCode {
             Self::UnreadableRegistration => "unreadable_registration",
             Self::MissingBinary => "missing_binary",
             Self::ContractMismatch => "contract_mismatch",
+            Self::FileExists => "file_exists",
             Self::Other(s) => s.as_str(),
         }
     }

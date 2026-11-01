@@ -16,6 +16,7 @@ export class CmdErrorDetails {
   op_index?: number | undefined;
   current_version?: string | undefined;
   conflicts?: UndoConflict[];
+  path?: string | undefined;
   /** Fields not declared by the schema, preserved verbatim across load/save (#336). */
   additionalProperties: Record<string, unknown> = Object.create(null);
 
@@ -28,6 +29,7 @@ export class CmdErrorDetails {
       case "op_index":
       case "current_version":
       case "conflicts":
+      case "path":
         return true;
       default:
         return false;
@@ -52,6 +54,9 @@ export class CmdErrorDetails {
     }
     if (init?.conflicts !== undefined) {
       this.conflicts = init.conflicts;
+    }
+    if (init?.path !== undefined) {
+      this.path = init.path;
     }
     if (init?.additionalProperties !== undefined) {
       this.additionalProperties = Object.assign(
@@ -97,6 +102,9 @@ export class CmdErrorDetails {
         data["conflicts"] as unknown[],
         context.at("conflicts"),
       );
+    }
+    if (data["path"] !== undefined && data["path"] !== null) {
+      instance.path = String(data["path"]);
     }
 
     instance.additionalProperties = Object.create(null);
@@ -191,6 +199,9 @@ export class CmdErrorDetails {
         obj.conflicts,
         context,
       );
+    }
+    if (obj.path !== undefined && obj.path !== null) {
+      result["path"] = obj.path;
     }
 
     const extras = obj.additionalProperties ?? {};

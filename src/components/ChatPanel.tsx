@@ -1,5 +1,5 @@
 import { Children, isValidElement, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject, type UIEvent } from "react";
-import { invoke } from "../services/tauri";
+import { commandErrorText, invoke } from "../services/tauri";
 import { listenEvent } from "../ipc/events";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { AgentRunInspector } from "./AgentRunInspector";
@@ -1691,7 +1691,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       });
     } catch (err) {
       if (abortedRef.current || activePreflightSendIdRef.current !== sendId) return;
-      const errMsg = err instanceof Error ? err.message : String(err);
+      const errMsg = err instanceof Error ? err.message : commandErrorText(err);
       setChatError(errMsg);
       // Log error to activity
       addActivityEntries([{
@@ -1968,7 +1968,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       }]);
       showToast(`Promoted chat to ${relativePath}`, 5000, "success");
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = error instanceof Error ? error.message : commandErrorText(error);
       addActivityEntries([{
         id: crypto.randomUUID(),
         timestamp: new Date(),

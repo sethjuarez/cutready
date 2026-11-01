@@ -3,7 +3,8 @@
 //! `model/` and `generated_tests/` are emitted from `contracts/*.tsp`; do not
 //! edit them by hand. Run `npm run generate` in `contracts/` instead.
 //! `vector_adapters.rs` binds the contract's `@vector` operations to the
-//! production document code in `cutready-core`.
+//! production document code in `cutready-core`. `cmd_error_ext.rs` adds the
+//! hand-written `CmdError` constructors and conversions Tauri commands use.
 
 /// The edit contract version (`EditService`, `EditOp`, `CmdError` and the
 /// document shapes) every host speaks. `cutready-cli mcp` reports it in its
@@ -15,6 +16,8 @@ pub const CONTRACT_VERSION: u32 = 1;
 #[rustfmt::skip]
 pub mod model;
 pub use model::*;
+
+mod cmd_error_ext;
 
 #[cfg(test)]
 #[rustfmt::skip]

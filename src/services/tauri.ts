@@ -108,3 +108,4 @@ export async function emitTo<T>(
 }
 
 export { Channel, convertFileSrc };
+export { commandErrorText } from "./commandErrors";

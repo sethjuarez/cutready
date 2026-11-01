@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { invoke, Channel } from "../services/tauri";
+import { invoke, Channel, commandErrorText } from "../services/tauri";
 import {
   moveDraftlineProjectFolder,
   type MoveProjectFolderResult,
@@ -1378,7 +1378,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await useVersioningStore.getState().checkProjectHealth();
     } catch (err) {
       console.error("Failed to switch project:", err);
-      set({ error: String(err) });
+      set({ error: commandErrorText(err) });
     } finally {
       set({ loading: false, projectSwitching: false });
     }
@@ -1390,7 +1390,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadProjects();
     } catch (err) {
       console.error("Failed to create project:", err);
-      set({ error: String(err) });
+      set({ error: commandErrorText(err) });
     }
   },
 
@@ -1403,7 +1403,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await useVersioningStore.getState().loadGraphData();
     } catch (err) {
       console.error("Failed to delete project:", err);
-      const message = `Could not delete project: ${err}`;
+      const message = `Could not delete project: ${commandErrorText(err)}`;
       set({ error: message });
       useToastStore.getState().show(message, 5000, "error");
       throw err;

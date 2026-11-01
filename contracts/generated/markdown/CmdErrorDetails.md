@@ -26,6 +26,7 @@ classDiagram
         +uint32 op_index
         +string current_version
         +UndoConflict[] conflicts
+        +string path
     }
     class UndoConflict {
         +string path
@@ -45,6 +46,7 @@ classDiagram
 | op_index | uint32 | Zero-based position of the rejected op in an `EditService` batch. |
 | current_version | string | The document version on disk, for `stale_document`. |
 | conflicts | [UndoConflict[]](../undoconflict/) | The entities that block an undo, for `undo_conflict`. |
+| path | string | The project-relative file that already exists, for `file_exists`. |
 
 ## Composed Types
 

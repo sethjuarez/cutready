@@ -61,8 +61,9 @@ harness-agentive = { path = "../crates/harness-agentive", optional = true }
 harness-copilot-sdk = { path = "../crates/harness-copilot-sdk", optional = true }
 harness-prompty = { path = "../crates/harness-prompty" }
 # Typra-generated document contracts (contracts/*.tsp). The app uses the
-# generated types directly where it has adopted them, such as `.cv` chat artifacts.
-cutready-contracts = { path = "../crates/cutready-contracts" }
+# generated types directly where it has adopted them, such as `.cv` chat artifacts
+# and the `CmdError` envelope commands return (hence `serde`).
+cutready-contracts = { path = "../crates/cutready-contracts", features = ["serde"] }
 cutready-core = { path = "../crates/cutready-core" }
 cutready-desktop-io = { path = "../crates/cutready-desktop-io" }
 cutready-versioning = { path = "../crates/cutready-versioning" }

@@ -114,6 +114,8 @@ pub struct CmdErrorDetails {
     pub current_version: Option<String>,
     /// The entities that block an undo, for `undo_conflict`.
     pub conflicts: Option<Vec<UndoConflict>>,
+    /// The project-relative file that already exists, for `file_exists`.
+    pub path: Option<String>,
     /// Undeclared fields captured on load and written back on save (unknown-field passthrough).
     pub additional_properties: serde_json::Map<String, serde_json::Value>,
 }
@@ -167,13 +169,14 @@ impl CmdErrorDetails {
             op_index: value.get("op_index").and_then(|v| v.as_u64().and_then(|n| u32::try_from(n).ok())),
             current_version: value.get("current_version").and_then(|v| v.as_str()).map(|s| s.to_string()),
             conflicts: value.get("conflicts").map(|v| Self::load_conflicts(v, ctx)),
+            path: value.get("path").and_then(|v| v.as_str()).map(|s| s.to_string()),
             additional_properties: Self::capture_additional_properties(&value, ""),
         }
     }
 
     /// True when `key` is a declared wire key for the given discriminator value.
     fn additional_properties_known_key(kind: &str, key: &str) -> bool {
-        matches!(key, "row_index" | "field" | "row_id" | "op_index" | "current_version" | "conflicts")
+        matches!(key, "row_index" | "field" | "row_id" | "op_index" | "current_version" | "conflicts" | "path")
     }
 
     fn capture_additional_properties(value: &serde_json::Value, kind: &str) -> serde_json::Map<String, serde_json::Value> {
@@ -223,6 +226,9 @@ impl CmdErrorDetails {
         }
         if let Some(items) = self.conflicts.as_ref() {
             result.insert("conflicts".to_string(), Self::save_conflicts(items, ctx));
+        }
+        if let Some(val) = self.path.as_ref() {
+            result.insert("path".to_string(), serde_json::Value::String(val.clone()));
         }
         for (key, value) in &self.additional_properties {
             if Self::additional_properties_known_key("", key) {
