@@ -3,9 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use cutready_core::contracts::{
-    AppliedEdit, CmdError, CmdErrorCode, CommandFailure, DocumentSnapshot, RunReview, SaveContext,
-};
+use cutready_core::contracts::{AppliedEdit, CmdError, CmdErrorCode, DocumentSnapshot, RunReview};
 use cutready_core::edit_ops::{self, ContentEditError};
 use cutready_core::edit_session::{kind_of, Applied, EditSession, Expected, ReviewError};
 use cutready_core::{Clock, Files, OpLogStore, PortErrorKind};
@@ -31,14 +29,6 @@ impl Failure {
 
     pub fn error(&self) -> &CmdError {
         &self.0
-    }
-
-    /// What a failed command prints: `{error: CmdError}`.
-    pub fn to_json(&self) -> Value {
-        CommandFailure {
-            error: (*self.0).clone(),
-        }
-        .to_value(&SaveContext::default())
     }
 
     pub fn message(&self) -> &str {

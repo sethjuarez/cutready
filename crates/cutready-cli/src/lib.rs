@@ -8,6 +8,7 @@
 pub mod discovery;
 pub mod edit;
 pub mod mcp;
+pub mod output;
 pub mod project;
 pub mod validate;
 

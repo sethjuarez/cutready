@@ -87,3 +87,12 @@ pub fn assert_subset(name: &str, expected: &Value, actual: &Value) {
         _ => assert_eq!(expected, actual, "{name}"),
     }
 }
+
+/// Every CLI result and MCP `structuredContent` is exactly a contract model.
+pub fn assert_contract_output(value: Value) -> Value {
+    assert!(
+        cutready_cli::output::contract_model(&value).is_some(),
+        "not a contract model (contracts/cli.tsp): {value}"
+    );
+    value
+}

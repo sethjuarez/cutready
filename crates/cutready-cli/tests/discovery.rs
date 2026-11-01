@@ -3,9 +3,13 @@
 // Test helpers are test code; a failed unwrap is a failed test.
 #![allow(clippy::unwrap_used)]
 
+mod common;
+
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+use common::assert_contract_output;
 
 use cutready_cli::discovery::{
     compare_versions, discover, register, DiscoveryError, Registered, Registration, REGISTRY_FILE,
@@ -209,7 +213,7 @@ fn cli(config: &Path, args: &[&str]) -> (bool, Value) {
             String::from_utf8_lossy(&output.stdout)
         )
     });
-    (output.status.success(), value)
+    (output.status.success(), assert_contract_output(value))
 }
 
 #[test]

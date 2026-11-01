@@ -27,7 +27,11 @@ fn result(response: Option<Value>) -> Value {
         response.get("error").is_none(),
         "unexpected error: {response}"
     );
-    response["result"].clone()
+    let result = response["result"].clone();
+    if let Some(content) = result.get("structuredContent") {
+        assert_contract_output(content.clone());
+    }
+    result
 }
 
 #[test]

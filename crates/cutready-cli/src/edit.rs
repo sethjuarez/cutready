@@ -42,9 +42,10 @@ pub fn edit(
 
 /// Parses an ops document: a JSON array of EditOps.
 pub fn parse_ops(text: &str) -> Result<Vec<Value>, Failure> {
-    match serde_json::from_str::<Value>(text) {
-        Ok(Value::Array(ops)) => Ok(ops),
-        Ok(_) => Err(Failure::other("ops must be a JSON array of EditOps")),
-        Err(err) => Err(Failure::other(format!("ops are not valid JSON: {err}"))),
-    }
+    let value = serde_json::from_str::<Value>(text)
+        .map_err(|err| Failure::other(format!("ops are not valid JSON: {err}")))?;
+    value
+        .as_array()
+        .cloned()
+        .ok_or_else(|| Failure::other("ops must be a JSON array of EditOps"))
 }

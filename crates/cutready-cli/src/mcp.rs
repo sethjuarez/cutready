@@ -20,8 +20,9 @@ use std::path::Path;
 use cutready_core::Clock;
 use serde_json::{json, Value};
 
-use cutready_core::contracts::{ReviewAction, ReviewResolution, RunStarted, SaveContext};
+use cutready_core::contracts::{ReviewAction, ReviewResolution, RunStarted};
 
+use crate::output::Output;
 use crate::project::{applied_edit, Failure, Project};
 use crate::CONTRACT_VERSION;
 
@@ -82,7 +83,7 @@ impl<'c> Server<'c> {
                 Err(err) => Some(error(Value::Null, PARSE_ERROR, &err.to_string(), None)),
             };
             if let Some(response) = response {
-                serde_json::to_writer(&mut output, &response)?;
+                serde_json::to_writer(&mut output, &response)?; // mcp framing
                 output.write_all(b"\n")?;
                 output.flush()?;
             }
@@ -101,7 +102,7 @@ impl<'c> Server<'c> {
         let method = message.get("method").and_then(Value::as_str);
         let (Some(method), true, true) = (
             method,
-            message.get("jsonrpc") == Some(&json!("2.0")),
+            message.get("jsonrpc") == Some(&json!("2.0")), // mcp framing
             id.is_none() || valid_id.is_some(),
         ) else {
             return Some(error(
@@ -113,19 +114,19 @@ impl<'c> Server<'c> {
         };
         // A notification: nothing to answer.
         let id = valid_id.cloned()?;
-        let params = message.get("params").cloned().unwrap_or_else(|| json!({}));
+        let params = message.get("params").cloned().unwrap_or_else(|| json!({})); // mcp framing
         let outcome = match method {
             "initialize" => self.initialize(&params),
-            "ping" => Ok(json!({})),
+            "ping" => Ok(json!({})), // mcp framing
             _ if !self.initialized => {
                 Err((NOT_INITIALIZED, "Send initialize first".to_string(), None))
             }
-            "tools/list" => Ok(json!({ "tools": tools() })),
+            "tools/list" => Ok(json!({ "tools": tools() })), // mcp framing
             "tools/call" => self.call(&params),
             _ => Err((METHOD_NOT_FOUND, format!("Unknown method {method}"), None)),
         };
         Some(match outcome {
-            Ok(result) => json!({ "jsonrpc": "2.0", "id": id, "result": result }),
+            Ok(result) => json!({ "jsonrpc": "2.0", "id": id, "result": result }), // mcp framing
             Err((code, message, data)) => error(id, code, &message, data),
         })
     }
@@ -140,11 +141,13 @@ impl<'c> Server<'c> {
                     format!(
                         "This cutready-cli speaks edit contract {CONTRACT_VERSION}; the client speaks {declared}. Install matching versions."
                     ),
+                    // mcp framing: JSON-RPC error data
                     Some(json!({ "server": CONTRACT_VERSION, "client": declared })),
                 ));
             }
         }
         self.initialized = true;
+        // mcp framing: the initialize result
         Ok(json!({
             "protocolVersion": PROTOCOL_VERSION,
             "capabilities": {
@@ -163,20 +166,19 @@ impl<'c> Server<'c> {
         let args = params
             .get("arguments")
             .cloned()
-            .unwrap_or_else(|| json!({}));
+            .unwrap_or_else(|| json!({})); // mcp framing
         let project = match Project::open(&self.root) {
             Ok(project) => project,
             Err(err) => return Ok(tool_error(&err)),
         };
-        let ctx = SaveContext::default();
-        let result = match name {
+        let result: Result<Box<dyn Output>, Failure> = match name {
             "read_document" => {
                 let path = string_arg(&args, "path")?;
-                project.read(path).map(|doc| doc.to_value(&ctx))
+                project.read(path).map(boxed)
             }
             "begin_run" => project.begin_run(ACTOR, self.clock).map(|run_id| {
                 self.runs.insert(run_id.clone());
-                RunStarted { run_id }.to_value(&ctx)
+                boxed(RunStarted { run_id })
             }),
             "apply_ops" => {
                 let run_id = self.own_run(&args)?;
@@ -196,16 +198,14 @@ impl<'c> Server<'c> {
                     .ok_or_else(|| invalid("ops must be an array of EditOps"))?;
                 project
                     .apply(self.clock, ACTOR, run_id, path, expected, ops)
-                    .map(|applied| applied_edit(run_id, path, &applied).to_value(&ctx))
+                    .map(|applied| boxed(applied_edit(run_id, path, &applied)))
             }
             "review" => project.reviews(self.clock).map(|reviews| {
-                Value::Array(
-                    reviews
-                        .iter()
-                        .filter(|review| self.runs.contains(&review.run_id))
-                        .map(|review| review.to_value(&ctx))
-                        .collect(),
-                )
+                let own: Vec<_> = reviews
+                    .into_iter()
+                    .filter(|review| self.runs.contains(&review.run_id))
+                    .collect();
+                boxed(own)
             }),
             "keep" | "undo" => {
                 let run_id = self.own_run(&args)?;
@@ -220,7 +220,7 @@ impl<'c> Server<'c> {
                     project.undo(self.clock, run_id, path, through_seq)
                 };
                 resolved.map(|()| {
-                    ReviewResolution {
+                    boxed(ReviewResolution {
                         run_id: run_id.to_string(),
                         path: path.to_string(),
                         resolved: if name == "keep" {
@@ -228,14 +228,13 @@ impl<'c> Server<'c> {
                         } else {
                             ReviewAction::Undo
                         },
-                    }
-                    .to_value(&ctx)
+                    })
                 })
             }
             other => return Err(invalid(&format!("Unknown tool {other}"))),
         };
         Ok(match result {
-            Ok(value) => tool_result(value, false),
+            Ok(output) => tool_result(output.as_ref(), false),
             Err(err) => tool_error(&err),
         })
     }
@@ -266,7 +265,14 @@ fn string_arg<'a>(args: &'a Value, key: &str) -> Result<&'a str, (i64, String, O
         .ok_or_else(|| invalid(&format!("{key} is required")))
 }
 
-fn tool_result(value: Value, is_error: bool) -> Value {
+fn boxed(output: impl Output + 'static) -> Box<dyn Output> {
+    Box::new(output)
+}
+
+/// MCP framing around a typed result: `structuredContent` plus its text.
+fn tool_result(output: &dyn Output, is_error: bool) -> Value {
+    let value = output.to_output();
+    // mcp framing
     json!({
         "content": [{ "type": "text", "text": value.to_string() }],
         "structuredContent": value,
@@ -276,18 +282,19 @@ fn tool_result(value: Value, is_error: bool) -> Value {
 
 /// A refused tool call: the `CommandFailure` in `structuredContent`.
 fn tool_error(err: &Failure) -> Value {
-    tool_result(err.to_json(), true)
+    tool_result(err, true)
 }
 
 fn error(id: Value, code: i64, message: &str, data: Option<Value>) -> Value {
-    let mut error = json!({ "code": code, "message": message });
+    let mut error = json!({ "code": code, "message": message }); // mcp framing
     if let Some(data) = data {
         error["data"] = data;
     }
-    json!({ "jsonrpc": "2.0", "id": id, "error": error })
+    json!({ "jsonrpc": "2.0", "id": id, "error": error }) // mcp framing
 }
 
 fn tools() -> Value {
+    // mcp framing: tool schemas
     json!([
         {
             "name": "read_document",
@@ -333,6 +340,7 @@ fn tools() -> Value {
 }
 
 fn review_tool(name: &str, description: &str) -> Value {
+    // mcp framing: tool schema
     json!({
         "name": name,
         "description": description,

@@ -3,11 +3,11 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use cutready_cli::edit::{self, Expect};
+use cutready_cli::output::{self, Output};
 use cutready_cli::project::{Failure, Project};
 use cutready_cli::{discovery, mcp, validate, CONTRACT_VERSION};
-use cutready_core::contracts::{ReviewAction, ReviewResolution, RunReview, SaveContext};
+use cutready_core::contracts::{ReviewAction, ReviewResolution};
 use cutready_desktop_io::SystemClock;
-use serde_json::Value;
 
 const USAGE: &str = "\
 Usage:
@@ -54,6 +54,7 @@ fn run(args: &[String]) -> Result<ExitCode, Usage> {
     };
     match command.as_str() {
         "--version" | "-V" => {
+            // plain text: --version
             println!(
                 "cutready-cli {} (edit contract {CONTRACT_VERSION})",
                 env!("CARGO_PKG_VERSION")
@@ -61,7 +62,7 @@ fn run(args: &[String]) -> Result<ExitCode, Usage> {
             Ok(ExitCode::SUCCESS)
         }
         "--help" | "-h" | "help" => {
-            println!("{USAGE}");
+            println!("{USAGE}"); // plain text: --help
             Ok(ExitCode::SUCCESS)
         }
         "edit" => edit_command(rest),
@@ -70,7 +71,7 @@ fn run(args: &[String]) -> Result<ExitCode, Usage> {
                 .split_first()
                 .ok_or_else(|| usage("validate needs a project folder"))?;
             Ok(match validate::validate(&PathBuf::from(project), docs) {
-                Ok(report) => print_json(&report.to_value(&ctx()), report.ok),
+                Ok(report) => print_json(&report, report.ok),
                 Err(err) => failed(&err),
             })
         }
@@ -81,7 +82,7 @@ fn run(args: &[String]) -> Result<ExitCode, Usage> {
             let result = Project::open(&PathBuf::from(project))
                 .and_then(|project| project.reviews(&SystemClock));
             Ok(match result {
-                Ok(reviews) => print_json(&reviews_json(&reviews), true),
+                Ok(reviews) => print_json(&reviews, true),
                 Err(err) => failed(&err),
             })
         }
@@ -98,9 +99,7 @@ fn run(args: &[String]) -> Result<ExitCode, Usage> {
             let result = discovery::Registration::current()
                 .and_then(|install| Ok((discovery::register(&dir, &install, force)?, install)));
             Ok(match result {
-                Ok((outcome, install)) => {
-                    print_json(&outcome.to_registration(&install).to_value(&ctx()), true)
-                }
+                Ok((outcome, install)) => print_json(&outcome.to_registration(&install), true),
                 Err(err) => failed(&Failure::other(err.to_string())),
             })
         }
@@ -112,7 +111,7 @@ fn run(args: &[String]) -> Result<ExitCode, Usage> {
                 return Ok(no_config_dir());
             };
             Ok(match discovery::discover(&dir, CONTRACT_VERSION) {
-                Ok(found) => print_json(&found.to_install().to_value(&ctx()), true),
+                Ok(found) => print_json(&found.to_install(), true),
                 Err(err) => failed(&Failure::from(err.to_cmd_error())),
             })
         }
@@ -129,7 +128,7 @@ fn run(args: &[String]) -> Result<ExitCode, Usage> {
                 }
             };
             let stdin = std::io::stdin().lock();
-            let stdout = std::io::stdout().lock();
+            let stdout = std::io::stdout().lock(); // mcp framing: the JSON-RPC stream
             if let Err(err) = server.serve(stdin, stdout) {
                 eprintln!("cutready-cli mcp: {err}");
                 return Ok(ExitCode::FAILURE);
@@ -194,7 +193,7 @@ fn edit_command(args: &[String]) -> Result<ExitCode, Usage> {
         )
     });
     Ok(match result {
-        Ok(applied) => print_json(&applied.to_value(&ctx()), true),
+        Ok(applied) => print_json(&applied, true),
         Err(err) => failed(&err),
     })
 }
@@ -245,23 +244,10 @@ fn resolve_command(command: &str, args: &[String]) -> Result<ExitCode, Usage> {
                     ReviewAction::Undo
                 },
             };
-            print_json(&resolution.to_value(&ctx()), true)
+            print_json(&resolution, true)
         }
         Err(err) => failed(&err),
     })
-}
-
-fn ctx() -> SaveContext {
-    SaveContext::default()
-}
-
-fn reviews_json(reviews: &[RunReview]) -> Value {
-    Value::Array(
-        reviews
-            .iter()
-            .map(|review| review.to_value(&ctx()))
-            .collect(),
-    )
 }
 
 fn no_config_dir() -> ExitCode {
@@ -270,11 +256,11 @@ fn no_config_dir() -> ExitCode {
 
 /// Prints the `CommandFailure` and fails.
 fn failed(err: &Failure) -> ExitCode {
-    print_json(&err.to_json(), false)
+    print_json(err, false)
 }
 
-fn print_json(value: &Value, ok: bool) -> ExitCode {
-    println!("{value}");
+fn print_json(output: &(impl Output + ?Sized), ok: bool) -> ExitCode {
+    output::print(output);
     if ok {
         ExitCode::SUCCESS
     } else {
