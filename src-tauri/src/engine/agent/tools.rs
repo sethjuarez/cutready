@@ -1648,7 +1648,8 @@ fn copy_storyboard_with_dependencies(
         dependency_count += 1;
     }
 
-    document_ops::save_storyboard(&target_abs, None, &storyboard).map_err(|e| e.to_string())?;
+    document_ops::save_storyboard(target_root, &target_abs, None, &storyboard)
+        .map_err(|e| e.to_string())?;
     copied.insert(normalized_target);
     Ok(format!(
         "- storyboard: {source_path} -> {target_path} (with {dependency_count} sketch dependenc{})",
@@ -1693,7 +1694,8 @@ fn copy_sketch_with_assets(
         }
     }
 
-    document_ops::save_sketch(&target_abs, None, &sketch).map_err(|e| e.to_string())?;
+    document_ops::save_sketch(target_root, &target_abs, None, &sketch)
+        .map_err(|e| e.to_string())?;
     copied.insert(normalized_target);
     Ok(format!(
         "- sketch: {source_path} -> {target_path} (with {asset_count} asset{}, skipped {skipped_asset_count})",
@@ -2664,7 +2666,7 @@ fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
         }
     };
 
-    match document_ops::save_sketch(&path, before.as_ref(), &sketch) {
+    match document_ops::save_sketch(root, &path, before.as_ref(), &sketch) {
         Ok(()) => ToolOutput::from(summary),
         Err(e) => ToolOutput::failed(format!("Error writing sketch: {e}")),
     }
@@ -2750,7 +2752,7 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> ToolOutput {
         return ToolOutput::failed(format!("Error: {e}"));
     }
 
-    match document_ops::save_sketch(&path, Some(&before), &sketch) {
+    match document_ops::save_sketch(root, &path, Some(&before), &sketch) {
         Ok(()) => ToolOutput::from(format!("Updated row {} in {}", index + 1, path.display())),
         Err(e) => ToolOutput::failed(format!("Error writing sketch: {e}")),
     }
@@ -2944,7 +2946,7 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> ToolOutput {
         }
     }
 
-    match document_ops::save_sketch(&path, Some(&before), &sketch) {
+    match document_ops::save_sketch(root, &path, Some(&before), &sketch) {
         Ok(()) => {
             if sketch.rows[index].visual.is_some() {
                 ToolOutput::from(format!(
@@ -3180,7 +3182,7 @@ fn exec_design_plan(root: &Path, args: &Value) -> String {
     sketch.rows[index].design_plan = Some(plan.clone());
     let row_context = format_visual_row_context(&sketch, index);
 
-    match document_ops::save_sketch(&path, Some(&before), &sketch) {
+    match document_ops::save_sketch(root, &path, Some(&before), &sketch) {
         Ok(()) => {
             format!(
                 "Design plan saved for row {}.\n\n{}\n\nSaved design plan:\n{}\n\nNow generate DSL JSON based on this plan and row context.",
@@ -3268,7 +3270,7 @@ fn save_row_visual(
         .map_err(|e| format!("Error writing visual file: {e}"))?;
     sketch.rows[index].visual = Some(Value::String(rel_path.clone()));
     sketch.rows[index].screenshot = None;
-    document_ops::save_sketch(path, Some(&before), sketch)
+    document_ops::save_sketch(root, path, Some(&before), sketch)
         .map_err(|e| format!("Error writing sketch: {e}"))?;
     Ok(rel_path)
 }
@@ -3830,7 +3832,7 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> ToolOutput {
 
     sb.updated_at = chrono::Utc::now();
 
-    match document_ops::save_storyboard(&path, existing.as_ref(), &sb) {
+    match document_ops::save_storyboard(root, &path, existing.as_ref(), &sb) {
         Ok(()) => ToolOutput::from(format!(
             "Saved storyboard \"{}\" at '{safe_rel}' ({} items)",
             sb.title,
@@ -5293,6 +5295,7 @@ mod tests {
         project::write_note(
             &source_root.join("notes.md"),
             "![Logo](images/logo.png \"Company Logo\")\n![Missing](images/missing.png)",
+            &source_root,
         )
         .unwrap();
 

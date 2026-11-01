@@ -54,6 +54,9 @@ pub struct ToolExecutionContext {
     pub project_workspace_tools_enabled: bool,
     /// Whether mutating tools are permitted this run.
     pub mutation_tools_enabled: bool,
+    /// The top-level agent run the call belongs to. Delegated child turns
+    /// share it, so the host reviews one execution's writes together.
+    pub run_id: String,
 }
 
 /// Host-owned tool execution injected into a harness adapter.

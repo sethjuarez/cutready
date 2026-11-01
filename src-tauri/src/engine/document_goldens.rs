@@ -120,6 +120,10 @@ fn tree(root: &Path) -> BTreeMap<String, Vec<u8>> {
     fn walk(root: &Path, dir: &Path, out: &mut BTreeMap<String, Vec<u8>>) {
         for entry in std::fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();
+            // Runtime state (op log, write lock) is never part of the project.
+            if path.file_name().is_some_and(|name| name == ".git") {
+                continue;
+            }
             if path.is_dir() {
                 walk(root, &path, out);
             } else {
@@ -516,7 +520,7 @@ fn note_content() -> String {
 #[test]
 fn note_save() {
     let p = Project::new();
-    project::write_note(&p.path("notes/plan.md"), &note_content()).unwrap();
+    project::write_note(&p.path("notes/plan.md"), &note_content(), p.root()).unwrap();
     assert_golden("note_save", &p);
 }
 

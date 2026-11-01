@@ -82,7 +82,7 @@ pub async fn import_docx(
     let final_path = resolve_import_path(&root, &relative_path, "md", conflict)?;
     let abs_final = project::safe_resolve(&root, &final_path).map_err(|e| e.to_string())?;
 
-    document_writer::replace_note(&abs_final, &markdown)?;
+    document_writer::replace_note(&root, &abs_final, &markdown)?;
     Ok(final_path)
 }
 
@@ -116,7 +116,7 @@ pub async fn import_pdf(
     let final_path = resolve_import_path(&root, &relative_path, "md", conflict)?;
     let abs_final = project::safe_resolve(&root, &final_path).map_err(|e| e.to_string())?;
 
-    document_writer::replace_note(&abs_final, &markdown)?;
+    document_writer::replace_note(&root, &abs_final, &markdown)?;
     Ok(final_path)
 }
 
@@ -150,7 +150,7 @@ pub async fn import_pptx(
     let final_path = resolve_import_path(&root, &relative_path, "md", conflict)?;
     let abs_final = project::safe_resolve(&root, &final_path).map_err(|e| e.to_string())?;
 
-    document_writer::replace_note(&abs_final, &markdown)?;
+    document_writer::replace_note(&root, &abs_final, &markdown)?;
     Ok(final_path)
 }
 
@@ -191,7 +191,7 @@ pub async fn import_markdown(
     }
 
     let abs_final = project::safe_resolve(&root, &final_path).map_err(|e| e.to_string())?;
-    document_writer::replace_note(&abs_final, &content)?;
+    document_writer::replace_note(&root, &abs_final, &content)?;
     Ok(final_path)
 }
 
@@ -234,7 +234,7 @@ pub async fn import_sketch(
     }
 
     let abs_final = project::safe_resolve(&root, &final_path).map_err(|e| e.to_string())?;
-    document_writer::replace_sketch(&abs_final, &sketch)?;
+    document_writer::replace_sketch(&root, &abs_final, &sketch)?;
     Ok(final_path)
 }
 
@@ -271,7 +271,7 @@ pub async fn import_storyboard(
     let final_path = resolve_import_path(&root, &relative_path, "sb", conflict)?;
     let abs_final = project::safe_resolve(&root, &final_path).map_err(|e| e.to_string())?;
 
-    document_writer::replace_storyboard(&abs_final, &storyboard)?;
+    document_writer::replace_storyboard(&root, &abs_final, &storyboard)?;
     Ok(final_path)
 }
 

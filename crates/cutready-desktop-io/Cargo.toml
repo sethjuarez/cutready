@@ -3,7 +3,7 @@ name = "cutready-desktop-io"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "Desktop implementations of cutready-core ports: rooted std::fs files, system clock, tracing log and a cross-process file lock."
+description = "Desktop implementations of cutready-core ports: rooted std::fs files, system clock, tracing log, a cross-process file lock and the SQLite op log."
 
 [lib]
 name = "cutready_desktop_io"
@@ -11,5 +11,8 @@ name = "cutready_desktop_io"
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 cutready-core = { path = "../cutready-core" }
+rusqlite = { version = "0.37", features = ["bundled"] }
+serde_json = "1"
 tempfile = "3"
 tracing = "0.1"
+uuid = { version = "1", features = ["v4"] }

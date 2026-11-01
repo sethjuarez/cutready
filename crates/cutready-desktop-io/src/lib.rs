@@ -6,11 +6,13 @@ mod clock;
 mod files;
 mod lock;
 mod log;
+mod op_log;
 
 pub use clock::SystemClock;
 pub use files::StdFiles;
 pub use lock::FileLock;
 pub use log::TracingLog;
+pub use op_log::SqliteOpLogStore;
 
 use cutready_core::{PortError, PortErrorKind};
 

@@ -1042,12 +1042,8 @@ pub fn read_visual(
 }
 
 /// Write a sketch to a `.sk` file.
-pub fn write_sketch(
-    sketch: &Sketch,
-    path: &Path,
-    _project_root: &Path,
-) -> Result<(), ProjectError> {
-    document_writer::replace_sketch(path, sketch)?;
+pub fn write_sketch(sketch: &Sketch, path: &Path, project_root: &Path) -> Result<(), ProjectError> {
+    document_writer::replace_sketch(project_root, path, sketch)?;
     Ok(())
 }
 
@@ -1809,9 +1805,9 @@ fn rollback_rename_project_asset(
 pub fn write_storyboard(
     sb: &Storyboard,
     path: &Path,
-    _project_root: &Path,
+    project_root: &Path,
 ) -> Result<(), ProjectError> {
-    document_writer::replace_storyboard(path, sb)?;
+    document_writer::replace_storyboard(project_root, path, sb)?;
     Ok(())
 }
 
@@ -1840,7 +1836,8 @@ pub fn read_storyboard(path: &Path) -> Result<Storyboard, ProjectError> {
 /// Persist a storyboard whose older on-disk shape was just upgraded on read.
 /// Best effort: a failed write leaves the old file, which upgrades again next read.
 fn save_upgraded_storyboard(storyboard: &Storyboard, path: &Path) {
-    if let Err(err) = document_writer::replace_storyboard(path, storyboard) {
+    let root = document_writer::project_root_for(path);
+    if let Err(err) = document_writer::replace_storyboard(&root, path, storyboard) {
         log::warn!(
             "could not save upgraded storyboard {}: {err}",
             path.display()
@@ -2074,8 +2071,8 @@ pub fn read_note(path: &Path) -> Result<String, ProjectError> {
 }
 
 /// Write a note file (plain text).
-pub fn write_note(path: &Path, content: &str) -> Result<(), ProjectError> {
-    document_writer::replace_note(path, content)?;
+pub fn write_note(path: &Path, content: &str, project_root: &Path) -> Result<(), ProjectError> {
+    document_writer::replace_note(project_root, path, content)?;
     Ok(())
 }
 
@@ -3833,6 +3830,7 @@ mod tests {
         write_note(
             &root.join("notes.md"),
             r#"before ![](.cutready/screenshots/old.png "title") after <img src=".cutready/screenshots/old.png">"#,
+            root,
         )
         .unwrap();
 
