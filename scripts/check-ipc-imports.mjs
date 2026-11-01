@@ -43,26 +43,86 @@ function isEventModule(specifier) {
   return specifier === "@tauri-apps/api/event" || /(^|\/)(services\/)?tauri$/.test(specifier);
 }
 
-/** Raw event functions a file imports (`listen`, `emit`, …, or `ns.*` for namespace imports). */
+/**
+ * Files that may import raw event functions: the typed event module and the
+ * same plumbing/test exemptions as invoke. Other src/ipc/ modules may not.
+ */
+export function isEventExempt(path) {
+  return path === "src/ipc/events.ts" || (isExempt(path) && !path.startsWith("src/ipc/"));
+}
+
+function moduleName(node) {
+  return node && ts.isStringLiteralLike(node) ? node.text : null;
+}
+
+function isDynamicLoad(node) {
+  return (
+    ts.isCallExpression(node) &&
+    (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+      (ts.isIdentifier(node.expression) && node.expression.text === "require")) &&
+    isEventModule(moduleName(node.arguments[0]) ?? "")
+  );
+}
+
+function unwrap(node) {
+  while (node && (ts.isAwaitExpression(node) || ts.isParenthesizedExpression(node))) node = node.expression;
+  return node;
+}
+
+/**
+ * Raw event functions a file imports or re-exports (`listen`, `emit`, …),
+ * `ns.*` for namespace imports and `*` for star re-exports. Covers static
+ * imports, re-exports, `import x = require()`, and `import()`/`require()`
+ * calls (destructured names, or `*` when the whole module is kept).
+ */
 export function eventImports(text) {
-  const source = ts.createSourceFile("file.tsx", text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TSX);
+  const source = ts.createSourceFile("file.tsx", text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const found = [];
-  for (const statement of source.statements) {
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
-    if (!isEventModule(statement.moduleSpecifier.text)) continue;
-    const clause = statement.importClause;
-    if (!clause || clause.isTypeOnly) continue;
-    const bindings = clause.namedBindings;
-    if (!bindings) continue;
-    if (ts.isNamespaceImport(bindings)) {
-      found.push(`${bindings.name.text}.*`);
-      continue;
-    }
-    for (const element of bindings.elements) {
+  const named = (elements) => {
+    for (const element of elements) {
       const imported = (element.propertyName ?? element.name).text;
       if (!element.isTypeOnly && EVENT_FUNCTIONS.has(imported)) found.push(imported);
     }
-  }
+  };
+  const visit = (node) => {
+    if (ts.isImportDeclaration(node) && isEventModule(moduleName(node.moduleSpecifier) ?? "")) {
+      const clause = node.importClause;
+      const bindings = clause && !clause.isTypeOnly ? clause.namedBindings : undefined;
+      if (bindings && ts.isNamespaceImport(bindings)) found.push(`${bindings.name.text}.*`);
+      else if (bindings) named(bindings.elements);
+      return;
+    }
+    if (ts.isExportDeclaration(node) && !node.isTypeOnly && isEventModule(moduleName(node.moduleSpecifier) ?? "")) {
+      if (!node.exportClause || ts.isNamespaceExport(node.exportClause)) found.push("*");
+      else named(node.exportClause.elements);
+      return;
+    }
+    if (
+      ts.isImportEqualsDeclaration(node) &&
+      ts.isExternalModuleReference(node.moduleReference) &&
+      isEventModule(moduleName(node.moduleReference.expression) ?? "")
+    ) {
+      found.push(`${node.name.text}.*`);
+      return;
+    }
+    if (ts.isVariableDeclaration(node) && node.initializer && isDynamicLoad(unwrap(node.initializer))) {
+      if (ts.isObjectBindingPattern(node.name)) {
+        for (const element of node.name.elements) {
+          const imported = element.propertyName ?? element.name;
+          if (ts.isIdentifier(imported) && EVENT_FUNCTIONS.has(imported.text)) found.push(imported.text);
+        }
+      } else {
+        found.push("*");
+      }
+      return;
+    }
+    if (isDynamicLoad(node)) {
+      found.push("*");
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
   return found;
 }
 
@@ -210,10 +270,13 @@ export function measure(cwd = process.cwd()) {
   const events = {};
   for (const full of walk(join(cwd, "src"))) {
     const path = relative(cwd, full).split(sep).join("/");
-    if (!/\.tsx?$/.test(path) || isExempt(path)) continue;
+    if (!/\.tsx?$/.test(path)) continue;
     const text = readFileSync(full, "utf8");
-    const calls = countInvokes(text);
-    if (calls !== null) counts[path] = calls;
+    if (!isExempt(path)) {
+      const calls = countInvokes(text);
+      if (calls !== null) counts[path] = calls;
+    }
+    if (isEventExempt(path)) continue;
     const names = eventImports(text);
     if (names.length > 0) events[path] = names;
   }
