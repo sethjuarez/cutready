@@ -119,7 +119,7 @@ impl SCStreamOutputTrait for AudioHandler {
 }
 
 fn bytemuck_cast_f32(data: &[u8]) -> &[f32] {
-    if data.len() % 4 != 0 || data.as_ptr() as usize % 4 != 0 {
+    if !data.len().is_multiple_of(4) || !(data.as_ptr() as usize).is_multiple_of(4) {
         return &[];
     }
     // SAFETY: f32 is 4 bytes, data is aligned and length is a multiple of 4

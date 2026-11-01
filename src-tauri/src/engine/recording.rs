@@ -2193,6 +2193,8 @@ fn resolve_avfoundation_microphone(
     }
 }
 
+// Each platform ends in its own cfg block, so the `return` is only needless on some targets.
+#[allow(clippy::needless_return)]
 fn build_ffmpeg_capture_args(
     settings: &RecorderSettings,
     output_path: &Path,
@@ -2525,6 +2527,8 @@ fn build_ffmpeg_camera_args(
     build_ffmpeg_camera_args_with_mode(settings, output_path, true)
 }
 
+// Each platform ends in its own cfg block, so the `return` is only needless on some targets.
+#[allow(clippy::needless_return)]
 fn build_ffmpeg_camera_args_with_mode(
     settings: &RecorderSettings,
     output_path: &Path,

@@ -1378,6 +1378,7 @@ mod tests {
     }
 
     fn git_command() -> std::process::Command {
+        #[cfg_attr(not(target_os = "windows"), allow(unused_mut))]
         let mut command = std::process::Command::new("git");
         #[cfg(target_os = "windows")]
         {
