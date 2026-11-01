@@ -42,7 +42,25 @@ pub struct WriteGuard {
 /// Acquire the write lock of the repository containing `path`, blocking until
 /// other holders release it.
 pub fn lock(path: &Path) -> Result<WriteGuard, String> {
-    acquire(&lock_file(path), true)
+    lock_at(&lock_file(path))
+}
+
+/// Run `setup`, which may create or adopt the repository at `path`, while
+/// holding a lock keyed by the folder itself and the write lock of whatever
+/// repository holds it before and after. Concurrent setups of one folder queue
+/// on the folder key, and writers of the new repository wait once it exists.
+pub fn with_setup_lock<T>(path: &Path, setup: impl FnOnce() -> T) -> Result<T, String> {
+    let _folder = lock_at(&folder_lock_file(path))?;
+    let _before = lock(path)?;
+    let result = setup();
+    // Taking the new repository's lock waits out writers that found it
+    // mid-setup before the folder lock (and setup) is released.
+    let _after = lock(path)?;
+    Ok(result)
+}
+
+fn lock_at(file: &Path) -> Result<WriteGuard, String> {
+    acquire(file, true)
         .map(|held| WriteGuard {
             _held: held,
             _not_send: PhantomData,
@@ -60,6 +78,10 @@ pub fn lock_file(path: &Path) -> PathBuf {
             return git_dir.join("cutready").join(LOCK_FILENAME);
         }
     }
+    folder_lock_file(path)
+}
+
+fn folder_lock_file(path: &Path) -> PathBuf {
     let key = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     std::env::temp_dir().join("cutready-locks").join(format!(
         "{:016x}.lock",
@@ -194,6 +216,37 @@ mod tests {
         .unwrap();
         assert_eq!(other, cutready_core::PortErrorKind::Busy);
         drop(outer);
+    }
+
+    #[test]
+    fn setup_holds_the_folder_and_the_new_repository_locks() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("demo");
+        std::fs::create_dir_all(&target).unwrap();
+        let folder = folder_lock_file(&target);
+        let busy = |file: PathBuf| {
+            std::thread::spawn(move || {
+                RepoLock { file }
+                    .try_acquire()
+                    .map(|_| ())
+                    .unwrap_err()
+                    .kind
+            })
+            .join()
+            .unwrap()
+        };
+        let observed = with_setup_lock(&target, || {
+            git2::Repository::init(&target).unwrap();
+            let repo = lock_file(&target);
+            assert_ne!(repo, folder);
+            // The new repository's lock is taken before setup's lock is released.
+            let _held = lock(&target).unwrap();
+            (busy(folder.clone()), busy(repo))
+        })
+        .unwrap();
+        let busy_kind = cutready_core::PortErrorKind::Busy;
+        assert_eq!(observed, (busy_kind, busy_kind));
+        RepoLock { file: folder }.try_acquire().unwrap();
     }
 
     #[test]

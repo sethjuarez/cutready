@@ -2589,6 +2589,8 @@ pub fn folder_state_dir(git_dir: &Path, folder: &Path) -> PathBuf {
 /// project's agent DB, memory, tabs, and sidebar order) from `from` to `to`,
 /// which may be nested in either direction. The directory moves with one
 /// `rename`, so a database a live run holds open refuses the move up front.
+/// The repository write lock at the state root (held during the move) stays
+/// put, so a move to or from the root goes entry by entry around it.
 /// Refuses, without changing anything, when `to` already holds other state.
 /// On failure every completed step is undone.
 pub fn move_folder_state(from: &Path, to: &Path) -> Result<(), ProjectError> {
@@ -2615,15 +2617,30 @@ pub fn move_folder_state(from: &Path, to: &Path) -> Result<(), ProjectError> {
         if to.exists() {
             return Err(occupied());
         }
+        let keep_lock = from.join(WRITE_LOCK).exists();
         let parked = staging(from);
-        std::fs::rename(from, &parked).map_err(io)?;
+        if keep_lock {
+            std::fs::create_dir(&parked).map_err(io)?;
+            if let Err(err) = move_entries(from, &parked) {
+                let _ = std::fs::remove_dir(&parked);
+                return Err(io(err));
+            }
+        } else {
+            std::fs::rename(from, &parked).map_err(io)?;
+        }
         let placed = to
             .parent()
             .map_or(Ok(()), std::fs::create_dir_all)
             .and_then(|()| std::fs::rename(&parked, to));
         if let Err(err) = placed {
-            remove_empty_dirs(to.parent(), from.parent());
-            return Err(match std::fs::rename(&parked, from) {
+            let restored = if keep_lock {
+                remove_empty_dirs(to.parent(), Some(from));
+                move_entries(&parked, from).and_then(|()| std::fs::remove_dir(&parked))
+            } else {
+                remove_empty_dirs(to.parent(), from.parent());
+                std::fs::rename(&parked, from)
+            };
+            return Err(match restored {
                 Ok(()) => io(err),
                 Err(_) => ProjectError::Io(format!(
                     "Could not move project state ({err}); it is parked at {}",
@@ -2639,10 +2656,18 @@ pub fn move_folder_state(from: &Path, to: &Path) -> Result<(), ProjectError> {
         if !only_holds(to, from) {
             return Err(occupied());
         }
+        let keep_lock = to.join(WRITE_LOCK).exists();
         let parked = staging(to);
         std::fs::rename(from, &parked).map_err(io)?;
-        remove_empty_dirs(from.parent(), to.parent());
-        let placed = if to.exists() {
+        remove_empty_dirs(
+            from.parent(),
+            if keep_lock { Some(to) } else { to.parent() },
+        );
+        let placed = if keep_lock {
+            move_entries(&parked, to).map(|()| {
+                let _ = std::fs::remove_dir(&parked);
+            })
+        } else if to.exists() {
             Err(std::io::Error::other(format!(
                 "{} is not empty",
                 to.display()
@@ -2680,7 +2705,30 @@ pub fn move_folder_state(from: &Path, to: &Path) -> Result<(), ProjectError> {
     Ok(())
 }
 
-/// True when `dir` holds nothing but the directories leading to `keep`.
+const WRITE_LOCK: &str = crate::engine::write_lock::LOCK_FILENAME;
+
+/// Move every entry of `from` except the write lock into the existing `to`.
+/// On failure the entries already moved go back.
+fn move_entries(from: &Path, to: &Path) -> std::io::Result<()> {
+    let mut moved = Vec::new();
+    for entry in std::fs::read_dir(from)? {
+        let name = entry?.file_name();
+        if name == WRITE_LOCK {
+            continue;
+        }
+        if let Err(err) = std::fs::rename(from.join(&name), to.join(&name)) {
+            for name in moved.iter().rev() {
+                let _ = std::fs::rename(to.join(name), from.join(name));
+            }
+            return Err(err);
+        }
+        moved.push(name);
+    }
+    Ok(())
+}
+
+/// True when `dir` holds nothing but the write lock and the directories
+/// leading to `keep`.
 fn only_holds(dir: &Path, keep: &Path) -> bool {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return false;
@@ -2690,7 +2738,9 @@ fn only_holds(dir: &Path, keep: &Path) -> bool {
             return false;
         };
         let path = entry.path();
-        path == keep || (keep.starts_with(&path) && path.is_dir() && only_holds(&path, keep))
+        entry.file_name() == WRITE_LOCK
+            || path == keep
+            || (keep.starts_with(&path) && path.is_dir() && only_holds(&path, keep))
     })
 }
 
@@ -4765,6 +4815,41 @@ mod tests {
         seed(&base.join("b"));
         assert!(move_folder_state(&base.join("a"), &base.join("b")).is_err());
         assert!(base.join("a/agent-state.db").exists());
+    }
+
+    #[test]
+    fn move_folder_state_leaves_the_held_write_lock_at_the_root() {
+        let tmp = TempDir::new().unwrap();
+        git2::Repository::init(tmp.path()).unwrap();
+        let base = crate::engine::write_lock::lock_file(tmp.path())
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        let _guard = crate::engine::write_lock::lock(tmp.path()).unwrap();
+        std::fs::write(base.join("agent-state.db"), "root").unwrap();
+
+        let nested = base.join("demos");
+        move_folder_state(&base, &nested).unwrap();
+        assert!(base.join(WRITE_LOCK).exists());
+        assert!(!base.join("agent-state.db").exists());
+        assert_eq!(
+            std::fs::read_to_string(nested.join("agent-state.db")).unwrap(),
+            "root"
+        );
+
+        move_folder_state(&nested, &base).unwrap();
+        assert!(base.join(WRITE_LOCK).exists());
+        assert!(!nested.exists());
+        assert_eq!(
+            std::fs::read_to_string(base.join("agent-state.db")).unwrap(),
+            "root"
+        );
+        let names: Vec<_> = std::fs::read_dir(base.parent().unwrap())
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .filter(|n| n.to_string_lossy().starts_with("cutready"))
+            .collect();
+        assert_eq!(names, vec![std::ffi::OsString::from("cutready")]);
     }
 
     #[test]
