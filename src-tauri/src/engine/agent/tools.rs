@@ -905,7 +905,7 @@ pub fn execute_tool(
     {
         None
     } else {
-        match crate::engine::workspace_write_lock::lock() {
+        match crate::engine::write_lock::lock(project_root) {
             Ok(guard) => Some(guard),
             Err(error) => return ToolOutput::failed(error),
         }

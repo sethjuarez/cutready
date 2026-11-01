@@ -28,4 +28,4 @@ pub mod secret_vault;
 pub mod speech;
 pub mod video_import;
 pub mod word_export;
-pub mod workspace_write_lock;
+pub mod write_lock;
