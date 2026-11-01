@@ -12,7 +12,7 @@
     "check": "npm run check:frontend && npm run check:rust",
     "check:frontend": "npm run check:commands && tsc --noEmit && npm run typecheck:contracts && vitest run",
     "check:commands": "node scripts/check-command-parity.mjs",
-    "check:rust": "npm run check:core && npm run check:documents && cargo clippy --workspace --all-targets --locked && cargo test --workspace --locked",
+    "check:rust": "npm run check:core && npm run check:documents && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked",
     "check:documents": "node scripts/check-document-writes.mjs",
     "check:core": "node scripts/check-core-deps.mjs && cargo check -p cutready-core --target aarch64-apple-ios --locked",
     "typecheck:contracts": "tsc --noEmit -p src/contracts/tsconfig.json",

@@ -1,5 +1,8 @@
 //! Discovery: registration, upgrades and contract checks.
 
+// Test helpers are test code; a failed unwrap is a failed test.
+#![allow(clippy::unwrap_used)]
+
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 use std::process::Command;

@@ -1438,6 +1438,9 @@ fn escape_filter_text(value: &str) -> String {
 }
 
 fn escape_filter_path(path: &Path, strip_windows_drive_prefix: bool) -> String {
+    #[cfg(not(target_os = "windows"))]
+    let _ = strip_windows_drive_prefix;
+    #[cfg_attr(not(target_os = "windows"), allow(unused_mut))]
     let mut normalized = path
         .to_string_lossy()
         .replace(std::path::MAIN_SEPARATOR, "/");
@@ -1998,7 +2001,7 @@ fn background_music_filter_chain(
     }
     music_filters
         .last_mut()
-        .unwrap()
+        .expect("the music chain starts with filters")
         .outputs
         .push("music".into());
     FfmpegFilterChain::new(music_filters)

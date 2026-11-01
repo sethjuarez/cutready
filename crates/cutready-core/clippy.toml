@@ -1,5 +1,7 @@
 # cutready-core must stay host-neutral: no subprocesses, no direct filesystem,
 # clock or environment access. Go through the ports in `src/ports/` instead.
+# Clippy reads only the nearest clippy.toml, so this repeats the root settings.
+allow-unwrap-in-tests = true
 disallowed-types = [
   { path = "std::process::Command", reason = "core never spawns processes" },
   { path = "std::fs::File", reason = "use the Files port" },

@@ -295,6 +295,7 @@ async fn run_script_with_state(
 }
 
 /// Run a turn with explicit `agent_id` + sub-agent prompt registry so delegation is live.
+#[allow(clippy::too_many_arguments)]
 async fn run_delegating(
     provider: Arc<ScriptedModelPort>,
     root: &Path,
@@ -738,7 +739,7 @@ async fn cancellation_stops_native_model_port() {
     let root = project.path().to_path_buf();
     let events = Arc::new(Mutex::new(Vec::new()));
     let events_for_task = events.clone();
-    let task = tokio::spawn(async move {
+    let task = crate::util::spawn::spawn_named("prompty-script", async move {
         run_script(
             provider,
             &root,

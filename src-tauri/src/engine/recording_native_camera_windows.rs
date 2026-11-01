@@ -7,7 +7,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     mpsc, Arc,
 };
-use std::thread::{self, JoinHandle};
+use std::thread::JoinHandle;
 
 use anyhow::Context;
 use windows::core::{GUID, PCWSTR, PWSTR};
@@ -70,20 +70,21 @@ impl NativeCameraRecording {
         let (started_tx, started_rx) = mpsc::channel();
         let thread_output_path = output_path.clone();
 
-        let handle = thread::spawn(move || {
-            let result = run_native_camera_capture(
-                &friendly_name,
-                format,
-                &thread_output_path,
-                &log_path,
-                thread_stop,
-                started_tx,
-            );
-            if let Err(err) = &result {
-                let _ = append_log(&log_path, &format!("native_camera error {err:#}"));
-            }
-            result
-        });
+        let handle =
+            crate::util::spawn::spawn_thread_named("cutready-camera-capture", move || {
+                let result = run_native_camera_capture(
+                    &friendly_name,
+                    format,
+                    &thread_output_path,
+                    &log_path,
+                    thread_stop,
+                    started_tx,
+                );
+                if let Err(err) = &result {
+                    let _ = append_log(&log_path, &format!("native_camera error {err:#}"));
+                }
+                result
+            })?;
 
         match started_rx.recv() {
             Ok(Ok(())) => Ok(Self {

@@ -344,7 +344,7 @@ fn copy_note_assets(content: &str, source_root: &Path, dest_root: &Path, overwri
             let end_char = if *pattern == "](" {
                 ')'
             } else {
-                pattern.chars().last().unwrap()
+                pattern.chars().last().expect("link patterns are non-empty")
             };
             if let Some(end) = after.find(end_char) {
                 let path = after[..end].trim();

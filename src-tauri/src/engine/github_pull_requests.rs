@@ -160,11 +160,6 @@ impl GitHubPullRequestProvider {
         self
     }
 
-    #[cfg(test)]
-    pub fn repo(&self) -> &GitHubRepo {
-        &self.repo
-    }
-
     fn pulls_url(&self) -> String {
         format!(
             "{}/repos/{}/{}/pulls",

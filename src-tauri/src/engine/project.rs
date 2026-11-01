@@ -1434,15 +1434,14 @@ fn validate_rename_project_asset_destination(
                 ));
             }
         }
-        RenameAssetKind::Visual => {
+        RenameAssetKind::Visual
             if !new_path
                 .to_ascii_lowercase()
-                .starts_with(".cutready/visuals/")
-            {
-                return Err(ProjectError::Io(
-                    "Visual assets must stay under .cutready/visuals.".into(),
-                ));
-            }
+                .starts_with(".cutready/visuals/") =>
+        {
+            return Err(ProjectError::Io(
+                "Visual assets must stay under .cutready/visuals.".into(),
+            ));
         }
         _ => {}
     }
@@ -1877,7 +1876,7 @@ pub fn scan_sketches(project_root: &Path) -> Result<Vec<SketchSummary>, ProjectE
             }
         },
     )?;
-    summaries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    summaries.sort_by_key(|s| std::cmp::Reverse(s.updated_at));
     Ok(summaries)
 }
 
@@ -1900,7 +1899,7 @@ pub fn scan_storyboards(project_root: &Path) -> Result<Vec<StoryboardSummary>, P
             }
         },
     )?;
-    summaries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    summaries.sort_by_key(|s| std::cmp::Reverse(s.updated_at));
     Ok(summaries)
 }
 
@@ -1977,7 +1976,7 @@ fn scan_document_summaries(
             }
         },
     )?;
-    summaries.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    summaries.sort_by_key(|s| std::cmp::Reverse(s.updated_at));
     Ok(summaries)
 }
 
@@ -2073,12 +2072,6 @@ pub fn read_note(path: &Path) -> Result<String, ProjectError> {
         return Err(ProjectError::NotFound(path.to_string_lossy().into_owned()));
     }
     std::fs::read_to_string(path).map_err(|e| ProjectError::Io(e.to_string()))
-}
-
-/// Write a note file (plain text).
-pub fn write_note(path: &Path, content: &str, project_root: &Path) -> Result<(), ProjectError> {
-    document_writer::replace_note(project_root, path, content)?;
-    Ok(())
 }
 
 pub fn get_note_lock(
@@ -3819,10 +3812,10 @@ mod tests {
         row.screenshot = Some(".cutready/screenshots/old.png".into());
         sketch.rows.push(row);
         write_sketch(&sketch, &root.join("shot.sk"), root).unwrap();
-        write_note(
+        document_writer::replace_note(
+            root,
             &root.join("notes.md"),
             r#"before ![](.cutready/screenshots/old.png "title") after <img src=".cutready/screenshots/old.png">"#,
-            root,
         )
         .unwrap();
 

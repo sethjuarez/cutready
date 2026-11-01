@@ -21,3 +21,6 @@ thiserror = "2"
 pdf-extract = "0.8"
 quick-xml = "0.37"
 zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[lints]
+workspace = true

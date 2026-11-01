@@ -5293,10 +5293,10 @@ mod tests {
         )
         .unwrap();
         std::fs::write(source_root.join("images/logo.png"), b"png").unwrap();
-        project::write_note(
+        crate::engine::document_writer::replace_note(
+            &source_root,
             &source_root.join("notes.md"),
             "![Logo](images/logo.png \"Company Logo\")\n![Missing](images/missing.png)",
-            &source_root,
         )
         .unwrap();
 

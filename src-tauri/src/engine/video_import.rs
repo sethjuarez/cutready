@@ -1974,8 +1974,7 @@ This is a short-form WebVTT cue.
     #[test]
     fn resolves_planning_context_references_with_caps() {
         let root = tempfile::tempdir().unwrap();
-        let long_note = std::iter::repeat("context")
-            .take(MAX_PLANNING_CONTEXT_REFERENCE_CHARS)
+        let long_note = std::iter::repeat_n("context", MAX_PLANNING_CONTEXT_REFERENCE_CHARS)
             .collect::<Vec<_>>()
             .join(" ");
         std::fs::write(root.path().join("launch-plan.md"), long_note).unwrap();

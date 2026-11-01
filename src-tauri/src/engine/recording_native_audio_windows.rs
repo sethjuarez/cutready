@@ -364,7 +364,7 @@ impl PcmWavWriter {
 
     fn write_float32_stereo(&mut self, bytes: &[u8], gain: f32) -> anyhow::Result<()> {
         let mut pcm = Vec::with_capacity(bytes.len() / 2);
-        for sample in bytes.chunks_exact(4) {
+        for sample in bytes.as_chunks::<4>().0 {
             let value = f32::from_le_bytes([sample[0], sample[1], sample[2], sample[3]]);
             let clipped = (value * gain).clamp(-1.0, 1.0);
             let sample = (clipped * i16::MAX as f32).round() as i16;

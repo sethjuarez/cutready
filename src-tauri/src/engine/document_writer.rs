@@ -694,7 +694,14 @@ mod tests {
                             "index": null,
                             "item": { "type": "sketch_ref", "path": format!("s{t}-{i}.sk") },
                         });
-                        let write = || edit(root, "story.sb", Expected::Unchecked, &[op.clone()]);
+                        let write = || {
+                            edit(
+                                root,
+                                "story.sb",
+                                Expected::Unchecked,
+                                std::slice::from_ref(&op),
+                            )
+                        };
                         if t % 2 == 0 {
                             write().unwrap();
                         } else {

@@ -1,5 +1,8 @@
 //! The `cutready-cli` binary against a temp project with the app closed.
 
+// Test helpers are test code; a failed unwrap is a failed test.
+#![allow(clippy::unwrap_used)]
+
 mod common;
 
 use std::io::Write;

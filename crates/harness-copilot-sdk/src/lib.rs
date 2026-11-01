@@ -659,7 +659,7 @@ fn build_custom_agents(
 /// Title-case a persona id for a human-friendly display name (`writer` ->
 /// `Writer`). Non-alphanumeric separators are preserved as spaces.
 fn title_case(id: &str) -> String {
-    id.split(|c: char| c == '-' || c == '_' || c == ' ')
+    id.split(['-', '_', ' '])
         .filter(|word| !word.is_empty())
         .map(|word| {
             let mut chars = word.chars();

@@ -1,5 +1,8 @@
 //! Review, Keep and Undo over MCP and the `cutready-cli` binary.
 
+// Test helpers are test code; a failed unwrap is a failed test.
+#![allow(clippy::unwrap_used)]
+
 mod common;
 
 use std::io::Write;

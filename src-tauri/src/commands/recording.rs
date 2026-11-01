@@ -742,7 +742,7 @@ fn read_recent_wav_level(path: &Path) -> std::io::Result<RecordingAudioLevel> {
     let mut peak = 0.0f32;
     let mut sum = 0.0f64;
     let mut count = 0u64;
-    for chunk in bytes.chunks_exact(2) {
+    for chunk in bytes.as_chunks::<2>().0 {
         let sample = i16::from_le_bytes([chunk[0], chunk[1]]) as f32 / i16::MAX as f32;
         let abs = sample.abs();
         peak = peak.max(abs);
