@@ -82,11 +82,35 @@ pub fn lock_file(path: &Path) -> PathBuf {
 }
 
 fn folder_lock_file(path: &Path) -> PathBuf {
-    let key = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    std::env::temp_dir().join("cutready-locks").join(format!(
-        "{:016x}.lock",
-        fnv1a(key.to_string_lossy().as_bytes())
-    ))
+    let key = folder_key(path).to_string_lossy().into_owned();
+    // Windows paths are case-insensitive.
+    #[cfg(windows)]
+    let key = key.to_lowercase();
+    std::env::temp_dir()
+        .join("cutready-locks")
+        .join(format!("{:016x}.lock", fnv1a(key.as_bytes())))
+}
+
+/// `path` made absolute through its nearest existing ancestor, so the key is
+/// the same before and after setup creates the folder.
+fn folder_key(path: &Path) -> PathBuf {
+    let mut existing = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+    let mut missing = Vec::new();
+    while !existing.exists() {
+        match (
+            existing.file_name().map(ToOwned::to_owned),
+            existing.parent(),
+        ) {
+            (Some(name), Some(parent)) => {
+                missing.push(name);
+                existing = parent.to_path_buf();
+            }
+            _ => break,
+        }
+    }
+    let mut key = std::fs::canonicalize(&existing).unwrap_or(existing);
+    key.extend(missing.iter().rev());
+    key
 }
 
 /// The lock as a core [`Lock`] port, so `EditSession` takes the same
@@ -247,6 +271,16 @@ mod tests {
         let busy_kind = cutready_core::PortErrorKind::Busy;
         assert_eq!(observed, (busy_kind, busy_kind));
         RepoLock { file: folder }.try_acquire().unwrap();
+    }
+
+    #[test]
+    fn the_folder_key_survives_creating_the_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("new").join("demo");
+        let before = folder_lock_file(&target);
+        std::fs::create_dir_all(&target).unwrap();
+        assert_eq!(folder_lock_file(&target), before);
+        assert_eq!(folder_lock_file(&target.join("..").join("demo")), before);
     }
 
     #[test]
