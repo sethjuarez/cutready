@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { errorMessage, MAX_ACTIVITY_ENTRIES, useAppStore } from "../stores/appStore";
+import { useChatStore } from "../stores/chatStore";
 
 describe("errorMessage", () => {
   it("uses the message field from structured command errors", () => {
@@ -28,24 +29,24 @@ describe("activity log", () => {
 
 describe("chat persistence", () => {
   it("keeps messages attached to their database-backed session", () => {
-    useAppStore.setState({
+    useChatStore.setState({
       chatMessages: [],
       chatSessionPath: "session-123",
     });
 
-    useAppStore.getState().setChatMessages([{ role: "user", content: "Plan the demo" }]);
+    useChatStore.getState().setChatMessages([{ role: "user", content: "Plan the demo" }]);
 
-    expect(useAppStore.getState().chatMessages).toEqual([{ role: "user", content: "Plan the demo" }]);
-    expect(useAppStore.getState().chatSessionPath).toBe("session-123");
+    expect(useChatStore.getState().chatMessages).toEqual([{ role: "user", content: "Plan the demo" }]);
+    expect(useChatStore.getState().chatSessionPath).toBe("session-123");
   });
 
   it("keeps a send error when the failed turn's messages are kept", () => {
-    useAppStore.setState({ chatMessages: [], chatError: null });
+    useChatStore.setState({ chatMessages: [], chatError: null });
 
-    useAppStore.getState().setChatError("Provider returned 500");
-    useAppStore.getState().setChatMessages([{ role: "user", content: "Plan the demo" }]);
+    useChatStore.getState().setChatError("Provider returned 500");
+    useChatStore.getState().setChatMessages([{ role: "user", content: "Plan the demo" }]);
 
-    expect(useAppStore.getState().chatError).toBe("Provider returned 500");
+    expect(useChatStore.getState().chatError).toBe("Provider returned 500");
   });
 
   it("restores a stored transcript into the active conversation", () => {
@@ -54,9 +55,9 @@ describe("chat persistence", () => {
       { role: "assistant", content: "Restored." },
     ];
 
-    useAppStore.getState().restoreChatSession("restored-session", transcript);
+    useChatStore.getState().restoreChatSession("restored-session", transcript);
 
-    expect(useAppStore.getState().chatSessionPath).toBe("restored-session");
-    expect(useAppStore.getState().chatMessages).toEqual(transcript);
+    expect(useChatStore.getState().chatSessionPath).toBe("restored-session");
+    expect(useChatStore.getState().chatMessages).toEqual(transcript);
   });
 });

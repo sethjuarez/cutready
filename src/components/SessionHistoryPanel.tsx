@@ -3,6 +3,7 @@ import { History, MessageSquare, MoreHorizontal, RefreshCw, Sparkles, Trash2 } f
 import { invoke } from "../services/tauri";
 import { commandErrorText } from "../services/commandErrors";
 import { useAppStore } from "../stores/appStore";
+import { useChatStore } from "../stores/chatStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import { useToastStore } from "../stores/toastStore";
 import { getContributorIdentity } from "../services/identity";
@@ -40,8 +41,8 @@ export function sessionSourcePathLabel(sourcePath: string): string {
 }
 
 export function SessionHistoryPanel({ onOpenChat }: { onOpenChat: () => void }) {
-  const restoreChatSession = useAppStore((state) => state.restoreChatSession);
-  const newChatSession = useAppStore((state) => state.newChatSession);
+  const restoreChatSession = useChatStore((state) => state.restoreChatSession);
+  const newChatSession = useChatStore((state) => state.newChatSession);
   const loadChatArtifacts = useAppStore((state) => state.loadChatArtifacts);
   const openChatArtifact = useAppStore((state) => state.openChatArtifact);
   const refreshChangedFiles = useVersioningStore((state) => state.refreshChangedFiles);
@@ -115,7 +116,7 @@ export function SessionHistoryPanel({ onOpenChat }: { onOpenChat: () => void }) 
     try {
       await invoke("delete_chat_session", { sessionId });
       setSessions((current) => current.filter((candidate) => candidate.session_id !== sessionId));
-      if (useAppStore.getState().chatSessionPath === sessionId) {
+      if (useChatStore.getState().chatSessionPath === sessionId) {
         newChatSession();
       }
       window.dispatchEvent(new CustomEvent("cutready:chat-sessions-updated"));
@@ -176,7 +177,7 @@ export function SessionHistoryPanel({ onOpenChat }: { onOpenChat: () => void }) 
       await invoke("update_note", { relativePath, content: `${JSON.stringify(artifact, null, 2)}\n` });
       await invoke("delete_chat_session", { sessionId });
       setSessions((current) => current.filter((candidate) => candidate.session_id !== sessionId));
-      if (useAppStore.getState().chatSessionPath === sessionId) {
+      if (useChatStore.getState().chatSessionPath === sessionId) {
         newChatSession();
       }
       await loadChatArtifacts();

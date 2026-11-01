@@ -10,6 +10,7 @@ import { projectRelativeScreenshotPath } from "../utils/projectImage";
 import { contentTypeTone } from "../utils/contentTypeTheme";
 
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
+import { useChatStore } from "../stores/chatStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import { useAiApplyGateStore } from "../stores/aiApplyGateStore";
 import { useToastStore } from "../stores/toastStore";
@@ -770,8 +771,8 @@ export function ChatPanel({ focusMode = false }: { focusMode?: boolean }) {
 
 function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const { settings, updateSetting, loaded: settingsLoaded, oauthRefreshPending } = useSettings();
-  const chatFocusMode = useAppStore((s) => s.chatFocusMode);
-  const setChatFocusMode = useAppStore((s) => s.setChatFocusMode);
+  const chatFocusMode = useChatStore((s) => s.chatFocusMode);
+  const setChatFocusMode = useChatStore((s) => s.setChatFocusMode);
   const currentProject = useAppStore((s) => s.currentProject);
   const sketches = useAppStore((s) => s.sketches);
   const notes = useAppStore((s) => s.notes);
@@ -780,25 +781,25 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const activeSketchPath = useAppStore((s) => s.activeSketchPath);
   const activeStoryboardPath = useAppStore((s) => s.activeStoryboardPath);
   const activeNotePath = useAppStore((s) => s.activeNotePath);
-  const messages = useAppStore((s) => s.chatMessages);
-  const setChatMessages = useAppStore((s) => s.setChatMessages);
+  const messages = useChatStore((s) => s.chatMessages);
+  const setChatMessages = useChatStore((s) => s.setChatMessages);
   const inlineToolActivity = useMemo(() => buildInlineToolActivityIndex(messages), [messages]);
   const deleteMessage = useCallback((index: number, message: ChatMessage) => {
-    const current = useAppStore.getState().chatMessages;
+    const current = useChatStore.getState().chatMessages;
     // The row's index can go stale if history changed after render; fall back to identity.
     const target = current[index] === message ? index : current.indexOf(message);
     if (target < 0) return;
     setChatMessages(current.filter((_, idx) => idx !== target));
   }, [setChatMessages]);
-  const loading = useAppStore((s) => s.chatLoading);
-  const setChatLoading = useAppStore((s) => s.setChatLoading);
-  const error = useAppStore((s) => s.chatError);
-  const setChatError = useAppStore((s) => s.setChatError);
-  const input = useAppStore((s) => s.chatInputDraft);
-  const setInput = useAppStore((s) => s.setChatInputDraft);
+  const loading = useChatStore((s) => s.chatLoading);
+  const setChatLoading = useChatStore((s) => s.setChatLoading);
+  const error = useChatStore((s) => s.chatError);
+  const setChatError = useChatStore((s) => s.setChatError);
+  const input = useChatStore((s) => s.chatInputDraft);
+  const setInput = useChatStore((s) => s.setChatInputDraft);
   const addActivityEntries = useAppStore((s) => s.addActivityEntries);
-  const chatSessionPath = useAppStore((s) => s.chatSessionPath);
-  const newChatSession = useAppStore((s) => s.newChatSession);
+  const chatSessionPath = useChatStore((s) => s.chatSessionPath);
+  const newChatSession = useChatStore((s) => s.newChatSession);
   const loadSketches = useAppStore((s) => s.loadSketches);
   const loadNotes = useAppStore((s) => s.loadNotes);
   const loadChatArtifacts = useAppStore((s) => s.loadChatArtifacts);
@@ -809,7 +810,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const openNote = useAppStore((s) => s.openNote);
   const openChatArtifact = useAppStore((s) => s.openChatArtifact);
   const openStoryboard = useAppStore((s) => s.openStoryboard);
-  const pendingChatPrompt = useAppStore((s) => s.pendingChatPrompt);
+  const pendingChatPrompt = useChatStore((s) => s.pendingChatPrompt);
   const showToast = useToastStore((s) => s.show);
 
   const [references, setReferences] = useState<FileReference[]>([]);
@@ -823,12 +824,12 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   const [showAgentPicker, setShowAgentPicker] = useState(false);
   const [promotingChat, setPromotingChat] = useState(false);
   const [expandedWebRef, setExpandedWebRef] = useState<string | null>(null);
-  const streamingText = useAppStore((s) => s.chatStreamingText);
-  const streamingThinking = useAppStore((s) => s.chatStreamingThinking);
-  const streamingStatus = useAppStore((s) => s.chatStreamingStatus);
-  const streamingDrafts = useAppStore((s) => s.chatStreamingDrafts);
-  const setChatStreamingState = useAppStore((s) => s.setChatStreamingState);
-  const resetChatStreaming = useAppStore((s) => s.resetChatStreaming);
+  const streamingText = useChatStore((s) => s.chatStreamingText);
+  const streamingThinking = useChatStore((s) => s.chatStreamingThinking);
+  const streamingStatus = useChatStore((s) => s.chatStreamingStatus);
+  const streamingDrafts = useChatStore((s) => s.chatStreamingDrafts);
+  const setChatStreamingState = useChatStore((s) => s.setChatStreamingState);
+  const resetChatStreaming = useChatStore((s) => s.resetChatStreaming);
 
   // Listen for streaming agent events from the backend
   const streamingRef = useRef("");
@@ -923,7 +924,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           setChatStreamingState({ chatStreamingStatus: ev.message ?? "" });
           // Compaction status events get injected as visible system messages in chat
           if (ev.message && ev.message.startsWith("Compacting context")) {
-            setChatMessages([...useAppStore.getState().chatMessages, { role: "system", content: ev.message! }]);
+            setChatMessages([...useChatStore.getState().chatMessages, { role: "system", content: ev.message! }]);
           }
           addActivityEntries([{
             id: crypto.randomUUID(),
@@ -1424,7 +1425,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     const newMessages = [...messages, userMsg];
     const sessionId = chatSessionPath ?? crypto.randomUUID();
     if (!chatSessionPath) {
-      useAppStore.setState({ chatSessionPath: sessionId });
+      useChatStore.setState({ chatSessionPath: sessionId });
     }
     // For silent sends, don't update the displayed chat with the user message
     if (!silent) {
@@ -1725,7 +1726,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   useEffect(() => {
     if (pendingChatPrompt) {
       const { text, silent, agent } = pendingChatPrompt;
-      useAppStore.setState({ pendingChatPrompt: null });
+      useChatStore.setState({ pendingChatPrompt: null });
       handleSendRef.current(text, { silent, agent });
     }
   }, [pendingChatPrompt]);
