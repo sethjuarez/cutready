@@ -2,6 +2,8 @@
 
 > _Technical design for the proposed solution using Tauri v2._
 
+Key decisions and what enforces them are recorded as [architecture decision records](../adr/README.md).
+
 ---
 
 ## High-Level Architecture
