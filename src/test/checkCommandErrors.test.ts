@@ -3,8 +3,10 @@ import {
   checkCommandErrors,
   commands,
   genericArgs,
+  resolveAlias,
   returnsStringError,
   stringCommands,
+  typeAliases,
   updateCaps,
   // @ts-expect-error - plain .mjs script without type declarations
 } from "../../scripts/check-command-errors.mjs";
@@ -28,6 +30,63 @@ describe("check-command-errors", () => {
     expect(returnsStringError("Result<String, CmdError>")).toBe(false);
     expect(returnsStringError("contract::TauriCommandResult<String>")).toBe(false);
     expect(returnsStringError("Vec<String>")).toBe(false);
+  });
+
+  it("treats a leading :: and spaced paths like any other path", () => {
+    expect(returnsStringError("::std::result::Result<(), ::std::string::String>")).toBe(true);
+    expect(returnsStringError("std :: result :: Result<u8, :: std :: string :: String>")).toBe(true);
+    expect(returnsStringError("::std::result::Result<String, ::cutready_contracts::CmdError>")).toBe(false);
+  });
+
+  it("resolves module-level aliases for the error or the whole result", () => {
+    const text = [
+      "type E = String;",
+      "pub(crate) type R<T> = Result<T, String>;",
+      "pub type Alias<T> = std::result::Result<T, E>;",
+      "type Typed<T> = Result<T, CmdError>;",
+      "impl TryFrom<u8> for Thing {",
+      "    type Error = String;",
+      "}",
+      "#[cfg(test)]",
+      "mod tests {",
+      "    type Ok = String;",
+      "}",
+    ].join("\n");
+    const aliases = typeAliases(text);
+    expect(Object.keys(aliases).sort()).toEqual(["Alias", "E", "R", "Typed"]);
+    expect(resolveAlias("R<Vec<u8>>", aliases)).toBe("Result<Vec<u8>, String>");
+    expect(returnsStringError("Result<(), E>", aliases)).toBe(true);
+    expect(returnsStringError("R<Option<String>>", aliases)).toBe(true);
+    expect(returnsStringError("self::R<()>", aliases)).toBe(true);
+    expect(returnsStringError("Alias<u8>", aliases)).toBe(true);
+    expect(returnsStringError("Typed<String>", aliases)).toBe(false);
+    expect(returnsStringError("Result<(), Error>", aliases)).toBe(false);
+    expect(returnsStringError("Result<(), E>")).toBe(false);
+  });
+
+  it("counts commands that hide the String error behind an alias", () => {
+    const text = [
+      "type E = String;",
+      "type R<T> = Result<T, String>;",
+      "#[tauri::command]",
+      "pub fn by_error() -> Result<(), E> { Ok(()) }",
+      "#[tauri::command]",
+      "pub fn by_result() -> R<u8> { Ok(1) }",
+      "#[tauri::command]",
+      "pub fn rooted() -> ::std::result::Result<(), ::std::string::String> { Ok(()) }",
+      "#[tauri::command]",
+      "pub fn multiline(",
+      "    a: u8,",
+      ") -> std::result::Result<",
+      "    Vec<u8>,",
+      "    String,",
+      "> {",
+      "    Ok(vec![a])",
+      "}",
+      "#[tauri::command]",
+      "pub fn typed() -> Result<(), CmdError> { Ok(()) }",
+    ].join("\n");
+    expect(stringCommands(text)).toEqual(["by_error", "by_result", "rooted", "multiline"]);
   });
 
   it("finds tauri and auditaur commands outside tests, comments and strings", () => {

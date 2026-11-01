@@ -26,15 +26,22 @@ impl CmdError {
             }),
         }
     }
+
+    /// Lifts a serialized Draftline `TauriCommandError` back into the envelope,
+    /// keeping its code, message and details. Call this only where the text is
+    /// known to be such a refusal; anything that doesn't load as one stays
+    /// `command_failed` with the text verbatim.
+    pub fn from_draftline_envelope(message: impl Into<String>) -> Self {
+        let message = message.into();
+        envelope(&message).unwrap_or_else(|| Self::failed(message))
+    }
 }
 
-/// A plain message becomes `command_failed` with that exact text. A message
-/// that is itself a serialized envelope (`{"code":…,"message":…}`), which
-/// some engine refusals still return as `String`, keeps its code, message
-/// and details instead of being wrapped as opaque text.
+/// Any message becomes `command_failed` with that exact text, even when it
+/// happens to look like JSON. See [`CmdError::from_draftline_envelope`].
 impl From<String> for CmdError {
     fn from(message: String) -> Self {
-        envelope(&message).unwrap_or_else(|| Self::failed(message))
+        Self::failed(message)
     }
 }
 
@@ -86,8 +93,21 @@ mod tests {
     }
 
     #[test]
+    fn json_shaped_messages_stay_command_failed_verbatim() {
+        let raw = r#"{"code":"rate_limit","message":"Retry later","request_id":"abc"}"#;
+        for error in [CmdError::from(raw), CmdError::from(raw.to_string())] {
+            assert_eq!(error.code, CmdErrorCode::CommandFailed);
+            assert_eq!(error.message, raw);
+            assert!(error.details.is_none());
+        }
+        let not_an_envelope = CmdError::from_draftline_envelope(r#"{"code":1}"#);
+        assert_eq!(not_an_envelope.code, CmdErrorCode::CommandFailed);
+        assert_eq!(not_an_envelope.message, r#"{"code":1}"#);
+    }
+
+    #[test]
     fn serialized_envelopes_keep_their_code_and_details() {
-        let error = CmdError::from(
+        let error = CmdError::from_draftline_envelope(
             r#"{"code":"folder_is_elsewhere","message":"Elsewhere","details":{"folder":"cutready","repository":null}}"#
                 .to_string(),
         );

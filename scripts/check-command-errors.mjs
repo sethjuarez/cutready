@@ -52,8 +52,14 @@ function closeOf(code, open, pairs = { "(": ")", "<": ">", "[": "]", "{": "}" })
   return -1;
 }
 
+/** `type` with spacing around `::` removed and any leading `::` dropped. */
+export function normalizeType(type) {
+  return type.trim().replace(/\s*::\s*/g, "::").replace(/^::/, "");
+}
+
 /** Top-level comma-separated generic arguments of `Name<...>` in `type`, or null. */
 export function genericArgs(type, name) {
+  type = normalizeType(type);
   const match = new RegExp(`^(?:[\\w:]*::)?${name}\\s*<`).exec(type);
   if (!match) return null;
   const open = match[0].length - 1;
@@ -77,10 +83,56 @@ export function genericArgs(type, name) {
   return args.filter(Boolean);
 }
 
-/** True when a return type is `Result<T, String>`. */
-export function returnsStringError(returnType) {
-  const args = genericArgs(returnType.trim(), "Result");
-  return args !== null && args.length === 2 && /^(?:(?:std::)?string::)?String$/.test(args[1]);
+/** Module-level `type Name<P..> = Target;` aliases in masked `code`: {name: {params, target}}. */
+function aliasesIn(code) {
+  const aliases = {};
+  const alias = /\b(?:pub(?:\s*\([^)]*\))?\s+)?type\s+(\w+)\s*(<[^=]*>)?\s*=\s*([^;]+);/g;
+  let depth = 0;
+  let scanned = 0;
+  let match;
+  while ((match = alias.exec(code))) {
+    for (; scanned < match.index; scanned += 1) {
+      if (code[scanned] === "{") depth += 1;
+      else if (code[scanned] === "}") depth -= 1;
+    }
+    if (depth !== 0) continue;
+    const params = match[2]
+      ? match[2]
+          .slice(1, -1)
+          .split(",")
+          .map((param) => /^\s*(\w+)/.exec(param)?.[1])
+          .filter(Boolean)
+      : [];
+    aliases[match[1]] = { params, target: normalizeType(match[3]) };
+  }
+  return aliases;
+}
+
+/** Module-level type aliases declared outside tests in a Rust source file. */
+export function typeAliases(text) {
+  return aliasesIn(maskTests(maskNonCode(text)));
+}
+
+/** `type` with a module-level alias at its head expanded (generics substituted). */
+export function resolveAlias(type, aliases = {}, depth = 0) {
+  type = normalizeType(type).replace(/^(?:(?:self|crate|super)::)+/, "");
+  const head = /^(\w+)\s*(?=<|$)/.exec(type);
+  const alias = head && aliases[head[1]];
+  if (!alias || depth > 8) return type;
+  const args = genericArgs(type, head[1]) ?? [];
+  let target = alias.target;
+  alias.params.forEach((param, index) => {
+    if (args[index] !== undefined) target = target.replace(new RegExp(`\\b${param}\\b`, "g"), args[index]);
+  });
+  return resolveAlias(target, aliases, depth + 1);
+}
+
+/** True when a return type is `Result<T, String>`, looking through module-level aliases. */
+export function returnsStringError(returnType, aliases = {}) {
+  const args = genericArgs(resolveAlias(returnType, aliases), "Result");
+  return (
+    args !== null && args.length === 2 && /^(?:(?:std::)?string::)?String$/.test(resolveAlias(args[1], aliases))
+  );
 }
 
 /** Every `#[tauri::command]`/`#[auditaur_command]` fn outside tests: `{ name, returnType }`. */
@@ -109,8 +161,9 @@ export function commands(text) {
 
 /** Names of commands in `text` that still return `Result<_, String>`. */
 export function stringCommands(text) {
+  const aliases = typeAliases(text);
   return commands(text)
-    .filter((command) => returnsStringError(command.returnType))
+    .filter((command) => returnsStringError(command.returnType, aliases))
     .map((command) => command.name);
 }
 

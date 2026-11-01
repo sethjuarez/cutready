@@ -22,10 +22,27 @@ fn draftline_refusals_reach_the_frontend_with_their_code_and_details() {
         "message": "This repository's CutReady project lives in 'cutready'.",
         "details": { "folder": "cutready" },
     });
-    let error = cmd_err(crate::engine::project::ProjectError::Draftline(
+    let error = CmdError::from(crate::engine::project::ProjectError::Draftline(
         refusal.to_string(),
     ));
     assert_eq!(rejection(&error), refusal);
+}
+
+#[test]
+fn json_shaped_provider_failures_keep_their_full_text() {
+    let raw = r#"{"code":"rate_limit","message":"Retry later","request_id":"abc"}"#;
+    for error in [cmd_err(raw), CmdError::from(raw.to_string())] {
+        assert_eq!(
+            rejection(&error),
+            serde_json::json!({ "code": "command_failed", "message": raw })
+        );
+    }
+    let io = crate::engine::project::ProjectError::Io(raw.to_string());
+    let old_text = io.to_string();
+    assert_eq!(
+        rejection(&CmdError::from(io)),
+        serde_json::json!({ "code": "command_failed", "message": old_text })
+    );
 }
 
 #[test]

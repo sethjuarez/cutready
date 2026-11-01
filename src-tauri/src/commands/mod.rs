@@ -32,7 +32,20 @@ pub use cutready_contracts::CmdError;
 /// `map_err` adapter for failures that were previously stringified with
 /// `e.to_string()`; the message is unchanged.
 pub(crate) fn cmd_err(error: impl ToString) -> CmdError {
-    CmdError::from(error.to_string())
+    CmdError::failed(error.to_string())
+}
+
+/// The one Draftline boundary: opening or initializing a project may refuse
+/// with a serialized Draftline envelope, which keeps its code and details.
+impl From<crate::engine::project::ProjectError> for CmdError {
+    fn from(error: crate::engine::project::ProjectError) -> Self {
+        match error {
+            crate::engine::project::ProjectError::Draftline(json) => {
+                CmdError::from_draftline_envelope(json)
+            }
+            other => CmdError::failed(other.to_string()),
+        }
+    }
 }
 
 #[cfg(test)]

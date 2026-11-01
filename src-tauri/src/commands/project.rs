@@ -89,7 +89,7 @@ pub async fn create_project_folder(
     let root = PathBuf::from(&path);
     let view =
         crate::engine::write_lock::with_setup_lock(&root, || project::init_project_folder(&root))?
-            .map_err(|e| e.to_string())?;
+            .map_err(CmdError::from)?;
 
     // Set repo view (new project = repo root is project root)
     {
@@ -125,7 +125,7 @@ pub async fn open_project_folder(
     let (repo, projects) = crate::engine::write_lock::with_setup_lock(&root, || {
         project::open_repo_with(&root, adopt.unwrap_or(false))
     })?
-    .map_err(|e| e.to_string())?;
+    .map_err(CmdError::from)?;
     {
         let mut repo_lock = state.current_repo.lock().map_err(|e| e.to_string())?;
         *repo_lock = Some(repo);
