@@ -46,7 +46,7 @@ npx vitest run src/contracts
 
 A vector with no adapter fails unless it is waived. A waived vector that starts passing also fails, so remove waivers as adapters land.
 
-The TypeScript harness waives the document vectors: the frontend sends edits to the Rust backend over IPC and never saves `.sk` or `.sb` files itself. The Swift harness waives `StoryboardDocument` vectors while the companion remains view-only for storyboards, and `EditService` vectors while it keeps its own positional sketch edits.
+The TypeScript and Swift harnesses waive the `EditService` and `StoryboardDocument` vectors, and TypeScript also waives the `SketchDocument` vectors, deferred until the canvas and iOS phases. Both runtimes will then implement the pure edit layer (decode, typed ops, canonical save, versions, undo) and pass these same vectors. Only the write path (write lock, recovery, op log, Draftline) stays Rust-only. Waivers are keyed by operation, so they also cover the golden-seeded `golden_*` cases.
 
 The `Contracts` workflow (`.github/workflows/contracts.yml`) runs `npm run check`, the Rust, Swift, and TypeScript conformance suites, and the sketch model regressions on changes to the contract or any binding.
 
@@ -54,7 +54,7 @@ The `Contracts` workflow (`.github/workflows/contracts.yml`) runs `npm run check
 
 Desktop is the reference for `.sb` files. `StoryboardDocument.roundTrip` pins the canonical save form; `StoryboardDocument.upgrade` converts older shapes before decode. Desktop runs the upgrade while scanning storyboards and opening one, then rewrites files that changed. It moves legacy `sketches` into `items`, maps item type `sketch` to `sketch_ref`, and fills canonical defaults. Unknown top-level fields are preserved.
 
-The desktop TypeScript harness and the Swift harness currently waive these vectors because neither runtime owns storyboard persistence.
+The desktop TypeScript harness and the Swift harness waive these vectors, deferred until the canvas and iOS phases (see [Workflow](#workflow)).
 
 ## Canonical save form
 
@@ -111,6 +111,8 @@ Desktop is the reference. Every runtime must save `.sk` files this way. Fields t
 | Empty batch | Returns the sketch unchanged, including `updated_at` |
 
 `EditService.documentVersion` returns `sha256:<hex>` of a file's bytes. `EditService.editDocument` is the host write path for every sketch, storyboard and note. Given the kind, the file on disk (`null` when absent), the version the ops were computed against (`null` to expect no file) and the ops, it fails with `stale_document` on a mismatch (with `details.current_version` when the file exists). A missing file must start with its kind's `replace_*` op. Otherwise it returns the canonical bytes to write and their version; for notes it also returns `note_locked` and `note_lock_changed`, since hosts keep note locks outside the file. Hosts only read and write the bytes.
+
+`vectors/build.mjs` also seeds `golden_*` cases from the golden files in `crates/cutready-core/tests/golden/`: each desktop edit there is replayed as `EditOp` values, so `editDocument` must produce the golden bytes and version, `undoDocument` must restore the input, and `documentVersion` must hash every golden document. The builder lists the golden cases it skips and why.
 
 ## Timing
 

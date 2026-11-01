@@ -4,10 +4,11 @@ import { parseDurationSeconds } from "../utils/documentMetadata";
 import { promoteChatArtifact, roundTripChatArtifact } from "./chatPromotion";
 import type { VectorAdapter } from "./generated/tests/vector-runner";
 
-const backendOwnsDocuments =
-  "The desktop frontend never decodes, edits, or saves .sk or .sb files; it sends edits " +
-  "over IPC to the Rust backend, whose production path runs these vectors in " +
-  "crates/cutready-contracts.";
+const deferredUntilCanvasAndIos =
+  "Deferred until the canvas and iOS phases: the frontend will implement the pure edit " +
+  "layer (decode, typed ops, canonical save, versions, undo) and pass these same vectors. " +
+  "Only the write path (lock, recovery, op log, Draftline) stays Rust-only. Until then " +
+  "crates/cutready-contracts runs them against cutready-core.";
 
 export const vectorAdapters: Record<string, VectorAdapter> = {
   "ChatArtifactDocument.promote": {
@@ -31,14 +32,14 @@ export const vectorAdapters: Record<string, VectorAdapter> = {
 };
 
 export const vectorWaivers: Record<string, string> = {
-  "EditService.applySketchOps": backendOwnsDocuments,
-  "EditService.documentVersion": backendOwnsDocuments,
-  "EditService.applyStoryboardOps": backendOwnsDocuments,
-  "EditService.editDocument": backendOwnsDocuments,
-  "EditService.undoDocument": backendOwnsDocuments,
-  "SketchDocument.roundTrip": backendOwnsDocuments,
-  "SketchDocument.updateRowText": backendOwnsDocuments,
-  "SketchDocument.reorderRows": backendOwnsDocuments,
-  "StoryboardDocument.roundTrip": backendOwnsDocuments,
-  "StoryboardDocument.upgrade": backendOwnsDocuments,
+  "EditService.applySketchOps": deferredUntilCanvasAndIos,
+  "EditService.documentVersion": deferredUntilCanvasAndIos,
+  "EditService.applyStoryboardOps": deferredUntilCanvasAndIos,
+  "EditService.editDocument": deferredUntilCanvasAndIos,
+  "EditService.undoDocument": deferredUntilCanvasAndIos,
+  "SketchDocument.roundTrip": deferredUntilCanvasAndIos,
+  "SketchDocument.updateRowText": deferredUntilCanvasAndIos,
+  "SketchDocument.reorderRows": deferredUntilCanvasAndIos,
+  "StoryboardDocument.roundTrip": deferredUntilCanvasAndIos,
+  "StoryboardDocument.upgrade": deferredUntilCanvasAndIos,
 };

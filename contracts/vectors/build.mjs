@@ -12,7 +12,7 @@
 // - chat artifacts omit a blank `summary` and empty `tool_uses`.
 // Floats are non-integral binary fractions so every runtime prints them identically.
 import { createHash } from "node:crypto";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -1370,9 +1370,9 @@ const documentVersionVectors = [
 const sha = (content) => `sha256:${createHash("sha256").update(content, "utf8").digest("hex")}`;
 
 // EditService.editDocument. Sketch and storyboard bytes depend on serde's
-// exact output, so content-changing writes for them are pinned by the apply*Ops
-// vectors plus cutready-core unit tests; these pin the version gate, creates,
-// the no-op path and notes, whose bytes are the content itself.
+// exact output, so content-changing writes for them are pinned by the
+// golden-seeded cases below; these pin the version gate, creates, the no-op
+// path and notes, whose bytes are the content itself.
 const onDisk = JSON.stringify(unlockedFixture);
 const lockedOnDisk = JSON.stringify({ ...unlockedFixture, locked: true });
 const boardOnDisk = JSON.stringify(lockedStoryboard);
@@ -1611,6 +1611,154 @@ const undoDocumentVectors = [
     expectedError: cmdError("undo_conflict", { conflicts: [{ path: "", expected_version: sha(sk(ranAfter)) }] }),
   },
 ];
+
+// Golden-seeded EditService vectors. The 4.3 golden files
+// (crates/cutready-core/tests/golden) pin the bytes every desktop edit writes;
+// src-tauri/src/engine/document_goldens.rs applies each edit. Each case below
+// replays the same edit as EditService ops on the golden input:
+// - editDocument: the input bytes plus the ops give the expected file's exact
+//   bytes and their version;
+// - undoDocument: undoing that write on the expected bytes gives back the input;
+// - applySketchOps / applyStoryboardOps: the parsed input plus the ops give the
+//   parsed expected document. Typra re-serializes vectors through JSON, which
+//   can't tell `1.0` from `1`, so documents holding an integral float (the
+//   `scale: 1.0` keyframe in sketch.sk) are pinned by editDocument bytes only;
+// - documentVersion: the version of every golden document used here. The
+//   version is SHA-256 over the file's bytes (`edit_ops::document_version`), the
+//   same `sha` the hand-written vectors use, so no core logic is copied.
+//
+// Golden cases left out, because they aren't one EditService call on one
+// existing document:
+// - sketch_create, storyboard_create: create a new file from `Sketch::new` /
+//   `Storyboard::new` defaults, not an edit;
+// - sketch_read_migrates_inline_visual, storyboard_read_upgrades_legacy: read
+//   migrations (the first also writes a visual file); `StoryboardDocument.upgrade`
+//   covers the second shape;
+// - sketch_save_roundtrip: no op, and sketch.sk holds an integral float (see above);
+//   `editDocument` returns an empty batch's bytes unchanged, so it can't pin it;
+// - note_save, note_lock, note_unlock: note save and the `.cutready/locks.json`
+//   lock store, which hosts keep outside the document;
+// - storyboard_lock_cascades_to_sketches: locks the storyboard and every sketch
+//   it references, across files;
+// - agent_*: agent tool writes stamped with the wall clock (masked in the goldens).
+const goldenDir = path.join(
+  path.dirname(path.dirname(path.dirname(fileURLToPath(import.meta.url)))),
+  "crates/cutready-core/tests/golden",
+);
+const goldenText = (rel) => readFileSync(path.join(goldenDir, rel), "utf8");
+const GOLDEN_NOW = "2026-01-02T03:04:05Z";
+const goldenSketch = JSON.parse(goldenText("inputs/sketch.sk"));
+const goldenRowIds = goldenSketch.rows.map((_, i) => `row-${i + 1}`);
+const integralFloat = /:\s*-?\d+\.0+(?:[eE][+-]?\d+)?\s*[,}\]\n]/;
+
+const goldenCases = [
+  { name: "sketch_update_title", input: "sketch.sk", ops: [{ kind: "set_title", title: "Intro — revised" }] },
+  { name: "sketch_update_description", input: "sketch.sk", ops: [{ kind: "set_description", description: { type: "doc", content: [] } }] },
+  { name: "sketch_update_metadata", input: "sketch.sk", ops: [{ kind: "set_metadata", metadata: { fields: { audience: "customers" } } }] },
+  {
+    name: "sketch_update_rows",
+    input: "sketch.sk",
+    // The editor sends every row without lock state; positions keep their locks.
+    ops: [{
+      kind: "replace_rows",
+      rows: goldenSketch.rows.map((r, i) => {
+        const next = { ...clone(r), id: goldenRowIds[i], locked: false, locks: noLocks() };
+        if (i === 0) next.narrative = "Welcome back to **Contoso**.";
+        if (i === 1) next.demo_actions = "Click the **Orders** tab";
+        return next;
+      }),
+    }],
+  },
+  {
+    name: "sketch_update_row_text",
+    input: "sketch.sk",
+    ops: [
+      { kind: "set_row_text", row_id: "row-1", time: "1:05", narrative: "Welcome, partners." },
+      // An unchanged time keeps the row's duration.
+      { kind: "set_row_text", row_id: "row-2", time: "~30s", demo_actions: "Click **Orders** twice" },
+    ],
+  },
+  {
+    name: "sketch_reorder_rows",
+    input: "sketch.sk",
+    ops: [{ kind: "set_lock", locked: false }, { kind: "reorder_rows", row_ids: ["row-3", "row-1", "row-2"] }],
+  },
+  { name: "sketch_lock", input: "sketch.sk", ops: [{ kind: "set_lock", locked: true }] },
+  { name: "sketch_unlock", input: "sketch.sk", ops: [{ kind: "set_lock", locked: false }] },
+  {
+    name: "sketch_row_lock",
+    input: "sketch.sk",
+    ops: [{ kind: "set_lock", row_id: "row-1", locked: true }, { kind: "set_lock", row_id: "row-3", locked: false }],
+  },
+  {
+    name: "sketch_cell_lock",
+    input: "sketch.sk",
+    ops: [
+      { kind: "set_lock", row_id: "row-1", field: "demo_actions", locked: true },
+      { kind: "set_lock", row_id: "row-2", field: "narrative", locked: false },
+    ],
+  },
+  { name: "sketch_save_nulls_roundtrip", input: "sketch-nulls.sk", ops: [] },
+  {
+    name: "storyboard_update",
+    input: "storyboard.sb",
+    ops: [
+      { kind: "set_title", title: "Contoso demo — final" },
+      { kind: "set_description", description: "Customer walkthrough" },
+      { kind: "set_metadata", metadata: { fields: {} } },
+    ],
+  },
+  { name: "storyboard_add_sketch_at_position", input: "storyboard.sb", ops: [{ kind: "insert_storyboard_item", index: 1, item: sketchRef("setup.sk") }] },
+  { name: "storyboard_add_sketch_append", input: "storyboard.sb", ops: [{ kind: "insert_storyboard_item", index: null, item: sketchRef("appendix.sk") }] },
+  { name: "storyboard_remove_sketch", input: "storyboard.sb", ops: [{ kind: "remove_storyboard_item", index: 0 }] },
+  {
+    name: "storyboard_add_section",
+    input: "storyboard.sb",
+    ops: [
+      { kind: "insert_storyboard_item", index: 0, item: section("Opening", [], { description: "" }) },
+      { kind: "insert_storyboard_item", index: null, item: section("Appendix", [], { description: "Extra material" }) },
+    ],
+  },
+  {
+    name: "storyboard_reorder_items",
+    input: "storyboard.sb",
+    ops: [{ kind: "set_storyboard_items", items: JSON.parse(goldenText("inputs/storyboard.sb")).items.reverse() }],
+  },
+  { name: "storyboard_save_roundtrip", input: "storyboard.sb", ops: [] },
+].map((c) => {
+  const kind = c.input.endsWith(".sb") ? "storyboard" : "sketch";
+  const inputPath = `inputs/${c.input}`;
+  const expectedPath = `expected/${c.name}/${kind === "sketch" ? "intro.sk" : "demo.sb"}`;
+  return { ...c, kind, inputPath, expectedPath, before: goldenText(inputPath), after: goldenText(expectedPath) };
+});
+
+for (const c of goldenCases) {
+  const vectorName = `golden_${c.name}`;
+  if (!integralFloat.test(c.before) && !integralFloat.test(c.after)) {
+    const vectors = c.kind === "sketch" ? applySketchOpsVectors : applyStoryboardOpsVectors;
+    vectors.push({
+      name: vectorName,
+      input: { [c.kind]: JSON.parse(c.before), ops: c.ops, now: GOLDEN_NOW },
+      expected: JSON.parse(c.after),
+    });
+  }
+  // An empty batch returns the bytes on disk, so only real edits pin bytes.
+  if (c.ops.length === 0) continue;
+  editDocumentVectors.push({
+    name: vectorName,
+    input: { request: { kind: c.kind, content: c.before, expected_version: sha(c.before), ops: c.ops, now: GOLDEN_NOW, note_locked: false } },
+    expected: { content: c.after, version: sha(c.after) },
+  });
+  undoDocumentVectors.push({
+    name: `${vectorName}_undo`,
+    input: undo(c.kind, c.after, [write(c.before, c.after)]),
+    expected: undone(c.before),
+  });
+}
+
+for (const rel of [...new Set(goldenCases.flatMap((c) => [c.inputPath, c.expectedPath]))].sort()) {
+  documentVersionVectors.push({ name: `golden_${rel}`, input: { content: goldenText(rel) }, expected: sha(goldenText(rel)) });
+}
 
 const tspConst = (name, vectors) =>
   `const ${name} = """\n${JSON.stringify(vectors, null, 2).replaceAll("\\", "\\\\")}\n""";\n`;

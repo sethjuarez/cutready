@@ -3440,6 +3440,2691 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         let result = seam.edit_document(&request);
         assert!(result.is_err(), "{}: expected an error, got Ok", "expecting no file when one exists is stale");
     }
+    // vector: golden_expected/sketch_cell_lock/intro.sk
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": true,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_expected/sketch_cell_lock/intro.sk", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_expected/sketch_cell_lock/intro.sk: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:c8c869a626691ccda1ec46828ef6611d59aad369ed2563208355050dc3376d19"
+"####,
+        )
+        .expect("golden_expected/sketch_cell_lock/intro.sk: expected parses");
+        assert_eq!(actual_value, expected, "golden_expected/sketch_cell_lock/intro.sk misrouted");
+    }
+    // vector: golden_expected/sketch_lock/intro.sk
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Intro — welcome\",\n  \"locked\": true,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_expected/sketch_lock/intro.sk", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_expected/sketch_lock/intro.sk: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:a5628d1391d3eef8cf207d42df1344d7f31d62bf420ecadb01bdb45f07f65859"
+"####,
+        )
+        .expect("golden_expected/sketch_lock/intro.sk: expected parses");
+        assert_eq!(actual_value, expected, "golden_expected/sketch_lock/intro.sk misrouted");
+    }
+    // vector: golden_expected/sketch_reorder_rows/intro.sk
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-3\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    },\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_expected/sketch_reorder_rows/intro.sk", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_expected/sketch_reorder_rows/intro.sk: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:c136eac955d8e0cf07505fbec08d48e718ddfc4499e1f177434e484d2feec2d5"
+"####,
+        )
+        .expect("golden_expected/sketch_reorder_rows/intro.sk: expected parses");
+        assert_eq!(actual_value, expected, "golden_expected/sketch_reorder_rows/intro.sk misrouted");
+    }
+    // vector: golden_expected/sketch_row_lock/intro.sk
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_expected/sketch_row_lock/intro.sk", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_expected/sketch_row_lock/intro.sk: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:7449e813987f0ea47bbd6df5d1c4ef7d76542e02de190a1c060fd55a347a8db6"
+"####,
+        )
+        .expect("golden_expected/sketch_row_lock/intro.sk: expected parses");
+        assert_eq!(actual_value, expected, "golden_expected/sketch_row_lock/intro.sk misrouted");
+    }
+    // vector: golden_expected/sketch_save_nulls_roundtrip/intro.sk
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Nulls\",\n  \"locked\": false,\n  \"description\": null,\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"\",\n      \"narrative\": \"n\",\n      \"demo_actions\": \"\",\n      \"screenshot\": null,\n      \"future_cell\": null\n    }\n  ],\n  \"state\": \"draft\",\n  \"created_at\": \"2025-10-01T06:00:00Z\",\n  \"updated_at\": \"2025-10-01T08:00:00Z\",\n  \"future_null\": null\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_expected/sketch_save_nulls_roundtrip/intro.sk", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_expected/sketch_save_nulls_roundtrip/intro.sk: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:171d6ea0130b381cb2f894cb0dae40d8bd8c001acba0ed086234e20c482259b4"
+"####,
+        )
+        .expect("golden_expected/sketch_save_nulls_roundtrip/intro.sk: expected parses");
+        assert_eq!(actual_value, expected, "golden_expected/sketch_save_nulls_roundtrip/intro.sk misrouted");
+    }
+    // vector: golden_expected/sketch_unlock/intro.sk
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_expected/sketch_unlock/intro.sk", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_expected/sketch_unlock/intro.sk: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:1b0ae7ea05be3887e7f6140888aed92a99a560423a18e5fb3f558454d2bd19db"
+"####,
+        )
+        .expect("golden_expected/sketch_unlock/intro.sk: expected parses");
+        assert_eq!(actual_value, expected, "golden_expected/sketch_unlock/intro.sk misrouted");
+    }
+    // vector: golden_expected/sketch_update_description/intro.sk
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_expected/sketch_update_description/intro.sk", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_expected/sketch_update_description/intro.sk: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:ef632bf92f9851fbd06a1e97ba9e72531c8d850dc7123a777f8ba9ab47742c9b"
+"####,
+        )
+        .expect("golden_expected/sketch_update_description/intro.sk: expected parses");
+        assert_eq!(actual_value, expected, "golden_expected/sketch_update_description/intro.sk misrouted");
+    }
+    // vector: golden_expected/sketch_update_metadata/intro.sk
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"customers\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_expected/sketch_update_metadata/intro.sk", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_expected/sketch_update_metadata/intro.sk: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:47afdabb558390ed13ba194b2d7724b4d2df3c1c2c36a4aa796a1b18e5688771"
+"####,
+        )
+        .expect("golden_expected/sketch_update_metadata/intro.sk: expected parses");
+        assert_eq!(actual_value, expected, "golden_expected/sketch_update_metadata/intro.sk misrouted");
+    }
+    // vector: golden_expected/sketch_update_row_text/intro.sk
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"1:05\",\n      \"duration_seconds\": 65,\n      \"narrative\": \"Welcome, partners.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders** twice\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_expected/sketch_update_row_text/intro.sk", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_expected/sketch_update_row_text/intro.sk: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:6528c560403d745ab4e77c198c9a970de0fef4ff824bdc164fab9bec3d2c095e"
+"####,
+        )
+        .expect("golden_expected/sketch_update_row_text/intro.sk: expected parses");
+        assert_eq!(actual_value, expected, "golden_expected/sketch_update_row_text/intro.sk misrouted");
+    }
+    // vector: golden_expected/sketch_update_rows/intro.sk
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome back to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click the **Orders** tab\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_expected/sketch_update_rows/intro.sk", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_expected/sketch_update_rows/intro.sk: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:35a63255f451f5ac7dd0ad9739caa6ed9f1486b95cc4b103b36c553fa4bcf7c4"
+"####,
+        )
+        .expect("golden_expected/sketch_update_rows/intro.sk: expected parses");
+        assert_eq!(actual_value, expected, "golden_expected/sketch_update_rows/intro.sk misrouted");
+    }
+    // vector: golden_expected/sketch_update_title/intro.sk
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Intro — revised\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_expected/sketch_update_title/intro.sk", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_expected/sketch_update_title/intro.sk: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:b0ae484d5fd1831b75b0047eccc42174c8f818cf04750768a3448a3320ca4423"
+"####,
+        )
+        .expect("golden_expected/sketch_update_title/intro.sk: expected parses");
+        assert_eq!(actual_value, expected, "golden_expected/sketch_update_title/intro.sk misrouted");
+    }
+    // vector: golden_expected/storyboard_add_section/demo.sb
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"section\",\n      \"title\": \"Opening\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Appendix\",\n      \"description\": \"Extra material\",\n      \"sketches\": []\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_expected/storyboard_add_section/demo.sb", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_expected/storyboard_add_section/demo.sb: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:bcdc9e1d69ef1c64029f210a35977a0b5483e0b38aabf6ed55ea11341c0521ba"
+"####,
+        )
+        .expect("golden_expected/storyboard_add_section/demo.sb: expected parses");
+        assert_eq!(actual_value, expected, "golden_expected/storyboard_add_section/demo.sb misrouted");
+    }
+    // vector: golden_expected/storyboard_add_sketch_append/demo.sb
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"appendix.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_expected/storyboard_add_sketch_append/demo.sb", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_expected/storyboard_add_sketch_append/demo.sb: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:9617acc715f5604edf3dcaa93bc040f32fc4917a20206d2629c3f7f48793a1e6"
+"####,
+        )
+        .expect("golden_expected/storyboard_add_sketch_append/demo.sb: expected parses");
+        assert_eq!(actual_value, expected, "golden_expected/storyboard_add_sketch_append/demo.sb misrouted");
+    }
+    // vector: golden_expected/storyboard_add_sketch_at_position/demo.sb
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"setup.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_expected/storyboard_add_sketch_at_position/demo.sb", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_expected/storyboard_add_sketch_at_position/demo.sb: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:82b45e0a98bae1bcebfa727f65a51c7e847133c9307daa5205df554e0830341a"
+"####,
+        )
+        .expect("golden_expected/storyboard_add_sketch_at_position/demo.sb: expected parses");
+        assert_eq!(actual_value, expected, "golden_expected/storyboard_add_sketch_at_position/demo.sb misrouted");
+    }
+    // vector: golden_expected/storyboard_remove_sketch/demo.sb
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_expected/storyboard_remove_sketch/demo.sb", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_expected/storyboard_remove_sketch/demo.sb: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:db3d234699ce50f6d5874c05c3fb1d563e8740bc015e56ede9ce2ce6cce8f189"
+"####,
+        )
+        .expect("golden_expected/storyboard_remove_sketch/demo.sb: expected parses");
+        assert_eq!(actual_value, expected, "golden_expected/storyboard_remove_sketch/demo.sb misrouted");
+    }
+    // vector: golden_expected/storyboard_reorder_items/demo.sb
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_expected/storyboard_reorder_items/demo.sb", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_expected/storyboard_reorder_items/demo.sb: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:678ebe993d602def89fcdde8b20f10dc19f63c4852bdd1f483b93ea3629a620a"
+"####,
+        )
+        .expect("golden_expected/storyboard_reorder_items/demo.sb: expected parses");
+        assert_eq!(actual_value, expected, "golden_expected/storyboard_reorder_items/demo.sb misrouted");
+    }
+    // vector: golden_expected/storyboard_save_roundtrip/demo.sb
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_expected/storyboard_save_roundtrip/demo.sb", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_expected/storyboard_save_roundtrip/demo.sb: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:425dd2b63c471cd9878303578e9390256d867636ff99d00ce00fe11778ede85b"
+"####,
+        )
+        .expect("golden_expected/storyboard_save_roundtrip/demo.sb: expected parses");
+        assert_eq!(actual_value, expected, "golden_expected/storyboard_save_roundtrip/demo.sb misrouted");
+    }
+    // vector: golden_expected/storyboard_update/demo.sb
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Contoso demo — final\",\n  \"description\": \"Customer walkthrough\",\n  \"locked\": false,\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_expected/storyboard_update/demo.sb", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_expected/storyboard_update/demo.sb: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:b56f4e011c199cb5f5a59911cb33ce2c17f5ce581bbd6d856081be30489d281b"
+"####,
+        )
+        .expect("golden_expected/storyboard_update/demo.sb: expected parses");
+        assert_eq!(actual_value, expected, "golden_expected/storyboard_update/demo.sb misrouted");
+    }
+    // vector: golden_inputs/sketch-nulls.sk
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n    \"title\": \"Nulls\",\n    \"locked\": null,\n    \"description\": null,\n    \"metadata\": null,\n    \"state\": \"sketch\",\n    \"rows\": [\n        {\n            \"locked\": null,\n            \"locks\": null,\n            \"time\": \"\",\n            \"narrative\": \"n\",\n            \"demo_actions\": \"\",\n            \"screenshot\": null,\n            \"future_cell\": null\n        }\n    ],\n    \"created_at\": \"2025-10-01T08:00:00+02:00\",\n    \"updated_at\": \"2025-10-01T08:00:00Z\",\n    \"future_null\": null\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_inputs/sketch-nulls.sk", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_inputs/sketch-nulls.sk: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:bc78e686abadbea17a4cd27fdf9487642d802a228169a62ceadcbdf2a5d61d57"
+"####,
+        )
+        .expect("golden_inputs/sketch-nulls.sk: expected parses");
+        assert_eq!(actual_value, expected, "golden_inputs/sketch-nulls.sk misrouted");
+    }
+    // vector: golden_inputs/sketch.sk
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_inputs/sketch.sk", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_inputs/sketch.sk: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f"
+"####,
+        )
+        .expect("golden_inputs/sketch.sk: expected parses");
+        assert_eq!(actual_value, expected, "golden_inputs/sketch.sk misrouted");
+    }
+    // vector: golden_inputs/storyboard.sb
+    {
+        let content: String = serde_json::from_str(
+            r####"
+"{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}"
+"####,
+        )
+        .expect("content parses");
+        let actual = seam.document_version(&content)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_inputs/storyboard.sb", error));
+        let actual_value = serde_json::to_value(actual).expect("golden_inputs/storyboard.sb: serialize");
+        let expected: Value = serde_json::from_str(
+            r####"
+"sha256:425dd2b63c471cd9878303578e9390256d867636ff99d00ce00fe11778ede85b"
+"####,
+        )
+        .expect("golden_inputs/storyboard.sb: expected parses");
+        assert_eq!(actual_value, expected, "golden_inputs/storyboard.sb misrouted");
+    }
+    // vector: golden_sketch_cell_lock
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "expected_version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f",
+  "ops": [
+    {
+      "kind": "set_lock",
+      "row_id": "row-1",
+      "field": "demo_actions",
+      "locked": true
+    },
+    {
+      "kind": "set_lock",
+      "row_id": "row-2",
+      "field": "narrative",
+      "locked": false
+    }
+  ],
+  "now": "2026-01-02T03:04:05Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_cell_lock", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": true,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:c8c869a626691ccda1ec46828ef6611d59aad369ed2563208355050dc3376d19"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_cell_lock: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_cell_lock misrouted");
+    }
+    // vector: golden_sketch_cell_lock_undo
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": true,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "writes": [
+    {
+      "before": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+      "after": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": true,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_cell_lock_undo", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_cell_lock_undo: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_cell_lock_undo misrouted");
+    }
+    // vector: golden_sketch_lock
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "expected_version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f",
+  "ops": [
+    {
+      "kind": "set_lock",
+      "locked": true
+    }
+  ],
+  "now": "2026-01-02T03:04:05Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_lock", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": true,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:a5628d1391d3eef8cf207d42df1344d7f31d62bf420ecadb01bdb45f07f65859"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_lock: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_lock misrouted");
+    }
+    // vector: golden_sketch_lock_undo
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": true,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "writes": [
+    {
+      "before": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+      "after": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": true,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_lock_undo", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_lock_undo: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_lock_undo misrouted");
+    }
+    // vector: golden_sketch_reorder_rows
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "expected_version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f",
+  "ops": [
+    {
+      "kind": "set_lock",
+      "locked": false
+    },
+    {
+      "kind": "reorder_rows",
+      "row_ids": [
+        "row-3",
+        "row-1",
+        "row-2"
+      ]
+    }
+  ],
+  "now": "2026-01-02T03:04:05Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_reorder_rows", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-3\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    },\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:c136eac955d8e0cf07505fbec08d48e718ddfc4499e1f177434e484d2feec2d5"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_reorder_rows: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_reorder_rows misrouted");
+    }
+    // vector: golden_sketch_reorder_rows_undo
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-3\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    },\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "writes": [
+    {
+      "before": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+      "after": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-3\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    },\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_reorder_rows_undo", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_reorder_rows_undo: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_reorder_rows_undo misrouted");
+    }
+    // vector: golden_sketch_row_lock
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "expected_version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f",
+  "ops": [
+    {
+      "kind": "set_lock",
+      "row_id": "row-1",
+      "locked": true
+    },
+    {
+      "kind": "set_lock",
+      "row_id": "row-3",
+      "locked": false
+    }
+  ],
+  "now": "2026-01-02T03:04:05Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_row_lock", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:7449e813987f0ea47bbd6df5d1c4ef7d76542e02de190a1c060fd55a347a8db6"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_row_lock: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_row_lock misrouted");
+    }
+    // vector: golden_sketch_row_lock_undo
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "writes": [
+    {
+      "before": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+      "after": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_row_lock_undo", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_row_lock_undo: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_row_lock_undo misrouted");
+    }
+    // vector: golden_sketch_save_nulls_roundtrip
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Nulls",
+  "locked": null,
+  "description": null,
+  "metadata": null,
+  "state": "sketch",
+  "rows": [
+    {
+      "locked": null,
+      "locks": null,
+      "time": "",
+      "narrative": "n",
+      "demo_actions": "",
+      "screenshot": null,
+      "future_cell": null
+    }
+  ],
+  "created_at": "2025-10-01T08:00:00+02:00",
+  "updated_at": "2025-10-01T08:00:00Z",
+  "future_null": null
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-01-02T03:04:05Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_sketch_ops(&sketch, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_save_nulls_roundtrip", error));
+        let expected = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Nulls",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "id": "row-1",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "time": "",
+      "narrative": "n",
+      "demo_actions": "",
+      "screenshot": null,
+      "future_cell": null
+    }
+  ],
+  "state": "draft",
+  "created_at": "2025-10-01T06:00:00Z",
+  "updated_at": "2025-10-01T08:00:00Z",
+  "future_null": null
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_save_nulls_roundtrip: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_save_nulls_roundtrip misrouted");
+    }
+    // vector: golden_sketch_unlock
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "expected_version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f",
+  "ops": [
+    {
+      "kind": "set_lock",
+      "locked": false
+    }
+  ],
+  "now": "2026-01-02T03:04:05Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_unlock", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:1b0ae7ea05be3887e7f6140888aed92a99a560423a18e5fb3f558454d2bd19db"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_unlock: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_unlock misrouted");
+    }
+    // vector: golden_sketch_unlock_undo
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "writes": [
+    {
+      "before": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+      "after": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_unlock_undo", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_unlock_undo: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_unlock_undo misrouted");
+    }
+    // vector: golden_sketch_update_description
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "expected_version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f",
+  "ops": [
+    {
+      "kind": "set_description",
+      "description": {
+        "type": "doc",
+        "content": []
+      }
+    }
+  ],
+  "now": "2026-01-02T03:04:05Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_update_description", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:ef632bf92f9851fbd06a1e97ba9e72531c8d850dc7123a777f8ba9ab47742c9b"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_update_description: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_update_description misrouted");
+    }
+    // vector: golden_sketch_update_description_undo
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "writes": [
+    {
+      "before": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+      "after": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_update_description_undo", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_update_description_undo: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_update_description_undo misrouted");
+    }
+    // vector: golden_sketch_update_metadata
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "expected_version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f",
+  "ops": [
+    {
+      "kind": "set_metadata",
+      "metadata": {
+        "fields": {
+          "audience": "customers"
+        }
+      }
+    }
+  ],
+  "now": "2026-01-02T03:04:05Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_update_metadata", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"customers\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:47afdabb558390ed13ba194b2d7724b4d2df3c1c2c36a4aa796a1b18e5688771"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_update_metadata: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_update_metadata misrouted");
+    }
+    // vector: golden_sketch_update_metadata_undo
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"customers\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "writes": [
+    {
+      "before": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+      "after": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"customers\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_update_metadata_undo", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_update_metadata_undo: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_update_metadata_undo misrouted");
+    }
+    // vector: golden_sketch_update_row_text
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "expected_version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f",
+  "ops": [
+    {
+      "kind": "set_row_text",
+      "row_id": "row-1",
+      "time": "1:05",
+      "narrative": "Welcome, partners."
+    },
+    {
+      "kind": "set_row_text",
+      "row_id": "row-2",
+      "time": "~30s",
+      "demo_actions": "Click **Orders** twice"
+    }
+  ],
+  "now": "2026-01-02T03:04:05Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_update_row_text", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"1:05\",\n      \"duration_seconds\": 65,\n      \"narrative\": \"Welcome, partners.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders** twice\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:6528c560403d745ab4e77c198c9a970de0fef4ff824bdc164fab9bec3d2c095e"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_update_row_text: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_update_row_text misrouted");
+    }
+    // vector: golden_sketch_update_row_text_undo
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"1:05\",\n      \"duration_seconds\": 65,\n      \"narrative\": \"Welcome, partners.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders** twice\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "writes": [
+    {
+      "before": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+      "after": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"1:05\",\n      \"duration_seconds\": 65,\n      \"narrative\": \"Welcome, partners.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders** twice\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_update_row_text_undo", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_update_row_text_undo: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_update_row_text_undo misrouted");
+    }
+    // vector: golden_sketch_update_rows
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "expected_version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f",
+  "ops": [
+    {
+      "kind": "replace_rows",
+      "rows": [
+        {
+          "time": "0:15",
+          "duration_seconds": 15,
+          "narrative": "Welcome back to **Contoso**.",
+          "demo_actions": "Open the dashboard",
+          "screenshot": ".cutready/screenshots/intro.png",
+          "visual": ".cutready/visuals/0a1b2c3d4e5f.json",
+          "motion_points": [
+            {
+              "rank": 1,
+              "x": 0.25,
+              "y": 0.5,
+              "label": "Header"
+            },
+            {
+              "rank": 2,
+              "x": 0.75,
+              "y": 0.125
+            }
+          ],
+          "typing_spots": [
+            {
+              "x": 0.1,
+              "y": 0.2,
+              "width": 0.3,
+              "height": 0.05,
+              "text": "orders",
+              "start_offset_ms": 250,
+              "characters_per_second": 12.5,
+              "show_cursor": true
+            }
+          ],
+          "motion_plan": {
+            "kind": "subtle_push",
+            "keyframes": [
+              {
+                "time_ms": 0,
+                "scale": 1,
+                "x": 0.5,
+                "y": 0.5
+              },
+              {
+                "time_ms": 1500,
+                "scale": 1.25,
+                "x": 0.4,
+                "y": 0.45,
+                "easing": "ease_in_out"
+              }
+            ],
+            "rationale": "Draw focus to the header."
+          },
+          "design_plan": "Warm title card.",
+          "narration": {
+            "path": ".cutready/narration/intro-0.wav",
+            "source_text": "Welcome to **Contoso**.",
+            "source_text_hash": "abc123",
+            "mime_type": "audio/wav",
+            "duration_ms": 4200,
+            "leading_silence_ms": 120,
+            "byte_size": 134400,
+            "recorded_at": "2025-11-04T10:20:30Z"
+          },
+          "narration_plan": {
+            "source_text": "Welcome to **Contoso**.",
+            "voice": "en-US-AvaNeural",
+            "locale": "en-US",
+            "ssml": "<speak>Welcome</speak>",
+            "pronunciation_overrides": {
+              "Contoso": "con-TOE-so"
+            },
+            "beats": [
+              {
+                "text": "Welcome",
+                "purpose": "hook",
+                "pause_after_ms": 300
+              }
+            ],
+            "generated_at": "2025-11-04T10:21:00.5Z"
+          },
+          "ios_row_marker": {
+            "added_by": "ios",
+            "version": 3
+          },
+          "id": "row-1",
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          }
+        },
+        {
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "time": "~30s",
+          "narrative": "Locked narrative stays put.",
+          "demo_actions": "Click the **Orders** tab",
+          "screenshot": null,
+          "id": "row-2",
+          "locked": false
+        },
+        {
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "time": "1m",
+          "duration_seconds": 60,
+          "narrative": "Fully locked row.",
+          "demo_actions": "Hover the chart",
+          "screenshot": ".cutready/screenshots/chart.png",
+          "id": "row-3"
+        }
+      ]
+    }
+  ],
+  "now": "2026-01-02T03:04:05Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_update_rows", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome back to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click the **Orders** tab\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:35a63255f451f5ac7dd0ad9739caa6ed9f1486b95cc4b103b36c553fa4bcf7c4"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_update_rows: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_update_rows misrouted");
+    }
+    // vector: golden_sketch_update_rows_undo
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome back to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click the **Orders** tab\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "writes": [
+    {
+      "before": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+      "after": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome back to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click the **Orders** tab\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_update_rows_undo", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_update_rows_undo: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_update_rows_undo misrouted");
+    }
+    // vector: golden_sketch_update_title
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "expected_version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f",
+  "ops": [
+    {
+      "kind": "set_title",
+      "title": "Intro — revised"
+    }
+  ],
+  "now": "2026-01-02T03:04:05Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_update_title", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — revised\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:b0ae484d5fd1831b75b0047eccc42174c8f818cf04750768a3448a3320ca4423"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_update_title: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_update_title misrouted");
+    }
+    // vector: golden_sketch_update_title_undo
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\n  \"title\": \"Intro — revised\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "writes": [
+    {
+      "before": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+      "after": "{\n  \"title\": \"Intro — revised\",\n  \"locked\": false,\n  \"description\": {\n    \"content\": [\n      {\n        \"content\": [\n          {\n            \"text\": \"Open with the dashboard.\",\n            \"type\": \"text\"\n          }\n        ],\n        \"type\": \"paragraph\"\n      }\n    ],\n    \"type\": \"doc\"\n  },\n  \"rows\": [\n    {\n      \"id\": \"row-1\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": false,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1.0,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.500Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"id\": \"row-2\",\n      \"locked\": false,\n      \"locks\": {\n        \"time\": false,\n        \"narrative\": true,\n        \"demo_actions\": false,\n        \"screenshot\": false,\n        \"visual\": false,\n        \"design_plan\": false\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"id\": \"row-3\",\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_sketch_update_title_undo", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Intro — welcome\",\n  \"locked\": false,\n  \"description\": {\n    \"type\": \"doc\",\n    \"content\": [\n      {\n        \"type\": \"paragraph\",\n        \"content\": [\n          {\n            \"type\": \"text\",\n            \"text\": \"Open with the dashboard.\"\n          }\n        ]\n      }\n    ]\n  },\n  \"rows\": [\n    {\n      \"time\": \"0:15\",\n      \"duration_seconds\": 15,\n      \"narrative\": \"Welcome to **Contoso**.\",\n      \"demo_actions\": \"Open the dashboard\",\n      \"screenshot\": \".cutready/screenshots/intro.png\",\n      \"visual\": \".cutready/visuals/0a1b2c3d4e5f.json\",\n      \"motion_points\": [\n        {\n          \"rank\": 1,\n          \"x\": 0.25,\n          \"y\": 0.5,\n          \"label\": \"Header\"\n        },\n        {\n          \"rank\": 2,\n          \"x\": 0.75,\n          \"y\": 0.125\n        }\n      ],\n      \"typing_spots\": [\n        {\n          \"x\": 0.1,\n          \"y\": 0.2,\n          \"width\": 0.3,\n          \"height\": 0.05,\n          \"text\": \"orders\",\n          \"start_offset_ms\": 250,\n          \"characters_per_second\": 12.5,\n          \"show_cursor\": true\n        }\n      ],\n      \"motion_plan\": {\n        \"kind\": \"subtle_push\",\n        \"keyframes\": [\n          {\n            \"time_ms\": 0,\n            \"scale\": 1,\n            \"x\": 0.5,\n            \"y\": 0.5\n          },\n          {\n            \"time_ms\": 1500,\n            \"scale\": 1.25,\n            \"x\": 0.4,\n            \"y\": 0.45,\n            \"easing\": \"ease_in_out\"\n          }\n        ],\n        \"rationale\": \"Draw focus to the header.\"\n      },\n      \"design_plan\": \"Warm title card.\",\n      \"narration\": {\n        \"path\": \".cutready/narration/intro-0.wav\",\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"source_text_hash\": \"abc123\",\n        \"mime_type\": \"audio/wav\",\n        \"duration_ms\": 4200,\n        \"leading_silence_ms\": 120,\n        \"byte_size\": 134400,\n        \"recorded_at\": \"2025-11-04T10:20:30Z\"\n      },\n      \"narration_plan\": {\n        \"source_text\": \"Welcome to **Contoso**.\",\n        \"voice\": \"en-US-AvaNeural\",\n        \"locale\": \"en-US\",\n        \"ssml\": \"<speak>Welcome</speak>\",\n        \"pronunciation_overrides\": {\n          \"Contoso\": \"con-TOE-so\"\n        },\n        \"beats\": [\n          {\n            \"text\": \"Welcome\",\n            \"purpose\": \"hook\",\n            \"pause_after_ms\": 300\n          }\n        ],\n        \"generated_at\": \"2025-11-04T10:21:00.5Z\"\n      },\n      \"ios_row_marker\": {\n        \"added_by\": \"ios\",\n        \"version\": 3\n      }\n    },\n    {\n      \"locks\": {\n        \"narrative\": true\n      },\n      \"time\": \"~30s\",\n      \"narrative\": \"Locked narrative stays put.\",\n      \"demo_actions\": \"Click **Orders**\",\n      \"screenshot\": null\n    },\n    {\n      \"locked\": true,\n      \"locks\": {\n        \"time\": true,\n        \"narrative\": true,\n        \"demo_actions\": true,\n        \"screenshot\": true,\n        \"visual\": true,\n        \"design_plan\": true\n      },\n      \"time\": \"1m\",\n      \"duration_seconds\": 60,\n      \"narrative\": \"Fully locked row.\",\n      \"demo_actions\": \"Hover the chart\",\n      \"screenshot\": \".cutready/screenshots/chart.png\"\n    }\n  ],\n  \"metadata\": {\n    \"fields\": {\n      \"audience\": \"partners\",\n      \"owner\": \"seth\"\n    }\n  },\n  \"state\": \"refined\",\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30.123456789Z\",\n  \"future_top_level\": {\n    \"nested\": [\n      1,\n      \"two\",\n      null\n    ]\n  },\n  \"zz_ios_only\": \"kept\"\n}",
+  "version": "sha256:286a8c4412ba5f9bbfc2ba21cf55120758f480f34ab280e92af23c79c524592f"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_sketch_update_title_undo: expected parses");
+        assert_eq!(actual, expected, "golden_sketch_update_title_undo misrouted");
+    }
+    // vector: golden_storyboard_add_section
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contoso demo",
+  "description": "Partner walkthrough",
+  "locked": false,
+  "metadata": {
+    "fields": {
+      "cut": "v2"
+    }
+  },
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Orders",
+      "description": "The order flow",
+      "sketches": [
+        "orders/list.sk",
+        "orders/detail.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    }
+  ],
+  "created_at": "2025-10-01T08:00:00Z",
+  "updated_at": "2025-11-04T10:20:30Z",
+  "ios_board_marker": true
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "insert_storyboard_item",
+    "index": 0,
+    "item": {
+      "type": "section",
+      "title": "Opening",
+      "description": "",
+      "sketches": []
+    }
+  },
+  {
+    "kind": "insert_storyboard_item",
+    "index": null,
+    "item": {
+      "type": "section",
+      "title": "Appendix",
+      "description": "Extra material",
+      "sketches": []
+    }
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-01-02T03:04:05Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_storyboard_ops(&storyboard, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_storyboard_add_section", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contoso demo",
+  "description": "Partner walkthrough",
+  "locked": false,
+  "metadata": {
+    "fields": {
+      "cut": "v2"
+    }
+  },
+  "items": [
+    {
+      "type": "section",
+      "title": "Opening",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Orders",
+      "description": "The order flow",
+      "sketches": [
+        "orders/list.sk",
+        "orders/detail.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Appendix",
+      "description": "Extra material",
+      "sketches": []
+    }
+  ],
+  "created_at": "2025-10-01T08:00:00Z",
+  "updated_at": "2026-01-02T03:04:05Z",
+  "ios_board_marker": true
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_storyboard_add_section: expected parses");
+        assert_eq!(actual, expected, "golden_storyboard_add_section misrouted");
+    }
+    // vector: golden_storyboard_add_section
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "storyboard",
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}",
+  "expected_version": "sha256:425dd2b63c471cd9878303578e9390256d867636ff99d00ce00fe11778ede85b",
+  "ops": [
+    {
+      "kind": "insert_storyboard_item",
+      "index": 0,
+      "item": {
+        "type": "section",
+        "title": "Opening",
+        "description": "",
+        "sketches": []
+      }
+    },
+    {
+      "kind": "insert_storyboard_item",
+      "index": null,
+      "item": {
+        "type": "section",
+        "title": "Appendix",
+        "description": "Extra material",
+        "sketches": []
+      }
+    }
+  ],
+  "now": "2026-01-02T03:04:05Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_storyboard_add_section", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"section\",\n      \"title\": \"Opening\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Appendix\",\n      \"description\": \"Extra material\",\n      \"sketches\": []\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}",
+  "version": "sha256:bcdc9e1d69ef1c64029f210a35977a0b5483e0b38aabf6ed55ea11341c0521ba"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_storyboard_add_section: expected parses");
+        assert_eq!(actual, expected, "golden_storyboard_add_section misrouted");
+    }
+    // vector: golden_storyboard_add_section_undo
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "storyboard",
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"section\",\n      \"title\": \"Opening\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Appendix\",\n      \"description\": \"Extra material\",\n      \"sketches\": []\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}",
+  "writes": [
+    {
+      "before": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}",
+      "after": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"section\",\n      \"title\": \"Opening\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Appendix\",\n      \"description\": \"Extra material\",\n      \"sketches\": []\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_storyboard_add_section_undo", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}",
+  "version": "sha256:425dd2b63c471cd9878303578e9390256d867636ff99d00ce00fe11778ede85b"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_storyboard_add_section_undo: expected parses");
+        assert_eq!(actual, expected, "golden_storyboard_add_section_undo misrouted");
+    }
+    // vector: golden_storyboard_add_sketch_append
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contoso demo",
+  "description": "Partner walkthrough",
+  "locked": false,
+  "metadata": {
+    "fields": {
+      "cut": "v2"
+    }
+  },
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Orders",
+      "description": "The order flow",
+      "sketches": [
+        "orders/list.sk",
+        "orders/detail.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    }
+  ],
+  "created_at": "2025-10-01T08:00:00Z",
+  "updated_at": "2025-11-04T10:20:30Z",
+  "ios_board_marker": true
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "insert_storyboard_item",
+    "index": null,
+    "item": {
+      "type": "sketch_ref",
+      "path": "appendix.sk"
+    }
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-01-02T03:04:05Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_storyboard_ops(&storyboard, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_storyboard_add_sketch_append", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contoso demo",
+  "description": "Partner walkthrough",
+  "locked": false,
+  "metadata": {
+    "fields": {
+      "cut": "v2"
+    }
+  },
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Orders",
+      "description": "The order flow",
+      "sketches": [
+        "orders/list.sk",
+        "orders/detail.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    },
+    {
+      "type": "sketch_ref",
+      "path": "appendix.sk"
+    }
+  ],
+  "created_at": "2025-10-01T08:00:00Z",
+  "updated_at": "2026-01-02T03:04:05Z",
+  "ios_board_marker": true
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_storyboard_add_sketch_append: expected parses");
+        assert_eq!(actual, expected, "golden_storyboard_add_sketch_append misrouted");
+    }
+    // vector: golden_storyboard_add_sketch_append
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "storyboard",
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}",
+  "expected_version": "sha256:425dd2b63c471cd9878303578e9390256d867636ff99d00ce00fe11778ede85b",
+  "ops": [
+    {
+      "kind": "insert_storyboard_item",
+      "index": null,
+      "item": {
+        "type": "sketch_ref",
+        "path": "appendix.sk"
+      }
+    }
+  ],
+  "now": "2026-01-02T03:04:05Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_storyboard_add_sketch_append", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"appendix.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}",
+  "version": "sha256:9617acc715f5604edf3dcaa93bc040f32fc4917a20206d2629c3f7f48793a1e6"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_storyboard_add_sketch_append: expected parses");
+        assert_eq!(actual, expected, "golden_storyboard_add_sketch_append misrouted");
+    }
+    // vector: golden_storyboard_add_sketch_append_undo
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "storyboard",
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"appendix.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}",
+  "writes": [
+    {
+      "before": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}",
+      "after": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"appendix.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_storyboard_add_sketch_append_undo", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}",
+  "version": "sha256:425dd2b63c471cd9878303578e9390256d867636ff99d00ce00fe11778ede85b"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_storyboard_add_sketch_append_undo: expected parses");
+        assert_eq!(actual, expected, "golden_storyboard_add_sketch_append_undo misrouted");
+    }
+    // vector: golden_storyboard_add_sketch_at_position
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contoso demo",
+  "description": "Partner walkthrough",
+  "locked": false,
+  "metadata": {
+    "fields": {
+      "cut": "v2"
+    }
+  },
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Orders",
+      "description": "The order flow",
+      "sketches": [
+        "orders/list.sk",
+        "orders/detail.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    }
+  ],
+  "created_at": "2025-10-01T08:00:00Z",
+  "updated_at": "2025-11-04T10:20:30Z",
+  "ios_board_marker": true
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "insert_storyboard_item",
+    "index": 1,
+    "item": {
+      "type": "sketch_ref",
+      "path": "setup.sk"
+    }
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-01-02T03:04:05Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_storyboard_ops(&storyboard, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_storyboard_add_sketch_at_position", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contoso demo",
+  "description": "Partner walkthrough",
+  "locked": false,
+  "metadata": {
+    "fields": {
+      "cut": "v2"
+    }
+  },
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "sketch_ref",
+      "path": "setup.sk"
+    },
+    {
+      "type": "section",
+      "title": "Orders",
+      "description": "The order flow",
+      "sketches": [
+        "orders/list.sk",
+        "orders/detail.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    }
+  ],
+  "created_at": "2025-10-01T08:00:00Z",
+  "updated_at": "2026-01-02T03:04:05Z",
+  "ios_board_marker": true
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_storyboard_add_sketch_at_position: expected parses");
+        assert_eq!(actual, expected, "golden_storyboard_add_sketch_at_position misrouted");
+    }
+    // vector: golden_storyboard_add_sketch_at_position
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "storyboard",
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}",
+  "expected_version": "sha256:425dd2b63c471cd9878303578e9390256d867636ff99d00ce00fe11778ede85b",
+  "ops": [
+    {
+      "kind": "insert_storyboard_item",
+      "index": 1,
+      "item": {
+        "type": "sketch_ref",
+        "path": "setup.sk"
+      }
+    }
+  ],
+  "now": "2026-01-02T03:04:05Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_storyboard_add_sketch_at_position", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"setup.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}",
+  "version": "sha256:82b45e0a98bae1bcebfa727f65a51c7e847133c9307daa5205df554e0830341a"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_storyboard_add_sketch_at_position: expected parses");
+        assert_eq!(actual, expected, "golden_storyboard_add_sketch_at_position misrouted");
+    }
+    // vector: golden_storyboard_add_sketch_at_position_undo
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "storyboard",
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"setup.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}",
+  "writes": [
+    {
+      "before": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}",
+      "after": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"setup.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_storyboard_add_sketch_at_position_undo", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}",
+  "version": "sha256:425dd2b63c471cd9878303578e9390256d867636ff99d00ce00fe11778ede85b"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_storyboard_add_sketch_at_position_undo: expected parses");
+        assert_eq!(actual, expected, "golden_storyboard_add_sketch_at_position_undo misrouted");
+    }
+    // vector: golden_storyboard_remove_sketch
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contoso demo",
+  "description": "Partner walkthrough",
+  "locked": false,
+  "metadata": {
+    "fields": {
+      "cut": "v2"
+    }
+  },
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Orders",
+      "description": "The order flow",
+      "sketches": [
+        "orders/list.sk",
+        "orders/detail.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    }
+  ],
+  "created_at": "2025-10-01T08:00:00Z",
+  "updated_at": "2025-11-04T10:20:30Z",
+  "ios_board_marker": true
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "remove_storyboard_item",
+    "index": 0
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-01-02T03:04:05Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_storyboard_ops(&storyboard, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_storyboard_remove_sketch", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contoso demo",
+  "description": "Partner walkthrough",
+  "locked": false,
+  "metadata": {
+    "fields": {
+      "cut": "v2"
+    }
+  },
+  "items": [
+    {
+      "type": "section",
+      "title": "Orders",
+      "description": "The order flow",
+      "sketches": [
+        "orders/list.sk",
+        "orders/detail.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    }
+  ],
+  "created_at": "2025-10-01T08:00:00Z",
+  "updated_at": "2026-01-02T03:04:05Z",
+  "ios_board_marker": true
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_storyboard_remove_sketch: expected parses");
+        assert_eq!(actual, expected, "golden_storyboard_remove_sketch misrouted");
+    }
+    // vector: golden_storyboard_remove_sketch
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "storyboard",
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}",
+  "expected_version": "sha256:425dd2b63c471cd9878303578e9390256d867636ff99d00ce00fe11778ede85b",
+  "ops": [
+    {
+      "kind": "remove_storyboard_item",
+      "index": 0
+    }
+  ],
+  "now": "2026-01-02T03:04:05Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_storyboard_remove_sketch", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}",
+  "version": "sha256:db3d234699ce50f6d5874c05c3fb1d563e8740bc015e56ede9ce2ce6cce8f189"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_storyboard_remove_sketch: expected parses");
+        assert_eq!(actual, expected, "golden_storyboard_remove_sketch misrouted");
+    }
+    // vector: golden_storyboard_remove_sketch_undo
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "storyboard",
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}",
+  "writes": [
+    {
+      "before": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}",
+      "after": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_storyboard_remove_sketch_undo", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}",
+  "version": "sha256:425dd2b63c471cd9878303578e9390256d867636ff99d00ce00fe11778ede85b"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_storyboard_remove_sketch_undo: expected parses");
+        assert_eq!(actual, expected, "golden_storyboard_remove_sketch_undo misrouted");
+    }
+    // vector: golden_storyboard_reorder_items
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contoso demo",
+  "description": "Partner walkthrough",
+  "locked": false,
+  "metadata": {
+    "fields": {
+      "cut": "v2"
+    }
+  },
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Orders",
+      "description": "The order flow",
+      "sketches": [
+        "orders/list.sk",
+        "orders/detail.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    }
+  ],
+  "created_at": "2025-10-01T08:00:00Z",
+  "updated_at": "2025-11-04T10:20:30Z",
+  "ios_board_marker": true
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "set_storyboard_items",
+    "items": [
+      {
+        "type": "sketch_ref",
+        "path": "outro.sk"
+      },
+      {
+        "type": "section",
+        "title": "Wrap",
+        "sketches": []
+      },
+      {
+        "type": "section",
+        "title": "Orders",
+        "description": "The order flow",
+        "sketches": [
+          "orders/list.sk",
+          "orders/detail.sk"
+        ]
+      },
+      {
+        "type": "sketch_ref",
+        "path": "intro.sk"
+      }
+    ]
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-01-02T03:04:05Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_storyboard_ops(&storyboard, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_storyboard_reorder_items", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contoso demo",
+  "description": "Partner walkthrough",
+  "locked": false,
+  "metadata": {
+    "fields": {
+      "cut": "v2"
+    }
+  },
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Wrap",
+      "sketches": []
+    },
+    {
+      "type": "section",
+      "title": "Orders",
+      "description": "The order flow",
+      "sketches": [
+        "orders/list.sk",
+        "orders/detail.sk"
+      ]
+    },
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    }
+  ],
+  "created_at": "2025-10-01T08:00:00Z",
+  "updated_at": "2026-01-02T03:04:05Z",
+  "ios_board_marker": true
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_storyboard_reorder_items: expected parses");
+        assert_eq!(actual, expected, "golden_storyboard_reorder_items misrouted");
+    }
+    // vector: golden_storyboard_reorder_items
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "storyboard",
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}",
+  "expected_version": "sha256:425dd2b63c471cd9878303578e9390256d867636ff99d00ce00fe11778ede85b",
+  "ops": [
+    {
+      "kind": "set_storyboard_items",
+      "items": [
+        {
+          "type": "sketch_ref",
+          "path": "outro.sk"
+        },
+        {
+          "type": "section",
+          "title": "Wrap",
+          "sketches": []
+        },
+        {
+          "type": "section",
+          "title": "Orders",
+          "description": "The order flow",
+          "sketches": [
+            "orders/list.sk",
+            "orders/detail.sk"
+          ]
+        },
+        {
+          "type": "sketch_ref",
+          "path": "intro.sk"
+        }
+      ]
+    }
+  ],
+  "now": "2026-01-02T03:04:05Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_storyboard_reorder_items", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}",
+  "version": "sha256:678ebe993d602def89fcdde8b20f10dc19f63c4852bdd1f483b93ea3629a620a"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_storyboard_reorder_items: expected parses");
+        assert_eq!(actual, expected, "golden_storyboard_reorder_items misrouted");
+    }
+    // vector: golden_storyboard_reorder_items_undo
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "storyboard",
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}",
+  "writes": [
+    {
+      "before": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}",
+      "after": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_storyboard_reorder_items_undo", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}",
+  "version": "sha256:425dd2b63c471cd9878303578e9390256d867636ff99d00ce00fe11778ede85b"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_storyboard_reorder_items_undo: expected parses");
+        assert_eq!(actual, expected, "golden_storyboard_reorder_items_undo misrouted");
+    }
+    // vector: golden_storyboard_save_roundtrip
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contoso demo",
+  "description": "Partner walkthrough",
+  "locked": false,
+  "metadata": {
+    "fields": {
+      "cut": "v2"
+    }
+  },
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Orders",
+      "description": "The order flow",
+      "sketches": [
+        "orders/list.sk",
+        "orders/detail.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    }
+  ],
+  "created_at": "2025-10-01T08:00:00Z",
+  "updated_at": "2025-11-04T10:20:30Z",
+  "ios_board_marker": true
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-01-02T03:04:05Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_storyboard_ops(&storyboard, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_storyboard_save_roundtrip", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contoso demo",
+  "description": "Partner walkthrough",
+  "locked": false,
+  "metadata": {
+    "fields": {
+      "cut": "v2"
+    }
+  },
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Orders",
+      "description": "The order flow",
+      "sketches": [
+        "orders/list.sk",
+        "orders/detail.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    }
+  ],
+  "created_at": "2025-10-01T08:00:00Z",
+  "updated_at": "2025-11-04T10:20:30Z",
+  "ios_board_marker": true
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_storyboard_save_roundtrip: expected parses");
+        assert_eq!(actual, expected, "golden_storyboard_save_roundtrip misrouted");
+    }
+    // vector: golden_storyboard_update
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contoso demo",
+  "description": "Partner walkthrough",
+  "locked": false,
+  "metadata": {
+    "fields": {
+      "cut": "v2"
+    }
+  },
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Orders",
+      "description": "The order flow",
+      "sketches": [
+        "orders/list.sk",
+        "orders/detail.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    }
+  ],
+  "created_at": "2025-10-01T08:00:00Z",
+  "updated_at": "2025-11-04T10:20:30Z",
+  "ios_board_marker": true
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "set_title",
+    "title": "Contoso demo — final"
+  },
+  {
+    "kind": "set_description",
+    "description": "Customer walkthrough"
+  },
+  {
+    "kind": "set_metadata",
+    "metadata": {
+      "fields": {}
+    }
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-01-02T03:04:05Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_storyboard_ops(&storyboard, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_storyboard_update", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contoso demo — final",
+  "description": "Customer walkthrough",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Orders",
+      "description": "The order flow",
+      "sketches": [
+        "orders/list.sk",
+        "orders/detail.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    }
+  ],
+  "created_at": "2025-10-01T08:00:00Z",
+  "updated_at": "2026-01-02T03:04:05Z",
+  "ios_board_marker": true
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_storyboard_update: expected parses");
+        assert_eq!(actual, expected, "golden_storyboard_update misrouted");
+    }
+    // vector: golden_storyboard_update
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "storyboard",
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}",
+  "expected_version": "sha256:425dd2b63c471cd9878303578e9390256d867636ff99d00ce00fe11778ede85b",
+  "ops": [
+    {
+      "kind": "set_title",
+      "title": "Contoso demo — final"
+    },
+    {
+      "kind": "set_description",
+      "description": "Customer walkthrough"
+    },
+    {
+      "kind": "set_metadata",
+      "metadata": {
+        "fields": {}
+      }
+    }
+  ],
+  "now": "2026-01-02T03:04:05Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_storyboard_update", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Contoso demo — final\",\n  \"description\": \"Customer walkthrough\",\n  \"locked\": false,\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}",
+  "version": "sha256:b56f4e011c199cb5f5a59911cb33ce2c17f5ce581bbd6d856081be30489d281b"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_storyboard_update: expected parses");
+        assert_eq!(actual, expected, "golden_storyboard_update misrouted");
+    }
+    // vector: golden_storyboard_update_undo
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "storyboard",
+  "content": "{\n  \"title\": \"Contoso demo — final\",\n  \"description\": \"Customer walkthrough\",\n  \"locked\": false,\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}",
+  "writes": [
+    {
+      "before": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}",
+      "after": "{\n  \"title\": \"Contoso demo — final\",\n  \"description\": \"Customer walkthrough\",\n  \"locked\": false,\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2026-01-02T03:04:05Z\",\n  \"ios_board_marker\": true\n}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "golden_storyboard_update_undo", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "{\n  \"title\": \"Contoso demo\",\n  \"description\": \"Partner walkthrough\",\n  \"locked\": false,\n  \"metadata\": {\n    \"fields\": {\n      \"cut\": \"v2\"\n    }\n  },\n  \"items\": [\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"intro.sk\"\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Orders\",\n      \"description\": \"The order flow\",\n      \"sketches\": [\n        \"orders/list.sk\",\n        \"orders/detail.sk\"\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"title\": \"Wrap\",\n      \"sketches\": []\n    },\n    {\n      \"type\": \"sketch_ref\",\n      \"path\": \"outro.sk\"\n    }\n  ],\n  \"created_at\": \"2025-10-01T08:00:00Z\",\n  \"updated_at\": \"2025-11-04T10:20:30Z\",\n  \"ios_board_marker\": true\n}",
+  "version": "sha256:425dd2b63c471cd9878303578e9390256d867636ff99d00ce00fe11778ede85b"
+}
+"####,
+            &ctx,
+        )
+        .expect("golden_storyboard_update_undo: expected parses");
+        assert_eq!(actual, expected, "golden_storyboard_update_undo misrouted");
+    }
     // vector: insert_row after an unknown row is rejected
     {
         let sketch = crate::model::Sketch::from_json(
