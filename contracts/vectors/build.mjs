@@ -1532,6 +1532,11 @@ const undoDocumentVectors = [
     expected: undone(null),
   },
   {
+    name: "a sketch the run created and locked is still deleted",
+    input: undo("sketch", sk({ ...unlockedFixture, locked: true }), [write(null, sk(unlockedFixture)), write(sk(unlockedFixture), sk({ ...unlockedFixture, locked: true }))]),
+    expected: undone(null),
+  },
+  {
     name: "a document the run deleted is restored",
     input: undo("note", null, [write(noteOnDisk, null)]),
     expected: undone(noteOnDisk),

@@ -837,6 +837,15 @@ interface AppStoreState {
   discardChanges: () => Promise<void>;
   /** Discard changes for one file. */
   discardFile: (filePath: string) => Promise<void>;
+  /**
+   * Runs `replace`, which rewrites or removes one file on disk, with editor
+   * writes for it suppressed; then reloads the sidebar and every open copy,
+   * closing tabs whose file is gone. Rethrows `replace`'s error.
+   */
+  replaceFileOnDisk: (
+    filePath: string,
+    replace: (paths: { repoPath: string; projectPath: string }) => Promise<unknown>,
+  ) => Promise<void>;
   /** Restore shelved changes into the workspace. */
   popStash: () => Promise<void>;
   /** Check whether a stash exists. */
@@ -2753,7 +2762,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     await rewriteWorkspaceFiles(get, set, discardDraftlineChanges, "Discard failed");
   },
 
-  discardFile: async (filePath) => {
+  replaceFileOnDisk: async (filePath, replace) => {
     const { repoPath, projectPath } = scopedPathVariants(filePath, get().currentProject);
     const suppressedPaths = Array.from(new Set([filePath, repoPath, projectPath].filter(Boolean)));
     const pathMatchesDiscard = (path: string | null | undefined) => {
@@ -2763,7 +2772,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     };
     try {
       for (const path of suppressedPaths) suppressEditorFlush(path);
-      await discardDraftlineFile(repoPath);
+      await replace({ repoPath, projectPath });
       await get().loadSketches();
       await get().loadStoryboards();
       await get().loadNotes();
@@ -2869,9 +2878,17 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().checkDirty();
     } catch (err) {
       clearSuppressedEditorFlushes(suppressedPaths);
+      await get().checkDirty();
+      throw err;
+    }
+  },
+
+  discardFile: async (filePath) => {
+    try {
+      await get().replaceFileOnDisk(filePath, ({ repoPath }) => discardDraftlineFile(repoPath));
+    } catch (err) {
       console.error("Failed to discard file:", err);
       useToastStore.getState().show(`Discard failed: ${errorMessage(err)}`, 5000, "error");
-      await get().checkDirty();
     }
   },
 

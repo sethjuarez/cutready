@@ -40,8 +40,9 @@ CREATE INDEX IF NOT EXISTS entries_by_run ON entries(run_id, seq);
 CREATE INDEX IF NOT EXISTS entries_pending ON entries(seq) WHERE state = 'pending';
 ";
 
-/// v1 logged writes without review state. Its user writes count as kept;
-/// agent writes stay up for review (without images, so only a clean undo
+/// v1 logged writes without review state. Its user writes auto-keep (a
+/// pending one too, should reconcile find it landed); agent writes stay up
+/// for review (without images, so only a clean undo
 /// back to the baseline is possible).
 const MIGRATE_1_TO_2: &str = "
 ALTER TABLE entries ADD COLUMN has_images INTEGER NOT NULL DEFAULT 0;
@@ -49,6 +50,7 @@ ALTER TABLE entries ADD COLUMN before_image TEXT;
 ALTER TABLE entries ADD COLUMN after_image TEXT;
 ALTER TABLE entries ADD COLUMN effect TEXT;
 ALTER TABLE entries ADD COLUMN resolution TEXT;
+UPDATE entries SET effect = '{\"kind\":\"auto_keep\"}' WHERE actor = 'user';
 UPDATE entries SET resolution = 'kept' WHERE actor = 'user' AND state = 'committed';
 ";
 
@@ -697,10 +699,11 @@ mod tests {
             store.entries_for_run("u").unwrap()[0].resolution,
             Some(Resolution::Kept)
         );
-        // A pending v1 user write commits with the default (Review) effect.
-        let pending = store.pending().unwrap()[0].seq;
-        store.commit(pending).unwrap();
-        assert_eq!(store.unreviewed().unwrap().len(), 2);
+        // A pending v1 user write that reconcile finds landed is kept too.
+        let pending = store.pending().unwrap()[0].clone();
+        assert_eq!(pending.write.effect, ReviewEffect::AutoKeep);
+        store.commit(pending.seq).unwrap();
+        assert_eq!(store.unreviewed().unwrap().len(), 1);
         drop(store);
         let conn = Connection::open(&path).unwrap();
         let version: i64 = conn

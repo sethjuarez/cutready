@@ -545,7 +545,9 @@ fn invert_rows(now: &mut Value, before: &Value, after: &Value, conflicts: &mut V
     }
 }
 
-/// Locks are judged on the result against what is there now.
+/// Locks are judged on the result against what is there now. Removing a
+/// document is only reached when it is still exactly what the run created,
+/// so any lock in it is the run's own and doesn't block.
 fn guard_locks(
     kind: DocumentKind,
     current: Option<&str>,
@@ -567,7 +569,6 @@ fn guard_locks(
             };
             let now = document::storyboard_from_json(current)?.0;
             match result {
-                None if now.locked => return Err(UndoError::LockedStoryboard),
                 None => {}
                 Some(result) => {
                     let next = document::storyboard_from_json(result)?.0;
@@ -583,7 +584,6 @@ fn guard_locks(
             };
             let now = document::sketch_from_json(current)?;
             match result {
-                None if now.locked => return Err(SketchEditError::LockedDocument.into()),
                 None => {}
                 Some(result) => guard_sketch(&now, &document::sketch_from_json(result)?)?,
             }
@@ -852,10 +852,10 @@ mod tests {
     }
 
     #[test]
-    fn a_locked_sketch_cannot_be_deleted() {
+    fn a_sketch_the_run_created_and_locked_is_removed() {
         let created = sketch(json!([]), json!({}));
         let locked = sketch(json!([]), json!({ "locked": true }));
-        let err = undo_document(
+        let undone = undo_document(
             DocumentKind::Sketch,
             Some(&locked),
             &[
@@ -868,7 +868,25 @@ mod tests {
             false,
             test_now(),
         )
+        .unwrap();
+        assert_eq!(undone.content, None);
+    }
+
+    #[test]
+    fn a_created_sketch_locked_by_someone_else_since_conflicts() {
+        let created = sketch(json!([]), json!({}));
+        let locked = sketch(json!([]), json!({ "locked": true }));
+        let err = undo_document(
+            DocumentKind::Sketch,
+            Some(&locked),
+            &[UndoWrite {
+                before: None,
+                after: Some(created),
+            }],
+            false,
+            test_now(),
+        )
         .unwrap_err();
-        assert_eq!(err, UndoError::Locked(SketchEditError::LockedDocument));
+        assert!(matches!(err, UndoError::Conflicts(_)), "{err:?}");
     }
 }

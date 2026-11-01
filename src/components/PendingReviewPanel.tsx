@@ -3,7 +3,7 @@ import { Check, Undo2 } from "lucide-react";
 import { RunReview } from "../contracts/generated/model/run-review";
 import type { DocumentReview } from "../contracts/generated/model/document-review";
 import { invoke } from "../services/tauri";
-import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
+import { flushEditorWrites, useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { useConfirmDialog } from "./ConfirmDialog";
 
@@ -41,12 +41,16 @@ export function PendingReviewPanel() {
     }
     setBusyKey(reviewKey(run, doc));
     try {
-      await invoke(action === "keep" ? "keep_run_document" : "undo_run_document", {
-        runId: run.run_id,
-        doc: doc.doc,
-        throughSeq: doc.through_seq,
-      });
-      if (action === "undo") await refreshAfterUndo(doc);
+      const args = { runId: run.run_id, doc: doc.doc, throughSeq: doc.through_seq };
+      if (action === "keep") {
+        await invoke("keep_run_document", args);
+      } else {
+        // Unsaved edits must reach disk first so the undo merges against them.
+        await flushEditorWrites();
+        const store = useAppStore.getState();
+        await store.replaceFileOnDisk(doc.doc, () => invoke("undo_run_document", args));
+        await store.refreshChangedFiles();
+      }
     } catch (err) {
       showToast(`Could not ${action} ${doc.doc}: ${String(err)}`, 5000, "error");
     } finally {
@@ -103,32 +107,3 @@ function reviewKey(run: RunReview, doc: DocumentReview): string {
   return `${run.run_id}:${doc.doc}`;
 }
 
-/** Undo rewrote or removed `doc` on disk: reload the sidebar and any open copy. */
-async function refreshAfterUndo(doc: DocumentReview) {
-  const store = useAppStore.getState();
-  const path = doc.doc;
-  if (doc.created) {
-    store.openTabs.filter((tab) => tab.path === path).forEach((tab) => store.closeTab(tab.id));
-  }
-  const reloadOpen = async (activePath: string | null, open: (path: string) => Promise<void>) => {
-    if (doc.created || activePath !== path) return;
-    suppressEditorFlush(path);
-    try {
-      await open(path);
-    } finally {
-      globalThis.setTimeout(() => clearSuppressedEditorFlush(path), 100);
-    }
-  };
-  if (path.endsWith(".sk")) {
-    await store.loadSketches();
-    await reloadOpen(store.activeSketchPath, store.openSketch);
-  } else if (path.endsWith(".sb")) {
-    await store.loadStoryboards();
-    await reloadOpen(store.activeStoryboardPath, store.openStoryboard);
-  } else if (path.endsWith(".md")) {
-    await store.loadNotes();
-    await reloadOpen(store.activeNotePath, store.openNote);
-  }
-  await store.checkDirty();
-  await store.refreshChangedFiles();
-}

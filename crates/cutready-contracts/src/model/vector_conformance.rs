@@ -1950,6 +1950,44 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         let result = seam.undo_document(&request);
         assert!(result.is_err(), "{}: expected an error, got Ok", "a row someone else locked since blocks restoring its content");
     }
+    // vector: a sketch the run created and locked is still deleted
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\"title\":\"Contract sketch\",\"locked\":true,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}",
+  "writes": [
+    {
+      "before": null,
+      "after": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}"
+    },
+    {
+      "before": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}",
+      "after": "{\"title\":\"Contract sketch\",\"locked\":true,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "a sketch the run created and locked is still deleted", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": null,
+  "version": null
+}
+"####,
+            &ctx,
+        )
+        .expect("a sketch the run created and locked is still deleted: expected parses");
+        assert_eq!(actual, expected, "a sketch the run created and locked is still deleted misrouted");
+    }
     // vector: a stale version reports the current one before any op runs
     {
         let request = crate::model::DocumentEditRequest::from_json(

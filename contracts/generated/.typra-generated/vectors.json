@@ -8441,6 +8441,44 @@
       "returns": "DocumentUndo",
       "sync": true,
       "vector": {
+        "name": "a sketch the run created and locked is still deleted",
+        "input": {
+          "request": {
+            "kind": "sketch",
+            "content": "{\"title\":\"Contract sketch\",\"locked\":true,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}",
+            "writes": [
+              {
+                "before": null,
+                "after": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}"
+              },
+              {
+                "before": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}",
+                "after": "{\"title\":\"Contract sketch\",\"locked\":true,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}"
+              }
+            ],
+            "note_locked": false,
+            "now": "2026-07-01T09:30:00Z"
+          }
+        },
+        "expected": {
+          "content": null,
+          "version": null
+        },
+        "operation": "undoDocument",
+        "stage": "callable"
+      }
+    },
+    {
+      "contract": "EditService",
+      "namespace": "CutReady.Contracts",
+      "group": "",
+      "operation": "undoDocument",
+      "params": {
+        "request": "DocumentUndoRequest"
+      },
+      "returns": "DocumentUndo",
+      "sync": true,
+      "vector": {
         "name": "a storyboard someone else locked since can't change",
         "input": {
           "request": {
