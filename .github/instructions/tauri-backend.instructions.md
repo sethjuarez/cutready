@@ -110,6 +110,12 @@ Core types are in the `models/` module:
 
 All models derive `Serialize` + `Deserialize` for JSON IPC and file storage. Use `#[serde(default)]` for backward compatibility on new fields.
 
+## Core and Ports
+
+- `crates/cutready-core` is the host-neutral document core (architecture v3). It reaches the outside world only through the traits in `src/ports/` (`Files`, `Clock`, `Log`, `Lock`, `Secrets`, `OpLogStore`), addresses documents by project-relative paths (`path::project_relative`, as strict as `safe_resolve`), and denies direct `std::fs`, `SystemTime`, `env::var` and `Command` through its `clippy.toml`.
+- `crates/cutready-desktop-io` holds the desktop port implementations shared by the app, CLI and MCP server. `cutready_core::testing` has in-memory fakes for tests.
+- `npm run check:core` (part of `check:rust`) rejects Tauri, `windows*`, git2, rusqlite, reqwest, Draftline, the app crate and tokio's `process` feature in core's graph, then runs `cargo check -p cutready-core --target aarch64-apple-ios`. Install the target locally with `rustup target add aarch64-apple-ios`.
+
 ## Versioning (Draftline)
 
 - CutReady persistence routes through `engine::draftline_adapter::CutReadyDraftlineAdapter`; do not add app-level `gix`, `git2`, or raw `git` save/restore/diff paths.

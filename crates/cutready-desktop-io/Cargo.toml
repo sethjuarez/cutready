@@ -1,0 +1,17 @@
+[package]
+name = "cutready-desktop-io"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Desktop implementations of cutready-core ports: rooted std::fs files, system clock, tracing log and a cross-process file lock."
+
+[lib]
+name = "cutready_desktop_io"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+cutready-core = { path = "../cutready-core" }
+tracing = "0.1"
+
+[dev-dependencies]
+tempfile = "3"

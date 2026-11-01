@@ -1,0 +1,18 @@
+[package]
+name = "cutready-core"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Host-neutral CutReady document core: load/save, edits and review behind ports. Pure Rust so it builds for iOS (see scripts/check-core-deps.mjs)."
+
+[lib]
+name = "cutready_core"
+
+# Keep this list pure Rust. scripts/check-core-deps.mjs rejects tauri*, windows*,
+# git2, rusqlite, reqwest and tokio's `process` feature anywhere in this graph,
+# and `cargo check --target aarch64-apple-ios` fails on any C dependency.
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["serde", "std"] }
+cutready-contracts = { path = "../cutready-contracts" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

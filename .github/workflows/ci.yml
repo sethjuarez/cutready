@@ -67,9 +67,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libpipewire-0.3-dev libgbm-dev
 
+      # The iOS target lets check:core prove cutready-core still builds for iOS.
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+          targets: aarch64-apple-ios
 
       - uses: Swatinem/rust-cache@v2
         with:
