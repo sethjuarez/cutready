@@ -437,6 +437,7 @@ async fn run_turn(turn: PromptyTurn) -> Result<RunResult, String> {
         durable: durable.clone(),
         memory_promotions: memory_promotions.clone(),
         delegation: Some(delegation),
+        run_id: session_id.clone(),
     });
     let post_commit = Arc::new(CutReadyPostCommitPort {
         durable: durable.clone(),
@@ -1046,6 +1047,8 @@ struct CutReadyToolPort {
     vision_enabled: bool,
     host: Arc<dyn PromptyHost>,
     durable: Option<Arc<dyn DurableRunStore>>,
+    /// The top-level run (shared by delegated child turns).
+    run_id: String,
     /// Host-owned buffer of memory-promotion candidates (as JSON) collected during
     /// tool execution and flushed post-commit by `CutReadyPostCommitPort`. Keeping the
     /// payload as `Value` means the native path never depends on the engine's promotion
@@ -1103,6 +1106,7 @@ impl ToolPort for CutReadyToolPort {
                     vision_enabled: self.vision_enabled,
                     project_workspace_tools_enabled: self.project_workspace_tools_enabled,
                     mutation_tools_enabled: self.mutation_tools_enabled,
+                    run_id: self.run_id.clone(),
                 },
             )
         };

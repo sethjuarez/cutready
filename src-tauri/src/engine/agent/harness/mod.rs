@@ -64,6 +64,15 @@ impl harness_contract::tools::HostToolExecutor for AppToolExecutor {
         call: &ToolCall,
         ctx: &harness_contract::tools::ToolExecutionContext,
     ) -> ToolOutput {
+        execute_in_run(call, ctx)
+    }
+}
+/// Run a tool call with its document writes logged under the agent run.
+fn execute_in_run(
+    call: &ToolCall,
+    ctx: &harness_contract::tools::ToolExecutionContext,
+) -> ToolOutput {
+    crate::engine::document_writer::in_agent_run(&ctx.run_id, || {
         crate::engine::agent::tools::execute_tool(
             call,
             &ctx.repo_root,
@@ -72,8 +81,9 @@ impl harness_contract::tools::HostToolExecutor for AppToolExecutor {
             ctx.project_workspace_tools_enabled,
             ctx.mutation_tools_enabled,
         )
-    }
+    })
 }
+
 // ---------------------------------------------------------------------------
 // Registry / factory
 // ---------------------------------------------------------------------------
@@ -104,14 +114,7 @@ impl harness_prompty::PromptyHost for AppPromptyHost {
         call: &ToolCall,
         ctx: &harness_contract::tools::ToolExecutionContext,
     ) -> ToolOutput {
-        crate::engine::agent::tools::execute_tool(
-            call,
-            &ctx.repo_root,
-            &ctx.project_root,
-            ctx.vision_enabled,
-            ctx.project_workspace_tools_enabled,
-            ctx.mutation_tools_enabled,
-        )
+        execute_in_run(call, ctx)
     }
 
     fn is_read_only_tool(&self, name: &str) -> bool {

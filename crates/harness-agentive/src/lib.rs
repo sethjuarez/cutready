@@ -184,6 +184,7 @@ impl AgentHarness for AgentiveHarness {
             vision_enabled,
             project_workspace_tools_enabled,
             mutation_tools_enabled,
+            run_id: run_id.clone(),
         };
         let host_executor = self.tool_executor.clone();
         // agentive's `RunnerEvent::ToolResult` carries no execution outcome, so the
@@ -633,6 +634,7 @@ mod tests {
             vision_enabled: false,
             project_workspace_tools_enabled: true,
             mutation_tools_enabled: true,
+            run_id: "run".into(),
         };
 
         let output = harness.tool_executor.execute(&call, &ctx);

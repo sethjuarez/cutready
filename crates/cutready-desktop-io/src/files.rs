@@ -81,7 +81,20 @@ impl Files for StdFiles {
             .map_err(fail)?;
         temp.write_all(bytes).map_err(fail)?;
         temp.as_file().sync_all().map_err(fail)?;
-        temp.persist(&full).map_err(|err| fail(err.error))?;
+        if let Err(err) = temp.persist(&full) {
+            // Windows refuses the rename when another process holds the
+            // target without delete sharing; the app always wrote in place
+            // then, so keep doing that rather than fail the save.
+            tracing::warn!(
+                "atomic replace of {} refused ({}); writing in place",
+                full.display(),
+                err.error
+            );
+            drop(err.file);
+            let mut file = fs::File::create(&full).map_err(fail)?;
+            file.write_all(bytes).map_err(fail)?;
+            file.sync_all().map_err(fail)?;
+        }
         let mut dir = parent;
         loop {
             sync_dir(dir).map_err(fail)?;

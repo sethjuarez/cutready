@@ -12,24 +12,31 @@ use serde_json::{json, Value};
 
 use crate::engine::document_writer::{self, Expected, WriteError};
 
-/// Save `after` over the sketch at `path`. `before` is what the tool read, or
-/// `None` when the tool creates the sketch (or overwrites an unreadable one).
-pub fn save_sketch(path: &Path, before: Option<&Sketch>, after: &Sketch) -> Result<(), WriteError> {
+/// Save `after` over the sketch at `path` under `root`. `before` is what the
+/// tool read, or `None` when the tool creates the sketch (or overwrites an
+/// unreadable one).
+pub fn save_sketch(
+    root: &Path,
+    path: &Path,
+    before: Option<&Sketch>,
+    after: &Sketch,
+) -> Result<(), WriteError> {
     match before.and_then(|before| sketch_ops(before, after)) {
-        Some(ops) => document_writer::edit_file(path, Expected::Unchecked, &ops).map(drop),
-        None => document_writer::replace_sketch(path, after).map(drop),
+        Some(ops) => document_writer::edit_file(root, path, Expected::Unchecked, &ops).map(drop),
+        None => document_writer::replace_sketch(root, path, after).map(drop),
     }
 }
 
 /// Save `after` over the storyboard at `path`, like [`save_sketch`].
 pub fn save_storyboard(
+    root: &Path,
     path: &Path,
     before: Option<&Storyboard>,
     after: &Storyboard,
 ) -> Result<(), WriteError> {
     match before.and_then(|before| storyboard_ops(before, after)) {
-        Some(ops) => document_writer::edit_file(path, Expected::Unchecked, &ops).map(drop),
-        None => document_writer::replace_storyboard(path, after).map(drop),
+        Some(ops) => document_writer::edit_file(root, path, Expected::Unchecked, &ops).map(drop),
+        None => document_writer::replace_storyboard(root, path, after).map(drop),
     }
 }
 
@@ -173,14 +180,14 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("intro.sk");
         let before = sketch();
-        save_sketch(&path, None, &before).unwrap();
+        save_sketch(temp.path(), &path, None, &before).unwrap();
         let before = crate::engine::project::read_sketch(&path).unwrap();
         let mut after = before.clone();
         after.title = "Welcome".into();
         after.description = Value::String("Opening".into());
         after.rows[0].demo_actions = "Click start".into();
 
-        save_sketch(&path, Some(&before), &after).unwrap();
+        save_sketch(temp.path(), &path, Some(&before), &after).unwrap();
 
         let saved = crate::engine::project::read_sketch(&path).unwrap();
         after.updated_at = saved.updated_at;

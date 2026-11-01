@@ -728,6 +728,17 @@ pub async fn switch_project(
 }
 
 fn reconcile_abandoned_agent_runs(state: &AppState, view: &ProjectView) {
+    match crate::engine::document_writer::open_project(&view.root) {
+        Ok(settled) if !settled.committed.is_empty() || !settled.abandoned.is_empty() => {
+            log::info!(
+                "[project] settled interrupted writes: {} committed, {} abandoned",
+                settled.committed.len(),
+                settled.abandoned.len()
+            );
+        }
+        Ok(_) => {}
+        Err(err) => log::warn!("[project] could not settle the op log: {err}"),
+    }
     let active_run_ids = {
         let active_runs = match state.active_agent_runs.lock() {
             Ok(runs) => runs,
