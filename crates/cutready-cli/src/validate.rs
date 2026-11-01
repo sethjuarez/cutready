@@ -2,34 +2,40 @@
 
 use std::path::{Path, PathBuf};
 
-use cutready_core::contracts::CmdError;
+use cutready_core::contracts::{CmdError, DocumentValidation, ValidationReport};
 use cutready_core::document::{self, DocumentError};
-use serde_json::{json, Value};
 
 use crate::project::{Failure, Project};
 
-/// Validates `docs` (every `.sk`, `.sb` and `.md` in the project when empty)
-/// and returns `(all_valid, {ok, documents: [{path, ok, version?, error?}]})`.
-pub fn validate(root: &Path, docs: &[String]) -> Result<(bool, Value), Failure> {
+/// Validates `docs` (every `.sk`, `.sb` and `.md` in the project when empty).
+pub fn validate(root: &Path, docs: &[String]) -> Result<ValidationReport, Failure> {
     let project = Project::open(root)?;
     let docs = if docs.is_empty() {
         discover(project.root())?
     } else {
         docs.to_vec()
     };
-    let mut all_ok = true;
-    let mut results = Vec::new();
-    for doc in docs {
-        let result = match check(&project, &doc) {
-            Ok(version) => json!({ "path": doc, "ok": true, "version": version }),
-            Err(err) => {
-                all_ok = false;
-                json!({ "path": doc, "ok": false, "error": err.to_json() })
-            }
-        };
-        results.push(result);
-    }
-    Ok((all_ok, json!({ "ok": all_ok, "documents": results })))
+    let documents: Vec<DocumentValidation> = docs
+        .into_iter()
+        .map(|doc| match check(&project, &doc) {
+            Ok(version) => DocumentValidation {
+                path: doc,
+                ok: true,
+                version: Some(version),
+                error: None,
+            },
+            Err(err) => DocumentValidation {
+                path: doc,
+                ok: false,
+                version: None,
+                error: Some(err.error().clone()),
+            },
+        })
+        .collect();
+    Ok(ValidationReport {
+        ok: documents.iter().all(|doc| doc.ok),
+        documents,
+    })
 }
 
 fn check(project: &Project, doc: &str) -> Result<String, Failure> {
@@ -45,7 +51,7 @@ fn check(project: &Project, doc: &str) -> Result<String, Failure> {
         Ok(())
     };
     decoded.map_err(|err| match err {
-        DocumentError::DuplicateRowId(dup) => Failure::Contract(Box::new(CmdError::from(&dup))),
+        DocumentError::DuplicateRowId(dup) => Failure::from(CmdError::from(&dup)),
         other => Failure::other(format!("{doc}: {other}")),
     })?;
     Ok(version)

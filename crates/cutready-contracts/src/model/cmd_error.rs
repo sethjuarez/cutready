@@ -20,6 +20,11 @@ pub enum CmdErrorCode {
     StaleDocument,
     UndoConflict,
     StaleReview,
+    CommandFailed,
+    NotRegistered,
+    UnreadableRegistration,
+    MissingBinary,
+    ContractMismatch,
     /// Unknown variant (open enum — accepts any string).
     Other(String),
 }
@@ -44,6 +49,11 @@ impl std::fmt::Display for CmdErrorCode {
             Self::StaleDocument => write!(f, "stale_document"),
             Self::UndoConflict => write!(f, "undo_conflict"),
             Self::StaleReview => write!(f, "stale_review"),
+            Self::CommandFailed => write!(f, "command_failed"),
+            Self::NotRegistered => write!(f, "not_registered"),
+            Self::UnreadableRegistration => write!(f, "unreadable_registration"),
+            Self::MissingBinary => write!(f, "missing_binary"),
+            Self::ContractMismatch => write!(f, "contract_mismatch"),
             Self::Other(s) => write!(f, "{}", s),
         }
     }
@@ -63,6 +73,11 @@ impl CmdErrorCode {
             "stale_document" => Some(Self::StaleDocument),
             "undo_conflict" => Some(Self::UndoConflict),
             "stale_review" => Some(Self::StaleReview),
+            "command_failed" => Some(Self::CommandFailed),
+            "not_registered" => Some(Self::NotRegistered),
+            "unreadable_registration" => Some(Self::UnreadableRegistration),
+            "missing_binary" => Some(Self::MissingBinary),
+            "contract_mismatch" => Some(Self::ContractMismatch),
             other => Some(Self::Other(other.to_string())),
         }
     }
@@ -101,6 +116,21 @@ impl CmdErrorCode {
         if s.eq_ignore_ascii_case("stale_review") {
             return Some(Self::StaleReview);
         }
+        if s.eq_ignore_ascii_case("command_failed") {
+            return Some(Self::CommandFailed);
+        }
+        if s.eq_ignore_ascii_case("not_registered") {
+            return Some(Self::NotRegistered);
+        }
+        if s.eq_ignore_ascii_case("unreadable_registration") {
+            return Some(Self::UnreadableRegistration);
+        }
+        if s.eq_ignore_ascii_case("missing_binary") {
+            return Some(Self::MissingBinary);
+        }
+        if s.eq_ignore_ascii_case("contract_mismatch") {
+            return Some(Self::ContractMismatch);
+        }
         Some(Self::Other(s.to_string()))
     }
 
@@ -117,6 +147,11 @@ impl CmdErrorCode {
             Self::StaleDocument => "stale_document",
             Self::UndoConflict => "undo_conflict",
             Self::StaleReview => "stale_review",
+            Self::CommandFailed => "command_failed",
+            Self::NotRegistered => "not_registered",
+            Self::UnreadableRegistration => "unreadable_registration",
+            Self::MissingBinary => "missing_binary",
+            Self::ContractMismatch => "contract_mismatch",
             Self::Other(s) => s.as_str(),
         }
     }

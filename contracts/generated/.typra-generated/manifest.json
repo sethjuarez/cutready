@@ -5,6 +5,11 @@
   "files": [
     {
       "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/applied_edit_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
       "path": "../crates/cutready-contracts/src/generated_tests/chat_artifact_source_test.rs",
       "marker": true
     },
@@ -40,12 +45,27 @@
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/cli_install_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/cli_registration_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
       "path": "../crates/cutready-contracts/src/generated_tests/cmd_error_details_test.rs",
       "marker": true
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/generated_tests",
       "path": "../crates/cutready-contracts/src/generated_tests/cmd_error_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/command_failure_test.rs",
       "marker": true
     },
     {
@@ -70,12 +90,22 @@
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/document_snapshot_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
       "path": "../crates/cutready-contracts/src/generated_tests/document_undo_request_test.rs",
       "marker": true
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/generated_tests",
       "path": "../crates/cutready-contracts/src/generated_tests/document_undo_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/document_validation_test.rs",
       "marker": true
     },
     {
@@ -130,12 +160,22 @@
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/review_resolution_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
       "path": "../crates/cutready-contracts/src/generated_tests/row_text_update_test.rs",
       "marker": true
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/generated_tests",
       "path": "../crates/cutready-contracts/src/generated_tests/run_review_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/run_started_test.rs",
       "marker": true
     },
     {
@@ -170,12 +210,22 @@
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/validation_report_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
       "path": "../crates/cutready-contracts/src/generated_tests/vector_conformance_test.rs",
       "marker": true
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/generated_tests",
       "path": "../crates/cutready-contracts/src/generated_tests/vector_runner/mod.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/applied_edit.rs",
       "marker": true
     },
     {
@@ -220,12 +270,27 @@
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/cli_install.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/cli_registration.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
       "path": "../crates/cutready-contracts/src/model/cmd_error_details.rs",
       "marker": true
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/model",
       "path": "../crates/cutready-contracts/src/model/cmd_error.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/command_failure.rs",
       "marker": true
     },
     {
@@ -255,12 +320,22 @@
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/document_snapshot.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
       "path": "../crates/cutready-contracts/src/model/document_undo_request.rs",
       "marker": true
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/model",
       "path": "../crates/cutready-contracts/src/model/document_undo.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/document_validation.rs",
       "marker": true
     },
     {
@@ -325,12 +400,22 @@
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/review_resolution.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
       "path": "../crates/cutready-contracts/src/model/row_text_update.rs",
       "marker": true
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/model",
       "path": "../crates/cutready-contracts/src/model/run_review.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/run_started.rs",
       "marker": true
     },
     {
@@ -375,6 +460,11 @@
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/validation_report.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
       "path": "../crates/cutready-contracts/src/model/vector_conformance.rs",
       "marker": true
     },
@@ -391,6 +481,11 @@
     {
       "outputRoot": "../src/contracts/generated",
       "path": "../src/contracts/generated/eslint.config.js",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/applied-edit.ts",
       "marker": true
     },
     {
@@ -435,12 +530,27 @@
     },
     {
       "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/cli-install.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/cli-registration.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
       "path": "../src/contracts/generated/model/cmd-error-details.ts",
       "marker": true
     },
     {
       "outputRoot": "../src/contracts/generated/model",
       "path": "../src/contracts/generated/model/cmd-error.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/command-failure.ts",
       "marker": true
     },
     {
@@ -470,12 +580,22 @@
     },
     {
       "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/document-snapshot.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
       "path": "../src/contracts/generated/model/document-undo-request.ts",
       "marker": true
     },
     {
       "outputRoot": "../src/contracts/generated/model",
       "path": "../src/contracts/generated/model/document-undo.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/document-validation.ts",
       "marker": true
     },
     {
@@ -540,12 +660,22 @@
     },
     {
       "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/review-resolution.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
       "path": "../src/contracts/generated/model/row-text-update.ts",
       "marker": true
     },
     {
       "outputRoot": "../src/contracts/generated/model",
       "path": "../src/contracts/generated/model/run-review.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/run-started.ts",
       "marker": true
     },
     {
@@ -590,7 +720,17 @@
     },
     {
       "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/validation-report.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
       "path": "../src/contracts/generated/model/vector-conformance.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/applied-edit.test.ts",
       "marker": true
     },
     {
@@ -630,12 +770,27 @@
     },
     {
       "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/cli-install.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/cli-registration.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
       "path": "../src/contracts/generated/tests/cmd-error-details.test.ts",
       "marker": true
     },
     {
       "outputRoot": "../src/contracts/generated/tests",
       "path": "../src/contracts/generated/tests/cmd-error.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/command-failure.test.ts",
       "marker": true
     },
     {
@@ -665,12 +820,22 @@
     },
     {
       "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/document-snapshot.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
       "path": "../src/contracts/generated/tests/document-undo-request.test.ts",
       "marker": true
     },
     {
       "outputRoot": "../src/contracts/generated/tests",
       "path": "../src/contracts/generated/tests/document-undo.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/document-validation.test.ts",
       "marker": true
     },
     {
@@ -760,12 +925,22 @@
     },
     {
       "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/review-resolution.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
       "path": "../src/contracts/generated/tests/row-text-update.test.ts",
       "marker": true
     },
     {
       "outputRoot": "../src/contracts/generated/tests",
       "path": "../src/contracts/generated/tests/run-review.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/run-started.test.ts",
       "marker": true
     },
     {
@@ -860,6 +1035,11 @@
     },
     {
       "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/validation-report.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
       "path": "../src/contracts/generated/tests/vector-conformance.test.ts",
       "marker": true
     },
@@ -877,6 +1057,11 @@
       "outputRoot": "generated/json-ast",
       "path": "generated/json-ast/model.json",
       "marker": false
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/AppliedEdit.md",
+      "marker": true
     },
     {
       "outputRoot": "generated/markdown",
@@ -920,12 +1105,27 @@
     },
     {
       "outputRoot": "generated/markdown",
+      "path": "generated/markdown/CliInstall.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/CliRegistration.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
       "path": "generated/markdown/CmdError.md",
       "marker": true
     },
     {
       "outputRoot": "generated/markdown",
       "path": "generated/markdown/CmdErrorDetails.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/CommandFailure.md",
       "marker": true
     },
     {
@@ -955,12 +1155,22 @@
     },
     {
       "outputRoot": "generated/markdown",
+      "path": "generated/markdown/DocumentSnapshot.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
       "path": "generated/markdown/DocumentUndo.md",
       "marker": true
     },
     {
       "outputRoot": "generated/markdown",
       "path": "generated/markdown/DocumentUndoRequest.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/DocumentValidation.md",
       "marker": true
     },
     {
@@ -1065,12 +1275,22 @@
     },
     {
       "outputRoot": "generated/markdown",
+      "path": "generated/markdown/ReviewResolution.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
       "path": "generated/markdown/RowTextUpdate.md",
       "marker": true
     },
     {
       "outputRoot": "generated/markdown",
       "path": "generated/markdown/RunReview.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/RunStarted.md",
       "marker": true
     },
     {
@@ -1175,6 +1395,11 @@
     },
     {
       "outputRoot": "generated/markdown",
+      "path": "generated/markdown/ValidationReport.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
       "path": "generated/markdown/WriteNoteOp.md",
       "marker": true
     },
@@ -1182,6 +1407,11 @@
       "outputRoot": "generated/swift",
       "path": "generated/swift/Package.swift",
       "marker": false
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/applied_edit.swift",
+      "marker": true
     },
     {
       "outputRoot": "generated/swift",
@@ -1225,12 +1455,27 @@
     },
     {
       "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/cli_install.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/cli_registration.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
       "path": "generated/swift/Sources/CutReadyContracts/cmd_error_details.swift",
       "marker": true
     },
     {
       "outputRoot": "generated/swift",
       "path": "generated/swift/Sources/CutReadyContracts/cmd_error.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/command_failure.swift",
       "marker": true
     },
     {
@@ -1255,12 +1500,22 @@
     },
     {
       "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/document_snapshot.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
       "path": "generated/swift/Sources/CutReadyContracts/document_undo_request.swift",
       "marker": true
     },
     {
       "outputRoot": "generated/swift",
       "path": "generated/swift/Sources/CutReadyContracts/document_undo.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/document_validation.swift",
       "marker": true
     },
     {
@@ -1320,12 +1575,22 @@
     },
     {
       "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/review_resolution.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
       "path": "generated/swift/Sources/CutReadyContracts/row_text_update.swift",
       "marker": true
     },
     {
       "outputRoot": "generated/swift",
       "path": "generated/swift/Sources/CutReadyContracts/run_review.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/run_started.swift",
       "marker": true
     },
     {
@@ -1375,7 +1640,17 @@
     },
     {
       "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/validation_report.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
       "path": "generated/swift/Sources/CutReadyContracts/vector_conformance.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/AppliedEditTests.swift",
       "marker": true
     },
     {
@@ -1415,12 +1690,27 @@
     },
     {
       "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/CliInstallTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/CliRegistrationTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
       "path": "generated/swift/Tests/CutReadyContractsTests/CmdErrorDetailsTests.swift",
       "marker": true
     },
     {
       "outputRoot": "generated/swift",
       "path": "generated/swift/Tests/CutReadyContractsTests/CmdErrorTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/CommandFailureTests.swift",
       "marker": true
     },
     {
@@ -1450,12 +1740,22 @@
     },
     {
       "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/DocumentSnapshotTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
       "path": "generated/swift/Tests/CutReadyContractsTests/DocumentUndoRequestTests.swift",
       "marker": true
     },
     {
       "outputRoot": "generated/swift",
       "path": "generated/swift/Tests/CutReadyContractsTests/DocumentUndoTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/DocumentValidationTests.swift",
       "marker": true
     },
     {
@@ -1505,12 +1805,22 @@
     },
     {
       "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/ReviewResolutionTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
       "path": "generated/swift/Tests/CutReadyContractsTests/RowTextUpdateTests.swift",
       "marker": true
     },
     {
       "outputRoot": "generated/swift",
       "path": "generated/swift/Tests/CutReadyContractsTests/RunReviewTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/RunStartedTests.swift",
       "marker": true
     },
     {
@@ -1541,6 +1851,11 @@
     {
       "outputRoot": "generated/swift",
       "path": "generated/swift/Tests/CutReadyContractsTests/UndoWriteTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/ValidationReportTests.swift",
       "marker": true
     }
   ]

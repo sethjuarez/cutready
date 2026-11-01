@@ -5,4 +5,5 @@ import "./errors.tsp";
 import "./edits.tsp";
 import "./ops.tsp";
 import "./chat_artifact.tsp";
+import "./cli.tsp";
 import "./vectors.tsp";

@@ -15,6 +15,13 @@ options:
       - "CutReady.Contracts.ChatTranscript"
       - "CutReady.Contracts.ChatPromotion"
       - "CutReady.Contracts.RunReview"
+      - "CutReady.Contracts.DocumentSnapshot"
+      - "CutReady.Contracts.RunStarted"
+      - "CutReady.Contracts.AppliedEdit"
+      - "CutReady.Contracts.ReviewResolution"
+      - "CutReady.Contracts.ValidationReport"
+      - "CutReady.Contracts.CommandFailure"
+      - "CutReady.Contracts.CliRegistration"
     deterministic-output: true
     emit-targets:
       # Desktop (Rust). Models + sample tests compile inside the

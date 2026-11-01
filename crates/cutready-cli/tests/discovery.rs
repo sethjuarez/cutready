@@ -8,6 +8,9 @@ use cutready_cli::discovery::{
     compare_versions, discover, register, DiscoveryError, Registered, Registration, REGISTRY_FILE,
 };
 use cutready_cli::CONTRACT_VERSION;
+use cutready_core::contracts::{
+    CliInstall, CliRegistration, CmdErrorCode, CommandFailure, LoadContext, RegistrationOutcome,
+};
 use serde_json::{json, Value};
 
 /// A stand-in binary that exists on disk.
@@ -112,7 +115,7 @@ fn another_contract_version_fails_closed() {
             expected: CONTRACT_VERSION,
         }
     );
-    assert_eq!(err.code(), "contract_mismatch");
+    assert_eq!(err.code(), CmdErrorCode::ContractMismatch);
 }
 
 #[test]
@@ -209,25 +212,37 @@ fn cli(config: &Path, args: &[&str]) -> (bool, Value) {
 #[test]
 fn the_binary_registers_itself_and_is_discovered() {
     let config = tempfile::tempdir().unwrap();
+    let ctx = LoadContext::default();
     let (ok, missing) = cli(config.path(), &["discover"]);
     assert!(!ok);
-    assert_eq!(missing["error"]["code"], json!("not_registered"));
+    let missing = CommandFailure::try_load_from_value(&missing, &ctx).unwrap();
+    assert_eq!(missing.error.code, CmdErrorCode::NotRegistered);
 
     let (ok, registered) = cli(config.path(), &["register"]);
     assert!(ok, "{registered}");
-    assert_eq!(registered["outcome"], json!("registered"));
+    let registered = CliRegistration::try_load_from_value(&registered, &ctx).unwrap();
+    assert_eq!(registered.outcome, RegistrationOutcome::Registered);
+
+    let on_disk: Value =
+        serde_json::from_slice(&std::fs::read(config.path().join(REGISTRY_FILE)).unwrap()).unwrap();
+    assert_eq!(
+        CliInstall::try_load_from_value(&on_disk, &ctx).unwrap(),
+        registered.registered
+    );
 
     let (ok, found) = cli(config.path(), &["discover"]);
     assert!(ok, "{found}");
+    let found = CliInstall::try_load_from_value(&found, &ctx).unwrap();
     let exe = std::fs::canonicalize(env!("CARGO_BIN_EXE_cutready-cli")).unwrap();
-    let path = std::fs::canonicalize(found["path"].as_str().unwrap()).unwrap();
-    assert_eq!(path, exe);
-    assert_eq!(found["version"], json!(env!("CARGO_PKG_VERSION")));
-    assert_eq!(found["contractVersion"], json!(CONTRACT_VERSION));
+    assert_eq!(std::fs::canonicalize(&found.path).unwrap(), exe);
+    assert_eq!(found.version, env!("CARGO_PKG_VERSION"));
+    assert_eq!(found.contract_version, CONTRACT_VERSION);
 
     let (ok, again) = cli(config.path(), &["register"]);
     assert!(ok);
-    assert_eq!(again["outcome"], json!("replaced"));
+    let again = CliRegistration::try_load_from_value(&again, &ctx).unwrap();
+    assert_eq!(again.outcome, RegistrationOutcome::Replaced);
+    assert_eq!(again.previous, Some(found));
 }
 
 #[test]
@@ -237,6 +252,31 @@ fn the_binary_keeps_a_newer_registration() {
     register(config.path(), &newer, false).unwrap();
     let (ok, out) = cli(config.path(), &["register"]);
     assert!(ok, "{out}");
-    assert_eq!(out["outcome"], json!("kept_newer"));
-    assert_eq!(out["registered"]["version"], json!("999.0.0"));
+    let out = CliRegistration::try_load_from_value(&out, &LoadContext::default()).unwrap();
+    assert_eq!(out.outcome, RegistrationOutcome::KeptNewer);
+    assert_eq!(out.registered.version, "999.0.0");
+}
+
+#[test]
+fn a_malformed_registration_is_unreadable() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = binary(dir.path(), "cli").to_string_lossy().into_owned();
+    for value in [
+        json!({ "path": path, "version": "1.0.0" }),
+        json!({ "path": path, "version": "1.0.0", "contractVersion": CONTRACT_VERSION }),
+        json!({ "path": path, "version": 1, "contract_version": CONTRACT_VERSION }),
+        json!({ "path": path, "version": "1.0.0", "contract_version": "1" }),
+        json!({ "path": "", "version": "1.0.0", "contract_version": CONTRACT_VERSION }),
+    ] {
+        std::fs::write(dir.path().join(REGISTRY_FILE), value.to_string()).unwrap();
+        let err = discover(dir.path(), CONTRACT_VERSION).unwrap_err();
+        assert!(
+            matches!(err, DiscoveryError::Unreadable(_)),
+            "{value}: {err:?}"
+        );
+        assert_eq!(
+            err.to_cmd_error().code,
+            CmdErrorCode::UnreadableRegistration
+        );
+    }
 }

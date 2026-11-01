@@ -3,10 +3,11 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use cutready_cli::edit::{self, Expect};
-use cutready_cli::project::Project;
+use cutready_cli::project::{Failure, Project};
 use cutready_cli::{discovery, mcp, validate, CONTRACT_VERSION};
+use cutready_core::contracts::{ReviewAction, ReviewResolution, RunReview, SaveContext};
 use cutready_desktop_io::SystemClock;
-use serde_json::{json, Value};
+use serde_json::Value;
 
 const USAGE: &str = "\
 Usage:
@@ -69,8 +70,8 @@ fn run(args: &[String]) -> Result<ExitCode, Usage> {
                 .split_first()
                 .ok_or_else(|| usage("validate needs a project folder"))?;
             Ok(match validate::validate(&PathBuf::from(project), docs) {
-                Ok((ok, report)) => print_json(&report, ok),
-                Err(err) => print_json(&err.to_json(), false),
+                Ok(report) => print_json(&report.to_value(&ctx()), report.ok),
+                Err(err) => failed(&err),
             })
         }
         "review" => {
@@ -80,8 +81,8 @@ fn run(args: &[String]) -> Result<ExitCode, Usage> {
             let result = Project::open(&PathBuf::from(project))
                 .and_then(|project| project.reviews(&SystemClock));
             Ok(match result {
-                Ok(reviews) => print_json(&reviews, true),
-                Err(err) => print_json(&json!({ "error": err.to_json() }), false),
+                Ok(reviews) => print_json(&reviews_json(&reviews), true),
+                Err(err) => failed(&err),
             })
         }
         "keep" | "undo" => resolve_command(command, rest),
@@ -99,20 +100,9 @@ fn run(args: &[String]) -> Result<ExitCode, Usage> {
                 .and_then(|install| Ok((discovery::register(&dir, &install, force)?, install)));
             Ok(match result {
                 Ok((outcome, install)) => {
-                    let mut out =
-                        json!({ "outcome": outcome.outcome(), "registered": install.to_json() });
-                    match &outcome {
-                        discovery::Registered::Replaced(previous) => {
-                            out["previous"] = previous.to_json()
-                        }
-                        discovery::Registered::KeptNewer(existing) => {
-                            out["registered"] = existing.to_json()
-                        }
-                        discovery::Registered::New => {}
-                    }
-                    print_json(&out, true)
+                    print_json(&outcome.to_registration(&install).to_value(&ctx()), true)
                 }
-                Err(err) => print_json(&json!({ "error": { "message": err.to_string() } }), false),
+                Err(err) => failed(&Failure::other(err.to_string())),
             })
         }
         "discover" => {
@@ -124,11 +114,8 @@ fn run(args: &[String]) -> Result<ExitCode, Usage> {
                 return Ok(ExitCode::FAILURE);
             };
             Ok(match discovery::discover(&dir, CONTRACT_VERSION) {
-                Ok(found) => print_json(&found.to_json(), true),
-                Err(err) => print_json(
-                    &json!({ "error": { "code": err.code(), "message": err.to_string() } }),
-                    false,
-                ),
+                Ok(found) => print_json(&found.to_install().to_value(&ctx()), true),
+                Err(err) => failed(&Failure::from(err.to_cmd_error())),
             })
         }
         "mcp" => {
@@ -209,8 +196,8 @@ fn edit_command(args: &[String]) -> Result<ExitCode, Usage> {
         )
     });
     Ok(match result {
-        Ok(out) => print_json(&out, true),
-        Err(err) => print_json(&json!({ "error": err.to_json() }), false),
+        Ok(applied) => print_json(&applied.to_value(&ctx()), true),
+        Err(err) => failed(&err),
     })
 }
 
@@ -250,12 +237,38 @@ fn resolve_command(command: &str, args: &[String]) -> Result<ExitCode, Usage> {
         }
     });
     Ok(match result {
-        Ok(()) => print_json(
-            &json!({ "run_id": run_id, "path": doc, "resolved": command }),
-            true,
-        ),
-        Err(err) => print_json(&json!({ "error": err.to_json() }), false),
+        Ok(()) => {
+            let resolution = ReviewResolution {
+                run_id,
+                path: doc.clone(),
+                resolved: if command == "keep" {
+                    ReviewAction::Keep
+                } else {
+                    ReviewAction::Undo
+                },
+            };
+            print_json(&resolution.to_value(&ctx()), true)
+        }
+        Err(err) => failed(&err),
     })
+}
+
+fn ctx() -> SaveContext {
+    SaveContext::default()
+}
+
+fn reviews_json(reviews: &[RunReview]) -> Value {
+    Value::Array(
+        reviews
+            .iter()
+            .map(|review| review.to_value(&ctx()))
+            .collect(),
+    )
+}
+
+/// Prints the `CommandFailure` and fails.
+fn failed(err: &Failure) -> ExitCode {
+    print_json(&err.to_json(), false)
 }
 
 fn print_json(value: &Value, ok: bool) -> ExitCode {

@@ -46,6 +46,24 @@ union CmdErrorCode {
   /** The run wrote to the document again since it was reviewed; review it again. */
   staleReview: "stale_review",
 
+  /**
+   * A CLI or MCP command couldn't run: no such project, run or file, malformed
+   * input, or an I/O failure. `message` says which.
+   */
+  commandFailed: "command_failed",
+
+  /** `cutready-cli discover`: no install is registered. */
+  notRegistered: "not_registered",
+
+  /** `cutready-cli discover`: the registration file can't be read or parsed. */
+  unreadableRegistration: "unreadable_registration",
+
+  /** `cutready-cli discover`: the registered binary is gone. */
+  missingBinary: "missing_binary",
+
+  /** `cutready-cli discover`: the registered install speaks another edit contract. */
+  contractMismatch: "contract_mismatch",
+
   /** Codes from newer runtimes load and save unchanged. */
   string,
 }

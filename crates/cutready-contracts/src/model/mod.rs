@@ -102,6 +102,33 @@ pub use chat_transcript::*;
 pub mod chat_promotion;
 pub use chat_promotion::*;
 
+pub mod document_snapshot;
+pub use document_snapshot::*;
+
+pub mod run_started;
+pub use run_started::*;
+
+pub mod applied_edit;
+pub use applied_edit::*;
+
+pub mod review_resolution;
+pub use review_resolution::*;
+
+pub mod document_validation;
+pub use document_validation::*;
+
+pub mod validation_report;
+pub use validation_report::*;
+
+pub mod command_failure;
+pub use command_failure::*;
+
+pub mod cli_install;
+pub use cli_install::*;
+
+pub mod cli_registration;
+pub use cli_registration::*;
+
 pub mod chat_artifact_document;
 pub use chat_artifact_document::*;
 

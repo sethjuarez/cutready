@@ -20,7 +20,9 @@ use std::path::Path;
 use cutready_core::Clock;
 use serde_json::{json, Value};
 
-use crate::project::{applied_json, Failure, Project};
+use cutready_core::contracts::{ReviewAction, ReviewResolution, RunStarted, SaveContext};
+
+use crate::project::{applied_edit, Failure, Project};
 use crate::CONTRACT_VERSION;
 
 /// The MCP revision this server implements.
@@ -166,16 +168,15 @@ impl<'c> Server<'c> {
             Ok(project) => project,
             Err(err) => return Ok(tool_error(&err)),
         };
+        let ctx = SaveContext::default();
         let result = match name {
             "read_document" => {
                 let path = string_arg(&args, "path")?;
-                project.read(path).map(|doc| {
-                    json!({ "path": doc.path, "content": doc.content, "version": doc.version })
-                })
+                project.read(path).map(|doc| doc.to_value(&ctx))
             }
             "begin_run" => project.begin_run(ACTOR, self.clock).map(|run_id| {
                 self.runs.insert(run_id.clone());
-                json!({ "run_id": run_id })
+                RunStarted { run_id }.to_value(&ctx)
             }),
             "apply_ops" => {
                 let run_id = self.own_run(&args)?;
@@ -195,21 +196,14 @@ impl<'c> Server<'c> {
                     .ok_or_else(|| invalid("ops must be an array of EditOps"))?;
                 project
                     .apply(self.clock, ACTOR, run_id, path, expected, ops)
-                    .map(|applied| applied_json(path, &applied))
+                    .map(|applied| applied_edit(run_id, path, &applied).to_value(&ctx))
             }
             "review" => project.reviews(self.clock).map(|reviews| {
-                let own = |review: &&Value| {
-                    review["run_id"]
-                        .as_str()
-                        .is_some_and(|id| self.runs.contains(id))
-                };
                 Value::Array(
                     reviews
-                        .as_array()
-                        .into_iter()
-                        .flatten()
-                        .filter(own)
-                        .cloned()
+                        .iter()
+                        .filter(|review| self.runs.contains(&review.run_id))
+                        .map(|review| review.to_value(&ctx))
                         .collect(),
                 )
             }),
@@ -225,7 +219,18 @@ impl<'c> Server<'c> {
                 } else {
                     project.undo(self.clock, run_id, path, through_seq)
                 };
-                resolved.map(|()| json!({ "run_id": run_id, "path": path, "resolved": name }))
+                resolved.map(|()| {
+                    ReviewResolution {
+                        run_id: run_id.to_string(),
+                        path: path.to_string(),
+                        resolved: if name == "keep" {
+                            ReviewAction::Keep
+                        } else {
+                            ReviewAction::Undo
+                        },
+                    }
+                    .to_value(&ctx)
+                })
             }
             other => return Err(invalid(&format!("Unknown tool {other}"))),
         };
@@ -269,8 +274,7 @@ fn tool_result(value: Value, is_error: bool) -> Value {
     })
 }
 
-/// A refused tool call. Contract errors put the `CmdError` in
-/// `structuredContent`.
+/// A refused tool call: the `CommandFailure` in `structuredContent`.
 fn tool_error(err: &Failure) -> Value {
     tool_result(err.to_json(), true)
 }

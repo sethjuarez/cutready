@@ -183,18 +183,20 @@ src-tauri/
 
 `crates/cutready-cli` builds `cutready-cli`, which edits a project with the app closed. It uses the same core write path (`EditSession`), repository lock and op log as the app, so its runs show up in the app's pending reviews.
 
-| Command | Purpose |
-| --- | --- |
-| `cutready-cli edit <project> <doc> --expected <version\|absent> [--ops <file>] [--run <id>]` | Apply a JSON array of EditOps as a `cli` run |
-| `cutready-cli validate <project> [<doc>...]` | Check that `.sk`, `.sb` and `.md` documents load |
-| `cutready-cli review <project>` | List runs awaiting Keep or Undo (`RunReview` JSON) |
-| `cutready-cli keep\|undo <project> <doc> --run <id> --through <seq>` | Resolve one document of one run |
-| `cutready-cli mcp <project>` | MCP server over stdio: `read_document`, `begin_run`, `apply_ops` (as `mcp` runs), `review`, `keep`, `undo` |
-| `cutready-cli register [--force]` / `discover` | Record this binary as the user's CLI / print the registered one |
+| Command | Purpose | Prints |
+| --- | --- | --- |
+| `cutready-cli edit <project> <doc> --expected <version\|absent> [--ops <file>] [--run <id>]` | Apply a JSON array of EditOps as a `cli` run | `AppliedEdit` |
+| `cutready-cli validate <project> [<doc>...]` | Check that `.sk`, `.sb` and `.md` documents load | `ValidationReport` |
+| `cutready-cli review <project>` | List runs awaiting Keep or Undo | `RunReview[]` |
+| `cutready-cli keep\|undo <project> <doc> --run <id> --through <seq>` | Resolve one document of one run | `ReviewResolution` |
+| `cutready-cli mcp <project>` | MCP server over stdio: `read_document`, `begin_run`, `apply_ops` (as `mcp` runs), `review`, `keep`, `undo` | see below |
+| `cutready-cli register [--force]` / `discover` | Record this binary as the user's CLI / print the registered one | `CliRegistration` / `CliInstall` |
+
+Input and output are JSON on stdin/stdout; there is no text format. Every shape is a Typra contract model (`contracts/cli.tsp`, `EditOp`, `RunReview`), so other clients can use the generated Rust, Swift or TypeScript types. A refused command prints `CommandFailure` (`{error: CmdError}`) and exits 1; usage errors exit 2. The MCP tools wrap the same `Project` handlers: `read_document` returns `DocumentSnapshot`, `begin_run` `RunStarted`, `apply_ops` `AppliedEdit`, `review` `RunReview[]`, `keep`/`undo` `ReviewResolution`, and a refused call puts `CommandFailure` in `structuredContent`.
 
 The MCP `initialize` handshake exchanges `capabilities.experimental.cutready.contractVersion` (`cutready_contracts::CONTRACT_VERSION`). A client that declares another version gets error `-32001` and the server stops. An MCP connection sees and resolves only the runs it began; reviewing other runs is the user's job, in the app or with the `review`/`keep`/`undo` commands. The CLI refuses folders outside a git repository rather than creating one. It must not depend on Tauri or the app crate (`scripts/check-core-deps.mjs`).
 
-**Discovery.** `register` writes `<config dir>/cutready/cli.json` (`{path, version, contractVersion}`; `CUTREADY_CONFIG_DIR` overrides the directory). A newer install replaces an older one; an older one replaces it only if the registered binary is gone, or with `--force`. Clients read the file, check the binary exists and speaks their contract version, then start `cutready-cli mcp`, whose handshake checks again. Any mismatch fails closed. Releases attach a standalone `cutready-cli_<version>_<platform>` archive per platform; the app installer doesn't bundle it yet. The CLI's version follows the app's through release-please.
+**Discovery.** `register` writes `<config dir>/cutready/cli.json` (a `CliInstall`: `{path, version, contract_version}`; `CUTREADY_CONFIG_DIR` overrides the directory). A newer install replaces an older one; an older one replaces it only if the registered binary is gone, or with `--force`. Clients read the file, check the binary exists and speaks their contract version, then start `cutready-cli mcp`, whose handshake checks again. Any mismatch fails closed. Releases attach a standalone `cutready-cli_<version>_<platform>` archive per platform; the app installer doesn't bundle it yet. The CLI's version follows the app's through release-please.
 
 ---
 

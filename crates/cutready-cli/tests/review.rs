@@ -132,7 +132,7 @@ fn keep_through_an_old_seq_is_stale() {
         json!({ "run_id": run, "path": "notes/plan.md", "through_seq": old_seq }),
         true,
     );
-    assert_eq!(refused["code"], json!("stale_review"), "{refused}");
+    assert_eq!(refused["error"]["code"], json!("stale_review"), "{refused}");
     assert_eq!(review(&mut server, 7).len(), 1);
 }
 
@@ -154,7 +154,7 @@ fn undo_of_a_document_changed_since_conflicts_and_changes_nothing() {
         json!({ "run_id": run, "path": "notes/plan.md", "through_seq": through }),
         true,
     );
-    assert_eq!(refused["code"], json!("undo_conflict"), "{refused}");
+    assert_eq!(refused["error"]["code"], json!("undo_conflict"), "{refused}");
     let on_disk = std::fs::read_to_string(dir.path().join("notes/plan.md")).unwrap();
     assert_eq!(on_disk, "# Theirs\n");
 }

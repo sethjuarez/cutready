@@ -33,6 +33,7 @@
       "target": "markdown",
       "outputRoot": "generated/markdown",
       "rootExports": [
+        "AppliedEdit",
         "ChatArtifact",
         "ChatArtifactDocument",
         "ChatArtifactSource",
@@ -41,15 +42,20 @@
         "ChatToolUse",
         "ChatTranscript",
         "ChatTurn",
+        "CliInstall",
+        "CliRegistration",
         "CmdError",
         "CmdErrorDetails",
+        "CommandFailure",
         "DeleteRowOp",
         "DocumentEdit",
         "DocumentEditRequest",
         "DocumentMetadata",
         "DocumentReview",
+        "DocumentSnapshot",
         "DocumentUndo",
         "DocumentUndoRequest",
+        "DocumentValidation",
         "EditOp",
         "EditService",
         "InsertRowOp",
@@ -69,8 +75,10 @@
         "ReplaceRowsOp",
         "ReplaceSketchOp",
         "ReplaceStoryboardOp",
+        "ReviewResolution",
         "RowTextUpdate",
         "RunReview",
+        "RunStarted",
         "SetDescriptionOp",
         "SetLockOp",
         "SetMetadataOp",
@@ -91,9 +99,17 @@
         "UndoConflict",
         "UndoWrite",
         "UpdateRowOp",
+        "ValidationReport",
         "WriteNoteOp"
       ],
       "exports": [
+        {
+          "name": "AppliedEdit",
+          "kind": "value",
+          "group": "",
+          "source": "AppliedEdit",
+          "protocol": false
+        },
         {
           "name": "ChatArtifact",
           "kind": "value",
@@ -151,6 +167,20 @@
           "protocol": false
         },
         {
+          "name": "CliInstall",
+          "kind": "value",
+          "group": "",
+          "source": "CliInstall",
+          "protocol": false
+        },
+        {
+          "name": "CliRegistration",
+          "kind": "value",
+          "group": "",
+          "source": "CliRegistration",
+          "protocol": false
+        },
+        {
           "name": "CmdError",
           "kind": "value",
           "group": "",
@@ -162,6 +192,13 @@
           "kind": "value",
           "group": "",
           "source": "CmdErrorDetails",
+          "protocol": false
+        },
+        {
+          "name": "CommandFailure",
+          "kind": "value",
+          "group": "",
+          "source": "CommandFailure",
           "protocol": false
         },
         {
@@ -200,6 +237,13 @@
           "protocol": false
         },
         {
+          "name": "DocumentSnapshot",
+          "kind": "value",
+          "group": "",
+          "source": "DocumentSnapshot",
+          "protocol": false
+        },
+        {
           "name": "DocumentUndo",
           "kind": "value",
           "group": "",
@@ -211,6 +255,13 @@
           "kind": "value",
           "group": "",
           "source": "DocumentUndoRequest",
+          "protocol": false
+        },
+        {
+          "name": "DocumentValidation",
+          "kind": "value",
+          "group": "",
+          "source": "DocumentValidation",
           "protocol": false
         },
         {
@@ -347,6 +398,13 @@
           "protocol": false
         },
         {
+          "name": "ReviewResolution",
+          "kind": "value",
+          "group": "",
+          "source": "ReviewResolution",
+          "protocol": false
+        },
+        {
           "name": "RowTextUpdate",
           "kind": "value",
           "group": "",
@@ -358,6 +416,13 @@
           "kind": "value",
           "group": "",
           "source": "RunReview",
+          "protocol": false
+        },
+        {
+          "name": "RunStarted",
+          "kind": "value",
+          "group": "",
+          "source": "RunStarted",
           "protocol": false
         },
         {
@@ -501,6 +566,13 @@
           "protocol": false
         },
         {
+          "name": "ValidationReport",
+          "kind": "value",
+          "group": "",
+          "source": "ValidationReport",
+          "protocol": false
+        },
+        {
           "name": "WriteNoteOp",
           "kind": "value",
           "group": "",
@@ -717,6 +789,7 @@
         }
       ],
       "modules": [
+        "AppliedEdit",
         "ChatArtifact",
         "ChatArtifactDocument",
         "ChatArtifactSource",
@@ -725,14 +798,19 @@
         "ChatToolUse",
         "ChatTranscript",
         "ChatTurn",
+        "CliInstall",
+        "CliRegistration",
         "CmdError",
         "CmdErrorDetails",
+        "CommandFailure",
         "DocumentEdit",
         "DocumentEditRequest",
         "DocumentMetadata",
         "DocumentReview",
+        "DocumentSnapshot",
         "DocumentUndo",
         "DocumentUndoRequest",
+        "DocumentValidation",
         "EditOp",
         "EditService",
         "MotionPlan",
@@ -744,8 +822,10 @@
         "PlanningCellLocks",
         "PlanningRow",
         "PlanningTiming",
+        "ReviewResolution",
         "RowTextUpdate",
         "RunReview",
+        "RunStarted",
         "Sketch",
         "SketchDocument",
         "Storyboard",
@@ -753,13 +833,15 @@
         "StoryboardItem",
         "TypingSpot",
         "UndoConflict",
-        "UndoWrite"
+        "UndoWrite",
+        "ValidationReport"
       ]
     },
     {
       "target": "rust",
       "outputRoot": "../crates/cutready-contracts/src/model",
       "rootExports": [
+        "AppliedEdit",
         "ChatArtifact",
         "ChatArtifactDocument",
         "ChatArtifactSource",
@@ -768,15 +850,20 @@
         "ChatToolUse",
         "ChatTranscript",
         "ChatTurn",
+        "CliInstall",
+        "CliRegistration",
         "CmdError",
         "CmdErrorDetails",
+        "CommandFailure",
         "DeleteRowOp",
         "DocumentEdit",
         "DocumentEditRequest",
         "DocumentMetadata",
         "DocumentReview",
+        "DocumentSnapshot",
         "DocumentUndo",
         "DocumentUndoRequest",
+        "DocumentValidation",
         "EditOp",
         "EditService",
         "InsertRowOp",
@@ -796,8 +883,10 @@
         "ReplaceRowsOp",
         "ReplaceSketchOp",
         "ReplaceStoryboardOp",
+        "ReviewResolution",
         "RowTextUpdate",
         "RunReview",
+        "RunStarted",
         "SetDescriptionOp",
         "SetLockOp",
         "SetMetadataOp",
@@ -818,9 +907,17 @@
         "UndoConflict",
         "UndoWrite",
         "UpdateRowOp",
+        "ValidationReport",
         "WriteNoteOp"
       ],
       "exports": [
+        {
+          "name": "AppliedEdit",
+          "kind": "value",
+          "group": "",
+          "source": "applied_edit",
+          "protocol": false
+        },
         {
           "name": "ChatArtifact",
           "kind": "value",
@@ -878,6 +975,20 @@
           "protocol": false
         },
         {
+          "name": "CliInstall",
+          "kind": "value",
+          "group": "",
+          "source": "cli_install",
+          "protocol": false
+        },
+        {
+          "name": "CliRegistration",
+          "kind": "value",
+          "group": "",
+          "source": "cli_registration",
+          "protocol": false
+        },
+        {
           "name": "CmdError",
           "kind": "value",
           "group": "",
@@ -889,6 +1000,13 @@
           "kind": "value",
           "group": "",
           "source": "cmd_error_details",
+          "protocol": false
+        },
+        {
+          "name": "CommandFailure",
+          "kind": "value",
+          "group": "",
+          "source": "command_failure",
           "protocol": false
         },
         {
@@ -927,6 +1045,13 @@
           "protocol": false
         },
         {
+          "name": "DocumentSnapshot",
+          "kind": "value",
+          "group": "",
+          "source": "document_snapshot",
+          "protocol": false
+        },
+        {
           "name": "DocumentUndo",
           "kind": "value",
           "group": "",
@@ -938,6 +1063,13 @@
           "kind": "value",
           "group": "",
           "source": "document_undo_request",
+          "protocol": false
+        },
+        {
+          "name": "DocumentValidation",
+          "kind": "value",
+          "group": "",
+          "source": "document_validation",
           "protocol": false
         },
         {
@@ -1074,6 +1206,13 @@
           "protocol": false
         },
         {
+          "name": "ReviewResolution",
+          "kind": "value",
+          "group": "",
+          "source": "review_resolution",
+          "protocol": false
+        },
+        {
           "name": "RowTextUpdate",
           "kind": "value",
           "group": "",
@@ -1085,6 +1224,13 @@
           "kind": "value",
           "group": "",
           "source": "run_review",
+          "protocol": false
+        },
+        {
+          "name": "RunStarted",
+          "kind": "value",
+          "group": "",
+          "source": "run_started",
           "protocol": false
         },
         {
@@ -1228,6 +1374,13 @@
           "protocol": false
         },
         {
+          "name": "ValidationReport",
+          "kind": "value",
+          "group": "",
+          "source": "validation_report",
+          "protocol": false
+        },
+        {
           "name": "WriteNoteOp",
           "kind": "value",
           "group": "",
@@ -1444,6 +1597,7 @@
         }
       ],
       "modules": [
+        "applied_edit",
         "chat_artifact",
         "chat_artifact_document",
         "chat_artifact_source",
@@ -1452,15 +1606,20 @@
         "chat_tool_use",
         "chat_transcript",
         "chat_turn",
+        "cli_install",
+        "cli_registration",
         "cmd_error",
         "cmd_error_details",
+        "command_failure",
         "context",
         "document_edit",
         "document_edit_request",
         "document_metadata",
         "document_review",
+        "document_snapshot",
         "document_undo",
         "document_undo_request",
+        "document_validation",
         "edit_op",
         "edit_service",
         "motion_plan",
@@ -1472,8 +1631,10 @@
         "planning_cell_locks",
         "planning_row",
         "planning_timing",
+        "review_resolution",
         "row_text_update",
         "run_review",
+        "run_started",
         "sketch",
         "sketch_document",
         "storyboard",
@@ -1481,7 +1642,8 @@
         "storyboard_item",
         "typing_spot",
         "undo_conflict",
-        "undo_write"
+        "undo_write",
+        "validation_report"
       ]
     },
     {
@@ -1489,6 +1651,7 @@
       "outputRoot": "generated/swift",
       "packageName": "CutReadyContracts",
       "rootExports": [
+        "AppliedEdit",
         "ChatArtifact",
         "ChatArtifactDocument",
         "ChatArtifactSource",
@@ -1497,15 +1660,20 @@
         "ChatToolUse",
         "ChatTranscript",
         "ChatTurn",
+        "CliInstall",
+        "CliRegistration",
         "CmdError",
         "CmdErrorDetails",
+        "CommandFailure",
         "DeleteRowOp",
         "DocumentEdit",
         "DocumentEditRequest",
         "DocumentMetadata",
         "DocumentReview",
+        "DocumentSnapshot",
         "DocumentUndo",
         "DocumentUndoRequest",
+        "DocumentValidation",
         "EditOp",
         "EditService",
         "InsertRowOp",
@@ -1525,8 +1693,10 @@
         "ReplaceRowsOp",
         "ReplaceSketchOp",
         "ReplaceStoryboardOp",
+        "ReviewResolution",
         "RowTextUpdate",
         "RunReview",
+        "RunStarted",
         "SetDescriptionOp",
         "SetLockOp",
         "SetMetadataOp",
@@ -1547,9 +1717,17 @@
         "UndoConflict",
         "UndoWrite",
         "UpdateRowOp",
+        "ValidationReport",
         "WriteNoteOp"
       ],
       "exports": [
+        {
+          "name": "AppliedEdit",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/applied_edit.swift",
+          "protocol": false
+        },
         {
           "name": "ChatArtifact",
           "kind": "value",
@@ -1607,6 +1785,20 @@
           "protocol": false
         },
         {
+          "name": "CliInstall",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/cli_install.swift",
+          "protocol": false
+        },
+        {
+          "name": "CliRegistration",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/cli_registration.swift",
+          "protocol": false
+        },
+        {
           "name": "CmdError",
           "kind": "value",
           "group": "",
@@ -1618,6 +1810,13 @@
           "kind": "value",
           "group": "",
           "source": "Sources/CutReadyContracts/cmd_error_details.swift",
+          "protocol": false
+        },
+        {
+          "name": "CommandFailure",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/command_failure.swift",
           "protocol": false
         },
         {
@@ -1656,6 +1855,13 @@
           "protocol": false
         },
         {
+          "name": "DocumentSnapshot",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/document_snapshot.swift",
+          "protocol": false
+        },
+        {
           "name": "DocumentUndo",
           "kind": "value",
           "group": "",
@@ -1667,6 +1873,13 @@
           "kind": "value",
           "group": "",
           "source": "Sources/CutReadyContracts/document_undo_request.swift",
+          "protocol": false
+        },
+        {
+          "name": "DocumentValidation",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/document_validation.swift",
           "protocol": false
         },
         {
@@ -1803,6 +2016,13 @@
           "protocol": false
         },
         {
+          "name": "ReviewResolution",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/review_resolution.swift",
+          "protocol": false
+        },
+        {
           "name": "RowTextUpdate",
           "kind": "value",
           "group": "",
@@ -1814,6 +2034,13 @@
           "kind": "value",
           "group": "",
           "source": "Sources/CutReadyContracts/run_review.swift",
+          "protocol": false
+        },
+        {
+          "name": "RunStarted",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/run_started.swift",
           "protocol": false
         },
         {
@@ -1957,6 +2184,13 @@
           "protocol": false
         },
         {
+          "name": "ValidationReport",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/validation_report.swift",
+          "protocol": false
+        },
+        {
           "name": "WriteNoteOp",
           "kind": "value",
           "group": "",
@@ -2173,6 +2407,7 @@
         }
       ],
       "modules": [
+        "Sources/CutReadyContracts/applied_edit.swift",
         "Sources/CutReadyContracts/chat_artifact.swift",
         "Sources/CutReadyContracts/chat_artifact_document.swift",
         "Sources/CutReadyContracts/chat_artifact_source.swift",
@@ -2181,14 +2416,19 @@
         "Sources/CutReadyContracts/chat_tool_use.swift",
         "Sources/CutReadyContracts/chat_transcript.swift",
         "Sources/CutReadyContracts/chat_turn.swift",
+        "Sources/CutReadyContracts/cli_install.swift",
+        "Sources/CutReadyContracts/cli_registration.swift",
         "Sources/CutReadyContracts/cmd_error.swift",
         "Sources/CutReadyContracts/cmd_error_details.swift",
+        "Sources/CutReadyContracts/command_failure.swift",
         "Sources/CutReadyContracts/document_edit.swift",
         "Sources/CutReadyContracts/document_edit_request.swift",
         "Sources/CutReadyContracts/document_metadata.swift",
         "Sources/CutReadyContracts/document_review.swift",
+        "Sources/CutReadyContracts/document_snapshot.swift",
         "Sources/CutReadyContracts/document_undo.swift",
         "Sources/CutReadyContracts/document_undo_request.swift",
+        "Sources/CutReadyContracts/document_validation.swift",
         "Sources/CutReadyContracts/edit_op.swift",
         "Sources/CutReadyContracts/edit_service.swift",
         "Sources/CutReadyContracts/motion_plan.swift",
@@ -2200,8 +2440,10 @@
         "Sources/CutReadyContracts/planning_cell_locks.swift",
         "Sources/CutReadyContracts/planning_row.swift",
         "Sources/CutReadyContracts/planning_timing.swift",
+        "Sources/CutReadyContracts/review_resolution.swift",
         "Sources/CutReadyContracts/row_text_update.swift",
         "Sources/CutReadyContracts/run_review.swift",
+        "Sources/CutReadyContracts/run_started.swift",
         "Sources/CutReadyContracts/sketch.swift",
         "Sources/CutReadyContracts/sketch_document.swift",
         "Sources/CutReadyContracts/storyboard.swift",
@@ -2209,7 +2451,8 @@
         "Sources/CutReadyContracts/storyboard_item.swift",
         "Sources/CutReadyContracts/typing_spot.swift",
         "Sources/CutReadyContracts/undo_conflict.swift",
-        "Sources/CutReadyContracts/undo_write.swift"
+        "Sources/CutReadyContracts/undo_write.swift",
+        "Sources/CutReadyContracts/validation_report.swift"
       ]
     },
     {
@@ -2217,6 +2460,7 @@
       "outputRoot": "../src/contracts/generated/model",
       "namespace": "CutReady.Contracts",
       "rootExports": [
+        "AppliedEdit",
         "ChatArtifact",
         "ChatArtifactDocument",
         "ChatArtifactSource",
@@ -2225,15 +2469,20 @@
         "ChatToolUse",
         "ChatTranscript",
         "ChatTurn",
+        "CliInstall",
+        "CliRegistration",
         "CmdError",
         "CmdErrorDetails",
+        "CommandFailure",
         "DeleteRowOp",
         "DocumentEdit",
         "DocumentEditRequest",
         "DocumentMetadata",
         "DocumentReview",
+        "DocumentSnapshot",
         "DocumentUndo",
         "DocumentUndoRequest",
+        "DocumentValidation",
         "EditOp",
         "EditService",
         "InsertRowOp",
@@ -2253,8 +2502,10 @@
         "ReplaceRowsOp",
         "ReplaceSketchOp",
         "ReplaceStoryboardOp",
+        "ReviewResolution",
         "RowTextUpdate",
         "RunReview",
+        "RunStarted",
         "SetDescriptionOp",
         "SetLockOp",
         "SetMetadataOp",
@@ -2275,9 +2526,17 @@
         "UndoConflict",
         "UndoWrite",
         "UpdateRowOp",
+        "ValidationReport",
         "WriteNoteOp"
       ],
       "exports": [
+        {
+          "name": "AppliedEdit",
+          "kind": "value",
+          "group": "",
+          "source": "./applied-edit",
+          "protocol": false
+        },
         {
           "name": "ChatArtifact",
           "kind": "value",
@@ -2335,6 +2594,20 @@
           "protocol": false
         },
         {
+          "name": "CliInstall",
+          "kind": "value",
+          "group": "",
+          "source": "./cli-install",
+          "protocol": false
+        },
+        {
+          "name": "CliRegistration",
+          "kind": "value",
+          "group": "",
+          "source": "./cli-registration",
+          "protocol": false
+        },
+        {
           "name": "CmdError",
           "kind": "value",
           "group": "",
@@ -2346,6 +2619,13 @@
           "kind": "value",
           "group": "",
           "source": "./cmd-error-details",
+          "protocol": false
+        },
+        {
+          "name": "CommandFailure",
+          "kind": "value",
+          "group": "",
+          "source": "./command-failure",
           "protocol": false
         },
         {
@@ -2384,6 +2664,13 @@
           "protocol": false
         },
         {
+          "name": "DocumentSnapshot",
+          "kind": "value",
+          "group": "",
+          "source": "./document-snapshot",
+          "protocol": false
+        },
+        {
           "name": "DocumentUndo",
           "kind": "value",
           "group": "",
@@ -2395,6 +2682,13 @@
           "kind": "value",
           "group": "",
           "source": "./document-undo-request",
+          "protocol": false
+        },
+        {
+          "name": "DocumentValidation",
+          "kind": "value",
+          "group": "",
+          "source": "./document-validation",
           "protocol": false
         },
         {
@@ -2531,6 +2825,13 @@
           "protocol": false
         },
         {
+          "name": "ReviewResolution",
+          "kind": "value",
+          "group": "",
+          "source": "./review-resolution",
+          "protocol": false
+        },
+        {
           "name": "RowTextUpdate",
           "kind": "value",
           "group": "",
@@ -2542,6 +2843,13 @@
           "kind": "value",
           "group": "",
           "source": "./run-review",
+          "protocol": false
+        },
+        {
+          "name": "RunStarted",
+          "kind": "value",
+          "group": "",
+          "source": "./run-started",
           "protocol": false
         },
         {
@@ -2682,6 +2990,13 @@
           "kind": "value",
           "group": "",
           "source": "./edit-op",
+          "protocol": false
+        },
+        {
+          "name": "ValidationReport",
+          "kind": "value",
+          "group": "",
+          "source": "./validation-report",
           "protocol": false
         },
         {
@@ -2901,6 +3216,7 @@
         }
       ],
       "modules": [
+        "./applied-edit",
         "./chat-artifact",
         "./chat-artifact-document",
         "./chat-artifact-source",
@@ -2909,14 +3225,19 @@
         "./chat-tool-use",
         "./chat-transcript",
         "./chat-turn",
+        "./cli-install",
+        "./cli-registration",
         "./cmd-error",
         "./cmd-error-details",
+        "./command-failure",
         "./document-edit",
         "./document-edit-request",
         "./document-metadata",
         "./document-review",
+        "./document-snapshot",
         "./document-undo",
         "./document-undo-request",
+        "./document-validation",
         "./edit-op",
         "./edit-service",
         "./motion-plan",
@@ -2928,8 +3249,10 @@
         "./planning-cell-locks",
         "./planning-row",
         "./planning-timing",
+        "./review-resolution",
         "./row-text-update",
         "./run-review",
+        "./run-started",
         "./sketch",
         "./sketch-document",
         "./storyboard",
@@ -2937,7 +3260,8 @@
         "./storyboard-item",
         "./typing-spot",
         "./undo-conflict",
-        "./undo-write"
+        "./undo-write",
+        "./validation-report"
       ]
     }
   ]

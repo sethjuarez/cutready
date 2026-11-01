@@ -3,49 +3,60 @@
 
 use std::path::{Path, PathBuf};
 
-use cutready_core::contracts::{CmdError, SaveContext};
+use cutready_core::contracts::{
+    AppliedEdit, CmdError, CmdErrorCode, CommandFailure, DocumentSnapshot, RunReview, SaveContext,
+};
 use cutready_core::edit_ops::{self, ContentEditError};
 use cutready_core::edit_session::{kind_of, Applied, EditSession, Expected, ReviewError};
 use cutready_core::{Clock, Files, OpLogStore, PortErrorKind};
 use cutready_desktop_io::repo_lock::RepoLock;
 use cutready_desktop_io::state_dir::{enclosing_git_dir, git_state_dir, OP_LOG_FILENAME};
 use cutready_desktop_io::{SqliteOpLogStore, StdFiles};
-use serde_json::{json, Value};
+use serde_json::Value;
 
-/// Why a command was refused. Contract errors carry the `CmdError` every
-/// runtime reports (clients branch on its `code`); the rest are plain text.
+/// Why a command was refused: the `CmdError` every runtime reports. Clients
+/// branch on its `code`; failures outside the edit contract are
+/// `command_failed`.
 #[derive(Debug)]
-pub enum Failure {
-    Contract(Box<CmdError>),
-    Other(String),
-}
+pub struct Failure(Box<CmdError>);
 
 impl Failure {
     pub fn other(message: impl Into<String>) -> Self {
-        Self::Other(message.into())
+        Self(Box::new(CmdError {
+            code: CmdErrorCode::CommandFailed,
+            message: message.into(),
+            details: None,
+        }))
     }
 
-    /// `{code, message, details?}` for contract errors, `{message}` otherwise.
+    pub fn error(&self) -> &CmdError {
+        &self.0
+    }
+
+    /// What a failed command prints: `{error: CmdError}`.
     pub fn to_json(&self) -> Value {
-        match self {
-            Self::Contract(err) => err.to_value(&SaveContext::default()),
-            Self::Other(message) => json!({ "message": message }),
+        CommandFailure {
+            error: (*self.0).clone(),
         }
+        .to_value(&SaveContext::default())
     }
 
     pub fn message(&self) -> &str {
-        match self {
-            Self::Contract(err) => &err.message,
-            Self::Other(message) => message,
-        }
+        &self.0.message
+    }
+}
+
+impl From<CmdError> for Failure {
+    fn from(err: CmdError) -> Self {
+        Self(Box::new(err))
     }
 }
 
 impl From<&ContentEditError> for Failure {
     fn from(err: &ContentEditError) -> Self {
         match CmdError::try_from(err) {
-            Ok(cmd) => Self::Contract(Box::new(cmd)),
-            Err(message) => Self::Other(message),
+            Ok(cmd) => cmd.into(),
+            Err(message) => Self::other(message),
         }
     }
 }
@@ -53,27 +64,17 @@ impl From<&ContentEditError> for Failure {
 impl From<&ReviewError> for Failure {
     fn from(err: &ReviewError) -> Self {
         match CmdError::try_from(err) {
-            Ok(cmd) => Self::Contract(Box::new(cmd)),
-            Err(message) => Self::Other(message),
+            Ok(cmd) => cmd.into(),
+            Err(message) => Self::other(message),
         }
     }
 }
 
 impl From<cutready_core::PortError> for Failure {
     fn from(err: cutready_core::PortError) -> Self {
-        Self::Other(err.message)
+        Self::other(err.message)
     }
 }
-
-/// A document as it is on disk now.
-pub struct Snapshot {
-    pub path: String,
-    /// `None` when the file doesn't exist.
-    pub content: Option<String>,
-    /// `documentVersion` of the bytes; `None` when the file doesn't exist.
-    pub version: Option<String>,
-}
-
 /// One project's desktop ports, opened per command so no handle outlives it.
 pub struct Project {
     root: PathBuf,
@@ -125,7 +126,7 @@ impl Project {
 
     /// Reads a `.sk`, `.sb` or `.md` document with the version an edit of it
     /// must expect.
-    pub fn read(&self, doc: &str) -> Result<Snapshot, Failure> {
+    pub fn read(&self, doc: &str) -> Result<DocumentSnapshot, Failure> {
         let rel = cutready_core::path::project_relative(doc)?;
         let path = rel.to_string_lossy().replace('\\', "/");
         kind_of(&path).map_err(|e| Failure::other(e.to_string()))?;
@@ -134,13 +135,13 @@ impl Project {
                 let version = edit_ops::document_version(&bytes);
                 let content = String::from_utf8(bytes)
                     .map_err(|_| Failure::other(format!("{path} is not valid UTF-8")))?;
-                Ok(Snapshot {
+                Ok(DocumentSnapshot {
                     path,
                     content: Some(content),
                     version: Some(version),
                 })
             }
-            Err(err) if err.kind == PortErrorKind::NotFound => Ok(Snapshot {
+            Err(err) if err.kind == PortErrorKind::NotFound => Ok(DocumentSnapshot {
                 path,
                 content: None,
                 version: None,
@@ -181,16 +182,11 @@ impl Project {
             .map_err(|err| Failure::from(&err))
     }
 
-    /// Runs with changes awaiting Keep or Undo, oldest first, in the
-    /// canonical `RunReview` wire form the app's review panel reads.
-    pub fn reviews(&self, clock: &dyn Clock) -> Result<Value, Failure> {
-        let ctx = SaveContext::default();
-        let reviews = self.session(clock).pending_reviews()?;
-        Ok(Value::Array(
-            reviews.iter().map(|review| review.to_value(&ctx)).collect(),
-        ))
+    /// Runs with changes awaiting Keep or Undo, oldest first: what the app's
+    /// review panel shows.
+    pub fn reviews(&self, clock: &dyn Clock) -> Result<Vec<RunReview>, Failure> {
+        Ok(self.session(clock).pending_reviews()?)
     }
-
     /// Keeps a run's changes to `doc` through `through_seq` (from `reviews`);
     /// `stale_review` if the run changed the document since.
     pub fn keep(
@@ -220,18 +216,15 @@ impl Project {
     }
 }
 
-/// An apply's result as JSON: `{path, version, changed, seq, note_locked?,
-/// note_lock_changed?}`.
-pub fn applied_json(path: &str, applied: &Applied) -> Value {
-    let mut out = json!({
-        "path": path,
-        "version": applied.version,
-        "changed": applied.changed,
-        "seq": applied.seq,
-    });
-    if let Some(lock) = &applied.note_lock {
-        out["note_locked"] = json!(lock.locked);
-        out["note_lock_changed"] = json!(lock.changed);
+/// An apply's result on the wire.
+pub fn applied_edit(run_id: &str, path: &str, applied: &Applied) -> AppliedEdit {
+    AppliedEdit {
+        run_id: run_id.to_string(),
+        path: path.to_string(),
+        version: applied.version.clone(),
+        changed: applied.changed,
+        seq: applied.seq,
+        note_locked: applied.note_lock.as_ref().map(|lock| lock.locked),
+        note_lock_changed: applied.note_lock.as_ref().map(|lock| lock.changed),
     }
-    out
 }
