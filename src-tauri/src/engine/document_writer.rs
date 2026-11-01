@@ -172,13 +172,18 @@ pub fn replace_note(root: &Path, abs: &Path, content: &str) -> Result<Written, W
     replace(root, abs, DocumentKind::Note, op)
 }
 
-/// Remove a document file. A missing file is already deleted.
-pub fn delete(path: &Path) -> Result<(), ProjectError> {
+/// Remove a document file under `root`, holding the project's write lock so
+/// it never interleaves with another process's write. A missing file is
+/// already deleted. Not yet logged: review of deletes arrives with Keep/Undo.
+pub fn delete(root: &Path, path: &Path) -> Result<(), WriteError> {
+    use cutready_core::Lock as _;
     kind_of(path)?;
+    let lock = FileLock::new(state_dir(root).join(LOCK_FILENAME))?;
+    let _guard = lock.acquire()?;
     match std::fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(err) => Err(ProjectError::Io(err.to_string())),
+        Err(err) => Err(ProjectError::Io(err.to_string()).into()),
     }
 }
 
@@ -328,15 +333,13 @@ impl Ports {
 }
 
 /// The project a document belongs to when the caller has only its path: the
-/// deepest project this process opened or wrote that contains it, else the
-/// document's folder.
-pub fn project_root_for(path: &Path) -> PathBuf {
+/// deepest project this process opened or wrote that contains it.
+pub fn project_root_for(path: &Path) -> Option<PathBuf> {
     let dirs = STATE_DIRS.lock().unwrap_or_else(|e| e.into_inner());
     dirs.keys()
         .filter(|root| path.starts_with(root))
         .max_by_key(|root| root.components().count())
         .cloned()
-        .unwrap_or_else(|| path.parent().unwrap_or(Path::new("")).to_path_buf())
 }
 
 /// The runtime state dir for `root` (`<git dir>/cutready[/<folder>]`),
@@ -496,7 +499,7 @@ mod tests {
         let dir = project();
         let op = json!({ "kind": "touch" });
         assert!(edit(dir.path(), "a.json", Expected::Unchecked, &[op]).is_err());
-        assert!(delete(&dir.path().join("a.json")).is_err());
+        assert!(delete(dir.path(), &dir.path().join("a.json")).is_err());
     }
 
     #[test]
@@ -504,8 +507,8 @@ mod tests {
         let dir = project();
         let path = dir.path().join("a.md");
         replace_note(dir.path(), &path, "x").unwrap();
-        delete(&path).unwrap();
-        delete(&path).unwrap();
+        delete(dir.path(), &path).unwrap();
+        delete(dir.path(), &path).unwrap();
         assert!(!path.exists());
     }
 
@@ -670,9 +673,8 @@ mod tests {
         std::fs::create_dir_all(&inner).unwrap();
         open_project(&outer).unwrap();
         open_project(&inner).unwrap();
-        assert_eq!(project_root_for(&inner.join("x/a.sb")), inner);
-        assert_eq!(project_root_for(&outer.join("b.sb")), outer);
-        let stray = dir.path().join("elsewhere/c.sb");
-        assert_eq!(project_root_for(&stray), dir.path().join("elsewhere"));
+        assert_eq!(project_root_for(&inner.join("x/a.sb")), Some(inner));
+        assert_eq!(project_root_for(&outer.join("b.sb")), Some(outer));
+        assert_eq!(project_root_for(&dir.path().join("elsewhere/c.sb")), None);
     }
 }

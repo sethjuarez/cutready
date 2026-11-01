@@ -35,10 +35,11 @@ struct Project {
 }
 
 impl Project {
+    /// A fresh project, opened as the app opens one.
     fn new() -> Self {
-        Self {
-            dir: TempDir::new().unwrap(),
-        }
+        let dir = TempDir::new().unwrap();
+        crate::engine::document_writer::open_project(dir.path()).unwrap();
+        Self { dir }
     }
 
     fn with(inputs: &[(&str, &str)]) -> Self {
