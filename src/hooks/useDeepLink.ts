@@ -13,7 +13,8 @@
  */
 
 import { useEffect } from "react";
-import { invoke, listen } from "../services/tauri";
+import { invoke } from "../services/tauri";
+import { listenEvent } from "../ipc/events";
 import { open } from "../dialogs";
 import { sep } from "@tauri-apps/api/path";
 import { useAppStore } from "../stores/appStore";
@@ -111,7 +112,7 @@ export function useDeepLink() {
     if (!isTauri) return;
 
     // Listen for deep link events from backend (single-instance forwarding + on_open_url)
-    const unlisten = listen<string>("deep-link-received", (event) => {
+    const unlisten = listenEvent("deep-link-received", (event) => {
       handleDeepLink(event.payload);
     });
 

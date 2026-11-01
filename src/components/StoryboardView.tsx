@@ -13,7 +13,9 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { invoke, listen } from "../services/tauri";
+import { invoke } from "../services/tauri";
+import { useRecordingTakeActivity } from "../hooks/useRecordingTakeActivity";
+import { recordingIpc } from "../ipc/recording";
 import { SafeMarkdown } from "./SafeMarkdown";
 import {
   Play,
@@ -45,7 +47,6 @@ import { DocumentViewModeToggle, type DocumentViewMode } from "./DocumentViewMod
 import { StoryboardBalancedView, StoryboardScreenView } from "./StoryboardVisualViews";
 import { plainTextFromRichValue } from "../utils/richText";
 import type { Sketch, SketchSummary, StoryboardItem } from "../types/sketch";
-import type { RecordingTake } from "../types/recording";
 import type { PreviewSlide, PresentationMode } from "./presentation/types";
 import {
   appendSketchToSection,
@@ -424,7 +425,7 @@ export function StoryboardView() {
   const handleRecord = useCallback(async () => {
     if (!activeStoryboardPath) return;
     try {
-      await invoke("open_recorder_window", {
+      await recordingIpc.openRecorderWindow({
         scope: { kind: "storyboard", path: activeStoryboardPath },
         documentTitle: activeStoryboard?.title || "Untitled storyboard",
       });
@@ -433,26 +434,7 @@ export function StoryboardView() {
     }
   }, [activeStoryboard?.title, activeStoryboardPath]);
 
-  useEffect(() => {
-    if (!activeStoryboardPath || !activeStoryboard) return;
-    const unlistenStarted = listen<RecordingTake>("recording-control-started", (event) => {
-      if (event.payload.scope.kind !== "storyboard" || event.payload.scope.path !== activeStoryboardPath) return;
-      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Started recording take ${event.payload.id} for "${activeStoryboard.title || "Untitled storyboard"}"`, level: "info" }]);
-    });
-    const unlistenStopped = listen<RecordingTake>("recording-control-stopped", (event) => {
-      if (event.payload.scope.kind !== "storyboard" || event.payload.scope.path !== activeStoryboardPath) return;
-      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Saved recording take ${event.payload.id} for "${activeStoryboard.title || "Untitled storyboard"}"`, level: event.payload.status === "finalized" ? "success" : "error" }]);
-    });
-    const unlistenDiscarded = listen<RecordingTake>("recording-control-discarded", (event) => {
-      if (event.payload.scope.kind !== "storyboard" || event.payload.scope.path !== activeStoryboardPath) return;
-      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Discarded recording take ${event.payload.id} for "${activeStoryboard.title || "Untitled storyboard"}"`, level: "info" }]);
-    });
-    return () => {
-      unlistenStarted.then((fn) => fn());
-      unlistenStopped.then((fn) => fn());
-      unlistenDiscarded.then((fn) => fn());
-    };
-  }, [activeStoryboard, activeStoryboardPath]);
+  useRecordingTakeActivity(activeStoryboardPath && activeStoryboard ? { kind: "storyboard", path: activeStoryboardPath } : null, activeStoryboard?.title || "Untitled storyboard");
 
   const storyboardItems = activeStoryboard?.items ?? [];
   const filteredSketches = sketches.filter((s) =>

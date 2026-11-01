@@ -4,6 +4,10 @@
 // number of calls in scripts/ipc-imports.json; new files may not import it.
 // Caps only go down: run `node scripts/check-ipc-imports.mjs --update` after
 // moving calls into src/ipc/.
+//
+// Events follow the same rule without caps (F4): only src/ipc/events.ts may
+// import `listen`/`once`/`emit`/`emitTo`; everyone else uses its typed
+// `listenEvent`/`emitEvent`.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,6 +30,47 @@ export function isExempt(path) {
 
 function isTauriCore(specifier) {
   return specifier === "@tauri-apps/api/core" || /(^|\/)(services\/)?tauri$/.test(specifier);
+}
+
+const EVENT_FUNCTIONS = new Set(["listen", "once", "emit", "emitTo"]);
+
+/** Files that hand raw `listen` to a library rather than naming events. */
+export const EVENT_IMPORT_ALLOWLIST = {
+  "src/services/draftlineVersioning.ts": "passes listen to the Draftline client, which names its own events",
+};
+
+function isEventModule(specifier) {
+  return specifier === "@tauri-apps/api/event" || /(^|\/)(services\/)?tauri$/.test(specifier);
+}
+
+/** Raw event functions a file imports (`listen`, `emit`, …, or `ns.*` for namespace imports). */
+export function eventImports(text) {
+  const source = ts.createSourceFile("file.tsx", text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TSX);
+  const found = [];
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    if (!isEventModule(statement.moduleSpecifier.text)) continue;
+    const clause = statement.importClause;
+    if (!clause || clause.isTypeOnly) continue;
+    const bindings = clause.namedBindings;
+    if (!bindings) continue;
+    if (ts.isNamespaceImport(bindings)) {
+      found.push(`${bindings.name.text}.*`);
+      continue;
+    }
+    for (const element of bindings.elements) {
+      const imported = (element.propertyName ?? element.name).text;
+      if (!element.isTypeOnly && EVENT_FUNCTIONS.has(imported)) found.push(imported);
+    }
+  }
+  return found;
+}
+
+/** Problems for `imports` ({path: [names]}, files with raw event imports only). */
+export function checkEventImports(imports, allowlist = EVENT_IMPORT_ALLOWLIST) {
+  return Object.entries(imports)
+    .filter(([path]) => !(path in allowlist))
+    .map(([path, names]) => `${path}: imports ${names.join(", ")}; use listenEvent/emitEvent from src/ipc/events.ts`);
 }
 
 /** Local names `invoke` is imported as, or [] when the file doesn't import it. */
@@ -162,13 +207,17 @@ function walk(dir) {
 
 export function measure(cwd = process.cwd()) {
   const counts = {};
+  const events = {};
   for (const full of walk(join(cwd, "src"))) {
     const path = relative(cwd, full).split(sep).join("/");
     if (!/\.tsx?$/.test(path) || isExempt(path)) continue;
-    const calls = countInvokes(readFileSync(full, "utf8"));
+    const text = readFileSync(full, "utf8");
+    const calls = countInvokes(text);
     if (calls !== null) counts[path] = calls;
+    const names = eventImports(text);
+    if (names.length > 0) events[path] = names;
   }
-  return counts;
+  return { counts, events };
 }
 
 function serialize(caps) {
@@ -177,15 +226,15 @@ function serialize(caps) {
 
 function main() {
   const caps = JSON.parse(readFileSync(CAP_FILE, "utf8"));
-  const counts = measure();
+  const { counts, events } = measure();
   if (process.argv.includes("--update")) {
     writeFileSync(CAP_FILE, serialize(updateCaps(counts, caps)));
     console.log(`Updated ${CAP_FILE}.`);
     return;
   }
-  const problems = checkIpcImports(counts, caps);
+  const problems = [...checkIpcImports(counts, caps), ...checkEventImports(events)];
   if (problems.length > 0) {
-    console.error("Raw invoke ratchet:");
+    console.error("Raw IPC ratchet:");
     for (const problem of problems) console.error(`  - ${problem}`);
     process.exit(1);
   }

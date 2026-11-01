@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { listen } from "../services/tauri";
+import { listenEvent } from "../ipc/events";
 
 interface PresentationHotkeyHandlers {
   next?: () => void;
@@ -14,13 +14,13 @@ interface PresentationHotkeyHandlers {
 export function usePresentationHotkeyEvents(handlers: PresentationHotkeyHandlers) {
   useEffect(() => {
     const listeners = [
-      handlers.next ? listen("presentation-hotkey-next", handlers.next) : null,
-      handlers.previous ? listen("presentation-hotkey-previous", handlers.previous) : null,
-      handlers.playPause ? listen("presentation-hotkey-play-pause", handlers.playPause) : null,
-      handlers.speedUp ? listen("presentation-hotkey-speed-up", handlers.speedUp) : null,
-      handlers.slowDown ? listen("presentation-hotkey-slow-down", handlers.slowDown) : null,
-      handlers.toggleMode ? listen("presentation-hotkey-toggle-mode", handlers.toggleMode) : null,
-      handlers.exit ? listen("presentation-hotkey-exit", handlers.exit) : null,
+      handlers.next ? listenEvent("presentation-hotkey-next", handlers.next) : null,
+      handlers.previous ? listenEvent("presentation-hotkey-previous", handlers.previous) : null,
+      handlers.playPause ? listenEvent("presentation-hotkey-play-pause", handlers.playPause) : null,
+      handlers.speedUp ? listenEvent("presentation-hotkey-speed-up", handlers.speedUp) : null,
+      handlers.slowDown ? listenEvent("presentation-hotkey-slow-down", handlers.slowDown) : null,
+      handlers.toggleMode ? listenEvent("presentation-hotkey-toggle-mode", handlers.toggleMode) : null,
+      handlers.exit ? listenEvent("presentation-hotkey-exit", handlers.exit) : null,
     ].filter((listener): listener is Promise<() => void> => listener !== null);
 
     return () => {

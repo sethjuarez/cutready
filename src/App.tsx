@@ -9,7 +9,8 @@ import { AppLayout } from "./components/AppLayout";
 import { ToastContainer } from "./components/ToastContainer";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AppCloseGuard } from "./components/AppCloseGuard";
-import { invoke, listen } from "./services/tauri";
+import { invoke } from "./services/tauri";
+import { listenEvent } from "./ipc/events";
 import { commandRegistry } from "./services/commandRegistry";
 import { onWorkspaceSnapshotDeferred } from "./services/identity";
 import { isMac } from "./utils/platform";
@@ -106,7 +107,7 @@ function App() {
     };
 
     let unlisten: (() => void) | undefined;
-    listen("draftline://workspace_event", () => {
+    listenEvent("draftline://workspace_event", () => {
       void refreshFromDraftlineEvent();
     }).then((off) => {
       if (disposed) {

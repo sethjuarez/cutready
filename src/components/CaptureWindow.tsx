@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Monitor, LayoutGrid, ArrowLeft } from "lucide-react";
-import { invoke, emit } from "../services/tauri";
+import { invoke } from "../services/tauri";
+import { emitEvent } from "../ipc/events";
 import { useProjectImage } from "../hooks/useProjectImage";
 
 type Phase = "loading" | "choose-mode" | "select-region";
@@ -39,7 +40,7 @@ export function CaptureWindow() {
         setPhase("choose-mode");
       } catch (err) {
         console.error("[CaptureWindow] Failed to get params:", err);
-        await emit("capture-cancel", {});
+        await emitEvent("capture-cancel", {});
         await invoke("close_capture_window");
       }
     })();
@@ -54,13 +55,13 @@ export function CaptureWindow() {
 
   const finish = useCallback(async (path: string) => {
     console.log("[CaptureWindow] finish:", path);
-    await emit("capture-complete", { path });
+    await emitEvent("capture-complete", { path });
     await invoke("close_capture_window");
   }, []);
 
   const cancel = useCallback(async () => {
     console.log("[CaptureWindow] cancel");
-    await emit("capture-cancel", {});
+    await emitEvent("capture-cancel", {});
     await invoke("close_capture_window");
   }, []);
 

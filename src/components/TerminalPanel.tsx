@@ -4,7 +4,8 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { AlertTriangle, Plus, RotateCw, SquareTerminal, X } from "lucide-react";
-import { Channel, invoke, listen } from "../services/tauri";
+import { Channel, invoke } from "../services/tauri";
+import { listenEvent } from "../ipc/events";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
 import {
@@ -17,10 +18,6 @@ type TerminalOpenResult = {
   session_id: string;
   cwd: string;
   shell: string;
-};
-
-type TerminalExitedEvent = {
-  session_id: string;
 };
 
 type TerminalOutput = number[] | ArrayBuffer | Uint8Array;
@@ -502,7 +499,7 @@ export function TerminalPanel({
   useEffect(() => {
     let unlisten: (() => void) | null = null;
     let cancelled = false;
-    void listen<TerminalExitedEvent>("terminal-exited", (event) => {
+    void listenEvent("terminal-exited", (event) => {
       const sessionId = event.payload.session_id;
       for (const [id, runtime] of terminalRuntimes) {
         if (runtime.sessionId !== sessionId) continue;

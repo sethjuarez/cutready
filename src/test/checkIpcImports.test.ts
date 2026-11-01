@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  checkEventImports,
   checkIpcImports,
   countInvokes,
+  eventImports,
   isExempt,
   updateCaps,
   // @ts-expect-error - plain .mjs script without type declarations
@@ -69,5 +71,22 @@ describe("check-ipc-imports", () => {
     expect(isExempt("src/ipc/events.ts")).toBe(true);
     expect(isExempt("src/test/app.test.tsx")).toBe(true);
     expect(isExempt("src/stores/appStore.ts")).toBe(false);
+  });
+
+  it("finds raw event imports but not types or lookalikes", () => {
+    expect(eventImports('import { invoke, listen } from "../services/tauri";')).toEqual(["listen"]);
+    expect(eventImports('import { emit as send, emitTo } from "@tauri-apps/api/event";')).toEqual(["emit", "emitTo"]);
+    expect(eventImports('import * as events from "@tauri-apps/api/event";')).toEqual(["events.*"]);
+    expect(eventImports('import { once } from "./tauri";')).toEqual(["once"]);
+    expect(eventImports('import type { UnlistenFn } from "@tauri-apps/api/event";')).toEqual([]);
+    expect(eventImports('import { type EventCallback, invoke } from "../services/tauri";')).toEqual([]);
+    expect(eventImports('import { listenEvent } from "../ipc/events";')).toEqual([]);
+    expect(eventImports('// import { listen } from "../services/tauri";')).toEqual([]);
+  });
+
+  it("rejects raw event imports outside the allowlist", () => {
+    expect(checkEventImports({ "src/a.tsx": ["listen"], "src/lib.ts": ["listen"] }, { "src/lib.ts": "library adapter" })).toEqual([
+      expect.stringMatching(/^src\/a\.tsx: imports listen; use listenEvent\/emitEvent/),
+    ]);
   });
 });

@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Channel, convertFileSrc, invoke, listen } from "../services/tauri";
+import { Channel, convertFileSrc, invoke } from "../services/tauri";
+import { listenEvent } from "../ipc/events";
+import { useRecordingTakeActivity } from "../hooks/useRecordingTakeActivity";
+import { recordingIpc } from "../ipc/recording";
 import type { TokenResponse } from "../types/auth";
 import { open, save } from "../dialogs";
 import { openPath } from "@tauri-apps/plugin-opener";
@@ -37,7 +40,6 @@ import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } fro
 import { SketchIcon } from "./Icons";
 import { DocumentViewModeToggle, type DocumentViewMode } from "./DocumentViewModeToggle";
 import { SketchBalancedView, SketchScreenView } from "./SketchVisualViews";
-import type { RecordingTake } from "../types/recording";
 import { parseDurationSeconds, summarizeSketchDuration, type DurationDisplayMode } from "../utils/documentMetadata";
 import { preferredNarrationMimeType } from "../utils/narrationAudio";
 import { activeProviderInput, buildProviderConfig, narrationProvider } from "../utils/providerConfig";
@@ -65,7 +67,6 @@ type ProjectAudioAsset = { path: string; size: number; mimeType: string; modifie
 type SketchVideoExport = { path: string; duration_seconds: number; row_count: number };
 type SketchVideoExportProgress = { phase: string; current: number; total: number; message: string };
 type NarrationGenerationProgress = { phase: string; current: number; total: number; message: string };
-type AgentStreamEvent = { type: string; content?: string; client_run_id?: string };
 type SketchVideoExportSettings = {
   includeTitleCard: boolean;
   titleCardDurationSeconds: number;
@@ -1919,7 +1920,7 @@ Rules:
       const clientRunId = crypto.randomUUID();
       let streamedResponse = "";
       let draftedRows = 0;
-      unlisten = await listen<AgentStreamEvent>("agent-event", (event) => {
+      unlisten = await listenEvent("agent-event", (event) => {
         const update = event.payload;
         if (update.client_run_id !== clientRunId) return;
         if (update.type === "delta_reset") {
@@ -2360,7 +2361,7 @@ Rules:
   const handleRecord = useCallback(async () => {
     if (!activeSketchPath) return;
     try {
-      await invoke("open_recorder_window", {
+      await recordingIpc.openRecorderWindow({
         scope: { kind: "sketch", path: activeSketchPath },
         documentTitle: localTitle || "Untitled sketch",
       });
@@ -2369,26 +2370,7 @@ Rules:
     }
   }, [activeSketchPath, localTitle]);
 
-  useEffect(() => {
-    if (!activeSketchPath) return;
-    const unlistenStarted = listen<RecordingTake>("recording-control-started", (event) => {
-      if (event.payload.scope.kind !== "sketch" || event.payload.scope.path !== activeSketchPath) return;
-      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Started recording take ${event.payload.id} for "${localTitle || "Untitled sketch"}"`, level: "info" }]);
-    });
-    const unlistenStopped = listen<RecordingTake>("recording-control-stopped", (event) => {
-      if (event.payload.scope.kind !== "sketch" || event.payload.scope.path !== activeSketchPath) return;
-      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Saved recording take ${event.payload.id} for "${localTitle || "Untitled sketch"}"`, level: event.payload.status === "finalized" ? "success" : "error" }]);
-    });
-    const unlistenDiscarded = listen<RecordingTake>("recording-control-discarded", (event) => {
-      if (event.payload.scope.kind !== "sketch" || event.payload.scope.path !== activeSketchPath) return;
-      useAppStore.getState().addActivityEntries([{ id: crypto.randomUUID(), timestamp: new Date(), source: "recording", content: `Discarded recording take ${event.payload.id} for "${localTitle || "Untitled sketch"}"`, level: "info" }]);
-    });
-    return () => {
-      unlistenStarted.then((fn) => fn());
-      unlistenStopped.then((fn) => fn());
-      unlistenDiscarded.then((fn) => fn());
-    };
-  }, [activeSketchPath, localTitle]);
+  useRecordingTakeActivity(activeSketchPath ? { kind: "sketch", path: activeSketchPath } : null, localTitle || "Untitled sketch");
 
   if (!activeSketch) return null;
 

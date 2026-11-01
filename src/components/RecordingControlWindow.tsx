@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { invoke, emit, listen } from "../services/tauri";
+import { invoke } from "../services/tauri";
+import { emitEvent, listenEvent } from "../ipc/events";
+import { recordingIpc } from "../ipc/recording";
 import { getCurrentWindow, LogicalPosition, LogicalSize, PhysicalPosition } from "@tauri-apps/api/window";
 import { Eye, FileText, Keyboard, Mic, Monitor, Square, Video, Volume2, X } from "lucide-react";
 import { useRecordingDevices } from "../hooks/useRecordingDevices";
@@ -8,20 +10,7 @@ import { isMac } from "../utils/platform";
 import { fetchProjectImageDataUrl } from "../utils/projectImage";
 import { useConfirmDialog } from "./ConfirmDialog";
 import type { ProjectView } from "../types/project";
-import type { CameraFormatInfo, CaptureArea, PrompterScript, RecorderSettings, RecordingDeviceInfo, RecordingPlatformCapabilities, RecordingScope, RecordingTake } from "../types/recording";
-
-interface RecordingControlParams {
-  take_id?: string | null;
-  document_title: string;
-  scope?: RecordingScope | null;
-}
-
-interface RecordingAudioLevel {
-  available: boolean;
-  rms: number;
-  peak: number;
-  bytes: number;
-}
+import type { CameraFormatInfo, CaptureArea, PrompterScript, RecorderSettings, RecordingAudioLevel, RecordingControlParams, RecordingDeviceInfo, RecordingPlatformCapabilities, RecordingTake } from "../types/recording";
 
 interface MonitorInfo {
   id: number;
@@ -136,8 +125,8 @@ export function RecordingControlWindow() {
   }, []);
 
   const closePrompter = useCallback(async () => {
-    await emit("recording-prompter-close", {}).catch(() => undefined);
-    await invoke("close_recording_prompter_window").catch(() => undefined);
+    await emitEvent("recording-prompter-close", {}).catch(() => undefined);
+    await recordingIpc.closePrompterWindow().catch(() => undefined);
   }, []);
 
   const stopRecording = useCallback(async () => {
@@ -146,15 +135,15 @@ export function RecordingControlWindow() {
     setPhase("stopping");
     setError(null);
     clearCountdownTimer();
-    await invoke("close_recording_countdown_window").catch(() => undefined);
+    await recordingIpc.closeCountdownWindow().catch(() => undefined);
     await closePrompter();
     try {
-      const take = await invoke<RecordingTake>("stop_recording_take");
+      const take = await recordingIpc.stopTake();
       setRecordingTake(take);
-      await emit("recording-control-stopped", take).catch((err) => {
+      await emitEvent("recording-control-stopped", take).catch((err) => {
         console.warn("Failed to notify main window that recording stopped:", err);
       });
-      await invoke("close_recording_control_window");
+      await recordingIpc.closeControlWindow();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
@@ -177,15 +166,15 @@ export function RecordingControlWindow() {
     setError(null);
     activeCaptureRef.current = null;
     clearCountdownTimer();
-    await invoke("close_recording_countdown_window").catch(() => undefined);
+    await recordingIpc.closeCountdownWindow().catch(() => undefined);
     await closePrompter();
     try {
-      const take = await invoke<RecordingTake>("discard_recording_take");
+      const take = await recordingIpc.discardTake();
       setRecordingTake(take);
-      await emit("recording-control-discarded", take).catch((err) => {
+      await emitEvent("recording-control-discarded", take).catch((err) => {
         console.warn("Failed to notify main window that recording was discarded:", err);
       });
-      await invoke("close_recording_control_window");
+      await recordingIpc.closeControlWindow();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setPhase("recording");
@@ -212,7 +201,7 @@ export function RecordingControlWindow() {
       // and closes, instead of orphaning active capture behind a closed surface.
       startCanceledRef.current = true;
       clearCountdownTimer();
-      await invoke("close_recording_countdown_window").catch(() => undefined);
+      await recordingIpc.closeCountdownWindow().catch(() => undefined);
       await closePrompter();
       return;
     }
@@ -223,18 +212,18 @@ export function RecordingControlWindow() {
       // nothing to orphan.
       startCanceledRef.current = true;
       clearCountdownTimer();
-      await invoke("close_recording_countdown_window").catch(() => undefined);
+      await recordingIpc.closeCountdownWindow().catch(() => undefined);
       await closePrompter();
-      await invoke("close_recording_control_window").catch(() => undefined);
+      await recordingIpc.closeControlWindow().catch(() => undefined);
       return;
     }
     if (phase === "countdown") {
       clearCountdownTimer();
-      await invoke("close_recording_countdown_window").catch(() => undefined);
+      await recordingIpc.closeCountdownWindow().catch(() => undefined);
     }
     await closePrompter();
     if (phase !== "stopping" && phase !== "discarding") {
-      await invoke("close_recording_control_window");
+      await recordingIpc.closeControlWindow();
     }
   }, [clearCountdownTimer, closePrompter, discardRecording, phase]);
 
@@ -254,7 +243,7 @@ export function RecordingControlWindow() {
 
   const openPrompter = useCallback(async (readMode: boolean) => {
     if (!scope || !selectedMonitor) return;
-    await invoke("open_recording_prompter_window", {
+    await recordingIpc.openPrompterWindow({
       scope,
       documentTitle,
       physX: selectedMonitor.x,
@@ -270,7 +259,7 @@ export function RecordingControlWindow() {
     setPhase("starting");
     setError(null);
     await stopSourcePreview();
-    await invoke("close_recording_countdown_window").catch(() => undefined);
+    await recordingIpc.closeCountdownWindow().catch(() => undefined);
 
     // Abort before the native start if a cancel arrived during the awaits
     // above; no capture exists yet, so just close the deferred window.
@@ -278,7 +267,7 @@ export function RecordingControlWindow() {
       if (!startCanceledRef.current) return false;
       startCanceledRef.current = false;
       startInFlightRef.current = false;
-      await invoke("close_recording_control_window").catch(() => undefined);
+      await recordingIpc.closeControlWindow().catch(() => undefined);
       return true;
     };
     if (await abortBeforeNativeStart()) return;
@@ -319,10 +308,7 @@ export function RecordingControlWindow() {
       nativeStartPendingRef.current = true;
       let take: RecordingTake;
       try {
-        take = await invoke<RecordingTake>("start_recording_take", {
-          scope,
-          settings: recorderSettings,
-        });
+        take = await recordingIpc.startTake(scope, recorderSettings);
       } finally {
         nativeStartPendingRef.current = false;
       }
@@ -332,10 +318,10 @@ export function RecordingControlWindow() {
         // close rather than publishing a headless recording.
         startCanceledRef.current = false;
         startInFlightRef.current = false;
-        await invoke("discard_recording_take").catch((err) => {
+        await recordingIpc.discardTake().catch((err) => {
           console.warn("Failed to discard capture canceled during startup:", err);
         });
-        await invoke("close_recording_control_window").catch(() => undefined);
+        await recordingIpc.closeControlWindow().catch(() => undefined);
         return;
       }
       startInFlightRef.current = false;
@@ -351,14 +337,14 @@ export function RecordingControlWindow() {
         return;
       }
       if (prompterEnabled && prompterAvailable && supportsPrompterClickThrough) {
-        await emit("recording-prompter-read", {}).catch(() => undefined);
+        await emitEvent("recording-prompter-read", {}).catch(() => undefined);
       }
       if (activeCaptureRef.current !== take) {
         // A close during the prompter-read emit above already discarded this
         // capture via requestClose. Do not announce it as started.
         return;
       }
-      await emit("recording-control-started", take).catch((err) => {
+      await emitEvent("recording-control-started", take).catch((err) => {
         console.warn("Failed to notify main window that recording started:", err);
       });
     } catch (err) {
@@ -367,7 +353,7 @@ export function RecordingControlWindow() {
         // Start failed after a cancel request: nothing was installed, so just
         // honor the deferred close instead of returning to the setup screen.
         startCanceledRef.current = false;
-        await invoke("close_recording_control_window").catch(() => undefined);
+        await recordingIpc.closeControlWindow().catch(() => undefined);
         return;
       }
       setError(err instanceof Error ? err.message : String(err));
@@ -415,8 +401,8 @@ export function RecordingControlWindow() {
       startCanceledRef.current = false;
       startInFlightRef.current = false;
       clearCountdownTimer();
-      await invoke("close_recording_countdown_window").catch(() => undefined);
-      await invoke("close_recording_control_window").catch(() => undefined);
+      await recordingIpc.closeCountdownWindow().catch(() => undefined);
+      await recordingIpc.closeControlWindow().catch(() => undefined);
       return true;
     };
 
@@ -443,7 +429,7 @@ export function RecordingControlWindow() {
     setError(null);
     try {
       const attemptId = ++attemptSeqRef.current;
-      await invoke("open_recording_countdown_window", {
+      await recordingIpc.openCountdownWindow({
         monitorId: selectedMonitor.id,
         physX: selectedMonitor.x,
         physY: selectedMonitor.y,
@@ -539,7 +525,7 @@ export function RecordingControlWindow() {
 
   useEffect(() => {
     let cancelled = false;
-    invoke<RecordingPlatformCapabilities>("get_recording_platform_capabilities")
+    recordingIpc.platformCapabilities()
       .then((capabilities) => {
         if (!cancelled && isRecordingPlatformCapabilities(capabilities)) {
           setPlatformCapabilities(capabilities);
@@ -556,7 +542,7 @@ export function RecordingControlWindow() {
   useEffect(() => {
     (async () => {
       try {
-        const next = await invoke<RecordingControlParams>("get_recording_control_params");
+        const next = await recordingIpc.controlParams();
         setParams(next);
         if (next.take_id) {
           setRecordingTake((current) => current ?? { id: next.take_id } as RecordingTake);
@@ -575,7 +561,7 @@ export function RecordingControlWindow() {
     }
     let cancelled = false;
     setPrompterLoading(true);
-    invoke<PrompterScript>("get_recording_prompter_script", { scope })
+    recordingIpc.prompterScript(scope)
       .then((script) => {
         if (cancelled) return;
         const steps = Array.isArray(script?.steps) ? script.steps : [];
@@ -665,7 +651,7 @@ export function RecordingControlWindow() {
     if (!cameraDeviceId || cameraFormatsById[cameraDeviceId]) return;
     let cancelled = false;
     setCameraFormatsLoading(true);
-    invoke<CameraFormatInfo[]>("discover_camera_formats", { cameraDeviceId })
+    recordingIpc.discoverCameraFormats(cameraDeviceId)
       .then((formats) => {
         if (cancelled) return;
         setCameraFormatsById((current) => ({ ...current, [cameraDeviceId]: formats }));
@@ -682,7 +668,7 @@ export function RecordingControlWindow() {
   }, [cameraDeviceId, cameraFormatsById]);
 
   useEffect(() => {
-    const unlistenCancel = listen<{ attemptId?: number } | null>("recording-countdown-cancel", (event) => {
+    const unlistenCancel = listenEvent("recording-countdown-cancel", (event) => {
       const payloadId = event?.payload?.attemptId;
       // A cancel that names a specific attempt must match the countdown the
       // current attempt owns; a stale/duplicate cancel from a superseded
@@ -711,7 +697,7 @@ export function RecordingControlWindow() {
         startCanceledRef.current = true;
       }
     });
-    const unlistenToggle = listen("toggle-recording", () => {
+    const unlistenToggle = listenEvent("toggle-recording", () => {
       if (phase === "recording") void stopRecording();
       if (phase === "setup" && canStart) void startRecording();
     });
@@ -767,7 +753,7 @@ export function RecordingControlWindow() {
     let cancelled = false;
     const update = async () => {
       try {
-        const next = await invoke<RecordingAudioLevel>("get_recording_audio_level");
+        const next = await recordingIpc.audioLevel();
         if (!cancelled) setAudioLevel(next);
       } catch {
         if (!cancelled) setAudioLevel((level) => ({ ...level, available: false, rms: 0, peak: 0 }));
@@ -1438,12 +1424,7 @@ function deviceStatus(loading: boolean, error: string | null, microphoneCount: n
 }
 
 async function saveWindowPosition(position: PhysicalPosition) {
-  await invoke("save_recording_control_position", {
-    position: {
-      x: position.x,
-      y: position.y,
-    },
-  }).catch((err) => {
+  await recordingIpc.saveControlPosition(position.x, position.y).catch((err) => {
     console.warn("Failed to save recording control position:", err);
   });
 }

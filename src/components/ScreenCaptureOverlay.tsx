@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { invoke, listen } from "../services/tauri";
+import { invoke } from "../services/tauri";
+import { listenEvent } from "../ipc/events";
 import { fetchProjectImageDataUrl } from "../utils/projectImage";
 
 interface MonitorInfo {
@@ -55,12 +56,12 @@ export function ScreenCaptureOverlay({ onCapture, onCancel }: ScreenCaptureOverl
   // Listen for capture events from the capture window (stable — no deps on callbacks)
   useEffect(() => {
     console.info("[Overlay] Setting up event listeners");
-    const unlistenComplete = listen<{ path: string }>("capture-complete", (event) => {
+    const unlistenComplete = listenEvent("capture-complete", (event) => {
       console.info(`[Overlay] capture-complete event: ${event.payload.path}`);
       cleanupPreviewCaptures(new Set([event.payload.path]));
       callbacksRef.current.onCapture(event.payload.path);
     });
-    const unlistenCancel = listen("capture-cancel", () => {
+    const unlistenCancel = listenEvent("capture-cancel", () => {
       console.info("[Overlay] capture-cancel event received");
       cleanupPreviewCaptures(new Set());
       callbacksRef.current.onCancel();

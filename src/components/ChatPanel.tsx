@@ -1,5 +1,6 @@
 import { Children, isValidElement, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject, type UIEvent } from "react";
-import { invoke, listen } from "../services/tauri";
+import { invoke } from "../services/tauri";
+import { listenEvent } from "../ipc/events";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { AgentRunInspector } from "./AgentRunInspector";
 import { AgentStateDatabasePanel } from "./AgentStateDatabasePanel";
@@ -885,8 +886,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   useEffect(() => {
     const shouldListen = focusMode || !chatFocusMode;
     if (!shouldListen) return;
-
-    const unlisten = listen<{ type: string; content?: string; message?: string; name?: string; arguments?: string; result?: string; status?: "success" | "failure"; response?: string; agent_id?: string; task?: string; selected_count?: number; dropped_count?: number; total_bytes?: number; budget_bytes?: number; iteration?: number; attempt?: number; client_run_id?: string }>("agent-event", (event) => {
+    const unlisten = listenEvent("agent-event", (event) => {
       const ev = event.payload;
       if (
         ev.client_run_id
