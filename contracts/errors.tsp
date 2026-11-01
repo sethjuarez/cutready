@@ -26,6 +26,9 @@ union CmdErrorCode {
 
   /** `order` is not a permutation of the current row indices. */
   invalidReorder: "invalid_reorder",
+
+  /** Codes from newer runtimes load and save unchanged. */
+  string,
 }
 
 /** Structured context for a CmdError. Each code documents the fields it sets. */
@@ -35,6 +38,9 @@ model CmdErrorDetails {
 
   /** The locked cell, for `locked_cell`. */
   field?: PlanningCellField;
+
+  /** Detail fields from newer runtimes survive load and save. */
+  ...Record<unknown>;
 }
 
 /**

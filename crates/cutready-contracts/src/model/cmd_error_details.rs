@@ -104,6 +104,8 @@ pub struct CmdErrorDetails {
     pub row_index: Option<u32>,
     /// The locked cell, for `locked_cell`.
     pub field: Option<PlanningCellField>,
+    /// Undeclared fields captured on load and written back on save (unknown-field passthrough).
+    pub additional_properties: serde_json::Map<String, serde_json::Value>,
 }
 
 impl CmdErrorDetails {
@@ -151,7 +153,26 @@ impl CmdErrorDetails {
         Self {
             row_index: value.get("row_index").and_then(|v| v.as_u64().and_then(|n| u32::try_from(n).ok())),
             field: value.get("field").and_then(|v| v.as_str()).and_then(|s| PlanningCellField::from_str_opt(s)),
+            additional_properties: Self::capture_additional_properties(&value, ""),
         }
+    }
+
+    /// True when `key` is a declared wire key for the given discriminator value.
+    fn additional_properties_known_key(kind: &str, key: &str) -> bool {
+        matches!(key, "row_index" | "field")
+    }
+
+    fn capture_additional_properties(value: &serde_json::Value, kind: &str) -> serde_json::Map<String, serde_json::Value> {
+        value
+            .as_object()
+            .map(|object| {
+                object
+                    .iter()
+                    .filter(|(key, _)| !Self::additional_properties_known_key(kind, key))
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     pub(crate) fn validate_input_at(value: &serde_json::Value, path: &str) -> Result<(), String> {
@@ -169,6 +190,12 @@ impl CmdErrorDetails {
         }
         if let Some(val) = self.field.as_ref() {
             result.insert("field".to_string(), serde_json::Value::String(val.to_string()));
+        }
+        for (key, value) in &self.additional_properties {
+            if Self::additional_properties_known_key("", key) {
+                continue;
+            }
+            result.insert(key.clone(), value.clone());
         }
         ctx.process_dict(serde_json::Value::Object(result))
     }

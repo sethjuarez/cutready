@@ -3,13 +3,15 @@
 
 import Foundation
 
-public enum CmdErrorCode: String, Codable, CaseIterable {
-  case lockedDocument = "locked_document"
-  case lockedRowCount = "locked_row_count"
-  case lockedRow = "locked_row"
-  case lockedCell = "locked_cell"
-  case rowNotFound = "row_not_found"
-  case invalidReorder = "invalid_reorder"
+public struct CmdErrorCode: RawRepresentable, Equatable, Hashable, Codable {
+  public let rawValue: String
+  public init(rawValue: String) { self.rawValue = rawValue }
+  public static let lockedDocument = CmdErrorCode(rawValue: "locked_document")
+  public static let lockedRowCount = CmdErrorCode(rawValue: "locked_row_count")
+  public static let lockedRow = CmdErrorCode(rawValue: "locked_row")
+  public static let lockedCell = CmdErrorCode(rawValue: "locked_cell")
+  public static let rowNotFound = CmdErrorCode(rawValue: "row_not_found")
+  public static let invalidReorder = CmdErrorCode(rawValue: "invalid_reorder")
   public static func parse(_ value: String) throws -> CmdErrorCode {
     switch value {
     case "locked_document": return .lockedDocument
@@ -18,7 +20,7 @@ public enum CmdErrorCode: String, Codable, CaseIterable {
     case "locked_cell": return .lockedCell
     case "row_not_found": return .rowNotFound
     case "invalid_reorder": return .invalidReorder
-    default: throw TypraRuntimeError.invalidEnum(type: "CmdErrorCode", value: value)
+    default: return CmdErrorCode(rawValue: value)
     }
   }
 }

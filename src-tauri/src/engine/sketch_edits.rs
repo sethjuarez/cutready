@@ -37,18 +37,14 @@ pub enum SketchEditError {
 
 impl SketchEditError {
     /// Stable code shared with the iOS companion (`CmdErrorCode`).
-    pub fn code(&self) -> &'static str {
-        self.cmd_error_code().as_str()
-    }
-
-    fn cmd_error_code(&self) -> &'static CmdErrorCode {
+    pub fn code(&self) -> CmdErrorCode {
         match self {
-            Self::LockedDocument => &CmdErrorCode::LockedDocument,
-            Self::LockedRowCount => &CmdErrorCode::LockedRowCount,
-            Self::LockedRow { .. } => &CmdErrorCode::LockedRow,
-            Self::LockedCell { .. } => &CmdErrorCode::LockedCell,
-            Self::RowNotFound { .. } => &CmdErrorCode::RowNotFound,
-            Self::InvalidReorder => &CmdErrorCode::InvalidReorder,
+            Self::LockedDocument => CmdErrorCode::LockedDocument,
+            Self::LockedRowCount => CmdErrorCode::LockedRowCount,
+            Self::LockedRow { .. } => CmdErrorCode::LockedRow,
+            Self::LockedCell { .. } => CmdErrorCode::LockedCell,
+            Self::RowNotFound { .. } => CmdErrorCode::RowNotFound,
+            Self::InvalidReorder => CmdErrorCode::InvalidReorder,
         }
     }
 }
@@ -66,11 +62,12 @@ impl From<&SketchEditError> for CmdError {
             SketchEditError::LockedCell { row_index, field } => Some(CmdErrorDetails {
                 row_index: Some(contract_index(*row_index)),
                 field: PlanningCellField::from_str_opt(field),
+                ..Default::default()
             }),
             _ => None,
         };
         CmdError {
-            code: *err.cmd_error_code(),
+            code: err.code(),
             message: err.to_string(),
             details,
         }
@@ -376,12 +373,28 @@ mod tests {
             Some(CmdErrorDetails {
                 row_index: Some(1),
                 field: Some(PlanningCellField::DemoActions),
+                ..Default::default()
             })
         );
 
         let cmd = CmdError::from(&SketchEditError::LockedRowCount);
         assert_eq!(cmd.code.as_str(), "locked_row_count");
         assert_eq!(cmd.details, None);
+    }
+
+    #[test]
+    fn newer_error_codes_and_details_survive_a_round_trip() {
+        use cutready_contracts::{LoadContext, SaveContext};
+
+        let wire = serde_json::json!({
+            "code": "stale_document",
+            "message": "The sketch changed on disk.",
+            "details": { "row_index": 2, "field": "narrative", "expected_hash": "abc" }
+        });
+        let cmd = CmdError::load_from_value(&wire, &LoadContext::default());
+        assert_eq!(cmd.code, CmdErrorCode::Other("stale_document".into()));
+        assert_eq!(cmd.details.as_ref().unwrap().row_index, Some(2));
+        assert_eq!(cmd.to_value(&SaveContext::default()), wire);
     }
 
     fn sketch_with(rows: Vec<PlanningRow>) -> Sketch {
@@ -430,7 +443,7 @@ mod tests {
         )
         .unwrap_err();
 
-        assert_eq!(err.code(), "locked_cell");
+        assert_eq!(err.code(), CmdErrorCode::LockedCell);
         assert_eq!(sketch.rows[0].narrative, "Keep");
         assert_eq!(sketch.updated_at, before);
     }

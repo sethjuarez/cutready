@@ -7,7 +7,7 @@ use super::context::{LoadContext, SaveContext};
 
 use super::cmd_error_details::CmdErrorDetails;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CmdErrorCode {
     LockedDocument,
     LockedRowCount,
@@ -15,6 +15,8 @@ pub enum CmdErrorCode {
     LockedCell,
     RowNotFound,
     InvalidReorder,
+    /// Unknown variant (open enum — accepts any string).
+    Other(String),
 }
 
 impl Default for CmdErrorCode {
@@ -32,6 +34,7 @@ impl std::fmt::Display for CmdErrorCode {
             Self::LockedCell => write!(f, "locked_cell"),
             Self::RowNotFound => write!(f, "row_not_found"),
             Self::InvalidReorder => write!(f, "invalid_reorder"),
+            Self::Other(s) => write!(f, "{}", s),
         }
     }
 }
@@ -45,7 +48,7 @@ impl CmdErrorCode {
             "locked_cell" => Some(Self::LockedCell),
             "row_not_found" => Some(Self::RowNotFound),
             "invalid_reorder" => Some(Self::InvalidReorder),
-            _ => None,
+            other => Some(Self::Other(other.to_string())),
         }
     }
 
@@ -68,7 +71,7 @@ impl CmdErrorCode {
         if s.eq_ignore_ascii_case("invalid_reorder") {
             return Some(Self::InvalidReorder);
         }
-        None
+        Some(Self::Other(s.to_string()))
     }
 
     pub fn as_str(&self) -> &str {
@@ -79,6 +82,7 @@ impl CmdErrorCode {
             Self::LockedCell => "locked_cell",
             Self::RowNotFound => "row_not_found",
             Self::InvalidReorder => "invalid_reorder",
+            Self::Other(s) => s.as_str(),
         }
     }
 }

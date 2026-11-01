@@ -11,6 +11,19 @@ export class CmdErrorDetails {
 
   row_index?: number | undefined;
   field?: PlanningCellField | undefined;
+  /** Fields not declared by the schema, preserved verbatim across load/save (#336). */
+  additionalProperties: Record<string, unknown> = Object.create(null);
+
+  /** True when `key` is a declared wire key of this model (including inherited fields). */
+  protected isKnownWireKey(key: string): boolean {
+    switch (key) {
+      case "row_index":
+      case "field":
+        return true;
+      default:
+        return false;
+    }
+  }
 
   constructor(init?: Partial<CmdErrorDetails>) {
     if (init?.row_index !== undefined) {
@@ -18,6 +31,12 @@ export class CmdErrorDetails {
     }
     if (init?.field !== undefined) {
       this.field = init.field;
+    }
+    if (init?.additionalProperties !== undefined) {
+      this.additionalProperties = Object.assign(
+        Object.create(null),
+        init.additionalProperties,
+      );
     }
   }
 
@@ -39,6 +58,13 @@ export class CmdErrorDetails {
     }
     if (data["field"] !== undefined && data["field"] !== null) {
       instance.field = String(data["field"]) as PlanningCellField;
+    }
+
+    instance.additionalProperties = Object.create(null);
+    for (const [key, value] of Object.entries(data)) {
+      if (!instance.isKnownWireKey(key)) {
+        instance.additionalProperties[key] = value;
+      }
     }
 
     if (context) {
@@ -64,6 +90,18 @@ export class CmdErrorDetails {
     }
     if (obj.field !== undefined && obj.field !== null) {
       result["field"] = obj.field;
+    }
+
+    const extras = obj.additionalProperties ?? {};
+    for (const [key, value] of Object.entries(extras)) {
+      if (!obj.isKnownWireKey(key)) {
+        Object.defineProperty(result, key, {
+          value,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+      }
     }
 
     if (context) {

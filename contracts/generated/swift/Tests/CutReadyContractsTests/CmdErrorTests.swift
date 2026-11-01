@@ -14,10 +14,10 @@ final class CmdErrorTests: XCTestCase {
 }
 """
     let instance = try CmdError.fromJSON(json)
-    XCTAssertEqual(instance.code, CmdErrorCode.lockedDocument)
+    XCTAssertEqual(instance.code, CmdErrorCode(rawValue: "locked_document"))
     XCTAssertEqual(instance.message, "sample")
     let reloaded = try CmdError.fromJSON(try instance.toJSON())
-    XCTAssertEqual(reloaded.code, CmdErrorCode.lockedDocument)
+    XCTAssertEqual(reloaded.code, CmdErrorCode(rawValue: "locked_document"))
     XCTAssertEqual(reloaded.message, "sample")
   }
 
@@ -28,10 +28,10 @@ message: sample
 
 """
     let instance = try CmdError.fromYAML(yaml)
-    XCTAssertEqual(instance.code, CmdErrorCode.lockedDocument)
+    XCTAssertEqual(instance.code, CmdErrorCode(rawValue: "locked_document"))
     XCTAssertEqual(instance.message, "sample")
     let reloaded = try CmdError.fromYAML(try instance.toYAML())
-    XCTAssertEqual(reloaded.code, CmdErrorCode.lockedDocument)
+    XCTAssertEqual(reloaded.code, CmdErrorCode(rawValue: "locked_document"))
     XCTAssertEqual(reloaded.message, "sample")
   }
 

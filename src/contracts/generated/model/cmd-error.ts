@@ -5,7 +5,7 @@
 import { LoadContext, SaveContext } from "./context";
 import { CmdErrorDetails } from "./cmd-error-details";
 
-export type CmdErrorCode = "locked_document" | "locked_row_count" | "locked_row" | "locked_cell" | "row_not_found" | "invalid_reorder";
+export type CmdErrorCode = "locked_document" | "locked_row_count" | "locked_row" | "locked_cell" | "row_not_found" | "invalid_reorder" | (string & {});
 
 export class CmdError {
   static readonly shorthandProperty: string | undefined = undefined;
