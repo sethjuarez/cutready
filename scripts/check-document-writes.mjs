@@ -13,9 +13,6 @@ export const SOURCE_ROOT = "src-tauri/src";
 /** Files that may still call project::write_sketch/write_storyboard/write_note. */
 export const LEGACY_WRITERS = new Map([
   ["engine/project.rs", "defines the helpers, which delegate to the writer"],
-  ["commands/import.rs", "moves in 4.7b2"],
-  ["commands/recording.rs", "moves in 4.7b2"],
-  ["engine/video_import.rs", "moves in 4.7b2"],
   ["engine/agent/tools.rs", "moves with the agent tools in 4.8"],
   ["engine/document_goldens.rs", "test-only goldens"],
 ]);

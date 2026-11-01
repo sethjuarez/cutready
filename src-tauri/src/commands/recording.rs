@@ -4,6 +4,7 @@ use serde::Serialize;
 use std::path::Path;
 
 use chrono::Utc;
+use serde_json::json;
 use sha2::{Digest, Sha256};
 use tauri::State;
 use tauri_plugin_auditaur::auditaur_command;
@@ -11,6 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     engine::{
+        document_writer::{self, Expected},
         project, recording,
         speech::{SynthesisRequest, TtsConnection, TtsRegistry},
     },
@@ -315,9 +317,9 @@ fn persist_narration_asset(
     row.narration = Some(asset);
     row.narration_plan = narration_plan;
     row.motion_plan = None;
-    sketch.updated_at = Utc::now();
 
-    project::write_sketch(&sketch, &sketch_abs, root).map_err(|e| e.to_string())?;
+    let op = json!({ "kind": "replace_rows", "rows": sketch.rows });
+    let sketch = document_writer::edit_sketch(root, sketch_path, Expected::Unchecked, &[op])?;
     tracing::info!(
         target: "cutready::recording",
         sketch_path = %sketch_path,
@@ -943,5 +945,65 @@ mod tests {
         let path = std::path::Path::new(r"\\?\UNC\server\share\demo");
 
         assert_eq!(super::windows_shell_path(path), r"\\server\share\demo");
+    }
+
+    fn sketch_with_rows(root: &std::path::Path, rows: usize) {
+        use cutready_core::models::sketch::{PlanningRow, Sketch};
+        let mut sketch = Sketch::new("Intro", chrono::Utc::now());
+        sketch.rows = (0..rows).map(|_| PlanningRow::new()).collect();
+        crate::engine::project::write_sketch(&sketch, &root.join("intro.sk"), root).unwrap();
+    }
+
+    fn persist(root: &std::path::Path, row: usize) -> Result<super::Sketch, String> {
+        super::persist_narration_asset(
+            root,
+            "intro.sk",
+            row,
+            b"RIFF",
+            "audio/wav",
+            Some(1200),
+            "Hello".into(),
+            None,
+            None,
+            None,
+            None,
+        )
+    }
+
+    #[test]
+    fn narration_attaches_to_its_row_and_saves_the_sketch() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        sketch_with_rows(root, 2);
+
+        let sketch = persist(root, 1).unwrap();
+
+        let on_disk = crate::engine::project::read_sketch(&root.join("intro.sk")).unwrap();
+        assert_eq!(on_disk.updated_at, sketch.updated_at);
+        assert!(on_disk.rows[0].narration.is_none());
+        let asset = on_disk.rows[1].narration.as_ref().unwrap();
+        assert_eq!(asset.source_text, "Hello");
+        assert!(root.join(&asset.path).exists());
+    }
+
+    #[test]
+    fn narration_respects_sketch_and_row_locks() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        sketch_with_rows(root, 1);
+        let lock_row = serde_json::json!({ "kind": "set_lock", "row_id": "row-1", "locked": true });
+        crate::engine::document_writer::edit(
+            root,
+            "intro.sk",
+            crate::engine::document_writer::Expected::Unchecked,
+            &[lock_row],
+        )
+        .unwrap();
+
+        assert_eq!(persist(root, 0).unwrap_err(), "Planning row is locked");
+        assert_eq!(
+            persist(root, 3).unwrap_err(),
+            "Planning row 3 does not exist"
+        );
     }
 }

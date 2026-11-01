@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use crate::engine::agent::execution::ChatMessage;
 use crate::engine::agent::llm::LlmConfig;
-use crate::engine::{ffmpeg, project};
+use crate::engine::{document_writer, ffmpeg, project};
 use cutready_core::models::sketch::{PlanningRow, Sketch};
 
 const IMPORTS_DIR: &str = ".cutready/recordings/imports";
@@ -408,7 +408,7 @@ where
     sketch.updated_at = Utc::now();
 
     let sketch_abs = project::safe_resolve(project_root, sketch_relative_path)?;
-    project::write_sketch(&sketch, &sketch_abs, project_root)?;
+    document_writer::replace_sketch(&sketch_abs, &sketch)?;
     let note = build_summary_note(
         title,
         video_path,
@@ -418,7 +418,7 @@ where
         planning_context.as_ref(),
     );
     let note_abs = project::safe_resolve(project_root, note_relative_path)?;
-    project::write_note(&note_abs, &note)?;
+    document_writer::replace_note(&note_abs, &note)?;
 
     let manifest = VideoImportManifest {
         schema_version: 1,
