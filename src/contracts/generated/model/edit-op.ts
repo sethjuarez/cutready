@@ -5,6 +5,9 @@
 import { LoadContext, SaveContext } from "./context";
 import { DocumentMetadata } from "./document-metadata";
 import { PlanningRow } from "./planning-row";
+import { Sketch } from "./sketch";
+import { Storyboard } from "./storyboard";
+import { StoryboardItem } from "./storyboard-item";
 
 export type PlanningCellField = "time" | "narrative" | "demo_actions" | "screenshot" | "visual" | "design_plan";
 
@@ -79,6 +82,22 @@ export class EditOp {
         return ReplaceRowsOp.load(data, context);
       case "set_lock":
         return SetLockOp.load(data, context);
+      case "touch":
+        return TouchOp.load(data, context);
+      case "replace_sketch":
+        return ReplaceSketchOp.load(data, context);
+      case "replace_storyboard":
+        return ReplaceStoryboardOp.load(data, context);
+      case "replace_note":
+        return ReplaceNoteOp.load(data, context);
+      case "write_note":
+        return WriteNoteOp.load(data, context);
+      case "insert_storyboard_item":
+        return InsertStoryboardItemOp.load(data, context);
+      case "remove_storyboard_item":
+        return RemoveStoryboardItemOp.load(data, context);
+      case "set_storyboard_items":
+        return SetStoryboardItemsOp.load(data, context);
       default:
         throw new Error(
           `Unknown EditOp discriminator field 'kind' value: ${discriminator}`,
@@ -1298,6 +1317,762 @@ export class SetLockOp extends EditOp {
   static fromYaml(yaml: string, context?: LoadContext): SetLockOp {
     const data = LoadContext.parseYaml(yaml);
     return SetLockOp.load(data as Record<string, unknown>, context);
+  }
+
+  //#endregion
+}
+
+export class TouchOp extends EditOp {
+  static readonly shorthandProperty: string | undefined = undefined;
+
+  kind: string = "touch";
+
+  constructor(init?: Partial<TouchOp>) {
+    super(init);
+    this.kind = init?.kind ?? "touch";
+  }
+
+  //#region Load Methods
+
+  static load(data: Record<string, unknown>, context?: LoadContext): TouchOp {
+    context ??= new LoadContext();
+    if (context) {
+      data = context.processInput(data) as Record<string, unknown>;
+    }
+
+    const instance = new TouchOp();
+
+    if (data["kind"] !== undefined && data["kind"] !== null) {
+      instance.kind = String(data["kind"]);
+    }
+
+    if (context) {
+      return context.processOutput(instance) as TouchOp;
+    }
+    return instance;
+  }
+
+  //#endregion
+
+  //#region Save Methods
+
+  save(context?: SaveContext): Record<string, unknown> {
+    let obj: this = this;
+    if (context) {
+      obj = context.processObject(obj) as this;
+    }
+
+    // Start with parent class properties
+    const result = super.save(context);
+
+    if (obj.kind !== undefined && obj.kind !== null) {
+      result["kind"] = obj.kind;
+    }
+    return result;
+  }
+
+  toYaml(context?: SaveContext): string {
+    context = context ?? new SaveContext();
+    return context.toYaml(this.save(context));
+  }
+
+  toJson(context?: SaveContext, indent: number = 2): string {
+    context = context ?? new SaveContext();
+    return context.toJson(this.save(context), indent);
+  }
+
+  static fromJson(json: string, context?: LoadContext): TouchOp {
+    const data = JSON.parse(json);
+    return TouchOp.load(data as Record<string, unknown>, context);
+  }
+
+  static fromYaml(yaml: string, context?: LoadContext): TouchOp {
+    const data = LoadContext.parseYaml(yaml);
+    return TouchOp.load(data as Record<string, unknown>, context);
+  }
+
+  //#endregion
+}
+
+export class ReplaceSketchOp extends EditOp {
+  static readonly shorthandProperty: string | undefined = undefined;
+
+  kind: string = "replace_sketch";
+  sketch!: Sketch;
+
+  constructor(init?: Partial<ReplaceSketchOp>) {
+    super(init);
+    this.kind = init?.kind ?? "replace_sketch";
+    if (init?.sketch !== undefined) {
+      this.sketch = init.sketch;
+    }
+  }
+
+  //#region Load Methods
+
+  static load(
+    data: Record<string, unknown>,
+    context?: LoadContext,
+  ): ReplaceSketchOp {
+    context ??= new LoadContext();
+    if (context) {
+      data = context.processInput(data) as Record<string, unknown>;
+    }
+
+    if (data["sketch"] === undefined || data["sketch"] === null) {
+      throw new Error(`${context.at("sketch").path}: missing required field`);
+    }
+    const instance = new ReplaceSketchOp();
+
+    if (data["kind"] !== undefined && data["kind"] !== null) {
+      instance.kind = String(data["kind"]);
+    }
+    if (data["sketch"] !== undefined && data["sketch"] !== null) {
+      instance.sketch = Sketch.load(
+        data["sketch"] as Record<string, unknown>,
+        context.at("sketch"),
+      );
+    }
+
+    if (context) {
+      return context.processOutput(instance) as ReplaceSketchOp;
+    }
+    return instance;
+  }
+
+  //#endregion
+
+  //#region Save Methods
+
+  save(context?: SaveContext): Record<string, unknown> {
+    let obj: this = this;
+    if (context) {
+      obj = context.processObject(obj) as this;
+    }
+
+    // Start with parent class properties
+    const result = super.save(context);
+
+    if (obj.kind !== undefined && obj.kind !== null) {
+      result["kind"] = obj.kind;
+    }
+    if (obj.sketch !== undefined && obj.sketch !== null) {
+      result["sketch"] = obj.sketch.save(context);
+    }
+    return result;
+  }
+
+  toYaml(context?: SaveContext): string {
+    context = context ?? new SaveContext();
+    return context.toYaml(this.save(context));
+  }
+
+  toJson(context?: SaveContext, indent: number = 2): string {
+    context = context ?? new SaveContext();
+    return context.toJson(this.save(context), indent);
+  }
+
+  static fromJson(json: string, context?: LoadContext): ReplaceSketchOp {
+    const data = JSON.parse(json);
+    return ReplaceSketchOp.load(data as Record<string, unknown>, context);
+  }
+
+  static fromYaml(yaml: string, context?: LoadContext): ReplaceSketchOp {
+    const data = LoadContext.parseYaml(yaml);
+    return ReplaceSketchOp.load(data as Record<string, unknown>, context);
+  }
+
+  //#endregion
+}
+
+export class ReplaceStoryboardOp extends EditOp {
+  static readonly shorthandProperty: string | undefined = undefined;
+
+  kind: string = "replace_storyboard";
+  storyboard!: Storyboard;
+
+  constructor(init?: Partial<ReplaceStoryboardOp>) {
+    super(init);
+    this.kind = init?.kind ?? "replace_storyboard";
+    if (init?.storyboard !== undefined) {
+      this.storyboard = init.storyboard;
+    }
+  }
+
+  //#region Load Methods
+
+  static load(
+    data: Record<string, unknown>,
+    context?: LoadContext,
+  ): ReplaceStoryboardOp {
+    context ??= new LoadContext();
+    if (context) {
+      data = context.processInput(data) as Record<string, unknown>;
+    }
+
+    if (data["storyboard"] === undefined || data["storyboard"] === null) {
+      throw new Error(
+        `${context.at("storyboard").path}: missing required field`,
+      );
+    }
+    const instance = new ReplaceStoryboardOp();
+
+    if (data["kind"] !== undefined && data["kind"] !== null) {
+      instance.kind = String(data["kind"]);
+    }
+    if (data["storyboard"] !== undefined && data["storyboard"] !== null) {
+      instance.storyboard = Storyboard.load(
+        data["storyboard"] as Record<string, unknown>,
+        context.at("storyboard"),
+      );
+    }
+
+    if (context) {
+      return context.processOutput(instance) as ReplaceStoryboardOp;
+    }
+    return instance;
+  }
+
+  //#endregion
+
+  //#region Save Methods
+
+  save(context?: SaveContext): Record<string, unknown> {
+    let obj: this = this;
+    if (context) {
+      obj = context.processObject(obj) as this;
+    }
+
+    // Start with parent class properties
+    const result = super.save(context);
+
+    if (obj.kind !== undefined && obj.kind !== null) {
+      result["kind"] = obj.kind;
+    }
+    if (obj.storyboard !== undefined && obj.storyboard !== null) {
+      result["storyboard"] = obj.storyboard.save(context);
+    }
+    return result;
+  }
+
+  toYaml(context?: SaveContext): string {
+    context = context ?? new SaveContext();
+    return context.toYaml(this.save(context));
+  }
+
+  toJson(context?: SaveContext, indent: number = 2): string {
+    context = context ?? new SaveContext();
+    return context.toJson(this.save(context), indent);
+  }
+
+  static fromJson(json: string, context?: LoadContext): ReplaceStoryboardOp {
+    const data = JSON.parse(json);
+    return ReplaceStoryboardOp.load(data as Record<string, unknown>, context);
+  }
+
+  static fromYaml(yaml: string, context?: LoadContext): ReplaceStoryboardOp {
+    const data = LoadContext.parseYaml(yaml);
+    return ReplaceStoryboardOp.load(data as Record<string, unknown>, context);
+  }
+
+  //#endregion
+}
+
+export class ReplaceNoteOp extends EditOp {
+  static readonly shorthandProperty: string | undefined = undefined;
+
+  kind: string = "replace_note";
+  content: string = "";
+
+  constructor(init?: Partial<ReplaceNoteOp>) {
+    super(init);
+    this.kind = init?.kind ?? "replace_note";
+    this.content = init?.content ?? "";
+  }
+
+  //#region Load Methods
+
+  static load(
+    data: Record<string, unknown>,
+    context?: LoadContext,
+  ): ReplaceNoteOp {
+    context ??= new LoadContext();
+    if (context) {
+      data = context.processInput(data) as Record<string, unknown>;
+    }
+
+    const instance = new ReplaceNoteOp();
+
+    if (data["kind"] !== undefined && data["kind"] !== null) {
+      instance.kind = String(data["kind"]);
+    }
+    if (data["content"] !== undefined && data["content"] !== null) {
+      instance.content = String(data["content"]);
+    }
+
+    if (context) {
+      return context.processOutput(instance) as ReplaceNoteOp;
+    }
+    return instance;
+  }
+
+  //#endregion
+
+  //#region Save Methods
+
+  save(context?: SaveContext): Record<string, unknown> {
+    let obj: this = this;
+    if (context) {
+      obj = context.processObject(obj) as this;
+    }
+
+    // Start with parent class properties
+    const result = super.save(context);
+
+    if (obj.kind !== undefined && obj.kind !== null) {
+      result["kind"] = obj.kind;
+    }
+    if (obj.content !== undefined && obj.content !== null) {
+      result["content"] = obj.content;
+    }
+    return result;
+  }
+
+  toYaml(context?: SaveContext): string {
+    context = context ?? new SaveContext();
+    return context.toYaml(this.save(context));
+  }
+
+  toJson(context?: SaveContext, indent: number = 2): string {
+    context = context ?? new SaveContext();
+    return context.toJson(this.save(context), indent);
+  }
+
+  static fromJson(json: string, context?: LoadContext): ReplaceNoteOp {
+    const data = JSON.parse(json);
+    return ReplaceNoteOp.load(data as Record<string, unknown>, context);
+  }
+
+  static fromYaml(yaml: string, context?: LoadContext): ReplaceNoteOp {
+    const data = LoadContext.parseYaml(yaml);
+    return ReplaceNoteOp.load(data as Record<string, unknown>, context);
+  }
+
+  //#endregion
+}
+
+export class WriteNoteOp extends EditOp {
+  static readonly shorthandProperty: string | undefined = undefined;
+
+  kind: string = "write_note";
+  content: string = "";
+
+  constructor(init?: Partial<WriteNoteOp>) {
+    super(init);
+    this.kind = init?.kind ?? "write_note";
+    this.content = init?.content ?? "";
+  }
+
+  //#region Load Methods
+
+  static load(
+    data: Record<string, unknown>,
+    context?: LoadContext,
+  ): WriteNoteOp {
+    context ??= new LoadContext();
+    if (context) {
+      data = context.processInput(data) as Record<string, unknown>;
+    }
+
+    const instance = new WriteNoteOp();
+
+    if (data["kind"] !== undefined && data["kind"] !== null) {
+      instance.kind = String(data["kind"]);
+    }
+    if (data["content"] !== undefined && data["content"] !== null) {
+      instance.content = String(data["content"]);
+    }
+
+    if (context) {
+      return context.processOutput(instance) as WriteNoteOp;
+    }
+    return instance;
+  }
+
+  //#endregion
+
+  //#region Save Methods
+
+  save(context?: SaveContext): Record<string, unknown> {
+    let obj: this = this;
+    if (context) {
+      obj = context.processObject(obj) as this;
+    }
+
+    // Start with parent class properties
+    const result = super.save(context);
+
+    if (obj.kind !== undefined && obj.kind !== null) {
+      result["kind"] = obj.kind;
+    }
+    if (obj.content !== undefined && obj.content !== null) {
+      result["content"] = obj.content;
+    }
+    return result;
+  }
+
+  toYaml(context?: SaveContext): string {
+    context = context ?? new SaveContext();
+    return context.toYaml(this.save(context));
+  }
+
+  toJson(context?: SaveContext, indent: number = 2): string {
+    context = context ?? new SaveContext();
+    return context.toJson(this.save(context), indent);
+  }
+
+  static fromJson(json: string, context?: LoadContext): WriteNoteOp {
+    const data = JSON.parse(json);
+    return WriteNoteOp.load(data as Record<string, unknown>, context);
+  }
+
+  static fromYaml(yaml: string, context?: LoadContext): WriteNoteOp {
+    const data = LoadContext.parseYaml(yaml);
+    return WriteNoteOp.load(data as Record<string, unknown>, context);
+  }
+
+  //#endregion
+}
+
+export class InsertStoryboardItemOp extends EditOp {
+  static readonly shorthandProperty: string | undefined = undefined;
+
+  kind: string = "insert_storyboard_item";
+  index: number | null = null;
+  item!: StoryboardItem;
+
+  constructor(init?: Partial<InsertStoryboardItemOp>) {
+    super(init);
+    this.kind = init?.kind ?? "insert_storyboard_item";
+    if (init?.index !== undefined) {
+      this.index = init.index;
+    }
+    if (init?.item !== undefined) {
+      this.item = init.item;
+    }
+  }
+
+  //#region Load Methods
+
+  static load(
+    data: Record<string, unknown>,
+    context?: LoadContext,
+  ): InsertStoryboardItemOp {
+    context ??= new LoadContext();
+    if (context) {
+      data = context.processInput(data) as Record<string, unknown>;
+    }
+
+    if (data["index"] === undefined) {
+      throw new Error(`${context.at("index").path}: missing required field`);
+    }
+    if (data["item"] === undefined || data["item"] === null) {
+      throw new Error(`${context.at("item").path}: missing required field`);
+    }
+    const instance = new InsertStoryboardItemOp();
+
+    if (data["kind"] !== undefined && data["kind"] !== null) {
+      instance.kind = String(data["kind"]);
+    }
+    if (data["index"] !== undefined && data["index"] !== null) {
+      instance.index = Number(data["index"]);
+    }
+    if (data["item"] !== undefined && data["item"] !== null) {
+      instance.item = StoryboardItem.load(
+        data["item"] as Record<string, unknown>,
+        context.at("item"),
+      );
+    }
+
+    if (context) {
+      return context.processOutput(instance) as InsertStoryboardItemOp;
+    }
+    return instance;
+  }
+
+  //#endregion
+
+  //#region Save Methods
+
+  save(context?: SaveContext): Record<string, unknown> {
+    let obj: this = this;
+    if (context) {
+      obj = context.processObject(obj) as this;
+    }
+
+    // Start with parent class properties
+    const result = super.save(context);
+
+    if (obj.kind !== undefined && obj.kind !== null) {
+      result["kind"] = obj.kind;
+    }
+    if (obj.index !== undefined && obj.index !== null) {
+      result["index"] = obj.index;
+    } else {
+      result["index"] = null;
+    }
+    if (obj.item !== undefined && obj.item !== null) {
+      result["item"] = obj.item.save(context);
+    }
+    return result;
+  }
+
+  toYaml(context?: SaveContext): string {
+    context = context ?? new SaveContext();
+    return context.toYaml(this.save(context));
+  }
+
+  toJson(context?: SaveContext, indent: number = 2): string {
+    context = context ?? new SaveContext();
+    return context.toJson(this.save(context), indent);
+  }
+
+  static fromJson(json: string, context?: LoadContext): InsertStoryboardItemOp {
+    const data = JSON.parse(json);
+    return InsertStoryboardItemOp.load(
+      data as Record<string, unknown>,
+      context,
+    );
+  }
+
+  static fromYaml(yaml: string, context?: LoadContext): InsertStoryboardItemOp {
+    const data = LoadContext.parseYaml(yaml);
+    return InsertStoryboardItemOp.load(
+      data as Record<string, unknown>,
+      context,
+    );
+  }
+
+  //#endregion
+}
+
+export class RemoveStoryboardItemOp extends EditOp {
+  static readonly shorthandProperty: string | undefined = undefined;
+
+  kind: string = "remove_storyboard_item";
+  index: number = 0;
+
+  constructor(init?: Partial<RemoveStoryboardItemOp>) {
+    super(init);
+    this.kind = init?.kind ?? "remove_storyboard_item";
+    this.index = init?.index ?? 0;
+  }
+
+  //#region Load Methods
+
+  static load(
+    data: Record<string, unknown>,
+    context?: LoadContext,
+  ): RemoveStoryboardItemOp {
+    context ??= new LoadContext();
+    if (context) {
+      data = context.processInput(data) as Record<string, unknown>;
+    }
+
+    const instance = new RemoveStoryboardItemOp();
+
+    if (data["kind"] !== undefined && data["kind"] !== null) {
+      instance.kind = String(data["kind"]);
+    }
+    if (data["index"] !== undefined && data["index"] !== null) {
+      instance.index = Number(data["index"]);
+    }
+
+    if (context) {
+      return context.processOutput(instance) as RemoveStoryboardItemOp;
+    }
+    return instance;
+  }
+
+  //#endregion
+
+  //#region Save Methods
+
+  save(context?: SaveContext): Record<string, unknown> {
+    let obj: this = this;
+    if (context) {
+      obj = context.processObject(obj) as this;
+    }
+
+    // Start with parent class properties
+    const result = super.save(context);
+
+    if (obj.kind !== undefined && obj.kind !== null) {
+      result["kind"] = obj.kind;
+    }
+    if (obj.index !== undefined && obj.index !== null) {
+      result["index"] = obj.index;
+    }
+    return result;
+  }
+
+  toYaml(context?: SaveContext): string {
+    context = context ?? new SaveContext();
+    return context.toYaml(this.save(context));
+  }
+
+  toJson(context?: SaveContext, indent: number = 2): string {
+    context = context ?? new SaveContext();
+    return context.toJson(this.save(context), indent);
+  }
+
+  static fromJson(json: string, context?: LoadContext): RemoveStoryboardItemOp {
+    const data = JSON.parse(json);
+    return RemoveStoryboardItemOp.load(
+      data as Record<string, unknown>,
+      context,
+    );
+  }
+
+  static fromYaml(yaml: string, context?: LoadContext): RemoveStoryboardItemOp {
+    const data = LoadContext.parseYaml(yaml);
+    return RemoveStoryboardItemOp.load(
+      data as Record<string, unknown>,
+      context,
+    );
+  }
+
+  //#endregion
+}
+
+export class SetStoryboardItemsOp extends EditOp {
+  static readonly shorthandProperty: string | undefined = undefined;
+
+  kind: string = "set_storyboard_items";
+  items: StoryboardItem[] = [];
+
+  constructor(init?: Partial<SetStoryboardItemsOp>) {
+    super(init);
+    this.kind = init?.kind ?? "set_storyboard_items";
+    this.items = init?.items ?? [];
+  }
+
+  //#region Load Methods
+
+  static load(
+    data: Record<string, unknown>,
+    context?: LoadContext,
+  ): SetStoryboardItemsOp {
+    context ??= new LoadContext();
+    if (context) {
+      data = context.processInput(data) as Record<string, unknown>;
+    }
+
+    const instance = new SetStoryboardItemsOp();
+
+    if (data["kind"] !== undefined && data["kind"] !== null) {
+      instance.kind = String(data["kind"]);
+    }
+    if (data["items"] !== undefined && data["items"] !== null) {
+      instance.items = SetStoryboardItemsOp.loadItems(
+        data["items"] as unknown[],
+        context.at("items"),
+      );
+    }
+
+    if (context) {
+      return context.processOutput(instance) as SetStoryboardItemsOp;
+    }
+    return instance;
+  }
+
+  static loadItems(
+    data: Record<string, unknown>[] | unknown[],
+    context?: LoadContext,
+  ): StoryboardItem[] {
+    context ??= new LoadContext({ path: "items" });
+    if (!Array.isArray(data)) {
+      const result: StoryboardItem[] = [];
+      for (const [k, v] of Object.entries(data)) {
+        if (Array.isArray(v)) {
+          throw new TypeError(
+            context.at(k).path +
+              ": invalid named collection entry category array",
+          );
+        }
+        if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+          result.push(
+            StoryboardItem.load(
+              { name: k, ...(v as Record<string, unknown>) },
+              context.at(k),
+            ),
+          );
+        } else {
+          result.push(StoryboardItem.load({ name: k, type: v }, context.at(k)));
+        }
+      }
+      return result;
+    }
+    return data.map((item, index) =>
+      StoryboardItem.load(
+        item as Record<string, unknown>,
+        context.atIndex(index),
+      ),
+    );
+  }
+
+  static saveItems(
+    items: StoryboardItem[],
+    context?: SaveContext,
+  ): Record<string, unknown>[] | Record<string, unknown> {
+    if (!context) {
+      context = new SaveContext();
+    }
+
+    // This type doesn't have a 'name' property, so always use array format
+    return items.map((item) => item.save(context));
+  }
+
+  //#endregion
+
+  //#region Save Methods
+
+  save(context?: SaveContext): Record<string, unknown> {
+    let obj: this = this;
+    if (context) {
+      obj = context.processObject(obj) as this;
+    }
+
+    // Start with parent class properties
+    const result = super.save(context);
+
+    if (obj.kind !== undefined && obj.kind !== null) {
+      result["kind"] = obj.kind;
+    }
+    if (obj.items !== undefined && obj.items !== null) {
+      result["items"] = SetStoryboardItemsOp.saveItems(obj.items, context);
+    }
+    return result;
+  }
+
+  toYaml(context?: SaveContext): string {
+    context = context ?? new SaveContext();
+    return context.toYaml(this.save(context));
+  }
+
+  toJson(context?: SaveContext, indent: number = 2): string {
+    context = context ?? new SaveContext();
+    return context.toJson(this.save(context), indent);
+  }
+
+  static fromJson(json: string, context?: LoadContext): SetStoryboardItemsOp {
+    const data = JSON.parse(json);
+    return SetStoryboardItemsOp.load(data as Record<string, unknown>, context);
+  }
+
+  static fromYaml(yaml: string, context?: LoadContext): SetStoryboardItemsOp {
+    const data = LoadContext.parseYaml(yaml);
+    return SetStoryboardItemsOp.load(data as Record<string, unknown>, context);
   }
 
   //#endregion

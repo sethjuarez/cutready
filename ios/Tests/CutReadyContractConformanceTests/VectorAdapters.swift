@@ -58,7 +58,8 @@ enum VectorAdapters {
     return [
       "EditService.applySketchOps": ownEditPath,
       "EditService.documentVersion": ownEditPath,
-      "EditService.editSketchContent": ownEditPath,
+      "EditService.applyStoryboardOps": ownEditPath,
+      "EditService.editDocument": ownEditPath,
       "ChatArtifactDocument.promote": desktopOnlyChatArtifacts,
       "ChatArtifactDocument.roundTrip": desktopOnlyChatArtifacts,
       "StoryboardDocument.roundTrip": viewOnlyStoryboards,

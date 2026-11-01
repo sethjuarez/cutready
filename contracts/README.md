@@ -85,7 +85,7 @@ Desktop is the reference. Every runtime must save `.sk` files this way. Fields t
 
 ## Edit operations
 
-`EditService.applySketchOps` applies a batch of typed `EditOp` values (`ops.tsp`) to a sketch. Ops address rows by stable `id`, not position. `cutready-core` (`edit_ops.rs`) is the reference.
+`EditService.applySketchOps` and `applyStoryboardOps` apply a batch of typed `EditOp` values (`ops.tsp`) to a sketch or storyboard. Sketch ops address rows by stable `id`, not position. `cutready-core` (`edit_ops.rs`) is the reference.
 
 | Op `kind` | Effect |
 | --- | --- |
@@ -95,17 +95,22 @@ Desktop is the reference. Every runtime must save `.sk` files this way. Fields t
 | `insert_row` | Insert after `after_row_id` (`null` = first); a missing id gets `row-N` |
 | `delete_row`, `reorder_rows` | Remove a row; reorder by a full list of row ids |
 | `update_row`, `replace_rows` | Replace one row by id, or every row; lock state stays where it was |
-| `set_lock` | Lock or unlock the sketch, a row (`row_id`), or a cell (`row_id` + `field`) |
+| `set_lock` | Lock or unlock the sketch, a row (`row_id`), or a cell (`row_id` + `field`); storyboards and notes take no row |
+| `touch` | Change nothing but `updated_at`; a sketch allows it while locked, a storyboard doesn't |
+| `replace_sketch`, `replace_storyboard`, `replace_note` | Replace the whole document; ignores locks and keeps the given `updated_at` |
+| `insert_storyboard_item`, `remove_storyboard_item`, `set_storyboard_items` | Insert at `index` (`null` or past the end appends), remove, or replace a storyboard's items |
+| `write_note` | Replace a note's markdown; refused while the note is locked |
 
 | Rule | Detail |
 | --- | --- |
 | Atomic | Ops are parsed and applied in order; the first failure rejects the whole batch and reports `details.op_index` |
 | Locks | Content ops follow the edit policy above; `set_lock` is allowed on a locked sketch |
 | Unknown ids | `row_not_found` with `details.row_id`; `locked_document` wins over it |
-| Bad ops | An unknown `kind` or malformed op fails with `invalid_op` |
+| Bad ops | An unknown `kind`, malformed op, or op for another document kind fails with `invalid_op` |
+| Notes | A note batch changes the markdown or the lock, never both |
 | Empty batch | Returns the sketch unchanged, including `updated_at` |
 
-`EditService.documentVersion` returns `sha256:<hex>` of a file's bytes. `EditService.editSketchContent` is the host write path: given the file on disk, the version the ops were computed against and the ops, it fails with `stale_document` and `details.current_version` on a mismatch, otherwise returns the canonical bytes to write and their version. Hosts only read and write the bytes.
+`EditService.documentVersion` returns `sha256:<hex>` of a file's bytes. `EditService.editDocument` is the host write path for every sketch, storyboard and note. Given the kind, the file on disk (`null` when absent), the version the ops were computed against (`null` to expect no file) and the ops, it fails with `stale_document` on a mismatch (with `details.current_version` when the file exists). A missing file must start with its kind's `replace_*` op. Otherwise it returns the canonical bytes to write and their version; for notes it also returns `note_locked` and `note_lock_changed`, since hosts keep note locks outside the file. Hosts only read and write the bytes.
 
 ## Timing
 

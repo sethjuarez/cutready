@@ -18,6 +18,7 @@ import type {
   ChatArtifactDocument,
   ChatPromotion,
   ChatTranscript,
+  DocumentEditRequest,
   EditOp,
   EditService,
   PlanningTiming,
@@ -224,23 +225,162 @@ export async function runEditServiceConformance(
   }
   // vector: a current version still enforces the edit policy
   {
-    const contentJson = '"{\\"title\\":\\"Contract sketch\\",\\"locked\\":true,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}"';
-    const content = JSON.parse(contentJson) as string;
-    const expected_versionJson = '"sha256:0954839672a12a14252836cdb04beab7052711fcb6985fcc03d33d1d8354106f"';
-    const expected_version = JSON.parse(expected_versionJson) as string;
-    const opsJson = '[{"kind":"set_title","title":"No"}]';
-    const ops = JSON.parse(opsJson) as EditOp[];
-    const nowJson = '"2026-07-01T09:30:00Z"';
-    const now = JSON.parse(nowJson) as string;
+    const requestJson = '{"kind":"sketch","content":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":true,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}","expected_version":"sha256:0954839672a12a14252836cdb04beab7052711fcb6985fcc03d33d1d8354106f","ops":[{"kind":"set_title","title":"No"}],"now":"2026-07-01T09:30:00Z","note_locked":false}';
+    const request = JSON.parse(requestJson) as DocumentEditRequest;
     let caught: unknown;
     try {
-      await seam.editSketchContent(content, expected_version, ops, now);
+      await seam.editDocument(request);
     } catch (error) {
       caught = error;
     }
     seamConformanceAssert(
       caught !== undefined,
       "a current version still enforces the edit policy: expected an error",
+    );
+  }
+  // vector: a lock toggled back to where it was hasn't changed
+  {
+    const requestJson = '{"kind":"note","content":"# Plan\\n\\nShip it.\\n","expected_version":"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012","ops":[{"kind":"set_lock","locked":true},{"kind":"set_lock","locked":false}],"now":"2026-07-01T09:30:00Z","note_locked":false}';
+    const request = JSON.parse(requestJson) as DocumentEditRequest;
+    const actual = await seam.editDocument(request);
+    const expected = JSON.parse(
+      '{"content":"# Plan\\n\\nShip it.\\n","version":"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012","note_locked":false,"note_lock_changed":false}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "a lock toggled back to where it was hasn't changed misrouted",
+    );
+  }
+  // vector: a locked storyboard rejects content edits
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":true,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}';
+    const storyboard = JSON.parse(storyboardJson) as Storyboard;
+    const opsJson = '[{"kind":"insert_storyboard_item","index":null,"item":{"type":"sketch_ref","path":"x.sk"}}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    let caught: unknown;
+    try {
+      await seam.applyStoryboardOps(storyboard, ops, now);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "a locked storyboard rejects content edits: expected an error",
+    );
+  }
+  // vector: a missing file must start with its replacement
+  {
+    const requestJson = '{"kind":"note","content":null,"expected_version":null,"ops":[{"kind":"write_note","content":"# New"}],"now":"2026-07-01T09:30:00Z","note_locked":false}';
+    const request = JSON.parse(requestJson) as DocumentEditRequest;
+    let caught: unknown;
+    try {
+      await seam.editDocument(request);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "a missing file must start with its replacement: expected an error",
+    );
+  }
+  // vector: a missing note is created by replace_note
+  {
+    const requestJson = '{"kind":"note","content":null,"expected_version":null,"ops":[{"kind":"replace_note","content":""}],"now":"2026-07-01T09:30:00Z","note_locked":false}';
+    const request = JSON.parse(requestJson) as DocumentEditRequest;
+    const actual = await seam.editDocument(request);
+    const expected = JSON.parse(
+      '{"content":"","version":"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","note_locked":false,"note_lock_changed":false}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "a missing note is created by replace_note misrouted",
+    );
+  }
+  // vector: a non-string description is rejected
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}';
+    const storyboard = JSON.parse(storyboardJson) as Storyboard;
+    const opsJson = '[{"kind":"set_description","description":{"root":{}}}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    let caught: unknown;
+    try {
+      await seam.applyStoryboardOps(storyboard, ops, now);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "a non-string description is rejected: expected an error",
+    );
+  }
+  // vector: a note batch can't both lock and edit content
+  {
+    const requestJson = '{"kind":"note","content":"# Plan\\n\\nShip it.\\n","expected_version":"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012","ops":[{"kind":"set_lock","locked":false},{"kind":"write_note","content":"# Both"}],"now":"2026-07-01T09:30:00Z","note_locked":true}';
+    const request = JSON.parse(requestJson) as DocumentEditRequest;
+    let caught: unknown;
+    try {
+      await seam.editDocument(request);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "a note batch can't both lock and edit content: expected an error",
+    );
+  }
+  // vector: a note can't be touched
+  {
+    const requestJson = '{"kind":"note","content":"# Plan\\n\\nShip it.\\n","expected_version":"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012","ops":[{"kind":"touch"}],"now":"2026-07-01T09:30:00Z","note_locked":false}';
+    const request = JSON.parse(requestJson) as DocumentEditRequest;
+    let caught: unknown;
+    try {
+      await seam.editDocument(request);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "a note can't be touched: expected an error",
+    );
+  }
+  // vector: a note has no rows to lock
+  {
+    const requestJson = '{"kind":"note","content":"# Plan\\n\\nShip it.\\n","expected_version":"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012","ops":[{"kind":"set_lock","row_id":"row-1","locked":true}],"now":"2026-07-01T09:30:00Z","note_locked":false}';
+    const request = JSON.parse(requestJson) as DocumentEditRequest;
+    let caught: unknown;
+    try {
+      await seam.editDocument(request);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "a note has no rows to lock: expected an error",
+    );
+  }
+  // vector: a note op on a sketch is rejected
+  {
+    const sketchJson = '{"title":"Contract sketch","locked":false,"description":null,"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:10","narrative":"First.","demo_actions":"Open.","future_row_field":"first"},{"id":"row-2","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/second.png","time":"0:20","narrative":"Second.","demo_actions":"Click."}],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}';
+    const sketch = JSON.parse(sketchJson) as Sketch;
+    const opsJson = '[{"kind":"write_note","content":"# No"}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    let caught: unknown;
+    try {
+      await seam.applySketchOps(sketch, ops, now);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "a note op on a sketch is rejected: expected an error",
     );
   }
   // vector: a rejected op fails the whole batch
@@ -262,25 +402,91 @@ export async function runEditServiceConformance(
       "a rejected op fails the whole batch: expected an error",
     );
   }
-  // vector: a stale version reports the current one before any op runs
+  // vector: a row op on a storyboard is rejected
   {
-    const contentJson = '"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}"';
-    const content = JSON.parse(contentJson) as string;
-    const expected_versionJson = '"sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"';
-    const expected_version = JSON.parse(expected_versionJson) as string;
-    const opsJson = '[{"kind":"set_mood"}]';
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}';
+    const storyboard = JSON.parse(storyboardJson) as Storyboard;
+    const opsJson = '[{"kind":"delete_row","row_id":"row-1"}]';
     const ops = JSON.parse(opsJson) as EditOp[];
     const nowJson = '"2026-07-01T09:30:00Z"';
     const now = JSON.parse(nowJson) as string;
     let caught: unknown;
     try {
-      await seam.editSketchContent(content, expected_version, ops, now);
+      await seam.applyStoryboardOps(storyboard, ops, now);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "a row op on a storyboard is rejected: expected an error",
+    );
+  }
+  // vector: a stale version reports the current one before any op runs
+  {
+    const requestJson = '{"kind":"sketch","content":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}","expected_version":"sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a","ops":[{"kind":"set_mood"}],"now":"2026-07-01T09:30:00Z","note_locked":false}';
+    const request = JSON.parse(requestJson) as DocumentEditRequest;
+    let caught: unknown;
+    try {
+      await seam.editDocument(request);
     } catch (error) {
       caught = error;
     }
     seamConformanceAssert(
       caught !== undefined,
       "a stale version reports the current one before any op runs: expected an error",
+    );
+  }
+  // vector: a storyboard follows the storyboard policy
+  {
+    const requestJson = '{"kind":"storyboard","content":"{\\"title\\":\\"Contract storyboard\\",\\"description\\":\\"\\",\\"locked\\":true,\\"items\\":[{\\"type\\":\\"sketch_ref\\",\\"path\\":\\"intro.sk\\"},{\\"type\\":\\"section\\",\\"title\\":\\"Setup\\",\\"sketches\\":[\\"flows/login.sk\\"]}],\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\",\\"future_storyboard_field\\":{\\"owner\\":\\"ios\\"}}","expected_version":"sha256:d90bd569bb860e16ee73029172054ff4415fa43490e458abd1a6b67b20014986","ops":[{"kind":"touch"}],"now":"2026-07-01T09:30:00Z","note_locked":false}';
+    const request = JSON.parse(requestJson) as DocumentEditRequest;
+    let caught: unknown;
+    try {
+      await seam.editDocument(request);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "a storyboard follows the storyboard policy: expected an error",
+    );
+  }
+  // vector: a storyboard has no rows to lock
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}';
+    const storyboard = JSON.parse(storyboardJson) as Storyboard;
+    const opsJson = '[{"kind":"set_lock","row_id":"row-1","locked":true}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    let caught: unknown;
+    try {
+      await seam.applyStoryboardOps(storyboard, ops, now);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "a storyboard has no rows to lock: expected an error",
+    );
+  }
+  // vector: a storyboard op on a sketch is rejected
+  {
+    const sketchJson = '{"title":"Contract sketch","locked":false,"description":null,"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:10","narrative":"First.","demo_actions":"Open.","future_row_field":"first"},{"id":"row-2","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/second.png","time":"0:20","narrative":"Second.","demo_actions":"Click."}],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}';
+    const sketch = JSON.parse(sketchJson) as Sketch;
+    const opsJson = '[{"kind":"remove_storyboard_item","index":0}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    let caught: unknown;
+    try {
+      await seam.applySketchOps(sketch, ops, now);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "a storyboard op on a sketch is rejected: expected an error",
     );
   }
   // vector: an earlier rejected op wins over a later malformed one
@@ -302,6 +508,24 @@ export async function runEditServiceConformance(
       "an earlier rejected op wins over a later malformed one: expected an error",
     );
   }
+  // vector: an edit after a replacement sets updated_at
+  {
+    const sketchJson = '{"title":"Contract sketch","locked":false,"description":null,"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:10","narrative":"First.","demo_actions":"Open.","future_row_field":"first"},{"id":"row-2","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/second.png","time":"0:20","narrative":"Second.","demo_actions":"Click."}],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}';
+    const sketch = JSON.parse(sketchJson) as Sketch;
+    const opsJson = '[{"kind":"replace_sketch","sketch":{"title":"Contract sketch","locked":false,"description":{"root":{"children":[{"type":"paragraph","children":[{"text":"Intro scene"}]}]}},"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/open.png","time":"0:20","duration_seconds":20,"narrative":"Open the workspace.","demo_actions":"Click **Open**.","visual":".cutready/visuals/abc123def456.json","motion_points":[{"rank":1,"x":0.5,"y":0.25,"label":"Open button"},{"rank":2,"x":0.75,"y":0.5}],"typing_spots":[{"x":0.25,"y":0.5,"width":0.5,"height":0.125,"text":"demo-project","start_offset_ms":300,"characters_per_second":18.5,"show_cursor":true,"font_family":"mono","font_scale":1.25}],"motion_plan":{"kind":"wide_hold_then_push","keyframes":[{"time_ms":0,"scale":1.25,"x":0.5,"y":0.5,"easing":"linear"},{"time_ms":1500,"scale":1.75,"x":0.5,"y":0.25,"easing":"ease_in_out"}],"rationale":"Hold wide, then push toward the Open button."},"design_plan":"Title card with the product name.","narration":{"path":".cutready/narration/row-1.wav","source_text":"Open the workspace.","source_text_hash":"4f1c2a","mime_type":"audio/wav","duration_ms":4200,"leading_silence_ms":120,"trailing_silence_ms":80,"silence_threshold_db":-41.5,"byte_size":4096,"recorded_at":"2026-06-28T20:05:00Z"},"narration_plan":{"source_text":"Open the workspace.","voice":"en-US-Harper:MAI-Voice-2","locale":"en-US","ssml":"<speak>Open the workspace.</speak>","baseline_style":"friendly","pronunciation_overrides":{"CutReady":"cut ready"},"beats":[{"text":"Open the workspace.","emphasis":"moderate","style_degree":1.5,"pause_after_ms":250}],"generated_at":"2026-06-28T20:06:00Z"}}],"state":"refined","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","metadata":{"fields":{"audience":"developers"}}}},{"kind":"set_title","title":"Replaced"}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    const actual = await seam.applySketchOps(sketch, ops, now);
+    const expected = JSON.parse(
+      '{"title":"Replaced","locked":false,"description":{"root":{"children":[{"type":"paragraph","children":[{"text":"Intro scene"}]}]}},"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/open.png","time":"0:20","duration_seconds":20,"narrative":"Open the workspace.","demo_actions":"Click **Open**.","visual":".cutready/visuals/abc123def456.json","motion_points":[{"rank":1,"x":0.5,"y":0.25,"label":"Open button"},{"rank":2,"x":0.75,"y":0.5}],"typing_spots":[{"x":0.25,"y":0.5,"width":0.5,"height":0.125,"text":"demo-project","start_offset_ms":300,"characters_per_second":18.5,"show_cursor":true,"font_family":"mono","font_scale":1.25}],"motion_plan":{"kind":"wide_hold_then_push","keyframes":[{"time_ms":0,"scale":1.25,"x":0.5,"y":0.5,"easing":"linear"},{"time_ms":1500,"scale":1.75,"x":0.5,"y":0.25,"easing":"ease_in_out"}],"rationale":"Hold wide, then push toward the Open button."},"design_plan":"Title card with the product name.","narration":{"path":".cutready/narration/row-1.wav","source_text":"Open the workspace.","source_text_hash":"4f1c2a","mime_type":"audio/wav","duration_ms":4200,"leading_silence_ms":120,"trailing_silence_ms":80,"silence_threshold_db":-41.5,"byte_size":4096,"recorded_at":"2026-06-28T20:05:00Z"},"narration_plan":{"source_text":"Open the workspace.","voice":"en-US-Harper:MAI-Voice-2","locale":"en-US","ssml":"<speak>Open the workspace.</speak>","baseline_style":"friendly","pronunciation_overrides":{"CutReady":"cut ready"},"beats":[{"text":"Open the workspace.","emphasis":"moderate","style_degree":1.5,"pause_after_ms":250}],"generated_at":"2026-06-28T20:06:00Z"}}],"state":"refined","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-07-01T09:30:00Z","metadata":{"fields":{"audience":"developers"}}}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "an edit after a replacement sets updated_at misrouted",
+    );
+  }
   // vector: an empty batch leaves the document unchanged
   {
     const sketchJson = '{"title":"Contract sketch","locked":false,"description":null,"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:10","narrative":"First.","demo_actions":"Open.","future_row_field":"first"},{"id":"row-2","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/second.png","time":"0:20","narrative":"Second.","demo_actions":"Click."}],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}';
@@ -320,22 +544,43 @@ export async function runEditServiceConformance(
       "an empty batch leaves the document unchanged misrouted",
     );
   }
-  // vector: an empty batch returns the file unchanged
+  // vector: an empty batch leaves the storyboard unchanged
   {
-    const contentJson = '"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}"';
-    const content = JSON.parse(contentJson) as string;
-    const expected_versionJson = '"sha256:a89f31f168d3c78b74b7c3a254e8a4f6fbc66c346a450bf11949a98c6ae94015"';
-    const expected_version = JSON.parse(expected_versionJson) as string;
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":true,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}';
+    const storyboard = JSON.parse(storyboardJson) as Storyboard;
     const opsJson = "[]";
     const ops = JSON.parse(opsJson) as EditOp[];
     const nowJson = '"2026-07-01T09:30:00Z"';
     const now = JSON.parse(nowJson) as string;
-    const actual = await seam.editSketchContent(
-      content,
-      expected_version,
-      ops,
-      now,
+    const actual = await seam.applyStoryboardOps(storyboard, ops, now);
+    const expected = JSON.parse(
+      '{"title":"Contract storyboard","description":"","locked":true,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}',
     );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "an empty batch leaves the storyboard unchanged misrouted",
+    );
+  }
+  // vector: an empty batch on a locked note reports its lock
+  {
+    const requestJson = '{"kind":"note","content":"# Plan\\n\\nShip it.\\n","expected_version":"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012","ops":[],"now":"2026-07-01T09:30:00Z","note_locked":true}';
+    const request = JSON.parse(requestJson) as DocumentEditRequest;
+    const actual = await seam.editDocument(request);
+    const expected = JSON.parse(
+      '{"content":"# Plan\\n\\nShip it.\\n","version":"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012","note_locked":true,"note_lock_changed":false}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "an empty batch on a locked note reports its lock misrouted",
+    );
+  }
+  // vector: an empty batch returns the file unchanged
+  {
+    const requestJson = '{"kind":"sketch","content":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}","expected_version":"sha256:a89f31f168d3c78b74b7c3a254e8a4f6fbc66c346a450bf11949a98c6ae94015","ops":[],"now":"2026-07-01T09:30:00Z","note_locked":false}';
+    const request = JSON.parse(requestJson) as DocumentEditRequest;
+    const actual = await seam.editDocument(request);
     const expected = JSON.parse(
       '{"content":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}","version":"sha256:a89f31f168d3c78b74b7c3a254e8a4f6fbc66c346a450bf11949a98c6ae94015"}',
     );
@@ -343,6 +588,21 @@ export async function runEditServiceConformance(
       seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
         seamConformanceCanonical(expected),
       "an empty batch returns the file unchanged misrouted",
+    );
+  }
+  // vector: an op for another kind is rejected
+  {
+    const requestJson = '{"kind":"storyboard","content":"{\\"title\\":\\"Contract storyboard\\",\\"description\\":\\"\\",\\"locked\\":true,\\"items\\":[{\\"type\\":\\"sketch_ref\\",\\"path\\":\\"intro.sk\\"},{\\"type\\":\\"section\\",\\"title\\":\\"Setup\\",\\"sketches\\":[\\"flows/login.sk\\"]}],\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\",\\"future_storyboard_field\\":{\\"owner\\":\\"ios\\"}}","expected_version":"sha256:d90bd569bb860e16ee73029172054ff4415fa43490e458abd1a6b67b20014986","ops":[{"kind":"replace_sketch","sketch":{"title":"Contract sketch","locked":false,"description":null,"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:10","narrative":"First.","demo_actions":"Open.","future_row_field":"first"},{"id":"row-2","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/second.png","time":"0:20","narrative":"Second.","demo_actions":"Click."}],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}}],"now":"2026-07-01T09:30:00Z","note_locked":false}';
+    const request = JSON.parse(requestJson) as DocumentEditRequest;
+    let caught: unknown;
+    try {
+      await seam.editDocument(request);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "an op for another kind is rejected: expected an error",
     );
   }
   // vector: an op of an unknown kind is rejected
@@ -448,6 +708,36 @@ export async function runEditServiceConformance(
       "empty document misrouted",
     );
   }
+  // vector: expecting a file that is gone is stale
+  {
+    const requestJson = '{"kind":"note","content":null,"expected_version":"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012","ops":[{"kind":"write_note","content":"# New"}],"now":"2026-07-01T09:30:00Z","note_locked":false}';
+    const request = JSON.parse(requestJson) as DocumentEditRequest;
+    let caught: unknown;
+    try {
+      await seam.editDocument(request);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "expecting a file that is gone is stale: expected an error",
+    );
+  }
+  // vector: expecting no file when one exists is stale
+  {
+    const requestJson = '{"kind":"note","content":"# Plan\\n\\nShip it.\\n","expected_version":null,"ops":[{"kind":"replace_note","content":"# New"}],"now":"2026-07-01T09:30:00Z","note_locked":false}';
+    const request = JSON.parse(requestJson) as DocumentEditRequest;
+    let caught: unknown;
+    try {
+      await seam.editDocument(request);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "expecting no file when one exists is stale: expected an error",
+    );
+  }
   // vector: insert_row after an unknown row is rejected
   {
     const sketchJson = '{"title":"Contract sketch","locked":false,"description":null,"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:10","narrative":"First.","demo_actions":"Open.","future_row_field":"first"},{"id":"row-2","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/second.png","time":"0:20","narrative":"Second.","demo_actions":"Click."}],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}';
@@ -523,6 +813,24 @@ export async function runEditServiceConformance(
       "insert_row with a taken id is rejected: expected an error",
     );
   }
+  // vector: insert_storyboard_item inserts at an index and appends past the end
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}';
+    const storyboard = JSON.parse(storyboardJson) as Storyboard;
+    const opsJson = '[{"kind":"insert_storyboard_item","index":0,"item":{"type":"sketch_ref","path":"cold-open.sk"}},{"kind":"insert_storyboard_item","index":null,"item":{"type":"section","title":"Wrap-up","description":"Close.","sketches":[]}},{"kind":"insert_storyboard_item","index":99,"item":{"type":"sketch_ref","path":"outro.sk"}}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    const actual = await seam.applyStoryboardOps(storyboard, ops, now);
+    const expected = JSON.parse(
+      '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"cold-open.sk"},{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]},{"type":"section","title":"Wrap-up","description":"Close.","sketches":[]},{"type":"sketch_ref","path":"outro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-07-01T09:30:00Z","future_storyboard_field":{"owner":"ios"}}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "insert_storyboard_item inserts at an index and appends past the end misrouted",
+    );
+  }
   // vector: inserted row without an id gets one as in decode
   {
     const sketchJson = '{"title":"Contract sketch","locked":false,"description":null,"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:10","narrative":"First.","demo_actions":"Open.","future_row_field":"first"},{"id":"row-2","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/second.png","time":"0:20","narrative":"Second.","demo_actions":"Click."}],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}';
@@ -578,6 +886,43 @@ export async function runEditServiceConformance(
       "ops address rows by id after a reorder in the same batch misrouted",
     );
   }
+  // vector: remove_storyboard_item past the end is rejected
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}';
+    const storyboard = JSON.parse(storyboardJson) as Storyboard;
+    const opsJson = '[{"kind":"remove_storyboard_item","index":2}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    let caught: unknown;
+    try {
+      await seam.applyStoryboardOps(storyboard, ops, now);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "remove_storyboard_item past the end is rejected: expected an error",
+    );
+  }
+  // vector: remove_storyboard_item removes the item at an index
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}';
+    const storyboard = JSON.parse(storyboardJson) as Storyboard;
+    const opsJson = '[{"kind":"remove_storyboard_item","index":0}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    const actual = await seam.applyStoryboardOps(storyboard, ops, now);
+    const expected = JSON.parse(
+      '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-07-01T09:30:00Z","future_storyboard_field":{"owner":"ios"}}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "remove_storyboard_item removes the item at an index misrouted",
+    );
+  }
   // vector: reorder_rows around locked rows keeps locks in place
   {
     const sketchJson = '{"title":"Contract sketch","locked":false,"description":null,"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/open.png","time":"0:10","duration_seconds":10,"narrative":"Open the app.","demo_actions":"Click Open.","motion_points":[{"rank":1,"x":0.5,"y":0.25}],"future_row_field":{"keep":true}},{"id":"row-2","locked":false,"locks":{"time":false,"narrative":true,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:20","narrative":"Locked narration.","demo_actions":"Type a name."},{"id":"row-3","locked":true,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:30","narrative":"Locked row.","demo_actions":"Close."},{"locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"id":"row-4","time":"0:40","narrative":"Spare.","demo_actions":"Wrap up."}],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_document_field":["still","here"]}';
@@ -615,6 +960,20 @@ export async function runEditServiceConformance(
       "reorder_rows that misses a row is rejected: expected an error",
     );
   }
+  // vector: replace_note ignores the note's lock
+  {
+    const requestJson = '{"kind":"note","content":"# Plan\\n\\nShip it.\\n","expected_version":"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012","ops":[{"kind":"replace_note","content":"# Imported"}],"now":"2026-07-01T09:30:00Z","note_locked":true}';
+    const request = JSON.parse(requestJson) as DocumentEditRequest;
+    const actual = await seam.editDocument(request);
+    const expected = JSON.parse(
+      '{"content":"# Imported","version":"sha256:5aad5c9922913ab9a36d79684893785d447191e3fd4a4e6433e4ea0c80a36f32","note_locked":true,"note_lock_changed":false}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "replace_note ignores the note's lock misrouted",
+    );
+  }
   // vector: replace_rows keeps lock state with each position
   {
     const sketchJson = '{"title":"Contract sketch","locked":false,"description":null,"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:10","narrative":"First.","demo_actions":"Open.","future_row_field":"first"},{"id":"row-2","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/second.png","time":"0:20","narrative":"Second.","demo_actions":"Click."}],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}';
@@ -633,6 +992,60 @@ export async function runEditServiceConformance(
       "replace_rows keeps lock state with each position misrouted",
     );
   }
+  // vector: replace_sketch ignores locks and keeps the given updated_at
+  {
+    const sketchJson = '{"title":"Contract sketch","locked":true,"description":null,"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:10","narrative":"First.","demo_actions":"Open.","future_row_field":"first"},{"id":"row-2","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/second.png","time":"0:20","narrative":"Second.","demo_actions":"Click."}],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}';
+    const sketch = JSON.parse(sketchJson) as Sketch;
+    const opsJson = '[{"kind":"replace_sketch","sketch":{"title":"Contract sketch","locked":false,"description":null,"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/open.png","time":"0:10","duration_seconds":10,"narrative":"Open the app.","demo_actions":"Click Open.","motion_points":[{"rank":1,"x":0.5,"y":0.25}],"future_row_field":{"keep":true}},{"id":"row-2","locked":false,"locks":{"time":false,"narrative":true,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:20","narrative":"Locked narration.","demo_actions":"Type a name."},{"id":"row-3","locked":true,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:30","narrative":"Locked row.","demo_actions":"Close."}],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_document_field":["still","here"]}}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    const actual = await seam.applySketchOps(sketch, ops, now);
+    const expected = JSON.parse(
+      '{"title":"Contract sketch","locked":false,"description":null,"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/open.png","time":"0:10","duration_seconds":10,"narrative":"Open the app.","demo_actions":"Click Open.","motion_points":[{"rank":1,"x":0.5,"y":0.25}],"future_row_field":{"keep":true}},{"id":"row-2","locked":false,"locks":{"time":false,"narrative":true,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:20","narrative":"Locked narration.","demo_actions":"Type a name."},{"id":"row-3","locked":true,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:30","narrative":"Locked row.","demo_actions":"Close."}],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_document_field":["still","here"]}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "replace_sketch ignores locks and keeps the given updated_at misrouted",
+    );
+  }
+  // vector: replace_storyboard ignores locks and keeps the given updated_at
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":true,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}';
+    const storyboard = JSON.parse(storyboardJson) as Storyboard;
+    const opsJson = '[{"kind":"replace_storyboard","storyboard":{"title":"Contract storyboard","description":"End-to-end launch demo.","locked":true,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","description":"Get signed in.","sketches":["flows/login.sk","flows/workspace.sk"]},{"type":"section","title":"Wrap-up","sketches":[]},{"type":"sketch_ref","path":"outro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","metadata":{"fields":{"audience":"partners"}},"future_storyboard_field":{"owner":"ios","tags":["a","b"]}}}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    const actual = await seam.applyStoryboardOps(storyboard, ops, now);
+    const expected = JSON.parse(
+      '{"title":"Contract storyboard","description":"End-to-end launch demo.","locked":true,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","description":"Get signed in.","sketches":["flows/login.sk","flows/workspace.sk"]},{"type":"section","title":"Wrap-up","sketches":[]},{"type":"sketch_ref","path":"outro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","metadata":{"fields":{"audience":"partners"}},"future_storyboard_field":{"owner":"ios","tags":["a","b"]}}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "replace_storyboard ignores locks and keeps the given updated_at misrouted",
+    );
+  }
+  // vector: set_description null clears the description
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"Old.","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}';
+    const storyboard = JSON.parse(storyboardJson) as Storyboard;
+    const opsJson = '[{"kind":"set_description","description":null}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    const actual = await seam.applyStoryboardOps(storyboard, ops, now);
+    const expected = JSON.parse(
+      '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-07-01T09:30:00Z","future_storyboard_field":{"owner":"ios"}}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "set_description null clears the description misrouted",
+    );
+  }
   // vector: set_description replaces and clears the description
   {
     const sketchJson = '{"title":"Contract sketch","locked":false,"description":{"root":{"children":[{"type":"paragraph","children":[{"text":"Intro scene"}]}]}},"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/open.png","time":"0:20","duration_seconds":20,"narrative":"Open the workspace.","demo_actions":"Click **Open**.","visual":".cutready/visuals/abc123def456.json","motion_points":[{"rank":1,"x":0.5,"y":0.25,"label":"Open button"},{"rank":2,"x":0.75,"y":0.5}],"typing_spots":[{"x":0.25,"y":0.5,"width":0.5,"height":0.125,"text":"demo-project","start_offset_ms":300,"characters_per_second":18.5,"show_cursor":true,"font_family":"mono","font_scale":1.25}],"motion_plan":{"kind":"wide_hold_then_push","keyframes":[{"time_ms":0,"scale":1.25,"x":0.5,"y":0.5,"easing":"linear"},{"time_ms":1500,"scale":1.75,"x":0.5,"y":0.25,"easing":"ease_in_out"}],"rationale":"Hold wide, then push toward the Open button."},"design_plan":"Title card with the product name.","narration":{"path":".cutready/narration/row-1.wav","source_text":"Open the workspace.","source_text_hash":"4f1c2a","mime_type":"audio/wav","duration_ms":4200,"leading_silence_ms":120,"trailing_silence_ms":80,"silence_threshold_db":-41.5,"byte_size":4096,"recorded_at":"2026-06-28T20:05:00Z"},"narration_plan":{"source_text":"Open the workspace.","voice":"en-US-Harper:MAI-Voice-2","locale":"en-US","ssml":"<speak>Open the workspace.</speak>","baseline_style":"friendly","pronunciation_overrides":{"CutReady":"cut ready"},"beats":[{"text":"Open the workspace.","emphasis":"moderate","style_degree":1.5,"pause_after_ms":250}],"generated_at":"2026-06-28T20:06:00Z"}}],"state":"refined","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","metadata":{"fields":{"audience":"developers"}}}';
@@ -649,6 +1062,20 @@ export async function runEditServiceConformance(
       seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
         seamConformanceCanonical(expected),
       "set_description replaces and clears the description misrouted",
+    );
+  }
+  // vector: set_lock changes the note's lock and leaves its content
+  {
+    const requestJson = '{"kind":"note","content":"# Plan\\n\\nShip it.\\n","expected_version":"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012","ops":[{"kind":"set_lock","locked":true}],"now":"2026-07-01T09:30:00Z","note_locked":false}';
+    const request = JSON.parse(requestJson) as DocumentEditRequest;
+    const actual = await seam.editDocument(request);
+    const expected = JSON.parse(
+      '{"content":"# Plan\\n\\nShip it.\\n","version":"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012","note_locked":true,"note_lock_changed":true}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "set_lock changes the note's lock and leaves its content misrouted",
     );
   }
   // vector: set_lock locks a cell and a whole row
@@ -685,6 +1112,24 @@ export async function runEditServiceConformance(
       seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
         seamConformanceCanonical(expected),
       "set_lock unlocks a locked sketch and everything in it misrouted",
+    );
+  }
+  // vector: set_lock unlocks a locked storyboard for later ops
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":true,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}';
+    const storyboard = JSON.parse(storyboardJson) as Storyboard;
+    const opsJson = '[{"kind":"set_lock","locked":false},{"kind":"set_title","title":"Open"}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    const actual = await seam.applyStoryboardOps(storyboard, ops, now);
+    const expected = JSON.parse(
+      '{"title":"Open","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-07-01T09:30:00Z","future_storyboard_field":{"owner":"ios"}}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "set_lock unlocks a locked storyboard for later ops misrouted",
     );
   }
   // vector: set_metadata replaces the metadata
@@ -779,6 +1224,24 @@ export async function runEditServiceConformance(
       "set_screenshot and set_visual set and clear asset references misrouted",
     );
   }
+  // vector: set_storyboard_items replaces the items
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}';
+    const storyboard = JSON.parse(storyboardJson) as Storyboard;
+    const opsJson = '[{"kind":"set_storyboard_items","items":[{"type":"section","title":"Setup","sketches":["flows/login.sk"]},{"type":"sketch_ref","path":"intro.sk"}]}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    const actual = await seam.applyStoryboardOps(storyboard, ops, now);
+    const expected = JSON.parse(
+      '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"section","title":"Setup","sketches":["flows/login.sk"]},{"type":"sketch_ref","path":"intro.sk"}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-07-01T09:30:00Z","future_storyboard_field":{"owner":"ios"}}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "set_storyboard_items replaces the items misrouted",
+    );
+  }
   // vector: set_title keeps unknown document fields
   {
     const sketchJson = '{"title":"Contract sketch","locked":false,"description":null,"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/open.png","time":"0:10","duration_seconds":10,"narrative":"Open the app.","demo_actions":"Click Open.","motion_points":[{"rank":1,"x":0.5,"y":0.25}],"future_row_field":{"keep":true}},{"id":"row-2","locked":false,"locks":{"time":false,"narrative":true,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:20","narrative":"Locked narration.","demo_actions":"Type a name."},{"id":"row-3","locked":true,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:30","narrative":"Locked row.","demo_actions":"Close."}],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_document_field":["still","here"]}';
@@ -795,6 +1258,24 @@ export async function runEditServiceConformance(
       seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
         seamConformanceCanonical(expected),
       "set_title keeps unknown document fields misrouted",
+    );
+  }
+  // vector: set_title, set_description and set_metadata keep unknown fields
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}';
+    const storyboard = JSON.parse(storyboardJson) as Storyboard;
+    const opsJson = '[{"kind":"set_title","title":"Launch"},{"kind":"set_description","description":"Partners first."},{"kind":"set_metadata","metadata":{"fields":{"audience":"partners"}}}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    const actual = await seam.applyStoryboardOps(storyboard, ops, now);
+    const expected = JSON.parse(
+      '{"title":"Launch","description":"Partners first.","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-07-01T09:30:00Z","future_storyboard_field":{"owner":"ios"},"metadata":{"fields":{"audience":"partners"}}}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "set_title, set_description and set_metadata keep unknown fields misrouted",
     );
   }
   // vector: set_visual on a row with a locked screenshot is rejected
@@ -814,6 +1295,130 @@ export async function runEditServiceConformance(
     seamConformanceAssert(
       caught !== undefined,
       "set_visual on a row with a locked screenshot is rejected: expected an error",
+    );
+  }
+  // vector: setting a note's lock to its current state changes nothing
+  {
+    const requestJson = '{"kind":"note","content":"# Plan\\n\\nShip it.\\n","expected_version":"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012","ops":[{"kind":"set_lock","locked":true}],"now":"2026-07-01T09:30:00Z","note_locked":true}';
+    const request = JSON.parse(requestJson) as DocumentEditRequest;
+    const actual = await seam.editDocument(request);
+    const expected = JSON.parse(
+      '{"content":"# Plan\\n\\nShip it.\\n","version":"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012","note_locked":true,"note_lock_changed":false}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "setting a note's lock to its current state changes nothing misrouted",
+    );
+  }
+  // vector: touch after a locked replacement is rejected
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}';
+    const storyboard = JSON.parse(storyboardJson) as Storyboard;
+    const opsJson = '[{"kind":"replace_storyboard","storyboard":{"title":"Contract storyboard","description":"","locked":true,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}},{"kind":"touch"}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    let caught: unknown;
+    try {
+      await seam.applyStoryboardOps(storyboard, ops, now);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "touch after a locked replacement is rejected: expected an error",
+    );
+  }
+  // vector: touch after a locked replacement still sets updated_at
+  {
+    const sketchJson = '{"title":"Contract sketch","locked":false,"description":null,"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:10","narrative":"First.","demo_actions":"Open.","future_row_field":"first"},{"id":"row-2","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/second.png","time":"0:20","narrative":"Second.","demo_actions":"Click."}],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}';
+    const sketch = JSON.parse(sketchJson) as Sketch;
+    const opsJson = '[{"kind":"replace_sketch","sketch":{"title":"Contract sketch","locked":false,"description":null,"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/open.png","time":"0:10","duration_seconds":10,"narrative":"Open the app.","demo_actions":"Click Open.","motion_points":[{"rank":1,"x":0.5,"y":0.25}],"future_row_field":{"keep":true}},{"id":"row-2","locked":false,"locks":{"time":false,"narrative":true,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:20","narrative":"Locked narration.","demo_actions":"Type a name."},{"id":"row-3","locked":true,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:30","narrative":"Locked row.","demo_actions":"Close."}],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_document_field":["still","here"]}},{"kind":"touch"}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    const actual = await seam.applySketchOps(sketch, ops, now);
+    const expected = JSON.parse(
+      '{"title":"Contract sketch","locked":false,"description":null,"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/open.png","time":"0:10","duration_seconds":10,"narrative":"Open the app.","demo_actions":"Click Open.","motion_points":[{"rank":1,"x":0.5,"y":0.25}],"future_row_field":{"keep":true}},{"id":"row-2","locked":false,"locks":{"time":false,"narrative":true,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:20","narrative":"Locked narration.","demo_actions":"Type a name."},{"id":"row-3","locked":true,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:30","narrative":"Locked row.","demo_actions":"Close."}],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-07-01T09:30:00Z","future_document_field":["still","here"]}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "touch after a locked replacement still sets updated_at misrouted",
+    );
+  }
+  // vector: touch after an open replacement sets updated_at
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":true,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}';
+    const storyboard = JSON.parse(storyboardJson) as Storyboard;
+    const opsJson = '[{"kind":"replace_storyboard","storyboard":{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}},{"kind":"touch"}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    const actual = await seam.applyStoryboardOps(storyboard, ops, now);
+    const expected = JSON.parse(
+      '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-07-01T09:30:00Z","future_storyboard_field":{"owner":"ios"}}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "touch after an open replacement sets updated_at misrouted",
+    );
+  }
+  // vector: touch follows the storyboard lock
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":true,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}';
+    const storyboard = JSON.parse(storyboardJson) as Storyboard;
+    const opsJson = '[{"kind":"touch"}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    let caught: unknown;
+    try {
+      await seam.applyStoryboardOps(storyboard, ops, now);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "touch follows the storyboard lock: expected an error",
+    );
+  }
+  // vector: touch marks a locked sketch edited
+  {
+    const sketchJson = '{"title":"Contract sketch","locked":true,"description":null,"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:10","narrative":"First.","demo_actions":"Open.","future_row_field":"first"},{"id":"row-2","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/second.png","time":"0:20","narrative":"Second.","demo_actions":"Click."}],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}';
+    const sketch = JSON.parse(sketchJson) as Sketch;
+    const opsJson = '[{"kind":"touch"}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    const actual = await seam.applySketchOps(sketch, ops, now);
+    const expected = JSON.parse(
+      '{"title":"Contract sketch","locked":true,"description":null,"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:10","narrative":"First.","demo_actions":"Open.","future_row_field":"first"},{"id":"row-2","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/second.png","time":"0:20","narrative":"Second.","demo_actions":"Click."}],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-07-01T09:30:00Z"}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "touch marks a locked sketch edited misrouted",
+    );
+  }
+  // vector: touch marks an open storyboard edited
+  {
+    const storyboardJson = '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}';
+    const storyboard = JSON.parse(storyboardJson) as Storyboard;
+    const opsJson = '[{"kind":"touch"}]';
+    const ops = JSON.parse(opsJson) as EditOp[];
+    const nowJson = '"2026-07-01T09:30:00Z"';
+    const now = JSON.parse(nowJson) as string;
+    const actual = await seam.applyStoryboardOps(storyboard, ops, now);
+    const expected = JSON.parse(
+      '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-07-01T09:30:00Z","future_storyboard_field":{"owner":"ios"}}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "touch marks an open storyboard edited misrouted",
     );
   }
   // vector: unknown row id is rejected
@@ -884,6 +1489,35 @@ export async function runEditServiceConformance(
       seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
         seamConformanceCanonical(expected),
       "utf-8 bytes, not code units misrouted",
+    );
+  }
+  // vector: write_note on a locked note is rejected
+  {
+    const requestJson = '{"kind":"note","content":"# Plan\\n\\nShip it.\\n","expected_version":"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012","ops":[{"kind":"write_note","content":"# No"}],"now":"2026-07-01T09:30:00Z","note_locked":true}';
+    const request = JSON.parse(requestJson) as DocumentEditRequest;
+    let caught: unknown;
+    try {
+      await seam.editDocument(request);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "write_note on a locked note is rejected: expected an error",
+    );
+  }
+  // vector: write_note replaces an open note's content
+  {
+    const requestJson = '{"kind":"note","content":"# Plan\\n\\nShip it.\\n","expected_version":"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012","ops":[{"kind":"write_note","content":"# Plan\\n\\nShip it today.\\n"}],"now":"2026-07-01T09:30:00Z","note_locked":false}';
+    const request = JSON.parse(requestJson) as DocumentEditRequest;
+    const actual = await seam.editDocument(request);
+    const expected = JSON.parse(
+      '{"content":"# Plan\\n\\nShip it today.\\n","version":"sha256:90582b7c91d38230d54636e2285d6d30feb7df435bc0245df1825856737ab577","note_locked":false,"note_lock_changed":false}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "write_note replaces an open note's content misrouted",
     );
   }
 }

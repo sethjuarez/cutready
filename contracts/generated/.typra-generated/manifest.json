@@ -50,7 +50,12 @@
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/generated_tests",
-      "path": "../crates/cutready-contracts/src/generated_tests/content_edit_test.rs",
+      "path": "../crates/cutready-contracts/src/generated_tests/document_edit_request_test.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/generated_tests",
+      "path": "../crates/cutready-contracts/src/generated_tests/document_edit_test.rs",
       "marker": true
     },
     {
@@ -195,12 +200,17 @@
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/model",
-      "path": "../crates/cutready-contracts/src/model/content_edit.rs",
+      "path": "../crates/cutready-contracts/src/model/context.rs",
       "marker": true
     },
     {
       "outputRoot": "../crates/cutready-contracts/src/model",
-      "path": "../crates/cutready-contracts/src/model/context.rs",
+      "path": "../crates/cutready-contracts/src/model/document_edit_request.rs",
+      "marker": true
+    },
+    {
+      "outputRoot": "../crates/cutready-contracts/src/model",
+      "path": "../crates/cutready-contracts/src/model/document_edit.rs",
       "marker": true
     },
     {
@@ -375,12 +385,17 @@
     },
     {
       "outputRoot": "../src/contracts/generated/model",
-      "path": "../src/contracts/generated/model/content-edit.ts",
+      "path": "../src/contracts/generated/model/context.ts",
       "marker": true
     },
     {
       "outputRoot": "../src/contracts/generated/model",
-      "path": "../src/contracts/generated/model/context.ts",
+      "path": "../src/contracts/generated/model/document-edit-request.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/model",
+      "path": "../src/contracts/generated/model/document-edit.ts",
       "marker": true
     },
     {
@@ -535,12 +550,17 @@
     },
     {
       "outputRoot": "../src/contracts/generated/tests",
-      "path": "../src/contracts/generated/tests/content-edit.test.ts",
+      "path": "../src/contracts/generated/tests/delete-row-op.test.ts",
       "marker": true
     },
     {
       "outputRoot": "../src/contracts/generated/tests",
-      "path": "../src/contracts/generated/tests/delete-row-op.test.ts",
+      "path": "../src/contracts/generated/tests/document-edit-request.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/document-edit.test.ts",
       "marker": true
     },
     {
@@ -556,6 +576,11 @@
     {
       "outputRoot": "../src/contracts/generated/tests",
       "path": "../src/contracts/generated/tests/insert-row-op.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/insert-storyboard-item-op.test.ts",
       "marker": true
     },
     {
@@ -600,12 +625,32 @@
     },
     {
       "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/remove-storyboard-item-op.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
       "path": "../src/contracts/generated/tests/reorder-rows-op.test.ts",
       "marker": true
     },
     {
       "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/replace-note-op.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
       "path": "../src/contracts/generated/tests/replace-rows-op.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/replace-sketch-op.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/replace-storyboard-op.test.ts",
       "marker": true
     },
     {
@@ -636,6 +681,11 @@
     {
       "outputRoot": "../src/contracts/generated/tests",
       "path": "../src/contracts/generated/tests/set-screenshot-op.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/set-storyboard-items-op.test.ts",
       "marker": true
     },
     {
@@ -675,6 +725,11 @@
     },
     {
       "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/touch-op.test.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
       "path": "../src/contracts/generated/tests/typing-spot.test.ts",
       "marker": true
     },
@@ -691,6 +746,11 @@
     {
       "outputRoot": "../src/contracts/generated/tests",
       "path": "../src/contracts/generated/tests/vector-runner.ts",
+      "marker": true
+    },
+    {
+      "outputRoot": "../src/contracts/generated/tests",
+      "path": "../src/contracts/generated/tests/write-note-op.test.ts",
       "marker": true
     },
     {
@@ -750,12 +810,17 @@
     },
     {
       "outputRoot": "generated/markdown",
-      "path": "generated/markdown/ContentEdit.md",
+      "path": "generated/markdown/DeleteRowOp.md",
       "marker": true
     },
     {
       "outputRoot": "generated/markdown",
-      "path": "generated/markdown/DeleteRowOp.md",
+      "path": "generated/markdown/DocumentEdit.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/DocumentEditRequest.md",
       "marker": true
     },
     {
@@ -781,6 +846,11 @@
     {
       "outputRoot": "generated/markdown",
       "path": "generated/markdown/InsertRowOp.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/InsertStoryboardItemOp.md",
       "marker": true
     },
     {
@@ -830,12 +900,32 @@
     },
     {
       "outputRoot": "generated/markdown",
+      "path": "generated/markdown/RemoveStoryboardItemOp.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
       "path": "generated/markdown/ReorderRowsOp.md",
       "marker": true
     },
     {
       "outputRoot": "generated/markdown",
+      "path": "generated/markdown/ReplaceNoteOp.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
       "path": "generated/markdown/ReplaceRowsOp.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/ReplaceSketchOp.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/ReplaceStoryboardOp.md",
       "marker": true
     },
     {
@@ -866,6 +956,11 @@
     {
       "outputRoot": "generated/markdown",
       "path": "generated/markdown/SetScreenshotOp.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/SetStoryboardItemsOp.md",
       "marker": true
     },
     {
@@ -915,12 +1010,22 @@
     },
     {
       "outputRoot": "generated/markdown",
+      "path": "generated/markdown/TouchOp.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
       "path": "generated/markdown/TypingSpot.md",
       "marker": true
     },
     {
       "outputRoot": "generated/markdown",
       "path": "generated/markdown/UpdateRowOp.md",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/markdown",
+      "path": "generated/markdown/WriteNoteOp.md",
       "marker": true
     },
     {
@@ -980,7 +1085,12 @@
     },
     {
       "outputRoot": "generated/swift",
-      "path": "generated/swift/Sources/CutReadyContracts/content_edit.swift",
+      "path": "generated/swift/Sources/CutReadyContracts/document_edit_request.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Sources/CutReadyContracts/document_edit.swift",
       "marker": true
     },
     {
@@ -1140,7 +1250,12 @@
     },
     {
       "outputRoot": "generated/swift",
-      "path": "generated/swift/Tests/CutReadyContractsTests/ContentEditTests.swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/DocumentEditRequestTests.swift",
+      "marker": true
+    },
+    {
+      "outputRoot": "generated/swift",
+      "path": "generated/swift/Tests/CutReadyContractsTests/DocumentEditTests.swift",
       "marker": true
     },
     {

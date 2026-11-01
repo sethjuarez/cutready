@@ -7,7 +7,8 @@ slug: "reference/editservice"
 
 The one way every host edits a document. Ops apply in order and atomically:
 the first rejected op fails the batch with `details.op_index` and the
-document is unchanged. A successful batch sets `updated_at` to `now` once.
+document is unchanged. A successful batch sets `updated_at` to `now` once,
+unless every op is a replacement. Notes have no `updated_at`.
 
 ## Class Diagram
 
@@ -24,8 +25,9 @@ classDiagram
     class EditService {
       <<protocol>>
         +applySketchOps(sketch: Sketch, ops: EditOp[], now: string) Sketch [sync]
+        +applyStoryboardOps(storyboard: Storyboard, ops: EditOp[], now: string) Storyboard [sync]
         +documentVersion(content: string) string [sync]
-        +editSketchContent(content: string, expected_version: string, ops: EditOp[], now: string) ContentEdit [sync]
+        +editDocument(request: DocumentEditRequest) DocumentEdit [sync]
     }
 ```
 
@@ -36,11 +38,12 @@ The following helper methods are declared via `@method` and must be implemented 
 | Name | Signature | Runtime shape | Description |
 | ---- | --------- | ------------- | ----------- |
 | `applySketchOps` | `applySketchOps(sketch: Sketch, ops: EditOp[], now: string) -> Sketch` | sync | Apply ops to a `.sk` document. |
+| `applyStoryboardOps` | `applyStoryboardOps(storyboard: Storyboard, ops: EditOp[], now: string) -> Storyboard` | sync | Apply ops to a `.sb` document. |
 | `documentVersion` | `documentVersion(content: string) -> string` | sync | The version an edit was computed against: `sha256:` plus the lowercase
 hex SHA-256 of the document's bytes on disk. A write whose expected
 version differs fails with `stale_document`. |
-| `editSketchContent` | `editSketchContent(content: string, expected_version: string, ops: EditOp[], now: string) -> ContentEdit` | sync | The host write path for a `.sk` file. `content` is the file on disk and
-`expected_version` the version the ops were computed against; a mismatch
-fails with `stale_document` and `details.current_version`. Otherwise the
-ops apply and the result is the canonical bytes to write and their
-version. An empty batch returns `content` unchanged. |
+| `editDocument` | `editDocument(request: DocumentEditRequest) -> DocumentEdit` | sync | The host write path for every project document. A version mismatch fails
+with `stale_document` (with `details.current_version` when the file
+exists). A missing file must start with its kind's replacement op,
+otherwise the batch is `invalid_op`. The result is the canonical bytes to
+write and their version. An empty batch returns `content` unchanged. |

@@ -4,15 +4,23 @@
 
 import { LoadContext, SaveContext } from "./context";
 
-export class ContentEdit {
+export class DocumentEdit {
   static readonly shorthandProperty: string | undefined = undefined;
 
   content: string = "";
   version: string = "";
+  note_locked?: boolean | undefined;
+  note_lock_changed?: boolean | undefined;
 
-  constructor(init?: Partial<ContentEdit>) {
+  constructor(init?: Partial<DocumentEdit>) {
     this.content = init?.content ?? "";
     this.version = init?.version ?? "";
+    if (init?.note_locked !== undefined) {
+      this.note_locked = init.note_locked;
+    }
+    if (init?.note_lock_changed !== undefined) {
+      this.note_lock_changed = init.note_lock_changed;
+    }
   }
 
   //#region Load Methods
@@ -20,13 +28,13 @@ export class ContentEdit {
   static load(
     data: Record<string, unknown>,
     context?: LoadContext,
-  ): ContentEdit {
+  ): DocumentEdit {
     context ??= new LoadContext();
     if (context) {
       data = context.processInput(data) as Record<string, unknown>;
     }
 
-    const instance = new ContentEdit();
+    const instance = new DocumentEdit();
 
     if (data["content"] !== undefined && data["content"] !== null) {
       instance.content = String(data["content"]);
@@ -34,9 +42,18 @@ export class ContentEdit {
     if (data["version"] !== undefined && data["version"] !== null) {
       instance.version = String(data["version"]);
     }
+    if (data["note_locked"] !== undefined && data["note_locked"] !== null) {
+      instance.note_locked = Boolean(data["note_locked"]);
+    }
+    if (
+      data["note_lock_changed"] !== undefined &&
+      data["note_lock_changed"] !== null
+    ) {
+      instance.note_lock_changed = Boolean(data["note_lock_changed"]);
+    }
 
     if (context) {
-      return context.processOutput(instance) as ContentEdit;
+      return context.processOutput(instance) as DocumentEdit;
     }
     return instance;
   }
@@ -59,6 +76,12 @@ export class ContentEdit {
     if (obj.version !== undefined && obj.version !== null) {
       result["version"] = obj.version;
     }
+    if (obj.note_locked !== undefined && obj.note_locked !== null) {
+      result["note_locked"] = obj.note_locked;
+    }
+    if (obj.note_lock_changed !== undefined && obj.note_lock_changed !== null) {
+      result["note_lock_changed"] = obj.note_lock_changed;
+    }
 
     if (context) {
       return context.processDict(result);
@@ -76,14 +99,14 @@ export class ContentEdit {
     return context.toJson(this.save(context), indent);
   }
 
-  static fromJson(json: string, context?: LoadContext): ContentEdit {
+  static fromJson(json: string, context?: LoadContext): DocumentEdit {
     const data = JSON.parse(json);
-    return ContentEdit.load(data as Record<string, unknown>, context);
+    return DocumentEdit.load(data as Record<string, unknown>, context);
   }
 
-  static fromYaml(yaml: string, context?: LoadContext): ContentEdit {
+  static fromYaml(yaml: string, context?: LoadContext): DocumentEdit {
     const data = LoadContext.parseYaml(yaml);
-    return ContentEdit.load(data as Record<string, unknown>, context);
+    return DocumentEdit.load(data as Record<string, unknown>, context);
   }
 
   //#endregion

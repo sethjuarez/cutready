@@ -169,28 +169,58 @@ fn document_version(input: &Value, _ctx: &Context) -> Result<Value, VectorError>
     Ok(Value::String(edit_ops::document_version(content.as_bytes())))
 }
 
-fn edit_sketch_content(input: &Value, _ctx: &Context) -> Result<Value, VectorError> {
-    let field = |name: &str| {
-        input
-            .get(name)
-            .and_then(Value::as_str)
-            .ok_or_else(|| VectorError::harness(format!("{name} is required")))
-    };
+fn edit_document(input: &Value, _ctx: &Context) -> Result<Value, VectorError> {
+    let request = input
+        .get("request")
+        .ok_or_else(|| VectorError::harness("request is required"))?;
+    let kind = request
+        .get("kind")
+        .and_then(Value::as_str)
+        .and_then(cutready_core::contracts::DocumentKind::from_str_opt)
+        .ok_or_else(|| VectorError::harness("request.kind must be a document kind"))?;
+    let ops = request
+        .get("ops")
+        .and_then(Value::as_array)
+        .ok_or_else(|| VectorError::harness("request.ops is required"))?;
+    let content = request.get("content").and_then(Value::as_str);
+    let expected = request.get("expected_version").and_then(Value::as_str);
+    let note_locked = request
+        .get("note_locked")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let edit = edit_ops::edit_document(kind, content, expected, ops, now(request)?, note_locked)
+        .map_err(|err| match CoreCmdError::try_from(&err) {
+            Ok(cmd) => VectorError::cmd(cmd),
+            Err(message) => VectorError::harness(message),
+        })?;
+    let mut out = json!({ "content": edit.content, "version": edit.version });
+    if let Some(lock) = edit.note_lock {
+        out["note_locked"] = json!(lock.locked);
+        out["note_lock_changed"] = json!(lock.changed);
+    }
+    Ok(out)
+}
+
+fn decode_storyboard(input: &Value) -> Result<cutready_core::models::sketch::Storyboard, VectorError> {
+    serde_json::from_value(input.get("storyboard").cloned().unwrap_or(Value::Null))
+        .map_err(|e| VectorError::harness(format!("decode storyboard: {e}")))
+}
+
+fn save_storyboard(storyboard: &cutready_core::models::sketch::Storyboard) -> Result<Value, VectorError> {
+    let text = document::storyboard_to_json(storyboard)
+        .map_err(|e| VectorError::harness(format!("save storyboard: {e}")))?;
+    serde_json::from_str(&text)
+        .map_err(|e| VectorError::harness(format!("reparse storyboard: {e}")))
+}
+
+fn apply_storyboard_ops(input: &Value, _ctx: &Context) -> Result<Value, VectorError> {
+    let mut storyboard = decode_storyboard(input)?;
     let ops = input
         .get("ops")
         .and_then(Value::as_array)
         .ok_or_else(|| VectorError::harness("ops is required"))?;
-    let edit = edit_ops::edit_sketch_content(
-        field("content")?,
-        field("expected_version")?,
-        ops,
-        now(input)?,
-    )
-    .map_err(|err| match CoreCmdError::try_from(&err) {
-        Ok(cmd) => VectorError::cmd(cmd),
-        Err(message) => VectorError::harness(message),
-    })?;
-    Ok(json!({ "content": edit.content, "version": edit.version }))
+    edit_ops::apply_storyboard_op_values(&mut storyboard, ops, now(input)?)?;
+    save_storyboard(&storyboard)
 }
 
 // Decode and save canonically, without the legacy upgrade.
@@ -631,7 +661,11 @@ pub fn adapters() -> HashMap<&'static str, Adapter> {
         ("SketchDocument.reorderRows", Adapter::sync(reorder_rows)),
         ("EditService.applySketchOps", Adapter::sync(apply_sketch_ops)),
         ("EditService.documentVersion", Adapter::sync(document_version)),
-        ("EditService.editSketchContent", Adapter::sync(edit_sketch_content)),
+        ("EditService.editDocument", Adapter::sync(edit_document)),
+        (
+            "EditService.applyStoryboardOps",
+            Adapter::sync(apply_storyboard_ops),
+        ),
         (
             "PlanningTiming.parseDurationSeconds",
             Adapter::sync(parse_duration_seconds),

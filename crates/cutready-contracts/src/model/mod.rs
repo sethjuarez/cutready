@@ -57,8 +57,11 @@ pub use row_text_update::*;
 pub mod edit_op;
 pub use edit_op::*;
 
-pub mod content_edit;
-pub use content_edit::*;
+pub mod document_edit_request;
+pub use document_edit_request::*;
+
+pub mod document_edit;
+pub use document_edit::*;
 
 pub mod chat_participant;
 pub use chat_participant::*;

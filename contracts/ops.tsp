@@ -1,5 +1,6 @@
 import "@typra/emitter";
 import "./sketch.tsp";
+import "./storyboard.tsp";
 import "./errors.tsp";
 import "./vectors.tsp";
 
@@ -19,12 +20,34 @@ union EditOpKind {
   updateRow: "update_row",
   replaceRows: "replace_rows",
   setLock: "set_lock",
+  touch: "touch",
+  replaceSketch: "replace_sketch",
+  replaceStoryboard: "replace_storyboard",
+  replaceNote: "replace_note",
+  writeNote: "write_note",
+  insertStoryboardItem: "insert_storyboard_item",
+  removeStoryboardItem: "remove_storyboard_item",
+  setStoryboardItems: "set_storyboard_items",
+}
+
+/** What a project file holds. Hosts pick it from the extension: `.sk`, `.sb`, `.md`. */
+union DocumentKind {
+  sketch: "sketch",
+  storyboard: "storyboard",
+  note: "note",
 }
 
 /**
- * One typed edit, addressed by stable row id. Lock rules match
- * `SketchDocument`: content edits are rejected on a locked sketch, locked rows,
- * and changed locked cells; `set_lock` is always allowed.
+ * One typed edit. Row ops address rows by stable id. Lock rules match
+ * `SketchDocument`: content edits are rejected on a locked document, locked
+ * rows, and changed locked cells; `set_lock` is always allowed. An op that
+ * doesn't apply to the document's kind is `invalid_op`.
+ *
+ * Sketches take the title, description, metadata, row, `set_lock`, `touch`
+ * and `replace_sketch` ops. Storyboards take `set_title`,
+ * `set_description` (a string; null clears it), `set_metadata`, `set_lock`
+ * without a row, `touch`, the storyboard item ops and `replace_storyboard`.
+ * Notes take `write_note`, `replace_note` and `set_lock` without a row.
  */
 @discriminator("kind")
 model EditOp {
@@ -124,16 +147,75 @@ model SetLockOp extends EditOp {
   locked: boolean;
 }
 
+/** Mark the document edited without changing anything else. On a storyboard it
+ * follows the lock policy; on a sketch it doesn't, so a touch always succeeds. */
+model TouchOp extends EditOp {
+  kind: "touch";
+}
+
+/**
+ * Replace the whole document, for create and import only. A replacement
+ * ignores the lock policy and keeps the given `updated_at`; rows without an id
+ * get one as in decode.
+ */
+model ReplaceSketchOp extends EditOp {
+  kind: "replace_sketch";
+  sketch: Sketch;
+}
+
+/** `replace_sketch` for a storyboard, in the canonical shape. Hosts upgrade older files on read. */
+model ReplaceStoryboardOp extends EditOp {
+  kind: "replace_storyboard";
+  storyboard: Storyboard;
+}
+
+/** `replace_sketch` for a note: the new markdown, ignoring the note's lock. */
+model ReplaceNoteOp extends EditOp {
+  kind: "replace_note";
+  content: string;
+}
+
+/** The note's new markdown. Rejected while the note is locked. */
+model WriteNoteOp extends EditOp {
+  kind: "write_note";
+  content: string;
+}
+
+/** Insert `item` at `index`; null or past the end appends. */
+model InsertStoryboardItemOp extends EditOp {
+  kind: "insert_storyboard_item";
+  index: uint32 | null;
+  item: StoryboardItem;
+}
+
+/** Remove the item at `index`; an index past the end is `invalid_op`. */
+model RemoveStoryboardItemOp extends EditOp {
+  kind: "remove_storyboard_item";
+  index: uint32;
+}
+
+/** Replace the storyboard's items, for reorders and bulk rewrites. */
+model SetStoryboardItemsOp extends EditOp {
+  kind: "set_storyboard_items";
+  items: StoryboardItem[];
+}
+
 /**
  * The one way every host edits a document. Ops apply in order and atomically:
  * the first rejected op fails the batch with `details.op_index` and the
- * document is unchanged. A successful batch sets `updated_at` to `now` once.
+ * document is unchanged. A successful batch sets `updated_at` to `now` once,
+ * unless every op is a replacement. Notes have no `updated_at`.
  */
 interface EditService {
   /** Apply ops to a `.sk` document. */
   @sync
   @vector(ApplySketchOpsVectors)
   applySketchOps(sketch: Sketch, ops: EditOp[], now: string): Sketch;
+
+  /** Apply ops to a `.sb` document. */
+  @sync
+  @vector(ApplyStoryboardOpsVectors)
+  applyStoryboardOps(storyboard: Storyboard, ops: EditOp[], now: string): Storyboard;
 
   /**
    * The version an edit was computed against: `sha256:` plus the lowercase
@@ -145,19 +227,42 @@ interface EditService {
   documentVersion(content: string): string;
 
   /**
-   * The host write path for a `.sk` file. `content` is the file on disk and
-   * `expected_version` the version the ops were computed against; a mismatch
-   * fails with `stale_document` and `details.current_version`. Otherwise the
-   * ops apply and the result is the canonical bytes to write and their
-   * version. An empty batch returns `content` unchanged.
+   * The host write path for every project document. A version mismatch fails
+   * with `stale_document` (with `details.current_version` when the file
+   * exists). A missing file must start with its kind's replacement op,
+   * otherwise the batch is `invalid_op`. The result is the canonical bytes to
+   * write and their version. An empty batch returns `content` unchanged.
    */
   @sync
-  @vector(EditSketchContentVectors)
-  editSketchContent(content: string, expected_version: string, ops: EditOp[], now: string): ContentEdit;
+  @vector(EditDocumentVectors)
+  editDocument(request: DocumentEditRequest): DocumentEdit;
 }
 
-/** Bytes to write and their `EditService.documentVersion`. */
-model ContentEdit {
+/** One write to one project file. */
+model DocumentEditRequest {
+  kind: DocumentKind;
+
+  /** The file on disk, or null when it doesn't exist. */
+  content: string | null;
+
+  /** The version the ops were computed against, or null to expect no file. */
+  expected_version: string | null;
+
+  ops: EditOp[];
+  now: string;
+
+  /** The note's lock from the host's lock store; ignored for other kinds. */
+  note_locked?: boolean = false;
+}
+
+/**
+ * Bytes to write and their `EditService.documentVersion`. For notes,
+ * `note_locked` is the lock to keep and `note_lock_changed` says whether the
+ * host must save it; a note batch either edits content or locks, never both.
+ */
+model DocumentEdit {
   content: string;
   version: string;
+  note_locked?: boolean;
+  note_lock_changed?: boolean;
 }

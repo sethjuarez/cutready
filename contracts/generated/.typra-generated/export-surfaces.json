@@ -43,12 +43,14 @@
         "ChatTurn",
         "CmdError",
         "CmdErrorDetails",
-        "ContentEdit",
         "DeleteRowOp",
+        "DocumentEdit",
+        "DocumentEditRequest",
         "DocumentMetadata",
         "EditOp",
         "EditService",
         "InsertRowOp",
+        "InsertStoryboardItemOp",
         "MotionPlan",
         "MotionPlanKeyframe",
         "MotionPoint",
@@ -58,14 +60,19 @@
         "PlanningCellLocks",
         "PlanningRow",
         "PlanningTiming",
+        "RemoveStoryboardItemOp",
         "ReorderRowsOp",
+        "ReplaceNoteOp",
         "ReplaceRowsOp",
+        "ReplaceSketchOp",
+        "ReplaceStoryboardOp",
         "RowTextUpdate",
         "SetDescriptionOp",
         "SetLockOp",
         "SetMetadataOp",
         "SetRowTextOp",
         "SetScreenshotOp",
+        "SetStoryboardItemsOp",
         "SetTitleOp",
         "SetVisualOp",
         "Sketch",
@@ -75,8 +82,10 @@
         "StoryboardItem",
         "StoryboardSection",
         "StoryboardSketchRef",
+        "TouchOp",
         "TypingSpot",
-        "UpdateRowOp"
+        "UpdateRowOp",
+        "WriteNoteOp"
       ],
       "exports": [
         {
@@ -150,17 +159,24 @@
           "protocol": false
         },
         {
-          "name": "ContentEdit",
-          "kind": "value",
-          "group": "",
-          "source": "ContentEdit",
-          "protocol": false
-        },
-        {
           "name": "DeleteRowOp",
           "kind": "value",
           "group": "",
           "source": "EditOp",
+          "protocol": false
+        },
+        {
+          "name": "DocumentEdit",
+          "kind": "value",
+          "group": "",
+          "source": "DocumentEdit",
+          "protocol": false
+        },
+        {
+          "name": "DocumentEditRequest",
+          "kind": "value",
+          "group": "",
+          "source": "DocumentEditRequest",
           "protocol": false
         },
         {
@@ -186,6 +202,13 @@
         },
         {
           "name": "InsertRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
+          "protocol": false
+        },
+        {
+          "name": "InsertStoryboardItemOp",
           "kind": "value",
           "group": "",
           "source": "EditOp",
@@ -255,6 +278,13 @@
           "protocol": true
         },
         {
+          "name": "RemoveStoryboardItemOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
+          "protocol": false
+        },
+        {
           "name": "ReorderRowsOp",
           "kind": "value",
           "group": "",
@@ -262,7 +292,28 @@
           "protocol": false
         },
         {
+          "name": "ReplaceNoteOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
+          "protocol": false
+        },
+        {
           "name": "ReplaceRowsOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
+          "protocol": false
+        },
+        {
+          "name": "ReplaceSketchOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
+          "protocol": false
+        },
+        {
+          "name": "ReplaceStoryboardOp",
           "kind": "value",
           "group": "",
           "source": "EditOp",
@@ -305,6 +356,13 @@
         },
         {
           "name": "SetScreenshotOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
+          "protocol": false
+        },
+        {
+          "name": "SetStoryboardItemsOp",
           "kind": "value",
           "group": "",
           "source": "EditOp",
@@ -374,6 +432,13 @@
           "protocol": false
         },
         {
+          "name": "TouchOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
+          "protocol": false
+        },
+        {
           "name": "TypingSpot",
           "kind": "value",
           "group": "",
@@ -382,6 +447,13 @@
         },
         {
           "name": "UpdateRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "EditOp",
+          "protocol": false
+        },
+        {
+          "name": "WriteNoteOp",
           "kind": "value",
           "group": "",
           "source": "EditOp",
@@ -444,6 +516,20 @@
               "nonFatal": false
             },
             {
+              "name": "applyStoryboardOps",
+              "returns": "Storyboard",
+              "params": {
+                "now": "string",
+                "ops": "EditOp[]",
+                "storyboard": "Storyboard"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
               "name": "documentVersion",
               "returns": "string",
               "params": {
@@ -456,13 +542,10 @@
               "nonFatal": false
             },
             {
-              "name": "editSketchContent",
-              "returns": "ContentEdit",
+              "name": "editDocument",
+              "returns": "DocumentEdit",
               "params": {
-                "content": "string",
-                "expected_version": "string",
-                "now": "string",
-                "ops": "EditOp[]"
+                "request": "DocumentEditRequest"
               },
               "optional": false,
               "sync": true,
@@ -584,7 +667,8 @@
         "ChatTurn",
         "CmdError",
         "CmdErrorDetails",
-        "ContentEdit",
+        "DocumentEdit",
+        "DocumentEditRequest",
         "DocumentMetadata",
         "EditOp",
         "EditService",
@@ -620,12 +704,14 @@
         "ChatTurn",
         "CmdError",
         "CmdErrorDetails",
-        "ContentEdit",
         "DeleteRowOp",
+        "DocumentEdit",
+        "DocumentEditRequest",
         "DocumentMetadata",
         "EditOp",
         "EditService",
         "InsertRowOp",
+        "InsertStoryboardItemOp",
         "MotionPlan",
         "MotionPlanKeyframe",
         "MotionPoint",
@@ -635,14 +721,19 @@
         "PlanningCellLocks",
         "PlanningRow",
         "PlanningTiming",
+        "RemoveStoryboardItemOp",
         "ReorderRowsOp",
+        "ReplaceNoteOp",
         "ReplaceRowsOp",
+        "ReplaceSketchOp",
+        "ReplaceStoryboardOp",
         "RowTextUpdate",
         "SetDescriptionOp",
         "SetLockOp",
         "SetMetadataOp",
         "SetRowTextOp",
         "SetScreenshotOp",
+        "SetStoryboardItemsOp",
         "SetTitleOp",
         "SetVisualOp",
         "Sketch",
@@ -652,8 +743,10 @@
         "StoryboardItem",
         "StoryboardSection",
         "StoryboardSketchRef",
+        "TouchOp",
         "TypingSpot",
-        "UpdateRowOp"
+        "UpdateRowOp",
+        "WriteNoteOp"
       ],
       "exports": [
         {
@@ -727,17 +820,24 @@
           "protocol": false
         },
         {
-          "name": "ContentEdit",
-          "kind": "value",
-          "group": "",
-          "source": "content_edit",
-          "protocol": false
-        },
-        {
           "name": "DeleteRowOp",
           "kind": "value",
           "group": "",
           "source": "edit_op",
+          "protocol": false
+        },
+        {
+          "name": "DocumentEdit",
+          "kind": "value",
+          "group": "",
+          "source": "document_edit",
+          "protocol": false
+        },
+        {
+          "name": "DocumentEditRequest",
+          "kind": "value",
+          "group": "",
+          "source": "document_edit_request",
           "protocol": false
         },
         {
@@ -763,6 +863,13 @@
         },
         {
           "name": "InsertRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
+          "protocol": false
+        },
+        {
+          "name": "InsertStoryboardItemOp",
           "kind": "value",
           "group": "",
           "source": "edit_op",
@@ -832,6 +939,13 @@
           "protocol": true
         },
         {
+          "name": "RemoveStoryboardItemOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
+          "protocol": false
+        },
+        {
           "name": "ReorderRowsOp",
           "kind": "value",
           "group": "",
@@ -839,7 +953,28 @@
           "protocol": false
         },
         {
+          "name": "ReplaceNoteOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
+          "protocol": false
+        },
+        {
           "name": "ReplaceRowsOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
+          "protocol": false
+        },
+        {
+          "name": "ReplaceSketchOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
+          "protocol": false
+        },
+        {
+          "name": "ReplaceStoryboardOp",
           "kind": "value",
           "group": "",
           "source": "edit_op",
@@ -882,6 +1017,13 @@
         },
         {
           "name": "SetScreenshotOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
+          "protocol": false
+        },
+        {
+          "name": "SetStoryboardItemsOp",
           "kind": "value",
           "group": "",
           "source": "edit_op",
@@ -951,6 +1093,13 @@
           "protocol": false
         },
         {
+          "name": "TouchOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
+          "protocol": false
+        },
+        {
           "name": "TypingSpot",
           "kind": "value",
           "group": "",
@@ -959,6 +1108,13 @@
         },
         {
           "name": "UpdateRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "edit_op",
+          "protocol": false
+        },
+        {
+          "name": "WriteNoteOp",
           "kind": "value",
           "group": "",
           "source": "edit_op",
@@ -1021,6 +1177,20 @@
               "nonFatal": false
             },
             {
+              "name": "applyStoryboardOps",
+              "returns": "Storyboard",
+              "params": {
+                "now": "string",
+                "ops": "EditOp[]",
+                "storyboard": "Storyboard"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
               "name": "documentVersion",
               "returns": "string",
               "params": {
@@ -1033,13 +1203,10 @@
               "nonFatal": false
             },
             {
-              "name": "editSketchContent",
-              "returns": "ContentEdit",
+              "name": "editDocument",
+              "returns": "DocumentEdit",
               "params": {
-                "content": "string",
-                "expected_version": "string",
-                "now": "string",
-                "ops": "EditOp[]"
+                "request": "DocumentEditRequest"
               },
               "optional": false,
               "sync": true,
@@ -1161,8 +1328,9 @@
         "chat_turn",
         "cmd_error",
         "cmd_error_details",
-        "content_edit",
         "context",
+        "document_edit",
+        "document_edit_request",
         "document_metadata",
         "edit_op",
         "edit_service",
@@ -1199,12 +1367,14 @@
         "ChatTurn",
         "CmdError",
         "CmdErrorDetails",
-        "ContentEdit",
         "DeleteRowOp",
+        "DocumentEdit",
+        "DocumentEditRequest",
         "DocumentMetadata",
         "EditOp",
         "EditService",
         "InsertRowOp",
+        "InsertStoryboardItemOp",
         "MotionPlan",
         "MotionPlanKeyframe",
         "MotionPoint",
@@ -1214,14 +1384,19 @@
         "PlanningCellLocks",
         "PlanningRow",
         "PlanningTiming",
+        "RemoveStoryboardItemOp",
         "ReorderRowsOp",
+        "ReplaceNoteOp",
         "ReplaceRowsOp",
+        "ReplaceSketchOp",
+        "ReplaceStoryboardOp",
         "RowTextUpdate",
         "SetDescriptionOp",
         "SetLockOp",
         "SetMetadataOp",
         "SetRowTextOp",
         "SetScreenshotOp",
+        "SetStoryboardItemsOp",
         "SetTitleOp",
         "SetVisualOp",
         "Sketch",
@@ -1231,8 +1406,10 @@
         "StoryboardItem",
         "StoryboardSection",
         "StoryboardSketchRef",
+        "TouchOp",
         "TypingSpot",
-        "UpdateRowOp"
+        "UpdateRowOp",
+        "WriteNoteOp"
       ],
       "exports": [
         {
@@ -1306,17 +1483,24 @@
           "protocol": false
         },
         {
-          "name": "ContentEdit",
-          "kind": "value",
-          "group": "",
-          "source": "Sources/CutReadyContracts/content_edit.swift",
-          "protocol": false
-        },
-        {
           "name": "DeleteRowOp",
           "kind": "value",
           "group": "",
           "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
+          "name": "DocumentEdit",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/document_edit.swift",
+          "protocol": false
+        },
+        {
+          "name": "DocumentEditRequest",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/document_edit_request.swift",
           "protocol": false
         },
         {
@@ -1342,6 +1526,13 @@
         },
         {
           "name": "InsertRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
+          "name": "InsertStoryboardItemOp",
           "kind": "value",
           "group": "",
           "source": "Sources/CutReadyContracts/edit_op.swift",
@@ -1411,6 +1602,13 @@
           "protocol": true
         },
         {
+          "name": "RemoveStoryboardItemOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
           "name": "ReorderRowsOp",
           "kind": "value",
           "group": "",
@@ -1418,7 +1616,28 @@
           "protocol": false
         },
         {
+          "name": "ReplaceNoteOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
           "name": "ReplaceRowsOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
+          "name": "ReplaceSketchOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
+          "name": "ReplaceStoryboardOp",
           "kind": "value",
           "group": "",
           "source": "Sources/CutReadyContracts/edit_op.swift",
@@ -1461,6 +1680,13 @@
         },
         {
           "name": "SetScreenshotOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
+          "name": "SetStoryboardItemsOp",
           "kind": "value",
           "group": "",
           "source": "Sources/CutReadyContracts/edit_op.swift",
@@ -1530,6 +1756,13 @@
           "protocol": false
         },
         {
+          "name": "TouchOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
           "name": "TypingSpot",
           "kind": "value",
           "group": "",
@@ -1538,6 +1771,13 @@
         },
         {
           "name": "UpdateRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
+          "name": "WriteNoteOp",
           "kind": "value",
           "group": "",
           "source": "Sources/CutReadyContracts/edit_op.swift",
@@ -1600,6 +1840,20 @@
               "nonFatal": false
             },
             {
+              "name": "applyStoryboardOps",
+              "returns": "Storyboard",
+              "params": {
+                "now": "string",
+                "ops": "EditOp[]",
+                "storyboard": "Storyboard"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
               "name": "documentVersion",
               "returns": "string",
               "params": {
@@ -1612,13 +1866,10 @@
               "nonFatal": false
             },
             {
-              "name": "editSketchContent",
-              "returns": "ContentEdit",
+              "name": "editDocument",
+              "returns": "DocumentEdit",
               "params": {
-                "content": "string",
-                "expected_version": "string",
-                "now": "string",
-                "ops": "EditOp[]"
+                "request": "DocumentEditRequest"
               },
               "optional": false,
               "sync": true,
@@ -1740,7 +1991,8 @@
         "Sources/CutReadyContracts/chat_turn.swift",
         "Sources/CutReadyContracts/cmd_error.swift",
         "Sources/CutReadyContracts/cmd_error_details.swift",
-        "Sources/CutReadyContracts/content_edit.swift",
+        "Sources/CutReadyContracts/document_edit.swift",
+        "Sources/CutReadyContracts/document_edit_request.swift",
         "Sources/CutReadyContracts/document_metadata.swift",
         "Sources/CutReadyContracts/edit_op.swift",
         "Sources/CutReadyContracts/edit_service.swift",
@@ -1777,12 +2029,14 @@
         "ChatTurn",
         "CmdError",
         "CmdErrorDetails",
-        "ContentEdit",
         "DeleteRowOp",
+        "DocumentEdit",
+        "DocumentEditRequest",
         "DocumentMetadata",
         "EditOp",
         "EditService",
         "InsertRowOp",
+        "InsertStoryboardItemOp",
         "MotionPlan",
         "MotionPlanKeyframe",
         "MotionPoint",
@@ -1792,14 +2046,19 @@
         "PlanningCellLocks",
         "PlanningRow",
         "PlanningTiming",
+        "RemoveStoryboardItemOp",
         "ReorderRowsOp",
+        "ReplaceNoteOp",
         "ReplaceRowsOp",
+        "ReplaceSketchOp",
+        "ReplaceStoryboardOp",
         "RowTextUpdate",
         "SetDescriptionOp",
         "SetLockOp",
         "SetMetadataOp",
         "SetRowTextOp",
         "SetScreenshotOp",
+        "SetStoryboardItemsOp",
         "SetTitleOp",
         "SetVisualOp",
         "Sketch",
@@ -1809,8 +2068,10 @@
         "StoryboardItem",
         "StoryboardSection",
         "StoryboardSketchRef",
+        "TouchOp",
         "TypingSpot",
-        "UpdateRowOp"
+        "UpdateRowOp",
+        "WriteNoteOp"
       ],
       "exports": [
         {
@@ -1884,17 +2145,24 @@
           "protocol": false
         },
         {
-          "name": "ContentEdit",
-          "kind": "value",
-          "group": "",
-          "source": "./content-edit",
-          "protocol": false
-        },
-        {
           "name": "DeleteRowOp",
           "kind": "value",
           "group": "",
           "source": "./edit-op",
+          "protocol": false
+        },
+        {
+          "name": "DocumentEdit",
+          "kind": "value",
+          "group": "",
+          "source": "./document-edit",
+          "protocol": false
+        },
+        {
+          "name": "DocumentEditRequest",
+          "kind": "value",
+          "group": "",
+          "source": "./document-edit-request",
           "protocol": false
         },
         {
@@ -1920,6 +2188,13 @@
         },
         {
           "name": "InsertRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
+          "protocol": false
+        },
+        {
+          "name": "InsertStoryboardItemOp",
           "kind": "value",
           "group": "",
           "source": "./edit-op",
@@ -1989,6 +2264,13 @@
           "protocol": true
         },
         {
+          "name": "RemoveStoryboardItemOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
+          "protocol": false
+        },
+        {
           "name": "ReorderRowsOp",
           "kind": "value",
           "group": "",
@@ -1996,7 +2278,28 @@
           "protocol": false
         },
         {
+          "name": "ReplaceNoteOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
+          "protocol": false
+        },
+        {
           "name": "ReplaceRowsOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
+          "protocol": false
+        },
+        {
+          "name": "ReplaceSketchOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
+          "protocol": false
+        },
+        {
+          "name": "ReplaceStoryboardOp",
           "kind": "value",
           "group": "",
           "source": "./edit-op",
@@ -2039,6 +2342,13 @@
         },
         {
           "name": "SetScreenshotOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
+          "protocol": false
+        },
+        {
+          "name": "SetStoryboardItemsOp",
           "kind": "value",
           "group": "",
           "source": "./edit-op",
@@ -2108,6 +2418,13 @@
           "protocol": false
         },
         {
+          "name": "TouchOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
+          "protocol": false
+        },
+        {
           "name": "TypingSpot",
           "kind": "value",
           "group": "",
@@ -2116,6 +2433,13 @@
         },
         {
           "name": "UpdateRowOp",
+          "kind": "value",
+          "group": "",
+          "source": "./edit-op",
+          "protocol": false
+        },
+        {
+          "name": "WriteNoteOp",
           "kind": "value",
           "group": "",
           "source": "./edit-op",
@@ -2178,6 +2502,20 @@
               "nonFatal": false
             },
             {
+              "name": "applyStoryboardOps",
+              "returns": "Storyboard",
+              "params": {
+                "now": "string",
+                "ops": "EditOp[]",
+                "storyboard": "Storyboard"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
               "name": "documentVersion",
               "returns": "string",
               "params": {
@@ -2190,13 +2528,10 @@
               "nonFatal": false
             },
             {
-              "name": "editSketchContent",
-              "returns": "ContentEdit",
+              "name": "editDocument",
+              "returns": "DocumentEdit",
               "params": {
-                "content": "string",
-                "expected_version": "string",
-                "now": "string",
-                "ops": "EditOp[]"
+                "request": "DocumentEditRequest"
               },
               "optional": false,
               "sync": true,
@@ -2318,7 +2653,8 @@
         "./chat-turn",
         "./cmd-error",
         "./cmd-error-details",
-        "./content-edit",
+        "./document-edit",
+        "./document-edit-request",
         "./document-metadata",
         "./edit-op",
         "./edit-service",

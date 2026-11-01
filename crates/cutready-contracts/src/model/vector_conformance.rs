@@ -1105,25 +1105,111 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
     }
     // vector: a current version still enforces the edit policy
     {
-        let content: String = serde_json::from_str(
+        let request = crate::model::DocumentEditRequest::from_json(
             r####"
-"{\"title\":\"Contract sketch\",\"locked\":true,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}"
+{
+  "kind": "sketch",
+  "content": "{\"title\":\"Contract sketch\",\"locked\":true,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}",
+  "expected_version": "sha256:0954839672a12a14252836cdb04beab7052711fcb6985fcc03d33d1d8354106f",
+  "ops": [
+    {
+      "kind": "set_title",
+      "title": "No"
+    }
+  ],
+  "now": "2026-07-01T09:30:00Z",
+  "note_locked": false
+}
 "####,
+            &ctx,
         )
-        .expect("content parses");
-        let expected_version: String = serde_json::from_str(
+        .expect("request parses");
+        let result = seam.edit_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a current version still enforces the edit policy");
+    }
+    // vector: a lock toggled back to where it was hasn't changed
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
             r####"
-"sha256:0954839672a12a14252836cdb04beab7052711fcb6985fcc03d33d1d8354106f"
+{
+  "kind": "note",
+  "content": "# Plan\n\nShip it.\n",
+  "expected_version": "sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012",
+  "ops": [
+    {
+      "kind": "set_lock",
+      "locked": true
+    },
+    {
+      "kind": "set_lock",
+      "locked": false
+    }
+  ],
+  "now": "2026-07-01T09:30:00Z",
+  "note_locked": false
+}
 "####,
+            &ctx,
         )
-        .expect("expected_version parses");
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "a lock toggled back to where it was hasn't changed", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "# Plan\n\nShip it.\n",
+  "version": "sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012",
+  "note_locked": false,
+  "note_lock_changed": false
+}
+"####,
+            &ctx,
+        )
+        .expect("a lock toggled back to where it was hasn't changed: expected parses");
+        assert_eq!(actual, expected, "a lock toggled back to where it was hasn't changed misrouted");
+    }
+    // vector: a locked storyboard rejects content edits
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": true,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
         let ops: Vec<crate::model::EditOp> = {
             let items: Vec<Value> = serde_json::from_str(
                 r####"
 [
   {
-    "kind": "set_title",
-    "title": "No"
+    "kind": "insert_storyboard_item",
+    "index": null,
+    "item": {
+      "type": "sketch_ref",
+      "path": "x.sk"
+    }
   }
 ]
 "####,
@@ -1141,8 +1227,283 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
 "####,
         )
         .expect("now parses");
-        let result = seam.edit_sketch_content(&content, &expected_version, &ops, &now);
-        assert!(result.is_err(), "{}: expected an error, got Ok", "a current version still enforces the edit policy");
+        let result = seam.apply_storyboard_ops(&storyboard, &ops, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a locked storyboard rejects content edits");
+    }
+    // vector: a missing file must start with its replacement
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "note",
+  "content": null,
+  "expected_version": null,
+  "ops": [
+    {
+      "kind": "write_note",
+      "content": "# New"
+    }
+  ],
+  "now": "2026-07-01T09:30:00Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.edit_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a missing file must start with its replacement");
+    }
+    // vector: a missing note is created by replace_note
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "note",
+  "content": null,
+  "expected_version": null,
+  "ops": [
+    {
+      "kind": "replace_note",
+      "content": ""
+    }
+  ],
+  "now": "2026-07-01T09:30:00Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "a missing note is created by replace_note", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "",
+  "version": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "note_locked": false,
+  "note_lock_changed": false
+}
+"####,
+            &ctx,
+        )
+        .expect("a missing note is created by replace_note: expected parses");
+        assert_eq!(actual, expected, "a missing note is created by replace_note misrouted");
+    }
+    // vector: a non-string description is rejected
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "set_description",
+    "description": {
+      "root": {}
+    }
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.apply_storyboard_ops(&storyboard, &ops, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a non-string description is rejected");
+    }
+    // vector: a note batch can't both lock and edit content
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "note",
+  "content": "# Plan\n\nShip it.\n",
+  "expected_version": "sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012",
+  "ops": [
+    {
+      "kind": "set_lock",
+      "locked": false
+    },
+    {
+      "kind": "write_note",
+      "content": "# Both"
+    }
+  ],
+  "now": "2026-07-01T09:30:00Z",
+  "note_locked": true
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.edit_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a note batch can't both lock and edit content");
+    }
+    // vector: a note can't be touched
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "note",
+  "content": "# Plan\n\nShip it.\n",
+  "expected_version": "sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012",
+  "ops": [
+    {
+      "kind": "touch"
+    }
+  ],
+  "now": "2026-07-01T09:30:00Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.edit_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a note can't be touched");
+    }
+    // vector: a note has no rows to lock
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "note",
+  "content": "# Plan\n\nShip it.\n",
+  "expected_version": "sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012",
+  "ops": [
+    {
+      "kind": "set_lock",
+      "row_id": "row-1",
+      "locked": true
+    }
+  ],
+  "now": "2026-07-01T09:30:00Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.edit_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a note has no rows to lock");
+    }
+    // vector: a note op on a sketch is rejected
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "id": "row-1",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "First.",
+      "demo_actions": "Open.",
+      "future_row_field": "first"
+    },
+    {
+      "id": "row-2",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/second.png",
+      "time": "0:20",
+      "narrative": "Second.",
+      "demo_actions": "Click."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "write_note",
+    "content": "# No"
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.apply_sketch_ops(&sketch, &ops, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a note op on a sketch is rejected");
     }
     // vector: a rejected op fails the whole batch
     {
@@ -1257,26 +1618,44 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         let result = seam.apply_sketch_ops(&sketch, &ops, &now);
         assert!(result.is_err(), "{}: expected an error, got Ok", "a rejected op fails the whole batch");
     }
-    // vector: a stale version reports the current one before any op runs
+    // vector: a row op on a storyboard is rejected
     {
-        let content: String = serde_json::from_str(
+        let storyboard = crate::model::Storyboard::from_json(
             r####"
-"{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
 "####,
+            &ctx,
         )
-        .expect("content parses");
-        let expected_version: String = serde_json::from_str(
-            r####"
-"sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
-"####,
-        )
-        .expect("expected_version parses");
+        .expect("storyboard parses");
         let ops: Vec<crate::model::EditOp> = {
             let items: Vec<Value> = serde_json::from_str(
                 r####"
 [
   {
-    "kind": "set_mood"
+    "kind": "delete_row",
+    "row_id": "row-1"
   }
 ]
 "####,
@@ -1294,8 +1673,191 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
 "####,
         )
         .expect("now parses");
-        let result = seam.edit_sketch_content(&content, &expected_version, &ops, &now);
+        let result = seam.apply_storyboard_ops(&storyboard, &ops, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a row op on a storyboard is rejected");
+    }
+    // vector: a stale version reports the current one before any op runs
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}",
+  "expected_version": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "ops": [
+    {
+      "kind": "set_mood"
+    }
+  ],
+  "now": "2026-07-01T09:30:00Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.edit_document(&request);
         assert!(result.is_err(), "{}: expected an error, got Ok", "a stale version reports the current one before any op runs");
+    }
+    // vector: a storyboard follows the storyboard policy
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "storyboard",
+  "content": "{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}}",
+  "expected_version": "sha256:d90bd569bb860e16ee73029172054ff4415fa43490e458abd1a6b67b20014986",
+  "ops": [
+    {
+      "kind": "touch"
+    }
+  ],
+  "now": "2026-07-01T09:30:00Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.edit_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a storyboard follows the storyboard policy");
+    }
+    // vector: a storyboard has no rows to lock
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "set_lock",
+    "row_id": "row-1",
+    "locked": true
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.apply_storyboard_ops(&storyboard, &ops, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a storyboard has no rows to lock");
+    }
+    // vector: a storyboard op on a sketch is rejected
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "id": "row-1",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "First.",
+      "demo_actions": "Open.",
+      "future_row_field": "first"
+    },
+    {
+      "id": "row-2",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/second.png",
+      "time": "0:20",
+      "narrative": "Second.",
+      "demo_actions": "Click."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "remove_storyboard_item",
+    "index": 0
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.apply_sketch_ops(&sketch, &ops, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a storyboard op on a sketch is rejected");
     }
     // vector: an earlier rejected op wins over a later malformed one
     {
@@ -1378,6 +1940,344 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         .expect("now parses");
         let result = seam.apply_sketch_ops(&sketch, &ops, &now);
         assert!(result.is_err(), "{}: expected an error, got Ok", "an earlier rejected op wins over a later malformed one");
+    }
+    // vector: an edit after a replacement sets updated_at
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "id": "row-1",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "First.",
+      "demo_actions": "Open.",
+      "future_row_field": "first"
+    },
+    {
+      "id": "row-2",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/second.png",
+      "time": "0:20",
+      "narrative": "Second.",
+      "demo_actions": "Click."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "replace_sketch",
+    "sketch": {
+      "title": "Contract sketch",
+      "locked": false,
+      "description": {
+        "root": {
+          "children": [
+            {
+              "type": "paragraph",
+              "children": [
+                {
+                  "text": "Intro scene"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "rows": [
+        {
+          "id": "row-1",
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": "screenshots/open.png",
+          "time": "0:20",
+          "duration_seconds": 20,
+          "narrative": "Open the workspace.",
+          "demo_actions": "Click **Open**.",
+          "visual": ".cutready/visuals/abc123def456.json",
+          "motion_points": [
+            {
+              "rank": 1,
+              "x": 0.5,
+              "y": 0.25,
+              "label": "Open button"
+            },
+            {
+              "rank": 2,
+              "x": 0.75,
+              "y": 0.5
+            }
+          ],
+          "typing_spots": [
+            {
+              "x": 0.25,
+              "y": 0.5,
+              "width": 0.5,
+              "height": 0.125,
+              "text": "demo-project",
+              "start_offset_ms": 300,
+              "characters_per_second": 18.5,
+              "show_cursor": true,
+              "font_family": "mono",
+              "font_scale": 1.25
+            }
+          ],
+          "motion_plan": {
+            "kind": "wide_hold_then_push",
+            "keyframes": [
+              {
+                "time_ms": 0,
+                "scale": 1.25,
+                "x": 0.5,
+                "y": 0.5,
+                "easing": "linear"
+              },
+              {
+                "time_ms": 1500,
+                "scale": 1.75,
+                "x": 0.5,
+                "y": 0.25,
+                "easing": "ease_in_out"
+              }
+            ],
+            "rationale": "Hold wide, then push toward the Open button."
+          },
+          "design_plan": "Title card with the product name.",
+          "narration": {
+            "path": ".cutready/narration/row-1.wav",
+            "source_text": "Open the workspace.",
+            "source_text_hash": "4f1c2a",
+            "mime_type": "audio/wav",
+            "duration_ms": 4200,
+            "leading_silence_ms": 120,
+            "trailing_silence_ms": 80,
+            "silence_threshold_db": -41.5,
+            "byte_size": 4096,
+            "recorded_at": "2026-06-28T20:05:00Z"
+          },
+          "narration_plan": {
+            "source_text": "Open the workspace.",
+            "voice": "en-US-Harper:MAI-Voice-2",
+            "locale": "en-US",
+            "ssml": "<speak>Open the workspace.</speak>",
+            "baseline_style": "friendly",
+            "pronunciation_overrides": {
+              "CutReady": "cut ready"
+            },
+            "beats": [
+              {
+                "text": "Open the workspace.",
+                "emphasis": "moderate",
+                "style_degree": 1.5,
+                "pause_after_ms": 250
+              }
+            ],
+            "generated_at": "2026-06-28T20:06:00Z"
+          }
+        }
+      ],
+      "state": "refined",
+      "created_at": "2026-06-28T20:00:00Z",
+      "updated_at": "2026-06-28T20:20:00Z",
+      "metadata": {
+        "fields": {
+          "audience": "developers"
+        }
+      }
+    }
+  },
+  {
+    "kind": "set_title",
+    "title": "Replaced"
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_sketch_ops(&sketch, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "an edit after a replacement sets updated_at", error));
+        let expected = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Replaced",
+  "locked": false,
+  "description": {
+    "root": {
+      "children": [
+        {
+          "type": "paragraph",
+          "children": [
+            {
+              "text": "Intro scene"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "rows": [
+    {
+      "id": "row-1",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/open.png",
+      "time": "0:20",
+      "duration_seconds": 20,
+      "narrative": "Open the workspace.",
+      "demo_actions": "Click **Open**.",
+      "visual": ".cutready/visuals/abc123def456.json",
+      "motion_points": [
+        {
+          "rank": 1,
+          "x": 0.5,
+          "y": 0.25,
+          "label": "Open button"
+        },
+        {
+          "rank": 2,
+          "x": 0.75,
+          "y": 0.5
+        }
+      ],
+      "typing_spots": [
+        {
+          "x": 0.25,
+          "y": 0.5,
+          "width": 0.5,
+          "height": 0.125,
+          "text": "demo-project",
+          "start_offset_ms": 300,
+          "characters_per_second": 18.5,
+          "show_cursor": true,
+          "font_family": "mono",
+          "font_scale": 1.25
+        }
+      ],
+      "motion_plan": {
+        "kind": "wide_hold_then_push",
+        "keyframes": [
+          {
+            "time_ms": 0,
+            "scale": 1.25,
+            "x": 0.5,
+            "y": 0.5,
+            "easing": "linear"
+          },
+          {
+            "time_ms": 1500,
+            "scale": 1.75,
+            "x": 0.5,
+            "y": 0.25,
+            "easing": "ease_in_out"
+          }
+        ],
+        "rationale": "Hold wide, then push toward the Open button."
+      },
+      "design_plan": "Title card with the product name.",
+      "narration": {
+        "path": ".cutready/narration/row-1.wav",
+        "source_text": "Open the workspace.",
+        "source_text_hash": "4f1c2a",
+        "mime_type": "audio/wav",
+        "duration_ms": 4200,
+        "leading_silence_ms": 120,
+        "trailing_silence_ms": 80,
+        "silence_threshold_db": -41.5,
+        "byte_size": 4096,
+        "recorded_at": "2026-06-28T20:05:00Z"
+      },
+      "narration_plan": {
+        "source_text": "Open the workspace.",
+        "voice": "en-US-Harper:MAI-Voice-2",
+        "locale": "en-US",
+        "ssml": "<speak>Open the workspace.</speak>",
+        "baseline_style": "friendly",
+        "pronunciation_overrides": {
+          "CutReady": "cut ready"
+        },
+        "beats": [
+          {
+            "text": "Open the workspace.",
+            "emphasis": "moderate",
+            "style_degree": 1.5,
+            "pause_after_ms": 250
+          }
+        ],
+        "generated_at": "2026-06-28T20:06:00Z"
+      }
+    }
+  ],
+  "state": "refined",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-07-01T09:30:00Z",
+  "metadata": {
+    "fields": {
+      "audience": "developers"
+    }
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("an edit after a replacement sets updated_at: expected parses");
+        assert_eq!(actual, expected, "an edit after a replacement sets updated_at misrouted");
     }
     // vector: an empty batch leaves the document unchanged
     {
@@ -1502,20 +2402,37 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         .expect("an empty batch leaves the document unchanged: expected parses");
         assert_eq!(actual, expected, "an empty batch leaves the document unchanged misrouted");
     }
-    // vector: an empty batch returns the file unchanged
+    // vector: an empty batch leaves the storyboard unchanged
     {
-        let content: String = serde_json::from_str(
+        let storyboard = crate::model::Storyboard::from_json(
             r####"
-"{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": true,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
 "####,
+            &ctx,
         )
-        .expect("content parses");
-        let expected_version: String = serde_json::from_str(
-            r####"
-"sha256:a89f31f168d3c78b74b7c3a254e8a4f6fbc66c346a450bf11949a98c6ae94015"
-"####,
-        )
-        .expect("expected_version parses");
+        .expect("storyboard parses");
         let ops: Vec<crate::model::EditOp> = {
             let items: Vec<Value> = serde_json::from_str(
                 r####"
@@ -1535,9 +2452,90 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
 "####,
         )
         .expect("now parses");
-        let actual = seam.edit_sketch_content(&content, &expected_version, &ops, &now)
+        let actual = seam.apply_storyboard_ops(&storyboard, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "an empty batch leaves the storyboard unchanged", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": true,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("an empty batch leaves the storyboard unchanged: expected parses");
+        assert_eq!(actual, expected, "an empty batch leaves the storyboard unchanged misrouted");
+    }
+    // vector: an empty batch on a locked note reports its lock
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "note",
+  "content": "# Plan\n\nShip it.\n",
+  "expected_version": "sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012",
+  "ops": [],
+  "now": "2026-07-01T09:30:00Z",
+  "note_locked": true
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "an empty batch on a locked note reports its lock", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "# Plan\n\nShip it.\n",
+  "version": "sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012",
+  "note_locked": true,
+  "note_lock_changed": false
+}
+"####,
+            &ctx,
+        )
+        .expect("an empty batch on a locked note reports its lock: expected parses");
+        assert_eq!(actual, expected, "an empty batch on a locked note reports its lock misrouted");
+    }
+    // vector: an empty batch returns the file unchanged
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}",
+  "expected_version": "sha256:a89f31f168d3c78b74b7c3a254e8a4f6fbc66c346a450bf11949a98c6ae94015",
+  "ops": [],
+  "now": "2026-07-01T09:30:00Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
             .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "an empty batch returns the file unchanged", error));
-        let expected = crate::model::ContentEdit::from_json(
+        let expected = crate::model::DocumentEdit::from_json(
             r####"
 {
   "content": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}",
@@ -1548,6 +2546,72 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         )
         .expect("an empty batch returns the file unchanged: expected parses");
         assert_eq!(actual, expected, "an empty batch returns the file unchanged misrouted");
+    }
+    // vector: an op for another kind is rejected
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "storyboard",
+  "content": "{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}}",
+  "expected_version": "sha256:d90bd569bb860e16ee73029172054ff4415fa43490e458abd1a6b67b20014986",
+  "ops": [
+    {
+      "kind": "replace_sketch",
+      "sketch": {
+        "title": "Contract sketch",
+        "locked": false,
+        "description": null,
+        "rows": [
+          {
+            "id": "row-1",
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": null,
+            "time": "0:10",
+            "narrative": "First.",
+            "demo_actions": "Open.",
+            "future_row_field": "first"
+          },
+          {
+            "id": "row-2",
+            "locked": false,
+            "locks": {
+              "time": false,
+              "narrative": false,
+              "demo_actions": false,
+              "screenshot": false,
+              "visual": false,
+              "design_plan": false
+            },
+            "screenshot": "screenshots/second.png",
+            "time": "0:20",
+            "narrative": "Second.",
+            "demo_actions": "Click."
+          }
+        ],
+        "state": "draft",
+        "created_at": "2026-06-28T20:00:00Z",
+        "updated_at": "2026-06-28T20:20:00Z"
+      }
+    }
+  ],
+  "now": "2026-07-01T09:30:00Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.edit_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "an op for another kind is rejected");
     }
     // vector: an op of an unknown kind is rejected
     {
@@ -1969,6 +3033,54 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         )
         .expect("empty document: expected parses");
         assert_eq!(actual_value, expected, "empty document misrouted");
+    }
+    // vector: expecting a file that is gone is stale
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "note",
+  "content": null,
+  "expected_version": "sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012",
+  "ops": [
+    {
+      "kind": "write_note",
+      "content": "# New"
+    }
+  ],
+  "now": "2026-07-01T09:30:00Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.edit_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "expecting a file that is gone is stale");
+    }
+    // vector: expecting no file when one exists is stale
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "note",
+  "content": "# Plan\n\nShip it.\n",
+  "expected_version": null,
+  "ops": [
+    {
+      "kind": "replace_note",
+      "content": "# New"
+    }
+  ],
+  "now": "2026-07-01T09:30:00Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.edit_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "expecting no file when one exists is stale");
     }
     // vector: insert_row after an unknown row is rejected
     {
@@ -2442,6 +3554,130 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         let result = seam.apply_sketch_ops(&sketch, &ops, &now);
         assert!(result.is_err(), "{}: expected an error, got Ok", "insert_row with a taken id is rejected");
     }
+    // vector: insert_storyboard_item inserts at an index and appends past the end
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "insert_storyboard_item",
+    "index": 0,
+    "item": {
+      "type": "sketch_ref",
+      "path": "cold-open.sk"
+    }
+  },
+  {
+    "kind": "insert_storyboard_item",
+    "index": null,
+    "item": {
+      "type": "section",
+      "title": "Wrap-up",
+      "description": "Close.",
+      "sketches": []
+    }
+  },
+  {
+    "kind": "insert_storyboard_item",
+    "index": 99,
+    "item": {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    }
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_storyboard_ops(&storyboard, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "insert_storyboard_item inserts at an index and appends past the end", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "cold-open.sk"
+    },
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap-up",
+      "description": "Close.",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-07-01T09:30:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("insert_storyboard_item inserts at an index and appends past the end: expected parses");
+        assert_eq!(actual, expected, "insert_storyboard_item inserts at an index and appends past the end misrouted");
+    }
     // vector: inserted row without an id gets one as in decode
     {
         let sketch = crate::model::Sketch::from_json(
@@ -2817,6 +4053,148 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         .expect("ops address rows by id after a reorder in the same batch: expected parses");
         assert_eq!(actual, expected, "ops address rows by id after a reorder in the same batch misrouted");
     }
+    // vector: remove_storyboard_item past the end is rejected
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "remove_storyboard_item",
+    "index": 2
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.apply_storyboard_ops(&storyboard, &ops, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "remove_storyboard_item past the end is rejected");
+    }
+    // vector: remove_storyboard_item removes the item at an index
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "remove_storyboard_item",
+    "index": 0
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_storyboard_ops(&storyboard, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "remove_storyboard_item removes the item at an index", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-07-01T09:30:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("remove_storyboard_item removes the item at an index: expected parses");
+        assert_eq!(actual, expected, "remove_storyboard_item removes the item at an index misrouted");
+    }
     // vector: reorder_rows around locked rows keeps locks in place
     {
         let sketch = crate::model::Sketch::from_json(
@@ -3123,6 +4501,43 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         let result = seam.apply_sketch_ops(&sketch, &ops, &now);
         assert!(result.is_err(), "{}: expected an error, got Ok", "reorder_rows that misses a row is rejected");
     }
+    // vector: replace_note ignores the note's lock
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "note",
+  "content": "# Plan\n\nShip it.\n",
+  "expected_version": "sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012",
+  "ops": [
+    {
+      "kind": "replace_note",
+      "content": "# Imported"
+    }
+  ],
+  "now": "2026-07-01T09:30:00Z",
+  "note_locked": true
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "replace_note ignores the note's lock", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "# Imported",
+  "version": "sha256:5aad5c9922913ab9a36d79684893785d447191e3fd4a4e6433e4ea0c80a36f32",
+  "note_locked": true,
+  "note_lock_changed": false
+}
+"####,
+            &ctx,
+        )
+        .expect("replace_note ignores the note's lock: expected parses");
+        assert_eq!(actual, expected, "replace_note ignores the note's lock misrouted");
+    }
     // vector: replace_rows keeps lock state with each position
     {
         let sketch = crate::model::Sketch::from_json(
@@ -3250,6 +4665,474 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         )
         .expect("replace_rows keeps lock state with each position: expected parses");
         assert_eq!(actual, expected, "replace_rows keeps lock state with each position misrouted");
+    }
+    // vector: replace_sketch ignores locks and keeps the given updated_at
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": true,
+  "description": null,
+  "rows": [
+    {
+      "id": "row-1",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "First.",
+      "demo_actions": "Open.",
+      "future_row_field": "first"
+    },
+    {
+      "id": "row-2",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/second.png",
+      "time": "0:20",
+      "narrative": "Second.",
+      "demo_actions": "Click."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "replace_sketch",
+    "sketch": {
+      "title": "Contract sketch",
+      "locked": false,
+      "description": null,
+      "rows": [
+        {
+          "id": "row-1",
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": "screenshots/open.png",
+          "time": "0:10",
+          "duration_seconds": 10,
+          "narrative": "Open the app.",
+          "demo_actions": "Click Open.",
+          "motion_points": [
+            {
+              "rank": 1,
+              "x": 0.5,
+              "y": 0.25
+            }
+          ],
+          "future_row_field": {
+            "keep": true
+          }
+        },
+        {
+          "id": "row-2",
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": true,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": null,
+          "time": "0:20",
+          "narrative": "Locked narration.",
+          "demo_actions": "Type a name."
+        },
+        {
+          "id": "row-3",
+          "locked": true,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": null,
+          "time": "0:30",
+          "narrative": "Locked row.",
+          "demo_actions": "Close."
+        }
+      ],
+      "state": "draft",
+      "created_at": "2026-06-28T20:00:00Z",
+      "updated_at": "2026-06-28T20:20:00Z",
+      "future_document_field": [
+        "still",
+        "here"
+      ]
+    }
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_sketch_ops(&sketch, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "replace_sketch ignores locks and keeps the given updated_at", error));
+        let expected = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "id": "row-1",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/open.png",
+      "time": "0:10",
+      "duration_seconds": 10,
+      "narrative": "Open the app.",
+      "demo_actions": "Click Open.",
+      "motion_points": [
+        {
+          "rank": 1,
+          "x": 0.5,
+          "y": 0.25
+        }
+      ],
+      "future_row_field": {
+        "keep": true
+      }
+    },
+    {
+      "id": "row-2",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": true,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Locked narration.",
+      "demo_actions": "Type a name."
+    },
+    {
+      "id": "row-3",
+      "locked": true,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:30",
+      "narrative": "Locked row.",
+      "demo_actions": "Close."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_document_field": [
+    "still",
+    "here"
+  ]
+}
+"####,
+            &ctx,
+        )
+        .expect("replace_sketch ignores locks and keeps the given updated_at: expected parses");
+        assert_eq!(actual, expected, "replace_sketch ignores locks and keeps the given updated_at misrouted");
+    }
+    // vector: replace_storyboard ignores locks and keeps the given updated_at
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": true,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "replace_storyboard",
+    "storyboard": {
+      "title": "Contract storyboard",
+      "description": "End-to-end launch demo.",
+      "locked": true,
+      "items": [
+        {
+          "type": "sketch_ref",
+          "path": "intro.sk"
+        },
+        {
+          "type": "section",
+          "title": "Setup",
+          "description": "Get signed in.",
+          "sketches": [
+            "flows/login.sk",
+            "flows/workspace.sk"
+          ]
+        },
+        {
+          "type": "section",
+          "title": "Wrap-up",
+          "sketches": []
+        },
+        {
+          "type": "sketch_ref",
+          "path": "outro.sk"
+        }
+      ],
+      "created_at": "2026-06-28T20:00:00Z",
+      "updated_at": "2026-06-28T20:20:00Z",
+      "metadata": {
+        "fields": {
+          "audience": "partners"
+        }
+      },
+      "future_storyboard_field": {
+        "owner": "ios",
+        "tags": [
+          "a",
+          "b"
+        ]
+      }
+    }
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_storyboard_ops(&storyboard, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "replace_storyboard ignores locks and keeps the given updated_at", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "End-to-end launch demo.",
+  "locked": true,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "description": "Get signed in.",
+      "sketches": [
+        "flows/login.sk",
+        "flows/workspace.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap-up",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "metadata": {
+    "fields": {
+      "audience": "partners"
+    }
+  },
+  "future_storyboard_field": {
+    "owner": "ios",
+    "tags": [
+      "a",
+      "b"
+    ]
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("replace_storyboard ignores locks and keeps the given updated_at: expected parses");
+        assert_eq!(actual, expected, "replace_storyboard ignores locks and keeps the given updated_at misrouted");
+    }
+    // vector: set_description null clears the description
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "Old.",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "set_description",
+    "description": null
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_storyboard_ops(&storyboard, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "set_description null clears the description", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-07-01T09:30:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("set_description null clears the description: expected parses");
+        assert_eq!(actual, expected, "set_description null clears the description misrouted");
     }
     // vector: set_description replaces and clears the description
     {
@@ -3537,6 +5420,43 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         )
         .expect("set_description replaces and clears the description: expected parses");
         assert_eq!(actual, expected, "set_description replaces and clears the description misrouted");
+    }
+    // vector: set_lock changes the note's lock and leaves its content
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "note",
+  "content": "# Plan\n\nShip it.\n",
+  "expected_version": "sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012",
+  "ops": [
+    {
+      "kind": "set_lock",
+      "locked": true
+    }
+  ],
+  "now": "2026-07-01T09:30:00Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "set_lock changes the note's lock and leaves its content", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "# Plan\n\nShip it.\n",
+  "version": "sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012",
+  "note_locked": true,
+  "note_lock_changed": true
+}
+"####,
+            &ctx,
+        )
+        .expect("set_lock changes the note's lock and leaves its content: expected parses");
+        assert_eq!(actual, expected, "set_lock changes the note's lock and leaves its content misrouted");
     }
     // vector: set_lock locks a cell and a whole row
     {
@@ -3864,6 +5784,98 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         )
         .expect("set_lock unlocks a locked sketch and everything in it: expected parses");
         assert_eq!(actual, expected, "set_lock unlocks a locked sketch and everything in it misrouted");
+    }
+    // vector: set_lock unlocks a locked storyboard for later ops
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": true,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "set_lock",
+    "locked": false
+  },
+  {
+    "kind": "set_title",
+    "title": "Open"
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_storyboard_ops(&storyboard, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "set_lock unlocks a locked storyboard for later ops", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Open",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-07-01T09:30:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("set_lock unlocks a locked storyboard for later ops: expected parses");
+        assert_eq!(actual, expected, "set_lock unlocks a locked storyboard for later ops misrouted");
     }
     // vector: set_metadata replaces the metadata
     {
@@ -4711,6 +6723,106 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         .expect("set_screenshot and set_visual set and clear asset references: expected parses");
         assert_eq!(actual, expected, "set_screenshot and set_visual set and clear asset references misrouted");
     }
+    // vector: set_storyboard_items replaces the items
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "set_storyboard_items",
+    "items": [
+      {
+        "type": "section",
+        "title": "Setup",
+        "sketches": [
+          "flows/login.sk"
+        ]
+      },
+      {
+        "type": "sketch_ref",
+        "path": "intro.sk"
+      }
+    ]
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_storyboard_ops(&storyboard, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "set_storyboard_items replaces the items", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    },
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-07-01T09:30:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("set_storyboard_items replaces the items: expected parses");
+        assert_eq!(actual, expected, "set_storyboard_items replaces the items misrouted");
+    }
     // vector: set_title keeps unknown document fields
     {
         let sketch = crate::model::Sketch::from_json(
@@ -4899,6 +7011,111 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         .expect("set_title keeps unknown document fields: expected parses");
         assert_eq!(actual, expected, "set_title keeps unknown document fields misrouted");
     }
+    // vector: set_title, set_description and set_metadata keep unknown fields
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "set_title",
+    "title": "Launch"
+  },
+  {
+    "kind": "set_description",
+    "description": "Partners first."
+  },
+  {
+    "kind": "set_metadata",
+    "metadata": {
+      "fields": {
+        "audience": "partners"
+      }
+    }
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_storyboard_ops(&storyboard, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "set_title, set_description and set_metadata keep unknown fields", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Launch",
+  "description": "Partners first.",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-07-01T09:30:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  },
+  "metadata": {
+    "fields": {
+      "audience": "partners"
+    }
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("set_title, set_description and set_metadata keep unknown fields: expected parses");
+        assert_eq!(actual, expected, "set_title, set_description and set_metadata keep unknown fields misrouted");
+    }
     // vector: set_visual on a row with a locked screenshot is rejected
     {
         let sketch = crate::model::Sketch::from_json(
@@ -4978,6 +7195,743 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         .expect("now parses");
         let result = seam.apply_sketch_ops(&sketch, &ops, &now);
         assert!(result.is_err(), "{}: expected an error, got Ok", "set_visual on a row with a locked screenshot is rejected");
+    }
+    // vector: setting a note's lock to its current state changes nothing
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "note",
+  "content": "# Plan\n\nShip it.\n",
+  "expected_version": "sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012",
+  "ops": [
+    {
+      "kind": "set_lock",
+      "locked": true
+    }
+  ],
+  "now": "2026-07-01T09:30:00Z",
+  "note_locked": true
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "setting a note's lock to its current state changes nothing", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "# Plan\n\nShip it.\n",
+  "version": "sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012",
+  "note_locked": true,
+  "note_lock_changed": false
+}
+"####,
+            &ctx,
+        )
+        .expect("setting a note's lock to its current state changes nothing: expected parses");
+        assert_eq!(actual, expected, "setting a note's lock to its current state changes nothing misrouted");
+    }
+    // vector: touch after a locked replacement is rejected
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "replace_storyboard",
+    "storyboard": {
+      "title": "Contract storyboard",
+      "description": "",
+      "locked": true,
+      "items": [
+        {
+          "type": "sketch_ref",
+          "path": "intro.sk"
+        },
+        {
+          "type": "section",
+          "title": "Setup",
+          "sketches": [
+            "flows/login.sk"
+          ]
+        }
+      ],
+      "created_at": "2026-06-28T20:00:00Z",
+      "updated_at": "2026-06-28T20:20:00Z",
+      "future_storyboard_field": {
+        "owner": "ios"
+      }
+    }
+  },
+  {
+    "kind": "touch"
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.apply_storyboard_ops(&storyboard, &ops, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "touch after a locked replacement is rejected");
+    }
+    // vector: touch after a locked replacement still sets updated_at
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "id": "row-1",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "First.",
+      "demo_actions": "Open.",
+      "future_row_field": "first"
+    },
+    {
+      "id": "row-2",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/second.png",
+      "time": "0:20",
+      "narrative": "Second.",
+      "demo_actions": "Click."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "replace_sketch",
+    "sketch": {
+      "title": "Contract sketch",
+      "locked": false,
+      "description": null,
+      "rows": [
+        {
+          "id": "row-1",
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": "screenshots/open.png",
+          "time": "0:10",
+          "duration_seconds": 10,
+          "narrative": "Open the app.",
+          "demo_actions": "Click Open.",
+          "motion_points": [
+            {
+              "rank": 1,
+              "x": 0.5,
+              "y": 0.25
+            }
+          ],
+          "future_row_field": {
+            "keep": true
+          }
+        },
+        {
+          "id": "row-2",
+          "locked": false,
+          "locks": {
+            "time": false,
+            "narrative": true,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": null,
+          "time": "0:20",
+          "narrative": "Locked narration.",
+          "demo_actions": "Type a name."
+        },
+        {
+          "id": "row-3",
+          "locked": true,
+          "locks": {
+            "time": false,
+            "narrative": false,
+            "demo_actions": false,
+            "screenshot": false,
+            "visual": false,
+            "design_plan": false
+          },
+          "screenshot": null,
+          "time": "0:30",
+          "narrative": "Locked row.",
+          "demo_actions": "Close."
+        }
+      ],
+      "state": "draft",
+      "created_at": "2026-06-28T20:00:00Z",
+      "updated_at": "2026-06-28T20:20:00Z",
+      "future_document_field": [
+        "still",
+        "here"
+      ]
+    }
+  },
+  {
+    "kind": "touch"
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_sketch_ops(&sketch, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "touch after a locked replacement still sets updated_at", error));
+        let expected = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "id": "row-1",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/open.png",
+      "time": "0:10",
+      "duration_seconds": 10,
+      "narrative": "Open the app.",
+      "demo_actions": "Click Open.",
+      "motion_points": [
+        {
+          "rank": 1,
+          "x": 0.5,
+          "y": 0.25
+        }
+      ],
+      "future_row_field": {
+        "keep": true
+      }
+    },
+    {
+      "id": "row-2",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": true,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:20",
+      "narrative": "Locked narration.",
+      "demo_actions": "Type a name."
+    },
+    {
+      "id": "row-3",
+      "locked": true,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:30",
+      "narrative": "Locked row.",
+      "demo_actions": "Close."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-07-01T09:30:00Z",
+  "future_document_field": [
+    "still",
+    "here"
+  ]
+}
+"####,
+            &ctx,
+        )
+        .expect("touch after a locked replacement still sets updated_at: expected parses");
+        assert_eq!(actual, expected, "touch after a locked replacement still sets updated_at misrouted");
+    }
+    // vector: touch after an open replacement sets updated_at
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": true,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "replace_storyboard",
+    "storyboard": {
+      "title": "Contract storyboard",
+      "description": "",
+      "locked": false,
+      "items": [
+        {
+          "type": "sketch_ref",
+          "path": "intro.sk"
+        },
+        {
+          "type": "section",
+          "title": "Setup",
+          "sketches": [
+            "flows/login.sk"
+          ]
+        }
+      ],
+      "created_at": "2026-06-28T20:00:00Z",
+      "updated_at": "2026-06-28T20:20:00Z",
+      "future_storyboard_field": {
+        "owner": "ios"
+      }
+    }
+  },
+  {
+    "kind": "touch"
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_storyboard_ops(&storyboard, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "touch after an open replacement sets updated_at", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-07-01T09:30:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("touch after an open replacement sets updated_at: expected parses");
+        assert_eq!(actual, expected, "touch after an open replacement sets updated_at misrouted");
+    }
+    // vector: touch follows the storyboard lock
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": true,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "touch"
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let result = seam.apply_storyboard_ops(&storyboard, &ops, &now);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "touch follows the storyboard lock");
+    }
+    // vector: touch marks a locked sketch edited
+    {
+        let sketch = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": true,
+  "description": null,
+  "rows": [
+    {
+      "id": "row-1",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "First.",
+      "demo_actions": "Open.",
+      "future_row_field": "first"
+    },
+    {
+      "id": "row-2",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/second.png",
+      "time": "0:20",
+      "narrative": "Second.",
+      "demo_actions": "Click."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("sketch parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "touch"
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_sketch_ops(&sketch, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "touch marks a locked sketch edited", error));
+        let expected = crate::model::Sketch::from_json(
+            r####"
+{
+  "title": "Contract sketch",
+  "locked": true,
+  "description": null,
+  "rows": [
+    {
+      "id": "row-1",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": null,
+      "time": "0:10",
+      "narrative": "First.",
+      "demo_actions": "Open.",
+      "future_row_field": "first"
+    },
+    {
+      "id": "row-2",
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "screenshot": "screenshots/second.png",
+      "time": "0:20",
+      "narrative": "Second.",
+      "demo_actions": "Click."
+    }
+  ],
+  "state": "draft",
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("touch marks a locked sketch edited: expected parses");
+        assert_eq!(actual, expected, "touch marks a locked sketch edited misrouted");
+    }
+    // vector: touch marks an open storyboard edited
+    {
+        let storyboard = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-06-28T20:20:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("storyboard parses");
+        let ops: Vec<crate::model::EditOp> = {
+            let items: Vec<Value> = serde_json::from_str(
+                r####"
+[
+  {
+    "kind": "touch"
+  }
+]
+"####,
+            )
+            .expect("ops parses");
+            items
+                .iter()
+                .map(|item| crate::model::EditOp::from_json(&item.to_string(), &ctx)
+                    .expect("ops element parses"))
+                .collect()
+        };
+        let now: String = serde_json::from_str(
+            r####"
+"2026-07-01T09:30:00Z"
+"####,
+        )
+        .expect("now parses");
+        let actual = seam.apply_storyboard_ops(&storyboard, &ops, &now)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "touch marks an open storyboard edited", error));
+        let expected = crate::model::Storyboard::from_json(
+            r####"
+{
+  "title": "Contract storyboard",
+  "description": "",
+  "locked": false,
+  "items": [
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Setup",
+      "sketches": [
+        "flows/login.sk"
+      ]
+    }
+  ],
+  "created_at": "2026-06-28T20:00:00Z",
+  "updated_at": "2026-07-01T09:30:00Z",
+  "future_storyboard_field": {
+    "owner": "ios"
+  }
+}
+"####,
+            &ctx,
+        )
+        .expect("touch marks an open storyboard edited: expected parses");
+        assert_eq!(actual, expected, "touch marks an open storyboard edited misrouted");
     }
     // vector: unknown row id is rejected
     {
@@ -5427,6 +8381,67 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         )
         .expect("utf-8 bytes, not code units: expected parses");
         assert_eq!(actual_value, expected, "utf-8 bytes, not code units misrouted");
+    }
+    // vector: write_note on a locked note is rejected
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "note",
+  "content": "# Plan\n\nShip it.\n",
+  "expected_version": "sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012",
+  "ops": [
+    {
+      "kind": "write_note",
+      "content": "# No"
+    }
+  ],
+  "now": "2026-07-01T09:30:00Z",
+  "note_locked": true
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.edit_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "write_note on a locked note is rejected");
+    }
+    // vector: write_note replaces an open note's content
+    {
+        let request = crate::model::DocumentEditRequest::from_json(
+            r####"
+{
+  "kind": "note",
+  "content": "# Plan\n\nShip it.\n",
+  "expected_version": "sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012",
+  "ops": [
+    {
+      "kind": "write_note",
+      "content": "# Plan\n\nShip it today.\n"
+    }
+  ],
+  "now": "2026-07-01T09:30:00Z",
+  "note_locked": false
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.edit_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "write_note replaces an open note's content", error));
+        let expected = crate::model::DocumentEdit::from_json(
+            r####"
+{
+  "content": "# Plan\n\nShip it today.\n",
+  "version": "sha256:90582b7c91d38230d54636e2285d6d30feb7df435bc0245df1825856737ab577",
+  "note_locked": false,
+  "note_lock_changed": false
+}
+"####,
+            &ctx,
+        )
+        .expect("write_note replaces an open note's content: expected parses");
+        assert_eq!(actual, expected, "write_note replaces an open note's content misrouted");
     }
 }
 
