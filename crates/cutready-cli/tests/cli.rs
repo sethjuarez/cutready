@@ -34,13 +34,15 @@ fn cli(args: &[&str], stdin: &str) -> Output {
 }
 
 fn stdout_json(output: &Output) -> Value {
-    serde_json::from_slice(&output.stdout).unwrap_or_else(|err| {
-        panic!(
-            "stdout is not JSON ({err}): {}\nstderr: {}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        )
-    })
+    assert_contract_output(
+        serde_json::from_slice(&output.stdout).unwrap_or_else(|err| {
+            panic!(
+                "stdout is not JSON ({err}): {}\nstderr: {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            )
+        }),
+    )
 }
 
 const SKETCH: &str = r#"{"title":"Intro","description":null,"rows":[],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:00:00Z"}"#;

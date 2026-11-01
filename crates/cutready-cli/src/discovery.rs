@@ -20,9 +20,10 @@ use std::path::{Path, PathBuf};
 
 use cutready_core::contracts::{
     CliInstall, CliRegistration, CmdError, CmdErrorCode, LoadContext, RegistrationOutcome,
-    SaveContext,
 };
 use serde_json::Value;
+
+use crate::output;
 
 /// The registration file name inside the discovery directory.
 pub const REGISTRY_FILE: &str = "cli.json";
@@ -132,15 +133,7 @@ pub fn register(dir: &Path, install: &Registration, force: bool) -> std::io::Res
         }
     };
     let tmp = dir.join(format!("{REGISTRY_FILE}.{}.tmp", std::process::id()));
-    let mut bytes =
-        serde_json::to_vec_pretty(&install.to_install().to_value(&SaveContext::default()))
-            .map_err(std::io::Error::other)?;
-    bytes.push(b'\n');
-    {
-        let mut out = std::fs::File::create(&tmp)?;
-        std::io::Write::write_all(&mut out, &bytes)?;
-        out.sync_all()?;
-    }
+    output::write_file(&tmp, &install.to_install())?;
     if let Err(err) = std::fs::rename(&tmp, &file) {
         let _ = std::fs::remove_file(&tmp);
         return Err(err);
