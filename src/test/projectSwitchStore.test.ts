@@ -26,6 +26,7 @@ vi.mock("../services/githubSetup", () => ({
 import { registerEditorFlush, useAppStore } from "../stores/appStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import { useSyncStore } from "../stores/syncStore";
+import { useChatStore } from "../stores/chatStore";
 import { useToastStore } from "../stores/toastStore";
 import { setDraftlineWorkspacePath } from "../services/draftlineVersioning";
 import type { Sketch, SketchSummary } from "../types/sketch";
@@ -101,15 +102,17 @@ describe("project switch store side effects", () => {
       notes: [],
       activeSketchPath: null,
       activeSketch: null,
+      loading: false,
+      projectSwitching: false,
+      adoptionPrompt: null,
+      error: null,
+    });
+    useChatStore.setState({
       chatMessages: [],
       chatSessionPath: null,
       chatLoading: false,
       chatError: null,
       chatInputDraft: "",
-      loading: false,
-      projectSwitching: false,
-      adoptionPrompt: null,
-      error: null,
     });
     useVersioningStore.setState({
       ...originalVersioningState,
@@ -147,11 +150,11 @@ describe("project switch store side effects", () => {
       }
     });
 
+    useChatStore.setState({ chatSessionPath: "cutready://legacy-chats/old.chat" });
     useAppStore.setState({
       currentProject: oldProject,
       openTabs: [{ id: "sketch-old.sk", type: "sketch", path: "old.sk", title: "Old sketch" }],
       activeTabId: "sketch-old.sk",
-      chatSessionPath: "cutready://legacy-chats/old.chat",
       loadSketches: async () => useAppStore.setState({ sketches: [restoredSketchSummary] }),
       loadStoryboards: async () => useAppStore.setState({ storyboards: [] }),
       loadNotes: async () => useAppStore.setState({ notes: [] }),
@@ -193,7 +196,7 @@ describe("project switch store side effects", () => {
       snapshotId: "snapshot-1",
     });
     expect(useAppStore.getState().projectSwitching).toBe(false);
-    expect(useAppStore.getState().chatSessionPath).toBeNull();
+    expect(useChatStore.getState().chatSessionPath).toBeNull();
   });
 
   it("clears stale chat when opening a project with no saved chat session", async () => {
@@ -212,8 +215,7 @@ describe("project switch store side effects", () => {
       }
     });
 
-    useAppStore.setState({
-      currentProject: oldProject,
+    useChatStore.setState({
       chatMessages: [
         { role: "user", content: "old project question" },
         { role: "assistant", content: "old project answer" },
@@ -222,6 +224,9 @@ describe("project switch store side effects", () => {
       chatLoading: true,
       chatError: "old error",
       chatInputDraft: "old draft",
+    });
+    useAppStore.setState({
+      currentProject: oldProject,
       loadProjects: vi.fn(() => Promise.resolve()),
       loadSketches: async () => useAppStore.setState({ sketches: [] }),
       loadStoryboards: async () => useAppStore.setState({ storyboards: [] }),
@@ -243,11 +248,11 @@ describe("project switch store side effects", () => {
     await useAppStore.getState().openProject("D:\\workspace\\beta");
 
     expect(useAppStore.getState().currentProject).toEqual(newProject);
-    expect(useAppStore.getState().chatMessages).toEqual([]);
-    expect(useAppStore.getState().chatSessionPath).toBeNull();
-    expect(useAppStore.getState().chatLoading).toBe(false);
-    expect(useAppStore.getState().chatError).toBeNull();
-    expect(useAppStore.getState().chatInputDraft).toBe("");
+    expect(useChatStore.getState().chatMessages).toEqual([]);
+    expect(useChatStore.getState().chatSessionPath).toBeNull();
+    expect(useChatStore.getState().chatLoading).toBe(false);
+    expect(useChatStore.getState().chatError).toBeNull();
+    expect(useChatStore.getState().chatInputDraft).toBe("");
   });
 
   it("asks before managing a code repository, then creates the suggested folder", async () => {

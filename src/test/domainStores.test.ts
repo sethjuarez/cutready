@@ -14,6 +14,7 @@ import {
   useVersioningStore,
 } from "../stores/versioningStore";
 import { initialSyncState, resetSyncState, useSyncStore } from "../stores/syncStore";
+import { initialChatState, useChatStore } from "../stores/chatStore";
 
 const alpha = { root: "D:\\workspace\\alpha", repo_root: "D:\\workspace", name: "Alpha" };
 const beta = { root: "D:\\workspace\\beta", repo_root: "D:\\workspace", name: "Beta" };
@@ -23,6 +24,7 @@ const startedBranch = { branchName: "from-old", snapshotId: "snapshot-1" };
 const originalAppState = { ...useAppStore.getState() };
 const originalVersioningState = { ...useVersioningStore.getState() };
 const originalSyncState = { ...useSyncStore.getState() };
+const originalChatState = { ...useChatStore.getState() };
 
 function pick<T extends object>(state: T, keys: string[]) {
   return Object.fromEntries(keys.map((key) => [key, (state as Record<string, unknown>)[key]]));
@@ -65,6 +67,36 @@ function dirtyDomainStores() {
     shareUrl: "https://example.com/share",
     sendForReviewPrompt: { branch: "cutready/x" } as never,
   });
+}
+
+const dirtyChat = {
+  chatMessages: [{ role: "user" as const, content: "old project question" }],
+  chatSessionPath: "old-session",
+  chatLoading: true,
+  chatError: "old error",
+  chatInputDraft: "old draft",
+  chatStreamingText: "partial",
+  chatStreamingThinking: "thinking",
+  chatStreamingStatus: "Connecting…",
+  chatStreamingDrafts: ["draft one"],
+  pendingChatPrompt: { text: "queued", silent: true, agent: "writer" },
+  chatFocusMode: true,
+};
+
+function dirtyChatStore() {
+  useChatStore.setState(dirtyChat);
+}
+
+/** Chat fields a project lifecycle action clears; every other chat field must be left untouched. */
+function expectChatReset(clearedKeys: (keyof typeof dirtyChat)[]) {
+  const initial = initialChatState();
+  const expected = Object.fromEntries(
+    Object.keys(dirtyChat).map((key) => {
+      const k = key as keyof typeof dirtyChat;
+      return [k, clearedKeys.includes(k) ? initial[k] : dirtyChat[k]];
+    }),
+  );
+  expect(pick(useChatStore.getState(), Object.keys(dirtyChat))).toEqual(expected);
 }
 
 function stubLoaders() {
@@ -119,6 +151,7 @@ describe("domain stores", () => {
     useAppStore.setState(originalAppState, true);
     useVersioningStore.setState(originalVersioningState, true);
     useSyncStore.setState(originalSyncState, true);
+    useChatStore.setState(originalChatState, true);
   });
 
   it("keeps the moved versioning and sync keys out of appStore", () => {
@@ -129,6 +162,19 @@ describe("domain stores", () => {
     expect(versioningKeys.filter((key) => appKeys.has(key))).toEqual([]);
     expect(syncKeys.filter((key) => appKeys.has(key))).toEqual([]);
     expect(versioningKeys.filter((key) => syncKeys.includes(key))).toEqual([]);
+    const chatKeys = Object.keys(useChatStore.getState());
+    expect(chatKeys.filter((key) => appKeys.has(key))).toEqual([]);
+    expect(chatKeys.filter((key) => versioningKeys.includes(key) || syncKeys.includes(key))).toEqual([]);
+    for (const key of [...Object.keys(initialChatState()),
+      "setChatMessages", "restoreChatSession", "newChatSession", "setChatLoading", "setChatError",
+      "setChatInputDraft", "setChatStreamingState", "resetChatStreaming", "sendChatPrompt", "setChatFocusMode",
+    ]) {
+      expect(appKeys.has(key)).toBe(false);
+      expect(chatKeys).toContain(key);
+    }
+    for (const key of ["chatArtifacts", "activeChatArtifactPath", "loadChatArtifacts", "openChatArtifact", "deleteChatArtifact", "activityLog", "debugLog"]) {
+      expect(appKeys.has(key)).toBe(true);
+    }
     for (const key of [
       "isDirty", "changedFiles", "saving", "isMerging", "saveVersion", "switchTimeline", "mergeTimelines",
       "syncStatus", "isSyncing", "syncError", "currentRemote", "pushToRemote", "sendForReview", "refreshSyncStatus",
@@ -140,6 +186,7 @@ describe("domain stores", () => {
   it("starts the new stores from their initial state", () => {
     expect(pick(useVersioningStore.getState(), Object.keys(initialVersioningState()))).toEqual(initialVersioningState());
     expect(pick(useSyncStore.getState(), Object.keys(initialSyncState()))).toEqual(initialSyncState());
+    expect(pick(useChatStore.getState(), Object.keys(initialChatState()))).toEqual(initialChatState());
   });
 
   it("opening a project resets versioning and sync state but leaves an in-flight save alone", async () => {
@@ -195,5 +242,94 @@ describe("domain stores", () => {
     expect(useAppStore.getState().currentProject).toEqual(gamma);
     expectVersioningReset();
     expectSyncReset();
+  });
+
+  it("opening a project clears the conversation but keeps focus mode, streaming state and any queued prompt", async () => {
+    useAppStore.setState({ currentProject: alpha });
+    dirtyChatStore();
+    stubLoaders();
+
+    await useAppStore.getState().openProject(beta.root);
+
+    expect(useAppStore.getState().currentProject).toEqual(beta);
+    expectChatReset(["chatMessages", "chatSessionPath", "chatLoading", "chatError", "chatInputDraft"]);
+  });
+
+  it("creating a project clears only the conversation and its session", async () => {
+    mockInvoke.mockImplementation((command: string) =>
+      command === "create_project_folder" ? Promise.resolve(beta) : Promise.resolve([]),
+    );
+    useAppStore.setState({ currentProject: alpha, loadRecentProjects: vi.fn(() => Promise.resolve()) });
+    dirtyChatStore();
+    stubLoaders();
+
+    await useAppStore.getState().createProject(beta.root);
+
+    expect(useAppStore.getState().currentProject).toEqual(beta);
+    expectChatReset(["chatMessages", "chatSessionPath"]);
+  });
+
+  it("closing a project clears the conversation and queued prompt synchronously but keeps the draft", () => {
+    useAppStore.setState({ currentProject: alpha });
+    dirtyChatStore();
+
+    useAppStore.getState().closeProject();
+
+    expect(useAppStore.getState().currentProject).toBeNull();
+    expectChatReset(["chatMessages", "chatSessionPath", "chatLoading", "chatError", "pendingChatPrompt"]);
+  });
+
+  it("switching projects clears the conversation but keeps focus mode, streaming state and any queued prompt", async () => {
+    mockInvoke.mockImplementation((command: string) =>
+      command === "switch_project" ? Promise.resolve(gamma) : Promise.resolve(null),
+    );
+    useAppStore.setState({ currentProject: alpha });
+    dirtyChatStore();
+    stubLoaders();
+
+    await useAppStore.getState().switchProject(gamma.root);
+
+    expect(useAppStore.getState().currentProject).toEqual(gamma);
+    expectChatReset(["chatMessages", "chatSessionPath", "chatLoading", "chatError", "chatInputDraft"]);
+  });
+
+  it("restoring saved workspace tabs clears the conversation after the project loads", async () => {
+    mockInvoke.mockImplementation((command: string) => {
+      switch (command) {
+        case "open_project_folder":
+          return Promise.resolve(beta);
+        case "get_workspace_state":
+          return Promise.resolve({ open_tabs: [], active_tab_id: null, chat_session_path: null });
+        default:
+          return Promise.resolve([]);
+      }
+    });
+    useAppStore.setState({ currentProject: alpha });
+    stubLoaders();
+    useAppStore.setState({
+      loadNotes: vi.fn(() => {
+        dirtyChatStore();
+        return Promise.resolve();
+      }),
+    });
+
+    await useAppStore.getState().openProject(beta.root);
+
+    expectChatReset(["chatMessages", "chatSessionPath", "chatLoading", "chatError", "chatInputDraft"]);
+  });
+
+  it("starting a new chat clears the conversation and the output activity log, then persists tabs", () => {
+    const persistTabs = vi.fn();
+    useAppStore.setState({
+      activityLog: [{ id: "a1", timestamp: new Date(0), source: "t", content: "x", level: "info" }],
+      _persistTabs: persistTabs,
+    });
+    dirtyChatStore();
+
+    useChatStore.getState().newChatSession();
+
+    expectChatReset(["chatMessages", "chatSessionPath", "chatLoading", "chatError", "chatInputDraft"]);
+    expect(useAppStore.getState().activityLog).toEqual([]);
+    expect(persistTabs).toHaveBeenCalledTimes(1);
   });
 });

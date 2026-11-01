@@ -29,7 +29,7 @@
     "src-tauri/src/engine/video_import.rs": 2037,
     "src-tauri/src/lib.rs": 960,
     "src/components/AgentRunInspector.tsx": 831,
-    "src/components/ChatPanel.tsx": 3555,
+    "src/components/ChatPanel.tsx": 3556,
     "src/components/NarrationRecordingDialog.tsx": 933,
     "src/components/RecordingControlWindow.tsx": 1430,
     "src/components/ScriptTable.tsx": 2516,
@@ -45,7 +45,7 @@
     "src/devMock.ts": 1419,
     "src/hooks/useSettings.ts": 999,
     "src/services/draftlineVersioning.ts": 879,
-    "src/stores/appStore.ts": 2238,
+    "src/stores/appStore.ts": 2145,
     "src/theme/appThemePalettes.ts": 845
   }
 }

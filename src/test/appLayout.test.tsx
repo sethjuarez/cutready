@@ -89,12 +89,13 @@ vi.mock("../utils/platform", () => ({
 
 import { AppLayout } from "../components/AppLayout";
 import { useAppStore } from "../stores/appStore";
+import { useChatStore } from "../stores/chatStore";
 
 describe("AppLayout titlebar spacing", () => {
   afterEach(() => {
+    act(() => useChatStore.setState({ chatFocusMode: false }));
     act(() =>
       useAppStore.setState({
-        chatFocusMode: false,
         currentProject: null,
         view: "home",
         outputVisible: true,
@@ -105,9 +106,9 @@ describe("AppLayout titlebar spacing", () => {
   });
 
   it("reserves fixed titlebar height for main content on Windows and Linux", () => {
+    act(() => useChatStore.setState({ chatFocusMode: false }));
     act(() =>
       useAppStore.setState({
-        chatFocusMode: false,
         view: "project",
       }),
     );
@@ -122,9 +123,9 @@ describe("AppLayout titlebar spacing", () => {
 
   it("does not add duplicate titlebar spacing on macOS", () => {
     platform.isMac = true;
+    act(() => useChatStore.setState({ chatFocusMode: false }));
     act(() =>
       useAppStore.setState({
-        chatFocusMode: false,
         view: "project",
       }),
     );
@@ -139,9 +140,9 @@ describe("AppLayout titlebar spacing", () => {
   });
 
   it("keeps chat focus mode below the fixed titlebar on Windows and Linux", () => {
+    act(() => useChatStore.setState({ chatFocusMode: true }));
     act(() =>
       useAppStore.setState({
-        chatFocusMode: true,
         view: "project",
       }),
     );
@@ -156,9 +157,9 @@ describe("AppLayout titlebar spacing", () => {
 
   it("keeps chat focus mode below the native traffic light toolbar on macOS", () => {
     platform.isMac = true;
+    act(() => useChatStore.setState({ chatFocusMode: true }));
     act(() =>
       useAppStore.setState({
-        chatFocusMode: true,
         view: "project",
       }),
     );
@@ -172,9 +173,9 @@ describe("AppLayout titlebar spacing", () => {
   });
 
   it("keeps the output panel mounted when navigating to views that hide it", () => {
+    act(() => useChatStore.setState({ chatFocusMode: false }));
     act(() =>
       useAppStore.setState({
-        chatFocusMode: false,
         outputVisible: true,
         view: "project",
       }),
@@ -194,9 +195,9 @@ describe("AppLayout titlebar spacing", () => {
   });
 
   it("cycles chat nav through side, focus, side, then hidden", () => {
+    act(() => useChatStore.setState({ chatFocusMode: false }));
     act(() =>
       useAppStore.setState({
-        chatFocusMode: false,
         currentProject: {
           name: "Demo",
           root: "C:\\demo",
@@ -213,22 +214,22 @@ describe("AppLayout titlebar spacing", () => {
 
     fireEvent.click(chatButton);
     expect(useAppStore.getState().showSecondaryPanel).toBe(true);
-    expect(useAppStore.getState().chatFocusMode).toBe(false);
+    expect(useChatStore.getState().chatFocusMode).toBe(false);
     expect(screen.queryByTestId("chat-focus-shell")).not.toBeInTheDocument();
 
     fireEvent.click(chatButton);
     expect(useAppStore.getState().showSecondaryPanel).toBe(true);
-    expect(useAppStore.getState().chatFocusMode).toBe(true);
+    expect(useChatStore.getState().chatFocusMode).toBe(true);
     expect(screen.getByTestId("chat-focus-shell")).toBeInTheDocument();
 
     fireEvent.click(chatButton);
     expect(useAppStore.getState().showSecondaryPanel).toBe(true);
-    expect(useAppStore.getState().chatFocusMode).toBe(false);
+    expect(useChatStore.getState().chatFocusMode).toBe(false);
     expect(screen.queryByTestId("chat-focus-shell")).not.toBeInTheDocument();
 
     fireEvent.click(chatButton);
     expect(useAppStore.getState().showSecondaryPanel).toBe(false);
-    expect(useAppStore.getState().chatFocusMode).toBe(false);
+    expect(useChatStore.getState().chatFocusMode).toBe(false);
     expect(screen.queryByTestId("chat-focus-shell")).not.toBeInTheDocument();
   });
 });

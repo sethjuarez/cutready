@@ -28,10 +28,10 @@ import type {
   StoryboardSummary,
   StoryboardItem,
   NoteSummary,
-  ChatMessage,
 } from "../types/sketch";
 import { useVersioningStore, resetVersioningState } from "./versioningStore";
 import { useSyncStore, resetSyncState } from "./syncStore";
+import { useChatStore } from "./chatStore";
 import {
   beginWorkspaceGeneration,
   bumpRemoteDetectionGeneration,
@@ -213,29 +213,6 @@ export interface AppStoreState {
   /** All project narration/audio cuts available for reuse. */
   narrationAssets: NarrationAssetInfo[];
 
-  // ── Chat state ──────────────────────────────────────────────
-  /** Messages in the current in-memory chat. */
-  chatMessages: ChatMessage[];
-  /** Current database-backed chat session ID; retained for workspace compatibility. */
-  chatSessionPath: string | null;
-  /** Whether the chat is waiting for a response. */
-  chatLoading: boolean;
-  /** Last chat error message. */
-  chatError: string | null;
-  /** Current unsent chat input text, shared between normal and focus mode. */
-  chatInputDraft: string;
-  /** Live assistant text currently streaming from the agent. */
-  chatStreamingText: string;
-  /** Live reasoning text currently streaming from the agent. */
-  chatStreamingThinking: string;
-  /** Live status text currently streaming from the agent. */
-  chatStreamingStatus: string;
-  /** Assistant drafts captured before tool-round resets. */
-  chatStreamingDrafts: string[];
-  /** A prompt queued from outside the chat (e.g. sparkle buttons). ChatPanel picks this up and sends it. */
-  pendingChatPrompt: { text: string; silent?: boolean; agent?: string } | null;
-  /** Whether chat is occupying the main work area as an intentional focus mode. */
-  chatFocusMode: boolean;
   /** Activity log entries for the output panel. */
   activityLog: ActivityEntry[];
   /** Debug log entries for the debug panel. */
@@ -450,28 +427,6 @@ export interface AppStoreState {
   /** Delete unreferenced narration/audio files. */
   deleteUnlinkedNarrationAssets: () => Promise<number>;
 
-  // ── Chat actions ────────────────────────────────────────────
-
-  /** Set the current in-memory chat messages without changing its database session. */
-  setChatMessages: (messages: ChatMessage[]) => void;
-  /** Restore a database-backed conversation into the Chat tab. */
-  restoreChatSession: (sessionId: string, messages: ChatMessage[]) => void;
-  /** Start a new in-memory conversation. */
-  newChatSession: () => void;
-  /** Set chat loading state. */
-  setChatLoading: (loading: boolean) => void;
-  /** Set chat error. */
-  setChatError: (error: string | null) => void;
-  /** Set current unsent chat input text. */
-  setChatInputDraft: (draft: string) => void;
-  /** Update live streaming chat state. */
-  setChatStreamingState: (state: Partial<Pick<AppStoreState, "chatStreamingText" | "chatStreamingThinking" | "chatStreamingStatus" | "chatStreamingDrafts">>) => void;
-  /** Clear live streaming chat state. */
-  resetChatStreaming: () => void;
-  /** Queue a prompt to be sent by the chat panel. */
-  sendChatPrompt: (prompt: string, opts?: { silent?: boolean; agent?: string }) => void;
-  /** Enter or exit chat focus mode. */
-  setChatFocusMode: (enabled: boolean) => void;
   /** Add entries to activity log. */
   addActivityEntries: (entries: ActivityEntry[]) => void;
   /** Clear activity log. */
@@ -618,7 +573,7 @@ async function restoreWorkspaceState(get: () => AppStoreState, set: (partial: Pa
       else if (active?.type === "chat-artifact") await get().openChatArtifact(active.path);
     }
 
-    set({
+    useChatStore.setState({
       chatMessages: [],
       chatSessionPath: null,
       chatLoading: false,
@@ -701,17 +656,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   activeChatArtifactPath: null,
   assets: [],
   narrationAssets: [],
-  chatMessages: [],
-  chatSessionPath: null,
-  chatLoading: false,
-  chatError: null,
-  chatInputDraft: "",
-  chatStreamingText: "",
-  chatStreamingThinking: "",
-  chatStreamingStatus: "",
-  chatStreamingDrafts: [],
-  pendingChatPrompt: null,
-  chatFocusMode: false,
   activityLog: [],
   debugLog: [],
   showSecondaryPanel: savedLayout.showSecondaryPanel ?? true,
@@ -1070,6 +1014,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       beginWorkspaceGeneration(project.repo_root);
       useVersioningStore.setState(resetVersioningState());
       useSyncStore.setState(resetSyncState());
+      useChatStore.setState({ chatMessages: [], chatSessionPath: null });
       set({
         currentProject: project,
         view: "project",
@@ -1086,8 +1031,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeNoteContent: null,
         activeNoteLocked: false,
         activeChatArtifactPath: null,
-        chatMessages: [],
-        chatSessionPath: null,
       });
       localStorage.setItem("cutready:lastProject", path);
       await get().loadRecentProjects();
@@ -1120,6 +1063,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       beginWorkspaceGeneration(project.repo_root);
       useVersioningStore.setState(resetVersioningState());
       useSyncStore.setState(resetSyncState());
+      useChatStore.setState({
+        chatMessages: [],
+        chatSessionPath: null,
+        chatLoading: false,
+        chatError: null,
+        chatInputDraft: "",
+      });
       set({
         currentProject: project,
         view: "project",
@@ -1136,11 +1086,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeNoteContent: null,
         activeNoteLocked: false,
         activeChatArtifactPath: null,
-        chatMessages: [],
-        chatSessionPath: null,
-        chatLoading: false,
-        chatError: null,
-        chatInputDraft: "",
       });
       localStorage.setItem("cutready:lastProject", path);
       // Surface interrupted operations before loaders that may refuse during recovery.
@@ -1266,6 +1211,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     });
     useVersioningStore.setState(resetVersioningState());
     useSyncStore.setState(resetSyncState());
+    useChatStore.setState({
+      chatMessages: [],
+      chatSessionPath: null,
+      chatLoading: false,
+      chatError: null,
+      pendingChatPrompt: null,
+    });
     set({
       currentProject: null,
       projects: [],
@@ -1285,11 +1237,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activeChatArtifactPath: null,
       assets: [],
       narrationAssets: [],
-      chatMessages: [],
-      chatSessionPath: null,
-      chatLoading: false,
-      chatError: null,
-      pendingChatPrompt: null,
       activityLog: [],
       debugLog: [],
       sidebarOrder: null,
@@ -1342,6 +1289,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         startedBranchFromSnapshot: preservesDraftlineWorkspace ? startedBranchFromSnapshot : null,
       });
       useSyncStore.setState(resetSyncState());
+      useChatStore.setState({
+        chatMessages: [],
+        chatSessionPath: null,
+        chatError: null,
+        chatLoading: false,
+        chatInputDraft: "",
+      });
       set({
         currentProject: project,
         openTabs: [],
@@ -1357,11 +1311,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeNoteContent: null,
         activeNoteLocked: false,
         activeChatArtifactPath: null,
-        chatMessages: [],
-        chatSessionPath: null,
-        chatError: null,
-        chatLoading: false,
-        chatInputDraft: "",
       });
       await get().loadSketches();
       await get().loadStoryboards();
@@ -2009,48 +1958,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
-  // ── Chat actions ──────────────────────────────────────────
-
-  setChatMessages: (messages) => {
-    // Callers clear chatError explicitly (send, retry, dismiss, session switch); a failed
-    // send sets the error and then keeps the user's message, so this must not wipe it.
-    set({ chatMessages: messages });
-  },
-
-  restoreChatSession: (sessionId, messages) => {
-    set({
-      chatMessages: messages,
-      chatSessionPath: sessionId,
-      chatLoading: false,
-      chatError: null,
-      chatInputDraft: "",
-    });
-  },
-
-  newChatSession: () => {
-    set({
-      chatMessages: [],
-      chatSessionPath: null,
-      chatLoading: false,
-      chatError: null,
-      chatInputDraft: "",
-      activityLog: [],
-    });
-    get()._persistTabs();
-  },
-
-  setChatLoading: (loading) => set({ chatLoading: loading }),
-  setChatError: (error) => set({ chatError: error }),
-  setChatInputDraft: (draft) => set({ chatInputDraft: draft }),
-  setChatStreamingState: (state) => set(state),
-  resetChatStreaming: () => set({
-    chatStreamingText: "",
-    chatStreamingThinking: "",
-    chatStreamingStatus: "",
-    chatStreamingDrafts: [],
-  }),
-  sendChatPrompt: (prompt, opts) => set({ pendingChatPrompt: { text: prompt, silent: opts?.silent, agent: opts?.agent } }),
-  setChatFocusMode: (enabled) => set({ chatFocusMode: enabled }),
   addActivityEntries: (entries) => {
     recordActivityEntries(entries);
     set((s) => ({ activityLog: [...s.activityLog, ...entries].slice(-MAX_ACTIVITY_ENTRIES) }));

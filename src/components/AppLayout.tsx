@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore, type AppView } from "../stores/appStore";
+import { useChatStore } from "../stores/chatStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
@@ -70,8 +71,8 @@ export function AppLayout() {
   const toggleSecondaryPanel = useAppStore((s) => s.toggleSecondaryPanel);
   const setSecondaryPanelVisible = useAppStore((s) => s.setSecondaryPanelVisible);
   const showSecondaryPanel = useAppStore((s) => s.showSecondaryPanel);
-  const chatFocusMode = useAppStore((s) => s.chatFocusMode);
-  const setChatFocusMode = useAppStore((s) => s.setChatFocusMode);
+  const chatFocusMode = useChatStore((s) => s.chatFocusMode);
+  const setChatFocusMode = useChatStore((s) => s.setChatFocusMode);
   const isMerging = useVersioningStore((s) => s.isMerging);
   const projectSwitching = useAppStore((s) => s.projectSwitching);
   const currentProject = useAppStore((s) => s.currentProject);
