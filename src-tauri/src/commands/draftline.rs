@@ -6,11 +6,10 @@ use draftline::tauri_contract as contract;
 #[cfg(test)]
 use draftline::VersionId;
 use draftline::{
-    ApplyIncomingReport, ChangeSet, ContributorProfile, HistoryEntry, MergeIncomingReport,
-    OutgoingFileKind, PreflightReport, PreviewFile, PullRequestProvider, RemoteCredential,
-    RemoteCredentialRequest, RemoteEndpoint, RemoteOptions, SendRequest, SendResult, Shelf,
-    Variation, VariationId, VariationRenamePreflight, VariationSummary, VersionDiff,
-    VersionPreview,
+    ApplyIncomingReport, ChangeSet, ContributorProfile, MergeIncomingReport, OutgoingFileKind,
+    PreflightReport, PreviewFile, PullRequestProvider, RemoteCredential, RemoteCredentialRequest,
+    RemoteEndpoint, RemoteOptions, SendRequest, SendResult, Shelf, Variation, VariationId,
+    VariationRenamePreflight, VariationSummary, VersionDiff,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
@@ -190,15 +189,6 @@ fn namespace_create_request(
     mut request: contract::PreflightCreateVariationFromVersionRequest,
 ) -> contract::PreflightCreateVariationFromVersionRequest {
     request.name = hybrid_variation_name(&request.workspace_path, &request.name);
-    request
-}
-
-fn namespace_restore_request(
-    mut request: contract::TargetedRestoreVersionRequest,
-) -> contract::TargetedRestoreVersionRequest {
-    if let draftline::RestoreVersionTarget::New { name, .. } = &mut request.target {
-        *name = hybrid_variation_name(&request.workspace_path, name);
-    }
     request
 }
 
@@ -609,162 +599,12 @@ pub async fn get_changes(
 }
 
 #[auditaur_command(skip_all)]
-pub async fn get_history(
-    request: contract::WorkspaceRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<Vec<HistoryEntry>> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::get_history_with_context(&context, request))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn get_full_history(
-    request: contract::WorkspaceRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<Vec<HistoryEntry>> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::get_full_history_with_context(&context, request))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn get_workspace_graph(
-    request: contract::WorkspaceGraphRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<draftline::WorkspaceGraph> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::get_workspace_graph_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn get_workspace_graph_refs(
-    request: contract::WorkspaceGraphRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<draftline::WorkspaceGraphRefs> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::get_workspace_graph_refs_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn get_workspace_graph_summary(
-    request: contract::WorkspaceGraphRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<draftline::WorkspaceGraphSummary> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::get_workspace_graph_summary_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn get_workspace_graph_overview(
-    request: contract::WorkspaceGraphOverviewRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<draftline::WorkspaceGraph> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::get_workspace_graph_overview_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn get_workspace_graph_around_version(
-    request: contract::WorkspaceGraphAroundVersionRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<draftline::WorkspaceGraph> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::get_workspace_graph_around_version_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
 pub async fn get_workspace_graph_for_variation(
     request: contract::WorkspaceGraphVariationRequest,
     app: AppHandle,
 ) -> contract::TauriCommandResult<draftline::WorkspaceGraph> {
     let context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::get_workspace_graph_for_variation_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn get_workspace_graph_agent_summary(
-    request: contract::WorkspaceGraphRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<draftline::WorkspaceGraphAgentSummary> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::get_workspace_graph_agent_summary_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn get_workspace_graph_neighborhood(
-    request: contract::WorkspaceGraphNeighborhoodRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<draftline::WorkspaceGraph> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::get_workspace_graph_neighborhood_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn search_workspace_graph(
-    request: contract::WorkspaceGraphSearchRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<draftline::WorkspaceGraphSearchResult> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::search_workspace_graph_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn get_workspace_graph_path(
-    request: contract::WorkspaceGraphPairRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<draftline::WorkspaceGraphPath> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::get_workspace_graph_path_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn get_workspace_graph_common_ancestor(
-    request: contract::WorkspaceGraphPairRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<draftline::WorkspaceGraphCommonAncestor> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::get_workspace_graph_common_ancestor_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn get_workspace_graph_node(
-    request: contract::VersionRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<draftline::WorkspaceGraphNodeDetail> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::get_workspace_graph_node_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn get_workspace_graph_compare_summary(
-    request: contract::WorkspaceGraphPairRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<draftline::WorkspaceGraphCompareSummary> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::get_workspace_graph_compare_summary_with_context(
         &context, request,
     ))
 }
@@ -790,26 +630,6 @@ pub async fn diff_version_to_workspace(
 }
 
 #[auditaur_command(skip_all)]
-pub async fn diff_workspace_file(
-    request: contract::CurrentFileRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<Option<draftline::CurrentFileDiff>> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::diff_workspace_file_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn preview_version(
-    request: contract::VersionRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<VersionPreview> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::preview_version_with_context(&context, request))
-}
-
-#[auditaur_command(skip_all)]
 pub async fn preview_version_file(
     request: contract::PreviewVersionFileRequest,
     app: AppHandle,
@@ -829,40 +649,6 @@ pub async fn preview_workspace_file(
     contract::into_tauri_result(contract::preview_workspace_file_with_context(
         &context, request,
     ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn restore_version_as_new_save(
-    request: contract::RestoreVersionRequest,
-    app: AppHandle,
-    lock: State<'_, ProjectLock>,
-) -> contract::TauriCommandResult<contract::RestoreVersionResult> {
-    let _guard = lock
-        .0
-        .lock()
-        .map_err(|error| context_error(error.to_string()))?;
-    let mut context = context_for_commit(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::restore_version_as_new_save_with_context(
-        &mut context,
-        request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn restore_version_as_new_save_to_variation(
-    request: contract::TargetedRestoreVersionRequest,
-    app: AppHandle,
-    lock: State<'_, ProjectLock>,
-) -> contract::TauriCommandResult<contract::TargetedRestoreVersionCommandResult> {
-    let request = namespace_restore_request(request);
-    let _guard = lock
-        .0
-        .lock()
-        .map_err(|error| context_error(error.to_string()))?;
-    let mut context = context_for_commit(&request.workspace_path, app)?;
-    contract::into_tauri_result(
-        contract::restore_version_as_new_save_to_variation_with_context(&mut context, request),
-    )
 }
 
 #[auditaur_command(skip_all)]

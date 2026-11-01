@@ -382,8 +382,6 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "delete_storyboard":
     case "rename_storyboard":
       return null;
-    case "get_history":
-      return mockDraftlineVersions();
     case "inspect_workspace":
       return {
         summary: {
@@ -412,58 +410,12 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       };
     case "filtered_files":
       return [];
-    case "get_full_history":
-      return [
-        {
-          version: mockDraftlineVersions()[0],
-          variation_tips: ["main"],
-          is_head: true,
-          parent_ids: ["abc123abc123abc123abc123abc123abc123abc1"],
-        },
-        {
-          version: mockDraftlineVersions()[1],
-          variation_tips: [],
-          is_head: false,
-          parent_ids: [],
-        },
-      ];
     case "list_variations":
       return [{
         variation: { id: "main", name: "main", metadata: { label: "main", slug: "main" }, is_current: true },
         head_version: mockDraftlineVersions()[0],
         reachable_version_count: 2,
       }];
-    case "get_workspace_graph_overview":
-      return {
-        current_variation: "main",
-        nodes: [
-          {
-            version: mockDraftlineVersions()[0],
-            parent_version_ids: ["abc123abc123abc123abc123abc123abc123abc1"],
-            layout: { lane: 0, row: 0 },
-            is_current: true,
-            is_head: true,
-            is_tip: true,
-          },
-          {
-            version: mockDraftlineVersions()[1],
-            parent_version_ids: [],
-            layout: { lane: 0, row: 1 },
-            is_current: false,
-            is_head: false,
-            is_tip: false,
-          },
-        ],
-        refs: [
-          {
-            id: "refs/draftline/variations/main",
-            name: "main",
-            kind: "local_variation",
-            target_version_id: "def456def456def456def456def456def456def4",
-            is_user_facing: true,
-          },
-        ],
-      };
     case "preflight_rename_variation": {
       const source = (args as { request?: { source_variation_id?: string } })?.request?.source_variation_id ?? "master";
       const target = (args as { request?: { target_variation_id?: string } })?.request?.target_variation_id ?? "main";
@@ -521,13 +473,6 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         to_version: (args as { request?: { to_version_id?: string; version_id?: string } })?.request?.to_version_id ?? (args as { request?: { version_id?: string } })?.request?.version_id ?? null,
         files: [{ path: "sketches/demo-introduction.sk", kind: "Modified", is_binary: false, is_large: false }],
         patch: null,
-      };
-    case "preview_version":
-      return {
-        id: (args as { request?: { version_id?: string } })?.request?.version_id ?? "def456def456def456def456def456def456def4",
-        files: [
-          { path: "sketches/demo-introduction.sk", content: JSON.stringify(MOCK_SKETCH), is_binary: false },
-        ],
       };
     case "preview_version_file":
     case "preview_workspace_file":
@@ -638,37 +583,6 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         name: (args as { request?: { variation?: string } })?.request?.variation ?? "main",
         metadata: { label: null, slug: null },
         is_current: true,
-      };
-    case "restore_version_as_new_save":
-      return {
-        id: "restore456restore456restore456restore456rest",
-        label: (args as { request?: { label?: string } })?.request?.label ?? "Restored draft",
-        author: { name: "You", email: "dev@example.com" },
-        saved_by: { name: "You", email: "dev@example.com" },
-        time_seconds: Math.floor(Date.now() / 1000),
-      };
-    case "restore_version_as_new_save_to_variation":
-      const restoreTarget = (args as { request?: { target?: { kind?: string; variation?: string; name?: string } } })?.request?.target;
-      const restoreTargetName = restoreTarget?.kind === "new"
-        ? restoreTarget.name
-        : restoreTarget?.kind === "existing"
-          ? restoreTarget.variation
-          : "main";
-      return {
-        version: {
-          id: "restore456restore456restore456restore456rest",
-          label: (args as { request?: { label?: string } })?.request?.label ?? "Restored draft",
-          author: { name: "You", email: "dev@example.com" },
-          saved_by: { name: "You", email: "dev@example.com" },
-          time_seconds: Math.floor(Date.now() / 1000),
-        },
-        target_variation: {
-          id: restoreTargetName ?? "main",
-          name: restoreTargetName ?? "main",
-          metadata: { label: restoreTargetName ?? "Main", slug: restoreTargetName ?? "main" },
-          is_current: true,
-        },
-        postconditions: { errors: [] },
       };
     case "get_sidebar_order":
       return { storyboards: [], sketches: [], notes: [] };

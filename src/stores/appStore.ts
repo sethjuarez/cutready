@@ -7,7 +7,6 @@ import {
   deleteDraftlineVariation,
   discardDraftlineChanges,
   discardDraftlineFile,
-  diffDraftlineVersions,
   fetchDraftlineRemote,
   getDraftlineBaseStatus,
   getDraftlineSyncStatus,
@@ -33,8 +32,6 @@ import {
   sendForReview as sendDraftlineForReview,
   popDraftlineShelf,
   preflightDraftlineRenameVariation,
-  restoreDraftlineVersionAsNewSave,
-  restoreDraftlineVersionAsNewSaveToVariation,
   renameDraftlineVariation,
   saveDraftlineVersion,
   moveDraftlineProjectFolder,
@@ -48,7 +45,6 @@ import {
   resolveDraftlineRecovery,
   retryDraftlineContentDownload,
   type DraftlineProjectHealth,
-  type DraftlineRestoreVersionTarget,
   type DraftlineMergeIncomingToken,
   type MoveProjectFolderResult,
 } from "../services/draftlineVersioning";
@@ -859,14 +855,6 @@ interface AppStoreState {
   navigateToSnapshot: (commitId: string) => Promise<void>;
   /** Open a read-only snapshot preview tab. */
   openSnapshotPreview: (commitId: string) => Promise<void>;
-  /** Restore a snapshot as a new Draftline save. */
-  restoreSnapshotAsNewSave: (commitId: string, label: string) => Promise<void>;
-  /** Restore a snapshot as a new Draftline save on a chosen variation. */
-  restoreSnapshotAsNewSaveToVariation: (
-    commitId: string,
-    label: string,
-    target: DraftlineRestoreVersionTarget,
-  ) => Promise<void>;
   /** Create a new timeline from a snapshot. */
   createTimeline: (fromCommitId: string, name: string) => Promise<void>;
   /** Create a named branch from a snapshot and switch to it for editing. */
@@ -923,8 +911,6 @@ interface AppStoreState {
   publishTimeline: () => Promise<void>;
 
   // ── Diff ──────────────────────────────────────────────────
-  /** Compare two snapshots and return file-level diffs. */
-  diffSnapshots: (fromCommit: string, toCommit: string) => Promise<DiffEntry[]>;
   /** Compare HEAD against the working directory. */
   diffWorkingTree: () => Promise<DiffEntry[]>;
   /** Check for large files before pushing. Returns list of (path, size). */
@@ -3030,46 +3016,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
-  restoreSnapshotAsNewSave: async (commitId, label) => {
-    try {
-      await restoreDraftlineVersionAsNewSave(commitId, label);
-      set({ diffResult: null, diffSelection: null, isDirty: false, changedFiles: [] });
-      await get().loadSketches();
-      await get().loadStoryboards();
-      await get().loadNotes();
-      await get().loadChatArtifacts();
-      await get().loadVersions();
-      await get().loadTimelines();
-      await get().loadGraphData();
-      await get().checkDirty();
-      useToastStore.getState().show("Restored snapshot as a new save.", 4000, "success");
-    } catch (err) {
-      console.error("Failed to restore snapshot:", err);
-      useToastStore.getState().show(`Restore failed: ${errorMessage(err)}`, 5000, "error");
-    }
-  },
-
-  restoreSnapshotAsNewSaveToVariation: async (commitId, label, target) => {
-    try {
-      const result = await restoreDraftlineVersionAsNewSaveToVariation(commitId, label, target);
-      set({ diffResult: null, diffSelection: null, isDirty: false, changedFiles: [] });
-      await get().loadSketches();
-      await get().loadStoryboards();
-      await get().loadNotes();
-      await get().loadChatArtifacts();
-      await get().loadVersions();
-      await get().loadTimelines();
-      await get().loadGraphData();
-      await get().checkDirty();
-      const targetLabel = result.target_variation.metadata.label ?? result.target_variation.name;
-      useToastStore.getState().show(`Restored snapshot on ${targetLabel}.`, 4000, "success");
-    } catch (err) {
-      console.error("Failed to restore snapshot:", err);
-      useToastStore.getState().show(`Restore failed: ${errorMessage(err)}`, 5000, "error");
-      throw err;
-    }
-  },
-
   createTimeline: async (fromCommitId, name) => {
     try {
       await createDraftlineVariation(fromCommitId, name, get().currentRemote?.name ?? null);
@@ -3726,21 +3672,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   },
 
   // ── Diff & bookmarks ──────────────────────────────────────
-
-  diffSnapshots: async (fromCommit, toCommit) => {
-    const generation = workspaceGeneration;
-    try {
-      const entries = await diffDraftlineVersions(fromCommit, toCommit);
-      if (generation !== workspaceGeneration) return entries;
-      set({ diffResult: entries, diffSelection: { from: fromCommit, to: toCommit } });
-      return entries;
-    } catch (err) {
-      console.error("Failed to diff snapshots:", err);
-      if (generation === workspaceGeneration) set({ diffResult: null, diffSelection: null });
-      useToastStore.getState().show(`Could not compare snapshots: ${errorMessage(err)}`, 5000, "error");
-      return [];
-    }
-  },
 
   diffWorkingTree: async () => {
     const generation = workspaceGeneration;

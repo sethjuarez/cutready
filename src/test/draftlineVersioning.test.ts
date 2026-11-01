@@ -11,7 +11,6 @@ vi.mock("../services/tauri", () => ({
 import {
   adoptDraftlineRemoteBranch,
   createDraftlineVariation,
-  diffDraftlineVersions,
   discardDraftlineChanges,
   getDraftlineSyncStatus,
   hasDraftlineChanges,
@@ -36,7 +35,6 @@ import {
   shelveDraftlineChanges,
   switchDraftlineVariation,
   inspectDraftlineProjectHealth,
-  needsDraftlineAttention,
   resolveDraftlineRecovery,
   retryDraftlineContentDownload,
   HEALTHY_PROJECT,
@@ -586,29 +584,6 @@ describe("draftlineVersioning", () => {
     });
   });
 
-  it("maps Draftline version diffs to diff entries", async () => {
-    mockInvoke.mockResolvedValueOnce({
-      from_version: "1111111111111111111111111111111111111111",
-      to_version: "2222222222222222222222222222222222222222",
-      files: [{ path: "intro.sk", kind: "Modified", is_binary: false, is_large: false }],
-      patch: "@@",
-    });
-
-    await expect(diffDraftlineVersions(
-      "1111111111111111111111111111111111111111",
-      "2222222222222222222222222222222222222222",
-    )).resolves.toEqual([
-      { path: "intro.sk", status: "modified", additions: 0, deletions: 0 },
-    ]);
-    expect(mockInvoke).toHaveBeenCalledWith("diff_versions", {
-      request: {
-        workspace_path: WORKSPACE,
-        from_version_id: "1111111111111111111111111111111111111111",
-        to_version_id: "2222222222222222222222222222222222222222",
-      },
-    });
-  });
-
   it("maps Draftline version-to-workspace diffs for previews", async () => {
     mockInvoke.mockResolvedValueOnce({
       from_version: "1111111111111111111111111111111111111111",
@@ -855,7 +830,6 @@ describe("draftlineVersioning", () => {
       routeInvoke({ inspect_workspace: healthDiagnostics(), filtered_files: [] });
       const health = await inspectDraftlineProjectHealth();
       expect(health).toEqual({ ...HEALTHY_PROJECT, missingContent: [] });
-      expect(needsDraftlineAttention({ ...health, missingContent: [] })).toBe(false);
     });
 
     it("reports pending recovery, a clearable stale lock, and missing content", async () => {
