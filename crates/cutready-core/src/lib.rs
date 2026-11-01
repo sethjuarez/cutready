@@ -1,0 +1,19 @@
+//! CutReady's host-neutral core.
+//!
+//! Every host (Tauri app, CLI, MCP server, iOS) reaches documents through this
+//! crate. Side effects go through the traits in [`ports`]; hosts supply the
+//! implementations (`cutready-desktop-io` on desktop, [`testing`] in tests).
+//! The crate must keep building for `aarch64-apple-ios`, so it takes no C,
+//! process, network, database or Tauri dependencies.
+
+#![deny(clippy::disallowed_methods, clippy::disallowed_types)]
+
+pub mod path;
+pub mod ports;
+pub mod testing;
+
+pub use cutready_contracts as contracts;
+pub use ports::{
+    Clock, Files, Lock, LockGuard, Log, LogLevel, NewOpLogEntry, OpLogEntry, OpLogState,
+    OpLogStore, PortError, PortErrorKind, Secrets,
+};

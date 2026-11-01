@@ -1714,6 +1714,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "cutready-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "cutready-contracts",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "cutready-desktop-io"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "cutready-core",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
 name = "darling"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
