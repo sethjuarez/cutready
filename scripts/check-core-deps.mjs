@@ -56,7 +56,7 @@ export function checkCoreDeps(packages) {
 function main() {
   const output = execFileSync(
     "cargo",
-    ["tree", "-p", CORE_PACKAGE, "-e", "normal,build", "--target", "all", "--prefix", "none", "-f", TREE_FORMAT, "--locked"],
+    ["tree", "-p", CORE_PACKAGE, "-e", "normal,build", "--target", "all", "--prefix", "none", "-f", TREE_FORMAT, "--locked", "--color", "never"],
     { encoding: "utf8" },
   );
   const packages = parseTree(output);
