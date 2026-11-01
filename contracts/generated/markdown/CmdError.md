@@ -30,6 +30,8 @@ classDiagram
         +uint32 row_index
         +string field
         +string row_id
+        +uint32 op_index
+        +string current_version
     }
     CmdError *-- CmdErrorDetails
 ```

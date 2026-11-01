@@ -1,12 +1,14 @@
-// Binds the SketchDocument and StoryboardDocument @vector operations
-// (contracts/edits.tsp, contracts/storyboard.tsp) to cutready-core's production
-// document code: `document` for decode/save and `sketch_edits` for edits.
+// Binds the SketchDocument, EditService and StoryboardDocument @vector
+// operations (contracts/edits.tsp, contracts/ops.tsp, contracts/storyboard.tsp)
+// to cutready-core's production document code: `document` for decode/save,
+// `sketch_edits` for positional edits and `edit_ops` for typed ops.
 // Included by the generated conformance suite via #[path].
 #![allow(dead_code, unused_variables, clippy::all)]
 
 // The library copy of the contract types, as cutready-core links them.
 use cutready_core::contracts::{CmdError as CoreCmdError, SaveContext as CoreSaveContext};
 use cutready_core::document;
+use cutready_core::edit_ops::{self, EditOpError};
 use cutready_core::models::sketch::Sketch;
 use cutready_core::sketch_edits::{self, RowTextUpdate, SketchEditError};
 use serde_json::{json, Map, Value};
@@ -41,6 +43,12 @@ impl VectorError {
 
 impl From<SketchEditError> for VectorError {
     fn from(err: SketchEditError) -> Self {
+        Self::cmd(CoreCmdError::from(&err))
+    }
+}
+
+impl From<EditOpError> for VectorError {
+    fn from(err: EditOpError) -> Self {
         Self::cmd(CoreCmdError::from(&err))
     }
 }
@@ -144,6 +152,45 @@ fn reorder_rows(input: &Value, _ctx: &Context) -> Result<Value, VectorError> {
         .ok_or_else(|| VectorError::harness("order must hold row indices"))?;
     sketch_edits::reorder_rows(&mut sketch, &order, now(input)?)?;
     save(&sketch)
+}
+
+fn apply_sketch_ops(input: &Value, _ctx: &Context) -> Result<Value, VectorError> {
+    let mut sketch = decode(input)?;
+    let ops = input
+        .get("ops")
+        .and_then(Value::as_array)
+        .ok_or_else(|| VectorError::harness("ops is required"))?;
+    edit_ops::apply_sketch_op_values(&mut sketch, ops, now(input)?)?;
+    save(&sketch)
+}
+
+fn document_version(input: &Value, _ctx: &Context) -> Result<Value, VectorError> {
+    let content = input.get("content").and_then(Value::as_str).unwrap_or_default();
+    Ok(Value::String(edit_ops::document_version(content.as_bytes())))
+}
+
+fn edit_sketch_content(input: &Value, _ctx: &Context) -> Result<Value, VectorError> {
+    let field = |name: &str| {
+        input
+            .get(name)
+            .and_then(Value::as_str)
+            .ok_or_else(|| VectorError::harness(format!("{name} is required")))
+    };
+    let ops = input
+        .get("ops")
+        .and_then(Value::as_array)
+        .ok_or_else(|| VectorError::harness("ops is required"))?;
+    let edit = edit_ops::edit_sketch_content(
+        field("content")?,
+        field("expected_version")?,
+        ops,
+        now(input)?,
+    )
+    .map_err(|err| match CoreCmdError::try_from(&err) {
+        Ok(cmd) => VectorError::cmd(cmd),
+        Err(message) => VectorError::harness(message),
+    })?;
+    Ok(json!({ "content": edit.content, "version": edit.version }))
 }
 
 // Decode and save canonically, without the legacy upgrade.
@@ -582,6 +629,9 @@ pub fn adapters() -> HashMap<&'static str, Adapter> {
             Adapter::sync(update_row_text),
         ),
         ("SketchDocument.reorderRows", Adapter::sync(reorder_rows)),
+        ("EditService.applySketchOps", Adapter::sync(apply_sketch_ops)),
+        ("EditService.documentVersion", Adapter::sync(document_version)),
+        ("EditService.editSketchContent", Adapter::sync(edit_sketch_content)),
         (
             "PlanningTiming.parseDurationSeconds",
             Adapter::sync(parse_duration_seconds),

@@ -24,6 +24,23 @@ export { Storyboard } from "./storyboard";
 export { CmdErrorDetails } from "./cmd-error-details";
 export { CmdError } from "./cmd-error";
 export { RowTextUpdate } from "./row-text-update";
+
+export {
+  EditOp,
+  SetTitleOp,
+  SetDescriptionOp,
+  SetMetadataOp,
+  SetRowTextOp,
+  SetScreenshotOp,
+  SetVisualOp,
+  InsertRowOp,
+  DeleteRowOp,
+  ReorderRowsOp,
+  UpdateRowOp,
+  ReplaceRowsOp,
+  SetLockOp,
+} from "./edit-op";
+export { ContentEdit } from "./content-edit";
 export { ChatParticipant } from "./chat-participant";
 export { ChatArtifactSource } from "./chat-artifact-source";
 export { ChatToolUse } from "./chat-tool-use";
@@ -32,6 +49,7 @@ export { ChatArtifact } from "./chat-artifact";
 export { ChatTranscript } from "./chat-transcript";
 export { ChatPromotion } from "./chat-promotion";
 export type { ChatArtifactDocument } from "./chat-artifact-document";
+export type { EditService } from "./edit-service";
 export type { PlanningTiming } from "./planning-timing";
 export type { SketchDocument } from "./sketch-document";
 export type { StoryboardDocument } from "./storyboard-document";

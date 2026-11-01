@@ -104,8 +104,12 @@ pub struct CmdErrorDetails {
     pub row_index: Option<u32>,
     /// The locked cell, for `locked_cell`.
     pub field: Option<PlanningCellField>,
-    /// The repeated row id, for `duplicate_row_id`.
+    /// The repeated row id for `duplicate_row_id`; the missing one for `row_not_found`.
     pub row_id: Option<String>,
+    /// Zero-based position of the rejected op in an `EditService` batch.
+    pub op_index: Option<u32>,
+    /// The document version on disk, for `stale_document`.
+    pub current_version: Option<String>,
     /// Undeclared fields captured on load and written back on save (unknown-field passthrough).
     pub additional_properties: serde_json::Map<String, serde_json::Value>,
 }
@@ -156,13 +160,15 @@ impl CmdErrorDetails {
             row_index: value.get("row_index").and_then(|v| v.as_u64().and_then(|n| u32::try_from(n).ok())),
             field: value.get("field").and_then(|v| v.as_str()).and_then(|s| PlanningCellField::from_str_opt(s)),
             row_id: value.get("row_id").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            op_index: value.get("op_index").and_then(|v| v.as_u64().and_then(|n| u32::try_from(n).ok())),
+            current_version: value.get("current_version").and_then(|v| v.as_str()).map(|s| s.to_string()),
             additional_properties: Self::capture_additional_properties(&value, ""),
         }
     }
 
     /// True when `key` is a declared wire key for the given discriminator value.
     fn additional_properties_known_key(kind: &str, key: &str) -> bool {
-        matches!(key, "row_index" | "field" | "row_id")
+        matches!(key, "row_index" | "field" | "row_id" | "op_index" | "current_version")
     }
 
     fn capture_additional_properties(value: &serde_json::Value, kind: &str) -> serde_json::Map<String, serde_json::Value> {
@@ -196,6 +202,12 @@ impl CmdErrorDetails {
         }
         if let Some(val) = self.row_id.as_ref() {
             result.insert("row_id".to_string(), serde_json::Value::String(val.clone()));
+        }
+        if let Some(val) = self.op_index.as_ref() {
+            result.insert("op_index".to_string(), serde_json::Value::Number(serde_json::Number::from(*val)));
+        }
+        if let Some(val) = self.current_version.as_ref() {
+            result.insert("current_version".to_string(), serde_json::Value::String(val.clone()));
         }
         for (key, value) in &self.additional_properties {
             if Self::additional_properties_known_key("", key) {

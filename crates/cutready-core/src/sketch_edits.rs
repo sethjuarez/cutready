@@ -33,6 +33,10 @@ pub enum SketchEditError {
     RowNotFound { row_index: usize },
     #[error("Row order must list every planning row exactly once.")]
     InvalidReorder,
+    #[error("No planning row has the id `{row_id}`.")]
+    RowIdNotFound { row_id: String },
+    #[error("{reason}")]
+    InvalidOp { reason: String },
 }
 
 impl SketchEditError {
@@ -43,8 +47,9 @@ impl SketchEditError {
             Self::LockedRowCount => CmdErrorCode::LockedRowCount,
             Self::LockedRow { .. } => CmdErrorCode::LockedRow,
             Self::LockedCell { .. } => CmdErrorCode::LockedCell,
-            Self::RowNotFound { .. } => CmdErrorCode::RowNotFound,
+            Self::RowNotFound { .. } | Self::RowIdNotFound { .. } => CmdErrorCode::RowNotFound,
             Self::InvalidReorder => CmdErrorCode::InvalidReorder,
+            Self::InvalidOp { .. } => CmdErrorCode::InvalidOp,
         }
     }
 }
@@ -64,6 +69,10 @@ impl From<&SketchEditError> for CmdError {
                 field: PlanningCellField::from_str_opt(field),
                 ..Default::default()
             }),
+            SketchEditError::RowIdNotFound { row_id } => Some(CmdErrorDetails {
+                row_id: Some(row_id.clone()),
+                ..Default::default()
+            }),
             _ => None,
         };
         CmdError {
@@ -74,7 +83,7 @@ impl From<&SketchEditError> for CmdError {
     }
 }
 
-fn contract_index(row_index: usize) -> u32 {
+pub(crate) fn contract_index(row_index: usize) -> u32 {
     u32::try_from(row_index).unwrap_or(u32::MAX)
 }
 
@@ -388,12 +397,12 @@ mod tests {
         use cutready_contracts::{LoadContext, SaveContext};
 
         let wire = serde_json::json!({
-            "code": "stale_document",
-            "message": "The sketch changed on disk.",
+            "code": "future_code",
+            "message": "A newer runtime rejected this.",
             "details": { "row_index": 2, "field": "narrative", "expected_hash": "abc" }
         });
         let cmd = CmdError::load_from_value(&wire, &LoadContext::default());
-        assert_eq!(cmd.code, CmdErrorCode::Other("stale_document".into()));
+        assert_eq!(cmd.code, CmdErrorCode::Other("future_code".into()));
         assert_eq!(cmd.details.as_ref().unwrap().row_index, Some(2));
         assert_eq!(cmd.to_value(&SaveContext::default()), wire);
     }

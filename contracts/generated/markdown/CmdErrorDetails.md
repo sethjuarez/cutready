@@ -23,6 +23,8 @@ classDiagram
         +uint32 row_index
         +string field
         +string row_id
+        +uint32 op_index
+        +string current_version
     }
 ```
 
@@ -32,4 +34,6 @@ classDiagram
 | ---- | ---- | ----------- |
 | row_index | uint32 | Zero-based row position, for row-scoped errors. |
 | field | string | The locked cell, for `locked_cell`. |
-| row_id | string | The repeated row id, for `duplicate_row_id`. |
+| row_id | string | The repeated row id for `duplicate_row_id`; the missing one for `row_not_found`. |
+| op_index | uint32 | Zero-based position of the rejected op in an `EditService` batch. |
+| current_version | string | The document version on disk, for `stale_document`. |

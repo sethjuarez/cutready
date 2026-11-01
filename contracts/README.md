@@ -8,6 +8,7 @@ Portable CutReady document contracts, written in TypeSpec and emitted by [Typra]
 | --- | --- |
 | `sketch.tsp` | `.sk` document models: `Sketch`, `PlanningRow`, locks, narration, motion |
 | `edits.tsp` | `SketchDocument` operations and `PlanningTiming` |
+| `ops.tsp` | `EditOp`, the typed sketch edits, and the `EditService` operations |
 | `errors.tsp` | `CmdError`, the `{code, message, details}` envelope every runtime reports |
 | `storyboard.tsp` | `.sb` document models plus canonical round-trip and legacy-upgrade operations |
 | `vectors/build.mjs` | Readable vector fixtures; writes `vectors.tsp` |
@@ -45,7 +46,7 @@ npx vitest run src/contracts
 
 A vector with no adapter fails unless it is waived. A waived vector that starts passing also fails, so remove waivers as adapters land.
 
-The TypeScript harness waives the document vectors: the frontend sends edits to the Rust backend over IPC and never saves `.sk` or `.sb` files itself. The Swift harness waives `StoryboardDocument` vectors while the companion remains view-only for storyboards.
+The TypeScript harness waives the document vectors: the frontend sends edits to the Rust backend over IPC and never saves `.sk` or `.sb` files itself. The Swift harness waives `StoryboardDocument` vectors while the companion remains view-only for storyboards, and `EditService` vectors while it keeps its own positional sketch edits.
 
 The `Contracts` workflow (`.github/workflows/contracts.yml`) runs `npm run check`, the Rust, Swift, and TypeScript conformance suites, and the sketch model regressions on changes to the contract or any binding.
 
@@ -81,6 +82,30 @@ Desktop is the reference. Every runtime must save `.sk` files this way. Fields t
 | Comparison | Exact: text that differs only in Unicode composition is a change |
 | Time edit | A changed `time` sets `duration_seconds` to `PlanningTiming.parseDurationSeconds(time)`, omitted when null; an unchanged `time` keeps it |
 | Success | `updated_at` is set to the edit time |
+
+## Edit operations
+
+`EditService.applySketchOps` applies a batch of typed `EditOp` values (`ops.tsp`) to a sketch. Ops address rows by stable `id`, not position. `cutready-core` (`edit_ops.rs`) is the reference.
+
+| Op `kind` | Effect |
+| --- | --- |
+| `set_title`, `set_description`, `set_metadata` | Replace that sketch field |
+| `set_row_text` | Set any of `time`, `narrative`, `demo_actions` on one row |
+| `set_screenshot`, `set_visual` | Set or clear (`null`) that row's asset path |
+| `insert_row` | Insert after `after_row_id` (`null` = first); a missing id gets `row-N` |
+| `delete_row`, `reorder_rows` | Remove a row; reorder by a full list of row ids |
+| `update_row`, `replace_rows` | Replace one row by id, or every row; lock state stays where it was |
+| `set_lock` | Lock or unlock the sketch, a row (`row_id`), or a cell (`row_id` + `field`) |
+
+| Rule | Detail |
+| --- | --- |
+| Atomic | Ops are parsed and applied in order; the first failure rejects the whole batch and reports `details.op_index` |
+| Locks | Content ops follow the edit policy above; `set_lock` is allowed on a locked sketch |
+| Unknown ids | `row_not_found` with `details.row_id`; `locked_document` wins over it |
+| Bad ops | An unknown `kind` or malformed op fails with `invalid_op` |
+| Empty batch | Returns the sketch unchanged, including `updated_at` |
+
+`EditService.documentVersion` returns `sha256:<hex>` of a file's bytes. `EditService.editSketchContent` is the host write path: given the file on disk, the version the ops were computed against and the ops, it fails with `stale_document` and `details.current_version` on a mismatch, otherwise returns the canonical bytes to write and their version. Hosts only read and write the bytes.
 
 ## Timing
 

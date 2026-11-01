@@ -10,6 +10,7 @@
 
 pub mod assets;
 pub mod document;
+pub mod edit_ops;
 pub mod import;
 pub mod models;
 pub mod notes;
