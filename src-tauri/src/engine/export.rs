@@ -3157,7 +3157,13 @@ mod tests {
         assert!(filter.contains("text='G|'"));
         assert!(filter.contains("text='Go|'"));
         assert!(filter.contains("fontcolor=0xffcc00"));
-        assert!(filter.contains("fontfile='/Windows/Fonts/consola.ttf'"));
+        match typing_spot_fontfile(Some("mono")) {
+            Some(font) => assert!(filter.contains(&format!(
+                "fontfile={}",
+                FfmpegValue::font_path(font).render()
+            ))),
+            None => assert!(!filter.contains("fontfile=")),
+        }
         assert!(filter.contains("between(t\\,0.500\\,0.600)"));
         assert!(filter.contains("between(t\\,0.600\\,2.000)"));
         assert!(filter.contains("x='w*0.206250'"));

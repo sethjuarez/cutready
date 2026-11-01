@@ -1717,14 +1717,17 @@ mod tests {
         let writer = std::thread::spawn(move || {
             started_tx.send(()).unwrap();
             let _guard = crate::engine::workspace_write_lock::lock().unwrap();
-            acquired_tx.send(()).unwrap();
+            // Never panic while holding the process-wide lock: that would
+            // poison it for every other test in this binary.
+            let _ = acquired_tx.send(());
         });
 
         started_rx.recv_timeout(Duration::from_secs(1)).unwrap();
         assert!(acquired_rx.recv_timeout(Duration::from_millis(50)).is_err());
 
         drop(change);
-        acquired_rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        // Other tests share the lock in parallel, so allow for contention.
+        acquired_rx.recv_timeout(Duration::from_secs(30)).unwrap();
         writer.join().unwrap();
     }
 

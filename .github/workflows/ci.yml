@@ -1,0 +1,100 @@
+name: CI
+
+# Pull request gate. Jobs call the same `npm run check:*` scripts used locally.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect changes
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            rust:
+              - "Cargo.toml"
+              - "Cargo.lock"
+              - "src-tauri/**"
+              - "crates/**"
+              - ".cargo/**"
+              - "rust-toolchain*"
+              - ".github/workflows/ci.yml"
+
+  frontend:
+    name: Frontend
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run check:frontend
+
+  rust:
+    name: Rust (Linux)
+    needs: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Linux packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libpipewire-0.3-dev libgbm-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ci-linux
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # Clippy is warn-only for now; only errors fail the job.
+      - run: npm run check:rust
+
+  rust-windows:
+    name: Rust (Windows)
+    needs: changes
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.rust == 'true' }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ci-windows
+
+      - run: cargo test --workspace --locked
