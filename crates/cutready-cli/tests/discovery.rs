@@ -129,11 +129,66 @@ fn a_corrupt_registration_is_unreadable_and_can_be_replaced() {
 }
 
 #[test]
-fn versions_order_numerically_with_prereleases_first() {
-    assert_eq!(compare_versions("1.10.0", "1.9.0"), Ordering::Greater);
-    assert_eq!(compare_versions("1.2.0-rc.1", "1.2.0"), Ordering::Less);
-    assert_eq!(compare_versions("1.2.0", "1.2.0"), Ordering::Equal);
-    assert_eq!(compare_versions("2", "1.99.99"), Ordering::Greater);
+fn versions_order_by_semver() {
+    assert_eq!(compare_versions("1.10.0", "1.9.0"), Some(Ordering::Greater));
+    assert_eq!(
+        compare_versions("1.2.0-rc.1", "1.2.0"),
+        Some(Ordering::Less)
+    );
+    assert_eq!(
+        compare_versions("1.2.0-rc.10", "1.2.0-rc.2"),
+        Some(Ordering::Greater)
+    );
+    assert_eq!(
+        compare_versions("1.2.0-alpha", "1.2.0-1"),
+        Some(Ordering::Greater)
+    );
+    assert_eq!(
+        compare_versions("1.2.0+build.5", "1.2.0"),
+        Some(Ordering::Greater)
+    );
+    assert_eq!(compare_versions("1.2", "1.2.0"), None);
+}
+
+#[test]
+fn a_registration_with_an_invalid_version_counts_as_older() {
+    let dir = tempfile::tempdir().unwrap();
+    let odd = install(binary(dir.path(), "odd"), "latest");
+    let cli = install(binary(dir.path(), "a"), "1.0.0");
+    register(dir.path(), &odd, false).unwrap();
+    assert_eq!(
+        register(dir.path(), &cli, false).unwrap(),
+        Registered::Replaced(odd)
+    );
+    assert_eq!(discover(dir.path(), CONTRACT_VERSION), Ok(cli));
+}
+
+#[test]
+fn concurrent_registrations_leave_the_newest() {
+    let dir = tempfile::tempdir().unwrap();
+    let versions = [
+        "1.0.0", "3.0.0", "2.0.0", "1.5.0", "2.9.9", "0.1.0", "2.5.0", "1.1.0",
+    ];
+    let installs: Vec<Registration> = versions
+        .iter()
+        .map(|v| install(binary(dir.path(), v), v))
+        .collect();
+    std::thread::scope(|scope| {
+        for cli in &installs {
+            let path = dir.path();
+            scope.spawn(move || register(path, cli, false).unwrap());
+        }
+    });
+    assert_eq!(
+        discover(dir.path(), CONTRACT_VERSION).unwrap().version,
+        "3.0.0"
+    );
+    let leftovers: Vec<_> = std::fs::read_dir(dir.path())
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| name.ends_with(".tmp"))
+        .collect();
+    assert!(leftovers.is_empty(), "{leftovers:?}");
 }
 
 fn cli(config: &Path, args: &[&str]) -> (bool, Value) {

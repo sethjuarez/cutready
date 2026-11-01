@@ -7,7 +7,13 @@
 //! mismatched pair fails closed instead of writing documents either side
 //! misreads. Clients that declare none (generic MCP hosts) should check the
 //! server's version in the result.
+//!
+//! A connection only sees and touches the runs it began: `apply_ops`, `keep`
+//! and `undo` refuse other runs, and `review` lists only its own. Reviewing
+//! the app's or another client's runs is the user's job, in the app or with
+//! `cutready-cli review/keep/undo`.
 
+use std::collections::HashSet;
 use std::io::{BufRead, Write};
 use std::path::Path;
 
@@ -38,6 +44,8 @@ pub struct Server<'c> {
     clock: &'c dyn Clock,
     initialized: bool,
     closed: bool,
+    /// Runs this connection began.
+    runs: HashSet<String>,
 }
 
 impl<'c> Server<'c> {
@@ -50,6 +58,7 @@ impl<'c> Server<'c> {
             clock,
             initialized: false,
             closed: false,
+            runs: HashSet::new(),
         })
     }
 
@@ -144,7 +153,7 @@ impl<'c> Server<'c> {
         }))
     }
 
-    fn call(&self, params: &Value) -> Outcome {
+    fn call(&mut self, params: &Value) -> Outcome {
         let name = params
             .get("name")
             .and_then(Value::as_str)
@@ -164,11 +173,12 @@ impl<'c> Server<'c> {
                     json!({ "path": doc.path, "content": doc.content, "version": doc.version })
                 })
             }
-            "begin_run" => project
-                .begin_run(ACTOR, self.clock)
-                .map(|run_id| json!({ "run_id": run_id })),
+            "begin_run" => project.begin_run(ACTOR, self.clock).map(|run_id| {
+                self.runs.insert(run_id.clone());
+                json!({ "run_id": run_id })
+            }),
             "apply_ops" => {
-                let run_id = string_arg(&args, "run_id")?;
+                let run_id = self.own_run(&args)?;
                 let path = string_arg(&args, "path")?;
                 let expected = match args.get("expected_version") {
                     Some(Value::String(version)) => Some(version.as_str()),
@@ -187,9 +197,24 @@ impl<'c> Server<'c> {
                     .apply(self.clock, ACTOR, run_id, path, expected, ops)
                     .map(|applied| applied_json(path, &applied))
             }
-            "review" => project.reviews(self.clock),
+            "review" => project.reviews(self.clock).map(|reviews| {
+                let own = |review: &&Value| {
+                    review["run_id"]
+                        .as_str()
+                        .is_some_and(|id| self.runs.contains(id))
+                };
+                Value::Array(
+                    reviews
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter(own)
+                        .cloned()
+                        .collect(),
+                )
+            }),
             "keep" | "undo" => {
-                let run_id = string_arg(&args, "run_id")?;
+                let run_id = self.own_run(&args)?;
                 let path = string_arg(&args, "path")?;
                 let through_seq = args
                     .get("through_seq")
@@ -208,6 +233,19 @@ impl<'c> Server<'c> {
             Ok(value) => tool_result(value, false),
             Err(err) => tool_error(&err),
         })
+    }
+}
+
+impl Server<'_> {
+    /// The `run_id` argument, if this connection began that run.
+    fn own_run<'a>(&self, args: &'a Value) -> Result<&'a str, (i64, String, Option<Value>)> {
+        let run_id = string_arg(args, "run_id")?;
+        if !self.runs.contains(run_id) {
+            return Err(invalid(&format!(
+                "Run {run_id} wasn't begun on this connection; call begin_run"
+            )));
+        }
+        Ok(run_id)
     }
 }
 

@@ -91,26 +91,41 @@ impl Registered {
 }
 
 /// Records `install` in `dir` unless a newer install whose binary exists is
-/// registered (`force` records it anyway).
+/// registered (`force` records it anyway). A registration whose version isn't
+/// SemVer counts as older. Concurrent registrations serialize on a lock file,
+/// so the newest install wins whatever order installers finish in.
 pub fn register(dir: &Path, install: &Registration, force: bool) -> std::io::Result<Registered> {
+    std::fs::create_dir_all(dir)?;
+    let lock = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(dir.join(format!("{REGISTRY_FILE}.lock")))?;
+    lock.lock()?;
     let file = dir.join(REGISTRY_FILE);
-    let existing = read(&file).ok();
-    let outcome = match existing {
+    let outcome = match read(&file).ok() {
         None => Registered::New,
         Some(existing) => {
-            let newer = compare_versions(&existing.version, &install.version) == Ordering::Greater;
+            let newer =
+                compare_versions(&existing.version, &install.version) == Some(Ordering::Greater);
             if newer && existing.path.is_file() && !force {
                 return Ok(Registered::KeptNewer(existing));
             }
             Registered::Replaced(existing)
         }
     };
-    std::fs::create_dir_all(dir)?;
-    let tmp = dir.join(format!("{REGISTRY_FILE}.tmp"));
+    let tmp = dir.join(format!("{REGISTRY_FILE}.{}.tmp", std::process::id()));
     let mut bytes = serde_json::to_vec_pretty(&install.to_json()).map_err(std::io::Error::other)?;
     bytes.push(b'\n');
-    std::fs::write(&tmp, bytes)?;
-    std::fs::rename(&tmp, &file)?;
+    {
+        let mut out = std::fs::File::create(&tmp)?;
+        std::io::Write::write_all(&mut out, &bytes)?;
+        out.sync_all()?;
+    }
+    if let Err(err) = std::fs::rename(&tmp, &file) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(err);
+    }
     Ok(outcome)
 }
 
@@ -186,26 +201,10 @@ fn read(file: &Path) -> Result<Registration, DiscoveryError> {
     })
 }
 
-/// Orders `major.minor.patch[-pre]` versions; a pre-release sorts before its
-/// release. Unparsable parts count as 0.
-pub fn compare_versions(a: &str, b: &str) -> Ordering {
-    fn parse(version: &str) -> ([u64; 3], Option<&str>) {
-        let (core, pre) = match version.split_once('-') {
-            Some((core, pre)) => (core, Some(pre)),
-            None => (version, None),
-        };
-        let mut parts = [0; 3];
-        for (slot, part) in parts.iter_mut().zip(core.split('.')) {
-            *slot = part.parse().unwrap_or(0);
-        }
-        (parts, pre)
-    }
-    let (a_core, a_pre) = parse(a);
-    let (b_core, b_pre) = parse(b);
-    a_core.cmp(&b_core).then_with(|| match (a_pre, b_pre) {
-        (None, None) => Ordering::Equal,
-        (None, Some(_)) => Ordering::Greater,
-        (Some(_), None) => Ordering::Less,
-        (Some(a), Some(b)) => a.cmp(b),
-    })
+/// Orders two SemVer versions (prerelease identifiers compare per SemVer);
+/// `None` when either isn't valid SemVer.
+pub fn compare_versions(a: &str, b: &str) -> Option<Ordering> {
+    let a = semver::Version::parse(a).ok()?;
+    let b = semver::Version::parse(b).ok()?;
+    Some(a.cmp(&b))
 }

@@ -1712,6 +1712,7 @@ dependencies = [
  "cutready-desktop-io",
  "dirs 6.0.0",
  "git2",
+ "semver",
  "serde_json",
  "tempfile",
 ]

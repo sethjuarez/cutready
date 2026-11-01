@@ -341,6 +341,21 @@ jobs:
             }
           }
 
+          const version = process.env.VERSION;
+          const cliAssets = {
+            'linux-x64': 'tar.gz',
+            'windows-x64': 'zip',
+            'windows-arm64': 'zip',
+            'macos-silicon': 'tar.gz',
+            'macos-intel': 'tar.gz',
+          };
+          for (const [key, ext] of Object.entries(cliAssets)) {
+            const asset = `cutready-cli_${version}_${key}.${ext}`;
+            if (!fs.existsSync(path.join(outputDir, asset))) {
+              throw new Error(`Missing standalone CLI release asset: ${asset}`);
+            }
+          }
+
           const dmgChecksums = fs.readdirSync(outputDir)
             .filter((name) => name.startsWith('CutReady_') && name.endsWith('.dmg'))
             .sort()

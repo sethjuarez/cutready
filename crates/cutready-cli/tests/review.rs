@@ -177,6 +177,46 @@ fn keep_and_undo_need_a_through_seq() {
     }
 }
 
+#[test]
+fn a_connection_only_sees_and_resolves_its_own_runs() {
+    let dir = project();
+    let clock = clock(NOW);
+    let mut first = Server::new(dir.path(), &clock).unwrap();
+    let mut second = Server::new(dir.path(), &clock).unwrap();
+    ready(&mut first);
+    ready(&mut second);
+    let run = begin(&mut first, 2);
+    write_note(&mut first, 3, &run, Value::Null, "# First\n");
+    let through = review(&mut first, 4)[0]["documents"][0]["through_seq"].clone();
+
+    assert!(review(&mut second, 2).is_empty());
+    for (id, name) in [(3, "keep"), (4, "undo")] {
+        let refused = second
+            .handle(&call(
+                id,
+                name,
+                json!({ "run_id": run, "path": "notes/plan.md", "through_seq": through }),
+            ))
+            .unwrap();
+        assert_eq!(refused["error"]["code"], json!(-32602), "{refused}");
+    }
+    let hijack = second
+        .handle(&call(
+            5,
+            "apply_ops",
+            json!({
+                "run_id": run,
+                "path": "notes/other.md",
+                "expected_version": null,
+                "ops": [{ "kind": "replace_note", "content": "x" }],
+            }),
+        ))
+        .unwrap();
+    assert_eq!(hijack["error"]["code"], json!(-32602), "{hijack}");
+    assert!(!dir.path().join("notes/other.md").exists());
+    assert_eq!(review(&mut first, 5).len(), 1);
+}
+
 fn cli(args: &[&str], stdin: &str) -> Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_cutready-cli"))
         .args(args)

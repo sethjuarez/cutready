@@ -17,6 +17,7 @@ path = "src/main.rs"
 cutready-core = { path = "../cutready-core" }
 cutready-desktop-io = { path = "../cutready-desktop-io" }
 dirs = "6"
+semver = "1"
 serde_json = "1"
 
 [dev-dependencies]
