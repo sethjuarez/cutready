@@ -15,6 +15,8 @@ public struct CmdErrorCode: RawRepresentable, Equatable, Hashable, Codable {
   public static let duplicateRowId = CmdErrorCode(rawValue: "duplicate_row_id")
   public static let invalidOp = CmdErrorCode(rawValue: "invalid_op")
   public static let staleDocument = CmdErrorCode(rawValue: "stale_document")
+  public static let undoConflict = CmdErrorCode(rawValue: "undo_conflict")
+  public static let staleReview = CmdErrorCode(rawValue: "stale_review")
   public static func parse(_ value: String) throws -> CmdErrorCode {
     switch value {
     case "locked_document": return .lockedDocument
@@ -26,6 +28,8 @@ public struct CmdErrorCode: RawRepresentable, Equatable, Hashable, Codable {
     case "duplicate_row_id": return .duplicateRowId
     case "invalid_op": return .invalidOp
     case "stale_document": return .staleDocument
+    case "undo_conflict": return .undoConflict
+    case "stale_review": return .staleReview
     default: return CmdErrorCode(rawValue: value)
     }
   }

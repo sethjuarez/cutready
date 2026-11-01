@@ -47,6 +47,9 @@
         "DocumentEdit",
         "DocumentEditRequest",
         "DocumentMetadata",
+        "DocumentReview",
+        "DocumentUndo",
+        "DocumentUndoRequest",
         "EditOp",
         "EditService",
         "InsertRowOp",
@@ -67,6 +70,7 @@
         "ReplaceSketchOp",
         "ReplaceStoryboardOp",
         "RowTextUpdate",
+        "RunReview",
         "SetDescriptionOp",
         "SetLockOp",
         "SetMetadataOp",
@@ -84,6 +88,8 @@
         "StoryboardSketchRef",
         "TouchOp",
         "TypingSpot",
+        "UndoConflict",
+        "UndoWrite",
         "UpdateRowOp",
         "WriteNoteOp"
       ],
@@ -184,6 +190,27 @@
           "kind": "value",
           "group": "",
           "source": "DocumentMetadata",
+          "protocol": false
+        },
+        {
+          "name": "DocumentReview",
+          "kind": "value",
+          "group": "",
+          "source": "DocumentReview",
+          "protocol": false
+        },
+        {
+          "name": "DocumentUndo",
+          "kind": "value",
+          "group": "",
+          "source": "DocumentUndo",
+          "protocol": false
+        },
+        {
+          "name": "DocumentUndoRequest",
+          "kind": "value",
+          "group": "",
+          "source": "DocumentUndoRequest",
           "protocol": false
         },
         {
@@ -327,6 +354,13 @@
           "protocol": false
         },
         {
+          "name": "RunReview",
+          "kind": "value",
+          "group": "",
+          "source": "RunReview",
+          "protocol": false
+        },
+        {
           "name": "SetDescriptionOp",
           "kind": "value",
           "group": "",
@@ -446,6 +480,20 @@
           "protocol": false
         },
         {
+          "name": "UndoConflict",
+          "kind": "value",
+          "group": "",
+          "source": "UndoConflict",
+          "protocol": false
+        },
+        {
+          "name": "UndoWrite",
+          "kind": "value",
+          "group": "",
+          "source": "UndoWrite",
+          "protocol": false
+        },
+        {
           "name": "UpdateRowOp",
           "kind": "value",
           "group": "",
@@ -546,6 +594,18 @@
               "returns": "DocumentEdit",
               "params": {
                 "request": "DocumentEditRequest"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "undoDocument",
+              "returns": "DocumentUndo",
+              "params": {
+                "request": "DocumentUndoRequest"
               },
               "optional": false,
               "sync": true,
@@ -670,6 +730,9 @@
         "DocumentEdit",
         "DocumentEditRequest",
         "DocumentMetadata",
+        "DocumentReview",
+        "DocumentUndo",
+        "DocumentUndoRequest",
         "EditOp",
         "EditService",
         "MotionPlan",
@@ -682,12 +745,15 @@
         "PlanningRow",
         "PlanningTiming",
         "RowTextUpdate",
+        "RunReview",
         "Sketch",
         "SketchDocument",
         "Storyboard",
         "StoryboardDocument",
         "StoryboardItem",
-        "TypingSpot"
+        "TypingSpot",
+        "UndoConflict",
+        "UndoWrite"
       ]
     },
     {
@@ -708,6 +774,9 @@
         "DocumentEdit",
         "DocumentEditRequest",
         "DocumentMetadata",
+        "DocumentReview",
+        "DocumentUndo",
+        "DocumentUndoRequest",
         "EditOp",
         "EditService",
         "InsertRowOp",
@@ -728,6 +797,7 @@
         "ReplaceSketchOp",
         "ReplaceStoryboardOp",
         "RowTextUpdate",
+        "RunReview",
         "SetDescriptionOp",
         "SetLockOp",
         "SetMetadataOp",
@@ -745,6 +815,8 @@
         "StoryboardSketchRef",
         "TouchOp",
         "TypingSpot",
+        "UndoConflict",
+        "UndoWrite",
         "UpdateRowOp",
         "WriteNoteOp"
       ],
@@ -845,6 +917,27 @@
           "kind": "value",
           "group": "",
           "source": "document_metadata",
+          "protocol": false
+        },
+        {
+          "name": "DocumentReview",
+          "kind": "value",
+          "group": "",
+          "source": "document_review",
+          "protocol": false
+        },
+        {
+          "name": "DocumentUndo",
+          "kind": "value",
+          "group": "",
+          "source": "document_undo",
+          "protocol": false
+        },
+        {
+          "name": "DocumentUndoRequest",
+          "kind": "value",
+          "group": "",
+          "source": "document_undo_request",
           "protocol": false
         },
         {
@@ -988,6 +1081,13 @@
           "protocol": false
         },
         {
+          "name": "RunReview",
+          "kind": "value",
+          "group": "",
+          "source": "run_review",
+          "protocol": false
+        },
+        {
           "name": "SetDescriptionOp",
           "kind": "value",
           "group": "",
@@ -1107,6 +1207,20 @@
           "protocol": false
         },
         {
+          "name": "UndoConflict",
+          "kind": "value",
+          "group": "",
+          "source": "undo_conflict",
+          "protocol": false
+        },
+        {
+          "name": "UndoWrite",
+          "kind": "value",
+          "group": "",
+          "source": "undo_write",
+          "protocol": false
+        },
+        {
           "name": "UpdateRowOp",
           "kind": "value",
           "group": "",
@@ -1207,6 +1321,18 @@
               "returns": "DocumentEdit",
               "params": {
                 "request": "DocumentEditRequest"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "undoDocument",
+              "returns": "DocumentUndo",
+              "params": {
+                "request": "DocumentUndoRequest"
               },
               "optional": false,
               "sync": true,
@@ -1332,6 +1458,9 @@
         "document_edit",
         "document_edit_request",
         "document_metadata",
+        "document_review",
+        "document_undo",
+        "document_undo_request",
         "edit_op",
         "edit_service",
         "motion_plan",
@@ -1344,12 +1473,15 @@
         "planning_row",
         "planning_timing",
         "row_text_update",
+        "run_review",
         "sketch",
         "sketch_document",
         "storyboard",
         "storyboard_document",
         "storyboard_item",
-        "typing_spot"
+        "typing_spot",
+        "undo_conflict",
+        "undo_write"
       ]
     },
     {
@@ -1371,6 +1503,9 @@
         "DocumentEdit",
         "DocumentEditRequest",
         "DocumentMetadata",
+        "DocumentReview",
+        "DocumentUndo",
+        "DocumentUndoRequest",
         "EditOp",
         "EditService",
         "InsertRowOp",
@@ -1391,6 +1526,7 @@
         "ReplaceSketchOp",
         "ReplaceStoryboardOp",
         "RowTextUpdate",
+        "RunReview",
         "SetDescriptionOp",
         "SetLockOp",
         "SetMetadataOp",
@@ -1408,6 +1544,8 @@
         "StoryboardSketchRef",
         "TouchOp",
         "TypingSpot",
+        "UndoConflict",
+        "UndoWrite",
         "UpdateRowOp",
         "WriteNoteOp"
       ],
@@ -1508,6 +1646,27 @@
           "kind": "value",
           "group": "",
           "source": "Sources/CutReadyContracts/document_metadata.swift",
+          "protocol": false
+        },
+        {
+          "name": "DocumentReview",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/document_review.swift",
+          "protocol": false
+        },
+        {
+          "name": "DocumentUndo",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/document_undo.swift",
+          "protocol": false
+        },
+        {
+          "name": "DocumentUndoRequest",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/document_undo_request.swift",
           "protocol": false
         },
         {
@@ -1651,6 +1810,13 @@
           "protocol": false
         },
         {
+          "name": "RunReview",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/run_review.swift",
+          "protocol": false
+        },
+        {
           "name": "SetDescriptionOp",
           "kind": "value",
           "group": "",
@@ -1770,6 +1936,20 @@
           "protocol": false
         },
         {
+          "name": "UndoConflict",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/undo_conflict.swift",
+          "protocol": false
+        },
+        {
+          "name": "UndoWrite",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/undo_write.swift",
+          "protocol": false
+        },
+        {
           "name": "UpdateRowOp",
           "kind": "value",
           "group": "",
@@ -1870,6 +2050,18 @@
               "returns": "DocumentEdit",
               "params": {
                 "request": "DocumentEditRequest"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "undoDocument",
+              "returns": "DocumentUndo",
+              "params": {
+                "request": "DocumentUndoRequest"
               },
               "optional": false,
               "sync": true,
@@ -1994,6 +2186,9 @@
         "Sources/CutReadyContracts/document_edit.swift",
         "Sources/CutReadyContracts/document_edit_request.swift",
         "Sources/CutReadyContracts/document_metadata.swift",
+        "Sources/CutReadyContracts/document_review.swift",
+        "Sources/CutReadyContracts/document_undo.swift",
+        "Sources/CutReadyContracts/document_undo_request.swift",
         "Sources/CutReadyContracts/edit_op.swift",
         "Sources/CutReadyContracts/edit_service.swift",
         "Sources/CutReadyContracts/motion_plan.swift",
@@ -2006,12 +2201,15 @@
         "Sources/CutReadyContracts/planning_row.swift",
         "Sources/CutReadyContracts/planning_timing.swift",
         "Sources/CutReadyContracts/row_text_update.swift",
+        "Sources/CutReadyContracts/run_review.swift",
         "Sources/CutReadyContracts/sketch.swift",
         "Sources/CutReadyContracts/sketch_document.swift",
         "Sources/CutReadyContracts/storyboard.swift",
         "Sources/CutReadyContracts/storyboard_document.swift",
         "Sources/CutReadyContracts/storyboard_item.swift",
-        "Sources/CutReadyContracts/typing_spot.swift"
+        "Sources/CutReadyContracts/typing_spot.swift",
+        "Sources/CutReadyContracts/undo_conflict.swift",
+        "Sources/CutReadyContracts/undo_write.swift"
       ]
     },
     {
@@ -2033,6 +2231,9 @@
         "DocumentEdit",
         "DocumentEditRequest",
         "DocumentMetadata",
+        "DocumentReview",
+        "DocumentUndo",
+        "DocumentUndoRequest",
         "EditOp",
         "EditService",
         "InsertRowOp",
@@ -2053,6 +2254,7 @@
         "ReplaceSketchOp",
         "ReplaceStoryboardOp",
         "RowTextUpdate",
+        "RunReview",
         "SetDescriptionOp",
         "SetLockOp",
         "SetMetadataOp",
@@ -2070,6 +2272,8 @@
         "StoryboardSketchRef",
         "TouchOp",
         "TypingSpot",
+        "UndoConflict",
+        "UndoWrite",
         "UpdateRowOp",
         "WriteNoteOp"
       ],
@@ -2170,6 +2374,27 @@
           "kind": "value",
           "group": "",
           "source": "./document-metadata",
+          "protocol": false
+        },
+        {
+          "name": "DocumentReview",
+          "kind": "value",
+          "group": "",
+          "source": "./document-review",
+          "protocol": false
+        },
+        {
+          "name": "DocumentUndo",
+          "kind": "value",
+          "group": "",
+          "source": "./document-undo",
+          "protocol": false
+        },
+        {
+          "name": "DocumentUndoRequest",
+          "kind": "value",
+          "group": "",
+          "source": "./document-undo-request",
           "protocol": false
         },
         {
@@ -2313,6 +2538,13 @@
           "protocol": false
         },
         {
+          "name": "RunReview",
+          "kind": "value",
+          "group": "",
+          "source": "./run-review",
+          "protocol": false
+        },
+        {
           "name": "SetDescriptionOp",
           "kind": "value",
           "group": "",
@@ -2432,6 +2664,20 @@
           "protocol": false
         },
         {
+          "name": "UndoConflict",
+          "kind": "value",
+          "group": "",
+          "source": "./undo-conflict",
+          "protocol": false
+        },
+        {
+          "name": "UndoWrite",
+          "kind": "value",
+          "group": "",
+          "source": "./undo-write",
+          "protocol": false
+        },
+        {
           "name": "UpdateRowOp",
           "kind": "value",
           "group": "",
@@ -2532,6 +2778,18 @@
               "returns": "DocumentEdit",
               "params": {
                 "request": "DocumentEditRequest"
+              },
+              "optional": false,
+              "sync": true,
+              "runtimeCancellable": false,
+              "atomic": false,
+              "nonFatal": false
+            },
+            {
+              "name": "undoDocument",
+              "returns": "DocumentUndo",
+              "params": {
+                "request": "DocumentUndoRequest"
               },
               "optional": false,
               "sync": true,
@@ -2656,6 +2914,9 @@
         "./document-edit",
         "./document-edit-request",
         "./document-metadata",
+        "./document-review",
+        "./document-undo",
+        "./document-undo-request",
         "./edit-op",
         "./edit-service",
         "./motion-plan",
@@ -2668,12 +2929,15 @@
         "./planning-row",
         "./planning-timing",
         "./row-text-update",
+        "./run-review",
         "./sketch",
         "./sketch-document",
         "./storyboard",
         "./storyboard-document",
         "./storyboard-item",
-        "./typing-spot"
+        "./typing-spot",
+        "./undo-conflict",
+        "./undo-write"
       ]
     }
   ]

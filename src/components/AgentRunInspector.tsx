@@ -17,6 +17,7 @@ import { invoke } from "../services/tauri";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import { useConfirmDialog } from "./ConfirmDialog";
+import { PendingReviewPanel } from "./PendingReviewPanel";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -295,6 +296,7 @@ export function AgentRunInspector() {
       </div>
 
       <div className="flex-1 overflow-y-auto py-1">
+        <PendingReviewPanel />
         {error ? (
           <StateMessage label="Could not load agent runs" detail={error} />
         ) : loadingRuns ? (

@@ -19,6 +19,7 @@ import type {
   ChatPromotion,
   ChatTranscript,
   DocumentEditRequest,
+  DocumentUndoRequest,
   EditOp,
   EditService,
   PlanningTiming,
@@ -223,6 +224,21 @@ export async function runEditServiceConformance(
       "a cell lock without a row is rejected: expected an error",
     );
   }
+  // vector: a created note that changed since conflicts
+  {
+    const requestJson = '{"kind":"note","content":"# Theirs\\n","writes":[{"before":null,"after":"# Run\\n"}],"note_locked":false,"now":"2026-07-01T09:30:00Z"}';
+    const request = JSON.parse(requestJson) as DocumentUndoRequest;
+    let caught: unknown;
+    try {
+      await seam.undoDocument(request);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "a created note that changed since conflicts: expected an error",
+    );
+  }
   // vector: a current version still enforces the edit policy
   {
     const requestJson = '{"kind":"sketch","content":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":true,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}","expected_version":"sha256:0954839672a12a14252836cdb04beab7052711fcb6985fcc03d33d1d8354106f","ops":[{"kind":"set_title","title":"No"}],"now":"2026-07-01T09:30:00Z","note_locked":false}';
@@ -238,6 +254,47 @@ export async function runEditServiceConformance(
       "a current version still enforces the edit policy: expected an error",
     );
   }
+  // vector: a document gone since the run conflicts
+  {
+    const requestJson = '{"kind":"sketch","content":null,"writes":[{"before":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}","after":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"Run\'s words.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}"}],"note_locked":false,"now":"2026-07-01T09:30:00Z"}';
+    const request = JSON.parse(requestJson) as DocumentUndoRequest;
+    let caught: unknown;
+    try {
+      await seam.undoDocument(request);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "a document gone since the run conflicts: expected an error",
+    );
+  }
+  // vector: a document the run created is deleted
+  {
+    const requestJson = '{"kind":"note","content":"# Plan\\n\\nShip it.\\n","writes":[{"before":null,"after":"# Plan\\n\\nShip it.\\n"}],"note_locked":false,"now":"2026-07-01T09:30:00Z"}';
+    const request = JSON.parse(requestJson) as DocumentUndoRequest;
+    const actual = await seam.undoDocument(request);
+    const expected = JSON.parse('{"content":null,"version":null}');
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "a document the run created is deleted misrouted",
+    );
+  }
+  // vector: a document the run deleted is restored
+  {
+    const requestJson = '{"kind":"note","content":null,"writes":[{"before":"# Plan\\n\\nShip it.\\n","after":null}],"note_locked":false,"now":"2026-07-01T09:30:00Z"}';
+    const request = JSON.parse(requestJson) as DocumentUndoRequest;
+    const actual = await seam.undoDocument(request);
+    const expected = JSON.parse(
+      '{"content":"# Plan\\n\\nShip it.\\n","version":"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012"}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "a document the run deleted is restored misrouted",
+    );
+  }
   // vector: a lock toggled back to where it was hasn't changed
   {
     const requestJson = '{"kind":"note","content":"# Plan\\n\\nShip it.\\n","expected_version":"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012","ops":[{"kind":"set_lock","locked":true},{"kind":"set_lock","locked":false}],"now":"2026-07-01T09:30:00Z","note_locked":false}';
@@ -250,6 +307,21 @@ export async function runEditServiceConformance(
       seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
         seamConformanceCanonical(expected),
       "a lock toggled back to where it was hasn't changed misrouted",
+    );
+  }
+  // vector: a locked note can't be undone
+  {
+    const requestJson = '{"kind":"note","content":"# Run\\n","writes":[{"before":"# Plan\\n\\nShip it.\\n","after":"# Run\\n"}],"note_locked":true,"now":"2026-07-01T09:30:00Z"}';
+    const request = JSON.parse(requestJson) as DocumentUndoRequest;
+    let caught: unknown;
+    try {
+      await seam.undoDocument(request);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "a locked note can't be undone: expected an error",
     );
   }
   // vector: a locked storyboard rejects content edits
@@ -319,6 +391,20 @@ export async function runEditServiceConformance(
       "a non-string description is rejected: expected an error",
     );
   }
+  // vector: a note already back at its before value is left alone
+  {
+    const requestJson = '{"kind":"note","content":"# Plan\\n\\nShip it.\\n","writes":[{"before":"# Plan\\n\\nShip it.\\n","after":"# Run\\n"}],"note_locked":false,"now":"2026-07-01T09:30:00Z"}';
+    const request = JSON.parse(requestJson) as DocumentUndoRequest;
+    const actual = await seam.undoDocument(request);
+    const expected = JSON.parse(
+      '{"content":"# Plan\\n\\nShip it.\\n","version":"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012"}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "a note already back at its before value is left alone misrouted",
+    );
+  }
   // vector: a note batch can't both lock and edit content
   {
     const requestJson = '{"kind":"note","content":"# Plan\\n\\nShip it.\\n","expected_version":"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012","ops":[{"kind":"set_lock","locked":false},{"kind":"write_note","content":"# Both"}],"now":"2026-07-01T09:30:00Z","note_locked":true}';
@@ -347,6 +433,21 @@ export async function runEditServiceConformance(
     seamConformanceAssert(
       caught !== undefined,
       "a note can't be touched: expected an error",
+    );
+  }
+  // vector: a note changed since the run conflicts as a whole
+  {
+    const requestJson = '{"kind":"note","content":"# Theirs\\n","writes":[{"before":"# Plan\\n\\nShip it.\\n","after":"# Run\\n"}],"note_locked":false,"now":"2026-07-01T09:30:00Z"}';
+    const request = JSON.parse(requestJson) as DocumentUndoRequest;
+    let caught: unknown;
+    try {
+      await seam.undoDocument(request);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "a note changed since the run conflicts as a whole: expected an error",
     );
   }
   // vector: a note has no rows to lock
@@ -402,6 +503,35 @@ export async function runEditServiceConformance(
       "a rejected op fails the whole batch: expected an error",
     );
   }
+  // vector: a reorder already reverted is left alone
+  {
+    const requestJson = '{"kind":"sketch","content":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"a\\",\\"time\\":\\"0:10\\",\\"narrative\\":\\"A.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"b\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"B.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"c\\",\\"time\\":\\"0:30\\",\\"narrative\\":\\"C.\\",\\"demo_actions\\":\\"\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}","writes":[{"before":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"a\\",\\"time\\":\\"0:10\\",\\"narrative\\":\\"A.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"b\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"B.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"c\\",\\"time\\":\\"0:30\\",\\"narrative\\":\\"C.\\",\\"demo_actions\\":\\"\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}","after":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"c\\",\\"time\\":\\"0:30\\",\\"narrative\\":\\"C.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"a\\",\\"time\\":\\"0:10\\",\\"narrative\\":\\"A.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"b\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"B.\\",\\"demo_actions\\":\\"\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}"}],"note_locked":false,"now":"2026-07-01T09:30:00Z"}';
+    const request = JSON.parse(requestJson) as DocumentUndoRequest;
+    const actual = await seam.undoDocument(request);
+    const expected = JSON.parse(
+      '{"content":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"a\\",\\"time\\":\\"0:10\\",\\"narrative\\":\\"A.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"b\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"B.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"c\\",\\"time\\":\\"0:30\\",\\"narrative\\":\\"C.\\",\\"demo_actions\\":\\"\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}","version":"sha256:fecf218856506a9287b7251b0c8a5f2119be058142cdea38376a1648f2eab907"}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "a reorder already reverted is left alone misrouted",
+    );
+  }
+  // vector: a row changed again since the run conflicts with both versions
+  {
+    const requestJson = '{"kind":"sketch","content":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"Someone else\'s words.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}","writes":[{"before":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}","after":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"Run\'s words.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}"}],"note_locked":false,"now":"2026-07-01T09:30:00Z"}';
+    const request = JSON.parse(requestJson) as DocumentUndoRequest;
+    let caught: unknown;
+    try {
+      await seam.undoDocument(request);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "a row changed again since the run conflicts with both versions: expected an error",
+    );
+  }
   // vector: a row op on a storyboard is rejected
   {
     const storyboardJson = '{"title":"Contract storyboard","description":"","locked":false,"items":[{"type":"sketch_ref","path":"intro.sk"},{"type":"section","title":"Setup","sketches":["flows/login.sk"]}],"created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z","future_storyboard_field":{"owner":"ios"}}';
@@ -419,6 +549,33 @@ export async function runEditServiceConformance(
     seamConformanceAssert(
       caught !== undefined,
       "a row op on a storyboard is rejected: expected an error",
+    );
+  }
+  // vector: a row someone else locked since blocks restoring its content
+  {
+    const requestJson = '{"kind":"sketch","content":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":true,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"Run\'s words.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}","writes":[{"before":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}","after":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"Run\'s words.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}"}],"note_locked":false,"now":"2026-07-01T09:30:00Z"}';
+    const request = JSON.parse(requestJson) as DocumentUndoRequest;
+    let caught: unknown;
+    try {
+      await seam.undoDocument(request);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "a row someone else locked since blocks restoring its content: expected an error",
+    );
+  }
+  // vector: a sketch the run created and locked is still deleted
+  {
+    const requestJson = '{"kind":"sketch","content":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":true,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}","writes":[{"before":null,"after":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}"},{"before":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}","after":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":true,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}"}],"note_locked":false,"now":"2026-07-01T09:30:00Z"}';
+    const request = JSON.parse(requestJson) as DocumentUndoRequest;
+    const actual = await seam.undoDocument(request);
+    const expected = JSON.parse('{"content":null,"version":null}');
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "a sketch the run created and locked is still deleted misrouted",
     );
   }
   // vector: a stale version reports the current one before any op runs
@@ -487,6 +644,36 @@ export async function runEditServiceConformance(
     seamConformanceAssert(
       caught !== undefined,
       "a storyboard op on a sketch is rejected: expected an error",
+    );
+  }
+  // vector: a storyboard someone else locked since can't change
+  {
+    const requestJson = '{"kind":"storyboard","content":"{\\"title\\":\\"Run\'s title\\",\\"description\\":\\"\\",\\"locked\\":true,\\"items\\":[{\\"type\\":\\"sketch_ref\\",\\"path\\":\\"intro.sk\\"},{\\"type\\":\\"section\\",\\"title\\":\\"Setup\\",\\"sketches\\":[\\"flows/login.sk\\"]}],\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\",\\"future_storyboard_field\\":{\\"owner\\":\\"ios\\"}}","writes":[{"before":"{\\"title\\":\\"Contract storyboard\\",\\"description\\":\\"\\",\\"locked\\":false,\\"items\\":[{\\"type\\":\\"sketch_ref\\",\\"path\\":\\"intro.sk\\"},{\\"type\\":\\"section\\",\\"title\\":\\"Setup\\",\\"sketches\\":[\\"flows/login.sk\\"]}],\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\",\\"future_storyboard_field\\":{\\"owner\\":\\"ios\\"}}","after":"{\\"title\\":\\"Run\'s title\\",\\"description\\":\\"\\",\\"locked\\":false,\\"items\\":[{\\"type\\":\\"sketch_ref\\",\\"path\\":\\"intro.sk\\"},{\\"type\\":\\"section\\",\\"title\\":\\"Setup\\",\\"sketches\\":[\\"flows/login.sk\\"]}],\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\",\\"future_storyboard_field\\":{\\"owner\\":\\"ios\\"}}"}],"note_locked":false,"now":"2026-07-01T09:30:00Z"}';
+    const request = JSON.parse(requestJson) as DocumentUndoRequest;
+    let caught: unknown;
+    try {
+      await seam.undoDocument(request);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "a storyboard someone else locked since can't change: expected an error",
+    );
+  }
+  // vector: a top-level field changed again since the run conflicts
+  {
+    const requestJson = '{"kind":"storyboard","content":"{\\"title\\":\\"Theirs\\",\\"description\\":\\"\\",\\"locked\\":false,\\"items\\":[{\\"type\\":\\"sketch_ref\\",\\"path\\":\\"intro.sk\\"},{\\"type\\":\\"section\\",\\"title\\":\\"Setup\\",\\"sketches\\":[\\"flows/login.sk\\"]}],\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\",\\"future_storyboard_field\\":{\\"owner\\":\\"ios\\"}}","writes":[{"before":"{\\"title\\":\\"Contract storyboard\\",\\"description\\":\\"\\",\\"locked\\":false,\\"items\\":[{\\"type\\":\\"sketch_ref\\",\\"path\\":\\"intro.sk\\"},{\\"type\\":\\"section\\",\\"title\\":\\"Setup\\",\\"sketches\\":[\\"flows/login.sk\\"]}],\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\",\\"future_storyboard_field\\":{\\"owner\\":\\"ios\\"}}","after":"{\\"title\\":\\"Run\'s title\\",\\"description\\":\\"\\",\\"locked\\":false,\\"items\\":[{\\"type\\":\\"sketch_ref\\",\\"path\\":\\"intro.sk\\"},{\\"type\\":\\"section\\",\\"title\\":\\"Setup\\",\\"sketches\\":[\\"flows/login.sk\\"]}],\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\",\\"future_storyboard_field\\":{\\"owner\\":\\"ios\\"}}"}],"note_locked":false,"now":"2026-07-01T09:30:00Z"}';
+    const request = JSON.parse(requestJson) as DocumentUndoRequest;
+    let caught: unknown;
+    try {
+      await seam.undoDocument(request);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "a top-level field changed again since the run conflicts: expected an error",
     );
   }
   // vector: an earlier rejected op wins over a later malformed one
@@ -868,6 +1055,20 @@ export async function runEditServiceConformance(
       "locked sketch rejects content edits: expected an error",
     );
   }
+  // vector: no writes leaves the file as it is
+  {
+    const requestJson = '{"kind":"sketch","content":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}","writes":[],"note_locked":false,"now":"2026-07-01T09:30:00Z"}';
+    const request = JSON.parse(requestJson) as DocumentUndoRequest;
+    const actual = await seam.undoDocument(request);
+    const expected = JSON.parse(
+      '{"content":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}","version":"sha256:a89f31f168d3c78b74b7c3a254e8a4f6fbc66c346a450bf11949a98c6ae94015"}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "no writes leaves the file as it is misrouted",
+    );
+  }
   // vector: ops address rows by id after a reorder in the same batch
   {
     const sketchJson = '{"title":"Contract sketch","locked":false,"description":null,"rows":[{"id":"row-1","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":null,"time":"0:10","narrative":"First.","demo_actions":"Open.","future_row_field":"first"},{"id":"row-2","locked":false,"locks":{"time":false,"narrative":false,"demo_actions":false,"screenshot":false,"visual":false,"design_plan":false},"screenshot":"screenshots/second.png","time":"0:20","narrative":"Second.","demo_actions":"Click."}],"state":"draft","created_at":"2026-06-28T20:00:00Z","updated_at":"2026-06-28T20:20:00Z"}';
@@ -1026,6 +1227,21 @@ export async function runEditServiceConformance(
       seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
         seamConformanceCanonical(expected),
       "replace_storyboard ignores locks and keeps the given updated_at misrouted",
+    );
+  }
+  // vector: rows reordered again since the run conflict on their order
+  {
+    const requestJson = '{"kind":"sketch","content":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"b\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"B.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"c\\",\\"time\\":\\"0:30\\",\\"narrative\\":\\"C.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"a\\",\\"time\\":\\"0:10\\",\\"narrative\\":\\"A.\\",\\"demo_actions\\":\\"\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}","writes":[{"before":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"a\\",\\"time\\":\\"0:10\\",\\"narrative\\":\\"A.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"b\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"B.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"c\\",\\"time\\":\\"0:30\\",\\"narrative\\":\\"C.\\",\\"demo_actions\\":\\"\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}","after":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"c\\",\\"time\\":\\"0:30\\",\\"narrative\\":\\"C.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"a\\",\\"time\\":\\"0:10\\",\\"narrative\\":\\"A.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"b\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"B.\\",\\"demo_actions\\":\\"\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}"}],"note_locked":false,"now":"2026-07-01T09:30:00Z"}';
+    const request = JSON.parse(requestJson) as DocumentUndoRequest;
+    let caught: unknown;
+    try {
+      await seam.undoDocument(request);
+    } catch (error) {
+      caught = error;
+    }
+    seamConformanceAssert(
+      caught !== undefined,
+      "rows reordered again since the run conflict on their order: expected an error",
     );
   }
   // vector: set_description null clears the description
@@ -1438,6 +1654,20 @@ export async function runEditServiceConformance(
     seamConformanceAssert(
       caught !== undefined,
       "unknown row id is rejected: expected an error",
+    );
+  }
+  // vector: untouched since the run, the result is the exact bytes the run started from
+  {
+    const requestJson = '{"kind":"sketch","content":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"Someone else\'s words.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}","writes":[{"before":"{\\n \\"title\\": \\"Contract sketch\\",\\n \\"locked\\": false,\\n \\"description\\": null,\\n \\"rows\\": [\\n  {\\n   \\"id\\": \\"row-1\\",\\n   \\"locked\\": false,\\n   \\"locks\\": {\\n    \\"time\\": false,\\n    \\"narrative\\": false,\\n    \\"demo_actions\\": false,\\n    \\"screenshot\\": false,\\n    \\"visual\\": false,\\n    \\"design_plan\\": false\\n   },\\n   \\"screenshot\\": null,\\n   \\"time\\": \\"0:10\\",\\n   \\"narrative\\": \\"First.\\",\\n   \\"demo_actions\\": \\"Open.\\",\\n   \\"future_row_field\\": \\"first\\"\\n  },\\n  {\\n   \\"id\\": \\"row-2\\",\\n   \\"locked\\": false,\\n   \\"locks\\": {\\n    \\"time\\": false,\\n    \\"narrative\\": false,\\n    \\"demo_actions\\": false,\\n    \\"screenshot\\": false,\\n    \\"visual\\": false,\\n    \\"design_plan\\": false\\n   },\\n   \\"screenshot\\": \\"screenshots/second.png\\",\\n   \\"time\\": \\"0:20\\",\\n   \\"narrative\\": \\"Second.\\",\\n   \\"demo_actions\\": \\"Click.\\"\\n  }\\n ],\\n \\"state\\": \\"draft\\",\\n \\"created_at\\": \\"2026-06-28T20:00:00Z\\",\\n \\"updated_at\\": \\"2026-06-28T20:20:00Z\\"\\n}","after":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"Run\'s words.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}"},{"before":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"Run\'s words.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}","after":"{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"Someone else\'s words.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}"}],"note_locked":false,"now":"2026-07-01T09:30:00Z"}';
+    const request = JSON.parse(requestJson) as DocumentUndoRequest;
+    const actual = await seam.undoDocument(request);
+    const expected = JSON.parse(
+      '{"content":"{\\n \\"title\\": \\"Contract sketch\\",\\n \\"locked\\": false,\\n \\"description\\": null,\\n \\"rows\\": [\\n  {\\n   \\"id\\": \\"row-1\\",\\n   \\"locked\\": false,\\n   \\"locks\\": {\\n    \\"time\\": false,\\n    \\"narrative\\": false,\\n    \\"demo_actions\\": false,\\n    \\"screenshot\\": false,\\n    \\"visual\\": false,\\n    \\"design_plan\\": false\\n   },\\n   \\"screenshot\\": null,\\n   \\"time\\": \\"0:10\\",\\n   \\"narrative\\": \\"First.\\",\\n   \\"demo_actions\\": \\"Open.\\",\\n   \\"future_row_field\\": \\"first\\"\\n  },\\n  {\\n   \\"id\\": \\"row-2\\",\\n   \\"locked\\": false,\\n   \\"locks\\": {\\n    \\"time\\": false,\\n    \\"narrative\\": false,\\n    \\"demo_actions\\": false,\\n    \\"screenshot\\": false,\\n    \\"visual\\": false,\\n    \\"design_plan\\": false\\n   },\\n   \\"screenshot\\": \\"screenshots/second.png\\",\\n   \\"time\\": \\"0:20\\",\\n   \\"narrative\\": \\"Second.\\",\\n   \\"demo_actions\\": \\"Click.\\"\\n  }\\n ],\\n \\"state\\": \\"draft\\",\\n \\"created_at\\": \\"2026-06-28T20:00:00Z\\",\\n \\"updated_at\\": \\"2026-06-28T20:20:00Z\\"\\n}","version":"sha256:490675db4a20a28525501a2dda412447f7b6bdd58058d4c5f6a0f191c18ae634"}',
+    );
+    seamConformanceAssert(
+      seamConformanceCanonical(JSON.parse(JSON.stringify(actual))) ===
+        seamConformanceCanonical(expected),
+      "untouched since the run, the result is the exact bytes the run started from misrouted",
     );
   }
   // vector: update_row on a locked row is rejected

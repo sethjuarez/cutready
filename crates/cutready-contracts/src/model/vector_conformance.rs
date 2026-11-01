@@ -1103,6 +1103,29 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         let result = seam.apply_sketch_ops(&sketch, &ops, &now);
         assert!(result.is_err(), "{}: expected an error, got Ok", "a cell lock without a row is rejected");
     }
+    // vector: a created note that changed since conflicts
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "note",
+  "content": "# Theirs\n",
+  "writes": [
+    {
+      "before": null,
+      "after": "# Run\n"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.undo_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a created note that changed since conflicts");
+    }
     // vector: a current version still enforces the edit policy
     {
         let request = crate::model::DocumentEditRequest::from_json(
@@ -1126,6 +1149,97 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         .expect("request parses");
         let result = seam.edit_document(&request);
         assert!(result.is_err(), "{}: expected an error, got Ok", "a current version still enforces the edit policy");
+    }
+    // vector: a document gone since the run conflicts
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": null,
+  "writes": [
+    {
+      "before": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}",
+      "after": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Run's words.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.undo_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a document gone since the run conflicts");
+    }
+    // vector: a document the run created is deleted
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "note",
+  "content": "# Plan\n\nShip it.\n",
+  "writes": [
+    {
+      "before": null,
+      "after": "# Plan\n\nShip it.\n"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "a document the run created is deleted", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": null,
+  "version": null
+}
+"####,
+            &ctx,
+        )
+        .expect("a document the run created is deleted: expected parses");
+        assert_eq!(actual, expected, "a document the run created is deleted misrouted");
+    }
+    // vector: a document the run deleted is restored
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "note",
+  "content": null,
+  "writes": [
+    {
+      "before": "# Plan\n\nShip it.\n",
+      "after": null
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "a document the run deleted is restored", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "# Plan\n\nShip it.\n",
+  "version": "sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012"
+}
+"####,
+            &ctx,
+        )
+        .expect("a document the run deleted is restored: expected parses");
+        assert_eq!(actual, expected, "a document the run deleted is restored misrouted");
     }
     // vector: a lock toggled back to where it was hasn't changed
     {
@@ -1167,6 +1281,29 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         )
         .expect("a lock toggled back to where it was hasn't changed: expected parses");
         assert_eq!(actual, expected, "a lock toggled back to where it was hasn't changed misrouted");
+    }
+    // vector: a locked note can't be undone
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "note",
+  "content": "# Run\n",
+  "writes": [
+    {
+      "before": "# Plan\n\nShip it.\n",
+      "after": "# Run\n"
+    }
+  ],
+  "note_locked": true,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.undo_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a locked note can't be undone");
     }
     // vector: a locked storyboard rejects content edits
     {
@@ -1351,6 +1488,40 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         let result = seam.apply_storyboard_ops(&storyboard, &ops, &now);
         assert!(result.is_err(), "{}: expected an error, got Ok", "a non-string description is rejected");
     }
+    // vector: a note already back at its before value is left alone
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "note",
+  "content": "# Plan\n\nShip it.\n",
+  "writes": [
+    {
+      "before": "# Plan\n\nShip it.\n",
+      "after": "# Run\n"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "a note already back at its before value is left alone", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "# Plan\n\nShip it.\n",
+  "version": "sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012"
+}
+"####,
+            &ctx,
+        )
+        .expect("a note already back at its before value is left alone: expected parses");
+        assert_eq!(actual, expected, "a note already back at its before value is left alone misrouted");
+    }
     // vector: a note batch can't both lock and edit content
     {
         let request = crate::model::DocumentEditRequest::from_json(
@@ -1401,6 +1572,29 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         .expect("request parses");
         let result = seam.edit_document(&request);
         assert!(result.is_err(), "{}: expected an error, got Ok", "a note can't be touched");
+    }
+    // vector: a note changed since the run conflicts as a whole
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "note",
+  "content": "# Theirs\n",
+  "writes": [
+    {
+      "before": "# Plan\n\nShip it.\n",
+      "after": "# Run\n"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.undo_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a note changed since the run conflicts as a whole");
     }
     // vector: a note has no rows to lock
     {
@@ -1618,6 +1812,63 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         let result = seam.apply_sketch_ops(&sketch, &ops, &now);
         assert!(result.is_err(), "{}: expected an error, got Ok", "a rejected op fails the whole batch");
     }
+    // vector: a reorder already reverted is left alone
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"a\",\"time\":\"0:10\",\"narrative\":\"A.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"b\",\"time\":\"0:20\",\"narrative\":\"B.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"c\",\"time\":\"0:30\",\"narrative\":\"C.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}",
+  "writes": [
+    {
+      "before": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"a\",\"time\":\"0:10\",\"narrative\":\"A.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"b\",\"time\":\"0:20\",\"narrative\":\"B.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"c\",\"time\":\"0:30\",\"narrative\":\"C.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}",
+      "after": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"c\",\"time\":\"0:30\",\"narrative\":\"C.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"a\",\"time\":\"0:10\",\"narrative\":\"A.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"b\",\"time\":\"0:20\",\"narrative\":\"B.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "a reorder already reverted is left alone", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"a\",\"time\":\"0:10\",\"narrative\":\"A.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"b\",\"time\":\"0:20\",\"narrative\":\"B.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"c\",\"time\":\"0:30\",\"narrative\":\"C.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}",
+  "version": "sha256:fecf218856506a9287b7251b0c8a5f2119be058142cdea38376a1648f2eab907"
+}
+"####,
+            &ctx,
+        )
+        .expect("a reorder already reverted is left alone: expected parses");
+        assert_eq!(actual, expected, "a reorder already reverted is left alone misrouted");
+    }
+    // vector: a row changed again since the run conflicts with both versions
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Someone else's words.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"}",
+  "writes": [
+    {
+      "before": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}",
+      "after": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Run's words.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.undo_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a row changed again since the run conflicts with both versions");
+    }
     // vector: a row op on a storyboard is rejected
     {
         let storyboard = crate::model::Storyboard::from_json(
@@ -1675,6 +1926,67 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         .expect("now parses");
         let result = seam.apply_storyboard_ops(&storyboard, &ops, &now);
         assert!(result.is_err(), "{}: expected an error, got Ok", "a row op on a storyboard is rejected");
+    }
+    // vector: a row someone else locked since blocks restoring its content
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Run's words.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"}",
+  "writes": [
+    {
+      "before": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}",
+      "after": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Run's words.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.undo_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a row someone else locked since blocks restoring its content");
+    }
+    // vector: a sketch the run created and locked is still deleted
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\"title\":\"Contract sketch\",\"locked\":true,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}",
+  "writes": [
+    {
+      "before": null,
+      "after": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}"
+    },
+    {
+      "before": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}",
+      "after": "{\"title\":\"Contract sketch\",\"locked\":true,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "a sketch the run created and locked is still deleted", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": null,
+  "version": null
+}
+"####,
+            &ctx,
+        )
+        .expect("a sketch the run created and locked is still deleted: expected parses");
+        assert_eq!(actual, expected, "a sketch the run created and locked is still deleted misrouted");
     }
     // vector: a stale version reports the current one before any op runs
     {
@@ -1858,6 +2170,52 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         .expect("now parses");
         let result = seam.apply_sketch_ops(&sketch, &ops, &now);
         assert!(result.is_err(), "{}: expected an error, got Ok", "a storyboard op on a sketch is rejected");
+    }
+    // vector: a storyboard someone else locked since can't change
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "storyboard",
+  "content": "{\"title\":\"Run's title\",\"description\":\"\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}}",
+  "writes": [
+    {
+      "before": "{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}}",
+      "after": "{\"title\":\"Run's title\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.undo_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a storyboard someone else locked since can't change");
+    }
+    // vector: a top-level field changed again since the run conflicts
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "storyboard",
+  "content": "{\"title\":\"Theirs\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}}",
+  "writes": [
+    {
+      "before": "{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}}",
+      "after": "{\"title\":\"Run's title\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.undo_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "a top-level field changed again since the run conflicts");
     }
     // vector: an earlier rejected op wins over a later malformed one
     {
@@ -3917,6 +4275,35 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         let result = seam.apply_sketch_ops(&sketch, &ops, &now);
         assert!(result.is_err(), "{}: expected an error, got Ok", "locked sketch rejects content edits");
     }
+    // vector: no writes leaves the file as it is
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}",
+  "writes": [],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "no writes leaves the file as it is", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}",
+  "version": "sha256:a89f31f168d3c78b74b7c3a254e8a4f6fbc66c346a450bf11949a98c6ae94015"
+}
+"####,
+            &ctx,
+        )
+        .expect("no writes leaves the file as it is: expected parses");
+        assert_eq!(actual, expected, "no writes leaves the file as it is misrouted");
+    }
     // vector: ops address rows by id after a reorder in the same batch
     {
         let sketch = crate::model::Sketch::from_json(
@@ -5045,6 +5432,29 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         )
         .expect("replace_storyboard ignores locks and keeps the given updated_at: expected parses");
         assert_eq!(actual, expected, "replace_storyboard ignores locks and keeps the given updated_at misrouted");
+    }
+    // vector: rows reordered again since the run conflict on their order
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"b\",\"time\":\"0:20\",\"narrative\":\"B.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"c\",\"time\":\"0:30\",\"narrative\":\"C.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"a\",\"time\":\"0:10\",\"narrative\":\"A.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"}",
+  "writes": [
+    {
+      "before": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"a\",\"time\":\"0:10\",\"narrative\":\"A.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"b\",\"time\":\"0:20\",\"narrative\":\"B.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"c\",\"time\":\"0:30\",\"narrative\":\"C.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}",
+      "after": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"c\",\"time\":\"0:30\",\"narrative\":\"C.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"a\",\"time\":\"0:10\",\"narrative\":\"A.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"b\",\"time\":\"0:20\",\"narrative\":\"B.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.undo_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "rows reordered again since the run conflict on their order");
     }
     // vector: set_description null clears the description
     {
@@ -8041,6 +8451,44 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         .expect("now parses");
         let result = seam.apply_sketch_ops(&sketch, &ops, &now);
         assert!(result.is_err(), "{}: expected an error, got Ok", "unknown row id is rejected");
+    }
+    // vector: untouched since the run, the result is the exact bytes the run started from
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Someone else's words.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"}",
+  "writes": [
+    {
+      "before": "{\n \"title\": \"Contract sketch\",\n \"locked\": false,\n \"description\": null,\n \"rows\": [\n  {\n   \"id\": \"row-1\",\n   \"locked\": false,\n   \"locks\": {\n    \"time\": false,\n    \"narrative\": false,\n    \"demo_actions\": false,\n    \"screenshot\": false,\n    \"visual\": false,\n    \"design_plan\": false\n   },\n   \"screenshot\": null,\n   \"time\": \"0:10\",\n   \"narrative\": \"First.\",\n   \"demo_actions\": \"Open.\",\n   \"future_row_field\": \"first\"\n  },\n  {\n   \"id\": \"row-2\",\n   \"locked\": false,\n   \"locks\": {\n    \"time\": false,\n    \"narrative\": false,\n    \"demo_actions\": false,\n    \"screenshot\": false,\n    \"visual\": false,\n    \"design_plan\": false\n   },\n   \"screenshot\": \"screenshots/second.png\",\n   \"time\": \"0:20\",\n   \"narrative\": \"Second.\",\n   \"demo_actions\": \"Click.\"\n  }\n ],\n \"state\": \"draft\",\n \"created_at\": \"2026-06-28T20:00:00Z\",\n \"updated_at\": \"2026-06-28T20:20:00Z\"\n}",
+      "after": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Run's words.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"}"
+    },
+    {
+      "before": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Run's words.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"}",
+      "after": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"Someone else's words.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let actual = seam.undo_document(&request)
+            .unwrap_or_else(|error| panic!("{}: expected Ok, got Err: {}", "untouched since the run, the result is the exact bytes the run started from", error));
+        let expected = crate::model::DocumentUndo::from_json(
+            r####"
+{
+  "content": "{\n \"title\": \"Contract sketch\",\n \"locked\": false,\n \"description\": null,\n \"rows\": [\n  {\n   \"id\": \"row-1\",\n   \"locked\": false,\n   \"locks\": {\n    \"time\": false,\n    \"narrative\": false,\n    \"demo_actions\": false,\n    \"screenshot\": false,\n    \"visual\": false,\n    \"design_plan\": false\n   },\n   \"screenshot\": null,\n   \"time\": \"0:10\",\n   \"narrative\": \"First.\",\n   \"demo_actions\": \"Open.\",\n   \"future_row_field\": \"first\"\n  },\n  {\n   \"id\": \"row-2\",\n   \"locked\": false,\n   \"locks\": {\n    \"time\": false,\n    \"narrative\": false,\n    \"demo_actions\": false,\n    \"screenshot\": false,\n    \"visual\": false,\n    \"design_plan\": false\n   },\n   \"screenshot\": \"screenshots/second.png\",\n   \"time\": \"0:20\",\n   \"narrative\": \"Second.\",\n   \"demo_actions\": \"Click.\"\n  }\n ],\n \"state\": \"draft\",\n \"created_at\": \"2026-06-28T20:00:00Z\",\n \"updated_at\": \"2026-06-28T20:20:00Z\"\n}",
+  "version": "sha256:490675db4a20a28525501a2dda412447f7b6bdd58058d4c5f6a0f191c18ae634"
+}
+"####,
+            &ctx,
+        )
+        .expect("untouched since the run, the result is the exact bytes the run started from: expected parses");
+        assert_eq!(actual, expected, "untouched since the run, the result is the exact bytes the run started from misrouted");
     }
     // vector: update_row on a locked row is rejected
     {

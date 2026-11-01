@@ -36,6 +36,16 @@ union CmdErrorCode {
   /** The document changed since the edit was computed; `details.current_version` is its version now. */
   staleDocument: "stale_document",
 
+  /**
+   * Undo would overwrite changes made since the run: `details.conflicts` lists
+   * each entity whose current value matches neither the run's before nor its
+   * after value. Nothing is written.
+   */
+  undoConflict: "undo_conflict",
+
+  /** The run wrote to the document again since it was reviewed; review it again. */
+  staleReview: "stale_review",
+
   /** Codes from newer runtimes load and save unchanged. */
   string,
 }
@@ -57,8 +67,29 @@ model CmdErrorDetails {
   /** The document version on disk, for `stale_document`. */
   current_version?: string;
 
+  /** The entities that block an undo, for `undo_conflict`. */
+  conflicts?: UndoConflict[];
+
   /** Detail fields from newer runtimes survive load and save. */
   ...Record<unknown>;
+}
+
+/**
+ * One entity an undo can't revert. `path` addresses it: `""` for the whole
+ * document (a note is only ever whole), `/<key>` for a top-level field,
+ * `/rows/<id>` for a row's content, `/rows/<id>/locked` and
+ * `/rows/<id>/locks` for its locks, and `/rows` for the order of row ids.
+ * Versions are `documentVersion` of the file's bytes for `""` and of the
+ * entity's compact JSON with keys sorted otherwise; absent entities omit them.
+ */
+model UndoConflict {
+  path: string;
+
+  /** The value the undo expected (the run's after value). */
+  expected_version?: string;
+
+  /** The value there now. */
+  current_version?: string;
 }
 
 /**

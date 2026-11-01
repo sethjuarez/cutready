@@ -9949,6 +9949,397 @@ const EditDocumentVectors = """
 ]
 """;
 
+const UndoDocumentVectors = """
+[
+  {
+    "name": "no writes leaves the file as it is",
+    "input": {
+      "request": {
+        "kind": "sketch",
+        "content": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}",
+        "writes": [],
+        "note_locked": false,
+        "now": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expected": {
+      "content": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}",
+      "version": "sha256:a89f31f168d3c78b74b7c3a254e8a4f6fbc66c346a450bf11949a98c6ae94015"
+    }
+  },
+  {
+    "name": "untouched since the run, the result is the exact bytes the run started from",
+    "input": {
+      "request": {
+        "kind": "sketch",
+        "content": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"Someone else's words.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}",
+        "writes": [
+          {
+            "before": "{\\n \\"title\\": \\"Contract sketch\\",\\n \\"locked\\": false,\\n \\"description\\": null,\\n \\"rows\\": [\\n  {\\n   \\"id\\": \\"row-1\\",\\n   \\"locked\\": false,\\n   \\"locks\\": {\\n    \\"time\\": false,\\n    \\"narrative\\": false,\\n    \\"demo_actions\\": false,\\n    \\"screenshot\\": false,\\n    \\"visual\\": false,\\n    \\"design_plan\\": false\\n   },\\n   \\"screenshot\\": null,\\n   \\"time\\": \\"0:10\\",\\n   \\"narrative\\": \\"First.\\",\\n   \\"demo_actions\\": \\"Open.\\",\\n   \\"future_row_field\\": \\"first\\"\\n  },\\n  {\\n   \\"id\\": \\"row-2\\",\\n   \\"locked\\": false,\\n   \\"locks\\": {\\n    \\"time\\": false,\\n    \\"narrative\\": false,\\n    \\"demo_actions\\": false,\\n    \\"screenshot\\": false,\\n    \\"visual\\": false,\\n    \\"design_plan\\": false\\n   },\\n   \\"screenshot\\": \\"screenshots/second.png\\",\\n   \\"time\\": \\"0:20\\",\\n   \\"narrative\\": \\"Second.\\",\\n   \\"demo_actions\\": \\"Click.\\"\\n  }\\n ],\\n \\"state\\": \\"draft\\",\\n \\"created_at\\": \\"2026-06-28T20:00:00Z\\",\\n \\"updated_at\\": \\"2026-06-28T20:20:00Z\\"\\n}",
+            "after": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"Run's words.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}"
+          },
+          {
+            "before": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"Run's words.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}",
+            "after": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"Someone else's words.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}"
+          }
+        ],
+        "note_locked": false,
+        "now": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expected": {
+      "content": "{\\n \\"title\\": \\"Contract sketch\\",\\n \\"locked\\": false,\\n \\"description\\": null,\\n \\"rows\\": [\\n  {\\n   \\"id\\": \\"row-1\\",\\n   \\"locked\\": false,\\n   \\"locks\\": {\\n    \\"time\\": false,\\n    \\"narrative\\": false,\\n    \\"demo_actions\\": false,\\n    \\"screenshot\\": false,\\n    \\"visual\\": false,\\n    \\"design_plan\\": false\\n   },\\n   \\"screenshot\\": null,\\n   \\"time\\": \\"0:10\\",\\n   \\"narrative\\": \\"First.\\",\\n   \\"demo_actions\\": \\"Open.\\",\\n   \\"future_row_field\\": \\"first\\"\\n  },\\n  {\\n   \\"id\\": \\"row-2\\",\\n   \\"locked\\": false,\\n   \\"locks\\": {\\n    \\"time\\": false,\\n    \\"narrative\\": false,\\n    \\"demo_actions\\": false,\\n    \\"screenshot\\": false,\\n    \\"visual\\": false,\\n    \\"design_plan\\": false\\n   },\\n   \\"screenshot\\": \\"screenshots/second.png\\",\\n   \\"time\\": \\"0:20\\",\\n   \\"narrative\\": \\"Second.\\",\\n   \\"demo_actions\\": \\"Click.\\"\\n  }\\n ],\\n \\"state\\": \\"draft\\",\\n \\"created_at\\": \\"2026-06-28T20:00:00Z\\",\\n \\"updated_at\\": \\"2026-06-28T20:20:00Z\\"\\n}",
+      "version": "sha256:490675db4a20a28525501a2dda412447f7b6bdd58058d4c5f6a0f191c18ae634"
+    }
+  },
+  {
+    "name": "a document the run created is deleted",
+    "input": {
+      "request": {
+        "kind": "note",
+        "content": "# Plan\\n\\nShip it.\\n",
+        "writes": [
+          {
+            "before": null,
+            "after": "# Plan\\n\\nShip it.\\n"
+          }
+        ],
+        "note_locked": false,
+        "now": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expected": {
+      "content": null,
+      "version": null
+    }
+  },
+  {
+    "name": "a sketch the run created and locked is still deleted",
+    "input": {
+      "request": {
+        "kind": "sketch",
+        "content": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":true,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}",
+        "writes": [
+          {
+            "before": null,
+            "after": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}"
+          },
+          {
+            "before": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}",
+            "after": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":true,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}"
+          }
+        ],
+        "note_locked": false,
+        "now": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expected": {
+      "content": null,
+      "version": null
+    }
+  },
+  {
+    "name": "a document the run deleted is restored",
+    "input": {
+      "request": {
+        "kind": "note",
+        "content": null,
+        "writes": [
+          {
+            "before": "# Plan\\n\\nShip it.\\n",
+            "after": null
+          }
+        ],
+        "note_locked": false,
+        "now": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expected": {
+      "content": "# Plan\\n\\nShip it.\\n",
+      "version": "sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012"
+    }
+  },
+  {
+    "name": "a note already back at its before value is left alone",
+    "input": {
+      "request": {
+        "kind": "note",
+        "content": "# Plan\\n\\nShip it.\\n",
+        "writes": [
+          {
+            "before": "# Plan\\n\\nShip it.\\n",
+            "after": "# Run\\n"
+          }
+        ],
+        "note_locked": false,
+        "now": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expected": {
+      "content": "# Plan\\n\\nShip it.\\n",
+      "version": "sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012"
+    }
+  },
+  {
+    "name": "a note changed since the run conflicts as a whole",
+    "input": {
+      "request": {
+        "kind": "note",
+        "content": "# Theirs\\n",
+        "writes": [
+          {
+            "before": "# Plan\\n\\nShip it.\\n",
+            "after": "# Run\\n"
+          }
+        ],
+        "note_locked": false,
+        "now": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expectedError": {
+      "code": "undo_conflict",
+      "details": {
+        "conflicts": [
+          {
+            "path": "",
+            "expected_version": "sha256:a35e2e396d70dbcc452ae0c90fb62cc596ae2152beee5428c717f3b0f126b2c2",
+            "current_version": "sha256:e9e933a7ebd86ac0dd1093b840e7249c18db949f2e67d86c66c6ac06a2182697"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "a created note that changed since conflicts",
+    "input": {
+      "request": {
+        "kind": "note",
+        "content": "# Theirs\\n",
+        "writes": [
+          {
+            "before": null,
+            "after": "# Run\\n"
+          }
+        ],
+        "note_locked": false,
+        "now": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expectedError": {
+      "code": "undo_conflict",
+      "details": {
+        "conflicts": [
+          {
+            "path": "",
+            "expected_version": "sha256:a35e2e396d70dbcc452ae0c90fb62cc596ae2152beee5428c717f3b0f126b2c2",
+            "current_version": "sha256:e9e933a7ebd86ac0dd1093b840e7249c18db949f2e67d86c66c6ac06a2182697"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "a locked note can't be undone",
+    "input": {
+      "request": {
+        "kind": "note",
+        "content": "# Run\\n",
+        "writes": [
+          {
+            "before": "# Plan\\n\\nShip it.\\n",
+            "after": "# Run\\n"
+          }
+        ],
+        "note_locked": true,
+        "now": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expectedError": {
+      "code": "locked_document"
+    }
+  },
+  {
+    "name": "a row changed again since the run conflicts with both versions",
+    "input": {
+      "request": {
+        "kind": "sketch",
+        "content": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"Someone else's words.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}",
+        "writes": [
+          {
+            "before": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}",
+            "after": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"Run's words.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}"
+          }
+        ],
+        "note_locked": false,
+        "now": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expectedError": {
+      "code": "undo_conflict",
+      "details": {
+        "conflicts": [
+          {
+            "path": "/rows/row-1",
+            "expected_version": "sha256:f07b9e900e17f4b9c2b48cc86d28353299a482419a2fba45551b975db3759eb5",
+            "current_version": "sha256:f7092ea072c0848d0da685b84bbb88fefc988c9cf342a17c65189fce9b97ddf7"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "a row someone else locked since blocks restoring its content",
+    "input": {
+      "request": {
+        "kind": "sketch",
+        "content": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":true,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"Run's words.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}",
+        "writes": [
+          {
+            "before": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}",
+            "after": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"Run's words.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}"
+          }
+        ],
+        "note_locked": false,
+        "now": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expectedError": {
+      "code": "locked_row",
+      "details": {
+        "row_index": 0
+      }
+    }
+  },
+  {
+    "name": "rows reordered again since the run conflict on their order",
+    "input": {
+      "request": {
+        "kind": "sketch",
+        "content": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"b\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"B.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"c\\",\\"time\\":\\"0:30\\",\\"narrative\\":\\"C.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"a\\",\\"time\\":\\"0:10\\",\\"narrative\\":\\"A.\\",\\"demo_actions\\":\\"\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}",
+        "writes": [
+          {
+            "before": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"a\\",\\"time\\":\\"0:10\\",\\"narrative\\":\\"A.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"b\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"B.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"c\\",\\"time\\":\\"0:30\\",\\"narrative\\":\\"C.\\",\\"demo_actions\\":\\"\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}",
+            "after": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"c\\",\\"time\\":\\"0:30\\",\\"narrative\\":\\"C.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"a\\",\\"time\\":\\"0:10\\",\\"narrative\\":\\"A.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"b\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"B.\\",\\"demo_actions\\":\\"\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}"
+          }
+        ],
+        "note_locked": false,
+        "now": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expectedError": {
+      "code": "undo_conflict",
+      "details": {
+        "conflicts": [
+          {
+            "path": "/rows",
+            "expected_version": "sha256:30878fae57492f5e26ec39fe8f8f8c180197a72f97e2bf95a8d26b55ee49987c",
+            "current_version": "sha256:ef7edc7e2fab0e3abf3410d97ee71eeb86fb5aa4e969888d7da11d141a878f63"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "a reorder already reverted is left alone",
+    "input": {
+      "request": {
+        "kind": "sketch",
+        "content": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"a\\",\\"time\\":\\"0:10\\",\\"narrative\\":\\"A.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"b\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"B.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"c\\",\\"time\\":\\"0:30\\",\\"narrative\\":\\"C.\\",\\"demo_actions\\":\\"\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}",
+        "writes": [
+          {
+            "before": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"a\\",\\"time\\":\\"0:10\\",\\"narrative\\":\\"A.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"b\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"B.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"c\\",\\"time\\":\\"0:30\\",\\"narrative\\":\\"C.\\",\\"demo_actions\\":\\"\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}",
+            "after": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"c\\",\\"time\\":\\"0:30\\",\\"narrative\\":\\"C.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"a\\",\\"time\\":\\"0:10\\",\\"narrative\\":\\"A.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"b\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"B.\\",\\"demo_actions\\":\\"\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}"
+          }
+        ],
+        "note_locked": false,
+        "now": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expected": {
+      "content": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"a\\",\\"time\\":\\"0:10\\",\\"narrative\\":\\"A.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"b\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"B.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"c\\",\\"time\\":\\"0:30\\",\\"narrative\\":\\"C.\\",\\"demo_actions\\":\\"\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}",
+      "version": "sha256:fecf218856506a9287b7251b0c8a5f2119be058142cdea38376a1648f2eab907"
+    }
+  },
+  {
+    "name": "a storyboard someone else locked since can't change",
+    "input": {
+      "request": {
+        "kind": "storyboard",
+        "content": "{\\"title\\":\\"Run's title\\",\\"description\\":\\"\\",\\"locked\\":true,\\"items\\":[{\\"type\\":\\"sketch_ref\\",\\"path\\":\\"intro.sk\\"},{\\"type\\":\\"section\\",\\"title\\":\\"Setup\\",\\"sketches\\":[\\"flows/login.sk\\"]}],\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\",\\"future_storyboard_field\\":{\\"owner\\":\\"ios\\"}}",
+        "writes": [
+          {
+            "before": "{\\"title\\":\\"Contract storyboard\\",\\"description\\":\\"\\",\\"locked\\":false,\\"items\\":[{\\"type\\":\\"sketch_ref\\",\\"path\\":\\"intro.sk\\"},{\\"type\\":\\"section\\",\\"title\\":\\"Setup\\",\\"sketches\\":[\\"flows/login.sk\\"]}],\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\",\\"future_storyboard_field\\":{\\"owner\\":\\"ios\\"}}",
+            "after": "{\\"title\\":\\"Run's title\\",\\"description\\":\\"\\",\\"locked\\":false,\\"items\\":[{\\"type\\":\\"sketch_ref\\",\\"path\\":\\"intro.sk\\"},{\\"type\\":\\"section\\",\\"title\\":\\"Setup\\",\\"sketches\\":[\\"flows/login.sk\\"]}],\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\",\\"future_storyboard_field\\":{\\"owner\\":\\"ios\\"}}"
+          }
+        ],
+        "note_locked": false,
+        "now": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expectedError": {
+      "code": "locked_document"
+    }
+  },
+  {
+    "name": "a top-level field changed again since the run conflicts",
+    "input": {
+      "request": {
+        "kind": "storyboard",
+        "content": "{\\"title\\":\\"Theirs\\",\\"description\\":\\"\\",\\"locked\\":false,\\"items\\":[{\\"type\\":\\"sketch_ref\\",\\"path\\":\\"intro.sk\\"},{\\"type\\":\\"section\\",\\"title\\":\\"Setup\\",\\"sketches\\":[\\"flows/login.sk\\"]}],\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\",\\"future_storyboard_field\\":{\\"owner\\":\\"ios\\"}}",
+        "writes": [
+          {
+            "before": "{\\"title\\":\\"Contract storyboard\\",\\"description\\":\\"\\",\\"locked\\":false,\\"items\\":[{\\"type\\":\\"sketch_ref\\",\\"path\\":\\"intro.sk\\"},{\\"type\\":\\"section\\",\\"title\\":\\"Setup\\",\\"sketches\\":[\\"flows/login.sk\\"]}],\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\",\\"future_storyboard_field\\":{\\"owner\\":\\"ios\\"}}",
+            "after": "{\\"title\\":\\"Run's title\\",\\"description\\":\\"\\",\\"locked\\":false,\\"items\\":[{\\"type\\":\\"sketch_ref\\",\\"path\\":\\"intro.sk\\"},{\\"type\\":\\"section\\",\\"title\\":\\"Setup\\",\\"sketches\\":[\\"flows/login.sk\\"]}],\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\",\\"future_storyboard_field\\":{\\"owner\\":\\"ios\\"}}"
+          }
+        ],
+        "note_locked": false,
+        "now": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expectedError": {
+      "code": "undo_conflict",
+      "details": {
+        "conflicts": [
+          {
+            "path": "/title",
+            "expected_version": "sha256:e1ddc2ce7cb7eb1138ef48a8c37aa682fcdf732447cce8582aea2a780c9e3832",
+            "current_version": "sha256:2cc54e638f293ffe7be74218e122bfc52554f967be69ed40cc86ccdacb01ab1b"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "a document gone since the run conflicts",
+    "input": {
+      "request": {
+        "kind": "sketch",
+        "content": null,
+        "writes": [
+          {
+            "before": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"First.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}",
+            "after": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"id\\":\\"row-1\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"time\\":\\"0:10\\",\\"narrative\\":\\"Run's words.\\",\\"demo_actions\\":\\"Open.\\",\\"future_row_field\\":\\"first\\"},{\\"id\\":\\"row-2\\",\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":\\"screenshots/second.png\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Second.\\",\\"demo_actions\\":\\"Click.\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}"
+          }
+        ],
+        "note_locked": false,
+        "now": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expectedError": {
+      "code": "undo_conflict",
+      "details": {
+        "conflicts": [
+          {
+            "path": "",
+            "expected_version": "sha256:f4742e61c657f2b435e53db8c10f3aa1e0fefea67a38a23cdd49e38e90a28c44"
+          }
+        ]
+      }
+    }
+  }
+]
+""";
+
 const StoryboardRoundTripVectors = """
 [
   {

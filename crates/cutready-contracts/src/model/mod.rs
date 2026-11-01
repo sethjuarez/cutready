@@ -45,6 +45,9 @@ pub use storyboard_item::*;
 pub mod storyboard;
 pub use storyboard::*;
 
+pub mod undo_conflict;
+pub use undo_conflict::*;
+
 pub mod cmd_error_details;
 pub use cmd_error_details::*;
 
@@ -62,6 +65,21 @@ pub use document_edit_request::*;
 
 pub mod document_edit;
 pub use document_edit::*;
+
+pub mod undo_write;
+pub use undo_write::*;
+
+pub mod document_undo_request;
+pub use document_undo_request::*;
+
+pub mod document_undo;
+pub use document_undo::*;
+
+pub mod document_review;
+pub use document_review::*;
+
+pub mod run_review;
+pub use run_review::*;
 
 pub mod chat_participant;
 pub use chat_participant::*;

@@ -25,7 +25,14 @@ classDiagram
         +string row_id
         +uint32 op_index
         +string current_version
+        +UndoConflict[] conflicts
     }
+    class UndoConflict {
+        +string path
+        +string expected_version
+        +string current_version
+    }
+    CmdErrorDetails *-- UndoConflict
 ```
 
 ## Properties
@@ -37,3 +44,10 @@ classDiagram
 | row_id | string | The repeated row id for `duplicate_row_id`; the missing one for `row_not_found`. |
 | op_index | uint32 | Zero-based position of the rejected op in an `EditService` batch. |
 | current_version | string | The document version on disk, for `stale_document`. |
+| conflicts | [UndoConflict[]](../undoconflict/) | The entities that block an undo, for `undo_conflict`. |
+
+## Composed Types
+
+The following types are composed within `CmdErrorDetails`:
+
+- [UndoConflict](../undoconflict/)

@@ -14,6 +14,7 @@ options:
       - "CutReady.Contracts.ChatArtifact"
       - "CutReady.Contracts.ChatTranscript"
       - "CutReady.Contracts.ChatPromotion"
+      - "CutReady.Contracts.RunReview"
     deterministic-output: true
     emit-targets:
       # Desktop (Rust). Models + sample tests compile inside the

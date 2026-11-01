@@ -18,6 +18,8 @@ pub enum CmdErrorCode {
     DuplicateRowId,
     InvalidOp,
     StaleDocument,
+    UndoConflict,
+    StaleReview,
     /// Unknown variant (open enum — accepts any string).
     Other(String),
 }
@@ -40,6 +42,8 @@ impl std::fmt::Display for CmdErrorCode {
             Self::DuplicateRowId => write!(f, "duplicate_row_id"),
             Self::InvalidOp => write!(f, "invalid_op"),
             Self::StaleDocument => write!(f, "stale_document"),
+            Self::UndoConflict => write!(f, "undo_conflict"),
+            Self::StaleReview => write!(f, "stale_review"),
             Self::Other(s) => write!(f, "{}", s),
         }
     }
@@ -57,6 +61,8 @@ impl CmdErrorCode {
             "duplicate_row_id" => Some(Self::DuplicateRowId),
             "invalid_op" => Some(Self::InvalidOp),
             "stale_document" => Some(Self::StaleDocument),
+            "undo_conflict" => Some(Self::UndoConflict),
+            "stale_review" => Some(Self::StaleReview),
             other => Some(Self::Other(other.to_string())),
         }
     }
@@ -89,6 +95,12 @@ impl CmdErrorCode {
         if s.eq_ignore_ascii_case("stale_document") {
             return Some(Self::StaleDocument);
         }
+        if s.eq_ignore_ascii_case("undo_conflict") {
+            return Some(Self::UndoConflict);
+        }
+        if s.eq_ignore_ascii_case("stale_review") {
+            return Some(Self::StaleReview);
+        }
         Some(Self::Other(s.to_string()))
     }
 
@@ -103,6 +115,8 @@ impl CmdErrorCode {
             Self::DuplicateRowId => "duplicate_row_id",
             Self::InvalidOp => "invalid_op",
             Self::StaleDocument => "stale_document",
+            Self::UndoConflict => "undo_conflict",
+            Self::StaleReview => "stale_review",
             Self::Other(s) => s.as_str(),
         }
     }

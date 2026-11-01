@@ -2,18 +2,29 @@
 //! reconcile, edit, log pending, write, commit. Documents are the truth; the
 //! op log records which run wrote what so review can diff, keep or undo it.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
+use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::{json, Value};
 
-use crate::contracts::DocumentKind;
+use crate::contracts::{
+    CmdError, CmdErrorCode, DocumentKind, DocumentReview, RunReview, UndoConflict, UndoWrite,
+};
 use crate::document::DocumentError;
 use crate::edit_ops::{self, ContentEditError, NoteLock};
 use crate::notes::{self, LOCKS_PATH};
 use crate::path::project_relative;
 use crate::ports::{
-    Baseline, Clock, Files, Lock, NewOpLogEntry, OpLogState, OpLogStore, PortError, PortErrorKind,
+    Baseline, Clock, Files, Images, Lock, NewOpLogEntry, OpLogEntry, OpLogState, OpLogStore,
+    PortError, PortErrorKind, Resolution, ReviewEffect,
 };
+use crate::review::{self, UndoError};
+
+/// The app's own edits: kept as they commit, never up for review.
+pub const USER_ACTOR: &str = "user";
+/// Runs that write review undos.
+pub const REVIEW_ACTOR: &str = "review";
 
 /// What the caller believes is on disk.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,6 +69,43 @@ pub struct Reconciled {
 /// Hash recorded as `before_hash` when the document didn't exist.
 pub const ABSENT_HASH: &str = "";
 
+/// Why Keep or Undo failed. Nothing changed.
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+pub enum ReviewError {
+    #[error("The run changed this document again; review its latest changes.")]
+    Stale,
+    #[error(transparent)]
+    Undo(#[from] UndoError),
+}
+
+impl From<DocumentError> for ReviewError {
+    fn from(err: DocumentError) -> Self {
+        Self::Undo(UndoError::Document(err))
+    }
+}
+
+impl From<PortError> for ReviewError {
+    fn from(err: PortError) -> Self {
+        DocumentError::from(err).into()
+    }
+}
+
+/// The contract's CmdError; unreadable documents surface as their message.
+impl TryFrom<&ReviewError> for CmdError {
+    type Error = String;
+
+    fn try_from(err: &ReviewError) -> Result<Self, String> {
+        match err {
+            ReviewError::Stale => Ok(CmdError {
+                code: CmdErrorCode::StaleReview,
+                message: err.to_string(),
+                details: None,
+            }),
+            ReviewError::Undo(undo) => CmdError::try_from(undo),
+        }
+    }
+}
+
 /// The project document kind for a path's extension.
 pub fn kind_of(doc: &str) -> Result<DocumentKind, DocumentError> {
     match Path::new(doc).extension().and_then(|ext| ext.to_str()) {
@@ -78,6 +126,7 @@ struct Write {
     ops: Value,
     before: Option<String>,
     after: String,
+    effect: ReviewEffect,
 }
 
 /// One project's write path over its ports. Cheap to build per call.
@@ -173,6 +222,7 @@ impl<'a> EditSession<'a> {
                 ops: Value::Array(ops.to_vec()),
                 before: current,
                 after: edit.content.clone(),
+                effect: ReviewEffect::Review,
             });
         }
         if let Some(lock) = edit.note_lock.filter(|lock| lock.changed && follows_locks) {
@@ -187,6 +237,7 @@ impl<'a> EditSession<'a> {
                 ops: json!([{ "kind": "set_lock", "note": doc, "locked": lock.locked }]),
                 before,
                 after: notes::lock_manifest_to_json(&manifest)?,
+                effect: ReviewEffect::Review,
             });
         }
 
@@ -202,13 +253,160 @@ impl<'a> EditSession<'a> {
         })
     }
 
+    /// Runs with changes nobody has kept or undone, oldest first.
+    pub fn pending_reviews(&self) -> Result<Vec<RunReview>, PortError> {
+        let mut runs: Vec<RunReview> = Vec::new();
+        let mut docs: BTreeMap<(String, String), Vec<OpLogEntry>> = BTreeMap::new();
+        let mut order: Vec<(String, String)> = Vec::new();
+        for entry in self.log.unreviewed()? {
+            let key = (entry.write.run_id.clone(), entry.write.doc.clone());
+            if !docs.contains_key(&key) {
+                order.push(key.clone());
+            }
+            docs.entry(key).or_default().push(entry);
+        }
+        for key in order {
+            let entries = &docs[&key];
+            let (first, last) = (&entries[0], &entries[entries.len() - 1]);
+            let document = DocumentReview {
+                doc: key.1.clone(),
+                through_seq: last.seq,
+                writes: entries.len() as u32,
+                created: first.write.before_hash == ABSENT_HASH,
+                last_at: timestamp(last.write.at),
+            };
+            match runs.iter_mut().find(|run| run.run_id == key.0) {
+                Some(run) => run.documents.push(document),
+                None => {
+                    let run = self.log.run(&key.0)?;
+                    runs.push(RunReview {
+                        run_id: run.id,
+                        actor: run.actor,
+                        started_at: timestamp(run.started_at),
+                        documents: vec![document],
+                    });
+                }
+            }
+        }
+        Ok(runs)
+    }
+
+    /// Keeps `run_id`'s changes to `doc` up to `through_seq`, the
+    /// [`DocumentReview`] token. Stale if the run wrote to `doc` since.
+    pub fn keep(&self, run_id: &str, doc: &str, through_seq: u64) -> Result<(), ReviewError> {
+        let doc = normalize(doc)?;
+        let _guard = self.lock.acquire()?;
+        self.reconcile_locked()?;
+        self.reviewed_entries(run_id, &doc, through_seq)?;
+        self.log
+            .resolve(run_id, &doc, through_seq, Resolution::Kept)?;
+        Ok(())
+    }
+
+    /// Reverts `run_id`'s changes to `doc` up to `through_seq`, keeping
+    /// later edits by others where they don't overlap. The revert is itself
+    /// a write in a `review` run, so it is logged and crash-safe.
+    pub fn undo(&self, run_id: &str, doc: &str, through_seq: u64) -> Result<(), ReviewError> {
+        let doc = normalize(doc)?;
+        let _guard = self.lock.acquire()?;
+        self.reconcile_locked()?;
+        let entries = self.reviewed_entries(run_id, &doc, through_seq)?;
+        let current = self.read(&doc)?;
+        let content = if doc == LOCKS_PATH {
+            undo_whole_file(current.as_deref(), &entries)?
+        } else {
+            self.undo_document(&doc, current.as_deref(), &entries)?
+        };
+        if content == current {
+            self.log
+                .resolve(run_id, &doc, through_seq, Resolution::Undone)?;
+            return Ok(());
+        }
+        let Some(after) = content else {
+            // Undoing a document the run created. Deletes aren't logged; a
+            // crash before resolving leaves it up for review, and undoing
+            // again finds it already gone.
+            self.files.remove(Path::new(&doc))?;
+            self.log
+                .resolve(run_id, &doc, through_seq, Resolution::Undone)?;
+            return Ok(());
+        };
+        let now = self.clock.now();
+        let review_run = self.log.begin_run(REVIEW_ACTOR, now)?;
+        self.commit_writes(
+            &review_run,
+            REVIEW_ACTOR,
+            now,
+            vec![Write {
+                doc: doc.clone(),
+                ops: json!([{ "kind": "undo_run", "run_id": run_id, "through_seq": through_seq }]),
+                before: current,
+                after,
+                effect: ReviewEffect::Undo {
+                    run_id: run_id.to_string(),
+                    doc,
+                    through_seq,
+                },
+            }],
+        )?;
+        Ok(())
+    }
+
+    /// The run's unresolved writes to `doc`, checking `through_seq` is the
+    /// newest of them.
+    fn reviewed_entries(
+        &self,
+        run_id: &str,
+        doc: &str,
+        through_seq: u64,
+    ) -> Result<Vec<OpLogEntry>, ReviewError> {
+        let entries: Vec<_> = self
+            .log
+            .entries_for_run(run_id)?
+            .into_iter()
+            .filter(|e| {
+                e.write.doc == doc && e.state == OpLogState::Committed && e.resolution.is_none()
+            })
+            .collect();
+        match entries.last() {
+            Some(last) if last.seq == through_seq => Ok(entries),
+            _ => Err(ReviewError::Stale),
+        }
+    }
+
+    fn undo_document(
+        &self,
+        doc: &str,
+        current: Option<&str>,
+        entries: &[OpLogEntry],
+    ) -> Result<Option<String>, ReviewError> {
+        let kind = kind_of(doc)?;
+        let writes = match entries
+            .iter()
+            .map(|e| e.write.images.clone())
+            .collect::<Option<Vec<_>>>()
+        {
+            Some(images) => images
+                .into_iter()
+                .map(|images| UndoWrite {
+                    before: images.before,
+                    after: images.after,
+                })
+                .collect::<Vec<_>>(),
+            None => return legacy_undo(current, entries),
+        };
+        let note_locked =
+            kind == DocumentKind::Note && notes::get_note_lock(self.files, doc)?.locked;
+        Ok(review::undo_document(kind, current, &writes, note_locked, self.clock.now())?.content)
+    }
+
     /// Logs every write pending, replaces the files, then commits them. A
     /// crash in between is settled by [`Self::reconcile`], file by file.
     fn commit_writes(
         &self,
         run_id: &str,
         actor: &str,
-        at: chrono::DateTime<chrono::Utc>,
+        at: DateTime<Utc>,
         writes: Vec<Write>,
     ) -> Result<Vec<u64>, PortError> {
         let run_entries = if writes.is_empty() {
@@ -239,6 +437,15 @@ impl<'a> EditSession<'a> {
                     after_hash: edit_ops::document_version(write.after.as_bytes()),
                     at,
                     baseline,
+                    images: Some(Images {
+                        before: write.before.clone(),
+                        after: Some(write.after.clone()),
+                    }),
+                    effect: if actor == USER_ACTOR {
+                        ReviewEffect::AutoKeep
+                    } else {
+                        write.effect.clone()
+                    },
                 })?,
             );
         }
@@ -291,6 +498,57 @@ impl<'a> EditSession<'a> {
             Err(err) => Err(err.into()),
         }
     }
+}
+
+/// Undo for writes logged before review kept images: only a clean revert to
+/// the run's baseline, when nothing changed the document since.
+fn legacy_undo(
+    current: Option<&str>,
+    entries: &[OpLogEntry],
+) -> Result<Option<String>, ReviewError> {
+    let on_disk = current.map(|c| edit_ops::document_version(c.as_bytes()));
+    let chained = entries
+        .windows(2)
+        .all(|pair| pair[1].write.before_hash == pair[0].write.after_hash);
+    let last = &entries[entries.len() - 1].write;
+    let clean = chained && on_disk.as_deref() == Some(last.after_hash.as_str());
+    match (&entries[0].write.baseline, clean) {
+        (Some(Baseline::Content(content)), true) => Ok(Some(content.clone())),
+        (Some(Baseline::Absent), true) => Ok(None),
+        _ => Err(conflict(Some(last.after_hash.clone()), on_disk)),
+    }
+}
+
+/// Files without entity structure (the lock manifest) undo only cleanly.
+fn undo_whole_file(
+    current: Option<&str>,
+    entries: &[OpLogEntry],
+) -> Result<Option<String>, ReviewError> {
+    let images: Option<Vec<_>> = entries.iter().map(|e| e.write.images.clone()).collect();
+    let Some(images) = images else {
+        return legacy_undo(current, entries);
+    };
+    let chained = images
+        .windows(2)
+        .all(|pair| pair[1].before == pair[0].after);
+    let last = images[images.len() - 1].after.as_deref();
+    if chained && current == last {
+        return Ok(images[0].before.clone());
+    }
+    let version = |c: Option<&str>| c.map(|c| edit_ops::document_version(c.as_bytes()));
+    Err(conflict(version(last), version(current)))
+}
+
+fn conflict(expected: Option<String>, current: Option<String>) -> ReviewError {
+    ReviewError::Undo(UndoError::Conflicts(vec![UndoConflict {
+        path: String::new(),
+        expected_version: expected,
+        current_version: current,
+    }]))
+}
+
+fn timestamp(at: DateTime<Utc>) -> String {
+    at.to_rfc3339_opts(SecondsFormat::AutoSi, true)
 }
 
 /// The canonical project-relative form (`/`-separated) the op log keys on.
@@ -496,6 +754,8 @@ mod tests {
             after_hash: version(after),
             at: ports.clock.now(),
             baseline,
+            images: None,
+            effect: ReviewEffect::Review,
         };
         // Crashed after the write landed, before commit.
         let landed = ports
@@ -549,6 +809,8 @@ mod tests {
                 after_hash: version("# never"),
                 at: ports.clock.now(),
                 baseline: Some(Baseline::Absent),
+                images: None,
+                effect: ReviewEffect::Review,
             })
             .unwrap();
 
@@ -758,5 +1020,309 @@ mod tests {
             );
         }
         assert!(ports.log.entries_for_run(&run).unwrap().is_empty());
+    }
+
+    fn read(ports: &Ports, doc: &str) -> Option<String> {
+        ports
+            .files
+            .read(Path::new(doc))
+            .ok()
+            .map(|b| String::from_utf8(b).unwrap())
+    }
+
+    fn review_of(session: &EditSession<'_>, run: &str, doc: &str) -> Option<DocumentReview> {
+        session
+            .pending_reviews()
+            .unwrap()
+            .into_iter()
+            .find(|r| r.run_id == run)
+            .and_then(|r| r.documents.into_iter().find(|d| d.doc == doc))
+    }
+
+    #[test]
+    fn user_writes_are_kept_and_agent_writes_await_review() {
+        let ports = Ports::new();
+        let session = ports.session();
+        let user = session.begin_run(USER_ACTOR).unwrap();
+        let agent = session.begin_run("agent").unwrap();
+        session
+            .apply(&user, "a.md", Expected::Absent, &[note("# A")])
+            .unwrap();
+        session
+            .apply(&agent, "a.md", Expected::Unchecked, &[note("# A1")])
+            .unwrap();
+        let last = session
+            .apply(&agent, "a.md", Expected::Unchecked, &[note("# A2")])
+            .unwrap();
+        session
+            .apply(&agent, "b.md", Expected::Absent, &[note("# B")])
+            .unwrap();
+
+        let reviews = session.pending_reviews().unwrap();
+        assert_eq!(reviews.len(), 1);
+        assert_eq!(reviews[0].actor, "agent");
+        assert_eq!(reviews[0].started_at, "2026-01-02T03:04:05Z");
+        let docs = &reviews[0].documents;
+        assert_eq!(
+            docs.iter()
+                .map(|d| (d.doc.as_str(), d.writes, d.created, d.through_seq))
+                .collect::<Vec<_>>(),
+            vec![("a.md", 2, false, last.seq.unwrap()), ("b.md", 1, true, 4)]
+        );
+        assert_eq!(docs[0].last_at, "2026-01-02T03:04:05Z");
+    }
+
+    #[test]
+    fn keep_resolves_only_the_reviewed_writes() {
+        let ports = Ports::new();
+        let session = ports.session();
+        let agent = session.begin_run("agent").unwrap();
+        let first = session
+            .apply(&agent, "a.md", Expected::Absent, &[note("# A")])
+            .unwrap();
+        let second = session
+            .apply(&agent, "a.md", Expected::Unchecked, &[note("# A2")])
+            .unwrap();
+
+        assert_eq!(
+            session.keep(&agent, "a.md", first.seq.unwrap()),
+            Err(ReviewError::Stale)
+        );
+        assert_eq!(
+            CmdError::try_from(&ReviewError::Stale).unwrap().code,
+            CmdErrorCode::StaleReview
+        );
+        session.keep(&agent, "./a.md", second.seq.unwrap()).unwrap();
+        assert!(session.pending_reviews().unwrap().is_empty());
+        assert_eq!(
+            session.keep(&agent, "a.md", second.seq.unwrap()),
+            Err(ReviewError::Stale)
+        );
+        assert_eq!(read(&ports, "a.md").as_deref(), Some("# A2"));
+
+        // The run's next write is a new review; undo stops at the kept state.
+        let third = session
+            .apply(&agent, "a.md", Expected::Unchecked, &[note("# A3")])
+            .unwrap();
+        session.undo(&agent, "a.md", third.seq.unwrap()).unwrap();
+        assert_eq!(read(&ports, "a.md").as_deref(), Some("# A2"));
+    }
+
+    #[test]
+    fn undo_reverts_through_a_logged_review_run() {
+        let ports = Ports::new();
+        let session = ports.session();
+        let user = session.begin_run(USER_ACTOR).unwrap();
+        session
+            .apply(&user, "a.md", Expected::Absent, &[note("# A")])
+            .unwrap();
+        let agent = session.begin_run("agent").unwrap();
+        session
+            .apply(&agent, "a.md", Expected::Unchecked, &[note("# A1")])
+            .unwrap();
+        let last = session
+            .apply(&agent, "a.md", Expected::Unchecked, &[note("# A2")])
+            .unwrap();
+
+        session.undo(&agent, "a.md", last.seq.unwrap()).unwrap();
+
+        assert_eq!(read(&ports, "a.md").as_deref(), Some("# A"));
+        assert!(session.pending_reviews().unwrap().is_empty());
+        let resolutions: Vec<_> = ports
+            .log
+            .entries_for_run(&agent)
+            .unwrap()
+            .iter()
+            .map(|e| e.resolution)
+            .collect();
+        assert_eq!(resolutions, vec![Some(Resolution::Undone); 2]);
+        let review = ports.log.entries_for_run("run-3").unwrap();
+        assert_eq!(ports.log.run("run-3").unwrap().actor, REVIEW_ACTOR);
+        assert_eq!(review.len(), 1);
+        assert_eq!(review[0].resolution, Some(Resolution::Kept));
+        assert_eq!(
+            review[0].write.images,
+            Some(Images {
+                before: Some("# A2".into()),
+                after: Some("# A".into())
+            })
+        );
+    }
+
+    #[test]
+    fn undo_keeps_later_edits_by_others() {
+        let ports = Ports::new();
+        let session = ports.session();
+        let user = session.begin_run(USER_ACTOR).unwrap();
+        let board = Storyboard::new("Story", ports.clock.now());
+        session
+            .apply(
+                &user,
+                "s.sb",
+                Expected::Absent,
+                &[json!({ "kind": "replace_storyboard", "storyboard": serde_json::to_value(&board).unwrap() })],
+            )
+            .unwrap();
+        let agent = session.begin_run("agent").unwrap();
+        let inserted = session
+            .apply(
+                &agent,
+                "s.sb",
+                Expected::Unchecked,
+                &[json!({ "kind": "insert_storyboard_item", "index": null, "item": { "type": "sketch_ref", "path": "a.sk" } })],
+            )
+            .unwrap();
+        let mut renamed: Storyboard = serde_json::from_str(&read(&ports, "s.sb").unwrap()).unwrap();
+        renamed.title = "Renamed".into();
+        session
+            .apply(
+                &user,
+                "s.sb",
+                Expected::Unchecked,
+                &[json!({ "kind": "replace_storyboard", "storyboard": serde_json::to_value(&renamed).unwrap() })],
+            )
+            .unwrap();
+
+        session.undo(&agent, "s.sb", inserted.seq.unwrap()).unwrap();
+
+        let after: Storyboard = serde_json::from_str(&read(&ports, "s.sb").unwrap()).unwrap();
+        assert_eq!(after.title, "Renamed");
+        assert!(after.items.is_empty());
+    }
+
+    #[test]
+    fn undoing_a_created_document_deletes_it() {
+        let ports = Ports::new();
+        let session = ports.session();
+        let agent = session.begin_run("agent").unwrap();
+        let created = session
+            .apply(&agent, "new.md", Expected::Absent, &[note("# New")])
+            .unwrap();
+        session
+            .undo(&agent, "new.md", created.seq.unwrap())
+            .unwrap();
+        assert_eq!(read(&ports, "new.md"), None);
+        assert!(session.pending_reviews().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_conflicting_undo_changes_nothing() {
+        let ports = Ports::new();
+        let session = ports.session();
+        let agent = session.begin_run("agent").unwrap();
+        let created = session
+            .apply(&agent, "a.md", Expected::Absent, &[note("# A")])
+            .unwrap();
+        let user = session.begin_run(USER_ACTOR).unwrap();
+        session
+            .apply(&user, "a.md", Expected::Unchecked, &[note("# Mine")])
+            .unwrap();
+
+        let err = session
+            .undo(&agent, "a.md", created.seq.unwrap())
+            .unwrap_err();
+        assert_eq!(
+            CmdError::try_from(&err).unwrap().code,
+            CmdErrorCode::UndoConflict
+        );
+        assert_eq!(read(&ports, "a.md").as_deref(), Some("# Mine"));
+        assert!(review_of(&session, &agent, "a.md").is_some());
+    }
+
+    #[test]
+    fn a_locked_note_cannot_be_undone() {
+        let ports = Ports::new();
+        let session = ports.session();
+        let user = session.begin_run(USER_ACTOR).unwrap();
+        session
+            .apply(&user, "a.md", Expected::Absent, &[note("# A")])
+            .unwrap();
+        let agent = session.begin_run("agent").unwrap();
+        let edited = session
+            .apply(&agent, "a.md", Expected::Unchecked, &[note("# A1")])
+            .unwrap();
+        session
+            .apply(
+                &user,
+                "a.md",
+                Expected::Unchecked,
+                &[json!({ "kind": "set_lock", "locked": true })],
+            )
+            .unwrap();
+
+        let err = session
+            .undo(&agent, "a.md", edited.seq.unwrap())
+            .unwrap_err();
+        assert_eq!(err, ReviewError::Undo(UndoError::LockedNote));
+        assert_eq!(read(&ports, "a.md").as_deref(), Some("# A1"));
+    }
+
+    #[test]
+    fn an_agents_lock_change_is_its_own_review() {
+        let ports = Ports::new();
+        let session = ports.session();
+        let user = session.begin_run(USER_ACTOR).unwrap();
+        session
+            .apply(&user, "a.md", Expected::Absent, &[note("# A")])
+            .unwrap();
+        let before = read(&ports, LOCKS_PATH);
+        let agent = session.begin_run("agent").unwrap();
+        session
+            .apply(
+                &agent,
+                "a.md",
+                Expected::Unchecked,
+                &[json!({ "kind": "set_lock", "locked": true })],
+            )
+            .unwrap();
+        let review = review_of(&session, &agent, LOCKS_PATH).unwrap();
+        assert!(review_of(&session, &agent, "a.md").is_none());
+
+        session
+            .undo(&agent, LOCKS_PATH, review.through_seq)
+            .unwrap();
+        assert_eq!(read(&ports, LOCKS_PATH), before);
+        assert!(session.pending_reviews().unwrap().is_empty());
+    }
+
+    #[test]
+    fn writes_logged_before_review_undo_only_cleanly() {
+        let ports = Ports::new();
+        let session = ports.session();
+        let agent = session.begin_run("agent").unwrap();
+        ports.files.write_atomic(Path::new("a.md"), b"# A").unwrap();
+        let legacy = |before: &str, after: &str, baseline| NewOpLogEntry {
+            run_id: agent.clone(),
+            doc: "a.md".into(),
+            actor: "agent".into(),
+            ops: json!([]),
+            before_hash: version(before),
+            after_hash: version(after),
+            at: ports.clock.now(),
+            baseline,
+            images: None,
+            effect: ReviewEffect::Review,
+        };
+        let seq = ports
+            .log
+            .append_pending(legacy(
+                "# Base",
+                "# A",
+                Some(Baseline::Content("# Base".into())),
+            ))
+            .unwrap();
+        ports.log.commit(seq).unwrap();
+
+        ports
+            .files
+            .write_atomic(Path::new("a.md"), b"# Other")
+            .unwrap();
+        assert!(matches!(
+            session.undo(&agent, "a.md", seq),
+            Err(ReviewError::Undo(UndoError::Conflicts(_)))
+        ));
+        ports.files.write_atomic(Path::new("a.md"), b"# A").unwrap();
+        session.undo(&agent, "a.md", seq).unwrap();
+        assert_eq!(read(&ports, "a.md").as_deref(), Some("# Base"));
     }
 }

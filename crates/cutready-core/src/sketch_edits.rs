@@ -97,7 +97,7 @@ pub struct RowTextUpdate {
 }
 
 /// Lockable cells in column order; errors report the first locked cell that changed.
-const LOCKABLE_FIELDS: [&str; 6] = [
+pub(crate) const LOCKABLE_FIELDS: [&str; 6] = [
     "time",
     "narrative",
     "demo_actions",
@@ -340,7 +340,7 @@ pub fn reorder_rows(
 
 /// A locked row protects everything except its lock state, including
 /// desktop-only and unknown fields.
-fn row_content_matches(old: &PlanningRow, new: &PlanningRow) -> bool {
+pub(crate) fn row_content_matches(old: &PlanningRow, new: &PlanningRow) -> bool {
     row_content(old) == row_content(new)
 }
 
@@ -353,7 +353,7 @@ fn row_content(row: &PlanningRow) -> serde_json::Value {
     value
 }
 
-fn field_matches(old: &PlanningRow, new: &PlanningRow, field: &str) -> bool {
+pub(crate) fn field_matches(old: &PlanningRow, new: &PlanningRow, field: &str) -> bool {
     match field {
         "time" => old.time == new.time,
         "narrative" => old.narrative == new.narrative,

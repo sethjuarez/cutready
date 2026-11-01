@@ -21,6 +21,7 @@ export {
   StoryboardSection,
 } from "./storyboard-item";
 export { Storyboard } from "./storyboard";
+export { UndoConflict } from "./undo-conflict";
 export { CmdErrorDetails } from "./cmd-error-details";
 export { CmdError } from "./cmd-error";
 export { RowTextUpdate } from "./row-text-update";
@@ -50,6 +51,11 @@ export {
 } from "./edit-op";
 export { DocumentEditRequest } from "./document-edit-request";
 export { DocumentEdit } from "./document-edit";
+export { UndoWrite } from "./undo-write";
+export { DocumentUndoRequest } from "./document-undo-request";
+export { DocumentUndo } from "./document-undo";
+export { DocumentReview } from "./document-review";
+export { RunReview } from "./run-review";
 export { ChatParticipant } from "./chat-participant";
 export { ChatArtifactSource } from "./chat-artifact-source";
 export { ChatToolUse } from "./chat-tool-use";

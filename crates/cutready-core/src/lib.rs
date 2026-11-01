@@ -17,12 +17,13 @@ pub mod models;
 pub mod notes;
 pub mod path;
 pub mod ports;
+pub mod review;
 pub mod sketch_edits;
 pub mod testing;
 pub mod visual_document;
 
 pub use cutready_contracts as contracts;
 pub use ports::{
-    Baseline, Clock, Files, Lock, LockGuard, Log, LogLevel, NewOpLogEntry, OpLogEntry, OpLogState,
-    OpLogStore, PortError, PortErrorKind, Run, Secrets,
+    Baseline, Clock, Files, Images, Lock, LockGuard, Log, LogLevel, NewOpLogEntry, OpLogEntry,
+    OpLogState, OpLogStore, PortError, PortErrorKind, Resolution, ReviewEffect, Run, Secrets,
 };
