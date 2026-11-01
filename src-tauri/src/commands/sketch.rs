@@ -5,10 +5,11 @@
 use tauri::State;
 use tauri_plugin_auditaur::auditaur_command;
 
-use crate::engine::{project, visual_document::normalize_visual_document_for_save};
+use crate::engine::project;
 use crate::models::script::ProjectView;
 use crate::AppState;
 use cutready_core::models::sketch::{DocumentMetadata, PlanningCellLocks, Sketch, SketchSummary};
+use cutready_core::visual_document::normalize_visual_document_for_save;
 
 /// Helper: get the project root from current state.
 fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {

@@ -150,7 +150,7 @@ cutready/
 | engine/agent/llm.rs | ✅ Implemented | Thin bridge: LlmConfig → agentive providers |
 | engine/agent/runner.rs | ✅ Implemented | Agentic loop (delegates to agentive::run) |
 | engine/agent/tools.rs | ✅ Implemented | Agent tool definitions (read/write sketches, web fetch, visuals) |
-| engine/import.rs | ✅ Implemented | .docx/.pdf/.pptx import to sketches/notes |
+| cutready-core import.rs | ✅ Implemented | .docx/.pdf/.pptx parsing to markdown (host-neutral; images via `Files` port) |
 | engine/memory.rs | ✅ Implemented | Agent memory system (core, procedural, archival) |
 | engine/recording.rs | 🧪 Experimental | Screen, camera, microphone, and system-audio capture with local-only take storage |
 | engine/automation.rs | 🔲 Placeholder | Playwright replay automation |

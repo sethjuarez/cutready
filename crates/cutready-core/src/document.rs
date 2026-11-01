@@ -25,6 +25,9 @@ pub enum DocumentError {
     Parse(String),
     #[error("{0}")]
     Serialize(String),
+    /// The document (or the part being changed) is locked.
+    #[error("{0}")]
+    Locked(String),
 }
 
 pub fn sketch_to_json(sketch: &Sketch) -> Result<String, DocumentError> {
@@ -101,7 +104,7 @@ pub fn externalize_inline_visuals<E: std::fmt::Display>(
     migration
 }
 
-fn read_text(files: &dyn Files, path: &Path) -> Result<String, DocumentError> {
+pub(crate) fn read_text(files: &dyn Files, path: &Path) -> Result<String, DocumentError> {
     // Matches std::fs::read_to_string: invalid UTF-8 is an I/O failure, not a parse error.
     String::from_utf8(files.read(path)?).map_err(|_| {
         DocumentError::Port(PortError::new(

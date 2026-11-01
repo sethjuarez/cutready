@@ -8,12 +8,16 @@
 
 #![deny(clippy::disallowed_methods, clippy::disallowed_types)]
 
+pub mod assets;
 pub mod document;
+pub mod import;
 pub mod models;
+pub mod notes;
 pub mod path;
 pub mod ports;
 pub mod sketch_edits;
 pub mod testing;
+pub mod visual_document;
 
 pub use cutready_contracts as contracts;
 pub use ports::{

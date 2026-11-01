@@ -12,9 +12,9 @@ use tauri_plugin_auditaur::auditaur_command;
 use crate::engine::{
     diagnostics_sanitizer::{sanitize_diagnostic_optional_text, sanitize_diagnostic_text},
     project,
-    visual_document::normalize_visual_document_for_save,
 };
 use crate::{AppState, AuditaurDiagnosticsPolicy};
+use cutready_core::visual_document::normalize_visual_document_for_save;
 
 #[derive(Debug, Serialize)]
 pub struct DiagnosticsDump {

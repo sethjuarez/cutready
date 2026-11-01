@@ -1079,7 +1079,7 @@ pub async fn transfer_asset(
     // Collect asset refs BEFORE moving (so we can read the source file)
     let file_ext = source_rel.rsplit('.').next().unwrap_or("");
     let asset_refs: Vec<String> = if let Ok(content) = std::fs::read_to_string(&source) {
-        project::collect_asset_refs(&content, file_ext)
+        cutready_core::assets::collect_asset_refs(&content, file_ext)
     } else {
         Vec::new()
     };
