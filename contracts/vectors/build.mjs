@@ -1618,7 +1618,9 @@ const undoDocumentVectors = [
 // replays the same edit as EditService ops on the golden input:
 // - editDocument: the input bytes plus the ops give the expected file's exact
 //   bytes and their version;
-// - undoDocument: undoing that write on the expected bytes gives back the input;
+// - undoDocument: undoing that write on the expected bytes gives back the input
+//   (`_undo`, the fast path), and undoing it after a disjoint concurrent edit
+//   keeps that edit (`_undo_merge`, the merge path; see below);
 // - applySketchOps / applyStoryboardOps: the parsed input plus the ops give the
 //   parsed expected document. Typra re-serializes vectors through JSON, which
 //   can't tell `1.0` from `1`, so documents holding an integral float (the
@@ -1732,6 +1734,57 @@ const goldenCases = [
   return { ...c, kind, inputPath, expectedPath, before: goldenText(inputPath), after: goldenText(expectedPath) };
 });
 
+// Merge-path undo. `_undo` cases hand back the expected bytes untouched, which
+// takes the fast path (return the write's `before`). `_undo_merge` cases make a
+// concurrent edit on the expected bytes first, so the core must invert the
+// write entity by entity (review.rs) and keep the edit. Each edit touches an
+// entity the golden op leaves alone (a different top-level field, an untouched
+// row's content, or an unknown field), and no lock left after the undo holds
+// it. The expected bytes are the canonical save of the input (the
+// `*_save_roundtrip` golden) with the same textual edit, and `updated_at`
+// stamped with the undo's `now`, as every merged write is.
+const replaceOnce = (text, from, to, label) => {
+  const at = text.indexOf(from);
+  if (at < 0 || text.indexOf(from, at + 1) >= 0) {
+    throw new Error(`${label}: ${JSON.stringify(from)} must occur exactly once`);
+  }
+  return text.slice(0, at) + to + text.slice(at + from.length);
+};
+const goldenCanonical = {
+  sketch: goldenText("expected/sketch_save_roundtrip/intro.sk"),
+  storyboard: goldenText("expected/storyboard_save_roundtrip/demo.sb"),
+};
+const goldenCanonicalUpdatedAt = {
+  sketch: `"updated_at": "${goldenSketch.updated_at}"`,
+  storyboard: `"updated_at": "${JSON.parse(goldenText("inputs/storyboard.sb")).updated_at}"`,
+};
+const sketchTitle = [`"title": "Intro — welcome",`, `"title": "Intro — theirs",`];
+const storyboardTitle = [`"title": "Contoso demo",`, `"title": "Contoso demo (theirs)",`];
+const goldenConcurrent = {
+  // Sketch top-level fields: another field or a row changes meanwhile.
+  sketch_update_title: [`"demo_actions": "Open the dashboard",`, `"demo_actions": "Open the dashboard twice",`],
+  sketch_update_description: [`"owner": "seth"`, `"owner": "dana"`],
+  sketch_update_metadata: sketchTitle,
+  // Rows and order: a top-level field or an unknown field changes meanwhile.
+  sketch_update_rows: [`"text": "Open with the dashboard."`, `"text": "Open with the orders list."`],
+  sketch_update_row_text: [`"zz_ios_only": "kept"`, `"zz_ios_only": "theirs"`],
+  sketch_reorder_rows: sketchTitle,
+  // Locks: the content of a row whose lock the run didn't touch, an unlocked
+  // cell of a row the run locked a cell of, or a top-level field.
+  sketch_lock: sketchTitle,
+  sketch_unlock: [`"owner": "seth"`, `"owner": "dana"`],
+  sketch_row_lock: [`"demo_actions": "Click **Orders**",`, `"demo_actions": "Click **Orders** twice",`],
+  sketch_cell_lock: [`"narrative": "Welcome to **Contoso**.",`, `"narrative": "Welcome to **Contoso** today.",`],
+  // Storyboard items: a top-level field changes meanwhile.
+  storyboard_add_sketch_at_position: storyboardTitle,
+  storyboard_add_sketch_append: [`"description": "Partner walkthrough"`, `"description": "Partner walkthrough v2"`],
+  storyboard_remove_sketch: [`"cut": "v2"`, `"cut": "v3"`],
+  storyboard_add_section: [`"ios_board_marker": true`, `"ios_board_marker": false`],
+  storyboard_reorder_items: storyboardTitle,
+  // Storyboard fields: the items change meanwhile.
+  storyboard_update: [`"path": "outro.sk"`, `"path": "closing.sk"`],
+};
+
 for (const c of goldenCases) {
   const vectorName = `golden_${c.name}`;
   if (!integralFloat.test(c.before) && !integralFloat.test(c.after)) {
@@ -1753,6 +1806,21 @@ for (const c of goldenCases) {
     name: `${vectorName}_undo`,
     input: undo(c.kind, c.after, [write(c.before, c.after)]),
     expected: undone(c.before),
+  });
+  const concurrent = goldenConcurrent[c.name];
+  if (!concurrent) throw new Error(`${vectorName}: no concurrent change for its merge-path undo`);
+  const [from, to] = concurrent;
+  undoDocumentVectors.push({
+    name: `${vectorName}_undo_merge`,
+    input: undo(c.kind, replaceOnce(c.after, from, to, vectorName), [write(c.before, c.after)]),
+    expected: undone(
+      replaceOnce(
+        replaceOnce(goldenCanonical[c.kind], from, to, vectorName),
+        goldenCanonicalUpdatedAt[c.kind],
+        `"updated_at": "${NOW}"`,
+        vectorName,
+      ),
+    ),
   });
 }
 
