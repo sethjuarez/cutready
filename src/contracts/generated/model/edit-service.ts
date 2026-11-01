@@ -28,7 +28,9 @@ version differs fails with `stale_document`. */
   /** The host write path for every project document. A version mismatch fails
 with `stale_document` (with `details.current_version` when the file
 exists). A missing file must start with its kind's replacement op,
-otherwise the batch is `invalid_op`. The result is the canonical bytes to
+otherwise the batch is `invalid_op`. A batch that starts with the
+replacement op doesn't read the old bytes, so it can overwrite a file that
+no longer parses. The result is the canonical bytes to
 write and their version. An empty batch returns `content` unchanged. */
   editDocument(request: DocumentEditRequest): DocumentEdit;
 }

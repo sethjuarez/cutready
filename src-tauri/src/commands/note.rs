@@ -5,9 +5,13 @@
 use tauri::State;
 use tauri_plugin_auditaur::auditaur_command;
 
+use serde_json::json;
+
+use crate::engine::document_writer::{self, Expected, WriteError};
 use crate::engine::project;
 use crate::models::script::ProjectView;
 use crate::AppState;
+use cutready_core::edit_ops::ContentEditError;
 use cutready_core::models::sketch::NoteSummary;
 
 /// Helper: get the project root from current state.
@@ -31,8 +35,18 @@ pub async fn create_note(relative_path: String, state: State<'_, AppState>) -> R
         return Err(format!("File already exists: {relative_path}"));
     }
 
-    project::write_note(&abs_path, "").map_err(|e| e.to_string())?;
-    Ok(())
+    create_note_at(&root, &relative_path)
+}
+
+fn create_note_at(root: &std::path::Path, rel: &str) -> Result<(), String> {
+    let op = json!({ "kind": "replace_note", "content": "" });
+    match document_writer::edit(root, rel, Expected::Absent, &[op]) {
+        Ok(_) => Ok(()),
+        Err(WriteError::Edit(ContentEditError::Stale(_))) => {
+            Err(format!("File already exists: {rel}"))
+        }
+        Err(err) => Err(err.to_string()),
+    }
 }
 
 #[auditaur_command(skip_all, err)]
@@ -60,10 +74,28 @@ pub async fn set_note_lock(
     locked: bool,
     state: State<'_, AppState>,
 ) -> Result<project::NoteLockState, String> {
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
-    let _ = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
 
-    project::set_note_lock(&root, &relative_path, locked).map_err(|e| e.to_string())
+    set_note_lock_at(&root, &relative_path, &abs_path, locked)
+}
+
+/// The lock lives in the lock manifest. A note that isn't on disk can still
+/// be locked by path, as before.
+fn set_note_lock_at(
+    root: &std::path::Path,
+    rel: &str,
+    abs_path: &std::path::Path,
+    locked: bool,
+) -> Result<project::NoteLockState, String> {
+    if !abs_path.exists() {
+        return project::set_note_lock(root, rel, locked).map_err(|e| e.to_string());
+    }
+    let op = json!({ "kind": "set_lock", "locked": locked });
+    let written = document_writer::edit(root, rel, Expected::Unchecked, &[op])?;
+    let locked = written.note_lock.map_or(locked, |lock| lock.locked);
+    Ok(project::NoteLockState { locked })
 }
 
 #[auditaur_command(skip_all, err)]
@@ -75,9 +107,25 @@ pub async fn update_note(
     let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
-    project::ensure_note_unlocked(&root, &relative_path).map_err(|e| e.to_string())?;
 
-    project::write_note(&abs_path, &content).map_err(|e| e.to_string())?;
+    update_note_at(&root, &relative_path, &abs_path, content)
+}
+
+/// Saving a note that isn't on disk creates it, as before; the lock still
+/// applies because `write_note` follows it.
+fn update_note_at(
+    root: &std::path::Path,
+    rel: &str,
+    abs_path: &std::path::Path,
+    content: String,
+) -> Result<(), String> {
+    let write = json!({ "kind": "write_note", "content": content });
+    let ops = if abs_path.exists() {
+        vec![write]
+    } else {
+        vec![json!({ "kind": "replace_note", "content": "" }), write]
+    };
+    document_writer::edit(root, rel, Expected::Unchecked, &ops)?;
     Ok(())
 }
 
@@ -126,6 +174,7 @@ pub async fn save_pasted_image(
     let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let dir = root.join(".cutready").join("screenshots");
+    // asset write: screenshot image, not a document
     std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create screenshots dir: {e}"))?;
 
     let data = base64_decode(&base64_data)?;
@@ -141,6 +190,7 @@ pub async fn save_pasted_image(
     };
     let filename = format!("pasted-{ts}.{ext}");
     let abs_path = dir.join(&filename);
+    // asset write: screenshot image, not a document
     std::fs::write(&abs_path, &data).map_err(|e| format!("Failed to write image: {e}"))?;
     Ok(format!(".cutready/screenshots/{filename}"))
 }
@@ -199,6 +249,7 @@ pub async fn delete_project_image(
             "Can only delete assets from .cutready/screenshots/ or .cutready/visuals/".into(),
         );
     }
+    // asset write: image cleanup, not a document
     std::fs::remove_file(&abs_path).map_err(|e| format!("Failed to delete asset: {e}"))?;
     Ok(())
 }
@@ -215,6 +266,7 @@ pub async fn delete_orphaned_images(state: State<'_, AppState>) -> Result<u32, S
         if asset.referenced_by.is_empty() {
             let abs = root.join(&asset.path);
             if abs.exists() {
+                // asset write: image cleanup, not a document
                 std::fs::remove_file(&abs)
                     .map_err(|e| format!("Failed to delete {}: {e}", asset.path))?;
                 deleted += 1;
@@ -234,6 +286,7 @@ pub async fn import_image(
     let _write_guard = crate::engine::workspace_write_lock::lock()?;
     let root = project_root(&state)?;
     let dir = root.join(".cutready").join("screenshots");
+    // asset write: screenshot image, not a document
     std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create screenshots dir: {e}"))?;
 
     let source = std::path::Path::new(&source_path);
@@ -250,6 +303,7 @@ pub async fn import_image(
     let filename = format!("{ts}_{original_name}");
     let dest = dir.join(&filename);
 
+    // asset write: screenshot image, not a document
     std::fs::copy(source, &dest).map_err(|e| format!("Failed to copy image: {e}"))?;
     Ok(format!(".cutready/screenshots/{filename}"))
 }
@@ -308,5 +362,83 @@ mod tests {
             std::path::PathBuf::from("D:/workspace/demos/product-tour")
         );
         assert_ne!(document_root_from_project_view(&view), view.repo_root);
+    }
+
+    fn note(root: &std::path::Path) -> String {
+        std::fs::read_to_string(root.join("plan.md")).unwrap()
+    }
+
+    #[test]
+    fn creating_over_an_existing_note_reports_it_exists() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        create_note_at(root, "plan.md").unwrap();
+        assert_eq!(note(root), "");
+
+        assert_eq!(
+            create_note_at(root, "plan.md").unwrap_err(),
+            "File already exists: plan.md"
+        );
+    }
+
+    #[test]
+    fn saving_writes_the_note_and_creates_a_missing_one() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let abs = root.join("plan.md");
+
+        update_note_at(root, "plan.md", &abs, "# Draft".into()).unwrap();
+        assert_eq!(note(root), "# Draft");
+        update_note_at(root, "plan.md", &abs, "# Final".into()).unwrap();
+        assert_eq!(note(root), "# Final");
+    }
+
+    #[test]
+    fn a_locked_note_rejects_saves_even_when_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let abs = root.join("plan.md");
+        create_note_at(root, "plan.md").unwrap();
+
+        assert!(
+            set_note_lock_at(root, "plan.md", &abs, true)
+                .unwrap()
+                .locked
+        );
+        assert!(project::get_note_lock(root, "plan.md").unwrap().locked);
+        let locked = project::ensure_note_unlocked(root, "plan.md")
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            update_note_at(root, "plan.md", &abs, "x".into()).unwrap_err(),
+            locked
+        );
+        assert_eq!(note(root), "");
+
+        std::fs::remove_file(&abs).unwrap();
+        assert_eq!(
+            update_note_at(root, "plan.md", &abs, "x".into()).unwrap_err(),
+            locked
+        );
+        assert!(!abs.exists());
+
+        assert!(
+            !set_note_lock_at(root, "plan.md", &abs, false)
+                .unwrap()
+                .locked
+        );
+        update_note_at(root, "plan.md", &abs, "x".into()).unwrap();
+        assert_eq!(note(root), "x");
+    }
+
+    #[test]
+    fn delete_removes_the_note() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        create_note_at(root, "plan.md").unwrap();
+
+        project::delete_note(&root.join("plan.md"), root).unwrap();
+
+        assert!(!root.join("plan.md").exists());
     }
 }

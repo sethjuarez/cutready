@@ -319,9 +319,13 @@ pub fn edit_document(
     note_locked: bool,
 ) -> Result<DocumentEdit, ContentEditError> {
     let current_version = ensure_expected_version(current.map(str::as_bytes), expected_version)?;
-    if current.is_none() {
-        ensure_starts_with_replacement(kind, ops)?;
+    let replaces = starts_with_replacement(kind, ops)?;
+    if current.is_none() && !replaces {
+        return Err(new_document_needs_replacement(kind, ops)?.into());
     }
+    // A replacement batch doesn't read the old bytes, so it can overwrite a
+    // file that no longer parses.
+    let base = current.filter(|_| !replaces);
     let unchanged = |content: &str, version: String| DocumentEdit {
         content: content.to_string(),
         version,
@@ -335,7 +339,7 @@ pub fn edit_document(
     }
     let (content, note_lock) = match kind {
         DocumentKind::Sketch => {
-            let mut sketch = match current {
+            let mut sketch = match base {
                 Some(content) => document::sketch_from_json(content)?,
                 None => Sketch::new("", now),
             };
@@ -343,7 +347,7 @@ pub fn edit_document(
             (document::sketch_to_json(&sketch)?, None)
         }
         DocumentKind::Storyboard => {
-            let mut storyboard = match current {
+            let mut storyboard = match base {
                 Some(content) => document::storyboard_from_json(content)?.0,
                 None => Storyboard::new("", now),
             };
@@ -371,20 +375,13 @@ pub fn edit_document(
     })
 }
 
-/// A file that doesn't exist yet is created by its kind's replacement op.
-fn ensure_starts_with_replacement(kind: DocumentKind, ops: &[Value]) -> Result<(), EditOpError> {
-    let first = match ops.first() {
-        Some(value) => parse_op(0, value)?,
-        None => {
-            return Err(rejected(
-                0,
-                SketchEditError::InvalidOp {
-                    reason: "A new document needs its content.".into(),
-                },
-            ))
-        }
+/// Whether the batch opens with its kind's replacement op.
+fn starts_with_replacement(kind: DocumentKind, ops: &[Value]) -> Result<bool, EditOpError> {
+    let Some(value) = ops.first() else {
+        return Ok(false);
     };
-    let creates = matches!(
+    let first = parse_op(0, value)?;
+    Ok(matches!(
         (kind, &first.kind),
         (DocumentKind::Sketch, EditOpKind::ReplaceSketchOp { .. })
             | (
@@ -392,20 +389,22 @@ fn ensure_starts_with_replacement(kind: DocumentKind, ops: &[Value]) -> Result<(
                 EditOpKind::ReplaceStoryboardOp { .. }
             )
             | (DocumentKind::Note, EditOpKind::ReplaceNoteOp { .. })
-    );
-    if creates {
-        Ok(())
-    } else {
-        Err(rejected(
-            0,
-            SketchEditError::InvalidOp {
-                reason: format!(
-                    "This {kind} doesn't exist yet; start with replace_{kind}, not {}.",
-                    first.kind_str()
-                ),
-            },
-        ))
-    }
+    ))
+}
+
+/// A file that doesn't exist yet is created by its kind's replacement op.
+fn new_document_needs_replacement(
+    kind: DocumentKind,
+    ops: &[Value],
+) -> Result<EditOpError, EditOpError> {
+    let reason = match ops.first() {
+        Some(value) => format!(
+            "This {kind} doesn't exist yet; start with replace_{kind}, not {}.",
+            parse_op(0, value)?.kind_str()
+        ),
+        None => "A new document needs its content.".into(),
+    };
+    Ok(rejected(0, SketchEditError::InvalidOp { reason }))
 }
 
 /// `EditService.documentVersion`: `sha256:` plus the lowercase hex digest of
@@ -764,6 +763,35 @@ mod tests {
             cmd.details.unwrap().current_version,
             Some(document_version(b"{ }"))
         );
+    }
+
+    #[test]
+    fn a_replacement_overwrites_a_file_that_no_longer_parses() {
+        let replacement = sketch(&[("a", false)]);
+        let op = json!({ "kind": "replace_sketch", "sketch": replacement });
+        let edit = edit_document(
+            DocumentKind::Sketch,
+            Some("{"),
+            Some(&document_version(b"{")),
+            &[op],
+            test_now(),
+            false,
+        )
+        .unwrap();
+        assert_eq!(
+            edit.content,
+            document::sketch_to_json(&replacement).unwrap()
+        );
+
+        let touch = edit_document(
+            DocumentKind::Sketch,
+            Some("{"),
+            Some(&document_version(b"{")),
+            &[json!({ "kind": "touch" })],
+            test_now(),
+            false,
+        );
+        assert!(matches!(touch, Err(ContentEditError::Document(_))));
     }
 
     #[test]

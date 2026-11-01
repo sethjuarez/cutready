@@ -15,6 +15,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use crate::engine::document_writer;
 use crate::engine::draftline_adapter::CutReadyDraftlineAdapter;
 use crate::models::script::{ProjectEntry, ProjectManifest, ProjectView, RepoView};
 use cutready_core::assets::{
@@ -1046,14 +1047,7 @@ pub fn write_sketch(
     path: &Path,
     _project_root: &Path,
 ) -> Result<(), ProjectError> {
-    // Ensure parent directory exists
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
-    }
-
-    let json = document::sketch_to_json(sketch)?;
-    std::fs::write(path, json).map_err(|e| ProjectError::Io(e.to_string()))?;
-
+    document_writer::replace_sketch(path, sketch)?;
     Ok(())
 }
 
@@ -1131,7 +1125,7 @@ pub fn delete_sketch(path: &Path, project_root: &Path) -> Result<(), ProjectErro
         let sketch_rel_path = relative_project_path(path, project_root)?;
         let storyboard_updates = storyboards_with_sketch_removed(project_root, &sketch_rel_path)?;
 
-        std::fs::remove_file(path).map_err(|e| ProjectError::Io(e.to_string()))?;
+        document_writer::delete(path)?;
         for (storyboard_path, storyboard) in storyboard_updates {
             write_storyboard(&storyboard, &storyboard_path, project_root)?;
         }
@@ -1817,13 +1811,7 @@ pub fn write_storyboard(
     path: &Path,
     _project_root: &Path,
 ) -> Result<(), ProjectError> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
-    }
-
-    let json = document::storyboard_to_json(sb)?;
-    std::fs::write(path, json).map_err(|e| ProjectError::Io(e.to_string()))?;
-
+    document_writer::replace_storyboard(path, sb)?;
     Ok(())
 }
 
@@ -1852,16 +1840,11 @@ pub fn read_storyboard(path: &Path) -> Result<Storyboard, ProjectError> {
 /// Persist a storyboard whose older on-disk shape was just upgraded on read.
 /// Best effort: a failed write leaves the old file, which upgrades again next read.
 fn save_upgraded_storyboard(storyboard: &Storyboard, path: &Path) {
-    match document::storyboard_to_json(storyboard) {
-        Ok(json) => {
-            if let Err(err) = std::fs::write(path, json) {
-                log::warn!(
-                    "could not save upgraded storyboard {}: {err}",
-                    path.display()
-                );
-            }
-        }
-        Err(err) => log::warn!("could not serialize upgraded storyboard: {err}"),
+    if let Err(err) = document_writer::replace_storyboard(path, storyboard) {
+        log::warn!(
+            "could not save upgraded storyboard {}: {err}",
+            path.display()
+        );
     }
 }
 
@@ -1871,10 +1854,7 @@ pub fn delete_storyboard(path: &Path, _project_root: &Path) -> Result<(), Projec
         let storyboard = read_storyboard(path)?;
         ensure_storyboard_unlocked(&storyboard)?;
     }
-    if path.exists() {
-        std::fs::remove_file(path).map_err(|e| ProjectError::Io(e.to_string()))?;
-    }
-    Ok(())
+    document_writer::delete(path)
 }
 
 // ── Folder scanning ────────────────────────────────────────────────
@@ -2095,10 +2075,8 @@ pub fn read_note(path: &Path) -> Result<String, ProjectError> {
 
 /// Write a note file (plain text).
 pub fn write_note(path: &Path, content: &str) -> Result<(), ProjectError> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
-    }
-    std::fs::write(path, content).map_err(|e| ProjectError::Io(e.to_string()))
+    document_writer::replace_note(path, content)?;
+    Ok(())
 }
 
 pub fn get_note_lock(
@@ -2164,7 +2142,7 @@ pub fn delete_note(path: &Path, project_root: &Path) -> Result<(), ProjectError>
     let images_in_note = extract_screenshot_refs(&content);
 
     // Delete the note file
-    std::fs::remove_file(path).map_err(|e| ProjectError::Io(e.to_string()))?;
+    document_writer::delete(path)?;
     let _ = set_note_lock(project_root, &rel, false);
 
     // If the note had no screenshot references, we're done
@@ -2197,6 +2175,7 @@ pub fn delete_note(path: &Path, project_root: &Path) -> Result<(), ProjectError>
         if !all_referenced.contains(img_path) {
             let abs_img = project_root.join(img_path);
             if abs_img.exists() {
+                // asset write: orphaned image cleanup
                 let _ = std::fs::remove_file(&abs_img);
             }
         }
@@ -2988,6 +2967,17 @@ pub enum ProjectError {
     /// The document breaks an invariant (e.g. duplicate row ids).
     #[error("{0}")]
     Invalid(String),
+}
+
+impl From<document_writer::WriteError> for ProjectError {
+    fn from(err: document_writer::WriteError) -> Self {
+        use cutready_core::edit_ops::ContentEditError;
+        match err {
+            document_writer::WriteError::Project(err) => err,
+            document_writer::WriteError::Edit(ContentEditError::Document(err)) => err.into(),
+            document_writer::WriteError::Edit(err) => ProjectError::Invalid(err.to_string()),
+        }
+    }
 }
 
 impl From<document::DocumentError> for ProjectError {
