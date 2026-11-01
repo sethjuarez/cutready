@@ -3,6 +3,8 @@ pub mod agent_state;
 pub mod animation;
 pub mod automation;
 pub mod diagnostics_sanitizer;
+#[cfg(test)]
+mod document_goldens;
 pub mod draftline_adapter;
 pub mod export;
 pub mod ffmpeg;

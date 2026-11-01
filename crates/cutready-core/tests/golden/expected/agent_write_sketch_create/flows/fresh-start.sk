@@ -1,0 +1,42 @@
+{
+  "title": "fresh start",
+  "locked": false,
+  "description": null,
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "time": "10s",
+      "duration_seconds": 10,
+      "narrative": "First",
+      "demo_actions": "Open app",
+      "screenshot": null
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "time": "~1 min",
+      "duration_seconds": 75,
+      "narrative": "Second",
+      "demo_actions": "",
+      "screenshot": null
+    }
+  ],
+  "state": "draft",
+  "created_at": "<now>",
+  "updated_at": "<now>"
+}

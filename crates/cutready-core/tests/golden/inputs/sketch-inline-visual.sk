@@ -1,0 +1,33 @@
+{
+  "title": "Inline visual",
+  "description": "",
+  "state": "draft",
+  "rows": [
+    {
+      "time": "5s",
+      "narrative": "a",
+      "demo_actions": "",
+      "screenshot": null,
+      "visual": {
+        "version": "1",
+        "root": {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 10,
+          "height": 10,
+          "fill": "$accent"
+        }
+      }
+    },
+    {
+      "time": "",
+      "narrative": "b",
+      "demo_actions": "",
+      "screenshot": null,
+      "visual": ".cutready/visuals/existing.json"
+    }
+  ],
+  "created_at": "2025-10-01T08:00:00Z",
+  "updated_at": "2025-10-01T08:00:00Z"
+}
