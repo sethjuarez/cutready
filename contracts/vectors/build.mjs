@@ -1484,6 +1484,129 @@ const editDocumentVectors = [
   },
 ];
 
+// EditService.undoDocument. As with editDocument, merged sketch and
+// storyboard bytes are pinned by cutready-core unit tests; these pin the exact
+// fast path, creates and deletes, notes, conflicts and the lock guard.
+// Conflict versions hash an entity's compact JSON with keys sorted.
+const canonical = (value) =>
+  Array.isArray(value)
+    ? "[" + value.map(canonical).join(",") + "]"
+    : value && typeof value === "object"
+      ? "{" + Object.keys(value).sort().map((k) => JSON.stringify(k) + ":" + canonical(value[k])).join(",") + "}"
+      : JSON.stringify(value);
+const entityVersion = (value) => sha(canonical(value));
+const rowContent = ({ locked: _l, locks: _k, ...rest }) => rest;
+const undo = (kind, content, writes, note_locked = false) => ({
+  request: { kind, content, writes, note_locked, now: NOW },
+});
+const write = (before, after) => ({ before, after });
+const undone = (content) => ({ content, version: content === null ? null : sha(content) });
+const sk = (doc) => JSON.stringify(doc);
+const renamedRow = (doc, i, narrative) => edited(doc, (d) => { d.rows[i].narrative = narrative; });
+const ranAfter = renamedRow(unlockedFixture, 0, "Run's words.");
+const theirsAfter = renamedRow(ranAfter, 0, "Someone else's words.");
+const lockedAfterRun = edited(ranAfter, (d) => { d.rows[0].locked = true; });
+const threeRows = sketch([
+  row({ id: "a", time: "0:10", narrative: "A.", demo_actions: "" }),
+  row({ id: "b", time: "0:20", narrative: "B.", demo_actions: "" }),
+  row({ id: "c", time: "0:30", narrative: "C.", demo_actions: "" }),
+]);
+const runOrder = edited(threeRows, (d) => { d.rows = [d.rows[2], d.rows[0], d.rows[1]]; });
+const theirOrder = edited(threeRows, (d) => { d.rows = [d.rows[1], d.rows[2], d.rows[0]]; });
+const renamedBoard = { ...openStoryboard, title: "Run's title", updated_at: NOW };
+const lockedRenamedBoard = { ...renamedBoard, locked: true };
+const undoDocumentVectors = [
+  {
+    name: "no writes leaves the file as it is",
+    input: undo("sketch", sk(unlockedFixture), []),
+    expected: undone(sk(unlockedFixture)),
+  },
+  {
+    name: "untouched since the run, the result is the exact bytes the run started from",
+    input: undo("sketch", sk(theirsAfter), [write(JSON.stringify(unlockedFixture, null, 1), sk(ranAfter)), write(sk(ranAfter), sk(theirsAfter))]),
+    expected: undone(JSON.stringify(unlockedFixture, null, 1)),
+  },
+  {
+    name: "a document the run created is deleted",
+    input: undo("note", noteOnDisk, [write(null, noteOnDisk)]),
+    expected: undone(null),
+  },
+  {
+    name: "a document the run deleted is restored",
+    input: undo("note", null, [write(noteOnDisk, null)]),
+    expected: undone(noteOnDisk),
+  },
+  {
+    name: "a note already back at its before value is left alone",
+    input: undo("note", noteOnDisk, [write(noteOnDisk, "# Run\n")]),
+    expected: undone(noteOnDisk),
+  },
+  {
+    name: "a note changed since the run conflicts as a whole",
+    input: undo("note", "# Theirs\n", [write(noteOnDisk, "# Run\n")]),
+    expectedError: cmdError("undo_conflict", {
+      conflicts: [{ path: "", expected_version: sha("# Run\n"), current_version: sha("# Theirs\n") }],
+    }),
+  },
+  {
+    name: "a created note that changed since conflicts",
+    input: undo("note", "# Theirs\n", [write(null, "# Run\n")]),
+    expectedError: cmdError("undo_conflict", {
+      conflicts: [{ path: "", expected_version: sha("# Run\n"), current_version: sha("# Theirs\n") }],
+    }),
+  },
+  {
+    name: "a locked note can't be undone",
+    input: undo("note", "# Run\n", [write(noteOnDisk, "# Run\n")], true),
+    expectedError: cmdError("locked_document"),
+  },
+  {
+    name: "a row changed again since the run conflicts with both versions",
+    input: undo("sketch", sk(theirsAfter), [write(sk(unlockedFixture), sk(ranAfter))]),
+    expectedError: cmdError("undo_conflict", {
+      conflicts: [{
+        path: "/rows/row-1",
+        expected_version: entityVersion(rowContent(ranAfter.rows[0])),
+        current_version: entityVersion(rowContent(theirsAfter.rows[0])),
+      }],
+    }),
+  },
+  {
+    name: "a row someone else locked since blocks restoring its content",
+    input: undo("sketch", sk(lockedAfterRun), [write(sk(unlockedFixture), sk(ranAfter))]),
+    expectedError: cmdError("locked_row", { row_index: 0 }),
+  },
+  {
+    name: "rows reordered again since the run conflict on their order",
+    input: undo("sketch", sk(theirOrder), [write(sk(threeRows), sk(runOrder))]),
+    expectedError: cmdError("undo_conflict", {
+      conflicts: [{ path: "/rows", expected_version: entityVersion(["c", "a", "b"]), current_version: entityVersion(["b", "c", "a"]) }],
+    }),
+  },
+  {
+    name: "a reorder already reverted is left alone",
+    input: undo("sketch", sk(threeRows), [write(sk(threeRows), sk(runOrder))]),
+    expected: undone(sk(threeRows)),
+  },
+  {
+    name: "a storyboard someone else locked since can't change",
+    input: undo("storyboard", sk(lockedRenamedBoard), [write(sk(openStoryboard), sk(renamedBoard))]),
+    expectedError: cmdError("locked_document"),
+  },
+  {
+    name: "a top-level field changed again since the run conflicts",
+    input: undo("storyboard", sk({ ...renamedBoard, title: "Theirs" }), [write(sk(openStoryboard), sk(renamedBoard))]),
+    expectedError: cmdError("undo_conflict", {
+      conflicts: [{ path: "/title", expected_version: entityVersion("Run's title"), current_version: entityVersion("Theirs") }],
+    }),
+  },
+  {
+    name: "a document gone since the run conflicts",
+    input: undo("sketch", null, [write(sk(unlockedFixture), sk(ranAfter))]),
+    expectedError: cmdError("undo_conflict", { conflicts: [{ path: "", expected_version: sha(sk(ranAfter)) }] }),
+  },
+];
+
 const tspConst = (name, vectors) =>
   `const ${name} = """\n${JSON.stringify(vectors, null, 2).replaceAll("\\", "\\\\")}\n""";\n`;
 
@@ -1503,6 +1626,7 @@ writeFileSync(
     tspConst("DocumentVersionVectors", documentVersionVectors),
     tspConst("ApplyStoryboardOpsVectors", applyStoryboardOpsVectors),
     tspConst("EditDocumentVectors", editDocumentVectors),
+    tspConst("UndoDocumentVectors", undoDocumentVectors),
     tspConst("StoryboardRoundTripVectors", storyboardRoundTripVectors),
     tspConst("StoryboardUpgradeVectors", storyboardUpgradeVectors),
     tspConst("ChatArtifactRoundTripVectors", chatArtifactRoundTripVectors),

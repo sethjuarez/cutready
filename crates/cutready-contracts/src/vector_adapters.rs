@@ -201,6 +201,38 @@ fn edit_document(input: &Value, _ctx: &Context) -> Result<Value, VectorError> {
     Ok(out)
 }
 
+fn undo_document(input: &Value, _ctx: &Context) -> Result<Value, VectorError> {
+    let request = input
+        .get("request")
+        .ok_or_else(|| VectorError::harness("request is required"))?;
+    let kind = request
+        .get("kind")
+        .and_then(Value::as_str)
+        .and_then(cutready_core::contracts::DocumentKind::from_str_opt)
+        .ok_or_else(|| VectorError::harness("request.kind must be a document kind"))?;
+    let writes = request
+        .get("writes")
+        .and_then(Value::as_array)
+        .ok_or_else(|| VectorError::harness("request.writes is required"))?
+        .iter()
+        .map(|w| {
+            cutready_core::contracts::UndoWrite::try_load_from_value(w, &Default::default())
+                .map_err(|e| VectorError::harness(format!("request.writes: {e}")))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let content = request.get("content").and_then(Value::as_str);
+    let note_locked = request
+        .get("note_locked")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let undo = cutready_core::review::undo_document(kind, content, &writes, note_locked, now(request)?)
+        .map_err(|err| match CoreCmdError::try_from(&err) {
+            Ok(cmd) => VectorError::cmd(cmd),
+            Err(message) => VectorError::harness(message),
+        })?;
+    Ok(json!({ "content": undo.content, "version": undo.version }))
+}
+
 fn decode_storyboard(input: &Value) -> Result<cutready_core::models::sketch::Storyboard, VectorError> {
     serde_json::from_value(input.get("storyboard").cloned().unwrap_or(Value::Null))
         .map_err(|e| VectorError::harness(format!("decode storyboard: {e}")))
@@ -662,6 +694,7 @@ pub fn adapters() -> HashMap<&'static str, Adapter> {
         ("EditService.applySketchOps", Adapter::sync(apply_sketch_ops)),
         ("EditService.documentVersion", Adapter::sync(document_version)),
         ("EditService.editDocument", Adapter::sync(edit_document)),
+        ("EditService.undoDocument", Adapter::sync(undo_document)),
         (
             "EditService.applyStoryboardOps",
             Adapter::sync(apply_storyboard_ops),

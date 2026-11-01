@@ -13,6 +13,7 @@ pub mod narration_preview;
 pub mod note;
 pub mod project;
 pub mod recording;
+pub mod review;
 pub mod screenshot;
 pub mod secrets;
 pub mod sketch;

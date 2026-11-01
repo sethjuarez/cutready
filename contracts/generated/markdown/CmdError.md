@@ -32,6 +32,7 @@ classDiagram
         +string row_id
         +uint32 op_index
         +string current_version
+        +UndoConflict[] conflicts
     }
     CmdError *-- CmdErrorDetails
 ```

@@ -5,6 +5,8 @@
 
 use super::context::{LoadContext, SaveContext};
 
+use super::undo_conflict::UndoConflict;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PlanningCellField {
     Time,
@@ -110,6 +112,8 @@ pub struct CmdErrorDetails {
     pub op_index: Option<u32>,
     /// The document version on disk, for `stale_document`.
     pub current_version: Option<String>,
+    /// The entities that block an undo, for `undo_conflict`.
+    pub conflicts: Option<Vec<UndoConflict>>,
     /// Undeclared fields captured on load and written back on save (unknown-field passthrough).
     pub additional_properties: serde_json::Map<String, serde_json::Value>,
 }
@@ -162,13 +166,14 @@ impl CmdErrorDetails {
             row_id: value.get("row_id").and_then(|v| v.as_str()).map(|s| s.to_string()),
             op_index: value.get("op_index").and_then(|v| v.as_u64().and_then(|n| u32::try_from(n).ok())),
             current_version: value.get("current_version").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            conflicts: value.get("conflicts").map(|v| Self::load_conflicts(v, ctx)),
             additional_properties: Self::capture_additional_properties(&value, ""),
         }
     }
 
     /// True when `key` is a declared wire key for the given discriminator value.
     fn additional_properties_known_key(kind: &str, key: &str) -> bool {
-        matches!(key, "row_index" | "field" | "row_id" | "op_index" | "current_version")
+        matches!(key, "row_index" | "field" | "row_id" | "op_index" | "current_version" | "conflicts")
     }
 
     fn capture_additional_properties(value: &serde_json::Value, kind: &str) -> serde_json::Map<String, serde_json::Value> {
@@ -185,6 +190,13 @@ impl CmdErrorDetails {
     }
 
     pub(crate) fn validate_input_at(value: &serde_json::Value, path: &str) -> Result<(), String> {
+        if let Some(entries) = value.get("conflicts").and_then(|candidate| candidate.as_array()) {
+            let collection_path = if path.is_empty() { "conflicts".to_string() } else { format!("{}.{}", path, "conflicts") };
+            for (index, entry) in entries.iter().enumerate() {
+                let entry_path = format!("{}[{}]", collection_path, index);
+                UndoConflict::validate_input_at(entry, &entry_path)?;
+            }
+        }
         Ok(())
     }
 
@@ -209,6 +221,9 @@ impl CmdErrorDetails {
         if let Some(val) = self.current_version.as_ref() {
             result.insert("current_version".to_string(), serde_json::Value::String(val.clone()));
         }
+        if let Some(items) = self.conflicts.as_ref() {
+            result.insert("conflicts".to_string(), Self::save_conflicts(items, ctx));
+        }
         for (key, value) in &self.additional_properties {
             if Self::additional_properties_known_key("", key) {
                 continue;
@@ -226,6 +241,26 @@ impl CmdErrorDetails {
     /// Serialize CmdErrorDetails to a YAML string.
     pub fn to_yaml(&self, ctx: &SaveContext) -> Result<String, serde_yaml::Error> {
         serde_yaml::to_string(&self.to_value(ctx))
+    }
+
+    /// Load a collection of UndoConflict from a JSON value.
+    /// Handles both array format `[{...}]`.
+    fn load_conflicts(data: &serde_json::Value, ctx: &LoadContext) -> Vec<UndoConflict> {
+        match data {
+            serde_json::Value::Array(arr) => {
+                arr.iter().map(|v| UndoConflict::load_from_value(v, ctx)).collect()
+            }
+
+            _ => Vec::new(),
+
+        }
+    }
+
+    /// Save a collection of UndoConflict to a JSON value.
+    fn save_conflicts(items: &[UndoConflict], ctx: &SaveContext) -> serde_json::Value {
+
+        serde_json::Value::Array(items.iter().map(|item| item.to_value(ctx)).collect::<Vec<_>>())
+
     }
 }
 

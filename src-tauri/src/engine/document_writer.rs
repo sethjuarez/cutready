@@ -15,11 +15,13 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 
-use cutready_core::contracts::DocumentKind;
+use cutready_core::contracts::{DocumentKind, RunReview};
 use cutready_core::document::{self, DocumentError};
 use cutready_core::edit_ops::{ContentEditError, NoteLock};
 pub use cutready_core::edit_session::Expected;
-use cutready_core::edit_session::{EditSession, NoteLockPolicy, Reconciled};
+use cutready_core::edit_session::{
+    EditSession, NoteLockPolicy, Reconciled, ReviewError, USER_ACTOR,
+};
 use cutready_core::models::sketch::{Sketch, Storyboard};
 use cutready_core::{OpLogStore, PortError, PortErrorKind};
 use cutready_desktop_io::{SqliteOpLogStore, StdFiles, SystemClock};
@@ -29,7 +31,6 @@ use crate::engine::project::{self, ProjectError};
 use crate::engine::write_lock::{self, RepoLock};
 
 const OP_LOG_FILENAME: &str = "op-log.db";
-const USER_ACTOR: &str = "user";
 const AGENT_ACTOR: &str = "agent";
 
 /// Why a document write failed.
@@ -190,6 +191,49 @@ pub fn delete(root: &Path, path: &Path) -> Result<(), WriteError> {
 pub fn open_project(root: &Path) -> Result<Reconciled, WriteError> {
     let ports = Ports::open(root)?;
     Ok(ports.session().reconcile()?)
+}
+
+/// Runs with changes awaiting Keep or Undo, oldest first.
+pub fn pending_reviews(root: &Path) -> Result<Vec<RunReview>, WriteError> {
+    Ok(Ports::open(root)?.session().pending_reviews()?)
+}
+
+/// Keeps a run's changes to `doc` through the review's `through_seq`.
+pub fn keep_run_document(
+    root: &Path,
+    run_id: &str,
+    doc: &str,
+    through_seq: u64,
+) -> Result<(), String> {
+    let ports = Ports::open(root)?;
+    ports
+        .session()
+        .keep(run_id, doc, through_seq)
+        .map_err(review_message)
+}
+
+/// Undoes a run's changes to `doc` through the review's `through_seq`,
+/// keeping later edits that don't overlap.
+pub fn undo_run_document(
+    root: &Path,
+    run_id: &str,
+    doc: &str,
+    through_seq: u64,
+) -> Result<(), String> {
+    let ports = Ports::open(root)?;
+    ports
+        .session()
+        .undo(run_id, doc, through_seq)
+        .map_err(review_message)
+}
+
+fn review_message(err: ReviewError) -> String {
+    match err {
+        ReviewError::Undo(cutready_core::review::UndoError::Document(doc)) => {
+            ProjectError::from(doc).to_string()
+        }
+        other => other.to_string(),
+    }
 }
 
 /// Run `f` with document writes on this thread attributed to the agent run
@@ -611,6 +655,8 @@ mod tests {
                 after_hash: cutready_core::edit_ops::document_version(after.as_bytes()),
                 at: chrono::Utc::now(),
                 baseline: None,
+                images: None,
+                effect: cutready_core::ReviewEffect::Review,
             })
             .unwrap()
         };

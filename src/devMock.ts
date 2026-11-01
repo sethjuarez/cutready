@@ -598,6 +598,11 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       };
     case "copilot_sign_in":
       return null;
+    case "list_pending_reviews":
+      return [];
+    case "keep_run_document":
+    case "undo_run_document":
+      return null;
     case "list_agent_runs":
       return [
         {

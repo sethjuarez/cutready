@@ -8,4 +8,5 @@ public protocol EditService: Sendable {
   func applyStoryboardOps(storyboard: Storyboard, ops: [EditOp], now: String) throws -> Storyboard
   func documentVersion(content: String) throws -> String
   func editDocument(request: DocumentEditRequest) throws -> DocumentEdit
+  func undoDocument(request: DocumentUndoRequest) throws -> DocumentUndo
 }

@@ -11,7 +11,7 @@ use chrono::{DateTime, Utc};
 use crate::path::project_relative;
 use crate::ports::{
     Clock, Files, Lock, LockGuard, Log, LogLevel, NewOpLogEntry, OpLogEntry, OpLogState,
-    OpLogStore, PortError, PortErrorKind, Run, Secrets,
+    OpLogStore, PortError, PortErrorKind, Resolution, ReviewEffect, Run, Secrets,
 };
 
 /// Files held in a map keyed by normalized project-relative path.
@@ -213,7 +213,13 @@ impl MemoryOpLog {
                 )
             })?;
         match entry.state {
-            OpLogState::Pending => entry.state = to,
+            OpLogState::Pending => {
+                entry.state = to;
+                if to == OpLogState::Committed {
+                    let effect = entry.write.effect.clone();
+                    apply_effect(&mut entries, seq, &effect);
+                }
+            }
             state if state == to => {}
             state => {
                 return Err(PortError::new(
@@ -223,6 +229,38 @@ impl MemoryOpLog {
             }
         }
         Ok(())
+    }
+}
+
+fn apply_effect(entries: &mut [OpLogEntry], seq: u64, effect: &ReviewEffect) {
+    let resolve = |entries: &mut [OpLogEntry], run: &str, doc: &str, through: u64, to| {
+        for entry in entries.iter_mut().filter(|e| {
+            e.write.run_id == run
+                && e.write.doc == doc
+                && e.seq <= through
+                && e.state == OpLogState::Committed
+                && e.resolution.is_none()
+        }) {
+            entry.resolution = Some(to);
+        }
+    };
+    match effect {
+        ReviewEffect::Review => {}
+        ReviewEffect::AutoKeep => {
+            if let Some(entry) = entries.iter_mut().find(|e| e.seq == seq) {
+                entry.resolution = Some(Resolution::Kept);
+            }
+        }
+        ReviewEffect::Undo {
+            run_id,
+            doc,
+            through_seq,
+        } => {
+            resolve(entries, run_id, doc, *through_seq, Resolution::Undone);
+            if let Some(entry) = entries.iter_mut().find(|e| e.seq == seq) {
+                entry.resolution = Some(Resolution::Kept);
+            }
+        }
     }
 }
 
@@ -256,6 +294,7 @@ impl OpLogStore for MemoryOpLog {
         entries.push(OpLogEntry {
             seq,
             state: OpLogState::Pending,
+            resolution: None,
             write,
         });
         Ok(seq)
@@ -287,6 +326,39 @@ impl OpLogStore for MemoryOpLog {
             .unwrap()
             .iter()
             .filter(|entry| entry.write.run_id == run_id)
+            .cloned()
+            .collect())
+    }
+
+    fn resolve(
+        &self,
+        run_id: &str,
+        doc: &str,
+        through_seq: u64,
+        resolution: Resolution,
+    ) -> Result<usize, PortError> {
+        let mut entries = self.entries.lock().unwrap();
+        let mut changed = 0;
+        for entry in entries.iter_mut().filter(|e| {
+            e.write.run_id == run_id
+                && e.write.doc == doc
+                && e.seq <= through_seq
+                && e.state == OpLogState::Committed
+                && e.resolution.is_none()
+        }) {
+            entry.resolution = Some(resolution);
+            changed += 1;
+        }
+        Ok(changed)
+    }
+
+    fn unreviewed(&self) -> Result<Vec<OpLogEntry>, PortError> {
+        Ok(self
+            .entries
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|e| e.state == OpLogState::Committed && e.resolution.is_none())
             .cloned()
             .collect())
     }
@@ -348,6 +420,8 @@ mod tests {
             after_hash: "b".into(),
             at: Utc.with_ymd_and_hms(2026, 1, 2, 3, 4, 5).unwrap(),
             baseline: None,
+            images: None,
+            effect: ReviewEffect::Review,
         };
         let first = log.append_pending(entry("r1")).unwrap();
         let second = log.append_pending(entry("r2")).unwrap();

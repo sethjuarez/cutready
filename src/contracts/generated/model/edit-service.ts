@@ -4,6 +4,8 @@
 
 import { DocumentEdit } from "./document-edit";
 import { DocumentEditRequest } from "./document-edit-request";
+import { DocumentUndo } from "./document-undo";
+import { DocumentUndoRequest } from "./document-undo-request";
 import { EditOp } from "./edit-op";
 import { Sketch } from "./sketch";
 import { Storyboard } from "./storyboard";
@@ -33,4 +35,14 @@ replacement op doesn't read the old bytes, so it can overwrite a file that
 no longer parses. The result is the canonical bytes to
 write and their version. An empty batch returns `content` unchanged. */
   editDocument(request: DocumentEditRequest): DocumentEdit;
+  /** Review Undo: reverts a run's writes to one document on top of whatever is
+there now. Each write is inverted newest first, entity by entity: rows by
+id (content and locks separately), row order, other top-level fields, a
+note's content. An entity already at its before value is skipped; one at
+its after value is restored; anything else is an `undo_conflict` listing
+every such entity, and nothing is written. Locks are judged on the result:
+the undo may revert locks the run set, but content still locked afterwards
+can't change (`locked_document`, `locked_row_count`, `locked_row`,
+`locked_cell`). A null `content` result deletes the file. */
+  undoDocument(request: DocumentUndoRequest): DocumentUndo;
 }

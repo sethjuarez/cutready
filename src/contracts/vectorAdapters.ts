@@ -35,6 +35,7 @@ export const vectorWaivers: Record<string, string> = {
   "EditService.documentVersion": backendOwnsDocuments,
   "EditService.applyStoryboardOps": backendOwnsDocuments,
   "EditService.editDocument": backendOwnsDocuments,
+  "EditService.undoDocument": backendOwnsDocuments,
   "SketchDocument.roundTrip": backendOwnsDocuments,
   "SketchDocument.updateRowText": backendOwnsDocuments,
   "SketchDocument.reorderRows": backendOwnsDocuments,

@@ -8,6 +8,10 @@ use super::document_edit::DocumentEdit;
 
 use super::document_edit_request::DocumentEditRequest;
 
+use super::document_undo::DocumentUndo;
+
+use super::document_undo_request::DocumentUndoRequest;
+
 use super::edit_op::EditOp;
 
 use super::sketch::Sketch;
@@ -25,4 +29,6 @@ pub trait EditService: Send + Sync {
     fn document_version(&self, content: &String) -> Result<String, Box<dyn std::error::Error + Send + Sync>>;
     /// The host write path for every project document. A version mismatch fails with `stale_document` (with `details.current_version` when the file exists). A missing file must start with its kind's replacement op, otherwise the batch is `invalid_op`. A batch that starts with the replacement op doesn't read the old bytes, so it can overwrite a file that no longer parses. The result is the canonical bytes to write and their version. An empty batch returns `content` unchanged.
     fn edit_document(&self, request: &DocumentEditRequest) -> Result<DocumentEdit, Box<dyn std::error::Error + Send + Sync>>;
+    /// Review Undo: reverts a run's writes to one document on top of whatever is there now. Each write is inverted newest first, entity by entity: rows by id (content and locks separately), row order, other top-level fields, a note's content. An entity already at its before value is skipped; one at its after value is restored; anything else is an `undo_conflict` listing every such entity, and nothing is written. Locks are judged on the result: the undo may revert locks the run set, but content still locked afterwards can't change (`locked_document`, `locked_row_count`, `locked_row`, `locked_cell`). A null `content` result deletes the file.
+    fn undo_document(&self, request: &DocumentUndoRequest) -> Result<DocumentUndo, Box<dyn std::error::Error + Send + Sync>>;
 }

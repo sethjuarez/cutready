@@ -238,6 +238,82 @@ interface EditService {
   @sync
   @vector(EditDocumentVectors)
   editDocument(request: DocumentEditRequest): DocumentEdit;
+
+  /**
+   * Review Undo: reverts a run's writes to one document on top of whatever is
+   * there now. Each write is inverted newest first, entity by entity: rows by
+   * id (content and locks separately), row order, other top-level fields, a
+   * note's content. An entity already at its before value is skipped; one at
+   * its after value is restored; anything else is an `undo_conflict` listing
+   * every such entity, and nothing is written. Locks are judged on the result:
+   * the undo may revert locks the run set, but content still locked afterwards
+   * can't change (`locked_document`, `locked_row_count`, `locked_row`,
+   * `locked_cell`). A null `content` result deletes the file.
+   */
+  @sync
+  @vector(UndoDocumentVectors)
+  undoDocument(request: DocumentUndoRequest): DocumentUndo;
+}
+
+/** One logged write: the document's bytes before and after (null when absent). */
+model UndoWrite {
+  before: string | null;
+  after: string | null;
+}
+
+/** Undo a run's writes to one document. */
+model DocumentUndoRequest {
+  kind: DocumentKind;
+
+  /** The file on disk, or null when it doesn't exist. */
+  content: string | null;
+
+  /** The run's writes to this document, oldest first. */
+  writes: UndoWrite[];
+
+  /** The note's lock from the host's lock store; ignored for other kinds. */
+  note_locked?: boolean = false;
+
+  /** RFC 3339 time stamped as `updated_at` on a merged sketch or storyboard. */
+  now: string;
+}
+
+/** The bytes to write (null to delete the file) and their version. */
+model DocumentUndo {
+  content: string | null;
+  version: string | null;
+}
+
+/**
+ * A run with changes nobody has kept or undone yet. App edits run as an
+ * auto-kept `user` run, so they never appear here.
+ */
+@serializable model RunReview {
+  run_id: string;
+  actor: string;
+  started_at: string;
+  documents: DocumentReview[];
+}
+
+/**
+ * One document a run changed. Keep and Undo pass `through_seq` back; if the
+ * run wrote to the document again since, they fail with `stale_review`.
+ */
+model DocumentReview {
+  /** Project-relative path. */
+  doc: string;
+
+  /** The newest op-log entry this review covers. */
+  through_seq: uint64;
+
+  /** How many writes the review covers. */
+  writes: uint32;
+
+  /** The run created the document. */
+  created: boolean;
+
+  /** When the run last wrote it (RFC 3339). */
+  last_at: string;
 }
 
 /** One write to one project file. */

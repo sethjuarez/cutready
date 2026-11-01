@@ -26,6 +26,42 @@ pub enum Baseline {
     Content(String),
 }
 
+/// A document's full bytes around one write (None when absent), so review
+/// can undo it entity by entity. Entries logged before review existed have
+/// none.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Images {
+    pub before: Option<String>,
+    pub after: Option<String>,
+}
+
+/// What committing a write also records for review, in the same store
+/// transaction, so a crash can't separate the write from its review state.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ReviewEffect {
+    /// Awaits Keep or Undo.
+    #[default]
+    Review,
+    /// Kept as it commits: the app's own edits.
+    AutoKeep,
+    /// An undo write: kept itself, and it resolves the undone run's entries
+    /// for `doc` up to `through_seq` as undone.
+    Undo {
+        run_id: String,
+        doc: String,
+        through_seq: u64,
+    },
+}
+
+/// How a committed write was reviewed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Resolution {
+    Kept,
+    Undone,
+}
+
 /// A document write about to happen inside a run. `ops` holds the contract
 /// edit operations as JSON.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -40,6 +76,9 @@ pub struct NewOpLogEntry {
     pub at: DateTime<Utc>,
     /// Set on the run's first write to `doc` only.
     pub baseline: Option<Baseline>,
+    pub images: Option<Images>,
+    #[serde(default)]
+    pub effect: ReviewEffect,
 }
 
 /// A logged write. The store assigns `seq` and owns `state`.
@@ -47,6 +86,8 @@ pub struct NewOpLogEntry {
 pub struct OpLogEntry {
     pub seq: u64,
     pub state: OpLogState,
+    /// Set once a committed write is kept or undone.
+    pub resolution: Option<Resolution>,
     #[serde(flatten)]
     pub write: NewOpLogEntry,
 }
@@ -72,8 +113,9 @@ pub trait OpLogStore: Send + Sync {
     /// Logs a write as `Pending` before the document is replaced and returns
     /// its sequence number.
     fn append_pending(&self, write: NewOpLogEntry) -> Result<u64, PortError>;
-    /// Marks a pending write `Committed`. Committing twice is a no-op;
-    /// an unknown `seq` is `NotFound`; an abandoned one is `Corrupt`.
+    /// Marks a pending write `Committed` and applies its [`ReviewEffect`]
+    /// atomically. Committing twice is a no-op; an unknown `seq` is
+    /// `NotFound`; an abandoned one is `Corrupt`.
     fn commit(&self, seq: u64) -> Result<(), PortError>;
     /// Marks a pending write `Abandoned`: its document write never landed.
     /// Abandoning twice is a no-op; an unknown `seq` is `NotFound`; a
@@ -83,4 +125,16 @@ pub trait OpLogStore: Send + Sync {
     fn pending(&self) -> Result<Vec<OpLogEntry>, PortError>;
     /// All entries for a run, oldest first.
     fn entries_for_run(&self, run_id: &str) -> Result<Vec<OpLogEntry>, PortError>;
+    /// Resolves the run's committed, unresolved entries for `doc` up to
+    /// `through_seq` and returns how many changed. Entries already resolved
+    /// keep their resolution.
+    fn resolve(
+        &self,
+        run_id: &str,
+        doc: &str,
+        through_seq: u64,
+        resolution: Resolution,
+    ) -> Result<usize, PortError>;
+    /// Committed entries nobody has kept or undone, oldest first.
+    fn unreviewed(&self) -> Result<Vec<OpLogEntry>, PortError>;
 }
