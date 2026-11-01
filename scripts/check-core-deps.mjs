@@ -48,19 +48,19 @@ export function parseTree(output) {
 }
 
 export function checkCoreDeps(packages) {
-  return findForbidden(packages, FORBIDDEN);
+  return findForbidden(packages, FORBIDDEN, FORBIDDEN_FEATURES);
 }
 
 export function checkVersioningDeps(packages) {
-  return findForbidden(packages, VERSIONING_FORBIDDEN);
+  return findForbidden(packages, VERSIONING_FORBIDDEN, []);
 }
 
-function findForbidden(packages, forbidden) {
+function findForbidden(packages, forbidden, forbiddenFeatures) {
   const problems = [];
   for (const [name, features] of packages) {
     const rule = forbidden.find(({ pattern }) => pattern.test(name));
     if (rule) problems.push(`${name}: ${rule.reason}`);
-    for (const banned of FORBIDDEN_FEATURES) {
+    for (const banned of forbiddenFeatures) {
       if (banned.name === name && features.has(banned.feature)) {
         problems.push(`${name} feature "${banned.feature}": ${banned.reason}`);
       }

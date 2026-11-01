@@ -44,6 +44,7 @@ draftline v0.10.1||`;
   it("lets versioning use git and Draftline but not the desktop shell", () => {
     const versioning = parseTree(`cutready-versioning v0.1.0 (C:\\repo\\crates\\cutready-versioning)||
 draftline v0.10.2||
+tokio v1.47.0|process,rt|
 libgit2-sys v0.18.0||
 cutready-core v0.1.0 (C:\\repo\\crates\\cutready-core)||`);
     expect(checkVersioningDeps(versioning)).toEqual([]);
