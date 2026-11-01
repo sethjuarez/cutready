@@ -76,6 +76,7 @@ impl Files for StdFiles {
         temp.write_all(bytes).map_err(fail)?;
         temp.as_file().sync_all().map_err(fail)?;
         temp.persist(&full).map_err(|err| fail(err.error))?;
+        sync_dir(parent).map_err(fail)?;
         Ok(())
     }
 
@@ -115,6 +116,19 @@ impl Files for StdFiles {
         paths.sort();
         Ok(paths)
     }
+}
+
+/// Makes a rename in `dir` durable. NTFS journals renames, and Windows can't
+/// open a directory for flushing without backup semantics, so this is a
+/// no-op there.
+#[cfg(unix)]
+fn sync_dir(dir: &Path) -> std::io::Result<()> {
+    fs::File::open(dir)?.sync_all()
+}
+
+#[cfg(not(unix))]
+fn sync_dir(_dir: &Path) -> std::io::Result<()> {
+    Ok(())
 }
 
 #[cfg(test)]

@@ -4,12 +4,13 @@
 
 use std::path::Path;
 
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::contracts::DocumentKind;
 use crate::document::DocumentError;
 use crate::edit_ops::{self, ContentEditError, NoteLock};
-use crate::notes;
+use crate::notes::{self, LOCKS_PATH};
+use crate::path::project_relative;
 use crate::ports::{
     Baseline, Clock, Files, Lock, NewOpLogEntry, OpLogState, OpLogStore, PortError, PortErrorKind,
 };
@@ -26,8 +27,18 @@ pub enum Expected {
     Unchecked,
 }
 
-/// A write's outcome. `seq` is the op-log entry, `None` when the bytes didn't
-/// change (nothing is logged or written).
+/// Whether a note edit follows the lock manifest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoteLockPolicy {
+    /// Locked notes reject edits; `set_lock` ops update the manifest.
+    Enforce,
+    /// Import and create paths: the note is treated as unlocked and the
+    /// manifest is left alone.
+    Ignore,
+}
+
+/// A write's outcome. `seq` is the document's op-log entry, `None` when its
+/// bytes didn't change (nothing is logged or written for it).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Applied {
     pub content: String,
@@ -46,6 +57,28 @@ pub struct Reconciled {
 
 /// Hash recorded as `before_hash` when the document didn't exist.
 pub const ABSENT_HASH: &str = "";
+
+/// The project document kind for a path's extension.
+pub fn kind_of(doc: &str) -> Result<DocumentKind, DocumentError> {
+    match Path::new(doc).extension().and_then(|ext| ext.to_str()) {
+        Some("sk") => Ok(DocumentKind::Sketch),
+        Some("sb") => Ok(DocumentKind::Storyboard),
+        Some("md") => Ok(DocumentKind::Note),
+        _ => Err(PortError::new(
+            PortErrorKind::InvalidPath,
+            format!("Not a project document: {doc}"),
+        )
+        .into()),
+    }
+}
+
+/// One file write inside a transaction.
+struct Write {
+    doc: String,
+    ops: Value,
+    before: Option<String>,
+    after: String,
+}
 
 /// One project's write path over its ports. Cheap to build per call.
 pub struct EditSession<'a> {
@@ -75,23 +108,36 @@ impl<'a> EditSession<'a> {
         self.log.begin_run(actor, self.clock.now())
     }
 
-    /// Applies `ops` to the project-relative `doc` as part of `run_id`.
-    ///
-    /// Holds the project lock for the whole transaction. Hosts whose callers
-    /// already hold it must make [`Lock::acquire`] reentrant per thread.
+    /// Applies `ops` to the project-relative `doc` (`.sk`, `.sb` or `.md`)
+    /// as part of `run_id`, following note locks.
     pub fn apply(
         &self,
         run_id: &str,
         doc: &str,
-        kind: DocumentKind,
         expected: Expected,
         ops: &[Value],
     ) -> Result<Applied, ContentEditError> {
+        self.apply_with(run_id, doc, expected, ops, NoteLockPolicy::Enforce)
+    }
+
+    /// [`Self::apply`] with an explicit note-lock policy.
+    ///
+    /// Holds the project lock for the whole transaction. Hosts whose callers
+    /// already hold it must make [`Lock::acquire`] reentrant per thread.
+    pub fn apply_with(
+        &self,
+        run_id: &str,
+        doc: &str,
+        expected: Expected,
+        ops: &[Value],
+        policy: NoteLockPolicy,
+    ) -> Result<Applied, ContentEditError> {
+        let doc = normalize(doc)?;
+        let kind = kind_of(&doc)?;
         let _guard = self.lock.acquire().map_err(DocumentError::from)?;
         self.reconcile_locked().map_err(DocumentError::from)?;
         let run = self.log.run(run_id).map_err(DocumentError::from)?;
-        let path = Path::new(doc);
-        let current = self.read(path)?;
+        let current = self.read(&doc)?;
         let expected_version = match expected {
             Expected::Version(version) => Some(version),
             Expected::Absent => None,
@@ -101,16 +147,14 @@ impl<'a> EditSession<'a> {
                 None => {
                     return Err(DocumentError::from(PortError::new(
                         PortErrorKind::NotFound,
-                        doc.to_string(),
+                        doc.clone(),
                     ))
                     .into())
                 }
             },
         };
-        let note_locked = match kind {
-            DocumentKind::Note => notes::get_note_lock(self.files, doc)?.locked,
-            _ => false,
-        };
+        let follows_locks = kind == DocumentKind::Note && policy == NoteLockPolicy::Enforce;
+        let note_locked = follows_locks && notes::get_note_lock(self.files, &doc)?.locked;
         let now = self.clock.now();
         let edit = edit_ops::edit_document(
             kind,
@@ -121,51 +165,91 @@ impl<'a> EditSession<'a> {
             note_locked,
         )?;
         let changed = edit.changes(current.as_deref());
-        let mut seq = None;
+
+        let mut writes = Vec::new();
         if changed {
-            let first_write = !self
-                .log
-                .entries_for_run(run_id)
-                .map_err(DocumentError::from)?
-                .iter()
-                .any(|e| e.write.doc == doc && e.state == OpLogState::Committed);
-            let baseline = first_write.then(|| match &current {
-                Some(content) => Baseline::Content(content.clone()),
-                None => Baseline::Absent,
-            });
-            let entry = NewOpLogEntry {
-                run_id: run.id,
-                doc: doc.to_string(),
-                actor: run.actor,
+            writes.push(Write {
+                doc: doc.clone(),
                 ops: Value::Array(ops.to_vec()),
-                before_hash: current
-                    .as_deref()
-                    .map(|c| edit_ops::document_version(c.as_bytes()))
-                    .unwrap_or_else(|| ABSENT_HASH.to_string()),
-                after_hash: edit.version.clone(),
-                at: now,
-                baseline,
+                before: current,
+                after: edit.content.clone(),
+            });
+        }
+        if let Some(lock) = edit.note_lock.filter(|lock| lock.changed && follows_locks) {
+            let before = self.read(LOCKS_PATH)?;
+            let mut manifest = match &before {
+                Some(json) => notes::lock_manifest_from_json(json)?,
+                None => Default::default(),
             };
-            let logged = self
-                .log
-                .append_pending(entry)
-                .map_err(DocumentError::from)?;
-            self.files
-                .write_atomic(path, edit.content.as_bytes())
-                .map_err(DocumentError::from)?;
-            self.log.commit(logged).map_err(DocumentError::from)?;
-            seq = Some(logged);
+            manifest.set_note_lock(&notes::normalize_lock_path(&doc), lock.locked);
+            writes.push(Write {
+                doc: LOCKS_PATH.to_string(),
+                ops: json!([{ "kind": "set_lock", "note": doc, "locked": lock.locked }]),
+                before,
+                after: notes::lock_manifest_to_json(&manifest)?,
+            });
         }
-        if let Some(note_lock) = edit.note_lock.filter(|lock| lock.changed) {
-            notes::set_note_lock(self.files, doc, note_lock.locked)?;
-        }
+
+        let seqs = self
+            .commit_writes(&run.id, &run.actor, now, writes)
+            .map_err(DocumentError::from)?;
         Ok(Applied {
             content: edit.content,
             version: edit.version,
             changed,
             note_lock: edit.note_lock,
-            seq,
+            seq: changed.then(|| seqs[0]),
         })
+    }
+
+    /// Logs every write pending, replaces the files, then commits them. A
+    /// crash in between is settled by [`Self::reconcile`], file by file.
+    fn commit_writes(
+        &self,
+        run_id: &str,
+        actor: &str,
+        at: chrono::DateTime<chrono::Utc>,
+        writes: Vec<Write>,
+    ) -> Result<Vec<u64>, PortError> {
+        let run_entries = if writes.is_empty() {
+            Vec::new()
+        } else {
+            self.log.entries_for_run(run_id)?
+        };
+        let mut seqs = Vec::with_capacity(writes.len());
+        for write in &writes {
+            let first_write = !run_entries
+                .iter()
+                .any(|e| e.write.doc == write.doc && e.state == OpLogState::Committed);
+            let baseline = first_write.then(|| match &write.before {
+                Some(content) => Baseline::Content(content.clone()),
+                None => Baseline::Absent,
+            });
+            seqs.push(
+                self.log.append_pending(NewOpLogEntry {
+                    run_id: run_id.to_string(),
+                    doc: write.doc.clone(),
+                    actor: actor.to_string(),
+                    ops: write.ops.clone(),
+                    before_hash: write
+                        .before
+                        .as_deref()
+                        .map(|c| edit_ops::document_version(c.as_bytes()))
+                        .unwrap_or_else(|| ABSENT_HASH.to_string()),
+                    after_hash: edit_ops::document_version(write.after.as_bytes()),
+                    at,
+                    baseline,
+                })?,
+            );
+        }
+        for write in &writes {
+            self.files
+                .write_atomic(Path::new(&write.doc), write.after.as_bytes())?;
+        }
+        for seq in &seqs {
+            self.log.commit(*seq)?;
+        }
+        Ok(seqs)
     }
 
     /// Settles writes interrupted by a crash: a pending entry whose document
@@ -194,8 +278,8 @@ impl<'a> EditSession<'a> {
         Ok(settled)
     }
 
-    fn read(&self, path: &Path) -> Result<Option<String>, DocumentError> {
-        match self.files.read(path) {
+    fn read(&self, doc: &str) -> Result<Option<String>, DocumentError> {
+        match self.files.read(Path::new(doc)) {
             // Matches std::fs::read_to_string: invalid UTF-8 is an I/O failure.
             Ok(bytes) => String::from_utf8(bytes).map(Some).map_err(|_| {
                 DocumentError::Port(PortError::new(
@@ -209,6 +293,16 @@ impl<'a> EditSession<'a> {
     }
 }
 
+/// The canonical project-relative form (`/`-separated) the op log keys on.
+fn normalize(doc: &str) -> Result<String, DocumentError> {
+    let path = project_relative(doc)?;
+    let parts: Vec<_> = path
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    Ok(parts.join("/"))
+}
+
 fn starts_with_replacement(ops: &[Value]) -> bool {
     matches!(
         ops.first()
@@ -217,7 +311,6 @@ fn starts_with_replacement(ops: &[Value]) -> bool {
         Some("replace_sketch" | "replace_storyboard" | "replace_note")
     )
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -264,19 +357,12 @@ mod tests {
         let run = session.begin_run("agent:writer").unwrap();
 
         let first = session
-            .apply(
-                &run,
-                "plan.md",
-                DocumentKind::Note,
-                Expected::Absent,
-                &[note("# A")],
-            )
+            .apply(&run, "plan.md", Expected::Absent, &[note("# A")])
             .unwrap();
         let second = session
             .apply(
                 &run,
                 "plan.md",
-                DocumentKind::Note,
                 Expected::Version(first.version.clone()),
                 &[json!({ "kind": "write_note", "content": "# B" })],
             )
@@ -299,13 +385,7 @@ mod tests {
         // A second run on the same doc records its own baseline.
         let other = session.begin_run("user").unwrap();
         session
-            .apply(
-                &other,
-                "plan.md",
-                DocumentKind::Note,
-                Expected::Unchecked,
-                &[note("# C")],
-            )
+            .apply(&other, "plan.md", Expected::Unchecked, &[note("# C")])
             .unwrap();
         assert_eq!(
             ports.log.entries_for_run(&other).unwrap()[0].write.baseline,
@@ -319,23 +399,11 @@ mod tests {
         let session = ports.session();
         let run = session.begin_run("user").unwrap();
         session
-            .apply(
-                &run,
-                "plan.md",
-                DocumentKind::Note,
-                Expected::Absent,
-                &[note("# A")],
-            )
+            .apply(&run, "plan.md", Expected::Absent, &[note("# A")])
             .unwrap();
 
         let same = session
-            .apply(
-                &run,
-                "plan.md",
-                DocumentKind::Note,
-                Expected::Unchecked,
-                &[note("# A")],
-            )
+            .apply(&run, "plan.md", Expected::Unchecked, &[note("# A")])
             .unwrap();
 
         assert!(!same.changed);
@@ -349,37 +417,19 @@ mod tests {
         let session = ports.session();
         let run = session.begin_run("user").unwrap();
         session
-            .apply(
-                &run,
-                "plan.md",
-                DocumentKind::Note,
-                Expected::Absent,
-                &[note("# A")],
-            )
+            .apply(&run, "plan.md", Expected::Absent, &[note("# A")])
             .unwrap();
         let stale = version("# old");
 
         let err = session
-            .apply(
-                &run,
-                "plan.md",
-                DocumentKind::Note,
-                Expected::Version(stale),
-                &[note("# B")],
-            )
+            .apply(&run, "plan.md", Expected::Version(stale), &[note("# B")])
             .unwrap_err();
         assert!(matches!(
             err,
             ContentEditError::Stale(ref s) if s.current_version.as_deref() == Some(version("# A").as_str())
         ));
         let err = session
-            .apply(
-                &run,
-                "plan.md",
-                DocumentKind::Note,
-                Expected::Absent,
-                &[note("# B")],
-            )
+            .apply(&run, "plan.md", Expected::Absent, &[note("# B")])
             .unwrap_err();
         assert!(matches!(err, ContentEditError::Stale(_)));
 
@@ -397,7 +447,6 @@ mod tests {
             .apply(
                 &run,
                 "gone.md",
-                DocumentKind::Note,
                 Expected::Unchecked,
                 &[json!({ "kind": "write_note", "content": "x" })],
             )
@@ -418,13 +467,7 @@ mod tests {
         let ports = Ports::new();
         let err = ports
             .session()
-            .apply(
-                "run-9",
-                "plan.md",
-                DocumentKind::Note,
-                Expected::Absent,
-                &[note("# A")],
-            )
+            .apply("run-9", "plan.md", Expected::Absent, &[note("# A")])
             .unwrap_err();
         assert!(matches!(
             err,
@@ -442,13 +485,7 @@ mod tests {
         let session = ports.session();
         let run = session.begin_run("agent:writer").unwrap();
         session
-            .apply(
-                &run,
-                "a.md",
-                DocumentKind::Note,
-                Expected::Absent,
-                &[note("# A")],
-            )
+            .apply(&run, "a.md", Expected::Absent, &[note("# A")])
             .unwrap();
         let pending = |doc: &str, after: &str, baseline| NewOpLogEntry {
             run_id: run.clone(),
@@ -485,13 +522,7 @@ mod tests {
         // The abandoned write's baseline doesn't count: the run's next write
         // to b.md records it again.
         session
-            .apply(
-                &run,
-                "b.md",
-                DocumentKind::Note,
-                Expected::Absent,
-                &[note("# B")],
-            )
+            .apply(&run, "b.md", Expected::Absent, &[note("# B")])
             .unwrap();
         let entries = ports.log.entries_for_run(&run).unwrap();
         let last = entries.last().unwrap();
@@ -522,13 +553,7 @@ mod tests {
             .unwrap();
 
         session
-            .apply(
-                &run,
-                "a.md",
-                DocumentKind::Note,
-                Expected::Absent,
-                &[note("# A")],
-            )
+            .apply(&run, "a.md", Expected::Absent, &[note("# A")])
             .unwrap();
 
         let entries = ports.log.entries_for_run(&run).unwrap();
@@ -547,7 +572,6 @@ mod tests {
             .apply(
                 &run,
                 "demo.sb",
-                DocumentKind::Storyboard,
                 Expected::Absent,
                 &[json!({ "kind": "replace_storyboard", "storyboard": serde_json::to_value(&board).unwrap() })],
             )
@@ -567,7 +591,6 @@ mod tests {
                                 .apply(
                                     &run,
                                     "demo.sb",
-                                    DocumentKind::Storyboard,
                                     Expected::Unchecked,
                                     &[json!({ "kind": "insert_storyboard_item", "index": null, "item": item })],
                                 )
@@ -607,20 +630,13 @@ mod tests {
         let session = ports.session();
         let run = session.begin_run("user").unwrap();
         session
-            .apply(
-                &run,
-                "plan.md",
-                DocumentKind::Note,
-                Expected::Absent,
-                &[note("# A")],
-            )
+            .apply(&run, "plan.md", Expected::Absent, &[note("# A")])
             .unwrap();
 
         let locked = session
             .apply(
                 &run,
                 "plan.md",
-                DocumentKind::Note,
                 Expected::Unchecked,
                 &[json!({ "kind": "set_lock", "locked": true })],
             )
@@ -639,16 +655,108 @@ mod tests {
                 .unwrap()
                 .locked
         );
+        // The manifest change is part of the run, with its own baseline.
+        let manifest = ports.log.entries_for_run(&run).unwrap().pop().unwrap();
+        assert_eq!(manifest.write.doc, LOCKS_PATH);
+        assert_eq!(manifest.state, OpLogState::Committed);
+        assert_eq!(manifest.write.baseline, Some(Baseline::Absent));
+        assert_eq!(
+            manifest.write.ops,
+            json!([{ "kind": "set_lock", "note": "plan.md", "locked": true }])
+        );
         let err = session
             .apply(
                 &run,
                 "plan.md",
-                DocumentKind::Note,
                 Expected::Unchecked,
                 &[json!({ "kind": "write_note", "content": "# B" })],
             )
             .unwrap_err();
         assert!(err.to_string().contains("locked"), "{err}");
         assert_eq!(ports.files.read(Path::new("plan.md")).unwrap(), b"# A");
+    }
+
+    #[test]
+    fn ignoring_note_locks_replaces_a_locked_note_and_leaves_the_manifest() {
+        let ports = Ports::new();
+        let session = ports.session();
+        let run = session.begin_run("user").unwrap();
+        session
+            .apply(&run, "plan.md", Expected::Absent, &[note("# A")])
+            .unwrap();
+        notes::set_note_lock(&ports.files, "plan.md", true).unwrap();
+
+        let applied = session
+            .apply_with(
+                &run,
+                "plan.md",
+                Expected::Unchecked,
+                &[note("# Imported")],
+                NoteLockPolicy::Ignore,
+            )
+            .unwrap();
+
+        assert!(applied.changed);
+        assert_eq!(
+            ports.files.read(Path::new("plan.md")).unwrap(),
+            b"# Imported"
+        );
+        assert!(
+            notes::get_note_lock(&ports.files, "plan.md")
+                .unwrap()
+                .locked
+        );
+        assert!(ports
+            .log
+            .entries_for_run(&run)
+            .unwrap()
+            .iter()
+            .all(|e| e.write.doc == "plan.md"));
+    }
+
+    #[test]
+    fn documents_are_keyed_by_their_normalized_path() {
+        let ports = Ports::new();
+        let session = ports.session();
+        let run = session.begin_run("user").unwrap();
+        session
+            .apply(&run, "notes/./a.md", Expected::Absent, &[note("# A")])
+            .unwrap();
+        session
+            .apply(&run, "notes\\a.md", Expected::Unchecked, &[note("# B")])
+            .unwrap();
+
+        let entries = ports.log.entries_for_run(&run).unwrap();
+        assert_eq!(
+            entries
+                .iter()
+                .map(|e| e.write.doc.as_str())
+                .collect::<Vec<_>>(),
+            vec!["notes/a.md", "notes/a.md"]
+        );
+        assert_eq!(entries[1].write.baseline, None);
+    }
+
+    #[test]
+    fn only_project_documents_inside_the_project_are_written() {
+        let ports = Ports::new();
+        let session = ports.session();
+        let run = session.begin_run("user").unwrap();
+        for doc in ["notes.txt", "../outside.md", "/abs.md"] {
+            let err = session
+                .apply(&run, doc, Expected::Absent, &[note("# A")])
+                .unwrap_err();
+            assert!(
+                matches!(
+                    err,
+                    ContentEditError::Document(DocumentError::Port(PortError {
+                        kind: PortErrorKind::InvalidPath,
+                        ..
+                    }))
+                ),
+                "{doc}: {err:?}"
+            );
+        }
+        assert!(ports.log.entries_for_run(&run).unwrap().is_empty());
     }
 }

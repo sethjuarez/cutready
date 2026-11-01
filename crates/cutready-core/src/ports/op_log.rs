@@ -61,7 +61,9 @@ pub struct Run {
 }
 
 /// Local, never-versioned record of runs and document writes (SQLite on
-/// desktop, in the runtime state dir next to `agent-state.db`).
+/// desktop, in the runtime state dir next to `agent-state.db`). Every
+/// mutation is durable when it returns: a pending entry must outlive a crash
+/// that interrupts the document write it announces.
 pub trait OpLogStore: Send + Sync {
     /// Starts a run and returns its store-assigned id.
     fn begin_run(&self, actor: &str, started_at: DateTime<Utc>) -> Result<String, PortError>;
