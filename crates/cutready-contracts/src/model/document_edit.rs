@@ -5,20 +5,22 @@
 
 use super::context::{LoadContext, SaveContext};
 
-/// Bytes to write and their `EditService.documentVersion`.
+/// Bytes to write and their `EditService.documentVersion`. For notes, `note_locked` is the lock to keep and `note_lock_changed` says whether the host must save it; a note batch either edits content or locks, never both.
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct ContentEdit {
+pub struct DocumentEdit {
     pub content: String,
     pub version: String,
+    pub note_locked: Option<bool>,
+    pub note_lock_changed: Option<bool>,
 }
 
-impl ContentEdit {
-    /// Create a new ContentEdit with default values.
+impl DocumentEdit {
+    /// Create a new DocumentEdit with default values.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Load ContentEdit from a JSON string.
+    /// Load DocumentEdit from a JSON string.
     pub fn from_json(json: &str, ctx: &LoadContext) -> Result<Self, serde_json::Error> {
         let value: serde_json::Value = serde_json::from_str(json)?;
         Self::validate_input_at(&value, "")
@@ -26,7 +28,7 @@ impl ContentEdit {
         Ok(Self::load_from_value(&value, ctx))
     }
 
-    /// Load ContentEdit from a YAML string.
+    /// Load DocumentEdit from a YAML string.
     pub fn from_yaml(yaml: &str, ctx: &LoadContext) -> Result<Self, serde_yaml::Error> {
         let value: serde_json::Value = serde_yaml::from_str(yaml)?;
         Self::validate_input_at(&value, "")
@@ -34,7 +36,7 @@ impl ContentEdit {
         Ok(Self::load_from_value(&value, ctx))
     }
 
-    /// Load ContentEdit from an already-parsed JSON value, returning an error
+    /// Load DocumentEdit from an already-parsed JSON value, returning an error
     /// instead of panicking on invalid input. Fallible companion to
     /// `load_from_value` with the same validation policy as `from_json`.
     pub fn try_load_from_value(
@@ -46,7 +48,7 @@ impl ContentEdit {
         Ok(Self::load_from_value(value, ctx))
     }
 
-    /// Load ContentEdit from a `serde_json::Value`.
+    /// Load DocumentEdit from a `serde_json::Value`.
     ///
     /// Calls `ctx.process_input` before field extraction.
     pub fn load_from_value(value: &serde_json::Value, ctx: &LoadContext) -> Self {
@@ -57,6 +59,8 @@ impl ContentEdit {
         Self {
             content: value.get("content").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
             version: value.get("version").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            note_locked: value.get("note_locked").and_then(|v| v.as_bool()),
+            note_lock_changed: value.get("note_lock_changed").and_then(|v| v.as_bool()),
         }
     }
 
@@ -64,7 +68,7 @@ impl ContentEdit {
         Ok(())
     }
 
-    /// Serialize ContentEdit to a `serde_json::Value`.
+    /// Serialize DocumentEdit to a `serde_json::Value`.
     ///
     /// Calls `ctx.process_dict` after serialization.
     pub fn to_value(&self, ctx: &SaveContext) -> serde_json::Value {
@@ -72,32 +76,38 @@ impl ContentEdit {
         // Write base fields
         result.insert("content".to_string(), serde_json::Value::String(self.content.clone()));
         result.insert("version".to_string(), serde_json::Value::String(self.version.clone()));
+        if let Some(val) = self.note_locked.as_ref() {
+            result.insert("note_locked".to_string(), serde_json::Value::Bool(*val));
+        }
+        if let Some(val) = self.note_lock_changed.as_ref() {
+            result.insert("note_lock_changed".to_string(), serde_json::Value::Bool(*val));
+        }
         ctx.process_dict(serde_json::Value::Object(result))
     }
 
-    /// Serialize ContentEdit to a JSON string.
+    /// Serialize DocumentEdit to a JSON string.
     pub fn to_json(&self, ctx: &SaveContext) -> Result<String, serde_json::Error> {
         serde_json::to_string_pretty(&self.to_value(ctx))
     }
 
-    /// Serialize ContentEdit to a YAML string.
+    /// Serialize DocumentEdit to a YAML string.
     pub fn to_yaml(&self, ctx: &SaveContext) -> Result<String, serde_yaml::Error> {
         serde_yaml::to_string(&self.to_value(ctx))
     }
 }
 
-// Serde for `ContentEdit` delegates to the canonical to_value/load_from_value
+// Serde for `DocumentEdit` delegates to the canonical to_value/load_from_value
 // logic so its serde wire form always equals the canonical to_value/load_from_value form. Uses a default (no-op) context — no ${env:}/${file:}
 // resolution here — leaving the context-aware LoadContext/SaveContext API intact.
 #[cfg(feature = "serde")]
-impl serde::Serialize for ContentEdit {
+impl serde::Serialize for DocumentEdit {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serde::Serialize::serialize(&self.to_value(&SaveContext::default()), serializer)
     }
 }
 
 #[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for ContentEdit {
+impl<'de> serde::Deserialize<'de> for DocumentEdit {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let value = <serde_json::Value as serde::Deserialize>::deserialize(deserializer)?;
         Self::validate_input_at(&value, "").map_err(serde::de::Error::custom)?;

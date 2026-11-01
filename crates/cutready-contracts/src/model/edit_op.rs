@@ -11,6 +11,12 @@ use super::document_metadata::DocumentMetadata;
 
 use super::planning_row::PlanningRow;
 
+use super::sketch::Sketch;
+
+use super::storyboard::Storyboard;
+
+use super::storyboard_item::StoryboardItem;
+
 
 /// Variant-specific data for [`EditOp`], discriminated by `kind`.
 #[derive(Debug, Clone, PartialEq)]
@@ -71,6 +77,37 @@ pub enum EditOpKind {
         field: Option<PlanningCellField>,
         locked: bool,
     },
+    /// `kind` = `"touch"`
+    TouchOp,
+    /// `kind` = `"replace_sketch"`
+    ReplaceSketchOp {
+        sketch: Sketch,
+    },
+    /// `kind` = `"replace_storyboard"`
+    ReplaceStoryboardOp {
+        storyboard: Storyboard,
+    },
+    /// `kind` = `"replace_note"`
+    ReplaceNoteOp {
+        content: String,
+    },
+    /// `kind` = `"write_note"`
+    WriteNoteOp {
+        content: String,
+    },
+    /// `kind` = `"insert_storyboard_item"`
+    InsertStoryboardItemOp {
+        index: Option<u32>,
+        item: serde_json::Value,
+    },
+    /// `kind` = `"remove_storyboard_item"`
+    RemoveStoryboardItemOp {
+        index: u32,
+    },
+    /// `kind` = `"set_storyboard_items"`
+    SetStoryboardItemsOp {
+        items: Vec<StoryboardItem>,
+    },
 }
 
 impl Default for EditOpKind {
@@ -80,7 +117,7 @@ impl Default for EditOpKind {
         }
     }
 }
-/// One typed edit, addressed by stable row id. Lock rules match `SketchDocument`: content edits are rejected on a locked sketch, locked rows, and changed locked cells; `set_lock` is always allowed.
+/// One typed edit. Row ops address rows by stable id. Lock rules match `SketchDocument`: content edits are rejected on a locked document, locked rows, and changed locked cells; `set_lock` is always allowed. An op that doesn't apply to the document's kind is `invalid_op`. Sketches take the title, description, metadata, row, `set_lock`, `touch` and `replace_sketch` ops. Storyboards take `set_title`, `set_description` (a string; null clears it), `set_metadata`, `set_lock` without a row, `touch`, the storyboard item ops and `replace_storyboard`. Notes take `write_note`, `replace_note` and `set_lock` without a row.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct EditOp {
     /// Variant-specific data, discriminated by `kind`.
@@ -175,6 +212,29 @@ impl EditOp {
                 field: value.get("field").and_then(|v| v.as_str()).and_then(|s| PlanningCellField::from_str_opt(s)),
                 locked: value.get("locked").and_then(|v| v.as_bool()).unwrap_or(false),
             },
+            "touch" => EditOpKind::TouchOp,
+            "replace_sketch" => EditOpKind::ReplaceSketchOp {
+                sketch: value.get("sketch").filter(|v| v.is_object() || v.is_array() || v.is_string()).map(|v| Sketch::load_from_value(v, ctx)).unwrap_or_default(),
+            },
+            "replace_storyboard" => EditOpKind::ReplaceStoryboardOp {
+                storyboard: value.get("storyboard").filter(|v| v.is_object() || v.is_array() || v.is_string()).map(|v| Storyboard::load_from_value(v, ctx)).unwrap_or_default(),
+            },
+            "replace_note" => EditOpKind::ReplaceNoteOp {
+                content: value.get("content").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            },
+            "write_note" => EditOpKind::WriteNoteOp {
+                content: value.get("content").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            },
+            "insert_storyboard_item" => EditOpKind::InsertStoryboardItemOp {
+                index: value.get("index").and_then(|v| v.as_u64().and_then(|n| u32::try_from(n).ok())),
+                item: value.get("item").filter(|v| !v.is_null()).cloned().unwrap_or(serde_json::Value::Null),
+            },
+            "remove_storyboard_item" => EditOpKind::RemoveStoryboardItemOp {
+                index: value.get("index").and_then(|v| v.as_u64().and_then(|n| u32::try_from(n).ok())).unwrap_or(0),
+            },
+            "set_storyboard_items" => EditOpKind::SetStoryboardItemsOp {
+                items: value.get("items").map(|v| Self::load_items(v, ctx)).unwrap_or_default(),
+            },
             _ => panic!("Unknown EditOp discriminator field 'kind' value: {}", kind_str),
         };
         Self {
@@ -250,6 +310,45 @@ impl EditOp {
             }
             "set_lock" => {
             }
+            "touch" => {
+            }
+            "replace_sketch" => {
+                let child_path = if path.is_empty() { "sketch".to_string() } else { format!("{}.{}", path, "sketch") };
+                let child = value.get("sketch").filter(|candidate| !candidate.is_null())
+                    .ok_or_else(|| format!("{}: missing required field", child_path))?;
+                Sketch::validate_input_at(child, &child_path)?;
+            }
+            "replace_storyboard" => {
+                let child_path = if path.is_empty() { "storyboard".to_string() } else { format!("{}.{}", path, "storyboard") };
+                let child = value.get("storyboard").filter(|candidate| !candidate.is_null())
+                    .ok_or_else(|| format!("{}: missing required field", child_path))?;
+                Storyboard::validate_input_at(child, &child_path)?;
+            }
+            "replace_note" => {
+            }
+            "write_note" => {
+            }
+            "insert_storyboard_item" => {
+                if value.as_object().map_or(false, |object| !object.contains_key("index")) {
+                    let missing_path = if path.is_empty() { "index".to_string() } else { format!("{}.{}", path, "index") };
+                    return Err(format!("{}: missing required field", missing_path));
+                }
+                let child_path = if path.is_empty() { "item".to_string() } else { format!("{}.{}", path, "item") };
+                let child = value.get("item").filter(|candidate| !candidate.is_null())
+                    .ok_or_else(|| format!("{}: missing required field", child_path))?;
+                StoryboardItem::validate_input_at(child, &child_path)?;
+            }
+            "remove_storyboard_item" => {
+            }
+            "set_storyboard_items" => {
+                if let Some(entries) = value.get("items").and_then(|candidate| candidate.as_array()) {
+                    let collection_path = if path.is_empty() { "items".to_string() } else { format!("{}.{}", path, "items") };
+                    for (index, entry) in entries.iter().enumerate() {
+                        let entry_path = format!("{}[{}]", collection_path, index);
+                        StoryboardItem::validate_input_at(entry, &entry_path)?;
+                    }
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -260,7 +359,7 @@ impl EditOp {
             .and_then(|candidate| candidate.as_str())
             .ok_or_else(|| "Missing EditOp discriminator property: 'kind'".to_string())?;
         match discriminator {
-            "set_title" | "set_description" | "set_metadata" | "set_row_text" | "set_screenshot" | "set_visual" | "insert_row" | "delete_row" | "reorder_rows" | "update_row" | "replace_rows" | "set_lock" => Ok(()),
+            "set_title" | "set_description" | "set_metadata" | "set_row_text" | "set_screenshot" | "set_visual" | "insert_row" | "delete_row" | "reorder_rows" | "update_row" | "replace_rows" | "set_lock" | "touch" | "replace_sketch" | "replace_storyboard" | "replace_note" | "write_note" | "insert_storyboard_item" | "remove_storyboard_item" | "set_storyboard_items" => Ok(()),
             _ => Err(format!("Unknown EditOp discriminator field 'kind' value: {}", discriminator)),
         }
     }
@@ -280,6 +379,14 @@ impl EditOp {
             EditOpKind::UpdateRowOp { .. } => "update_row",
             EditOpKind::ReplaceRowsOp { .. } => "replace_rows",
             EditOpKind::SetLockOp { .. } => "set_lock",
+            EditOpKind::TouchOp => "touch",
+            EditOpKind::ReplaceSketchOp { .. } => "replace_sketch",
+            EditOpKind::ReplaceStoryboardOp { .. } => "replace_storyboard",
+            EditOpKind::ReplaceNoteOp { .. } => "replace_note",
+            EditOpKind::WriteNoteOp { .. } => "write_note",
+            EditOpKind::InsertStoryboardItemOp { .. } => "insert_storyboard_item",
+            EditOpKind::RemoveStoryboardItemOp { .. } => "remove_storyboard_item",
+            EditOpKind::SetStoryboardItemsOp { .. } => "set_storyboard_items",
         }
     }
 
@@ -368,6 +475,39 @@ impl EditOp {
                 }
                 result.insert("locked".to_string(), serde_json::Value::Bool(*locked));
             }
+            EditOpKind::TouchOp => {
+            }
+            EditOpKind::ReplaceSketchOp { sketch,  .. } => {
+                {
+                    let nested = sketch.to_value(ctx);
+                    result.insert("sketch".to_string(), nested);
+                }
+            }
+            EditOpKind::ReplaceStoryboardOp { storyboard,  .. } => {
+                {
+                    let nested = storyboard.to_value(ctx);
+                    result.insert("storyboard".to_string(), nested);
+                }
+            }
+            EditOpKind::ReplaceNoteOp { content,  .. } => {
+                result.insert("content".to_string(), serde_json::Value::String(content.clone()));
+            }
+            EditOpKind::WriteNoteOp { content,  .. } => {
+                result.insert("content".to_string(), serde_json::Value::String(content.clone()));
+            }
+            EditOpKind::InsertStoryboardItemOp { index, item,  .. } => {
+                result.insert("index".to_string(), serde_json::Value::Null);
+                if let Some(val) = index {
+                    result.insert("index".to_string(), serde_json::Value::Number(serde_json::Number::from(*val)));
+                }
+                result.insert("item".to_string(), item.clone());
+            }
+            EditOpKind::RemoveStoryboardItemOp { index,  .. } => {
+                result.insert("index".to_string(), serde_json::Value::Number(serde_json::Number::from(*index)));
+            }
+            EditOpKind::SetStoryboardItemsOp { items,  .. } => {
+                result.insert("items".to_string(), serde_json::Value::Array(items.iter().map(|item| item.to_value(ctx)).collect()));
+            }
         }
         ctx.process_dict(serde_json::Value::Object(result))
     }
@@ -397,6 +537,26 @@ impl EditOp {
 
     /// Save a collection of PlanningRow to a JSON value.
     fn save_rows(items: &[PlanningRow], ctx: &SaveContext) -> serde_json::Value {
+
+        serde_json::Value::Array(items.iter().map(|item| item.to_value(ctx)).collect::<Vec<_>>())
+
+    }
+
+    /// Load a collection of StoryboardItem from a JSON value.
+    /// Handles both array format `[{...}]`.
+    fn load_items(data: &serde_json::Value, ctx: &LoadContext) -> Vec<StoryboardItem> {
+        match data {
+            serde_json::Value::Array(arr) => {
+                arr.iter().map(|v| StoryboardItem::load_from_value(v, ctx)).collect()
+            }
+
+            _ => Vec::new(),
+
+        }
+    }
+
+    /// Save a collection of StoryboardItem to a JSON value.
+    fn save_items(items: &[StoryboardItem], ctx: &SaveContext) -> serde_json::Value {
 
         serde_json::Value::Array(items.iter().map(|item| item.to_value(ctx)).collect::<Vec<_>>())
 

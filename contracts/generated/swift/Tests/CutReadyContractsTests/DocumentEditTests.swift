@@ -5,7 +5,7 @@ import Foundation
 import XCTest
 @testable import CutReadyContracts
 
-final class ContentEditTests: XCTestCase {
+final class DocumentEditTests: XCTestCase {
   func testJSONRoundTrip1() throws {
     let json = """
 {
@@ -13,10 +13,10 @@ final class ContentEditTests: XCTestCase {
   "version": "sample"
 }
 """
-    let instance = try ContentEdit.fromJSON(json)
+    let instance = try DocumentEdit.fromJSON(json)
     XCTAssertEqual(instance.content, "sample")
     XCTAssertEqual(instance.version, "sample")
-    let reloaded = try ContentEdit.fromJSON(try instance.toJSON())
+    let reloaded = try DocumentEdit.fromJSON(try instance.toJSON())
     XCTAssertEqual(reloaded.content, "sample")
     XCTAssertEqual(reloaded.version, "sample")
   }
@@ -27,17 +27,17 @@ content: sample
 version: sample
 
 """
-    let instance = try ContentEdit.fromYAML(yaml)
+    let instance = try DocumentEdit.fromYAML(yaml)
     XCTAssertEqual(instance.content, "sample")
     XCTAssertEqual(instance.version, "sample")
-    let reloaded = try ContentEdit.fromYAML(try instance.toYAML())
+    let reloaded = try DocumentEdit.fromYAML(try instance.toYAML())
     XCTAssertEqual(reloaded.content, "sample")
     XCTAssertEqual(reloaded.version, "sample")
   }
 
   // Invalid-input test (malformed JSON must be rejected, issue #328 class)
   func testFromJSONInvalid() throws {
-    XCTAssertThrowsError(try ContentEdit.fromJSON("{"))
+    XCTAssertThrowsError(try DocumentEdit.fromJSON("{"))
   }
 
 }

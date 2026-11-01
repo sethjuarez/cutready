@@ -1,24 +1,33 @@
 //! Typed edit ops: the desktop binding for the `EditService` contract in
 //! `contracts/ops.tsp`.
 //!
-//! Every host applies document edits as a batch of [`EditOp`]s addressed by
-//! stable row id. Each op maps onto the [`sketch_edits`] lock policy, so ops
-//! enforce exactly the rules the positional commands do. A batch is atomic:
-//! the first rejected op fails it with its index and the document is left
-//! unchanged.
+//! Every host edits project documents as a batch of [`EditOp`]s. Sketch row
+//! ops address rows by stable id and map onto the [`sketch_edits`] lock policy,
+//! so they enforce exactly the rules the positional commands do. A batch is
+//! atomic: the first rejected op fails it with its index and the document is
+//! left unchanged. [`edit_document`] is the one write path: hosts read the
+//! bytes, call it, and write what it returns.
+
+use std::borrow::Borrow;
 
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::contracts::{
-    CmdError, CmdErrorCode, CmdErrorDetails, EditOp, EditOpKind, LoadContext, SaveContext,
+    CmdError, CmdErrorCode, CmdErrorDetails, DocumentKind, EditOp, EditOpKind, LoadContext,
+    SaveContext,
 };
 use crate::document::{self, DocumentError};
 use crate::models::sketch::{
     assign_row_ids, DocumentMetadata, DuplicateRowId, PlanningCellLocks, PlanningRow, Sketch,
+    Storyboard, StoryboardItem,
 };
+use crate::notes::NOTE_LOCKED_MESSAGE;
 use crate::sketch_edits::{self, contract_index, RowTextUpdate, SketchEditError};
+
+/// The storyboard lock message, shared with the desktop commands.
+pub const STORYBOARD_LOCKED_MESSAGE: &str = "This storyboard is locked. Unlock it before editing.";
 
 /// Why one op was rejected.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -27,6 +36,10 @@ pub enum OpRejection {
     Edit(#[from] SketchEditError),
     #[error(transparent)]
     DuplicateRowId(#[from] DuplicateRowId),
+    #[error("{}", STORYBOARD_LOCKED_MESSAGE)]
+    LockedStoryboard,
+    #[error("{}", NOTE_LOCKED_MESSAGE)]
+    LockedNote,
 }
 
 /// A rejected batch: which op failed (zero-based) and why.
@@ -43,6 +56,11 @@ impl From<&EditOpError> for CmdError {
         let mut cmd = match &err.rejection {
             OpRejection::Edit(edit) => CmdError::from(edit),
             OpRejection::DuplicateRowId(dup) => CmdError::from(dup),
+            OpRejection::LockedStoryboard | OpRejection::LockedNote => CmdError {
+                code: CmdErrorCode::LockedDocument,
+                message: err.rejection.to_string(),
+                details: None,
+            },
         };
         cmd.details.get_or_insert_with(Default::default).op_index =
             Some(contract_index(err.op_index));
@@ -71,26 +89,169 @@ fn parse_op(op_index: usize, value: &Value) -> Result<EditOp, EditOpError> {
     })
 }
 
-/// `EditService.applySketchOps` on wire ops: each op is parsed just before it
-/// applies, so the first rejected op wins whether it is malformed or refused.
+/// Ops parsed one at a time, just before each applies, so the first rejected
+/// op wins whether it is malformed or refused.
+fn lazy_ops(values: &[Value]) -> impl Iterator<Item = Result<EditOp, EditOpError>> + '_ {
+    values
+        .iter()
+        .enumerate()
+        .map(|(op_index, value)| parse_op(op_index, value))
+}
+
+fn typed_ops(ops: &[EditOp]) -> impl Iterator<Item = Result<&EditOp, EditOpError>> {
+    ops.iter().map(Ok)
+}
+
+/// Whole-document replacements keep the given `updated_at`.
+fn is_replacement(op: &EditOp) -> bool {
+    matches!(
+        op.kind,
+        EditOpKind::ReplaceSketchOp { .. }
+            | EditOpKind::ReplaceStoryboardOp { .. }
+            | EditOpKind::ReplaceNoteOp { .. }
+    )
+}
+
+/// Apply a batch to a copy and keep it only if every op succeeds. A batch
+/// with any op but a replacement stamps `now` once.
+fn run_batch<D: Clone, O: Borrow<EditOp>>(
+    doc: &mut D,
+    ops: impl Iterator<Item = Result<O, EditOpError>>,
+    now: DateTime<Utc>,
+    apply: impl Fn(&mut D, &EditOp, DateTime<Utc>) -> Result<(), OpRejection>,
+    stamp: impl FnOnce(&mut D, DateTime<Utc>),
+) -> Result<(), EditOpError> {
+    let mut next = doc.clone();
+    let mut edited = false;
+    let mut any = false;
+    for (op_index, op) in ops.enumerate() {
+        let op = op?;
+        let op = op.borrow();
+        apply(&mut next, op, now).map_err(|rejection| EditOpError {
+            op_index,
+            rejection,
+        })?;
+        any = true;
+        edited |= !is_replacement(op);
+    }
+    if !any {
+        return Ok(());
+    }
+    if edited {
+        stamp(&mut next, now);
+    }
+    *doc = next;
+    Ok(())
+}
+
+fn stamp_sketch(sketch: &mut Sketch, now: DateTime<Utc>) {
+    sketch.updated_at = now;
+}
+
+fn stamp_storyboard(storyboard: &mut Storyboard, now: DateTime<Utc>) {
+    storyboard.updated_at = now;
+}
+
+/// `EditService.applySketchOps` on wire ops.
 pub fn apply_sketch_op_values(
     sketch: &mut Sketch,
     ops: &[Value],
     now: DateTime<Utc>,
 ) -> Result<(), EditOpError> {
-    if ops.is_empty() {
-        return Ok(());
-    }
-    let mut next = sketch.clone();
-    for (op_index, value) in ops.iter().enumerate() {
-        let op = parse_op(op_index, value)?;
-        apply_one(&mut next, &op, now).map_err(|rejection| EditOpError {
+    run_batch(sketch, lazy_ops(ops), now, apply_one, stamp_sketch)
+}
+
+/// `EditService.applySketchOps`. Applies `ops` in order; on success the
+/// sketch's `updated_at` is `now` unless every op is a replacement (an empty
+/// batch changes nothing).
+pub fn apply_sketch_ops(
+    sketch: &mut Sketch,
+    ops: &[EditOp],
+    now: DateTime<Utc>,
+) -> Result<(), EditOpError> {
+    run_batch(sketch, typed_ops(ops), now, apply_one, stamp_sketch)
+}
+
+/// `EditService.applyStoryboardOps` on wire ops.
+pub fn apply_storyboard_op_values(
+    storyboard: &mut Storyboard,
+    ops: &[Value],
+    now: DateTime<Utc>,
+) -> Result<(), EditOpError> {
+    run_batch(
+        storyboard,
+        lazy_ops(ops),
+        now,
+        apply_storyboard_one,
+        stamp_storyboard,
+    )
+}
+
+/// `EditService.applyStoryboardOps`.
+pub fn apply_storyboard_ops(
+    storyboard: &mut Storyboard,
+    ops: &[EditOp],
+    now: DateTime<Utc>,
+) -> Result<(), EditOpError> {
+    run_batch(
+        storyboard,
+        typed_ops(ops),
+        now,
+        apply_storyboard_one,
+        stamp_storyboard,
+    )
+}
+
+/// A note after a batch: its markdown and lock.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NoteState {
+    pub content: String,
+    pub locked: bool,
+}
+
+/// Note ops: `write_note` and `replace_note` change the markdown, `set_lock`
+/// changes the lock. Hosts keep the lock in a separate store, so one batch
+/// does either, never both.
+fn apply_note_op_values(note: &mut NoteState, ops: &[Value]) -> Result<(), EditOpError> {
+    let mut next = note.clone();
+    let mut edits_content = None;
+    for (op_index, op) in lazy_ops(ops).enumerate() {
+        let op = op?;
+        let content_op = !matches!(op.kind, EditOpKind::SetLockOp { .. });
+        if *edits_content.get_or_insert(content_op) != content_op {
+            return Err(rejected(
+                op_index,
+                SketchEditError::InvalidOp {
+                    reason: "A note edit either changes the note or its lock, not both.".into(),
+                },
+            ));
+        }
+        apply_note_one(&mut next, &op).map_err(|rejection| EditOpError {
             op_index,
             rejection,
         })?;
     }
-    next.updated_at = now;
-    *sketch = next;
+    *note = next;
+    Ok(())
+}
+
+fn apply_note_one(note: &mut NoteState, op: &EditOp) -> Result<(), OpRejection> {
+    match &op.kind {
+        EditOpKind::WriteNoteOp { content } => {
+            if note.locked {
+                return Err(OpRejection::LockedNote);
+            }
+            note.content = content.clone();
+        }
+        EditOpKind::ReplaceNoteOp { content } => note.content = content.clone(),
+        EditOpKind::SetLockOp {
+            row_id: None,
+            field: None,
+            locked,
+        } => note.locked = *locked,
+        EditOpKind::SetLockOp { .. } => return Err(invalid("A note has no rows to lock.")),
+        _ => return Err(not_for(op, "a note")),
+    }
     Ok(())
 }
 
@@ -122,56 +283,129 @@ impl TryFrom<&ContentEditError> for CmdError {
     }
 }
 
-/// A successful whole-file edit: the canonical bytes to write and their version.
+/// A note's lock after a batch, and whether the host must save it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NoteLock {
+    pub locked: bool,
+    pub changed: bool,
+}
+
+/// A successful whole-file edit: the canonical bytes to write and their
+/// version, plus the note's lock for notes.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ContentEdit {
+pub struct DocumentEdit {
     pub content: String,
     pub version: String,
+    pub note_lock: Option<NoteLock>,
 }
 
-/// The host write path for a `.sk` file: check `expected_version` against the
-/// current bytes, apply the ops, save canonically and return the new version.
-/// Hosts only read and write the bytes.
-pub fn edit_sketch_content(
-    current: &str,
-    expected_version: &str,
+impl DocumentEdit {
+    /// Whether the bytes differ from `current` and need writing.
+    pub fn changes(&self, current: Option<&str>) -> bool {
+        current != Some(self.content.as_str())
+    }
+}
+
+/// `EditService.editDocument`: the host write path for every project file.
+/// `current` is the file on disk (None when absent), `expected_version` the
+/// version the ops were computed against (None to expect no file), and
+/// `note_locked` the note's lock from the host's store.
+pub fn edit_document(
+    kind: DocumentKind,
+    current: Option<&str>,
+    expected_version: Option<&str>,
     ops: &[Value],
     now: DateTime<Utc>,
-) -> Result<ContentEdit, ContentEditError> {
-    let current_version = ensure_expected_version(current.as_bytes(), expected_version)?;
-    let mut sketch = document::sketch_from_json(current)?;
-    if ops.is_empty() {
-        return Ok(ContentEdit {
-            content: current.to_string(),
-            version: current_version,
-        });
+    note_locked: bool,
+) -> Result<DocumentEdit, ContentEditError> {
+    let current_version = ensure_expected_version(current.map(str::as_bytes), expected_version)?;
+    if current.is_none() {
+        ensure_starts_with_replacement(kind, ops)?;
     }
-    apply_sketch_op_values(&mut sketch, ops, now)?;
-    let content = document::sketch_to_json(&sketch)?;
+    let unchanged = |content: &str, version: String| DocumentEdit {
+        content: content.to_string(),
+        version,
+        note_lock: (kind == DocumentKind::Note).then_some(NoteLock {
+            locked: note_locked,
+            changed: false,
+        }),
+    };
+    if let (Some(content), Some(version), true) = (current, current_version, ops.is_empty()) {
+        return Ok(unchanged(content, version));
+    }
+    let (content, note_lock) = match kind {
+        DocumentKind::Sketch => {
+            let mut sketch = match current {
+                Some(content) => document::sketch_from_json(content)?,
+                None => Sketch::new("", now),
+            };
+            apply_sketch_op_values(&mut sketch, ops, now)?;
+            (document::sketch_to_json(&sketch)?, None)
+        }
+        DocumentKind::Storyboard => {
+            let mut storyboard = match current {
+                Some(content) => document::storyboard_from_json(content)?.0,
+                None => Storyboard::new("", now),
+            };
+            apply_storyboard_op_values(&mut storyboard, ops, now)?;
+            (document::storyboard_to_json(&storyboard)?, None)
+        }
+        DocumentKind::Note => {
+            let mut note = NoteState {
+                content: current.unwrap_or_default().to_string(),
+                locked: note_locked,
+            };
+            apply_note_op_values(&mut note, ops)?;
+            let lock = NoteLock {
+                locked: note.locked,
+                changed: note.locked != note_locked,
+            };
+            (note.content, Some(lock))
+        }
+    };
     let version = document_version(content.as_bytes());
-    Ok(ContentEdit { content, version })
+    Ok(DocumentEdit {
+        content,
+        version,
+        note_lock,
+    })
 }
 
-/// `EditService.applySketchOps`. Applies `ops` in order; on success the
-/// sketch's `updated_at` is `now` (an empty batch changes nothing).
-pub fn apply_sketch_ops(
-    sketch: &mut Sketch,
-    ops: &[EditOp],
-    now: DateTime<Utc>,
-) -> Result<(), EditOpError> {
-    if ops.is_empty() {
-        return Ok(());
+/// A file that doesn't exist yet is created by its kind's replacement op.
+fn ensure_starts_with_replacement(kind: DocumentKind, ops: &[Value]) -> Result<(), EditOpError> {
+    let first = match ops.first() {
+        Some(value) => parse_op(0, value)?,
+        None => {
+            return Err(rejected(
+                0,
+                SketchEditError::InvalidOp {
+                    reason: "A new document needs its content.".into(),
+                },
+            ))
+        }
+    };
+    let creates = matches!(
+        (kind, &first.kind),
+        (DocumentKind::Sketch, EditOpKind::ReplaceSketchOp { .. })
+            | (
+                DocumentKind::Storyboard,
+                EditOpKind::ReplaceStoryboardOp { .. }
+            )
+            | (DocumentKind::Note, EditOpKind::ReplaceNoteOp { .. })
+    );
+    if creates {
+        Ok(())
+    } else {
+        Err(rejected(
+            0,
+            SketchEditError::InvalidOp {
+                reason: format!(
+                    "This {kind} doesn't exist yet; start with replace_{kind}, not {}.",
+                    first.kind_str()
+                ),
+            },
+        ))
     }
-    let mut next = sketch.clone();
-    for (op_index, op) in ops.iter().enumerate() {
-        apply_one(&mut next, op, now).map_err(|rejection| EditOpError {
-            op_index,
-            rejection,
-        })?;
-    }
-    next.updated_at = now;
-    *sketch = next;
-    Ok(())
 }
 
 /// `EditService.documentVersion`: `sha256:` plus the lowercase hex digest of
@@ -186,11 +420,12 @@ pub fn document_version(content: &[u8]) -> String {
     version
 }
 
-/// The document changed since the caller read it.
+/// The document changed since the caller read it. `current_version` is None
+/// when the file no longer exists.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("This document changed since the edit was made. Reload it and try again.")]
 pub struct StaleDocument {
-    pub current_version: String,
+    pub current_version: Option<String>,
 }
 
 impl From<&StaleDocument> for CmdError {
@@ -198,23 +433,104 @@ impl From<&StaleDocument> for CmdError {
         CmdError {
             code: CmdErrorCode::StaleDocument,
             message: err.to_string(),
-            details: Some(CmdErrorDetails {
-                current_version: Some(err.current_version.clone()),
+            details: err.current_version.as_ref().map(|version| CmdErrorDetails {
+                current_version: Some(version.clone()),
                 ..Default::default()
             }),
         }
     }
 }
 
-/// `EditService.ensureVersion`: checks a write's expected version against the
-/// bytes on disk and returns the version when it matches.
-pub fn ensure_expected_version(current: &[u8], expected: &str) -> Result<String, StaleDocument> {
-    let current_version = document_version(current);
-    if current_version == expected {
+/// Checks a write's expected version against the bytes on disk (None when
+/// absent) and returns the current version when it matches.
+pub fn ensure_expected_version(
+    current: Option<&[u8]>,
+    expected: Option<&str>,
+) -> Result<Option<String>, StaleDocument> {
+    let current_version = current.map(document_version);
+    if current_version.as_deref() == expected {
         Ok(current_version)
     } else {
         Err(StaleDocument { current_version })
     }
+}
+
+/// An op that doesn't apply to this kind of document.
+fn not_for(op: &EditOp, what: &str) -> OpRejection {
+    invalid(format!("{} doesn't apply to {what}.", op.kind_str()))
+}
+
+fn ensure_storyboard_unlocked(storyboard: &Storyboard) -> Result<(), OpRejection> {
+    if storyboard.locked {
+        return Err(OpRejection::LockedStoryboard);
+    }
+    Ok(())
+}
+
+fn apply_storyboard_one(
+    storyboard: &mut Storyboard,
+    op: &EditOp,
+    _now: DateTime<Utc>,
+) -> Result<(), OpRejection> {
+    let item = |value: Value| to_core::<StoryboardItem>(value, "storyboard item");
+    match &op.kind {
+        EditOpKind::SetLockOp {
+            row_id: None,
+            field: None,
+            locked,
+        } => storyboard.locked = *locked,
+        EditOpKind::SetLockOp { .. } => {
+            return Err(invalid("A storyboard has no rows to lock."));
+        }
+        EditOpKind::ReplaceStoryboardOp { storyboard: next } => {
+            *storyboard = to_core(next.to_value(&SaveContext::default()), "storyboard")?;
+        }
+        EditOpKind::SetTitleOp { title } => {
+            ensure_storyboard_unlocked(storyboard)?;
+            storyboard.title = title.clone();
+        }
+        EditOpKind::SetDescriptionOp { description } => {
+            ensure_storyboard_unlocked(storyboard)?;
+            storyboard.description = match description {
+                None | Some(Value::Null) => String::new(),
+                Some(Value::String(text)) => text.clone(),
+                Some(_) => return Err(invalid("A storyboard description is plain text.")),
+            };
+        }
+        EditOpKind::SetMetadataOp { metadata } => {
+            ensure_storyboard_unlocked(storyboard)?;
+            storyboard.metadata = to_core::<DocumentMetadata>(
+                metadata.to_value(&SaveContext::default()),
+                "metadata",
+            )?;
+        }
+        EditOpKind::TouchOp => ensure_storyboard_unlocked(storyboard)?,
+        EditOpKind::InsertStoryboardItemOp { index, item: value } => {
+            ensure_storyboard_unlocked(storyboard)?;
+            let item = item(value.clone())?;
+            match index.map(|i| i as usize) {
+                Some(at) if at < storyboard.items.len() => storyboard.items.insert(at, item),
+                _ => storyboard.items.push(item),
+            }
+        }
+        EditOpKind::RemoveStoryboardItemOp { index } => {
+            ensure_storyboard_unlocked(storyboard)?;
+            let at = *index as usize;
+            if at >= storyboard.items.len() {
+                return Err(invalid("Position out of range"));
+            }
+            storyboard.items.remove(at);
+        }
+        EditOpKind::SetStoryboardItemsOp { items } => {
+            ensure_storyboard_unlocked(storyboard)?;
+            storyboard.items = items
+                .iter()
+                .map(|value| item(value.to_value(&SaveContext::default())))
+                .collect::<Result<_, _>>()?;
+        }
+        _ => return Err(not_for(op, "a storyboard")),
+    }
+    Ok(())
 }
 
 fn rejected(op_index: usize, err: SketchEditError) -> EditOpError {
@@ -278,6 +594,12 @@ fn set_row_asset(
 
 fn apply_one(sketch: &mut Sketch, op: &EditOp, now: DateTime<Utc>) -> Result<(), OpRejection> {
     match &op.kind {
+        EditOpKind::TouchOp => {}
+        EditOpKind::ReplaceSketchOp { sketch: next } => {
+            let mut next: Sketch = to_core(next.to_value(&SaveContext::default()), "sketch")?;
+            assign_row_ids(&mut next.rows)?;
+            *sketch = next;
+        }
         EditOpKind::SetTitleOp { title } => {
             sketch_edits::ensure_unlocked(sketch)?;
             sketch.title = title.clone();
@@ -385,6 +707,7 @@ fn apply_one(sketch: &mut Sketch, op: &EditOp, now: DateTime<Utc>) -> Result<(),
                 }
             }
         },
+        _ => return Err(not_for(op, "a sketch")),
     }
     Ok(())
 }
@@ -426,11 +749,15 @@ mod tests {
     fn expected_version_must_match_the_bytes_on_disk() {
         let version = document_version(b"{}");
         assert_eq!(
-            ensure_expected_version(b"{}", &version),
-            Ok(version.clone())
+            ensure_expected_version(Some(b"{}"), Some(&version)),
+            Ok(Some(version.clone()))
         );
-        let err = ensure_expected_version(b"{ }", &version).unwrap_err();
-        assert_eq!(err.current_version, document_version(b"{ }"));
+        assert_eq!(ensure_expected_version(None, None), Ok(None));
+        let gone = ensure_expected_version(None, Some(&version)).unwrap_err();
+        assert_eq!(gone.current_version, None);
+        assert_eq!(CmdError::from(&gone).details, None);
+        let err = ensure_expected_version(Some(b"{ }"), Some(&version)).unwrap_err();
+        assert_eq!(err.current_version, Some(document_version(b"{ }")));
         let cmd = CmdError::from(&err);
         assert_eq!(cmd.code, CmdErrorCode::StaleDocument);
         assert_eq!(
@@ -443,21 +770,159 @@ mod tests {
     fn content_edit_checks_the_version_then_saves_canonically() {
         let current = document::sketch_to_json(&sketch(&[("a", false)])).unwrap();
         let version = document_version(current.as_bytes());
-        let edit = edit_sketch_content(
-            &current,
-            &version,
+        let edit = edit_document(
+            DocumentKind::Sketch,
+            Some(&current),
+            Some(&version),
             &[json!({ "kind": "set_title", "title": "Renamed" })],
             test_now(),
+            false,
         )
         .unwrap();
+        assert_eq!(edit.note_lock, None);
         assert_eq!(edit.version, document_version(edit.content.as_bytes()));
         assert_eq!(
             document::sketch_from_json(&edit.content).unwrap().title,
             "Renamed"
         );
 
-        let stale = edit_sketch_content(&edit.content, &version, &[], test_now()).unwrap_err();
-        assert!(matches!(stale, ContentEditError::Stale(s) if s.current_version == edit.version));
+        let stale = edit_document(
+            DocumentKind::Sketch,
+            Some(&edit.content),
+            Some(&version),
+            &[],
+            test_now(),
+            false,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(stale, ContentEditError::Stale(s) if s.current_version == Some(edit.version))
+        );
+    }
+
+    #[test]
+    fn a_new_document_must_start_with_its_replacement() {
+        let err = edit_document(
+            DocumentKind::Note,
+            None,
+            None,
+            &[json!({ "kind": "write_note", "content": "x" })],
+            test_now(),
+            false,
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContentEditError::Op(e) if e.op_index == 0));
+
+        let edit = edit_document(
+            DocumentKind::Note,
+            None,
+            None,
+            &[json!({ "kind": "replace_note", "content": "# Hi" })],
+            test_now(),
+            true,
+        )
+        .unwrap();
+        assert_eq!(edit.content, "# Hi");
+        assert_eq!(
+            edit.note_lock,
+            Some(NoteLock {
+                locked: true,
+                changed: false
+            })
+        );
+        assert!(edit.changes(None));
+    }
+
+    #[test]
+    fn missing_sketches_and_storyboards_are_created_by_replacement() {
+        let mut fresh = sketch(&[("a", false)]);
+        fresh.locked = true;
+        let edit = edit_document(
+            DocumentKind::Sketch,
+            None,
+            None,
+            &[json!({ "kind": "replace_sketch", "sketch": serde_json::to_value(&fresh).unwrap() })],
+            test_now(),
+            false,
+        )
+        .unwrap();
+        assert_eq!(edit.content, document::sketch_to_json(&fresh).unwrap());
+        assert_eq!(edit.note_lock, None);
+
+        let board = Storyboard::new("Board", test_now());
+        let edit = edit_document(
+            DocumentKind::Storyboard,
+            None,
+            None,
+            &[json!({ "kind": "replace_storyboard", "storyboard": serde_json::to_value(&board).unwrap() })],
+            test_now(),
+            false,
+        )
+        .unwrap();
+        assert_eq!(edit.content, document::storyboard_to_json(&board).unwrap());
+    }
+
+    #[test]
+    fn rejected_storyboard_and_note_batches_change_nothing() {
+        let mut storyboard = Storyboard::new("Board", test_now());
+        let before = document::storyboard_to_json(&storyboard).unwrap();
+        apply_storyboard_op_values(
+            &mut storyboard,
+            &[
+                json!({ "kind": "set_title", "title": "Renamed" }),
+                json!({ "kind": "remove_storyboard_item", "index": 0 }),
+            ],
+            test_now(),
+        )
+        .unwrap_err();
+        assert_eq!(document::storyboard_to_json(&storyboard).unwrap(), before);
+
+        let mut note = NoteState {
+            content: "# Plan".into(),
+            locked: false,
+        };
+        apply_note_op_values(
+            &mut note,
+            &[
+                json!({ "kind": "set_lock", "locked": true }),
+                json!({ "kind": "write_note", "content": "# Both" }),
+            ],
+        )
+        .unwrap_err();
+        assert_eq!(
+            note,
+            NoteState {
+                content: "# Plan".into(),
+                locked: false
+            }
+        );
+    }
+
+    #[test]
+    fn storyboard_ops_respect_the_lock_and_keep_items_in_order() {
+        let mut storyboard = Storyboard::new("Board", test_now());
+        let item = json!({ "type": "sketch_ref", "path": "a.sk" });
+        apply_storyboard_op_values(
+            &mut storyboard,
+            &[
+                json!({ "kind": "insert_storyboard_item", "index": null, "item": item }),
+                json!({ "kind": "insert_storyboard_item", "index": 0, "item": { "type": "sketch_ref", "path": "b.sk" } }),
+                json!({ "kind": "remove_storyboard_item", "index": 1 }),
+            ],
+            test_now(),
+        )
+        .unwrap();
+        assert_eq!(storyboard.items.len(), 1);
+
+        storyboard.locked = true;
+        let before = storyboard.clone();
+        let err =
+            apply_storyboard_op_values(&mut storyboard, &[json!({ "kind": "touch" })], test_now())
+                .unwrap_err();
+        assert_eq!(err.rejection, OpRejection::LockedStoryboard);
+        assert_eq!(storyboard.items.len(), before.items.len());
+        assert_eq!(storyboard.updated_at, before.updated_at);
+        assert_eq!(CmdError::from(&err).code, CmdErrorCode::LockedDocument);
     }
 
     #[test]

@@ -16,6 +16,14 @@ public enum EditOp: TypraModel {
   case updateRowOp(UpdateRowOp)
   case replaceRowsOp(ReplaceRowsOp)
   case setLockOp(SetLockOp)
+  case touchOp(TouchOp)
+  case replaceSketchOp(ReplaceSketchOp)
+  case replaceStoryboardOp(ReplaceStoryboardOp)
+  case replaceNoteOp(ReplaceNoteOp)
+  case writeNoteOp(WriteNoteOp)
+  case insertStoryboardItemOp(InsertStoryboardItemOp)
+  case removeStoryboardItemOp(RemoveStoryboardItemOp)
+  case setStoryboardItemsOp(SetStoryboardItemsOp)
 
   public static func load(_ data: Any, context: LoadContext = LoadContext()) throws -> EditOp {
     let normalizedData: Any = data
@@ -37,6 +45,14 @@ public enum EditOp: TypraModel {
     case "update_row": return .updateRowOp(try UpdateRowOp.load(normalizedData, context: context))
     case "replace_rows": return .replaceRowsOp(try ReplaceRowsOp.load(normalizedData, context: context))
     case "set_lock": return .setLockOp(try SetLockOp.load(normalizedData, context: context))
+    case "touch": return .touchOp(try TouchOp.load(normalizedData, context: context))
+    case "replace_sketch": return .replaceSketchOp(try ReplaceSketchOp.load(normalizedData, context: context))
+    case "replace_storyboard": return .replaceStoryboardOp(try ReplaceStoryboardOp.load(normalizedData, context: context))
+    case "replace_note": return .replaceNoteOp(try ReplaceNoteOp.load(normalizedData, context: context))
+    case "write_note": return .writeNoteOp(try WriteNoteOp.load(normalizedData, context: context))
+    case "insert_storyboard_item": return .insertStoryboardItemOp(try InsertStoryboardItemOp.load(normalizedData, context: context))
+    case "remove_storyboard_item": return .removeStoryboardItemOp(try RemoveStoryboardItemOp.load(normalizedData, context: context))
+    case "set_storyboard_items": return .setStoryboardItemsOp(try SetStoryboardItemsOp.load(normalizedData, context: context))
     default: throw TypraRuntimeError.unknownDiscriminator(type: "EditOp", field: "kind", value: discriminator)
     }
   }
@@ -55,6 +71,14 @@ public enum EditOp: TypraModel {
     case .updateRowOp(let value): return try value.save(context)
     case .replaceRowsOp(let value): return try value.save(context)
     case .setLockOp(let value): return try value.save(context)
+    case .touchOp(let value): return try value.save(context)
+    case .replaceSketchOp(let value): return try value.save(context)
+    case .replaceStoryboardOp(let value): return try value.save(context)
+    case .replaceNoteOp(let value): return try value.save(context)
+    case .writeNoteOp(let value): return try value.save(context)
+    case .insertStoryboardItemOp(let value): return try value.save(context)
+    case .removeStoryboardItemOp(let value): return try value.save(context)
+    case .setStoryboardItemsOp(let value): return try value.save(context)
     }
   }
 
@@ -764,6 +788,423 @@ public struct SetLockOp: TypraModel {
 
   public static func fromYAML(_ yaml: String, context: LoadContext = LoadContext()) throws -> SetLockOp {
     return try load(TypraRuntime.yamlObject(from: yaml, typeName: "SetLockOp"), context: context)
+  }
+
+  public func toYAML(_ context: SaveContext = SaveContext()) throws -> String {
+    return try TypraRuntime.yamlString(from: save(context))
+  }
+}
+
+/// Mark the document edited without changing anything else. On a storyboard it follows the lock policy; on a sketch it doesn't, so a touch always succeeds.
+public struct TouchOp: TypraModel {
+  public static let shorthandProperty: String? = nil
+  public var kind: String = "touch"
+
+  public init(kind: String = "touch") {
+    self.kind = kind
+  }
+
+  public static func load(_ data: Any, context: LoadContext = LoadContext()) throws -> TouchOp {
+    let object = try TypraRuntime.object(data, typeName: "TouchOp")
+    var instance = TouchOp()
+    if let value = object["kind"] {
+      instance.kind = try TypraRuntime.string(value, field: "kind")
+    }
+    else {
+      instance.kind = "touch"
+    }
+    return instance
+  }
+
+  public func save(_ context: SaveContext = SaveContext()) throws -> [String: Any] {
+    var result: [String: Any] = [:]
+    result["kind"] = self.kind
+    return result
+  }
+
+  public static func fromJSON(_ json: String, context: LoadContext = LoadContext()) throws -> TouchOp {
+    return try load(TypraRuntime.jsonObject(from: json, typeName: "TouchOp"), context: context)
+  }
+
+  public func toJSON(_ context: SaveContext = SaveContext()) throws -> String {
+    return try TypraRuntime.jsonString(from: save(context))
+  }
+
+  public static func fromYAML(_ yaml: String, context: LoadContext = LoadContext()) throws -> TouchOp {
+    return try load(TypraRuntime.yamlObject(from: yaml, typeName: "TouchOp"), context: context)
+  }
+
+  public func toYAML(_ context: SaveContext = SaveContext()) throws -> String {
+    return try TypraRuntime.yamlString(from: save(context))
+  }
+}
+
+/// Replace the whole document, for create and import only. A replacement ignores the lock policy and keeps the given `updated_at`; rows without an id get one as in decode.
+public struct ReplaceSketchOp: TypraModel {
+  public static let shorthandProperty: String? = nil
+  public var kind: String = "replace_sketch"
+  public var sketch: Sketch = Sketch()
+
+  public init(kind: String = "replace_sketch", sketch: Sketch = Sketch()) {
+    self.kind = kind
+    self.sketch = sketch
+  }
+
+  public static func load(_ data: Any, context: LoadContext = LoadContext()) throws -> ReplaceSketchOp {
+    let object = try TypraRuntime.object(data, typeName: "ReplaceSketchOp")
+    var instance = ReplaceSketchOp()
+    if let value = object["kind"] {
+      instance.kind = try TypraRuntime.string(value, field: "kind")
+    }
+    else {
+      instance.kind = "replace_sketch"
+    }
+    if object["sketch"] == nil || object["sketch"] is NSNull {
+      throw TypraRuntimeError.unsupported(context.at("sketch").path + ": missing required field")
+    }
+    if let value = object["sketch"] {
+      instance.sketch = try Sketch.load(value, context: context.at("sketch"))
+    }
+    return instance
+  }
+
+  public func save(_ context: SaveContext = SaveContext()) throws -> [String: Any] {
+    var result: [String: Any] = [:]
+    result["kind"] = self.kind
+    result["sketch"] = try self.sketch.save(context)
+    return result
+  }
+
+  public static func fromJSON(_ json: String, context: LoadContext = LoadContext()) throws -> ReplaceSketchOp {
+    return try load(TypraRuntime.jsonObject(from: json, typeName: "ReplaceSketchOp"), context: context)
+  }
+
+  public func toJSON(_ context: SaveContext = SaveContext()) throws -> String {
+    return try TypraRuntime.jsonString(from: save(context))
+  }
+
+  public static func fromYAML(_ yaml: String, context: LoadContext = LoadContext()) throws -> ReplaceSketchOp {
+    return try load(TypraRuntime.yamlObject(from: yaml, typeName: "ReplaceSketchOp"), context: context)
+  }
+
+  public func toYAML(_ context: SaveContext = SaveContext()) throws -> String {
+    return try TypraRuntime.yamlString(from: save(context))
+  }
+}
+
+/// `replace_sketch` for a storyboard, in the canonical shape. Hosts upgrade older files on read.
+public struct ReplaceStoryboardOp: TypraModel {
+  public static let shorthandProperty: String? = nil
+  public var kind: String = "replace_storyboard"
+  public var storyboard: Storyboard = Storyboard()
+
+  public init(kind: String = "replace_storyboard", storyboard: Storyboard = Storyboard()) {
+    self.kind = kind
+    self.storyboard = storyboard
+  }
+
+  public static func load(_ data: Any, context: LoadContext = LoadContext()) throws -> ReplaceStoryboardOp {
+    let object = try TypraRuntime.object(data, typeName: "ReplaceStoryboardOp")
+    var instance = ReplaceStoryboardOp()
+    if let value = object["kind"] {
+      instance.kind = try TypraRuntime.string(value, field: "kind")
+    }
+    else {
+      instance.kind = "replace_storyboard"
+    }
+    if object["storyboard"] == nil || object["storyboard"] is NSNull {
+      throw TypraRuntimeError.unsupported(context.at("storyboard").path + ": missing required field")
+    }
+    if let value = object["storyboard"] {
+      instance.storyboard = try Storyboard.load(value, context: context.at("storyboard"))
+    }
+    return instance
+  }
+
+  public func save(_ context: SaveContext = SaveContext()) throws -> [String: Any] {
+    var result: [String: Any] = [:]
+    result["kind"] = self.kind
+    result["storyboard"] = try self.storyboard.save(context)
+    return result
+  }
+
+  public static func fromJSON(_ json: String, context: LoadContext = LoadContext()) throws -> ReplaceStoryboardOp {
+    return try load(TypraRuntime.jsonObject(from: json, typeName: "ReplaceStoryboardOp"), context: context)
+  }
+
+  public func toJSON(_ context: SaveContext = SaveContext()) throws -> String {
+    return try TypraRuntime.jsonString(from: save(context))
+  }
+
+  public static func fromYAML(_ yaml: String, context: LoadContext = LoadContext()) throws -> ReplaceStoryboardOp {
+    return try load(TypraRuntime.yamlObject(from: yaml, typeName: "ReplaceStoryboardOp"), context: context)
+  }
+
+  public func toYAML(_ context: SaveContext = SaveContext()) throws -> String {
+    return try TypraRuntime.yamlString(from: save(context))
+  }
+}
+
+/// `replace_sketch` for a note: the new markdown, ignoring the note's lock.
+public struct ReplaceNoteOp: TypraModel {
+  public static let shorthandProperty: String? = nil
+  public var kind: String = "replace_note"
+  public var content: String = ""
+
+  public init(kind: String = "replace_note", content: String = "") {
+    self.kind = kind
+    self.content = content
+  }
+
+  public static func load(_ data: Any, context: LoadContext = LoadContext()) throws -> ReplaceNoteOp {
+    let object = try TypraRuntime.object(data, typeName: "ReplaceNoteOp")
+    var instance = ReplaceNoteOp()
+    if let value = object["kind"] {
+      instance.kind = try TypraRuntime.string(value, field: "kind")
+    }
+    else {
+      instance.kind = "replace_note"
+    }
+    if let value = object["content"] {
+      instance.content = try TypraRuntime.string(value, field: "content")
+    }
+    return instance
+  }
+
+  public func save(_ context: SaveContext = SaveContext()) throws -> [String: Any] {
+    var result: [String: Any] = [:]
+    result["kind"] = self.kind
+    result["content"] = self.content
+    return result
+  }
+
+  public static func fromJSON(_ json: String, context: LoadContext = LoadContext()) throws -> ReplaceNoteOp {
+    return try load(TypraRuntime.jsonObject(from: json, typeName: "ReplaceNoteOp"), context: context)
+  }
+
+  public func toJSON(_ context: SaveContext = SaveContext()) throws -> String {
+    return try TypraRuntime.jsonString(from: save(context))
+  }
+
+  public static func fromYAML(_ yaml: String, context: LoadContext = LoadContext()) throws -> ReplaceNoteOp {
+    return try load(TypraRuntime.yamlObject(from: yaml, typeName: "ReplaceNoteOp"), context: context)
+  }
+
+  public func toYAML(_ context: SaveContext = SaveContext()) throws -> String {
+    return try TypraRuntime.yamlString(from: save(context))
+  }
+}
+
+/// The note's new markdown. Rejected while the note is locked.
+public struct WriteNoteOp: TypraModel {
+  public static let shorthandProperty: String? = nil
+  public var kind: String = "write_note"
+  public var content: String = ""
+
+  public init(kind: String = "write_note", content: String = "") {
+    self.kind = kind
+    self.content = content
+  }
+
+  public static func load(_ data: Any, context: LoadContext = LoadContext()) throws -> WriteNoteOp {
+    let object = try TypraRuntime.object(data, typeName: "WriteNoteOp")
+    var instance = WriteNoteOp()
+    if let value = object["kind"] {
+      instance.kind = try TypraRuntime.string(value, field: "kind")
+    }
+    else {
+      instance.kind = "write_note"
+    }
+    if let value = object["content"] {
+      instance.content = try TypraRuntime.string(value, field: "content")
+    }
+    return instance
+  }
+
+  public func save(_ context: SaveContext = SaveContext()) throws -> [String: Any] {
+    var result: [String: Any] = [:]
+    result["kind"] = self.kind
+    result["content"] = self.content
+    return result
+  }
+
+  public static func fromJSON(_ json: String, context: LoadContext = LoadContext()) throws -> WriteNoteOp {
+    return try load(TypraRuntime.jsonObject(from: json, typeName: "WriteNoteOp"), context: context)
+  }
+
+  public func toJSON(_ context: SaveContext = SaveContext()) throws -> String {
+    return try TypraRuntime.jsonString(from: save(context))
+  }
+
+  public static func fromYAML(_ yaml: String, context: LoadContext = LoadContext()) throws -> WriteNoteOp {
+    return try load(TypraRuntime.yamlObject(from: yaml, typeName: "WriteNoteOp"), context: context)
+  }
+
+  public func toYAML(_ context: SaveContext = SaveContext()) throws -> String {
+    return try TypraRuntime.yamlString(from: save(context))
+  }
+}
+
+/// Insert `item` at `index`; null or past the end appends.
+public struct InsertStoryboardItemOp: TypraModel {
+  public static let shorthandProperty: String? = nil
+  public var kind: String = "insert_storyboard_item"
+  public var index: UInt32? = nil
+  public var item: StoryboardItem = .storyboardSketchRef(StoryboardSketchRef())
+
+  public init(kind: String = "insert_storyboard_item", index: UInt32? = nil, item: StoryboardItem = .storyboardSketchRef(StoryboardSketchRef())) {
+    self.kind = kind
+    self.index = index
+    self.item = item
+  }
+
+  public static func load(_ data: Any, context: LoadContext = LoadContext()) throws -> InsertStoryboardItemOp {
+    let object = try TypraRuntime.object(data, typeName: "InsertStoryboardItemOp")
+    var instance = InsertStoryboardItemOp()
+    if let value = object["kind"] {
+      instance.kind = try TypraRuntime.string(value, field: "kind")
+    }
+    else {
+      instance.kind = "insert_storyboard_item"
+    }
+    if object["index"] == nil {
+      throw TypraRuntimeError.unsupported(context.at("index").path + ": missing required field")
+    }
+    if let value = object["index"], !(value is NSNull) {
+      instance.index = try TypraRuntime.uint32(value, field: "index")
+    }
+    if object["item"] == nil || object["item"] is NSNull {
+      throw TypraRuntimeError.unsupported(context.at("item").path + ": missing required field")
+    }
+    if let value = object["item"] {
+      instance.item = try StoryboardItem.load(value, context: context.at("item"))
+    }
+    return instance
+  }
+
+  public func save(_ context: SaveContext = SaveContext()) throws -> [String: Any] {
+    var result: [String: Any] = [:]
+    result["kind"] = self.kind
+    if let value = self.index {
+      result["index"] = value
+    }
+    else {
+      result["index"] = NSNull()
+    }
+    result["item"] = try self.item.save(context)
+    return result
+  }
+
+  public static func fromJSON(_ json: String, context: LoadContext = LoadContext()) throws -> InsertStoryboardItemOp {
+    return try load(TypraRuntime.jsonObject(from: json, typeName: "InsertStoryboardItemOp"), context: context)
+  }
+
+  public func toJSON(_ context: SaveContext = SaveContext()) throws -> String {
+    return try TypraRuntime.jsonString(from: save(context))
+  }
+
+  public static func fromYAML(_ yaml: String, context: LoadContext = LoadContext()) throws -> InsertStoryboardItemOp {
+    return try load(TypraRuntime.yamlObject(from: yaml, typeName: "InsertStoryboardItemOp"), context: context)
+  }
+
+  public func toYAML(_ context: SaveContext = SaveContext()) throws -> String {
+    return try TypraRuntime.yamlString(from: save(context))
+  }
+}
+
+/// Remove the item at `index`; an index past the end is `invalid_op`.
+public struct RemoveStoryboardItemOp: TypraModel {
+  public static let shorthandProperty: String? = nil
+  public var kind: String = "remove_storyboard_item"
+  public var index: UInt32 = 0
+
+  public init(kind: String = "remove_storyboard_item", index: UInt32 = 0) {
+    self.kind = kind
+    self.index = index
+  }
+
+  public static func load(_ data: Any, context: LoadContext = LoadContext()) throws -> RemoveStoryboardItemOp {
+    let object = try TypraRuntime.object(data, typeName: "RemoveStoryboardItemOp")
+    var instance = RemoveStoryboardItemOp()
+    if let value = object["kind"] {
+      instance.kind = try TypraRuntime.string(value, field: "kind")
+    }
+    else {
+      instance.kind = "remove_storyboard_item"
+    }
+    if let value = object["index"] {
+      instance.index = try TypraRuntime.uint32(value, field: "index")
+    }
+    return instance
+  }
+
+  public func save(_ context: SaveContext = SaveContext()) throws -> [String: Any] {
+    var result: [String: Any] = [:]
+    result["kind"] = self.kind
+    result["index"] = self.index
+    return result
+  }
+
+  public static func fromJSON(_ json: String, context: LoadContext = LoadContext()) throws -> RemoveStoryboardItemOp {
+    return try load(TypraRuntime.jsonObject(from: json, typeName: "RemoveStoryboardItemOp"), context: context)
+  }
+
+  public func toJSON(_ context: SaveContext = SaveContext()) throws -> String {
+    return try TypraRuntime.jsonString(from: save(context))
+  }
+
+  public static func fromYAML(_ yaml: String, context: LoadContext = LoadContext()) throws -> RemoveStoryboardItemOp {
+    return try load(TypraRuntime.yamlObject(from: yaml, typeName: "RemoveStoryboardItemOp"), context: context)
+  }
+
+  public func toYAML(_ context: SaveContext = SaveContext()) throws -> String {
+    return try TypraRuntime.yamlString(from: save(context))
+  }
+}
+
+/// Replace the storyboard's items, for reorders and bulk rewrites.
+public struct SetStoryboardItemsOp: TypraModel {
+  public static let shorthandProperty: String? = nil
+  public var kind: String = "set_storyboard_items"
+  public var items: [StoryboardItem] = []
+
+  public init(kind: String = "set_storyboard_items", items: [StoryboardItem] = []) {
+    self.kind = kind
+    self.items = items
+  }
+
+  public static func load(_ data: Any, context: LoadContext = LoadContext()) throws -> SetStoryboardItemsOp {
+    let object = try TypraRuntime.object(data, typeName: "SetStoryboardItemsOp")
+    var instance = SetStoryboardItemsOp()
+    if let value = object["kind"] {
+      instance.kind = try TypraRuntime.string(value, field: "kind")
+    }
+    else {
+      instance.kind = "set_storyboard_items"
+    }
+    if let value = object["items"] {
+      instance.items = try TypraRuntime.array(value, field: "items").enumerated().map { try StoryboardItem.load($1, context: context.at("items").atIndex($0)) }
+    }
+    return instance
+  }
+
+  public func save(_ context: SaveContext = SaveContext()) throws -> [String: Any] {
+    var result: [String: Any] = [:]
+    result["kind"] = self.kind
+    result["items"] = try self.items.map { try $0.save(context) }
+    return result
+  }
+
+  public static func fromJSON(_ json: String, context: LoadContext = LoadContext()) throws -> SetStoryboardItemsOp {
+    return try load(TypraRuntime.jsonObject(from: json, typeName: "SetStoryboardItemsOp"), context: context)
+  }
+
+  public func toJSON(_ context: SaveContext = SaveContext()) throws -> String {
+    return try TypraRuntime.jsonString(from: save(context))
+  }
+
+  public static func fromYAML(_ yaml: String, context: LoadContext = LoadContext()) throws -> SetStoryboardItemsOp {
+    return try load(TypraRuntime.yamlObject(from: yaml, typeName: "SetStoryboardItemsOp"), context: context)
   }
 
   public func toYAML(_ context: SaveContext = SaveContext()) throws -> String {

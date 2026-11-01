@@ -4,19 +4,25 @@
 #![allow(unused_imports, dead_code, non_camel_case_types, unused_variables, unexpected_cfgs, clippy::all)]
 
 
-use super::content_edit::ContentEdit;
+use super::document_edit::DocumentEdit;
+
+use super::document_edit_request::DocumentEditRequest;
 
 use super::edit_op::EditOp;
 
 use super::sketch::Sketch;
 
-/// The one way every host edits a document. Ops apply in order and atomically: the first rejected op fails the batch with `details.op_index` and the document is unchanged. A successful batch sets `updated_at` to `now` once.
+use super::storyboard::Storyboard;
+
+/// The one way every host edits a document. Ops apply in order and atomically: the first rejected op fails the batch with `details.op_index` and the document is unchanged. A successful batch sets `updated_at` to `now` once, unless every op is a replacement. Notes have no `updated_at`.
 #[async_trait::async_trait]
 pub trait EditService: Send + Sync {
     /// Apply ops to a `.sk` document.
     fn apply_sketch_ops(&self, sketch: &Sketch, ops: &Vec<EditOp>, now: &String) -> Result<Sketch, Box<dyn std::error::Error + Send + Sync>>;
+    /// Apply ops to a `.sb` document.
+    fn apply_storyboard_ops(&self, storyboard: &Storyboard, ops: &Vec<EditOp>, now: &String) -> Result<Storyboard, Box<dyn std::error::Error + Send + Sync>>;
     /// The version an edit was computed against: `sha256:` plus the lowercase hex SHA-256 of the document's bytes on disk. A write whose expected version differs fails with `stale_document`.
     fn document_version(&self, content: &String) -> Result<String, Box<dyn std::error::Error + Send + Sync>>;
-    /// The host write path for a `.sk` file. `content` is the file on disk and `expected_version` the version the ops were computed against; a mismatch fails with `stale_document` and `details.current_version`. Otherwise the ops apply and the result is the canonical bytes to write and their version. An empty batch returns `content` unchanged.
-    fn edit_sketch_content(&self, content: &String, expected_version: &String, ops: &Vec<EditOp>, now: &String) -> Result<ContentEdit, Box<dyn std::error::Error + Send + Sync>>;
+    /// The host write path for every project document. A version mismatch fails with `stale_document` (with `details.current_version` when the file exists). A missing file must start with its kind's replacement op, otherwise the batch is `invalid_op`. The result is the canonical bytes to write and their version. An empty batch returns `content` unchanged.
+    fn edit_document(&self, request: &DocumentEditRequest) -> Result<DocumentEdit, Box<dyn std::error::Error + Send + Sync>>;
 }

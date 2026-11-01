@@ -1198,6 +1198,161 @@ const applySketchOpsVectors = [
     input: { sketch: unlockedFixture, ops: [], now: NOW },
     expected: unlockedFixture,
   },
+  {
+    name: "touch marks a locked sketch edited",
+    input: { sketch: { ...unlockedFixture, locked: true }, ops: [{ kind: "touch" }], now: NOW },
+    expected: edited({ ...unlockedFixture, locked: true }, () => {}),
+  },
+  {
+    name: "replace_sketch ignores locks and keeps the given updated_at",
+    input: { sketch: { ...unlockedFixture, locked: true }, ops: [{ kind: "replace_sketch", sketch: lockedFixture }], now: NOW },
+    expected: lockedFixture,
+  },
+  {
+    name: "an edit after a replacement sets updated_at",
+    input: { sketch: unlockedFixture, ops: [{ kind: "replace_sketch", sketch: desktopSketch }, { kind: "set_title", title: "Replaced" }], now: NOW },
+    expected: edited(desktopSketch, (s) => {
+      s.title = "Replaced";
+    }),
+  },
+  {
+    name: "touch after a locked replacement still sets updated_at",
+    input: { sketch: unlockedFixture, ops: [{ kind: "replace_sketch", sketch: lockedFixture }, { kind: "touch" }], now: NOW },
+    expected: edited(lockedFixture, () => {}),
+  },
+  {
+    name: "a storyboard op on a sketch is rejected",
+    input: { sketch: unlockedFixture, ops: [{ kind: "remove_storyboard_item", index: 0 }], now: NOW },
+    expectedError: opError(0, "invalid_op"),
+  },
+  {
+    name: "a note op on a sketch is rejected",
+    input: { sketch: unlockedFixture, ops: [{ kind: "write_note", content: "# No" }], now: NOW },
+    expectedError: opError(0, "invalid_op"),
+  },
+];
+
+// EditService.applyStoryboardOps. The storyboard keeps `description` as a
+// string; item ops address items by position, as the desktop commands do.
+const openStoryboard = storyboard([sketchRef("intro.sk"), section("Setup", ["flows/login.sk"])], {
+  future_storyboard_field: { owner: "ios" },
+});
+const lockedStoryboard = { ...openStoryboard, locked: true };
+
+const applyStoryboardOpsVectors = [
+  {
+    name: "set_title, set_description and set_metadata keep unknown fields",
+    input: {
+      storyboard: openStoryboard,
+      ops: [
+        { kind: "set_title", title: "Launch" },
+        { kind: "set_description", description: "Partners first." },
+        { kind: "set_metadata", metadata: { fields: { audience: "partners" } } },
+      ],
+      now: NOW,
+    },
+    expected: edited(openStoryboard, (s) => {
+      s.title = "Launch";
+      s.description = "Partners first.";
+      s.metadata = { fields: { audience: "partners" } };
+    }),
+  },
+  {
+    name: "set_description null clears the description",
+    input: { storyboard: { ...openStoryboard, description: "Old." }, ops: [{ kind: "set_description", description: null }], now: NOW },
+    expected: edited(openStoryboard, () => {}),
+  },
+  {
+    name: "a non-string description is rejected",
+    input: { storyboard: openStoryboard, ops: [{ kind: "set_description", description: { root: {} } }], now: NOW },
+    expectedError: opError(0, "invalid_op"),
+  },
+  {
+    name: "insert_storyboard_item inserts at an index and appends past the end",
+    input: {
+      storyboard: openStoryboard,
+      ops: [
+        { kind: "insert_storyboard_item", index: 0, item: sketchRef("cold-open.sk") },
+        { kind: "insert_storyboard_item", index: null, item: section("Wrap-up", [], { description: "Close." }) },
+        { kind: "insert_storyboard_item", index: 99, item: sketchRef("outro.sk") },
+      ],
+      now: NOW,
+    },
+    expected: edited(openStoryboard, (s) => {
+      s.items = [sketchRef("cold-open.sk"), ...s.items, section("Wrap-up", [], { description: "Close." }), sketchRef("outro.sk")];
+    }),
+  },
+  {
+    name: "remove_storyboard_item removes the item at an index",
+    input: { storyboard: openStoryboard, ops: [{ kind: "remove_storyboard_item", index: 0 }], now: NOW },
+    expected: edited(openStoryboard, (s) => {
+      s.items.shift();
+    }),
+  },
+  {
+    name: "remove_storyboard_item past the end is rejected",
+    input: { storyboard: openStoryboard, ops: [{ kind: "remove_storyboard_item", index: 2 }], now: NOW },
+    expectedError: opError(0, "invalid_op"),
+  },
+  {
+    name: "set_storyboard_items replaces the items",
+    input: { storyboard: openStoryboard, ops: [{ kind: "set_storyboard_items", items: [openStoryboard.items[1], openStoryboard.items[0]] }], now: NOW },
+    expected: edited(openStoryboard, (s) => {
+      s.items = [s.items[1], s.items[0]];
+    }),
+  },
+  {
+    name: "a locked storyboard rejects content edits",
+    input: { storyboard: lockedStoryboard, ops: [{ kind: "insert_storyboard_item", index: null, item: sketchRef("x.sk") }], now: NOW },
+    expectedError: opError(0, "locked_document"),
+  },
+  {
+    name: "touch follows the storyboard lock",
+    input: { storyboard: lockedStoryboard, ops: [{ kind: "touch" }], now: NOW },
+    expectedError: opError(0, "locked_document"),
+  },
+  {
+    name: "touch marks an open storyboard edited",
+    input: { storyboard: openStoryboard, ops: [{ kind: "touch" }], now: NOW },
+    expected: edited(openStoryboard, () => {}),
+  },
+  {
+    name: "set_lock unlocks a locked storyboard for later ops",
+    input: { storyboard: lockedStoryboard, ops: [{ kind: "set_lock", locked: false }, { kind: "set_title", title: "Open" }], now: NOW },
+    expected: edited(openStoryboard, (s) => {
+      s.title = "Open";
+    }),
+  },
+  {
+    name: "a storyboard has no rows to lock",
+    input: { storyboard: openStoryboard, ops: [{ kind: "set_lock", row_id: "row-1", locked: true }], now: NOW },
+    expectedError: opError(0, "invalid_op"),
+  },
+  {
+    name: "a row op on a storyboard is rejected",
+    input: { storyboard: openStoryboard, ops: [{ kind: "delete_row", row_id: "row-1" }], now: NOW },
+    expectedError: opError(0, "invalid_op"),
+  },
+  {
+    name: "replace_storyboard ignores locks and keeps the given updated_at",
+    input: { storyboard: lockedStoryboard, ops: [{ kind: "replace_storyboard", storyboard: desktopStoryboard }], now: NOW },
+    expected: desktopStoryboard,
+  },
+  {
+    name: "touch after an open replacement sets updated_at",
+    input: { storyboard: lockedStoryboard, ops: [{ kind: "replace_storyboard", storyboard: openStoryboard }, { kind: "touch" }], now: NOW },
+    expected: edited(openStoryboard, () => {}),
+  },
+  {
+    name: "touch after a locked replacement is rejected",
+    input: { storyboard: openStoryboard, ops: [{ kind: "replace_storyboard", storyboard: lockedStoryboard }, { kind: "touch" }], now: NOW },
+    expectedError: opError(1, "locked_document"),
+  },
+  {
+    name: "an empty batch leaves the storyboard unchanged",
+    input: { storyboard: lockedStoryboard, ops: [], now: NOW },
+    expected: lockedStoryboard,
+  },
 ];
 
 const documentVersion = (name, content) => ({
@@ -1214,26 +1369,118 @@ const documentVersionVectors = [
 
 const sha = (content) => `sha256:${createHash("sha256").update(content, "utf8").digest("hex")}`;
 
-// Content-changing writes depend on serde's exact bytes, so they are pinned by
-// the applySketchOps vectors plus cutready-core unit tests; these pin the
-// version gate and the no-op path.
+// EditService.editDocument. Sketch and storyboard bytes depend on serde's
+// exact output, so content-changing writes for them are pinned by the apply*Ops
+// vectors plus cutready-core unit tests; these pin the version gate, creates,
+// the no-op path and notes, whose bytes are the content itself.
 const onDisk = JSON.stringify(unlockedFixture);
 const lockedOnDisk = JSON.stringify({ ...unlockedFixture, locked: true });
-const editSketchContentVectors = [
+const boardOnDisk = JSON.stringify(lockedStoryboard);
+const noteOnDisk = "# Plan\n\nShip it.\n";
+const editDocument = (kind, content, expected_version, ops, note_locked = false) => ({
+  request: { kind, content, expected_version, ops, now: NOW, note_locked },
+});
+const noteEdit = (content, note_locked = false, note_lock_changed = false) => ({
+  content,
+  version: sha(content),
+  note_locked,
+  note_lock_changed,
+});
+const editDocumentVectors = [
   {
     name: "an empty batch returns the file unchanged",
-    input: { content: onDisk, expected_version: sha(onDisk), ops: [], now: NOW },
+    input: editDocument("sketch", onDisk, sha(onDisk), []),
     expected: { content: onDisk, version: sha(onDisk) },
   },
   {
     name: "a stale version reports the current one before any op runs",
-    input: { content: onDisk, expected_version: sha("{}"), ops: [{ kind: "set_mood" }], now: NOW },
+    input: editDocument("sketch", onDisk, sha("{}"), [{ kind: "set_mood" }]),
     expectedError: cmdError("stale_document", { current_version: sha(onDisk) }),
   },
   {
     name: "a current version still enforces the edit policy",
-    input: { content: lockedOnDisk, expected_version: sha(lockedOnDisk), ops: [{ kind: "set_title", title: "No" }], now: NOW },
+    input: editDocument("sketch", lockedOnDisk, sha(lockedOnDisk), [{ kind: "set_title", title: "No" }]),
     expectedError: opError(0, "locked_document"),
+  },
+  {
+    name: "a storyboard follows the storyboard policy",
+    input: editDocument("storyboard", boardOnDisk, sha(boardOnDisk), [{ kind: "touch" }]),
+    expectedError: opError(0, "locked_document"),
+  },
+  {
+    name: "an op for another kind is rejected",
+    input: editDocument("storyboard", boardOnDisk, sha(boardOnDisk), [{ kind: "replace_sketch", sketch: unlockedFixture }]),
+    expectedError: opError(0, "invalid_op"),
+  },
+  {
+    name: "expecting no file when one exists is stale",
+    input: editDocument("note", noteOnDisk, null, [{ kind: "replace_note", content: "# New" }]),
+    expectedError: cmdError("stale_document", { current_version: sha(noteOnDisk) }),
+  },
+  {
+    name: "expecting a file that is gone is stale",
+    input: editDocument("note", null, sha(noteOnDisk), [{ kind: "write_note", content: "# New" }]),
+    expectedError: cmdError("stale_document"),
+  },
+  {
+    name: "a missing file must start with its replacement",
+    input: editDocument("note", null, null, [{ kind: "write_note", content: "# New" }]),
+    expectedError: opError(0, "invalid_op"),
+  },
+  {
+    name: "a missing note is created by replace_note",
+    input: editDocument("note", null, null, [{ kind: "replace_note", content: "" }]),
+    expected: noteEdit(""),
+  },
+  {
+    name: "write_note replaces an open note's content",
+    input: editDocument("note", noteOnDisk, sha(noteOnDisk), [{ kind: "write_note", content: "# Plan\n\nShip it today.\n" }]),
+    expected: noteEdit("# Plan\n\nShip it today.\n"),
+  },
+  {
+    name: "write_note on a locked note is rejected",
+    input: editDocument("note", noteOnDisk, sha(noteOnDisk), [{ kind: "write_note", content: "# No" }], true),
+    expectedError: opError(0, "locked_document"),
+  },
+  {
+    name: "replace_note ignores the note's lock",
+    input: editDocument("note", noteOnDisk, sha(noteOnDisk), [{ kind: "replace_note", content: "# Imported" }], true),
+    expected: noteEdit("# Imported", true),
+  },
+  {
+    name: "set_lock changes the note's lock and leaves its content",
+    input: editDocument("note", noteOnDisk, sha(noteOnDisk), [{ kind: "set_lock", locked: true }]),
+    expected: noteEdit(noteOnDisk, true, true),
+  },
+  {
+    name: "setting a note's lock to its current state changes nothing",
+    input: editDocument("note", noteOnDisk, sha(noteOnDisk), [{ kind: "set_lock", locked: true }], true),
+    expected: noteEdit(noteOnDisk, true),
+  },
+  {
+    name: "an empty batch on a locked note reports its lock",
+    input: editDocument("note", noteOnDisk, sha(noteOnDisk), [], true),
+    expected: noteEdit(noteOnDisk, true),
+  },
+  {
+    name: "a lock toggled back to where it was hasn't changed",
+    input: editDocument("note", noteOnDisk, sha(noteOnDisk), [{ kind: "set_lock", locked: true }, { kind: "set_lock", locked: false }]),
+    expected: noteEdit(noteOnDisk),
+  },
+  {
+    name: "a note batch can't both lock and edit content",
+    input: editDocument("note", noteOnDisk, sha(noteOnDisk), [{ kind: "set_lock", locked: false }, { kind: "write_note", content: "# Both" }], true),
+    expectedError: opError(1, "invalid_op"),
+  },
+  {
+    name: "a note has no rows to lock",
+    input: editDocument("note", noteOnDisk, sha(noteOnDisk), [{ kind: "set_lock", row_id: "row-1", locked: true }]),
+    expectedError: opError(0, "invalid_op"),
+  },
+  {
+    name: "a note can't be touched",
+    input: editDocument("note", noteOnDisk, sha(noteOnDisk), [{ kind: "touch" }]),
+    expectedError: opError(0, "invalid_op"),
   },
 ];
 
@@ -1254,7 +1501,8 @@ writeFileSync(
     tspConst("ParseDurationSecondsVectors", parseDurationSecondsVectors),
     tspConst("ApplySketchOpsVectors", applySketchOpsVectors),
     tspConst("DocumentVersionVectors", documentVersionVectors),
-    tspConst("EditSketchContentVectors", editSketchContentVectors),
+    tspConst("ApplyStoryboardOpsVectors", applyStoryboardOpsVectors),
+    tspConst("EditDocumentVectors", editDocumentVectors),
     tspConst("StoryboardRoundTripVectors", storyboardRoundTripVectors),
     tspConst("StoryboardUpgradeVectors", storyboardUpgradeVectors),
     tspConst("ChatArtifactRoundTripVectors", chatArtifactRoundTripVectors),

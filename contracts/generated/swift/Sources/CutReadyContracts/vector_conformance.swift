@@ -189,22 +189,172 @@ public func runEditServiceConformance<S: EditService>(_ seam: S) async throws {
   }
   // vector: a current version still enforces the edit policy
   do {
-    let inputData = "{\"content\":\"{\\\"title\\\":\\\"Contract sketch\\\",\\\"locked\\\":true,\\\"description\\\":null,\\\"rows\\\":[{\\\"id\\\":\\\"row-1\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":null,\\\"time\\\":\\\"0:10\\\",\\\"narrative\\\":\\\"First.\\\",\\\"demo_actions\\\":\\\"Open.\\\",\\\"future_row_field\\\":\\\"first\\\"},{\\\"id\\\":\\\"row-2\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":\\\"screenshots/second.png\\\",\\\"time\\\":\\\"0:20\\\",\\\"narrative\\\":\\\"Second.\\\",\\\"demo_actions\\\":\\\"Click.\\\"}],\\\"state\\\":\\\"draft\\\",\\\"created_at\\\":\\\"2026-06-28T20:00:00Z\\\",\\\"updated_at\\\":\\\"2026-06-28T20:20:00Z\\\"}\",\"expected_version\":\"sha256:0954839672a12a14252836cdb04beab7052711fcb6985fcc03d33d1d8354106f\",\"ops\":[{\"kind\":\"set_title\",\"title\":\"No\"}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    let inputData = "{\"request\":{\"kind\":\"sketch\",\"content\":\"{\\\"title\\\":\\\"Contract sketch\\\",\\\"locked\\\":true,\\\"description\\\":null,\\\"rows\\\":[{\\\"id\\\":\\\"row-1\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":null,\\\"time\\\":\\\"0:10\\\",\\\"narrative\\\":\\\"First.\\\",\\\"demo_actions\\\":\\\"Open.\\\",\\\"future_row_field\\\":\\\"first\\\"},{\\\"id\\\":\\\"row-2\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":\\\"screenshots/second.png\\\",\\\"time\\\":\\\"0:20\\\",\\\"narrative\\\":\\\"Second.\\\",\\\"demo_actions\\\":\\\"Click.\\\"}],\\\"state\\\":\\\"draft\\\",\\\"created_at\\\":\\\"2026-06-28T20:00:00Z\\\",\\\"updated_at\\\":\\\"2026-06-28T20:20:00Z\\\"}\",\"expected_version\":\"sha256:0954839672a12a14252836cdb04beab7052711fcb6985fcc03d33d1d8354106f\",\"ops\":[{\"kind\":\"set_title\",\"title\":\"No\"}],\"now\":\"2026-07-01T09:30:00Z\",\"note_locked\":false}}".data(using: .utf8)!
     guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
       throw SeamConformanceError("a current version still enforces the edit policy: failed to parse embedded vector input")
     }
-    let content = input["content"] as! String
-    let expectedVersion = input["expected_version"] as! String
-    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
-    let now = input["now"] as! String
+    let request = try DocumentEditRequest.load(input["request"]!)
     var caught: Error? = nil
     do {
-      _ = try seam.editSketchContent(content: content, expectedVersion: expectedVersion, ops: ops, now: now)
+      _ = try seam.editDocument(request: request)
     } catch {
       caught = error
     }
     guard let caughtError = caught else {
       throw SeamConformanceError("a current version still enforces the edit policy: expected an error")
+    }
+  }
+  // vector: a lock toggled back to where it was hasn't changed
+  do {
+    let inputData = "{\"request\":{\"kind\":\"note\",\"content\":\"# Plan\\n\\nShip it.\\n\",\"expected_version\":\"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012\",\"ops\":[{\"kind\":\"set_lock\",\"locked\":true},{\"kind\":\"set_lock\",\"locked\":false}],\"now\":\"2026-07-01T09:30:00Z\",\"note_locked\":false}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("a lock toggled back to where it was hasn't changed: failed to parse embedded vector input")
+    }
+    let request = try DocumentEditRequest.load(input["request"]!)
+    let actual = try seam.editDocument(request: request)
+    let expectedData = "{\"content\":\"# Plan\\n\\nShip it.\\n\",\"version\":\"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012\",\"note_locked\":false,\"note_lock_changed\":false}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("a lock toggled back to where it was hasn't changed misrouted")
+    }
+  }
+  // vector: a locked storyboard rejects content edits
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}},\"ops\":[{\"kind\":\"insert_storyboard_item\",\"index\":null,\"item\":{\"type\":\"sketch_ref\",\"path\":\"x.sk\"}}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("a locked storyboard rejects content edits: failed to parse embedded vector input")
+    }
+    let storyboard = try Storyboard.load(input["storyboard"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    var caught: Error? = nil
+    do {
+      _ = try seam.applyStoryboardOps(storyboard: storyboard, ops: ops, now: now)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("a locked storyboard rejects content edits: expected an error")
+    }
+  }
+  // vector: a missing file must start with its replacement
+  do {
+    let inputData = "{\"request\":{\"kind\":\"note\",\"content\":null,\"expected_version\":null,\"ops\":[{\"kind\":\"write_note\",\"content\":\"# New\"}],\"now\":\"2026-07-01T09:30:00Z\",\"note_locked\":false}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("a missing file must start with its replacement: failed to parse embedded vector input")
+    }
+    let request = try DocumentEditRequest.load(input["request"]!)
+    var caught: Error? = nil
+    do {
+      _ = try seam.editDocument(request: request)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("a missing file must start with its replacement: expected an error")
+    }
+  }
+  // vector: a missing note is created by replace_note
+  do {
+    let inputData = "{\"request\":{\"kind\":\"note\",\"content\":null,\"expected_version\":null,\"ops\":[{\"kind\":\"replace_note\",\"content\":\"\"}],\"now\":\"2026-07-01T09:30:00Z\",\"note_locked\":false}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("a missing note is created by replace_note: failed to parse embedded vector input")
+    }
+    let request = try DocumentEditRequest.load(input["request"]!)
+    let actual = try seam.editDocument(request: request)
+    let expectedData = "{\"content\":\"\",\"version\":\"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"note_locked\":false,\"note_lock_changed\":false}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("a missing note is created by replace_note misrouted")
+    }
+  }
+  // vector: a non-string description is rejected
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}},\"ops\":[{\"kind\":\"set_description\",\"description\":{\"root\":{}}}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("a non-string description is rejected: failed to parse embedded vector input")
+    }
+    let storyboard = try Storyboard.load(input["storyboard"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    var caught: Error? = nil
+    do {
+      _ = try seam.applyStoryboardOps(storyboard: storyboard, ops: ops, now: now)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("a non-string description is rejected: expected an error")
+    }
+  }
+  // vector: a note batch can't both lock and edit content
+  do {
+    let inputData = "{\"request\":{\"kind\":\"note\",\"content\":\"# Plan\\n\\nShip it.\\n\",\"expected_version\":\"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012\",\"ops\":[{\"kind\":\"set_lock\",\"locked\":false},{\"kind\":\"write_note\",\"content\":\"# Both\"}],\"now\":\"2026-07-01T09:30:00Z\",\"note_locked\":true}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("a note batch can't both lock and edit content: failed to parse embedded vector input")
+    }
+    let request = try DocumentEditRequest.load(input["request"]!)
+    var caught: Error? = nil
+    do {
+      _ = try seam.editDocument(request: request)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("a note batch can't both lock and edit content: expected an error")
+    }
+  }
+  // vector: a note can't be touched
+  do {
+    let inputData = "{\"request\":{\"kind\":\"note\",\"content\":\"# Plan\\n\\nShip it.\\n\",\"expected_version\":\"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012\",\"ops\":[{\"kind\":\"touch\"}],\"now\":\"2026-07-01T09:30:00Z\",\"note_locked\":false}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("a note can't be touched: failed to parse embedded vector input")
+    }
+    let request = try DocumentEditRequest.load(input["request"]!)
+    var caught: Error? = nil
+    do {
+      _ = try seam.editDocument(request: request)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("a note can't be touched: expected an error")
+    }
+  }
+  // vector: a note has no rows to lock
+  do {
+    let inputData = "{\"request\":{\"kind\":\"note\",\"content\":\"# Plan\\n\\nShip it.\\n\",\"expected_version\":\"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012\",\"ops\":[{\"kind\":\"set_lock\",\"row_id\":\"row-1\",\"locked\":true}],\"now\":\"2026-07-01T09:30:00Z\",\"note_locked\":false}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("a note has no rows to lock: failed to parse embedded vector input")
+    }
+    let request = try DocumentEditRequest.load(input["request"]!)
+    var caught: Error? = nil
+    do {
+      _ = try seam.editDocument(request: request)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("a note has no rows to lock: expected an error")
+    }
+  }
+  // vector: a note op on a sketch is rejected
+  do {
+    let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"write_note\",\"content\":\"# No\"}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("a note op on a sketch is rejected: failed to parse embedded vector input")
+    }
+    let sketch = try Sketch.load(input["sketch"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    var caught: Error? = nil
+    do {
+      _ = try seam.applySketchOps(sketch: sketch, ops: ops, now: now)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("a note op on a sketch is rejected: expected an error")
     }
   }
   // vector: a rejected op fails the whole batch
@@ -226,24 +376,95 @@ public func runEditServiceConformance<S: EditService>(_ seam: S) async throws {
       throw SeamConformanceError("a rejected op fails the whole batch: expected an error")
     }
   }
-  // vector: a stale version reports the current one before any op runs
+  // vector: a row op on a storyboard is rejected
   do {
-    let inputData = "{\"content\":\"{\\\"title\\\":\\\"Contract sketch\\\",\\\"locked\\\":false,\\\"description\\\":null,\\\"rows\\\":[{\\\"id\\\":\\\"row-1\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":null,\\\"time\\\":\\\"0:10\\\",\\\"narrative\\\":\\\"First.\\\",\\\"demo_actions\\\":\\\"Open.\\\",\\\"future_row_field\\\":\\\"first\\\"},{\\\"id\\\":\\\"row-2\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":\\\"screenshots/second.png\\\",\\\"time\\\":\\\"0:20\\\",\\\"narrative\\\":\\\"Second.\\\",\\\"demo_actions\\\":\\\"Click.\\\"}],\\\"state\\\":\\\"draft\\\",\\\"created_at\\\":\\\"2026-06-28T20:00:00Z\\\",\\\"updated_at\\\":\\\"2026-06-28T20:20:00Z\\\"}\",\"expected_version\":\"sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\",\"ops\":[{\"kind\":\"set_mood\"}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}},\"ops\":[{\"kind\":\"delete_row\",\"row_id\":\"row-1\"}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
     guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
-      throw SeamConformanceError("a stale version reports the current one before any op runs: failed to parse embedded vector input")
+      throw SeamConformanceError("a row op on a storyboard is rejected: failed to parse embedded vector input")
     }
-    let content = input["content"] as! String
-    let expectedVersion = input["expected_version"] as! String
+    let storyboard = try Storyboard.load(input["storyboard"]!)
     let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
     let now = input["now"] as! String
     var caught: Error? = nil
     do {
-      _ = try seam.editSketchContent(content: content, expectedVersion: expectedVersion, ops: ops, now: now)
+      _ = try seam.applyStoryboardOps(storyboard: storyboard, ops: ops, now: now)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("a row op on a storyboard is rejected: expected an error")
+    }
+  }
+  // vector: a stale version reports the current one before any op runs
+  do {
+    let inputData = "{\"request\":{\"kind\":\"sketch\",\"content\":\"{\\\"title\\\":\\\"Contract sketch\\\",\\\"locked\\\":false,\\\"description\\\":null,\\\"rows\\\":[{\\\"id\\\":\\\"row-1\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":null,\\\"time\\\":\\\"0:10\\\",\\\"narrative\\\":\\\"First.\\\",\\\"demo_actions\\\":\\\"Open.\\\",\\\"future_row_field\\\":\\\"first\\\"},{\\\"id\\\":\\\"row-2\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":\\\"screenshots/second.png\\\",\\\"time\\\":\\\"0:20\\\",\\\"narrative\\\":\\\"Second.\\\",\\\"demo_actions\\\":\\\"Click.\\\"}],\\\"state\\\":\\\"draft\\\",\\\"created_at\\\":\\\"2026-06-28T20:00:00Z\\\",\\\"updated_at\\\":\\\"2026-06-28T20:20:00Z\\\"}\",\"expected_version\":\"sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\",\"ops\":[{\"kind\":\"set_mood\"}],\"now\":\"2026-07-01T09:30:00Z\",\"note_locked\":false}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("a stale version reports the current one before any op runs: failed to parse embedded vector input")
+    }
+    let request = try DocumentEditRequest.load(input["request"]!)
+    var caught: Error? = nil
+    do {
+      _ = try seam.editDocument(request: request)
     } catch {
       caught = error
     }
     guard let caughtError = caught else {
       throw SeamConformanceError("a stale version reports the current one before any op runs: expected an error")
+    }
+  }
+  // vector: a storyboard follows the storyboard policy
+  do {
+    let inputData = "{\"request\":{\"kind\":\"storyboard\",\"content\":\"{\\\"title\\\":\\\"Contract storyboard\\\",\\\"description\\\":\\\"\\\",\\\"locked\\\":true,\\\"items\\\":[{\\\"type\\\":\\\"sketch_ref\\\",\\\"path\\\":\\\"intro.sk\\\"},{\\\"type\\\":\\\"section\\\",\\\"title\\\":\\\"Setup\\\",\\\"sketches\\\":[\\\"flows/login.sk\\\"]}],\\\"created_at\\\":\\\"2026-06-28T20:00:00Z\\\",\\\"updated_at\\\":\\\"2026-06-28T20:20:00Z\\\",\\\"future_storyboard_field\\\":{\\\"owner\\\":\\\"ios\\\"}}\",\"expected_version\":\"sha256:d90bd569bb860e16ee73029172054ff4415fa43490e458abd1a6b67b20014986\",\"ops\":[{\"kind\":\"touch\"}],\"now\":\"2026-07-01T09:30:00Z\",\"note_locked\":false}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("a storyboard follows the storyboard policy: failed to parse embedded vector input")
+    }
+    let request = try DocumentEditRequest.load(input["request"]!)
+    var caught: Error? = nil
+    do {
+      _ = try seam.editDocument(request: request)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("a storyboard follows the storyboard policy: expected an error")
+    }
+  }
+  // vector: a storyboard has no rows to lock
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}},\"ops\":[{\"kind\":\"set_lock\",\"row_id\":\"row-1\",\"locked\":true}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("a storyboard has no rows to lock: failed to parse embedded vector input")
+    }
+    let storyboard = try Storyboard.load(input["storyboard"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    var caught: Error? = nil
+    do {
+      _ = try seam.applyStoryboardOps(storyboard: storyboard, ops: ops, now: now)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("a storyboard has no rows to lock: expected an error")
+    }
+  }
+  // vector: a storyboard op on a sketch is rejected
+  do {
+    let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"remove_storyboard_item\",\"index\":0}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("a storyboard op on a sketch is rejected: failed to parse embedded vector input")
+    }
+    let sketch = try Sketch.load(input["sketch"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    var caught: Error? = nil
+    do {
+      _ = try seam.applySketchOps(sketch: sketch, ops: ops, now: now)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("a storyboard op on a sketch is rejected: expected an error")
     }
   }
   // vector: an earlier rejected op wins over a later malformed one
@@ -265,6 +486,22 @@ public func runEditServiceConformance<S: EditService>(_ seam: S) async throws {
       throw SeamConformanceError("an earlier rejected op wins over a later malformed one: expected an error")
     }
   }
+  // vector: an edit after a replacement sets updated_at
+  do {
+    let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"replace_sketch\",\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":{\"root\":{\"children\":[{\"type\":\"paragraph\",\"children\":[{\"text\":\"Intro scene\"}]}]}},\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:20\",\"duration_seconds\":20,\"narrative\":\"Open the workspace.\",\"demo_actions\":\"Click **Open**.\",\"visual\":\".cutready/visuals/abc123def456.json\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25,\"label\":\"Open button\"},{\"rank\":2,\"x\":0.75,\"y\":0.5}],\"typing_spots\":[{\"x\":0.25,\"y\":0.5,\"width\":0.5,\"height\":0.125,\"text\":\"demo-project\",\"start_offset_ms\":300,\"characters_per_second\":18.5,\"show_cursor\":true,\"font_family\":\"mono\",\"font_scale\":1.25}],\"motion_plan\":{\"kind\":\"wide_hold_then_push\",\"keyframes\":[{\"time_ms\":0,\"scale\":1.25,\"x\":0.5,\"y\":0.5,\"easing\":\"linear\"},{\"time_ms\":1500,\"scale\":1.75,\"x\":0.5,\"y\":0.25,\"easing\":\"ease_in_out\"}],\"rationale\":\"Hold wide, then push toward the Open button.\"},\"design_plan\":\"Title card with the product name.\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":4200,\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\"},\"narration_plan\":{\"source_text\":\"Open the workspace.\",\"voice\":\"en-US-Harper:MAI-Voice-2\",\"locale\":\"en-US\",\"ssml\":\"<speak>Open the workspace.</speak>\",\"baseline_style\":\"friendly\",\"pronunciation_overrides\":{\"CutReady\":\"cut ready\"},\"beats\":[{\"text\":\"Open the workspace.\",\"emphasis\":\"moderate\",\"style_degree\":1.5,\"pause_after_ms\":250}],\"generated_at\":\"2026-06-28T20:06:00Z\"}}],\"state\":\"refined\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"developers\"}}}},{\"kind\":\"set_title\",\"title\":\"Replaced\"}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("an edit after a replacement sets updated_at: failed to parse embedded vector input")
+    }
+    let sketch = try Sketch.load(input["sketch"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    let actual = try seam.applySketchOps(sketch: sketch, ops: ops, now: now)
+    let expectedData = "{\"title\":\"Replaced\",\"locked\":false,\"description\":{\"root\":{\"children\":[{\"type\":\"paragraph\",\"children\":[{\"text\":\"Intro scene\"}]}]}},\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:20\",\"duration_seconds\":20,\"narrative\":\"Open the workspace.\",\"demo_actions\":\"Click **Open**.\",\"visual\":\".cutready/visuals/abc123def456.json\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25,\"label\":\"Open button\"},{\"rank\":2,\"x\":0.75,\"y\":0.5}],\"typing_spots\":[{\"x\":0.25,\"y\":0.5,\"width\":0.5,\"height\":0.125,\"text\":\"demo-project\",\"start_offset_ms\":300,\"characters_per_second\":18.5,\"show_cursor\":true,\"font_family\":\"mono\",\"font_scale\":1.25}],\"motion_plan\":{\"kind\":\"wide_hold_then_push\",\"keyframes\":[{\"time_ms\":0,\"scale\":1.25,\"x\":0.5,\"y\":0.5,\"easing\":\"linear\"},{\"time_ms\":1500,\"scale\":1.75,\"x\":0.5,\"y\":0.25,\"easing\":\"ease_in_out\"}],\"rationale\":\"Hold wide, then push toward the Open button.\"},\"design_plan\":\"Title card with the product name.\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":4200,\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\"},\"narration_plan\":{\"source_text\":\"Open the workspace.\",\"voice\":\"en-US-Harper:MAI-Voice-2\",\"locale\":\"en-US\",\"ssml\":\"<speak>Open the workspace.</speak>\",\"baseline_style\":\"friendly\",\"pronunciation_overrides\":{\"CutReady\":\"cut ready\"},\"beats\":[{\"text\":\"Open the workspace.\",\"emphasis\":\"moderate\",\"style_degree\":1.5,\"pause_after_ms\":250}],\"generated_at\":\"2026-06-28T20:06:00Z\"}}],\"state\":\"refined\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"metadata\":{\"fields\":{\"audience\":\"developers\"}}}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("an edit after a replacement sets updated_at misrouted")
+    }
+  }
   // vector: an empty batch leaves the document unchanged
   do {
     let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
@@ -281,21 +518,65 @@ public func runEditServiceConformance<S: EditService>(_ seam: S) async throws {
       throw SeamConformanceError("an empty batch leaves the document unchanged misrouted")
     }
   }
+  // vector: an empty batch leaves the storyboard unchanged
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}},\"ops\":[],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("an empty batch leaves the storyboard unchanged: failed to parse embedded vector input")
+    }
+    let storyboard = try Storyboard.load(input["storyboard"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    let actual = try seam.applyStoryboardOps(storyboard: storyboard, ops: ops, now: now)
+    let expectedData = "{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("an empty batch leaves the storyboard unchanged misrouted")
+    }
+  }
+  // vector: an empty batch on a locked note reports its lock
+  do {
+    let inputData = "{\"request\":{\"kind\":\"note\",\"content\":\"# Plan\\n\\nShip it.\\n\",\"expected_version\":\"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012\",\"ops\":[],\"now\":\"2026-07-01T09:30:00Z\",\"note_locked\":true}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("an empty batch on a locked note reports its lock: failed to parse embedded vector input")
+    }
+    let request = try DocumentEditRequest.load(input["request"]!)
+    let actual = try seam.editDocument(request: request)
+    let expectedData = "{\"content\":\"# Plan\\n\\nShip it.\\n\",\"version\":\"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012\",\"note_locked\":true,\"note_lock_changed\":false}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("an empty batch on a locked note reports its lock misrouted")
+    }
+  }
   // vector: an empty batch returns the file unchanged
   do {
-    let inputData = "{\"content\":\"{\\\"title\\\":\\\"Contract sketch\\\",\\\"locked\\\":false,\\\"description\\\":null,\\\"rows\\\":[{\\\"id\\\":\\\"row-1\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":null,\\\"time\\\":\\\"0:10\\\",\\\"narrative\\\":\\\"First.\\\",\\\"demo_actions\\\":\\\"Open.\\\",\\\"future_row_field\\\":\\\"first\\\"},{\\\"id\\\":\\\"row-2\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":\\\"screenshots/second.png\\\",\\\"time\\\":\\\"0:20\\\",\\\"narrative\\\":\\\"Second.\\\",\\\"demo_actions\\\":\\\"Click.\\\"}],\\\"state\\\":\\\"draft\\\",\\\"created_at\\\":\\\"2026-06-28T20:00:00Z\\\",\\\"updated_at\\\":\\\"2026-06-28T20:20:00Z\\\"}\",\"expected_version\":\"sha256:a89f31f168d3c78b74b7c3a254e8a4f6fbc66c346a450bf11949a98c6ae94015\",\"ops\":[],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    let inputData = "{\"request\":{\"kind\":\"sketch\",\"content\":\"{\\\"title\\\":\\\"Contract sketch\\\",\\\"locked\\\":false,\\\"description\\\":null,\\\"rows\\\":[{\\\"id\\\":\\\"row-1\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":null,\\\"time\\\":\\\"0:10\\\",\\\"narrative\\\":\\\"First.\\\",\\\"demo_actions\\\":\\\"Open.\\\",\\\"future_row_field\\\":\\\"first\\\"},{\\\"id\\\":\\\"row-2\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":\\\"screenshots/second.png\\\",\\\"time\\\":\\\"0:20\\\",\\\"narrative\\\":\\\"Second.\\\",\\\"demo_actions\\\":\\\"Click.\\\"}],\\\"state\\\":\\\"draft\\\",\\\"created_at\\\":\\\"2026-06-28T20:00:00Z\\\",\\\"updated_at\\\":\\\"2026-06-28T20:20:00Z\\\"}\",\"expected_version\":\"sha256:a89f31f168d3c78b74b7c3a254e8a4f6fbc66c346a450bf11949a98c6ae94015\",\"ops\":[],\"now\":\"2026-07-01T09:30:00Z\",\"note_locked\":false}}".data(using: .utf8)!
     guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
       throw SeamConformanceError("an empty batch returns the file unchanged: failed to parse embedded vector input")
     }
-    let content = input["content"] as! String
-    let expectedVersion = input["expected_version"] as! String
-    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
-    let now = input["now"] as! String
-    let actual = try seam.editSketchContent(content: content, expectedVersion: expectedVersion, ops: ops, now: now)
+    let request = try DocumentEditRequest.load(input["request"]!)
+    let actual = try seam.editDocument(request: request)
     let expectedData = "{\"content\":\"{\\\"title\\\":\\\"Contract sketch\\\",\\\"locked\\\":false,\\\"description\\\":null,\\\"rows\\\":[{\\\"id\\\":\\\"row-1\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":null,\\\"time\\\":\\\"0:10\\\",\\\"narrative\\\":\\\"First.\\\",\\\"demo_actions\\\":\\\"Open.\\\",\\\"future_row_field\\\":\\\"first\\\"},{\\\"id\\\":\\\"row-2\\\",\\\"locked\\\":false,\\\"locks\\\":{\\\"time\\\":false,\\\"narrative\\\":false,\\\"demo_actions\\\":false,\\\"screenshot\\\":false,\\\"visual\\\":false,\\\"design_plan\\\":false},\\\"screenshot\\\":\\\"screenshots/second.png\\\",\\\"time\\\":\\\"0:20\\\",\\\"narrative\\\":\\\"Second.\\\",\\\"demo_actions\\\":\\\"Click.\\\"}],\\\"state\\\":\\\"draft\\\",\\\"created_at\\\":\\\"2026-06-28T20:00:00Z\\\",\\\"updated_at\\\":\\\"2026-06-28T20:20:00Z\\\"}\",\"version\":\"sha256:a89f31f168d3c78b74b7c3a254e8a4f6fbc66c346a450bf11949a98c6ae94015\"}".data(using: .utf8)!
     let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
     guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
       throw SeamConformanceError("an empty batch returns the file unchanged misrouted")
+    }
+  }
+  // vector: an op for another kind is rejected
+  do {
+    let inputData = "{\"request\":{\"kind\":\"storyboard\",\"content\":\"{\\\"title\\\":\\\"Contract storyboard\\\",\\\"description\\\":\\\"\\\",\\\"locked\\\":true,\\\"items\\\":[{\\\"type\\\":\\\"sketch_ref\\\",\\\"path\\\":\\\"intro.sk\\\"},{\\\"type\\\":\\\"section\\\",\\\"title\\\":\\\"Setup\\\",\\\"sketches\\\":[\\\"flows/login.sk\\\"]}],\\\"created_at\\\":\\\"2026-06-28T20:00:00Z\\\",\\\"updated_at\\\":\\\"2026-06-28T20:20:00Z\\\",\\\"future_storyboard_field\\\":{\\\"owner\\\":\\\"ios\\\"}}\",\"expected_version\":\"sha256:d90bd569bb860e16ee73029172054ff4415fa43490e458abd1a6b67b20014986\",\"ops\":[{\"kind\":\"replace_sketch\",\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}}],\"now\":\"2026-07-01T09:30:00Z\",\"note_locked\":false}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("an op for another kind is rejected: failed to parse embedded vector input")
+    }
+    let request = try DocumentEditRequest.load(input["request"]!)
+    var caught: Error? = nil
+    do {
+      _ = try seam.editDocument(request: request)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("an op for another kind is rejected: expected an error")
     }
   }
   // vector: an op of an unknown kind is rejected
@@ -399,6 +680,40 @@ public func runEditServiceConformance<S: EditService>(_ seam: S) async throws {
       throw SeamConformanceError("empty document misrouted")
     }
   }
+  // vector: expecting a file that is gone is stale
+  do {
+    let inputData = "{\"request\":{\"kind\":\"note\",\"content\":null,\"expected_version\":\"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012\",\"ops\":[{\"kind\":\"write_note\",\"content\":\"# New\"}],\"now\":\"2026-07-01T09:30:00Z\",\"note_locked\":false}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("expecting a file that is gone is stale: failed to parse embedded vector input")
+    }
+    let request = try DocumentEditRequest.load(input["request"]!)
+    var caught: Error? = nil
+    do {
+      _ = try seam.editDocument(request: request)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("expecting a file that is gone is stale: expected an error")
+    }
+  }
+  // vector: expecting no file when one exists is stale
+  do {
+    let inputData = "{\"request\":{\"kind\":\"note\",\"content\":\"# Plan\\n\\nShip it.\\n\",\"expected_version\":null,\"ops\":[{\"kind\":\"replace_note\",\"content\":\"# New\"}],\"now\":\"2026-07-01T09:30:00Z\",\"note_locked\":false}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("expecting no file when one exists is stale: failed to parse embedded vector input")
+    }
+    let request = try DocumentEditRequest.load(input["request"]!)
+    var caught: Error? = nil
+    do {
+      _ = try seam.editDocument(request: request)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("expecting no file when one exists is stale: expected an error")
+    }
+  }
   // vector: insert_row after an unknown row is rejected
   do {
     let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"insert_row\",\"after_row_id\":\"missing\",\"row\":{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"new-row\",\"time\":\"0:05\",\"narrative\":\"New.\",\"demo_actions\":\"Wave.\"}}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
@@ -472,6 +787,22 @@ public func runEditServiceConformance<S: EditService>(_ seam: S) async throws {
       throw SeamConformanceError("insert_row with a taken id is rejected: expected an error")
     }
   }
+  // vector: insert_storyboard_item inserts at an index and appends past the end
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}},\"ops\":[{\"kind\":\"insert_storyboard_item\",\"index\":0,\"item\":{\"type\":\"sketch_ref\",\"path\":\"cold-open.sk\"}},{\"kind\":\"insert_storyboard_item\",\"index\":null,\"item\":{\"type\":\"section\",\"title\":\"Wrap-up\",\"description\":\"Close.\",\"sketches\":[]}},{\"kind\":\"insert_storyboard_item\",\"index\":99,\"item\":{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("insert_storyboard_item inserts at an index and appends past the end: failed to parse embedded vector input")
+    }
+    let storyboard = try Storyboard.load(input["storyboard"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    let actual = try seam.applyStoryboardOps(storyboard: storyboard, ops: ops, now: now)
+    let expectedData = "{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"cold-open.sk\"},{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]},{\"type\":\"section\",\"title\":\"Wrap-up\",\"description\":\"Close.\",\"sketches\":[]},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("insert_storyboard_item inserts at an index and appends past the end misrouted")
+    }
+  }
   // vector: inserted row without an id gets one as in decode
   do {
     let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"insert_row\",\"after_row_id\":\"row-1\",\"row\":{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:05\",\"narrative\":\"New.\",\"demo_actions\":\"Wave.\"}}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
@@ -523,6 +854,41 @@ public func runEditServiceConformance<S: EditService>(_ seam: S) async throws {
       throw SeamConformanceError("ops address rows by id after a reorder in the same batch misrouted")
     }
   }
+  // vector: remove_storyboard_item past the end is rejected
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}},\"ops\":[{\"kind\":\"remove_storyboard_item\",\"index\":2}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("remove_storyboard_item past the end is rejected: failed to parse embedded vector input")
+    }
+    let storyboard = try Storyboard.load(input["storyboard"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    var caught: Error? = nil
+    do {
+      _ = try seam.applyStoryboardOps(storyboard: storyboard, ops: ops, now: now)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("remove_storyboard_item past the end is rejected: expected an error")
+    }
+  }
+  // vector: remove_storyboard_item removes the item at an index
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}},\"ops\":[{\"kind\":\"remove_storyboard_item\",\"index\":0}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("remove_storyboard_item removes the item at an index: failed to parse embedded vector input")
+    }
+    let storyboard = try Storyboard.load(input["storyboard"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    let actual = try seam.applyStoryboardOps(storyboard: storyboard, ops: ops, now: now)
+    let expectedData = "{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("remove_storyboard_item removes the item at an index misrouted")
+    }
+  }
   // vector: reorder_rows around locked rows keeps locks in place
   do {
     let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"row-4\",\"time\":\"0:40\",\"narrative\":\"Spare.\",\"demo_actions\":\"Wrap up.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"ops\":[{\"kind\":\"reorder_rows\",\"row_ids\":[\"row-4\",\"row-2\",\"row-3\",\"row-1\"]}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
@@ -558,6 +924,20 @@ public func runEditServiceConformance<S: EditService>(_ seam: S) async throws {
       throw SeamConformanceError("reorder_rows that misses a row is rejected: expected an error")
     }
   }
+  // vector: replace_note ignores the note's lock
+  do {
+    let inputData = "{\"request\":{\"kind\":\"note\",\"content\":\"# Plan\\n\\nShip it.\\n\",\"expected_version\":\"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012\",\"ops\":[{\"kind\":\"replace_note\",\"content\":\"# Imported\"}],\"now\":\"2026-07-01T09:30:00Z\",\"note_locked\":true}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("replace_note ignores the note's lock: failed to parse embedded vector input")
+    }
+    let request = try DocumentEditRequest.load(input["request"]!)
+    let actual = try seam.editDocument(request: request)
+    let expectedData = "{\"content\":\"# Imported\",\"version\":\"sha256:5aad5c9922913ab9a36d79684893785d447191e3fd4a4e6433e4ea0c80a36f32\",\"note_locked\":true,\"note_lock_changed\":false}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("replace_note ignores the note's lock misrouted")
+    }
+  }
   // vector: replace_rows keeps lock state with each position
   do {
     let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"replace_rows\",\"rows\":[{\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"new-row\",\"time\":\"0:05\",\"narrative\":\"New.\",\"demo_actions\":\"Wave.\"}]}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
@@ -574,6 +954,54 @@ public func runEditServiceConformance<S: EditService>(_ seam: S) async throws {
       throw SeamConformanceError("replace_rows keeps lock state with each position misrouted")
     }
   }
+  // vector: replace_sketch ignores locks and keeps the given updated_at
+  do {
+    let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":true,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"replace_sketch\",\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]}}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("replace_sketch ignores locks and keeps the given updated_at: failed to parse embedded vector input")
+    }
+    let sketch = try Sketch.load(input["sketch"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    let actual = try seam.applySketchOps(sketch: sketch, ops: ops, now: now)
+    let expectedData = "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("replace_sketch ignores locks and keeps the given updated_at misrouted")
+    }
+  }
+  // vector: replace_storyboard ignores locks and keeps the given updated_at
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}},\"ops\":[{\"kind\":\"replace_storyboard\",\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"End-to-end launch demo.\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"description\":\"Get signed in.\",\"sketches\":[\"flows/login.sk\",\"flows/workspace.sk\"]},{\"type\":\"section\",\"title\":\"Wrap-up\",\"sketches\":[]},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"partners\"}},\"future_storyboard_field\":{\"owner\":\"ios\",\"tags\":[\"a\",\"b\"]}}}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("replace_storyboard ignores locks and keeps the given updated_at: failed to parse embedded vector input")
+    }
+    let storyboard = try Storyboard.load(input["storyboard"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    let actual = try seam.applyStoryboardOps(storyboard: storyboard, ops: ops, now: now)
+    let expectedData = "{\"title\":\"Contract storyboard\",\"description\":\"End-to-end launch demo.\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"description\":\"Get signed in.\",\"sketches\":[\"flows/login.sk\",\"flows/workspace.sk\"]},{\"type\":\"section\",\"title\":\"Wrap-up\",\"sketches\":[]},{\"type\":\"sketch_ref\",\"path\":\"outro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"partners\"}},\"future_storyboard_field\":{\"owner\":\"ios\",\"tags\":[\"a\",\"b\"]}}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("replace_storyboard ignores locks and keeps the given updated_at misrouted")
+    }
+  }
+  // vector: set_description null clears the description
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"Old.\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}},\"ops\":[{\"kind\":\"set_description\",\"description\":null}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("set_description null clears the description: failed to parse embedded vector input")
+    }
+    let storyboard = try Storyboard.load(input["storyboard"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    let actual = try seam.applyStoryboardOps(storyboard: storyboard, ops: ops, now: now)
+    let expectedData = "{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("set_description null clears the description misrouted")
+    }
+  }
   // vector: set_description replaces and clears the description
   do {
     let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":{\"root\":{\"children\":[{\"type\":\"paragraph\",\"children\":[{\"text\":\"Intro scene\"}]}]}},\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:20\",\"duration_seconds\":20,\"narrative\":\"Open the workspace.\",\"demo_actions\":\"Click **Open**.\",\"visual\":\".cutready/visuals/abc123def456.json\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25,\"label\":\"Open button\"},{\"rank\":2,\"x\":0.75,\"y\":0.5}],\"typing_spots\":[{\"x\":0.25,\"y\":0.5,\"width\":0.5,\"height\":0.125,\"text\":\"demo-project\",\"start_offset_ms\":300,\"characters_per_second\":18.5,\"show_cursor\":true,\"font_family\":\"mono\",\"font_scale\":1.25}],\"motion_plan\":{\"kind\":\"wide_hold_then_push\",\"keyframes\":[{\"time_ms\":0,\"scale\":1.25,\"x\":0.5,\"y\":0.5,\"easing\":\"linear\"},{\"time_ms\":1500,\"scale\":1.75,\"x\":0.5,\"y\":0.25,\"easing\":\"ease_in_out\"}],\"rationale\":\"Hold wide, then push toward the Open button.\"},\"design_plan\":\"Title card with the product name.\",\"narration\":{\"path\":\".cutready/narration/row-1.wav\",\"source_text\":\"Open the workspace.\",\"source_text_hash\":\"4f1c2a\",\"mime_type\":\"audio/wav\",\"duration_ms\":4200,\"leading_silence_ms\":120,\"trailing_silence_ms\":80,\"silence_threshold_db\":-41.5,\"byte_size\":4096,\"recorded_at\":\"2026-06-28T20:05:00Z\"},\"narration_plan\":{\"source_text\":\"Open the workspace.\",\"voice\":\"en-US-Harper:MAI-Voice-2\",\"locale\":\"en-US\",\"ssml\":\"<speak>Open the workspace.</speak>\",\"baseline_style\":\"friendly\",\"pronunciation_overrides\":{\"CutReady\":\"cut ready\"},\"beats\":[{\"text\":\"Open the workspace.\",\"emphasis\":\"moderate\",\"style_degree\":1.5,\"pause_after_ms\":250}],\"generated_at\":\"2026-06-28T20:06:00Z\"}}],\"state\":\"refined\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"metadata\":{\"fields\":{\"audience\":\"developers\"}}},\"ops\":[{\"kind\":\"set_description\",\"description\":{\"root\":{\"children\":[]}}},{\"kind\":\"set_description\",\"description\":null}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
@@ -588,6 +1016,20 @@ public func runEditServiceConformance<S: EditService>(_ seam: S) async throws {
     let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
     guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
       throw SeamConformanceError("set_description replaces and clears the description misrouted")
+    }
+  }
+  // vector: set_lock changes the note's lock and leaves its content
+  do {
+    let inputData = "{\"request\":{\"kind\":\"note\",\"content\":\"# Plan\\n\\nShip it.\\n\",\"expected_version\":\"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012\",\"ops\":[{\"kind\":\"set_lock\",\"locked\":true}],\"now\":\"2026-07-01T09:30:00Z\",\"note_locked\":false}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("set_lock changes the note's lock and leaves its content: failed to parse embedded vector input")
+    }
+    let request = try DocumentEditRequest.load(input["request"]!)
+    let actual = try seam.editDocument(request: request)
+    let expectedData = "{\"content\":\"# Plan\\n\\nShip it.\\n\",\"version\":\"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012\",\"note_locked\":true,\"note_lock_changed\":true}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("set_lock changes the note's lock and leaves its content misrouted")
     }
   }
   // vector: set_lock locks a cell and a whole row
@@ -620,6 +1062,22 @@ public func runEditServiceConformance<S: EditService>(_ seam: S) async throws {
     let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
     guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
       throw SeamConformanceError("set_lock unlocks a locked sketch and everything in it misrouted")
+    }
+  }
+  // vector: set_lock unlocks a locked storyboard for later ops
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}},\"ops\":[{\"kind\":\"set_lock\",\"locked\":false},{\"kind\":\"set_title\",\"title\":\"Open\"}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("set_lock unlocks a locked storyboard for later ops: failed to parse embedded vector input")
+    }
+    let storyboard = try Storyboard.load(input["storyboard"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    let actual = try seam.applyStoryboardOps(storyboard: storyboard, ops: ops, now: now)
+    let expectedData = "{\"title\":\"Open\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("set_lock unlocks a locked storyboard for later ops misrouted")
     }
   }
   // vector: set_metadata replaces the metadata
@@ -708,6 +1166,22 @@ public func runEditServiceConformance<S: EditService>(_ seam: S) async throws {
       throw SeamConformanceError("set_screenshot and set_visual set and clear asset references misrouted")
     }
   }
+  // vector: set_storyboard_items replaces the items
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}},\"ops\":[{\"kind\":\"set_storyboard_items\",\"items\":[{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]},{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"}]}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("set_storyboard_items replaces the items: failed to parse embedded vector input")
+    }
+    let storyboard = try Storyboard.load(input["storyboard"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    let actual = try seam.applyStoryboardOps(storyboard: storyboard, ops: ops, now: now)
+    let expectedData = "{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]},{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("set_storyboard_items replaces the items misrouted")
+    }
+  }
   // vector: set_title keeps unknown document fields
   do {
     let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]},\"ops\":[{\"kind\":\"set_title\",\"title\":\"Renamed\"}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
@@ -722,6 +1196,22 @@ public func runEditServiceConformance<S: EditService>(_ seam: S) async throws {
     let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
     guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
       throw SeamConformanceError("set_title keeps unknown document fields misrouted")
+    }
+  }
+  // vector: set_title, set_description and set_metadata keep unknown fields
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}},\"ops\":[{\"kind\":\"set_title\",\"title\":\"Launch\"},{\"kind\":\"set_description\",\"description\":\"Partners first.\"},{\"kind\":\"set_metadata\",\"metadata\":{\"fields\":{\"audience\":\"partners\"}}}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("set_title, set_description and set_metadata keep unknown fields: failed to parse embedded vector input")
+    }
+    let storyboard = try Storyboard.load(input["storyboard"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    let actual = try seam.applyStoryboardOps(storyboard: storyboard, ops: ops, now: now)
+    let expectedData = "{\"title\":\"Launch\",\"description\":\"Partners first.\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"},\"metadata\":{\"fields\":{\"audience\":\"partners\"}}}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("set_title, set_description and set_metadata keep unknown fields misrouted")
     }
   }
   // vector: set_visual on a row with a locked screenshot is rejected
@@ -741,6 +1231,122 @@ public func runEditServiceConformance<S: EditService>(_ seam: S) async throws {
     }
     guard let caughtError = caught else {
       throw SeamConformanceError("set_visual on a row with a locked screenshot is rejected: expected an error")
+    }
+  }
+  // vector: setting a note's lock to its current state changes nothing
+  do {
+    let inputData = "{\"request\":{\"kind\":\"note\",\"content\":\"# Plan\\n\\nShip it.\\n\",\"expected_version\":\"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012\",\"ops\":[{\"kind\":\"set_lock\",\"locked\":true}],\"now\":\"2026-07-01T09:30:00Z\",\"note_locked\":true}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("setting a note's lock to its current state changes nothing: failed to parse embedded vector input")
+    }
+    let request = try DocumentEditRequest.load(input["request"]!)
+    let actual = try seam.editDocument(request: request)
+    let expectedData = "{\"content\":\"# Plan\\n\\nShip it.\\n\",\"version\":\"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012\",\"note_locked\":true,\"note_lock_changed\":false}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("setting a note's lock to its current state changes nothing misrouted")
+    }
+  }
+  // vector: touch after a locked replacement is rejected
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}},\"ops\":[{\"kind\":\"replace_storyboard\",\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}}},{\"kind\":\"touch\"}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("touch after a locked replacement is rejected: failed to parse embedded vector input")
+    }
+    let storyboard = try Storyboard.load(input["storyboard"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    var caught: Error? = nil
+    do {
+      _ = try seam.applyStoryboardOps(storyboard: storyboard, ops: ops, now: now)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("touch after a locked replacement is rejected: expected an error")
+    }
+  }
+  // vector: touch after a locked replacement still sets updated_at
+  do {
+    let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"replace_sketch\",\"sketch\":{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_document_field\":[\"still\",\"here\"]}},{\"kind\":\"touch\"}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("touch after a locked replacement still sets updated_at: failed to parse embedded vector input")
+    }
+    let sketch = try Sketch.load(input["sketch"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    let actual = try seam.applySketchOps(sketch: sketch, ops: ops, now: now)
+    let expectedData = "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/open.png\",\"time\":\"0:10\",\"duration_seconds\":10,\"narrative\":\"Open the app.\",\"demo_actions\":\"Click Open.\",\"motion_points\":[{\"rank\":1,\"x\":0.5,\"y\":0.25}],\"future_row_field\":{\"keep\":true}},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":true,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:20\",\"narrative\":\"Locked narration.\",\"demo_actions\":\"Type a name.\"},{\"id\":\"row-3\",\"locked\":true,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:30\",\"narrative\":\"Locked row.\",\"demo_actions\":\"Close.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_document_field\":[\"still\",\"here\"]}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("touch after a locked replacement still sets updated_at misrouted")
+    }
+  }
+  // vector: touch after an open replacement sets updated_at
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}},\"ops\":[{\"kind\":\"replace_storyboard\",\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}}},{\"kind\":\"touch\"}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("touch after an open replacement sets updated_at: failed to parse embedded vector input")
+    }
+    let storyboard = try Storyboard.load(input["storyboard"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    let actual = try seam.applyStoryboardOps(storyboard: storyboard, ops: ops, now: now)
+    let expectedData = "{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("touch after an open replacement sets updated_at misrouted")
+    }
+  }
+  // vector: touch follows the storyboard lock
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":true,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}},\"ops\":[{\"kind\":\"touch\"}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("touch follows the storyboard lock: failed to parse embedded vector input")
+    }
+    let storyboard = try Storyboard.load(input["storyboard"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    var caught: Error? = nil
+    do {
+      _ = try seam.applyStoryboardOps(storyboard: storyboard, ops: ops, now: now)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("touch follows the storyboard lock: expected an error")
+    }
+  }
+  // vector: touch marks a locked sketch edited
+  do {
+    let inputData = "{\"sketch\":{\"title\":\"Contract sketch\",\"locked\":true,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"},\"ops\":[{\"kind\":\"touch\"}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("touch marks a locked sketch edited: failed to parse embedded vector input")
+    }
+    let sketch = try Sketch.load(input["sketch"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    let actual = try seam.applySketchOps(sketch: sketch, ops: ops, now: now)
+    let expectedData = "{\"title\":\"Contract sketch\",\"locked\":true,\"description\":null,\"rows\":[{\"id\":\"row-1\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"time\":\"0:10\",\"narrative\":\"First.\",\"demo_actions\":\"Open.\",\"future_row_field\":\"first\"},{\"id\":\"row-2\",\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":\"screenshots/second.png\",\"time\":\"0:20\",\"narrative\":\"Second.\",\"demo_actions\":\"Click.\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("touch marks a locked sketch edited misrouted")
+    }
+  }
+  // vector: touch marks an open storyboard edited
+  do {
+    let inputData = "{\"storyboard\":{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}},\"ops\":[{\"kind\":\"touch\"}],\"now\":\"2026-07-01T09:30:00Z\"}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("touch marks an open storyboard edited: failed to parse embedded vector input")
+    }
+    let storyboard = try Storyboard.load(input["storyboard"]!)
+    let ops = try (input["ops"]! as! [Any]).map { try EditOp.load($0) }
+    let now = input["now"] as! String
+    let actual = try seam.applyStoryboardOps(storyboard: storyboard, ops: ops, now: now)
+    let expectedData = "{\"title\":\"Contract storyboard\",\"description\":\"\",\"locked\":false,\"items\":[{\"type\":\"sketch_ref\",\"path\":\"intro.sk\"},{\"type\":\"section\",\"title\":\"Setup\",\"sketches\":[\"flows/login.sk\"]}],\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\",\"future_storyboard_field\":{\"owner\":\"ios\"}}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("touch marks an open storyboard edited misrouted")
     }
   }
   // vector: unknown row id is rejected
@@ -809,6 +1415,37 @@ public func runEditServiceConformance<S: EditService>(_ seam: S) async throws {
     let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
     guard try seamConformanceCanonicalJSON(actual) == seamConformanceCanonicalJSON(expected) else {
       throw SeamConformanceError("utf-8 bytes, not code units misrouted")
+    }
+  }
+  // vector: write_note on a locked note is rejected
+  do {
+    let inputData = "{\"request\":{\"kind\":\"note\",\"content\":\"# Plan\\n\\nShip it.\\n\",\"expected_version\":\"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012\",\"ops\":[{\"kind\":\"write_note\",\"content\":\"# No\"}],\"now\":\"2026-07-01T09:30:00Z\",\"note_locked\":true}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("write_note on a locked note is rejected: failed to parse embedded vector input")
+    }
+    let request = try DocumentEditRequest.load(input["request"]!)
+    var caught: Error? = nil
+    do {
+      _ = try seam.editDocument(request: request)
+    } catch {
+      caught = error
+    }
+    guard let caughtError = caught else {
+      throw SeamConformanceError("write_note on a locked note is rejected: expected an error")
+    }
+  }
+  // vector: write_note replaces an open note's content
+  do {
+    let inputData = "{\"request\":{\"kind\":\"note\",\"content\":\"# Plan\\n\\nShip it.\\n\",\"expected_version\":\"sha256:48b9b65915afd363d38252375b4552c0dd5fefcb32544eca71486a3a88876012\",\"ops\":[{\"kind\":\"write_note\",\"content\":\"# Plan\\n\\nShip it today.\\n\"}],\"now\":\"2026-07-01T09:30:00Z\",\"note_locked\":false}}".data(using: .utf8)!
+    guard let input = try JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+      throw SeamConformanceError("write_note replaces an open note's content: failed to parse embedded vector input")
+    }
+    let request = try DocumentEditRequest.load(input["request"]!)
+    let actual = try seam.editDocument(request: request)
+    let expectedData = "{\"content\":\"# Plan\\n\\nShip it today.\\n\",\"version\":\"sha256:90582b7c91d38230d54636e2285d6d30feb7df435bc0245df1825856737ab577\",\"note_locked\":false,\"note_lock_changed\":false}".data(using: .utf8)!
+    let expected = try JSONSerialization.jsonObject(with: expectedData, options: [.fragmentsAllowed])
+    guard try seamConformanceCanonicalJSON(try actual.save()) == seamConformanceCanonicalJSON(expected) else {
+      throw SeamConformanceError("write_note replaces an open note's content misrouted")
     }
   }
 }

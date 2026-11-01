@@ -5,6 +5,7 @@ import Foundation
 
 public protocol EditService: Sendable {
   func applySketchOps(sketch: Sketch, ops: [EditOp], now: String) throws -> Sketch
+  func applyStoryboardOps(storyboard: Storyboard, ops: [EditOp], now: String) throws -> Storyboard
   func documentVersion(content: String) throws -> String
-  func editSketchContent(content: String, expectedVersion: String, ops: [EditOp], now: String) throws -> ContentEdit
+  func editDocument(request: DocumentEditRequest) throws -> DocumentEdit
 }

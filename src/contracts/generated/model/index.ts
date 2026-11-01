@@ -39,8 +39,17 @@ export {
   UpdateRowOp,
   ReplaceRowsOp,
   SetLockOp,
+  TouchOp,
+  ReplaceSketchOp,
+  ReplaceStoryboardOp,
+  ReplaceNoteOp,
+  WriteNoteOp,
+  InsertStoryboardItemOp,
+  RemoveStoryboardItemOp,
+  SetStoryboardItemsOp,
 } from "./edit-op";
-export { ContentEdit } from "./content-edit";
+export { DocumentEditRequest } from "./document-edit-request";
+export { DocumentEdit } from "./document-edit";
 export { ChatParticipant } from "./chat-participant";
 export { ChatArtifactSource } from "./chat-artifact-source";
 export { ChatToolUse } from "./chat-tool-use";

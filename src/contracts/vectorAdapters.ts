@@ -33,7 +33,8 @@ export const vectorAdapters: Record<string, VectorAdapter> = {
 export const vectorWaivers: Record<string, string> = {
   "EditService.applySketchOps": backendOwnsDocuments,
   "EditService.documentVersion": backendOwnsDocuments,
-  "EditService.editSketchContent": backendOwnsDocuments,
+  "EditService.applyStoryboardOps": backendOwnsDocuments,
+  "EditService.editDocument": backendOwnsDocuments,
   "SketchDocument.roundTrip": backendOwnsDocuments,
   "SketchDocument.updateRowText": backendOwnsDocuments,
   "SketchDocument.reorderRows": backendOwnsDocuments,
