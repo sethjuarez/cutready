@@ -192,7 +192,7 @@ fn normalize_ref_name(name: &str) -> String {
         .to_lowercase()
 }
 
-fn format_sketch_for_ref(sketch: &crate::models::sketch::Sketch) -> String {
+fn format_sketch_for_ref(sketch: &cutready_core::models::sketch::Sketch) -> String {
     let mut out = format!("# {}\n\n", sketch.title);
     if let Some(desc) = sketch.description.as_str() {
         if !desc.is_empty() {

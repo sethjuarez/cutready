@@ -101,9 +101,10 @@ This detection and translation happens entirely in `llm.rs`. The runner and fron
 
 ## Data Models
 
-Core types are in the `models/` module:
+Document models live in `cutready-core` (`cutready_core::models::sketch`): `Sketch`, `PlanningRow`, `SketchState`, `Storyboard`, `StoryboardItem`, `SketchSummary`, `StoryboardSummary`. Constructors take `now`; core never reads the clock.
 
-- **`sketch.rs`** — `Sketch`, `PlanningRow`, `SketchState`, `Storyboard`, `StoryboardItem`, `SketchSummary`, `StoryboardSummary`. This is the primary data model.
+Desktop-only models stay in `src-tauri/src/models/`:
+
 - **`action.rs`** — `Action` enum for atomic demo steps (browser and native variants).
 - **`script.rs`** — `ProjectView` (the active project state), `ScriptRow`.
 - **`session.rs`** — `RecordedSession`, `CapturedAction` for raw recording output.
@@ -113,6 +114,7 @@ All models derive `Serialize` + `Deserialize` for JSON IPC and file storage. Use
 ## Core and Ports
 
 - `crates/cutready-core` is the host-neutral document core (architecture v3). It reaches the outside world only through the traits in `src/ports/` (`Files`, `Clock`, `Log`, `Lock`, `Secrets`, `OpLogStore`), addresses documents by project-relative paths (`path::project_relative`, as strict as `safe_resolve`), and denies direct `std::fs`, `SystemTime`, `env::var` and `Command` through its `clippy.toml`.
+- Core owns the canonical document bytes: `cutready_core::document` (codec, inline-visual migration, port-based `load_*`/`save_*`) and `cutready_core::sketch_edits`. `engine::project` keeps thin absolute-path shims over the same codec. Golden files in `crates/cutready-core/tests/golden/` pin the bytes from both paths (`tests/goldens.rs` and `src-tauri/src/engine/document_goldens.rs`; regenerate with `UPDATE_GOLDENS=1` only when a unit intends a format change).
 - `crates/cutready-desktop-io` holds the desktop port implementations shared by the app, CLI and MCP server. `cutready_core::testing` has in-memory fakes for tests.
 - `npm run check:core` (part of `check:rust`) rejects Tauri, `windows*`, git2, rusqlite, reqwest, Draftline, the app crate and tokio's `process` feature in core's graph, then runs `cargo check -p cutready-core --target aarch64-apple-ios`. Install the target locally with `rustup target add aarch64-apple-ios`.
 

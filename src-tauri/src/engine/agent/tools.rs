@@ -17,12 +17,12 @@ use crate::engine::agent::execution::{
 use crate::engine::draftline_adapter::{DeferReason, StructureChange, StructureSnapshot};
 use crate::engine::identity;
 use crate::engine::project;
-use crate::engine::sketch_edits;
 use crate::engine::visual_document::{
     normalize_visual_document_for_save, normalize_visual_to_v2, validate_agentic_visual,
     validate_dsl_doc, visual_to_renderable_v1,
 };
-use crate::models::sketch::{PlanningRow, Sketch};
+use cutready_core::models::sketch::{PlanningRow, Sketch};
+use cutready_core::sketch_edits;
 
 // `ToolDefinition` (the wire shape of the tool contract) now lives in the
 // `harness-contract` crate. Re-exported here so the concrete tool
@@ -1806,7 +1806,7 @@ fn ensure_can_write_target(target_abs: &Path, overwrite: bool) -> Result<(), Str
     Ok(())
 }
 
-fn storyboard_sketch_paths(storyboard: &crate::models::sketch::Storyboard) -> Vec<String> {
+fn storyboard_sketch_paths(storyboard: &cutready_core::models::sketch::Storyboard) -> Vec<String> {
     storyboard.sketch_paths()
 }
 
@@ -2034,7 +2034,7 @@ fn html_unescape(value: &str) -> String {
 
 pub(crate) fn format_storyboard_for_agent(
     root: &Path,
-    storyboard: &crate::models::sketch::Storyboard,
+    storyboard: &cutready_core::models::sketch::Storyboard,
 ) -> String {
     let mut out = format!("# {}\n", storyboard.title);
     out.push_str(&format!(
@@ -2056,10 +2056,10 @@ pub(crate) fn format_storyboard_for_agent(
 
     for (i, item) in storyboard.items.iter().enumerate() {
         match item {
-            crate::models::sketch::StoryboardItem::SketchRef { path } => {
+            cutready_core::models::sketch::StoryboardItem::SketchRef { path } => {
                 append_storyboard_sketch_summary(&mut out, root, i + 1, path);
             }
-            crate::models::sketch::StoryboardItem::Section {
+            cutready_core::models::sketch::StoryboardItem::Section {
                 title,
                 description,
                 sketches,
@@ -2569,13 +2569,13 @@ fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
                         .map(|s| s.to_string_lossy().replace(['-', '_'], " "))
                         .unwrap_or_else(|| "Untitled".into())
                 });
-            crate::models::sketch::Sketch {
+            cutready_core::models::sketch::Sketch {
                 title,
                 locked: false,
                 description: serde_json::Value::Null,
                 rows: vec![],
-                metadata: crate::models::sketch::DocumentMetadata::default(),
-                state: crate::models::sketch::SketchState::Draft,
+                metadata: cutready_core::models::sketch::DocumentMetadata::default(),
+                state: cutready_core::models::sketch::SketchState::Draft,
                 created_at: chrono::Utc::now(),
                 updated_at: chrono::Utc::now(),
                 unknown_fields: Default::default(),
@@ -3730,10 +3730,11 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> ToolOutput {
             }
             existing
         }
-        Err(_) => crate::models::sketch::Storyboard::new(
+        Err(_) => cutready_core::models::sketch::Storyboard::new(
             args.get("title")
                 .and_then(|v| v.as_str())
                 .unwrap_or("Untitled"),
+            chrono::Utc::now(),
         ),
     };
 
@@ -3762,7 +3763,7 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> ToolOutput {
                     if !sketch_path.ends_with(".sk") {
                         return ToolOutput::failed(format!("Error: items[{i}] sketch_ref path must end with .sk (got '{sketch_path}')"));
                     }
-                    new_items.push(crate::models::sketch::StoryboardItem::SketchRef {
+                    new_items.push(cutready_core::models::sketch::StoryboardItem::SketchRef {
                         path: sketch_path,
                     });
                 }
@@ -3797,7 +3798,7 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> ToolOutput {
                             return ToolOutput::failed(format!("Error: items[{i}] section sketch path must end with .sk (got '{sp}')"));
                         }
                     }
-                    new_items.push(crate::models::sketch::StoryboardItem::Section {
+                    new_items.push(cutready_core::models::sketch::StoryboardItem::Section {
                         title,
                         description,
                         sketches,
@@ -4422,7 +4423,7 @@ fn flatten_nodes(children: &[Value]) -> Vec<&Value> {
 mod tests {
     use super::*;
     use crate::engine::draftline_adapter::CutReadyDraftlineAdapter;
-    use crate::models::sketch::Sketch;
+    use cutready_core::models::sketch::Sketch;
     use serde_json::json;
     use tempfile::TempDir;
 
@@ -4461,7 +4462,7 @@ mod tests {
     }
 
     fn write_test_sketch(root: &Path, rel: &str, row: PlanningRow) {
-        let mut sketch = Sketch::new("Locked Tool Test");
+        let mut sketch = Sketch::new("Locked Tool Test", chrono::Utc::now());
         sketch.rows = vec![row];
         project::write_sketch(&sketch, &root.join(rel), root).unwrap();
     }
@@ -4501,8 +4502,12 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         std::fs::create_dir_all(&outside).unwrap();
         std::fs::write(outside.join("secret.md"), "do not leak").unwrap();
-        project::write_sketch(&Sketch::new("Secret"), &outside.join("secret.sk"), &outside)
-            .unwrap();
+        project::write_sketch(
+            &Sketch::new("Secret", chrono::Utc::now()),
+            &outside.join("secret.sk"),
+            &outside,
+        )
+        .unwrap();
 
         for (tool, path) in [
             ("read_note", "../outside/secret.md"),
@@ -4596,7 +4601,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path().join("project");
         std::fs::create_dir_all(&root).unwrap();
-        let mut sketch = Sketch::new("Intro");
+        let mut sketch = Sketch::new("Intro", chrono::Utc::now());
         sketch.rows.push(PlanningRow {
             time: "0:00".into(),
             duration_seconds: None,
@@ -5212,12 +5217,13 @@ mod tests {
         row.demo_actions = "Open app".into();
         row.screenshot = Some(".cutready/screenshots/intro.png".into());
         row.visual = Some(Value::String(".cutready/visuals/hero.json".into()));
-        let mut sketch = Sketch::new("Intro");
+        let mut sketch = Sketch::new("Intro", chrono::Utc::now());
         sketch.rows = vec![row];
         project::write_sketch(&sketch, &source_root.join("intro.sk"), &source_root).unwrap();
 
-        let mut storyboard = crate::models::sketch::Storyboard::new("Demo");
-        storyboard.items = vec![crate::models::sketch::StoryboardItem::SketchRef {
+        let mut storyboard =
+            cutready_core::models::sketch::Storyboard::new("Demo", chrono::Utc::now());
+        storyboard.items = vec![cutready_core::models::sketch::StoryboardItem::SketchRef {
             path: "intro.sk".into(),
         }];
         project::write_storyboard(&storyboard, &source_root.join("demo.sb"), &source_root).unwrap();
@@ -5311,18 +5317,19 @@ mod tests {
         row.time = "0:10".into();
         row.narrative = "Introduce the dashboard".into();
         row.demo_actions = "Open the dashboard".into();
-        let mut sketch = Sketch::new("Intro");
+        let mut sketch = Sketch::new("Intro", chrono::Utc::now());
         sketch.description = Value::String("Set up the product story".into());
         sketch.rows = vec![row];
         project::write_sketch(&sketch, &root.join("intro.sk"), root).unwrap();
 
-        let mut storyboard = crate::models::sketch::Storyboard::new("Launch Demo");
+        let mut storyboard =
+            cutready_core::models::sketch::Storyboard::new("Launch Demo", chrono::Utc::now());
         storyboard.description = "Full story".into();
         storyboard.items = vec![
-            crate::models::sketch::StoryboardItem::SketchRef {
+            cutready_core::models::sketch::StoryboardItem::SketchRef {
                 path: "intro.sk".into(),
             },
-            crate::models::sketch::StoryboardItem::SketchRef {
+            cutready_core::models::sketch::StoryboardItem::SketchRef {
                 path: "missing.sk".into(),
             },
         ];
@@ -5344,7 +5351,8 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
         let rel = "locked.sb";
-        let mut storyboard = crate::models::sketch::Storyboard::new("Locked Story");
+        let mut storyboard =
+            cutready_core::models::sketch::Storyboard::new("Locked Story", chrono::Utc::now());
         storyboard.locked = true;
         project::write_storyboard(&storyboard, &root.join(rel), root).unwrap();
 
@@ -5422,7 +5430,7 @@ mod tests {
     }
 
     fn write_rows(root: &Path, rel: &str, rows: Vec<PlanningRow>) {
-        let mut sketch = Sketch::new("Restructure");
+        let mut sketch = Sketch::new("Restructure", chrono::Utc::now());
         sketch.rows = rows;
         project::write_sketch(&sketch, &root.join(rel), root).unwrap();
     }
@@ -5895,7 +5903,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
         let rel = "demo.sk";
-        let mut sketch = Sketch::new("Row Number Test");
+        let mut sketch = Sketch::new("Row Number Test", chrono::Utc::now());
         let mut first = PlanningRow::new();
         first.narrative = "First row".into();
         let mut second = PlanningRow::new();
@@ -6011,7 +6019,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
         let rel = "demo.sk";
-        let mut sketch = Sketch::new("Read Rows");
+        let mut sketch = Sketch::new("Read Rows", chrono::Utc::now());
         sketch.rows = vec![PlanningRow::new(), PlanningRow::new()];
         project::write_sketch(&sketch, &root.join(rel), root).unwrap();
 
@@ -6105,7 +6113,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
         let rel = "demo.sk";
-        let mut sketch = Sketch::new("Row Scope Test");
+        let mut sketch = Sketch::new("Row Scope Test", chrono::Utc::now());
         let mut row_0 = PlanningRow::new();
         row_0.time = "0:00".into();
         row_0.narrative = "Keep first row narrative".into();
@@ -7213,7 +7221,7 @@ mod tests {
         let mut next = PlanningRow::new();
         next.narrative = "Show the final output".into();
         next.demo_actions = "Open the generated timeline".into();
-        let mut sketch = Sketch::new("Agent Story");
+        let mut sketch = Sketch::new("Agent Story", chrono::Utc::now());
         sketch.rows = vec![previous, target, next];
         project::write_sketch(&sketch, &root.join(rel), root).unwrap();
 

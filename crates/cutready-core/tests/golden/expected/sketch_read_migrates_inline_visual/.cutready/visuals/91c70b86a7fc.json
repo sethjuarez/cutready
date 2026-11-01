@@ -1,0 +1,11 @@
+{
+  "root": {
+    "fill": "$accent",
+    "height": 10,
+    "type": "rect",
+    "width": 10,
+    "x": 0,
+    "y": 0
+  },
+  "version": "1"
+}

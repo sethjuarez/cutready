@@ -1,0 +1,42 @@
+{
+  "title": "Inline visual",
+  "locked": false,
+  "description": "",
+  "rows": [
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "time": "5s",
+      "narrative": "a",
+      "demo_actions": "",
+      "screenshot": null,
+      "visual": ".cutready/visuals/91c70b86a7fc.json"
+    },
+    {
+      "locked": false,
+      "locks": {
+        "time": false,
+        "narrative": false,
+        "demo_actions": false,
+        "screenshot": false,
+        "visual": false,
+        "design_plan": false
+      },
+      "time": "",
+      "narrative": "b",
+      "demo_actions": "",
+      "screenshot": null,
+      "visual": ".cutready/visuals/existing.json"
+    }
+  ],
+  "state": "draft",
+  "created_at": "2025-10-01T08:00:00Z",
+  "updated_at": "2025-10-01T08:00:00Z"
+}

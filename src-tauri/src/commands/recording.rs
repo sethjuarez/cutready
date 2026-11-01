@@ -14,9 +14,9 @@ use crate::{
         project, recording,
         speech::{SynthesisRequest, TtsConnection, TtsRegistry},
     },
-    models::sketch::{NarrationAsset, NarrationPlan, Sketch},
     AppState,
 };
+use cutready_core::models::sketch::{NarrationAsset, NarrationPlan, Sketch};
 
 pub struct RecordingCaptureState(pub tokio::sync::Mutex<Option<recording::ActiveRecording>>);
 

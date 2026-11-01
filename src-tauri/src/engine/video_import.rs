@@ -14,7 +14,7 @@ use uuid::Uuid;
 use crate::engine::agent::execution::ChatMessage;
 use crate::engine::agent::llm::LlmConfig;
 use crate::engine::{ffmpeg, project};
-use crate::models::sketch::{PlanningRow, Sketch};
+use cutready_core::models::sketch::{PlanningRow, Sketch};
 
 const IMPORTS_DIR: &str = ".cutready/recordings/imports";
 const SCREENSHOTS_DIR: &str = ".cutready/screenshots";
@@ -392,7 +392,7 @@ where
         total_steps,
         "Saving imported sketch, summary note, and manifest",
     );
-    let mut sketch = Sketch::new(title);
+    let mut sketch = Sketch::new(title, chrono::Utc::now());
     sketch.description = serde_json::Value::String(format!(
         "Imported from video `{}` using sidecar transcript `{}`. Scene rows are transcript-derived and ready for review.",
         video_path
@@ -670,10 +670,10 @@ fn resolve_planning_context_reference(
             }
             for item in storyboard.items.iter().take(12) {
                 match item {
-                    crate::models::sketch::StoryboardItem::SketchRef { path } => {
+                    cutready_core::models::sketch::StoryboardItem::SketchRef { path } => {
                         parts.push(format!("Sketch reference: {path}"));
                     }
-                    crate::models::sketch::StoryboardItem::Section {
+                    cutready_core::models::sketch::StoryboardItem::Section {
                         title,
                         description,
                         sketches,

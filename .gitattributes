@@ -1,0 +1,2 @@
+# Golden fixtures are byte-compared; never convert line endings.
+crates/cutready-core/tests/golden/** -text

@@ -7,8 +7,8 @@ use tauri_plugin_auditaur::auditaur_command;
 
 use crate::engine::{project, visual_document::normalize_visual_document_for_save};
 use crate::models::script::ProjectView;
-use crate::models::sketch::{DocumentMetadata, PlanningCellLocks, Sketch, SketchSummary};
 use crate::AppState;
+use cutready_core::models::sketch::{DocumentMetadata, PlanningCellLocks, Sketch, SketchSummary};
 
 /// Helper: get the project root from current state.
 fn project_root(state: &AppState) -> Result<std::path::PathBuf, String> {
@@ -35,7 +35,7 @@ pub async fn create_sketch(
         return Err(format!("File already exists: {relative_path}"));
     }
 
-    let sketch = Sketch::new(title);
+    let sketch = Sketch::new(title, chrono::Utc::now());
     project::write_sketch(&sketch, &abs_path, &root).map_err(|e| e.to_string())?;
 
     Ok(sketch)
@@ -45,7 +45,7 @@ pub async fn create_sketch(
 pub async fn update_sketch(
     relative_path: String,
     description: Option<serde_json::Value>,
-    rows: Option<Vec<crate::models::sketch::PlanningRow>>,
+    rows: Option<Vec<cutready_core::models::sketch::PlanningRow>>,
     metadata: Option<DocumentMetadata>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
@@ -61,7 +61,7 @@ pub async fn update_sketch(
         sketch.description = desc;
     }
     if let Some(r) = rows {
-        crate::engine::sketch_edits::replace_rows(&mut sketch, r, now)
+        cutready_core::sketch_edits::replace_rows(&mut sketch, r, now)
             .map_err(|e| e.to_string())?;
     }
     if let Some(metadata) = metadata {

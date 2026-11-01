@@ -12,10 +12,8 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::{
-    engine::{ffmpeg, narration_preview, project},
-    models::sketch::{MotionPlan, MotionPlanKeyframe, Sketch, TypingSpot},
-};
+use crate::engine::{ffmpeg, narration_preview, project};
+use cutready_core::models::sketch::{MotionPlan, MotionPlanKeyframe, Sketch, TypingSpot};
 
 const EXPORTS_DIR: &str = "exports";
 const TEMP_DIR: &str = ".cutready/exports/tmp";
@@ -2691,7 +2689,7 @@ fn format_seconds(seconds: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::sketch::{
+    use cutready_core::models::sketch::{
         MotionPlan, MotionPlanEasing, MotionPlanKeyframe, MotionPlanKind, NarrationAsset,
         PlanningRow, Sketch, TypingSpot,
     };
@@ -3332,7 +3330,7 @@ mod tests {
 
     #[test]
     fn title_card_filter_includes_escaped_title_and_description() {
-        let mut sketch = Sketch::new("Demo: Export, Now 100%");
+        let mut sketch = Sketch::new("Demo: Export, Now 100%", chrono::Utc::now());
         sketch.description = serde_json::json!([{ "type": "paragraph", "children": [{ "text": "Direction's script, A [B]" }] }]);
 
         let settings = SketchVideoExportSettings::default();
@@ -3402,7 +3400,7 @@ mod tests {
         ])
         .unwrap();
 
-        let mut sketch = Sketch::new("Tiny Export");
+        let mut sketch = Sketch::new("Tiny Export", chrono::Utc::now());
         let mut row = PlanningRow::new();
         row.screenshot = Some(".cutready/screenshots/row-1.png".to_string());
         row.typing_spots = vec![TypingSpot {
@@ -3499,7 +3497,7 @@ mod tests {
         ])
         .unwrap();
 
-        let mut sketch = Sketch::new("Custom Export");
+        let mut sketch = Sketch::new("Custom Export", chrono::Utc::now());
         let mut row = PlanningRow::new();
         row.screenshot = Some(".cutready/screenshots/row-1.png".to_string());
         row.narration = Some(NarrationAsset {
@@ -3527,7 +3525,7 @@ mod tests {
     fn export_sketch_video_rejects_relative_output_path() {
         let temp_dir = TempDir::new().unwrap();
         let root = temp_dir.path();
-        let mut sketch = Sketch::new("Unsafe Export");
+        let mut sketch = Sketch::new("Unsafe Export", chrono::Utc::now());
         let mut row = PlanningRow::new();
         row.screenshot = Some("missing.png".to_string());
         row.narration = Some(NarrationAsset {

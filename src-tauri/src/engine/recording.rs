@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 use crate::engine::{ffmpeg, project};
-use crate::models::sketch::{PlanningRow, Sketch, StoryboardItem};
+use cutready_core::models::sketch::{PlanningRow, Sketch, StoryboardItem};
 
 const RECORDINGS_DIR: &str = ".cutready/recordings";
 const RECORDINGS_GITIGNORE: &str = "*\n!.gitignore\n";
@@ -3089,7 +3089,7 @@ mod tests {
 
     #[test]
     fn prompter_script_uses_narrative_and_action_cues() {
-        let mut sketch = Sketch::new("Intro");
+        let mut sketch = Sketch::new("Intro", chrono::Utc::now());
         sketch.rows.push(PlanningRow {
             narrative: "- Say hello\n- Explain the goal".into(),
             demo_actions: "* Open the app".into(),
@@ -3106,7 +3106,7 @@ mod tests {
 
     #[test]
     fn prompter_script_skips_empty_rows() {
-        let mut sketch = Sketch::new("Empty");
+        let mut sketch = Sketch::new("Empty", chrono::Utc::now());
         sketch.rows.push(PlanningRow::new());
         sketch.rows.push(PlanningRow {
             narrative: String::new(),

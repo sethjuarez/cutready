@@ -1,0 +1,21 @@
+{
+    "title": "Nulls",
+    "locked": null,
+    "description": null,
+    "metadata": null,
+    "state": "sketch",
+    "rows": [
+        {
+            "locked": null,
+            "locks": null,
+            "time": "",
+            "narrative": "n",
+            "demo_actions": "",
+            "screenshot": null,
+            "future_cell": null
+        }
+    ],
+    "created_at": "2025-10-01T08:00:00+02:00",
+    "updated_at": "2025-10-01T08:00:00Z",
+    "future_null": null
+}

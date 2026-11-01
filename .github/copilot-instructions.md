@@ -111,7 +111,7 @@ cutready/
 │       ├── lib.rs                 # Tauri command registration + plugin setup
 │       ├── commands/              # Tauri command handlers (15 modules)
 │       ├── engine/                # Backend engines (12 modules + agent/)
-│       ├── models/                # Data models: sketch.rs, action.rs, script.rs, session.rs
+│       ├── models/                # Desktop models: action.rs, script.rs, session.rs (documents live in crates/cutready-core)
 │       └── util/                  # screenshot.rs, trace.rs
 ├── tailwind.config.ts
 ├── vite.config.ts

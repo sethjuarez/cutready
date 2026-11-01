@@ -358,6 +358,7 @@ fn field_matches(old: &PlanningRow, new: &PlanningRow, field: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::test_now;
 
     #[test]
     fn edit_errors_map_to_the_contract_envelope() {
@@ -398,7 +399,7 @@ mod tests {
     }
 
     fn sketch_with(rows: Vec<PlanningRow>) -> Sketch {
-        let mut sketch = Sketch::new("Edits");
+        let mut sketch = Sketch::new("Edits", test_now());
         sketch.rows = rows;
         sketch
     }
@@ -439,7 +440,7 @@ mod tests {
                 narrative: Some("Changed".into()),
                 ..Default::default()
             },
-            Utc::now(),
+            test_now(),
         )
         .unwrap_err();
 
@@ -454,7 +455,7 @@ mod tests {
         locked.locked = true;
         let mut sketch = sketch_with(vec![locked.clone()]);
 
-        let err = replace_rows(&mut sketch, vec![locked, row("New")], Utc::now()).unwrap_err();
+        let err = replace_rows(&mut sketch, vec![locked, row("New")], test_now()).unwrap_err();
 
         assert_eq!(err, SketchEditError::LockedRowCount);
     }

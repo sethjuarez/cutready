@@ -1,0 +1,48 @@
+{
+  "title": "Contoso demo",
+  "description": "Partner walkthrough",
+  "locked": false,
+  "metadata": {
+    "fields": {
+      "cut": "v2"
+    }
+  },
+  "items": [
+    {
+      "type": "section",
+      "title": "Opening",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "intro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Orders",
+      "description": "The order flow",
+      "sketches": [
+        "orders/list.sk",
+        "orders/detail.sk"
+      ]
+    },
+    {
+      "type": "section",
+      "title": "Wrap",
+      "sketches": []
+    },
+    {
+      "type": "sketch_ref",
+      "path": "outro.sk"
+    },
+    {
+      "type": "section",
+      "title": "Appendix",
+      "description": "Extra material",
+      "sketches": []
+    }
+  ],
+  "created_at": "2025-10-01T08:00:00Z",
+  "updated_at": "2026-01-02T03:04:05Z",
+  "ios_board_marker": true
+}

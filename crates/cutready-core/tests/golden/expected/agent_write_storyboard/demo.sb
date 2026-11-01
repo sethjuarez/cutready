@@ -1,0 +1,27 @@
+{
+  "title": "Agent board",
+  "description": "Partner walkthrough",
+  "locked": false,
+  "metadata": {
+    "fields": {
+      "cut": "v2"
+    }
+  },
+  "items": [
+    {
+      "type": "section",
+      "title": "All",
+      "sketches": [
+        "intro.sk",
+        "outro.sk"
+      ]
+    },
+    {
+      "type": "sketch_ref",
+      "path": "bonus.sk"
+    }
+  ],
+  "created_at": "2025-10-01T08:00:00Z",
+  "updated_at": "<now>",
+  "ios_board_marker": true
+}
