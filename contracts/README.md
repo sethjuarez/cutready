@@ -64,7 +64,8 @@ Desktop is the reference. Every runtime must save `.sk` files this way. Fields t
 | Wire names | `snake_case` |
 | Unknown fields | Preserved on `Sketch` and `PlanningRow`, not on nested models |
 | Optional fields | A known optional field set to `null` loads like an absent key. Locks default to `false`; empty optional collections are omitted on save. Unknown fields keep their null values. |
-| Always written | Row `locked`, all six `locks`, `screenshot` (`null` if unset); sketch `locked`, `description` (`null` if unset); narration `duration_ms` (`null` if unknown) |
+| Row ids | Every row has a stable `id`, always written. Load and save fill missing, empty or `null` ids with `row-N` (1-based position, suffixed `-2`, `-3`… if taken); duplicate ids fail with `duplicate_row_id`. New rows from the desktop editor get a UUID. |
+| Always written | Row `id`, `locked`, all six `locks`, `screenshot` (`null` if unset); sketch `locked`, `description` (`null` if unset); narration `duration_ms` (`null` if unknown) |
 | Omitted when unset or empty | `visual`, `design_plan`, `duration_seconds`, `motion_points`, `typing_spots`, `motion_plan`, `narration`, `narration_plan`, `metadata` |
 | Legacy state | `"sketch"` loads as `"draft"` |
 | Timestamps | Saved as UTC with `Z`: no fraction for whole seconds, otherwise 3, 6, or 9 digits. Unchanged timestamps keep their precision; edit times (`now`) carry at most microseconds |

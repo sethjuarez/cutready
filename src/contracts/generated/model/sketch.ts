@@ -156,7 +156,7 @@ export class Sketch {
             ),
           );
         } else {
-          result.push(PlanningRow.load({ name: k, locked: v }, context.at(k)));
+          result.push(PlanningRow.load({ name: k, id: v }, context.at(k)));
         }
       }
       return result;

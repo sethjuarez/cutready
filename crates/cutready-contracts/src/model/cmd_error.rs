@@ -15,6 +15,7 @@ pub enum CmdErrorCode {
     LockedCell,
     RowNotFound,
     InvalidReorder,
+    DuplicateRowId,
     /// Unknown variant (open enum — accepts any string).
     Other(String),
 }
@@ -34,6 +35,7 @@ impl std::fmt::Display for CmdErrorCode {
             Self::LockedCell => write!(f, "locked_cell"),
             Self::RowNotFound => write!(f, "row_not_found"),
             Self::InvalidReorder => write!(f, "invalid_reorder"),
+            Self::DuplicateRowId => write!(f, "duplicate_row_id"),
             Self::Other(s) => write!(f, "{}", s),
         }
     }
@@ -48,6 +50,7 @@ impl CmdErrorCode {
             "locked_cell" => Some(Self::LockedCell),
             "row_not_found" => Some(Self::RowNotFound),
             "invalid_reorder" => Some(Self::InvalidReorder),
+            "duplicate_row_id" => Some(Self::DuplicateRowId),
             other => Some(Self::Other(other.to_string())),
         }
     }
@@ -71,6 +74,9 @@ impl CmdErrorCode {
         if s.eq_ignore_ascii_case("invalid_reorder") {
             return Some(Self::InvalidReorder);
         }
+        if s.eq_ignore_ascii_case("duplicate_row_id") {
+            return Some(Self::DuplicateRowId);
+        }
         Some(Self::Other(s.to_string()))
     }
 
@@ -82,6 +88,7 @@ impl CmdErrorCode {
             Self::LockedCell => "locked_cell",
             Self::RowNotFound => "row_not_found",
             Self::InvalidReorder => "invalid_reorder",
+            Self::DuplicateRowId => "duplicate_row_id",
             Self::Other(s) => s.as_str(),
         }
     }

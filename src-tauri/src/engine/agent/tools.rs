@@ -2396,6 +2396,7 @@ fn write_sketch_row_text(row: &PlanningRow) -> (&str, &str, &str, &str) {
 /// Whether `row` carries anything beyond its agent-visible text and locks.
 fn row_has_attached_data(row: &PlanningRow) -> bool {
     let plain = PlanningRow {
+        id: row.id.clone(),
         locked: row.locked,
         locks: row.locks.clone(),
         time: row.time.clone(),
@@ -4603,6 +4604,7 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let mut sketch = Sketch::new("Intro", chrono::Utc::now());
         sketch.rows.push(PlanningRow {
+            id: String::new(),
             time: "0:00".into(),
             duration_seconds: None,
             narrative: "Narrate".into(),
@@ -5435,8 +5437,11 @@ mod tests {
         project::write_sketch(&sketch, &root.join(rel), root).unwrap();
     }
 
+    /// A row's content; ids are assigned on save, so they're compared separately.
     fn row_value(row: &PlanningRow) -> Value {
-        serde_json::to_value(row).unwrap()
+        let mut value = serde_json::to_value(row).unwrap();
+        value.as_object_mut().unwrap().remove("id");
+        value
     }
 
     #[test]
@@ -5489,6 +5494,9 @@ mod tests {
         );
         let saved = project::read_sketch(&root.join(rel)).unwrap();
         assert_eq!(saved.rows.len(), 3);
+        // Continued rows keep their ids; the new row gets a fresh one.
+        let ids: Vec<&str> = saved.rows.iter().map(|row| row.id.as_str()).collect();
+        assert_eq!(ids, ["row-1-2", "row-2", "row-1"]);
         assert_eq!(saved.rows[0].narrative, "New opener");
         assert!(saved.rows[0].narration.is_none());
         assert!(saved.rows[0].visual.is_none());

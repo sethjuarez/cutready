@@ -29,6 +29,7 @@ classDiagram
     class CmdErrorDetails {
         +uint32 row_index
         +string field
+        +string row_id
     }
     CmdError *-- CmdErrorDetails
 ```

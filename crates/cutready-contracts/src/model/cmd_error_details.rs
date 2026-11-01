@@ -104,6 +104,8 @@ pub struct CmdErrorDetails {
     pub row_index: Option<u32>,
     /// The locked cell, for `locked_cell`.
     pub field: Option<PlanningCellField>,
+    /// The repeated row id, for `duplicate_row_id`.
+    pub row_id: Option<String>,
     /// Undeclared fields captured on load and written back on save (unknown-field passthrough).
     pub additional_properties: serde_json::Map<String, serde_json::Value>,
 }
@@ -153,13 +155,14 @@ impl CmdErrorDetails {
         Self {
             row_index: value.get("row_index").and_then(|v| v.as_u64().and_then(|n| u32::try_from(n).ok())),
             field: value.get("field").and_then(|v| v.as_str()).and_then(|s| PlanningCellField::from_str_opt(s)),
+            row_id: value.get("row_id").and_then(|v| v.as_str()).map(|s| s.to_string()),
             additional_properties: Self::capture_additional_properties(&value, ""),
         }
     }
 
     /// True when `key` is a declared wire key for the given discriminator value.
     fn additional_properties_known_key(kind: &str, key: &str) -> bool {
-        matches!(key, "row_index" | "field")
+        matches!(key, "row_index" | "field" | "row_id")
     }
 
     fn capture_additional_properties(value: &serde_json::Value, kind: &str) -> serde_json::Map<String, serde_json::Value> {
@@ -190,6 +193,9 @@ impl CmdErrorDetails {
         }
         if let Some(val) = self.field.as_ref() {
             result.insert("field".to_string(), serde_json::Value::String(val.to_string()));
+        }
+        if let Some(val) = self.row_id.as_ref() {
+            result.insert("row_id".to_string(), serde_json::Value::String(val.clone()));
         }
         for (key, value) in &self.additional_properties {
             if Self::additional_properties_known_key("", key) {

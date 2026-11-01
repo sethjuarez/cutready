@@ -20,6 +20,8 @@ use super::typing_spot::TypingSpot;
 /// A row in the sketch planning table. Unknown fields must survive every runtime's decode -> save.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct PlanningRow {
+    /// Stable identity, unique within the sketch. Decode gives a row without one (legacy files) `row-{position}`, one-based, appending `-2`, `-3`, ... while that id is taken; save always writes it. Duplicate ids are rejected with `duplicate_row_id`. Hosts may mint any other unique string for new rows.
+    pub id: Option<String>,
     /// Whether the entire row is protected from edits. Saved as `false` when unset.
     pub locked: Option<bool>,
     /// Saved with all six fields, even when nothing is locked.
@@ -88,6 +90,7 @@ impl PlanningRow {
             panic!("{}", message);
         }
         Self {
+            id: value.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()),
             locked: value.get("locked").and_then(|v| v.as_bool()),
             locks: value.get("locks").filter(|v| v.is_object() || v.is_array() || v.is_string()).map(|v| PlanningCellLocks::load_from_value(v, ctx)),
             time: value.get("time").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
@@ -108,7 +111,7 @@ impl PlanningRow {
 
     /// True when `key` is a declared wire key for the given discriminator value.
     fn additional_properties_known_key(kind: &str, key: &str) -> bool {
-        matches!(key, "locked" | "locks" | "time" | "duration_seconds" | "narrative" | "demo_actions" | "screenshot" | "visual" | "motion_points" | "typing_spots" | "motion_plan" | "design_plan" | "narration" | "narration_plan")
+        matches!(key, "id" | "locked" | "locks" | "time" | "duration_seconds" | "narrative" | "demo_actions" | "screenshot" | "visual" | "motion_points" | "typing_spots" | "motion_plan" | "design_plan" | "narration" | "narration_plan")
     }
 
     fn capture_additional_properties(value: &serde_json::Value, kind: &str) -> serde_json::Map<String, serde_json::Value> {
@@ -164,6 +167,9 @@ impl PlanningRow {
     pub fn to_value(&self, ctx: &SaveContext) -> serde_json::Value {
         let mut result = serde_json::Map::new();
         // Write base fields
+        if let Some(val) = self.id.as_ref() {
+            result.insert("id".to_string(), serde_json::Value::String(val.clone()));
+        }
         if let Some(val) = self.locked.as_ref() {
             result.insert("locked".to_string(), serde_json::Value::Bool(*val));
         }

@@ -22,6 +22,7 @@ classDiagram
     class CmdErrorDetails {
         +uint32 row_index
         +string field
+        +string row_id
     }
 ```
 
@@ -31,3 +32,4 @@ classDiagram
 | ---- | ---- | ----------- |
 | row_index | uint32 | Zero-based row position, for row-scoped errors. |
 | field | string | The locked cell, for `locked_cell`. |
+| row_id | string | The repeated row id, for `duplicate_row_id`. |

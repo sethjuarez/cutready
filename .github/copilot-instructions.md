@@ -16,7 +16,7 @@ CutReady is a **desktop application** for product demo video production. Users c
 
 CutReady uses a **Storyboard → Sketch** hierarchy:
 
-- **Sketch** (`.sk` files): A scene with title, description, and a planning table. Each planning table row has: Time, Narrative, Actions, Screenshot, and an optional Visual (Elucim DSL JSON stored externally in `.cutready/visuals/`).
+- **Sketch** (`.sk` files): A scene with title, description, and a planning table. Each planning table row has a stable `id` plus Time, Narrative, Actions, Screenshot, and an optional Visual (Elucim DSL JSON stored externally in `.cutready/visuals/`).
 - **Storyboard** (`.sb` files): Sequences sketches with optional named sections. References sketches by path.
 - **Notes** (`.md` files): Markdown documents for planning, context, and AI-generated content.
 - **Agent state and memory** (`.git/cutready/agent-state.db`, or `<gitdir>/cutready/<folder rel path>/agent-state.db` in hybrid projects): Local SQLite runtime state for chat/run trajectories, checkpoints, resume context, verification, and agent recall memory. The Runs tab is the curated UI; the database inspector is the raw/debug view. Legacy `.git/cutready/memory.json` and `.cutready/memory.json` files migrate into this DB and should not dirty snapshots.

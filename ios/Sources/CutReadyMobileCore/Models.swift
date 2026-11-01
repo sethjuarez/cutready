@@ -322,6 +322,9 @@ public struct DocumentMetadata: Codable, Equatable, Sendable {
 }
 
 public struct PlanningRow: Codable, Equatable, Sendable {
+    /// Stable identity, unique within the sketch. Empty until
+    /// `SketchDocumentCodec` assigns one (`PlanningRow.assignIds`).
+    public var id: String
     public var locked: Bool?
     public var locks: [PlanningCellField: Bool]?
     public var time: String
@@ -338,6 +341,7 @@ public struct PlanningRow: Codable, Equatable, Sendable {
     public var unknownFields: [String: JSONValue]
 
     public init(
+        id: String = "",
         locked: Bool? = nil,
         locks: [PlanningCellField: Bool]? = nil,
         time: String,
@@ -350,6 +354,7 @@ public struct PlanningRow: Codable, Equatable, Sendable {
         narration: RowNarration? = nil,
         unknownFields: [String: JSONValue] = [:]
     ) {
+        self.id = id
         self.locked = locked
         self.locks = locks
         self.time = time
@@ -364,6 +369,7 @@ public struct PlanningRow: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey, CaseIterable {
+        case id
         case locked
         case locks
         case time
@@ -380,6 +386,7 @@ public struct PlanningRow: Codable, Equatable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id) ?? ""
         locked = try container.decodeIfPresent(Bool.self, forKey: .locked)
         locks = try Self.decodeLocks(from: container)
         time = try container.decodeIfPresent(String.self, forKey: .time) ?? ""
@@ -403,6 +410,7 @@ public struct PlanningRow: Codable, Equatable, Sendable {
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
         try container.encode(isLocked, forKey: .locked)
         var lockContainer = container.nestedContainer(keyedBy: AnyCodingKey.self, forKey: .locks)
         for field in PlanningCellField.allCases {
@@ -716,8 +724,12 @@ private func unquoteFrontmatterValue(_ value: String) -> String {
 /// Production `.sk` decode/save, shared by the workspace client and the
 /// contract conformance tests.
 public enum SketchDocumentCodec {
+    /// Decodes a `.sk` file. Legacy rows without an id get one here (the
+    /// row-id migration); duplicate ids throw.
     public static func decode(_ data: Data) throws -> Sketch {
-        try JSONDecoder().decode(Sketch.self, from: data)
+        var sketch = try JSONDecoder().decode(Sketch.self, from: data)
+        try PlanningRow.assignIds(&sketch.rows)
+        return sketch
     }
 
     /// Parses an RFC 3339 edit time with microsecond precision.
@@ -725,9 +737,51 @@ public enum SketchDocumentCodec {
         CutReadyDocumentDateCodec.date(from: text)
     }
 
+    /// Canonical `.sk` bytes. Rows without an id get one; duplicate ids throw.
     public static func encode(_ sketch: Sketch) throws -> Data {
+        var sketch = sketch
+        try PlanningRow.assignIds(&sketch.rows)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
         return try encoder.encode(sketch)
+    }
+}
+
+/// Why a `.sk` document can't be decoded or saved.
+public enum SketchDocumentError: Error, Equatable, LocalizedError, Sendable {
+    /// Two rows share an id; `index` is the zero-based second row.
+    case duplicateRowId(index: Int, id: String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .duplicateRowId(let index, let id):
+            return "Planning row \(index + 1) repeats the row id `\(id)`."
+        }
+    }
+}
+
+extension PlanningRow {
+    /// Gives every row a stable id, matching cutready-core's `assign_row_ids`
+    /// (`contracts/sketch.tsp`): existing ids are kept and must be unique; a
+    /// row without one gets `row-{position}`, one-based, with `-2`, `-3`, ...
+    /// appended while that id is taken.
+    public static func assignIds(_ rows: inout [PlanningRow]) throws {
+        var taken = Set<String>()
+        for (index, row) in rows.enumerated() where !row.id.isEmpty {
+            guard taken.insert(row.id).inserted else {
+                throw SketchDocumentError.duplicateRowId(index: index, id: row.id)
+            }
+        }
+        for index in rows.indices where rows[index].id.isEmpty {
+            let base = "row-\(index + 1)"
+            var candidate = base
+            var suffix = 2
+            while taken.contains(candidate) {
+                candidate = "\(base)-\(suffix)"
+                suffix += 1
+            }
+            taken.insert(candidate)
+            rows[index].id = candidate
+        }
     }
 }

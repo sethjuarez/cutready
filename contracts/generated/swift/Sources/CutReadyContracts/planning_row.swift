@@ -6,6 +6,7 @@ import Foundation
 /// A row in the sketch planning table. Unknown fields must survive every runtime's decode -> save.
 public struct PlanningRow: TypraModel {
   public static let shorthandProperty: String? = nil
+  public var id: String? = nil
   public var locked: Bool? = nil
   public var locks: PlanningCellLocks? = nil
   public var time: String = ""
@@ -22,9 +23,10 @@ public struct PlanningRow: TypraModel {
   public var narrationPlan: NarrationPlan? = nil
   /// Undeclared fields captured on load and written back on save (unknown-field passthrough).
   public var additionalProperties: [String: Any] = [:]
-  static let additionalPropertiesKnownKeys: Set<String> = ["locked", "locks", "time", "duration_seconds", "narrative", "demo_actions", "screenshot", "visual", "motion_points", "typing_spots", "motion_plan", "design_plan", "narration", "narration_plan"]
+  static let additionalPropertiesKnownKeys: Set<String> = ["id", "locked", "locks", "time", "duration_seconds", "narrative", "demo_actions", "screenshot", "visual", "motion_points", "typing_spots", "motion_plan", "design_plan", "narration", "narration_plan"]
 
-  public init(locked: Bool? = nil, locks: PlanningCellLocks? = nil, time: String = "", durationSeconds: UInt32? = nil, narrative: String = "", demoActions: String = "", screenshot: String? = nil, visual: Any? = nil, motionPoints: [MotionPoint]? = nil, typingSpots: [TypingSpot]? = nil, motionPlan: MotionPlan? = nil, designPlan: String? = nil, narration: NarrationAsset? = nil, narrationPlan: NarrationPlan? = nil, additionalProperties: [String: Any] = [:]) {
+  public init(id: String? = nil, locked: Bool? = nil, locks: PlanningCellLocks? = nil, time: String = "", durationSeconds: UInt32? = nil, narrative: String = "", demoActions: String = "", screenshot: String? = nil, visual: Any? = nil, motionPoints: [MotionPoint]? = nil, typingSpots: [TypingSpot]? = nil, motionPlan: MotionPlan? = nil, designPlan: String? = nil, narration: NarrationAsset? = nil, narrationPlan: NarrationPlan? = nil, additionalProperties: [String: Any] = [:]) {
+    self.id = id
     self.locked = locked
     self.locks = locks
     self.time = time
@@ -45,6 +47,9 @@ public struct PlanningRow: TypraModel {
   public static func load(_ data: Any, context: LoadContext = LoadContext()) throws -> PlanningRow {
     let object = try TypraRuntime.object(data, typeName: "PlanningRow")
     var instance = PlanningRow()
+    if let value = object["id"] {
+      instance.id = try TypraRuntime.string(value, field: "id")
+    }
     if let value = object["locked"] {
       instance.locked = try TypraRuntime.bool(value, field: "locked")
     }
@@ -93,6 +98,9 @@ public struct PlanningRow: TypraModel {
 
   public func save(_ context: SaveContext = SaveContext()) throws -> [String: Any] {
     var result: [String: Any] = [:]
+    if let value = self.id {
+      result["id"] = value
+    }
     if let value = self.locked {
       result["locked"] = value
     }

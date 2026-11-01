@@ -2,7 +2,7 @@
 // committed; `npm run check` fails if it drifts from this builder.
 //
 // Expected outputs are the canonical desktop save form:
-// - rows always carry `locked`, all six `locks`, and `screenshot` (null if unset);
+// - rows always carry `id`, `locked`, all six `locks`, and `screenshot` (null if unset);
 // - sketches always carry `locked` and `description` (null if unset);
 // - narration always carries `duration_ms` (null if unknown);
 // - empty collections and unset optional values are omitted;
@@ -34,11 +34,13 @@ const row = (fields, locks = {}) => ({
   screenshot: null,
   ...fields,
 });
+// Rows without an id get the one decode assigns to a legacy row at that position.
+const withIds = (rows) => rows.map((r, i) => ("id" in r ? r : { id: `row-${i + 1}`, ...r }));
 const sketch = (rows, extra = {}) => ({
   title: "Contract sketch",
   locked: false,
   description: null,
-  rows,
+  rows: withIds(rows),
   state: "draft",
   created_at: CREATED,
   updated_at: UPDATED,
@@ -154,7 +156,7 @@ const visualLockFixture = sketch([
 
 // lockedFixture plus a trailing unlocked row, for reorders that respect locks.
 const lockedFixtureWithSpare = clone(lockedFixture);
-lockedFixtureWithSpare.rows.push(row({ time: "0:40", narrative: "Spare.", demo_actions: "Wrap up." }));
+lockedFixtureWithSpare.rows.push(row({ id: "row-4", time: "0:40", narrative: "Spare.", demo_actions: "Wrap up." }));
 
 // Rows that differ only in fields the edit UI never shows.
 const hiddenFieldFixture = sketch([
@@ -172,6 +174,17 @@ const composedFixture = sketch([
   row({ time: "\u00c5 0:10", duration_seconds: 10, narrative: "Time locked.", demo_actions: "" }, { time: true }),
   { ...row({ time: "0:20", narrative: "Caf\u00e9.", demo_actions: "" }), locked: true },
 ]);
+
+// A CmdError as vectors pin it: `code` plus typed `details`. `message` is
+// human-readable text each runtime words for itself, so adapters omit it.
+const cmdError = (code, details) => (details ? { code, details } : { code });
+
+// One plain row per entry, with the entry's fields merged in; an entry without
+// an `id` stays without one.
+const idFixture = (entries) => ({
+  ...sketch([]),
+  rows: entries.map((fields, i) => ({ ...row({ time: `0:${i + 1}0`, narrative: `Row ${i + 1}.`, demo_actions: "" }), ...fields })),
+});
 
 const edited = (base, mutate) => {
   const next = clone(base);
@@ -210,6 +223,7 @@ const roundTripVectors = [
       description: null,
       rows: [
         row({
+          id: "row-1",
           time: "~30s",
           narrative: "Legacy row.",
           demo_actions: "",
@@ -352,13 +366,34 @@ const roundTripVectors = [
     input: { sketch: sketch([], { metadata: { fields: null } }) },
     expected: sketch([]),
   },
+  {
+    name: "existing row ids are kept",
+    input: { sketch: idFixture([{ id: "intro" }, { id: "6f1c0d2e-9a4b-4c3d-8e2f-1a2b3c4d5e6f" }]) },
+    expected: idFixture([{ id: "intro" }, { id: "6f1c0d2e-9a4b-4c3d-8e2f-1a2b3c4d5e6f" }]),
+  },
+  {
+    name: "rows without an id get their one-based position",
+    input: { sketch: idFixture([{ id: "intro" }, {}, {}]) },
+    expected: idFixture([{ id: "intro" }, { id: "row-2" }, { id: "row-3" }]),
+  },
+  {
+    name: "empty and null row ids count as missing",
+    input: { sketch: idFixture([{ id: "" }, { id: null }]) },
+    expected: idFixture([{ id: "row-1" }, { id: "row-2" }]),
+  },
+  {
+    name: "an assigned id skips ids already in use",
+    input: { sketch: idFixture([{ id: "row-2" }, {}, { id: "row-2-2" }]) },
+    expected: idFixture([{ id: "row-2" }, { id: "row-2-3" }, { id: "row-2-2" }]),
+  },
+  {
+    name: "duplicate row ids are rejected",
+    input: { sketch: idFixture([{ id: "intro" }, { id: "body" }, { id: "intro" }]) },
+    expectedError: cmdError("duplicate_row_id", { row_index: 2, row_id: "intro" }),
+  },
 ];
 
 const updateRow = (row_index, cells) => ({ row_index, ...cells });
-
-// A CmdError as vectors pin it: `code` plus typed `details`. `message` is
-// human-readable text each runtime words for itself, so adapters omit it.
-const cmdError = (code, details) => (details ? { code, details } : { code });
 
 const updateRowTextVectors = [
   {

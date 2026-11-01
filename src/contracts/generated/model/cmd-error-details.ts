@@ -11,6 +11,7 @@ export class CmdErrorDetails {
 
   row_index?: number | undefined;
   field?: PlanningCellField | undefined;
+  row_id?: string | undefined;
   /** Fields not declared by the schema, preserved verbatim across load/save (#336). */
   additionalProperties: Record<string, unknown> = Object.create(null);
 
@@ -19,6 +20,7 @@ export class CmdErrorDetails {
     switch (key) {
       case "row_index":
       case "field":
+      case "row_id":
         return true;
       default:
         return false;
@@ -31,6 +33,9 @@ export class CmdErrorDetails {
     }
     if (init?.field !== undefined) {
       this.field = init.field;
+    }
+    if (init?.row_id !== undefined) {
+      this.row_id = init.row_id;
     }
     if (init?.additionalProperties !== undefined) {
       this.additionalProperties = Object.assign(
@@ -58,6 +63,9 @@ export class CmdErrorDetails {
     }
     if (data["field"] !== undefined && data["field"] !== null) {
       instance.field = String(data["field"]) as PlanningCellField;
+    }
+    if (data["row_id"] !== undefined && data["row_id"] !== null) {
+      instance.row_id = String(data["row_id"]);
     }
 
     instance.additionalProperties = Object.create(null);
@@ -90,6 +98,9 @@ export class CmdErrorDetails {
     }
     if (obj.field !== undefined && obj.field !== null) {
       result["field"] = obj.field;
+    }
+    if (obj.row_id !== undefined && obj.row_id !== null) {
+      result["row_id"] = obj.row_id;
     }
 
     const extras = obj.additionalProperties ?? {};

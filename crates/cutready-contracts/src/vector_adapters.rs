@@ -41,7 +41,12 @@ impl VectorError {
 
 impl From<SketchEditError> for VectorError {
     fn from(err: SketchEditError) -> Self {
-        let cmd = CoreCmdError::from(&err);
+        Self::cmd(CoreCmdError::from(&err))
+    }
+}
+
+impl VectorError {
+    fn cmd(cmd: CoreCmdError) -> Self {
         let mut payload = cmd.to_value(&CoreSaveContext::default());
         // Vectors pin `code` and `details`; `message` is each runtime's own wording.
         if let Some(fields) = payload.as_object_mut() {
@@ -77,8 +82,10 @@ impl Adapter {
 
 fn decode(input: &Value) -> Result<Sketch, VectorError> {
     let raw = input.get("sketch").cloned().unwrap_or(Value::Null);
-    document::sketch_from_json(&raw.to_string())
-        .map_err(|e| VectorError::harness(format!("decode sketch: {e}")))
+    document::sketch_from_json(&raw.to_string()).map_err(|e| match e {
+        document::DocumentError::DuplicateRowId(dup) => VectorError::cmd(CoreCmdError::from(&dup)),
+        e => VectorError::harness(format!("decode sketch: {e}")),
+    })
 }
 
 // The canonical sketch bytes. Re-parse the text (not serde_json::to_value) so

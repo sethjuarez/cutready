@@ -4,6 +4,7 @@
   "description": "",
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -20,6 +21,7 @@
       "visual": ".cutready/visuals/91c70b86a7fc.json"
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,

@@ -4,6 +4,7 @@
   "description": null,
   "rows": [
     {
+      "id": "row-1",
       "locked": false,
       "locks": {
         "time": false,
@@ -20,6 +21,7 @@
       "screenshot": null
     },
     {
+      "id": "row-2",
       "locked": false,
       "locks": {
         "time": false,

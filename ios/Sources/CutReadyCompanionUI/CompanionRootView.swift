@@ -2927,7 +2927,7 @@ private struct StoryboardDetailView: View {
                 let summary = resolvedSketch(for: referencedPath),
                 let contents = summary.contents,
                 let data = contents.data(using: .utf8),
-                let sketch = try? JSONDecoder().decode(Sketch.self, from: data)
+                let sketch = try? SketchDocumentCodec.decode(data)
             else {
                 continue
             }
@@ -3050,7 +3050,7 @@ private struct StoryboardSketchReferenceCard: View {
     private func sketchDescription(for sketchSummary: FileSummary) -> String {
         guard let contents = sketchSummary.contents,
               let data = contents.data(using: .utf8),
-              let sketch = try? JSONDecoder().decode(Sketch.self, from: data),
+              let sketch = try? SketchDocumentCodec.decode(data),
               let description = sketch.description.mobileDisplayText?.trimmingCharacters(in: .whitespacesAndNewlines),
               !description.isEmpty else {
             return "No sketch description yet."
@@ -3112,8 +3112,7 @@ private struct SketchDetailView: View {
             throw SketchPreviewError.missingContents
         }
 
-        let decoder = JSONDecoder()
-        return try decoder.decode(Sketch.self, from: data)
+        return try SketchDocumentCodec.decode(data)
     }
 
     var body: some View {

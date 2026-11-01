@@ -253,6 +253,10 @@ pub enum MotionPlanEasing {
 /// Row identity is its array index — no UUID needed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanningRow {
+    /// Stable identity, unique within the sketch. Empty until the codec
+    /// assigns one (see [`assign_row_ids`]); always written on save.
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub id: String,
     /// Whether the entire row is protected from edits.
     #[serde(default, deserialize_with = "null_as_default")]
     pub locked: bool,
@@ -309,6 +313,7 @@ pub struct PlanningRow {
 impl PlanningRow {
     pub fn new() -> Self {
         Self {
+            id: String::new(),
             locked: false,
             locks: PlanningCellLocks::default(),
             time: String::new(),
@@ -337,6 +342,46 @@ impl Default for PlanningRow {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Two rows in one sketch share an id.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("Planning row {} repeats the row id `{row_id}`.", .row_index + 1)]
+pub struct DuplicateRowId {
+    /// Zero-based position of the second row with the id.
+    pub row_index: usize,
+    pub row_id: String,
+}
+
+/// Gives every row a stable id. Ids already present are kept and must be
+/// unique. A row without one (legacy files, or rows built in code) gets
+/// `row-{position}`, one-based, with `-2`, `-3`, ... appended while that
+/// id is taken, so every runtime migrates the same file to the same ids.
+pub fn assign_row_ids(rows: &mut [PlanningRow]) -> Result<(), DuplicateRowId> {
+    let mut taken = std::collections::HashSet::new();
+    for (row_index, row) in rows.iter().enumerate() {
+        if !row.id.is_empty() && !taken.insert(row.id.clone()) {
+            return Err(DuplicateRowId {
+                row_index,
+                row_id: row.id.clone(),
+            });
+        }
+    }
+    for (index, row) in rows.iter_mut().enumerate() {
+        if !row.id.is_empty() {
+            continue;
+        }
+        let base = format!("row-{}", index + 1);
+        let mut candidate = base.clone();
+        let mut suffix = 2;
+        while taken.contains(&candidate) {
+            candidate = format!("{base}-{suffix}");
+            suffix += 1;
+        }
+        taken.insert(candidate.clone());
+        row.id = candidate;
+    }
+    Ok(())
 }
 
 /// A sketch — a focused scene in a demo storyboard.
@@ -752,6 +797,7 @@ mod tests {
     fn sketch_roundtrip() {
         let mut sketch = Sketch::new("Test Sketch", test_now());
         sketch.rows.push(PlanningRow {
+            id: String::new(),
             locked: false,
             locks: PlanningCellLocks::default(),
             time: "~30s".into(),
@@ -1007,6 +1053,7 @@ mod tests {
     #[test]
     fn planning_row_roundtrip() {
         let row = PlanningRow {
+            id: String::new(),
             locked: false,
             locks: PlanningCellLocks::default(),
             time: "~30s".into(),

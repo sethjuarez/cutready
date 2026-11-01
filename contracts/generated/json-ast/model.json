@@ -136,6 +136,30 @@
         "childTypes": [],
         "properties": [
           {
+            "name": "id",
+            "typeName": {
+              "namespace": "",
+              "name": "string"
+            },
+            "description": "Stable identity, unique within the sketch. Decode gives a row without one\n(legacy files) `row-{position}`, one-based, appending `-2`, `-3`, ... while\nthat id is taken; save always writes it. Duplicate ids are rejected with\n`duplicate_row_id`. Hosts may mint any other unique string for new rows.",
+            "samples": [],
+            "knownAs": [],
+            "defaultFor": [],
+            "isScalar": true,
+            "isOptional": true,
+            "isCollection": false,
+            "isAny": false,
+            "isDict": false,
+            "dictValueType": null,
+            "defaultValue": "null",
+            "hasExplicitDefault": false,
+            "allowedValues": [],
+            "parseAliases": {},
+            "enumName": null,
+            "isOpenEnum": false,
+            "isNamedCollection": false
+          },
+          {
             "name": "locked",
             "typeName": {
               "namespace": "",

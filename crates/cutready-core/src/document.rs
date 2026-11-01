@@ -8,7 +8,7 @@ use std::path::Path;
 
 use sha2::{Digest, Sha256};
 
-use crate::models::sketch::{Sketch, Storyboard};
+use crate::models::sketch::{assign_row_ids, DuplicateRowId, Sketch, Storyboard};
 use crate::ports::{Files, Log, LogLevel, PortError, PortErrorKind};
 
 /// Folder (project-relative) that holds externalized Elucim visuals.
@@ -28,14 +28,49 @@ pub enum DocumentError {
     /// The document (or the part being changed) is locked.
     #[error("{0}")]
     Locked(String),
+    /// Two rows share an id; the file needs a manual fix.
+    #[error(transparent)]
+    DuplicateRowId(#[from] DuplicateRowId),
+}
+
+/// Canonical `.sk` bytes. Rows without an id get one ([`assign_row_ids`]);
+/// duplicate ids are rejected.
+/// The contract's `duplicate_row_id` CmdError (`contracts/errors.tsp`).
+impl From<&DuplicateRowId> for crate::contracts::CmdError {
+    fn from(err: &DuplicateRowId) -> Self {
+        Self {
+            code: crate::contracts::CmdErrorCode::DuplicateRowId,
+            message: err.to_string(),
+            details: Some(crate::contracts::CmdErrorDetails {
+                row_index: Some(u32::try_from(err.row_index).unwrap_or(u32::MAX)),
+                row_id: Some(err.row_id.clone()),
+                ..Default::default()
+            }),
+        }
+    }
 }
 
 pub fn sketch_to_json(sketch: &Sketch) -> Result<String, DocumentError> {
-    serde_json::to_string_pretty(sketch).map_err(|e| DocumentError::Serialize(e.to_string()))
+    let encode = |sketch: &Sketch| {
+        serde_json::to_string_pretty(sketch).map_err(|e| DocumentError::Serialize(e.to_string()))
+    };
+    if sketch.rows.iter().any(|row| row.id.is_empty()) {
+        let mut sketch = sketch.clone();
+        assign_row_ids(&mut sketch.rows)?;
+        encode(&sketch)
+    } else {
+        assign_row_ids(&mut sketch.rows.clone())?;
+        encode(sketch)
+    }
 }
 
+/// Decodes a `.sk` file. Legacy rows without an id get one here (the row-id
+/// migration); duplicate ids are rejected.
 pub fn sketch_from_json(json: &str) -> Result<Sketch, DocumentError> {
-    serde_json::from_str(json).map_err(|e| DocumentError::Parse(e.to_string()))
+    let mut sketch: Sketch =
+        serde_json::from_str(json).map_err(|e| DocumentError::Parse(e.to_string()))?;
+    assign_row_ids(&mut sketch.rows)?;
+    Ok(sketch)
 }
 
 pub fn storyboard_to_json(storyboard: &Storyboard) -> Result<String, DocumentError> {
@@ -182,7 +217,66 @@ pub fn save_storyboard(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{MemoryFiles, MemoryLog};
+    use crate::models::sketch::PlanningRow;
+    use crate::testing::{test_now, MemoryFiles, MemoryLog};
+
+    fn row_with_id(id: &str) -> PlanningRow {
+        PlanningRow {
+            id: id.into(),
+            ..PlanningRow::new()
+        }
+    }
+
+    fn saved_ids(sketch: &Sketch) -> Vec<String> {
+        sketch_from_json(&sketch_to_json(sketch).unwrap())
+            .unwrap()
+            .rows
+            .into_iter()
+            .map(|row| row.id)
+            .collect()
+    }
+
+    #[test]
+    fn save_assigns_ids_to_new_rows_without_renaming_others() {
+        let mut sketch = Sketch::new("Ids", test_now());
+        sketch.rows = vec![row_with_id("row-2"), PlanningRow::new(), row_with_id("b")];
+        assert_eq!(saved_ids(&sketch), ["row-2", "row-2-2", "b"]);
+    }
+
+    #[test]
+    fn save_rejects_duplicate_row_ids() {
+        let mut sketch = Sketch::new("Ids", test_now());
+        sketch.rows = vec![row_with_id("a"), PlanningRow::new(), row_with_id("a")];
+        assert_eq!(
+            sketch_to_json(&sketch),
+            Err(DocumentError::DuplicateRowId(DuplicateRowId {
+                row_index: 2,
+                row_id: "a".into(),
+            }))
+        );
+    }
+
+    #[test]
+    fn row_ids_follow_rows_through_a_reorder() {
+        let mut sketch = Sketch::new("Ids", test_now());
+        sketch.rows = vec![PlanningRow::new(), PlanningRow::new(), PlanningRow::new()];
+        let mut loaded = sketch_from_json(&sketch_to_json(&sketch).unwrap()).unwrap();
+        loaded.rows.reverse();
+        assert_eq!(saved_ids(&loaded), ["row-3", "row-2", "row-1"]);
+    }
+
+    #[test]
+    fn duplicate_row_id_maps_to_its_cmd_error() {
+        let err = DuplicateRowId {
+            row_index: 1,
+            row_id: "a".into(),
+        };
+        let cmd = crate::contracts::CmdError::from(&err);
+        assert_eq!(cmd.code, crate::contracts::CmdErrorCode::DuplicateRowId);
+        let details = cmd.details.unwrap();
+        assert_eq!(details.row_index, Some(1));
+        assert_eq!(details.row_id.as_deref(), Some("a"));
+    }
 
     fn invalid_utf8(path: &str) -> MemoryFiles {
         let files = MemoryFiles::new();
