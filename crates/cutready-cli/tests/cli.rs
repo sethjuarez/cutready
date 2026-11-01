@@ -125,6 +125,68 @@ fn edit_creates_a_document_from_an_ops_file() {
 }
 
 #[test]
+fn edit_results_have_the_contract_shape() {
+    let dir = project();
+    let root = dir.path().to_str().unwrap();
+    write(dir.path(), "notes/plan.md", "Old");
+    write(dir.path(), "intro.sk", SKETCH);
+    let edit = |doc: &str, expected: &str, ops: Value| {
+        let output = cli(
+            &["edit", root, doc, "--expected", expected],
+            &ops.to_string(),
+        );
+        assert!(output.status.success(), "{output:?}");
+        stdout_json(&output)
+    };
+
+    let old = cutready_core::edit_ops::document_version(b"Old");
+    let note = edit(
+        "notes/plan.md",
+        &old,
+        json!([{ "kind": "write_note", "content": "New" }]),
+    );
+    let new = cutready_core::edit_ops::document_version(b"New");
+    let run_id = note["run_id"].clone();
+    assert!(note["seq"].is_u64(), "{note}");
+    assert_eq!(
+        note,
+        json!({
+            "run_id": run_id, "path": "notes/plan.md", "version": new, "changed": true,
+            "seq": note["seq"], "note_locked": false, "note_lock_changed": false,
+        })
+    );
+
+    // Nothing changed, nothing logged: seq is an explicit null.
+    let same = edit(
+        "notes/plan.md",
+        &new,
+        json!([{ "kind": "write_note", "content": "New" }]),
+    );
+    assert_eq!(same["changed"], false);
+    assert_eq!(same["seq"], Value::Null);
+    assert!(same.as_object().unwrap().contains_key("seq"), "{same}");
+
+    // Note-lock fields are omitted for other documents.
+    let version = cutready_core::edit_ops::document_version(SKETCH.as_bytes());
+    let sketch = edit(
+        "intro.sk",
+        &version,
+        json!([{ "kind": "set_title", "title": "Hello" }]),
+    );
+    let keys: Vec<&str> = sketch
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        keys,
+        ["changed", "path", "run_id", "seq", "version"],
+        "{sketch}"
+    );
+}
+
+#[test]
 fn usage_errors_exit_2() {
     let dir = project();
     let root = dir.path().to_str().unwrap();
@@ -160,6 +222,16 @@ fn validate_reports_each_document() {
             ("intro.sk", true),
             ("notes/a.md", true)
         ]
+    );
+    let documents = report["documents"].as_array().unwrap();
+    assert_eq!(documents[0]["error"]["code"], "command_failed", "{report}");
+    assert!(documents[0].get("version").is_none(), "{report}");
+    assert_eq!(
+        documents[2],
+        json!({
+            "path": "notes/a.md", "ok": true,
+            "version": cutready_core::edit_ops::document_version(b"Hi"),
+        })
     );
 
     let good = cli(&["validate", root, "intro.sk"], "");

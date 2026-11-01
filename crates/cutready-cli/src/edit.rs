@@ -2,10 +2,11 @@
 
 use std::path::Path;
 
+use cutready_core::contracts::AppliedEdit;
 use cutready_core::Clock;
-use serde_json::{json, Value};
+use serde_json::Value;
 
-use crate::project::{applied_json, Failure, Project};
+use crate::project::{applied_edit, Failure, Project};
 
 /// The op-log actor of runs started from the command line.
 pub const ACTOR: &str = "cli";
@@ -17,7 +18,7 @@ pub enum Expect {
 }
 
 /// Applies `ops` to `doc` in `run_id` (a new CLI run when `None`) and returns
-/// `{run_id, path, version, changed, seq, ...}`.
+/// the contract's `AppliedEdit`.
 pub fn edit(
     root: &Path,
     clock: &dyn Clock,
@@ -25,7 +26,7 @@ pub fn edit(
     expect: &Expect,
     ops: &[Value],
     run_id: Option<&str>,
-) -> Result<Value, Failure> {
+) -> Result<AppliedEdit, Failure> {
     let project = Project::open(root)?;
     let run_id = match run_id {
         Some(id) => id.to_string(),
@@ -36,9 +37,7 @@ pub fn edit(
         Expect::Absent => None,
     };
     let applied = project.apply(clock, ACTOR, &run_id, doc, expected, ops)?;
-    let mut out = applied_json(doc, &applied);
-    out["run_id"] = json!(run_id);
-    Ok(out)
+    Ok(applied_edit(&run_id, doc, &applied))
 }
 
 /// Parses an ops document: a JSON array of EditOps.

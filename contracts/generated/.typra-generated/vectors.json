@@ -14064,15 +14064,21 @@
     }
   ],
   "serializedTypes": [
+    "AppliedEdit",
     "ChatArtifact",
     "ChatArtifactSource",
     "ChatParticipant",
     "ChatToolUse",
     "ChatTurn",
+    "CliInstall",
+    "CliRegistration",
     "CmdError",
     "CmdErrorDetails",
+    "CommandFailure",
     "DocumentMetadata",
     "DocumentReview",
+    "DocumentSnapshot",
+    "DocumentValidation",
     "MotionPlan",
     "MotionPlanKeyframe",
     "MotionPoint",
@@ -14081,13 +14087,16 @@
     "NarrationPlan",
     "PlanningCellLocks",
     "PlanningRow",
+    "ReviewResolution",
     "RunReview",
+    "RunStarted",
     "Sketch",
     "Storyboard",
     "StoryboardItem",
     "StoryboardSection",
     "StoryboardSketchRef",
     "TypingSpot",
-    "UndoConflict"
+    "UndoConflict",
+    "ValidationReport"
   ]
 }

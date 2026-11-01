@@ -17,6 +17,11 @@ public struct CmdErrorCode: RawRepresentable, Equatable, Hashable, Codable {
   public static let staleDocument = CmdErrorCode(rawValue: "stale_document")
   public static let undoConflict = CmdErrorCode(rawValue: "undo_conflict")
   public static let staleReview = CmdErrorCode(rawValue: "stale_review")
+  public static let commandFailed = CmdErrorCode(rawValue: "command_failed")
+  public static let notRegistered = CmdErrorCode(rawValue: "not_registered")
+  public static let unreadableRegistration = CmdErrorCode(rawValue: "unreadable_registration")
+  public static let missingBinary = CmdErrorCode(rawValue: "missing_binary")
+  public static let contractMismatch = CmdErrorCode(rawValue: "contract_mismatch")
   public static func parse(_ value: String) throws -> CmdErrorCode {
     switch value {
     case "locked_document": return .lockedDocument
@@ -30,6 +35,11 @@ public struct CmdErrorCode: RawRepresentable, Equatable, Hashable, Codable {
     case "stale_document": return .staleDocument
     case "undo_conflict": return .undoConflict
     case "stale_review": return .staleReview
+    case "command_failed": return .commandFailed
+    case "not_registered": return .notRegistered
+    case "unreadable_registration": return .unreadableRegistration
+    case "missing_binary": return .missingBinary
+    case "contract_mismatch": return .contractMismatch
     default: return CmdErrorCode(rawValue: value)
     }
   }

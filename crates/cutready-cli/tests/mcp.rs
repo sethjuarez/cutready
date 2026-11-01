@@ -64,6 +64,7 @@ fn edit_document_vectors_hold_over_mcp() {
                 applied["isError"], true,
                 "{name}: expected an error, got {out}"
             );
+            let out = &out["error"];
             assert_eq!(out["code"], want["code"], "{name}: {out}");
             assert_subset(name, &want["details"], &out["details"]);
             let on_disk = std::fs::read_to_string(root.join(path)).ok();

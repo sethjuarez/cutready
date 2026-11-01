@@ -4,20 +4,25 @@
 //! `<config dir>/cutready/cli.json`:
 //!
 //! ```json
-//! { "path": "/abs/cutready-cli", "version": "1.37.0", "contractVersion": 1 }
+//! { "path": "/abs/cutready-cli", "version": "1.37.0", "contract_version": 1 }
 //! ```
 //!
 //! A newer install replaces an older one; an older one never replaces a newer
 //! one whose binary is still there. A client reads the file, checks the binary
-//! exists and its `contractVersion` is the one it speaks, then starts
+//! exists and its `contract_version` is the one it speaks, then starts
 //! `cutready-cli mcp`, whose handshake checks the contract again. Any mismatch
-//! fails closed. `CUTREADY_CONFIG_DIR` overrides the directory.
+//! fails closed. `CUTREADY_CONFIG_DIR` overrides the directory. The file
+//! and the `register`/`discover` output are the contract's `CliInstall`.
 
 use std::cmp::Ordering;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use serde_json::{json, Value};
+use cutready_core::contracts::{
+    CliInstall, CliRegistration, CmdError, CmdErrorCode, LoadContext, RegistrationOutcome,
+    SaveContext,
+};
+use serde_json::Value;
 
 /// The registration file name inside the discovery directory.
 pub const REGISTRY_FILE: &str = "cli.json";
@@ -43,23 +48,22 @@ impl Registration {
         })
     }
 
-    pub fn to_json(&self) -> Value {
-        json!({
-            "path": self.path.to_string_lossy(),
-            "version": self.version,
-            "contractVersion": self.contract_version,
-        })
+    pub fn to_install(&self) -> CliInstall {
+        CliInstall {
+            path: self.path.to_string_lossy().into_owned(),
+            version: self.version.clone(),
+            contract_version: self.contract_version,
+        }
     }
 
-    fn from_json(value: &Value) -> Option<Self> {
-        Some(Self {
-            path: PathBuf::from(value.get("path")?.as_str()?),
-            version: value.get("version")?.as_str()?.to_string(),
-            contract_version: u32::try_from(value.get("contractVersion")?.as_u64()?).ok()?,
-        })
+    fn from_install(install: CliInstall) -> Self {
+        Self {
+            path: PathBuf::from(install.path),
+            version: install.version,
+            contract_version: install.contract_version,
+        }
     }
 }
-
 /// The per-user discovery directory: `CUTREADY_CONFIG_DIR`, else
 /// `<config dir>/cutready`.
 pub fn default_dir() -> Option<PathBuf> {
@@ -81,11 +85,24 @@ pub enum Registered {
 }
 
 impl Registered {
-    pub fn outcome(&self) -> &'static str {
+    /// What `register` prints, after recording `install`.
+    pub fn to_registration(&self, install: &Registration) -> CliRegistration {
         match self {
-            Self::New => "registered",
-            Self::Replaced(_) => "replaced",
-            Self::KeptNewer(_) => "kept_newer",
+            Self::New => CliRegistration {
+                outcome: RegistrationOutcome::Registered,
+                registered: install.to_install(),
+                previous: None,
+            },
+            Self::Replaced(previous) => CliRegistration {
+                outcome: RegistrationOutcome::Replaced,
+                registered: install.to_install(),
+                previous: Some(previous.to_install()),
+            },
+            Self::KeptNewer(existing) => CliRegistration {
+                outcome: RegistrationOutcome::KeptNewer,
+                registered: existing.to_install(),
+                previous: None,
+            },
         }
     }
 }
@@ -115,7 +132,9 @@ pub fn register(dir: &Path, install: &Registration, force: bool) -> std::io::Res
         }
     };
     let tmp = dir.join(format!("{REGISTRY_FILE}.{}.tmp", std::process::id()));
-    let mut bytes = serde_json::to_vec_pretty(&install.to_json()).map_err(std::io::Error::other)?;
+    let mut bytes =
+        serde_json::to_vec_pretty(&install.to_install().to_value(&SaveContext::default()))
+            .map_err(std::io::Error::other)?;
     bytes.push(b'\n');
     {
         let mut out = std::fs::File::create(&tmp)?;
@@ -139,12 +158,20 @@ pub enum DiscoveryError {
 }
 
 impl DiscoveryError {
-    pub fn code(&self) -> &'static str {
+    pub fn code(&self) -> CmdErrorCode {
         match self {
-            Self::NotRegistered => "not_registered",
-            Self::Unreadable(_) => "unreadable_registration",
-            Self::Missing(_) => "missing_binary",
-            Self::ContractMismatch { .. } => "contract_mismatch",
+            Self::NotRegistered => CmdErrorCode::NotRegistered,
+            Self::Unreadable(_) => CmdErrorCode::UnreadableRegistration,
+            Self::Missing(_) => CmdErrorCode::MissingBinary,
+            Self::ContractMismatch { .. } => CmdErrorCode::ContractMismatch,
+        }
+    }
+
+    pub fn to_cmd_error(&self) -> CmdError {
+        CmdError {
+            code: self.code(),
+            message: self.to_string(),
+            details: None,
         }
     }
 }
@@ -196,8 +223,19 @@ fn read(file: &Path) -> Result<Registration, DiscoveryError> {
     };
     let value: Value =
         serde_json::from_slice(&bytes).map_err(|e| DiscoveryError::Unreadable(e.to_string()))?;
-    Registration::from_json(&value).ok_or_else(|| {
-        DiscoveryError::Unreadable("expected {path, version, contractVersion}".to_string())
+    let complete = value.get("path").and_then(Value::as_str).is_some()
+        && value.get("version").and_then(Value::as_str).is_some()
+        && value
+            .get("contract_version")
+            .and_then(Value::as_u64)
+            .is_some_and(|v| u32::try_from(v).is_ok());
+    let install = CliInstall::try_load_from_value(&value, &LoadContext::default())
+        .ok()
+        .filter(|install| complete && !install.path.is_empty() && !install.version.is_empty());
+    install.map(Registration::from_install).ok_or_else(|| {
+        DiscoveryError::Unreadable(
+            "expected a CliInstall {path, version, contract_version}".to_string(),
+        )
     })
 }
 
