@@ -107,6 +107,16 @@ pub fn edit(
     edit_at(&abs, kind, lock, expected, ops)
 }
 
+/// [`edit`] for a sketch or storyboard the caller already resolved. Notes go
+/// through [`edit`], which knows their lock key.
+pub fn edit_file(abs: &Path, expected: Expected, ops: &[Value]) -> Result<Written, WriteError> {
+    let kind = kind_of(abs)?;
+    if kind == DocumentKind::Note {
+        return Err(ProjectError::Invalid("Edit notes by project path".into()).into());
+    }
+    edit_at(abs, kind, None, expected, ops)
+}
+
 /// [`edit`] for a sketch, returning the sketch after the ops.
 pub fn edit_sketch(
     root: &Path,

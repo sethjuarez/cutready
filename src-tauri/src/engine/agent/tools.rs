@@ -10,6 +10,7 @@ use std::process::{Command, Stdio};
 
 use serde_json::{json, Value};
 
+use crate::engine::agent::document_ops;
 use crate::engine::agent::execution::{
     parse_tool_arguments, ContentPart, ImageUrl, ResourceOperation, ToolCall, ToolExecutionStatus,
     ToolOutput, TouchedResource, VerificationResult, VerificationStatus,
@@ -1647,7 +1648,7 @@ fn copy_storyboard_with_dependencies(
         dependency_count += 1;
     }
 
-    project::write_storyboard(&storyboard, &target_abs, target_root).map_err(|e| e.to_string())?;
+    document_ops::save_storyboard(&target_abs, None, &storyboard).map_err(|e| e.to_string())?;
     copied.insert(normalized_target);
     Ok(format!(
         "- storyboard: {source_path} -> {target_path} (with {dependency_count} sketch dependenc{})",
@@ -1692,7 +1693,7 @@ fn copy_sketch_with_assets(
         }
     }
 
-    project::write_sketch(&sketch, &target_abs, target_root).map_err(|e| e.to_string())?;
+    document_ops::save_sketch(&target_abs, None, &sketch).map_err(|e| e.to_string())?;
     copied.insert(normalized_target);
     Ok(format!(
         "- sketch: {source_path} -> {target_path} (with {asset_count} asset{}, skipped {skipped_asset_count})",
@@ -1761,8 +1762,10 @@ fn copy_optional_project_asset(
         return Ok(false);
     }
     if let Some(parent) = target_abs.parent() {
+        // asset write: target folder for a byte-preserving copy
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
+    // asset write: byte-preserving copy; joins multi-file transactions in 4.9
     std::fs::copy(&source_abs, &target_abs).map_err(|e| e.to_string())?;
     copied.insert(normalized_target);
     Ok(true)
@@ -1789,8 +1792,10 @@ fn copy_project_file(
     }
     ensure_can_write_target(&target_abs, overwrite)?;
     if let Some(parent) = target_abs.parent() {
+        // asset write: target folder for a byte-preserving copy
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
+    // asset write: byte-preserving copy; joins multi-file transactions in 4.9
     std::fs::copy(&source_abs, &target_abs).map_err(|e| e.to_string())?;
     copied.insert(normalized_target);
     Ok(format!("- file: {source_path} -> {target_path}"))
@@ -2551,6 +2556,7 @@ fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
         None
     };
     let is_new = existing.is_none();
+    let before = existing.clone();
     if is_new && row_items.is_none() {
         return ToolOutput::failed(
             "Error: missing 'rows' argument (required when creating a sketch)",
@@ -2658,7 +2664,7 @@ fn exec_write_sketch(root: &Path, args: &Value) -> ToolOutput {
         }
     };
 
-    match project::write_sketch(&sketch, &path, root) {
+    match document_ops::save_sketch(&path, before.as_ref(), &sketch) {
         Ok(()) => ToolOutput::from(summary),
         Err(e) => ToolOutput::failed(format!("Error writing sketch: {e}")),
     }
@@ -2681,6 +2687,7 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> ToolOutput {
         Ok(s) => s,
         Err(e) => return ToolOutput::failed(format!("Error reading sketch: {e}")),
     };
+    let before = sketch.clone();
     let index = match parse_row_target(args, sketch.rows.len()) {
         Ok(index) => index,
         Err(e) => return ToolOutput::failed(e),
@@ -2743,7 +2750,7 @@ fn exec_update_planning_row(root: &Path, args: &Value) -> ToolOutput {
         return ToolOutput::failed(format!("Error: {e}"));
     }
 
-    match project::write_sketch(&sketch, &path, root) {
+    match document_ops::save_sketch(&path, Some(&before), &sketch) {
         Ok(()) => ToolOutput::from(format!("Updated row {} in {}", index + 1, path.display())),
         Err(e) => ToolOutput::failed(format!("Error writing sketch: {e}")),
     }
@@ -2808,6 +2815,7 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> ToolOutput {
         Ok(s) => s,
         Err(e) => return ToolOutput::failed(format!("Error reading sketch: {e}")),
     };
+    let before = sketch.clone();
     let index = match parse_row_target(args, sketch.rows.len()) {
         Ok(index) => index,
         Err(e) => return ToolOutput::failed(e),
@@ -2936,7 +2944,7 @@ fn exec_set_row_visual(root: &Path, args: &Value) -> ToolOutput {
         }
     }
 
-    match project::write_sketch(&sketch, &path, root) {
+    match document_ops::save_sketch(&path, Some(&before), &sketch) {
         Ok(()) => {
             if sketch.rows[index].visual.is_some() {
                 ToolOutput::from(format!(
@@ -3147,6 +3155,7 @@ fn exec_design_plan(root: &Path, args: &Value) -> String {
         Ok(s) => s,
         Err(e) => return format!("Error reading sketch: {e}"),
     };
+    let before = sketch.clone();
     let index = match parse_row_target(args, sketch.rows.len()) {
         Ok(index) => index,
         Err(e) => return e,
@@ -3171,7 +3180,7 @@ fn exec_design_plan(root: &Path, args: &Value) -> String {
     sketch.rows[index].design_plan = Some(plan.clone());
     let row_context = format_visual_row_context(&sketch, index);
 
-    match project::write_sketch(&sketch, &path, root) {
+    match document_ops::save_sketch(&path, Some(&before), &sketch) {
         Ok(()) => {
             format!(
                 "Design plan saved for row {}.\n\n{}\n\nSaved design plan:\n{}\n\nNow generate DSL JSON based on this plan and row context.",
@@ -3252,13 +3261,15 @@ fn save_row_visual(
     index: usize,
     visual: &Value,
 ) -> Result<String, String> {
+    let before = sketch.clone();
     let visual = normalize_visual_document_for_save(visual)
         .map_err(|e| format!("Validation failed: {e}"))?;
     let rel_path = project::write_visual(root, &visual)
         .map_err(|e| format!("Error writing visual file: {e}"))?;
     sketch.rows[index].visual = Some(Value::String(rel_path.clone()));
     sketch.rows[index].screenshot = None;
-    project::write_sketch(sketch, path, root).map_err(|e| format!("Error writing sketch: {e}"))?;
+    document_ops::save_sketch(path, Some(&before), sketch)
+        .map_err(|e| format!("Error writing sketch: {e}"))?;
     Ok(rel_path)
 }
 
@@ -3667,6 +3678,7 @@ fn exec_write_note(root: &Path, args: &Value) -> ToolOutput {
 
     if let Some(parent) = path.parent() {
         if !parent.exists() {
+            // asset write: the note's folder
             if let Err(e) = std::fs::create_dir_all(parent) {
                 return ToolOutput::failed(format!("Error creating directories: {e}"));
             }
@@ -3674,7 +3686,7 @@ fn exec_write_note(root: &Path, args: &Value) -> ToolOutput {
     }
 
     let created = !path.exists();
-    match project::write_note(&path, content) {
+    match document_ops::save_note(root, &safe_rel, &path, content) {
         Ok(()) => {
             if created {
                 ToolOutput::from(format!("Created note '{safe_rel}'"))
@@ -3724,14 +3736,15 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> ToolOutput {
     };
 
     // Load existing or create new
-    let mut sb = match project::read_storyboard(&path) {
-        Ok(existing) => {
-            if let Err(e) = project::ensure_storyboard_unlocked(&existing) {
+    let existing = project::read_storyboard(&path).ok();
+    let mut sb = match &existing {
+        Some(existing) => {
+            if let Err(e) = project::ensure_storyboard_unlocked(existing) {
                 return ToolOutput::failed(format!("Error writing storyboard: {e}"));
             }
-            existing
+            existing.clone()
         }
-        Err(_) => cutready_core::models::sketch::Storyboard::new(
+        None => cutready_core::models::sketch::Storyboard::new(
             args.get("title")
                 .and_then(|v| v.as_str())
                 .unwrap_or("Untitled"),
@@ -3817,7 +3830,7 @@ fn exec_write_storyboard(root: &Path, args: &Value) -> ToolOutput {
 
     sb.updated_at = chrono::Utc::now();
 
-    match project::write_storyboard(&sb, &path, root) {
+    match document_ops::save_storyboard(&path, existing.as_ref(), &sb) {
         Ok(()) => ToolOutput::from(format!(
             "Saved storyboard \"{}\" at '{safe_rel}' ({} items)",
             sb.title,
