@@ -384,6 +384,7 @@ pub async fn synthesize_narration_recording(
 
     let duration_ms = probe_audio_duration_ms(&result.audio, &result.mime_type);
 
+    let _write_guard = crate::engine::workspace_write_lock::lock()?;
     persist_narration_asset(
         &root,
         &request.sketch_path,
