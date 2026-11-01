@@ -1159,7 +1159,7 @@ fn storyboards_with_sketch_removed(
         "sb",
         &mut |_rel_path, abs_path| {
             if let Ok(data) = std::fs::read_to_string(abs_path) {
-                if let Ok((mut storyboard, _)) = Storyboard::from_json_upgraded(&data) {
+                if let Ok((mut storyboard, _)) = document::storyboard_from_json(&data) {
                     if storyboard.remove_sketch_references(sketch_rel_path) > 0 {
                         if storyboard.locked {
                             locked_error = Some(ProjectError::Locked(format!(
@@ -2047,7 +2047,7 @@ pub fn scan_sketches(project_root: &Path) -> Result<Vec<SketchSummary>, ProjectE
         "sk",
         &mut |rel_path, abs_path| {
             if let Ok(data) = std::fs::read_to_string(abs_path) {
-                if let Ok(sketch) = serde_json::from_str::<Sketch>(&data) {
+                if let Ok(sketch) = document::sketch_from_json(&data) {
                     summaries.push(SketchSummary::from_sketch(&sketch, rel_path));
                 }
             }
@@ -2067,7 +2067,7 @@ pub fn scan_storyboards(project_root: &Path) -> Result<Vec<StoryboardSummary>, P
         "sb",
         &mut |rel_path, abs_path| {
             if let Ok(data) = std::fs::read_to_string(abs_path) {
-                if let Ok((sb, upgraded)) = Storyboard::from_json_upgraded(&data) {
+                if let Ok((sb, upgraded)) = document::storyboard_from_json(&data) {
                     if upgraded {
                         save_upgraded_storyboard(&sb, abs_path);
                     }
@@ -2092,7 +2092,7 @@ pub fn storyboards_referencing_sketch(
         "sb",
         &mut |_rel_path, abs_path| {
             if let Ok(data) = std::fs::read_to_string(abs_path) {
-                if let Ok((sb, _)) = Storyboard::from_json_upgraded(&data) {
+                if let Ok((sb, _)) = document::storyboard_from_json(&data) {
                     if sb.references_sketch(sketch_rel_path) {
                         titles.push(sb.title.clone());
                     }

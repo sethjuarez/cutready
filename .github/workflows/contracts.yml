@@ -120,8 +120,8 @@ jobs:
       - name: Desktop conformance
         run: cargo test -p cutready-contracts
 
-      - name: Desktop sketch model regressions
-        run: cargo test -p cutready --lib models::sketch
+      - name: Core document regressions and goldens
+        run: cargo test -p cutready-core
 
       - name: Generated Swift package
         run: swift test --package-path contracts/generated/swift

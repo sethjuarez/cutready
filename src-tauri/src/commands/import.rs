@@ -205,8 +205,8 @@ pub async fn import_sketch(
     let source_path = Path::new(&file_path);
     let data = fs::read_to_string(source_path).map_err(|e| format!("Failed to read file: {e}"))?;
 
-    let mut sketch: cutready_core::models::sketch::Sketch =
-        serde_json::from_str(&data).map_err(|e| format!("Invalid sketch file: {e}"))?;
+    let mut sketch = cutready_core::document::sketch_from_json(&data)
+        .map_err(|e| format!("Invalid sketch file: {e}"))?;
 
     let filename = source_path
         .file_stem()
@@ -247,7 +247,7 @@ pub async fn import_storyboard(
     let source_path = Path::new(&file_path);
     let data = fs::read_to_string(source_path).map_err(|e| format!("Failed to read file: {e}"))?;
 
-    let (storyboard, _) = cutready_core::models::sketch::Storyboard::from_json_upgraded(&data)
+    let (storyboard, _) = cutready_core::document::storyboard_from_json(&data)
         .map_err(|e| format!("Invalid storyboard file: {e}"))?;
 
     let filename = source_path

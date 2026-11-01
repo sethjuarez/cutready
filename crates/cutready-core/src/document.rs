@@ -9,7 +9,7 @@ use std::path::Path;
 use sha2::{Digest, Sha256};
 
 use crate::models::sketch::{Sketch, Storyboard};
-use crate::ports::{Files, Log, LogLevel, PortError};
+use crate::ports::{Files, Log, LogLevel, PortError, PortErrorKind};
 
 /// Folder (project-relative) that holds externalized Elucim visuals.
 pub const VISUALS_DIR: &str = ".cutready/visuals";
@@ -102,7 +102,13 @@ pub fn externalize_inline_visuals<E: std::fmt::Display>(
 }
 
 fn read_text(files: &dyn Files, path: &Path) -> Result<String, DocumentError> {
-    String::from_utf8(files.read(path)?).map_err(|e| DocumentError::Parse(e.to_string()))
+    // Matches std::fs::read_to_string: invalid UTF-8 is an I/O failure, not a parse error.
+    String::from_utf8(files.read(path)?).map_err(|_| {
+        DocumentError::Port(PortError::new(
+            PortErrorKind::Io,
+            "stream did not contain valid UTF-8",
+        ))
+    })
 }
 
 /// Loads a sketch and externalizes any inline visuals, saving the sketch when
@@ -168,4 +174,37 @@ pub fn save_storyboard(
     storyboard: &Storyboard,
 ) -> Result<(), DocumentError> {
     Ok(files.write_atomic(path, storyboard_to_json(storyboard)?.as_bytes())?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testing::{MemoryFiles, MemoryLog};
+
+    fn invalid_utf8(path: &str) -> MemoryFiles {
+        let files = MemoryFiles::new();
+        files
+            .write_atomic(Path::new(path), &[0xff, 0xfe, b'{'])
+            .unwrap();
+        files
+    }
+
+    fn assert_io(err: DocumentError) {
+        match err {
+            DocumentError::Port(e) => assert_eq!(e.kind, PortErrorKind::Io),
+            other => panic!("expected I/O error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn invalid_utf8_sketch_is_io_error() {
+        let files = invalid_utf8("a.sk");
+        assert_io(load_sketch(&files, &MemoryLog::default(), Path::new("a.sk")).unwrap_err());
+    }
+
+    #[test]
+    fn invalid_utf8_storyboard_is_io_error() {
+        let files = invalid_utf8("a.sb");
+        assert_io(load_storyboard(&files, &MemoryLog::default(), Path::new("a.sb")).unwrap_err());
+    }
 }
