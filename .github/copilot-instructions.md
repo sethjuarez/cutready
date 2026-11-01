@@ -143,7 +143,7 @@ cutready/
 | Module | Status | Purpose |
 | --- | --- | --- |
 | engine/project.rs | ✅ Implemented | Folder-based project I/O, safe_resolve(), file scanning |
-| engine/draftline_adapter.rs | ✅ Implemented | Draftline-backed versioning facade, content policy, remotes, history, diff, save, restore |
+| crates/cutready-versioning | ✅ Implemented | Draftline-backed versioning facade, content policy, remotes, history, diff, save, restore; no Tauri (`engine/draftline_adapter.rs` is a temporary re-export) |
 | commands/draftline.rs | ✅ Implemented | Tauri command wrappers for Draftline context, credentials, events, and collaboration operations |
 | engine/github_pull_requests.rs | ✅ Implemented | GitHub `PullRequestProvider` for hybrid Send for review (blocking client; run off the async runtime) |
 | engine/agent/ | ✅ Implemented | Multi-agent AI system (Planner, Writer, Editor, Designer) |

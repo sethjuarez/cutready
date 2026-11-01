@@ -39,6 +39,14 @@ pub struct WriteGuard {
     _not_send: PhantomData<*const ()>,
 }
 
+impl WriteGuard {
+    /// The held lock as a core [`LockGuard`], for code that takes the port
+    /// (such as a structure change) and keeps the thread affinity itself.
+    pub fn into_lock_guard(self) -> Box<dyn LockGuard> {
+        Box::new(self._held)
+    }
+}
+
 /// Acquire the write lock of the repository containing `path`, blocking until
 /// other holders release it.
 pub fn lock(path: &Path) -> Result<WriteGuard, String> {
@@ -281,6 +289,21 @@ mod tests {
         std::fs::create_dir_all(&target).unwrap();
         assert_eq!(folder_lock_file(&target), before);
         assert_eq!(folder_lock_file(&target.join("..").join("demo")), before);
+    }
+
+    #[test]
+    fn a_guard_handed_to_the_port_keeps_the_repository_locked() {
+        let dir = repo();
+        let guard = lock(dir.path()).unwrap().into_lock_guard();
+        let try_other = |file: PathBuf| {
+            std::thread::spawn(move || RepoLock { file }.try_acquire().map(|_| ()))
+                .join()
+                .unwrap()
+        };
+        let busy = try_other(lock_file(dir.path())).unwrap_err().kind;
+        assert_eq!(busy, cutready_core::PortErrorKind::Busy);
+        drop(guard);
+        try_other(lock_file(dir.path())).unwrap();
     }
 
     #[test]

@@ -68,7 +68,7 @@ The backend is organized as independent engines:
 | Engine | Module | Status | Responsibility |
 | --- | --- | --- | --- |
 | Project | `engine/project.rs` | ✅ | Folder-based project I/O, safe_resolve(), file scanning |
-| Draftline | `engine/draftline_adapter.rs` + `commands/draftline.rs` | ✅ | Draftline-backed persistence, history, diff, save, restore, remotes, merge/apply flows |
+| Draftline | `crates/cutready-versioning` (re-exported as `engine::draftline_adapter`) + `commands/draftline.rs` | ✅ | Draftline-backed persistence, history, diff, save, restore, remotes, merge/apply flows |
 | GitHub PRs | `engine/github_pull_requests.rs` | ✅ | Draftline `PullRequestProvider` for hybrid Send for review |
 | Agent | `engine/agent/` | ✅ | Multi-agent AI system (runner, tools, LLM client) |
 | Import | `cutready_core::import` | ✅ | .docx/.pdf/.pptx parsing; `commands/import.rs` wires it to `StdFiles` |
@@ -120,7 +120,7 @@ All models derive `Serialize` + `Deserialize` for JSON IPC and file storage. Use
 
 ## Versioning (Draftline)
 
-- CutReady persistence routes through `engine::draftline_adapter::CutReadyDraftlineAdapter`; do not add app-level `gix`, `git2`, or raw `git` save/restore/diff paths.
+- CutReady persistence routes through `cutready_versioning::CutReadyDraftlineAdapter`. The crate takes identity (`cutready_core::identity`) and the write lock (`cutready_core::Lock`, desktop `RepoLock`) as inputs and must not depend on Tauri; do not add app-level `gix`, `git2`, or raw `git` save/restore/diff paths.
 - Draftline owns snapshots, branch/variation graph helpers, sync, merge, restore-as-new-save, shelves, and collaboration semantics.
 - CutReady owns the content policy: sketches (`.sk`), storyboards (`.sb`), notes (`.md`), `.cutready/projects.json`, `.cutready/visuals`, and `.cutready/screenshots` are versioned content.
 - Serialize in-process mutations of Draftline-tracked files with `engine::workspace_write_lock::lock()`. `StructureChange` owns the guard from its pending-file snapshot through its automatic save; acquire before validation/read-modify-write sequences and pass the guard to `begin_with_guard` when needed. Do not nest acquisitions. Agent `read_sketch` also needs the lock because legacy visual migration can write. This lock coordinates CutReady writers only; it does not protect against external processes editing the workspace.

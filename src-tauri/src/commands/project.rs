@@ -8,6 +8,7 @@ use tauri::{Emitter, State};
 use tauri_plugin_auditaur::auditaur_command;
 use tauri_plugin_store::StoreExt;
 
+use crate::engine::write_lock::RepoLock;
 use crate::engine::{
     agent_state::AgentStateStore,
     draftline_adapter::{StructureChange, StructureSnapshot},
@@ -671,8 +672,12 @@ pub async fn repair_workspace_manifest(
     state: State<'_, AppState>,
 ) -> Result<project::WorkspaceManifestRepair, String> {
     let root = repo_root(&state)?;
-    let change =
-        StructureChange::begin(&root, "Repair workspace manifest", [project::MANIFEST_PATH])?;
+    let change = StructureChange::begin(
+        &root,
+        &RepoLock::for_path(&root),
+        "Repair workspace manifest",
+        [project::MANIFEST_PATH],
+    )?;
     let repair = project::repair_workspace_manifest(&root).map_err(|e| e.to_string())?;
     finish_structure_change(&app, &root, change)?;
     Ok(repair)
@@ -782,6 +787,7 @@ pub async fn create_project_in_repo(
     let root = repo_root(&state)?;
     let change = StructureChange::begin(
         &root,
+        &RepoLock::for_path(&root),
         format!("Add {} to workspace", name.trim()),
         [project::MANIFEST_PATH],
     )?;
@@ -801,8 +807,12 @@ pub async fn delete_project(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let root = repo_root(&state)?;
-    let change =
-        StructureChange::begin(&root, "Delete workspace project", [project::MANIFEST_PATH])?;
+    let change = StructureChange::begin(
+        &root,
+        &RepoLock::for_path(&root),
+        "Delete workspace project",
+        [project::MANIFEST_PATH],
+    )?;
     let safe_path = safe_project_manifest_path(&project_path)?;
 
     let mut manifest = project::read_manifest_result(&root).map_err(|e| e.to_string())?;
@@ -877,7 +887,7 @@ pub async fn rename_project(
             &root,
             "Organize workspace projects",
             ["."],
-            write_guard,
+            write_guard.into_lock_guard(),
         )?;
         let entry =
             project::migrate_to_multi_project(&root, &new_name).map_err(|e| e.to_string())?;
@@ -918,7 +928,7 @@ pub async fn rename_project(
         &root,
         "Rename workspace project",
         [project::MANIFEST_PATH],
-        write_guard,
+        write_guard.into_lock_guard(),
     )?;
     if new_path != project_path {
         change = change.touching(&project_path).touching(&new_path);
@@ -1017,7 +1027,12 @@ pub async fn migrate_to_multi_project(
     state: State<'_, AppState>,
 ) -> Result<ProjectEntry, String> {
     let root = repo_root(&state)?;
-    let change = StructureChange::begin(&root, "Organize workspace projects", ["."])?;
+    let change = StructureChange::begin(
+        &root,
+        &RepoLock::for_path(&root),
+        "Organize workspace projects",
+        ["."],
+    )?;
     let entry =
         project::migrate_to_multi_project(&root, &existing_name).map_err(|e| e.to_string())?;
     finish_structure_change(&app, &root, change)?;

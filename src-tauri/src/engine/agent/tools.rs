@@ -1416,6 +1416,7 @@ fn exec_create_project_as(
 
     let change = match StructureChange::begin(
         &repo_root,
+        &crate::engine::write_lock::RepoLock::for_path(&repo_root),
         format!("Add {name} to workspace"),
         [project::MANIFEST_PATH],
     ) {
