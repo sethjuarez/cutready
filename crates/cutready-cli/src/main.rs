@@ -93,8 +93,7 @@ fn run(args: &[String]) -> Result<ExitCode, Usage> {
                 _ => return Err(usage("register takes only --force")),
             };
             let Some(dir) = discovery::default_dir() else {
-                eprintln!("cutready-cli register: no per-user config directory");
-                return Ok(ExitCode::FAILURE);
+                return Ok(no_config_dir());
             };
             let result = discovery::Registration::current()
                 .and_then(|install| Ok((discovery::register(&dir, &install, force)?, install)));
@@ -110,8 +109,7 @@ fn run(args: &[String]) -> Result<ExitCode, Usage> {
                 return Err(usage("discover takes no arguments"));
             }
             let Some(dir) = discovery::default_dir() else {
-                eprintln!("cutready-cli discover: no per-user config directory");
-                return Ok(ExitCode::FAILURE);
+                return Ok(no_config_dir());
             };
             Ok(match discovery::discover(&dir, CONTRACT_VERSION) {
                 Ok(found) => print_json(&found.to_install().to_value(&ctx()), true),
@@ -264,6 +262,10 @@ fn reviews_json(reviews: &[RunReview]) -> Value {
             .map(|review| review.to_value(&ctx()))
             .collect(),
     )
+}
+
+fn no_config_dir() -> ExitCode {
+    failed(&Failure::other("no per-user config directory"))
 }
 
 /// Prints the `CommandFailure` and fails.

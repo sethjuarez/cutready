@@ -99,16 +99,21 @@ fn undo_removes_a_created_document() {
     let mut server = Server::new(dir.path(), &clock).unwrap();
     ready(&mut server);
     let run = begin(&mut server, 2);
-    write_note(&mut server, 3, &run, Value::Null, "# Run\n");
+    let applied = write_note(&mut server, 3, &run, Value::Null, "# Run\n");
+    assert_eq!(applied["run_id"], json!(run));
     let pending = review(&mut server, 4);
     let through = pending[0]["documents"][0]["through_seq"].clone();
 
-    tool(
+    let undone = tool(
         &mut server,
         5,
         "undo",
         json!({ "run_id": run, "path": "notes/plan.md", "through_seq": through }),
         false,
+    );
+    assert_eq!(
+        undone,
+        json!({ "run_id": run, "path": "notes/plan.md", "resolved": "undo" })
     );
     assert!(!dir.path().join("notes/plan.md").exists());
     assert!(review(&mut server, 6).is_empty());
@@ -154,7 +159,11 @@ fn undo_of_a_document_changed_since_conflicts_and_changes_nothing() {
         json!({ "run_id": run, "path": "notes/plan.md", "through_seq": through }),
         true,
     );
-    assert_eq!(refused["error"]["code"], json!("undo_conflict"), "{refused}");
+    assert_eq!(
+        refused["error"]["code"],
+        json!("undo_conflict"),
+        "{refused}"
+    );
     let on_disk = std::fs::read_to_string(dir.path().join("notes/plan.md")).unwrap();
     assert_eq!(on_disk, "# Theirs\n");
 }
