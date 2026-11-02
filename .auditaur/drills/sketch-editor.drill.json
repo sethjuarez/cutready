@@ -22,7 +22,7 @@
         { "click": { "testId": "explorer-item-walkthrough.sk" } },
         { "expect": { "label": "Sketch title" }, "toHaveValue": "Dashboard Walkthrough" },
         { "expect": { "testId": "planning-row-2" }, "toBeVisible": true },
-        { "expectIpc": "get_sketch", "status": "ok" },
+        { "expectIpc": "get_sketch_versioned", "status": "ok" },
         { "expectNoErrors": true }
       ]
     },

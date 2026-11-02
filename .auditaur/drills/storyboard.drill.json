@@ -22,7 +22,7 @@
         { "click": { "testId": "explorer-item-tour.sb" } },
         { "expect": { "label": "Storyboard title" }, "toHaveValue": "Product Tour" },
         { "expect": { "role": "button", "name": "Remove Aurora Onboarding from storyboard", "exact": true }, "toExist": true },
-        { "expectIpc": "get_storyboard", "status": "ok" },
+        { "expectIpc": "get_storyboard_versioned", "status": "ok" },
         { "expectNoErrors": true }
       ]
     },

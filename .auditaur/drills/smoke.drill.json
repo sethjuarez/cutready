@@ -31,7 +31,7 @@
       "steps": [
         { "click": { "text": "Plan the demo" } },
         { "expect": "body", "toContainText": "editable production plan", "timeoutMs": 15000 },
-        { "expectIpc": { "pattern": "^get_sketch$" }, "name": "the sketch was read over instrumented IPC" },
+        { "expectIpc": { "pattern": "^get_sketch_versioned$" }, "name": "the sketch was read over instrumented IPC" },
         { "expectNoTelemetry": { "pattern": "editable production plan|scan the planning table" }, "name": "sketch narrative and actions are redacted" }
       ]
     }
