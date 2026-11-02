@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { invoke } from "../services/tauri";
+import { commandErrorText, invoke } from "../services/tauri";
 import { RefreshCw } from "lucide-react";
 import type { AppSettings } from "../hooks/useSettings";
 import type { TokenResponse } from "../types/auth";
@@ -101,7 +101,7 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
         if (saved) loadResources(saved.subscriptionId);
       }
     } catch (e) {
-      setError(`Failed to list subscriptions: ${e}`);
+      setError(`Failed to list subscriptions: ${commandErrorText(e)}`);
     } finally {
       setLoading("");
     }
@@ -129,7 +129,7 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
         if (saved) loadProjects(saved);
       }
     } catch (e) {
-      setError(`Failed to list AI resources: ${e}`);
+      setError(`Failed to list AI resources: ${commandErrorText(e)}`);
     } finally {
       setLoading("");
     }
@@ -155,7 +155,7 @@ export function FoundryResourcePicker({ settings, updateSetting }: Props) {
         await selectProject(proj[0]);
       }
     } catch (e) {
-      setError(`Failed to list projects: ${e}`);
+      setError(`Failed to list projects: ${commandErrorText(e)}`);
     } finally {
       setLoading("");
     }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Bot, Check, CheckCircle, Copy, ExternalLink, FlaskConical, Info, LogIn, RefreshCw } from "lucide-react";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { useSettings, type AgentPreset } from "../../hooks/useSettings";
-import { invoke } from "../../services/tauri";
+import { commandErrorText, invoke } from "../../services/tauri";
 import { inputClass } from "../../styles";
 import { BUILT_IN_AGENTS } from "../../agents/builtInAgents";
 import { baseModelFromOwnedBy } from "../../utils/providerConfig";
@@ -148,7 +148,7 @@ function CopilotConnect() {
     try {
       await invoke("copilot_sign_in");
     } catch (e) {
-      setError(String(e));
+      setError(commandErrorText(e));
     }
     setPhase("loading");
     await probe();

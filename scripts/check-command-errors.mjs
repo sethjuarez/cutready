@@ -5,9 +5,8 @@
 // add any. Caps only go down: run `node scripts/check-command-errors.mjs
 // --update` after converting commands.
 //
-// project.rs and agent.rs are fully converted. Their only String commands are
-// the sign-in/token commands named in STRING_ALLOWLIST, which need separate
-// sign-off before they change.
+// project.rs and agent.rs are fully converted, sign-in/token commands
+// included (F7b), so STRING_ALLOWLIST keeps them at zero String commands.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,17 +18,7 @@ export const COMMANDS_DIR = "src-tauri/src/commands";
 /** Files where only the listed commands may still return `Result<_, String>`. */
 export const STRING_ALLOWLIST = {
   "src-tauri/src/commands/project.rs": [],
-  "src-tauri/src/commands/agent.rs": [
-    "copilot_sign_in",
-    "azure_device_code_start",
-    "azure_device_code_poll",
-    "azure_token_refresh",
-    "azure_browser_auth_start",
-    "azure_browser_auth_complete",
-    "list_azure_subscriptions",
-    "list_azure_ai_resources",
-    "list_foundry_projects",
-  ],
+  "src-tauri/src/commands/agent.rs": [],
 };
 
 const COMMAND_ATTR = /#\[\s*(?:tauri::command|auditaur_command)\b/g;

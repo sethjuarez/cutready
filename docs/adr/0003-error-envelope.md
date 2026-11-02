@@ -16,7 +16,7 @@ Commands used to fail with free-form strings, so clients matched on message text
 ## Consequences
 
 - New failure modes should add a named code and test cases to the contract. Unknown codes still deserialize (`CmdErrorCode::Other`) for forward compatibility.
-- Many existing app commands still return `String`. They move to `CmdError` as their modules are touched. `project.rs` and `agent.rs` moved in F7, keeping each old string as `message` under `command_failed`; only their sign-in/token commands still return `String`.
+- Many existing app commands still return `String`. They move to `CmdError` as their modules are touched. `project.rs` and `agent.rs` moved in F7, keeping each old string as `message` under `command_failed`. Their sign-in/token commands followed in F7b the same way: `command_failed` with the text unchanged, and no auth-flow changes. Typed auth codes (such as an expired or denied sign-in) are tracked in [a follow-up issue](https://github.com/sethjuarez/cutready/issues/330).
 
 ## Enforcement
 

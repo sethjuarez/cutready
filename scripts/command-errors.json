@@ -1,5 +1,4 @@
 {
-  "src-tauri/src/commands/agent.rs": 9,
   "src-tauri/src/commands/diagnostics.rs": 4,
   "src-tauri/src/commands/draftline.rs": 5,
   "src-tauri/src/commands/export.rs": 5,
