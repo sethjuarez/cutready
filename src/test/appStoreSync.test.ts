@@ -560,7 +560,7 @@ describe("appStore remote sync status", () => {
     const refresh = useSyncStore.getState().refreshSyncStatus();
 
     // The workspace closes while the sync request is still in flight.
-    useAppStore.getState().closeProject();
+    await useAppStore.getState().closeProject();
     // A sentinel a subsequent (empty-workspace) refresh would own; the stale
     // continuation must not clobber it.
     useSyncStore.setState({ syncStatus: { ahead: 9, behind: 9 } });

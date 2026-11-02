@@ -232,7 +232,7 @@ describe("domain stores", () => {
     useAppStore.setState({ currentProject: alpha });
     dirtyDomainStores();
 
-    useAppStore.getState().closeProject();
+    void useAppStore.getState().closeProject({ force: true });
 
     expect(useAppStore.getState().currentProject).toBeNull();
     expectVersioningReset();
@@ -299,7 +299,7 @@ describe("domain stores", () => {
     useAppStore.setState({ currentProject: alpha });
     dirtyChatStore();
 
-    useAppStore.getState().closeProject();
+    void useAppStore.getState().closeProject({ force: true });
 
     expect(useAppStore.getState().currentProject).toBeNull();
     expectChatReset(["chatMessages", "chatSessionPath", "chatLoading", "chatError", "pendingChatPrompt"]);
@@ -396,7 +396,7 @@ describe("domain stores", () => {
     useAppStore.setState({ currentProject: alpha });
     useRecordingStore.setState(dirtyRecording);
 
-    useAppStore.getState().closeProject();
+    void useAppStore.getState().closeProject({ force: true });
 
     expect(useAppStore.getState().currentProject).toBeNull();
     expectRecordingUntouched();

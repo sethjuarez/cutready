@@ -32,6 +32,8 @@ export const INSTALL_SETTLE_MS = 100;
 /** How long a project change or rename waits for queued saves before going ahead. */
 export const SETTLE_TIMEOUT_MS = 5000;
 const MAX_COPY_ATTEMPTS = 50;
+/** How often a conflict reload is offered again to an editor that keeps refusing it. */
+const MAX_RELOAD_ATTEMPTS = 5;
 
 /** Detail of `cutready:document-refreshed`; cancel the event to keep unsaved edits shown. */
 export interface DocumentRefreshedDetail extends SyncedDocument {
@@ -56,6 +58,14 @@ export class DocumentSaveDroppedError extends Error {
   constructor(readonly path: string) {
     super(`${path} belongs to a project that is no longer open`);
     this.name = "DocumentSaveDroppedError";
+  }
+}
+
+/** Open documents didn't finish saving in time, so a project change or rename didn't happen. */
+export class DocumentsUnsettledError extends Error {
+  constructor() {
+    super("CutReady couldn't finish saving open documents. Nothing was moved; try again.");
+    this.name = "DocumentsUnsettledError";
   }
 }
 
@@ -253,19 +263,33 @@ async function resolveConflict(
   throw new DocumentConflictError(path, copy.path);
 }
 
-async function reloadAfterConflict(entry: DocumentVersionEntry, path: string, copyPath: string) {
+/**
+ * Shows the document as it is on disk once every editor accepts it. An editor
+ * with unsaved typing refuses: its edits are written out (still into the
+ * copy) and the reload is offered again after them. Until an editor shows the
+ * reload, saves keep going to the copy.
+ */
+async function reloadAfterConflict(entry: DocumentVersionEntry, path: string, copyPath: string, attempt = 0) {
   const kind = documentKind(path);
   try {
     ensureCurrent(entry, path);
     const reloaded = await documentsIpc.read(kind, path);
     ensureCurrent(entry, path);
     entry.loadGeneration += 1;
-    install(kind, path, reloaded, false);
-    // Saves made before the editor shows the reload still go to the copy.
-    globalThis.setTimeout(() => {
-      entry.epoch += 1;
-      adopt(entry, reloaded);
-    }, INSTALL_SETTLE_MS);
+    if (install(kind, path, reloaded)) {
+      // Saves made before the editor shows the reload still go to the copy.
+      globalThis.setTimeout(() => {
+        entry.epoch += 1;
+        adopt(entry, reloaded);
+      }, INSTALL_SETTLE_MS);
+    } else if (attempt < MAX_RELOAD_ATTEMPTS) {
+      // Flushing queues the editors' saves on this document now; the retry runs after them.
+      void flushEditorWrites().catch(() => undefined);
+      entry.inFlight += 1;
+      const retry = entry.tail.then(() => reloadAfterConflict(entry, path, copyPath, attempt + 1));
+      entry.tail = retry.catch(() => undefined);
+    }
+    if (attempt > 0) return;
     const app = useAppStore.getState();
     await (kind === "sketch" ? app.loadSketches() : kind === "storyboard" ? app.loadStoryboards() : app.loadNotes());
     useToastStore.getState().show(
@@ -279,13 +303,13 @@ async function reloadAfterConflict(entry: DocumentVersionEntry, path: string, co
 }
 
 /**
- * Shows a document read from disk in the editors that have it open. When
- * `cancelable`, an editor with unsaved edits may cancel to keep them on
- * screen; then nothing is installed and this returns false.
+ * Shows a document read from disk in the editors that have it open. An editor
+ * with unsaved edits may cancel to keep them on screen; then nothing is
+ * installed and this returns false.
  */
-function install(kind: DocumentKind, path: string, loaded: Versioned<unknown>, cancelable: boolean): boolean {
+function install(kind: DocumentKind, path: string, loaded: Versioned<unknown>): boolean {
   const detail: DocumentRefreshedDetail = { path, document: loaded.document, content: loaded.content, version: loaded.version };
-  if (!window.dispatchEvent(new CustomEvent("cutready:document-refreshed", { detail, cancelable }))) return false;
+  if (!window.dispatchEvent(new CustomEvent("cutready:document-refreshed", { detail, cancelable: true }))) return false;
   const app = useAppStore.getState();
   if (kind === "sketch" && app.activeSketchPath === path) {
     useAppStore.setState({ activeSketch: loaded.document as typeof app.activeSketch });
@@ -323,26 +347,26 @@ async function refreshDocument(path: string) {
     if (entry.editRevision !== editRevision || entry.loadGeneration !== loadGeneration || !isClean(entry)) continue;
     entry.loadGeneration += 1;
     // An editor that kept its unsaved edits saves them against the old base, which merges.
-    if (install(kind, path, loaded, true)) adoptWhenSettled(entry, loaded);
+    if (install(kind, path, loaded)) adoptWhenSettled(entry, loaded);
     return;
   }
 }
 
-/** Waits for `promise`, but no longer than `timeoutMs`. */
-async function within(promise: Promise<unknown>, timeoutMs: number): Promise<void> {
+/** Waits for `promise`, but no longer than `timeoutMs`; false if it timed out. Rejections pass through. */
+async function within(promise: Promise<unknown>, timeoutMs: number): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const timedOut = new Promise<void>((resolve) => {
-    timer = globalThis.setTimeout(resolve, timeoutMs);
+  const timedOut = new Promise<boolean>((resolve) => {
+    timer = globalThis.setTimeout(() => resolve(false), timeoutMs);
   });
   try {
-    await Promise.race([promise, timedOut]);
+    return await Promise.race([promise.then(() => true), timedOut]);
   } finally {
     globalThis.clearTimeout(timer);
   }
 }
 
-/** Waits until every queued save and conflict reload has finished, or `timeoutMs` passes. */
-function drainDocumentQueues(timeoutMs: number): Promise<void> {
+/** Waits until every queued save and conflict reload has finished; false if `timeoutMs` passed first. */
+function drainDocumentQueues(timeoutMs: number): Promise<boolean> {
   return within((async () => {
     for (;;) {
       const entries = documentEntries();
@@ -355,24 +379,51 @@ function drainDocumentQueues(timeoutMs: number): Promise<void> {
 }
 
 /**
- * Before opening, switching or closing a project: writes out pending editor
- * edits, waits (at most `timeoutMs` each) for them and queued saves, then
- * stops this project's saves and loads. Call the returned function if the
- * project stays open after all; once another project opens they stay stopped.
+ * Writes out pending editor edits and waits (at most `timeoutMs` each) for
+ * them and every queued save. Throws if an edit couldn't be saved or the wait
+ * timed out; nothing is stopped then, so the caller can give up and retry.
+ */
+async function settleDocumentSaves(timeoutMs: number): Promise<void> {
+  if (!(await within(flushEditorWrites(), timeoutMs)) || !(await drainDocumentQueues(timeoutMs))) {
+    throw new DocumentsUnsettledError();
+  }
+}
+
+/**
+ * Before opening, switching or closing a project: settles saves (throws if
+ * they don't settle), then stops this project's saves and loads. Call the
+ * returned function if the project stays open after all; once another
+ * project opens they stay stopped.
  */
 export async function quiesceDocumentSaves(timeoutMs = SETTLE_TIMEOUT_MS): Promise<() => void> {
-  await within(flushEditorWrites().catch(() => undefined), timeoutMs);
-  await drainDocumentQueues(timeoutMs);
+  await settleDocumentSaves(timeoutMs);
   return closeDocumentScope();
 }
 
 /**
- * Before renaming project files: writes out pending editor edits (throws if
- * any can't be saved, so nothing is renamed) and waits for queued saves.
+ * Quiesces saves for a project change. If they don't settle, shows an error
+ * toast and returns null: the caller keeps the current project open.
+ */
+export async function beginProjectChange(timeoutMs = SETTLE_TIMEOUT_MS): Promise<(() => void) | null> {
+  try {
+    return await quiesceDocumentSaves(timeoutMs);
+  } catch (error) {
+    console.error("Open documents didn't finish saving:", error);
+    useToastStore.getState().show(
+      "CutReady couldn't finish saving your open documents, so the project stayed open. Try again.",
+      10000,
+      "error",
+    );
+    return null;
+  }
+}
+
+/**
+ * Before renaming project files: settles saves, and throws if they don't
+ * settle, so nothing is renamed and the old path keeps its saves.
  */
 export async function settleBeforeRename(timeoutMs = SETTLE_TIMEOUT_MS): Promise<void> {
-  await flushEditorWrites();
-  await drainDocumentQueues(timeoutMs);
+  await settleDocumentSaves(timeoutMs);
 }
 
 /** After a rename: saves of `from` stop, and saves of `to` continue from its synced text. */

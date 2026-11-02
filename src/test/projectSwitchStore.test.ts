@@ -362,7 +362,10 @@ describe("project switch store side effects", () => {
       useAppStore.setState({ error: "folder is busy" });
     });
     const realCloseProject = useAppStore.getState().closeProject;
-    const closeProject = vi.fn(() => useAppStore.setState({ currentProject: null }));
+    const closeProject = vi.fn(async () => {
+      useAppStore.setState({ currentProject: null });
+      return true;
+    });
     setDraftlineWorkspacePath("D:\\workspace");
     mockInvoke.mockImplementation((command: string) =>
       command === "move_project_folder"
@@ -583,7 +586,7 @@ describe("project switch store side effects", () => {
     const load = useVersioningStore.getState().loadVersions();
 
     // The workspace closes while inspect is still pending.
-    useAppStore.getState().closeProject();
+    await useAppStore.getState().closeProject();
     // A sentinel the new (empty) workspace owns; the stale load must not clobber it.
     useVersioningStore.setState({ versions: sentinelVersions });
 

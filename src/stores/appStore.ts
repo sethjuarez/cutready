@@ -13,7 +13,7 @@ import {
 } from "../services/draftlineErrors";
 import { recordActivityEntries } from "../services/telemetry";
 import { useToastStore } from "./toastStore";
-import { loadDocument, quiesceDocumentSaves, saveDocument } from "../services/documentSaves";
+import { beginProjectChange, loadDocument, saveDocument } from "../services/documentSaves";
 import { getStoryboardSketchPaths } from "../utils/storyboard";
 import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
 import type {
@@ -294,14 +294,15 @@ export interface AppStoreState {
    * then reopen it there. Throws (without changing anything) when the move is refused.
    */
   moveProjectFolder: (to: string) => Promise<MoveProjectFolderResult>;
-  closeProject: () => void;
+  /** Closes the project once open documents are saved (false if they couldn't be; it stays open). `force` closes at once. */
+  closeProject: (options?: { force?: boolean }) => Promise<boolean>;
 
   // ── Multi-project actions ──────────────────────────────────
 
   /** Load the list of projects in the current repo. */
   loadProjects: () => Promise<void>;
-  /** Switch to a different project within the repo. */
-  switchProject: (projectPath: string) => Promise<void>;
+  /** Switch to a different project within the repo (false if open documents couldn't be saved first). */
+  switchProject: (projectPath: string) => Promise<boolean>;
   /** Create a new project within the current repo. */
   createProjectInRepo: (name: string, description?: string) => Promise<void>;
   /** Delete a project from the repo. */
@@ -939,7 +940,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   createProject: async (path) => {
     bumpRemoteDetectionGeneration();
     set({ loading: true });
-    const releaseDocuments = await quiesceDocumentSaves();
+    const releaseDocuments = await beginProjectChange();
+    if (!releaseDocuments) return set({ loading: false });
     try {
       const project = await invoke<ProjectView>("create_project_folder", { path });
       beginWorkspaceGeneration(project.repo_root);
@@ -983,7 +985,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   openProject: async (path, options) => {
     bumpRemoteDetectionGeneration();
     set({ loading: true, adoptionPrompt: null });
-    const releaseDocuments = await quiesceDocumentSaves();
+    const releaseDocuments = await beginProjectChange();
+    if (!releaseDocuments) return set({ loading: false });
     try {
       const project = await invoke<ProjectView>("open_project_folder", { path, adopt: options?.adopt ?? false });
       beginWorkspaceGeneration(project.repo_root);
@@ -1083,7 +1086,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         // Content and local history are split; stop writing until the user repairs it.
         set({ moveFolderDialogOpen: false });
         // Keep editor flushes suppressed so unmounting editors can't write into the split state.
-        get().closeProject();
+        void get().closeProject({ force: true });
         throw err;
       }
       clearSuppressedEditorFlushes(openPaths);
@@ -1100,7 +1103,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     // openProject installs a fresh project object only when it succeeds.
     if (!reopened || reopened === project) {
       const reason = get().error ?? "it didn't open";
-      get().closeProject();
+      void get().closeProject({ force: true });
       useToastStore.getState().show(
         `Moved the project to ${result.projectRoot}, but couldn't reopen it (${reason}). Open it from Recent Projects.`,
         10000,
@@ -1120,15 +1123,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     return result;
   },
 
-  closeProject: () => {
+  closeProject: async (options) => {
+    if (!options?.force && !(await beginProjectChange())) return false;
     bumpRemoteDetectionGeneration();
     invoke("close_project").catch(console.error);
     beginWorkspaceGeneration(null);
     localStorage.removeItem("cutready:lastProject");
-    // Clear workspace settings
-    import("../hooks/useSettings").then(({ useSettingsStore }) => {
-      useSettingsStore.getState()._clearWorkspaceSettings();
-    });
+    import("../hooks/useSettings").then(({ useSettingsStore }) => useSettingsStore.getState()._clearWorkspaceSettings());
     useVersioningStore.setState(resetVersioningState());
     useSyncStore.setState(resetSyncState());
     useChatStore.setState({
@@ -1144,17 +1145,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       isMultiProject: false,
       view: "home",
       sketches: [],
-      activeSketchPath: null,
-      activeSketch: null,
       storyboards: [],
-      activeStoryboardPath: null,
-      activeStoryboard: null,
       notes: [],
-      activeNotePath: null,
-      activeNoteContent: null,
-      activeNoteLocked: false,
       chatArtifacts: [],
-      activeChatArtifactPath: null,
+      ...clearActiveDocumentState(),
       assets: [],
       narrationAssets: [],
       activityLog: [],
@@ -1166,6 +1160,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       splitActiveTabId: null,
       activeEditorGroup: "main",
     });
+    return true;
   },
 
   // ── Multi-project actions ──────────────────────────────────
@@ -1184,7 +1179,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   switchProject: async (projectPath) => {
     set({ loading: true, projectSwitching: true });
-    const releaseDocuments = await quiesceDocumentSaves();
+    const releaseDocuments = await beginProjectChange();
+    if (!releaseDocuments) {
+      set({ loading: false, projectSwitching: false });
+      return false;
+    }
     try {
       // Save current workspace state before switching
       const { openTabs, activeTabId, currentProject } = get();
@@ -1246,6 +1245,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       releaseDocuments();
       set({ loading: false, projectSwitching: false });
     }
+    return true;
   },
 
   createProjectInRepo: async (name, description) => {
