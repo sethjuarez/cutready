@@ -452,6 +452,103 @@ describe("document saves across projects", () => {
   });
 });
 
+describe("conflict redirects", () => {
+  let cleanup: () => void = () => undefined;
+  afterEach(() => cleanup());
+
+  /**
+   * A document whose first save conflicts, open in an editor that refuses the
+   * reload while it has typing (`pending`) and saves that typing when flushed.
+   */
+  async function conflictInRefusingEditor(flush: (state: { pending: string | null }) => string | null) {
+    await openSketch(sketch("v0"), "h0");
+    let conflicted = false;
+    const saved: string[] = [];
+    ipc.save.mockImplementation((_: string, args: Record<string, unknown>) => {
+      saved.push(`${args.relativePath} ${String(args.title)}`);
+      if (args.relativePath !== "demo.sk") return Promise.resolve(versioned(sketch("copy"), `c${saved.length}`));
+      if (conflicted) return Promise.resolve(versioned(sketch("next"), "h10"));
+      conflicted = true;
+      return Promise.reject({ code: "stale_document" });
+    });
+    ipc.createCopy.mockResolvedValue({ document: "", content: "", version: "c0", merged: false });
+    ipc.read.mockResolvedValue(versioned(sketch("theirs"), "h9"));
+    const state = { pending: null as string | null, offers: [] as boolean[] };
+    const editor = (event: Event) => {
+      state.offers.push(state.pending === null);
+      if (state.pending !== null) event.preventDefault();
+    };
+    window.addEventListener("cutready:document-refreshed", editor);
+    const unregister = registerEditorFlush(async () => {
+      const title = flush(state);
+      if (title) await saveDocument("update_sketch_title", { relativePath: "demo.sk", title });
+    });
+    cleanup = () => {
+      window.removeEventListener("cutready:document-refreshed", editor);
+      unregister();
+    };
+    const show = vi.spyOn(useToastStore.getState(), "show");
+    show.mockClear();
+    const conflict = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "mine" });
+    state.pending = "typed";
+    await expect(conflict).rejects.toSatisfy(isDocumentConflict);
+    const copyPath = () => ipc.createCopy.mock.calls[0][0] as string;
+    return { state, saved, show, copyPath, closeEditor: () => window.removeEventListener("cutready:document-refreshed", editor) };
+  }
+
+  it("keeps offering the reload after each save of the editor's typing, however many it takes", async () => {
+    let typed = 0;
+    // The user keeps typing: every flush saves one edit and leaves the next one pending, eight times.
+    const { state, saved, show, copyPath } = await conflictInRefusingEditor((editor) => {
+      const title = editor.pending;
+      editor.pending = typed < 8 ? `t${++typed}` : null;
+      return title;
+    });
+    await vi.waitFor(() => expect(useAppStore.getState().activeSketch?.title).toBe("theirs"));
+    expect(state.offers).toEqual([...Array(8).fill(false), true]);
+    expect(saved.slice(1)).toEqual([
+      `${copyPath()} mine`,
+      `${copyPath()} typed`,
+      ...Array.from({ length: 8 }, (_, i) => `${copyPath()} t${i + 1}`),
+    ]);
+    expect(show).toHaveBeenCalledWith(expect.stringContaining(`being saved to ${copyPath()}`), 10000, "warning");
+
+    await settle();
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "after" });
+    expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: "demo.sk", expectedVersion: "h9" }));
+  });
+
+  it("ends the redirect when the document is reopened from disk", async () => {
+    // The editor's typing never gets saved, so the reload is never accepted.
+    const { saved, copyPath, closeEditor } = await conflictInRefusingEditor(() => null);
+    await vi.waitFor(() => expect(ipc.read).toHaveBeenCalledTimes(2));
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "still mine" });
+    expect(saved[saved.length - 1]).toBe(`${copyPath()} still mine`);
+
+    closeEditor();
+    await vi.waitFor(() => expect(entry().inFlight).toBe(0));
+    expect(await loadDocument<Sketch>("sketch", "demo.sk")).toMatchObject({ title: "theirs" });
+    await settle();
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "reopened" });
+    expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: "demo.sk", expectedVersion: "h9" }));
+  });
+
+  it("ends the redirect when a refresh shows the document from disk", async () => {
+    const { state, saved, copyPath } = await conflictInRefusingEditor(() => null);
+    await vi.waitFor(() => expect(ipc.read).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(entry().inFlight).toBe(0));
+    expect(saved[saved.length - 1]).toBe(`${copyPath()} mine`);
+
+    // The typing was discarded; the next refresh is accepted.
+    state.pending = null;
+    await refreshOpenDocuments();
+    expect(useAppStore.getState().activeSketch?.title).toBe("theirs");
+    await settle();
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "refreshed" });
+    expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: "demo.sk", expectedVersion: "h9" }));
+  });
+});
+
 describe("conflict copies that can't be written", () => {
   async function conflictWith(setup: () => void) {
     await openSketch(sketch("v0"), "h0");

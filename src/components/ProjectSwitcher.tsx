@@ -146,8 +146,11 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
     setDeleting(true);
     try {
       const remaining = useAppStore.getState().projects.filter((p) => p.path !== project.path);
-      // Leave the project first; if its documents can't be saved, it stays and isn't deleted.
-      if (isActive && remaining.length > 0 && !(await switchProject(remaining[0].path))) return;
+      // Leave the project first; if that fails, it stays open and isn't deleted.
+      if (isActive && remaining.length > 0) {
+        const leaving = useAppStore.getState().currentProject?.root;
+        if (!(await switchProject(remaining[0].path)) || useAppStore.getState().currentProject?.root === leaving) return;
+      }
       const releaseDocuments = isActive && remaining.length === 0 ? await beginProjectChange() : () => undefined;
       if (!releaseDocuments) return;
       try {

@@ -32,8 +32,6 @@ export const INSTALL_SETTLE_MS = 100;
 /** How long a project change or rename waits for queued saves before going ahead. */
 export const SETTLE_TIMEOUT_MS = 5000;
 const MAX_COPY_ATTEMPTS = 50;
-/** How often a conflict reload is offered again to an editor that keeps refusing it. */
-const MAX_RELOAD_ATTEMPTS = 5;
 
 /** Detail of `cutready:document-refreshed`; cancel the event to keep unsaved edits shown. */
 export interface DocumentRefreshedDetail extends SyncedDocument {
@@ -102,15 +100,28 @@ function adopt(entry: DocumentVersionEntry, synced: SyncedDocument) {
   entry.baseVersion = synced.version;
 }
 
+const isRedirected = (entry: DocumentVersionEntry) => entry.redirect?.epoch === entry.epoch;
+
+/** Sends later saves to the document again, based on `loaded`; saves already queued still go to the copy. */
+function endRedirect(entry: DocumentVersionEntry, loaded: SyncedDocument) {
+  entry.epoch += 1;
+  entry.pendingReload = undefined;
+  adopt(entry, loaded);
+}
+
 /**
  * Makes `loaded` the base once its editor has had time to render it, unless a
  * save or load started meanwhile. Until then the older base stays: a save
  * built from content the editor showed before the install still merges.
+ * `installed` means every editor accepted `loaded`; then a conflict redirect
+ * ends regardless, since the editors now show the document as it is on disk.
  */
-function adoptWhenSettled(entry: DocumentVersionEntry, loaded: SyncedDocument) {
+function adoptWhenSettled(entry: DocumentVersionEntry, loaded: SyncedDocument, installed = false) {
   const generation = entry.loadGeneration;
   globalThis.setTimeout(() => {
-    if (entry.loadGeneration === generation && entry.inFlight === 0) adopt(entry, loaded);
+    const quiet = entry.loadGeneration === generation && entry.inFlight === 0;
+    if (isRedirected(entry) && (installed || quiet)) endRedirect(entry, loaded);
+    else if (quiet) adopt(entry, loaded);
   }, INSTALL_SETTLE_MS);
 }
 
@@ -142,6 +153,12 @@ export function saveDocument<T>(command: DocumentSaveCommand, args: SaveArgs): P
   entry.loadGeneration += 1;
   const run = entry.tail.then(() => runSave<T>(entry, command, args, pathKey, revision, epoch));
   entry.tail = run.catch(() => undefined);
+  const reload = entry.pendingReload;
+  if (reload) {
+    entry.pendingReload = undefined;
+    entry.inFlight += 1;
+    entry.tail = entry.tail.then(reload).catch(() => undefined);
+  }
   return run;
 }
 
@@ -258,7 +275,7 @@ async function resolveConflict(
   entry.redirect = { epoch, path: copy.path, content: local.content, version: local.version };
   void flushEditorWrites().catch(() => undefined);
   entry.inFlight += 1;
-  const reload = entry.tail.then(() => reloadAfterConflict(entry, path, copy.path));
+  const reload = entry.tail.then(() => reloadAfterConflict(entry, path, copy.path, epoch));
   entry.tail = reload.catch(() => undefined);
   throw new DocumentConflictError(path, copy.path);
 }
@@ -266,34 +283,36 @@ async function resolveConflict(
 /**
  * Shows the document as it is on disk once every editor accepts it. An editor
  * with unsaved typing refuses: its edits are written out (still into the
- * copy) and the reload is offered again after them. Until an editor shows the
- * reload, saves keep going to the copy.
+ * copy) and the reload is offered again after the next save of this document,
+ * however often that takes. Until the editors show the document as it is on
+ * disk (this reload, a refresh or reopening it), saves keep going to the copy.
  */
-async function reloadAfterConflict(entry: DocumentVersionEntry, path: string, copyPath: string, attempt = 0) {
+async function reloadAfterConflict(entry: DocumentVersionEntry, path: string, copyPath: string, epoch: number, first = true) {
   const kind = documentKind(path);
   try {
+    // A refresh or reopen already showed the document from disk.
+    if (entry.epoch !== epoch) return;
     ensureCurrent(entry, path);
     const reloaded = await documentsIpc.read(kind, path);
     ensureCurrent(entry, path);
+    if (entry.epoch !== epoch) return;
     entry.loadGeneration += 1;
-    if (install(kind, path, reloaded)) {
+    const installed = install(kind, path, reloaded);
+    if (installed) {
       // Saves made before the editor shows the reload still go to the copy.
-      globalThis.setTimeout(() => {
-        entry.epoch += 1;
-        adopt(entry, reloaded);
-      }, INSTALL_SETTLE_MS);
-    } else if (attempt < MAX_RELOAD_ATTEMPTS) {
-      // Flushing queues the editors' saves on this document now; the retry runs after them.
+      adoptWhenSettled(entry, reloaded, true);
+    } else {
+      // Set before flushing: the editors' saves queue now and the retry runs after them.
+      entry.pendingReload = () => reloadAfterConflict(entry, path, copyPath, epoch, false);
       void flushEditorWrites().catch(() => undefined);
-      entry.inFlight += 1;
-      const retry = entry.tail.then(() => reloadAfterConflict(entry, path, copyPath, attempt + 1));
-      entry.tail = retry.catch(() => undefined);
     }
-    if (attempt > 0) return;
+    if (!first) return;
     const app = useAppStore.getState();
     await (kind === "sketch" ? app.loadSketches() : kind === "storyboard" ? app.loadStoryboards() : app.loadNotes());
     useToastStore.getState().show(
-      `${fileName(path)} changed outside CutReady while you were editing. Your edits were saved to ${fileName(copyPath)}.`,
+      installed
+        ? `${fileName(path)} changed outside CutReady while you were editing. Your edits were saved to ${fileName(copyPath)}.`
+        : `${fileName(path)} changed outside CutReady while you were editing. Your edits are being saved to ${fileName(copyPath)} until ${fileName(path)} reloads.`,
       10000,
       "warning",
     );
@@ -347,7 +366,7 @@ async function refreshDocument(path: string) {
     if (entry.editRevision !== editRevision || entry.loadGeneration !== loadGeneration || !isClean(entry)) continue;
     entry.loadGeneration += 1;
     // An editor that kept its unsaved edits saves them against the old base, which merges.
-    if (install(kind, path, loaded)) adoptWhenSettled(entry, loaded);
+    if (install(kind, path, loaded)) adoptWhenSettled(entry, loaded, true);
     return;
   }
 }

@@ -197,6 +197,19 @@ describe("project switch store side effects", () => {
     });
     expect(useAppStore.getState().projectSwitching).toBe(false);
     expect(useChatStore.getState().chatSessionPath).toBeNull();
+    await expect(switchPromise).resolves.toBe(true);
+  });
+
+  it("reports a failed switch and keeps the current project", async () => {
+    mockInvoke.mockImplementation((command: string) =>
+      command === "switch_project" ? Promise.reject(new Error("project is gone")) : Promise.resolve(null),
+    );
+    useAppStore.setState({ currentProject: oldProject });
+
+    await expect(useAppStore.getState().switchProject("beta")).resolves.toBe(false);
+
+    expect(useAppStore.getState().currentProject).toEqual(oldProject);
+    expect(useAppStore.getState()).toMatchObject({ error: expect.stringContaining("project is gone"), loading: false, projectSwitching: false });
   });
 
   it("clears stale chat when opening a project with no saved chat session", async () => {

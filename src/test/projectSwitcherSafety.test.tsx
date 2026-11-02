@@ -93,6 +93,10 @@ describe("ProjectSwitcher safety gates", () => {
   });
 
   it("switches away from the active project before deleting it", async () => {
+    mockSwitchProject.mockImplementationOnce(async () => {
+      useAppStore.setState({ currentProject: { ...project, root: "D:\\workspace\\beta", name: "Beta" } });
+      return true;
+    });
     act(() => {
       useAppStore.setState({
         switchProject: mockSwitchProject,
@@ -150,6 +154,36 @@ describe("ProjectSwitcher safety gates", () => {
     });
 
     expect(mockSwitchProject).toHaveBeenCalledWith("beta");
+    expect(mockDeleteProjectFromRepo).not.toHaveBeenCalled();
+  });
+
+  it("doesn't delete the active project when the switch left it open", async () => {
+    mockDeleteProjectFromRepo.mockClear();
+    act(() => {
+      useAppStore.setState({
+        switchProject: mockSwitchProject,
+        deleteProjectFromRepo: mockDeleteProjectFromRepo,
+        loadProjects: () => Promise.resolve(),
+        currentProject: project,
+        projects,
+        isMultiProject: true,
+      });
+    });
+
+    render(<ProjectSwitcher variant="title" />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /alpha/i }));
+    });
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Delete Alpha" }));
+    });
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: "Remove from list" }));
+    });
+
+    expect(mockSwitchProject).toHaveBeenCalledWith("beta");
+    expect(useAppStore.getState().currentProject).toBe(project);
     expect(mockDeleteProjectFromRepo).not.toHaveBeenCalled();
   });
 

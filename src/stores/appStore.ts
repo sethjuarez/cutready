@@ -301,7 +301,7 @@ export interface AppStoreState {
 
   /** Load the list of projects in the current repo. */
   loadProjects: () => Promise<void>;
-  /** Switch to a different project within the repo (false if open documents couldn't be saved first). */
+  /** Switch to a different project within the repo (false if it didn't switch). */
   switchProject: (projectPath: string) => Promise<boolean>;
   /** Create a new project within the current repo. */
   createProjectInRepo: (name: string, description?: string) => Promise<void>;
@@ -1185,7 +1185,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       return false;
     }
     try {
-      // Save current workspace state before switching
       const { openTabs, activeTabId, currentProject } = get();
       const { startedBranchFromSnapshot } = useVersioningStore.getState();
       await invoke("set_workspace_state", {
@@ -1241,6 +1240,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } catch (err) {
       console.error("Failed to switch project:", err);
       set({ error: commandErrorText(err) });
+      return false;
     } finally {
       releaseDocuments();
       set({ loading: false, projectSwitching: false });

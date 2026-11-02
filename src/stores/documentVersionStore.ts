@@ -33,6 +33,8 @@ export interface DocumentVersionEntry {
   epoch: number;
   tail: Promise<unknown>;
   redirect?: ConflictRedirect;
+  /** A conflict reload an editor refused; it runs again after the next save of this document. */
+  pendingReload?: () => Promise<void>;
 }
 
 const entries = new Map<string, DocumentVersionEntry>();
