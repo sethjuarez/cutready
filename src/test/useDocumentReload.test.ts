@@ -2,7 +2,10 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const load = vi.hoisted(() => vi.fn());
-vi.mock("../services/documentSaves", () => ({ loadDocument: (...args: unknown[]) => load(...args) }));
+const installed = vi.hoisted(() => vi.fn());
+vi.mock("../services/documentSaves", () => ({
+  readDocument: (...args: unknown[]) => load(...args).then((document: unknown) => ({ document, installed })),
+}));
 
 import { useDocumentReload } from "../hooks/useDocumentReload";
 
@@ -41,6 +44,7 @@ beforeEach(() => {
   pending = false;
   apply.mockReset();
   load.mockReset();
+  installed.mockReset();
 });
 
 describe("useDocumentReload", () => {
@@ -69,6 +73,7 @@ describe("useDocumentReload", () => {
     result.current();
     await act(async () => read.resolve({ title: "older" }));
     expect(apply).not.toHaveBeenCalled();
+    expect(installed).not.toHaveBeenCalled();
   });
 
   it("drops a delayed read when edits are pending by the time it resolves", async () => {
@@ -80,6 +85,7 @@ describe("useDocumentReload", () => {
     pending = true;
     await act(async () => read.resolve({ title: "older" }));
     expect(apply).not.toHaveBeenCalled();
+    expect(installed).not.toHaveBeenCalled();
   });
 
   it("drops a delayed read that a refresh overtook", async () => {
@@ -101,5 +107,6 @@ describe("useDocumentReload", () => {
     window.dispatchEvent(new CustomEvent("cutready:sketch-saved"));
     await act(async () => read.resolve({ title: "saved" }));
     expect(apply).toHaveBeenCalledWith({ title: "saved" });
+    expect(installed).toHaveBeenCalledTimes(1);
   });
 });

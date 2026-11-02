@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { loadDocument, type DocumentRefreshedDetail } from "../services/documentSaves";
+import { readDocument, type DocumentRefreshedDetail } from "../services/documentSaves";
 import type { DocumentKind } from "../ipc/documents";
 
 interface DocumentReloadOptions<T> {
@@ -31,11 +31,12 @@ export function useDocumentReload<T>({ kind, path, events, accepts, hasPending, 
     const reload = (event: Event) => {
       if (latest.current.accepts && !latest.current.accepts(event)) return;
       const generation = editGeneration.current;
-      loadDocument<T>(kind, path)
-        .then((document) => {
+      readDocument<T>(kind, path)
+        .then(({ document, installed }) => {
           if (editGeneration.current !== generation || latest.current.hasPending()) return;
           editGeneration.current += 1;
           latest.current.apply(document);
+          installed();
         })
         .catch(() => {});
     };

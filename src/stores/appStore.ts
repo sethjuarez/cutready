@@ -13,7 +13,7 @@ import {
 } from "../services/draftlineErrors";
 import { recordActivityEntries } from "../services/telemetry";
 import { useToastStore } from "./toastStore";
-import { beginProjectChange, loadDocument, saveDocument } from "../services/documentSaves";
+import { beginProjectChange, loadDocument, readDocument, saveDocument } from "../services/documentSaves";
 import { getStoryboardSketchPaths } from "../utils/storyboard";
 import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
 import type {
@@ -1318,12 +1318,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activeNoteLocked: false,
     });
     try {
-      const sketch = await loadDocument<Sketch>("sketch", sketchPath);
+      const { document: sketch, installed } = await readDocument<Sketch>("sketch", sketchPath);
       if (get().activeSketchPath !== sketchPath) return;
-      set({
-        activeSketchPath: sketchPath,
-        activeSketch: sketch,
-      });
+      set({ activeSketchPath: sketchPath, activeSketch: sketch });
+      installed();
       get().openTab({ type: "sketch", path: sketchPath, title: sketch.title });
     } catch (err) {
       console.error("Failed to open sketch:", err);
@@ -1440,7 +1438,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activeNoteLocked: false,
     });
     try {
-      const storyboard = await loadDocument<Storyboard>("storyboard", storyboardPath);
+      const { document: storyboard, installed } = await readDocument<Storyboard>("storyboard", storyboardPath);
       if (get().activeStoryboardPath !== storyboardPath) return;
       set({
         activeStoryboardPath: storyboardPath,
@@ -1448,6 +1446,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeSketchPath: null,
         activeSketch: null,
       });
+      installed();
       get().openTab({ type: "storyboard", path: storyboardPath, title: storyboard.title });
     } catch (err) {
       console.error("Failed to open storyboard:", err);
@@ -1630,8 +1629,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activeStoryboard: null,
     });
     try {
-      const [content, lock] = await Promise.all([
-        loadDocument<string>("note", notePath),
+      const [{ document: content, installed }, lock] = await Promise.all([
+        readDocument<string>("note", notePath),
         invoke<{ locked: boolean }>("get_note_lock", { relativePath: notePath }),
       ]);
       if (get().activeNotePath !== notePath) return;
@@ -1645,6 +1644,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeStoryboardPath: null,
         activeStoryboard: null,
       });
+      installed();
       get().openTab({ type: "note", path: notePath, title });
     } catch (err) {
       console.error("Failed to open note:", err);

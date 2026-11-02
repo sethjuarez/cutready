@@ -113,27 +113,53 @@ function endRedirect(entry: DocumentVersionEntry, loaded: SyncedDocument) {
  * Makes `loaded` the base once its editor has had time to render it, unless a
  * save or load started meanwhile. Until then the older base stays: a save
  * built from content the editor showed before the install still merges.
- * `installed` means every editor accepted `loaded`; then a conflict redirect
- * ends regardless, since the editors now show the document as it is on disk.
+ * A conflict redirect ends only when `installed` says every editor shows
+ * `loaded`; until then saves keep going to the copy.
  */
 function adoptWhenSettled(entry: DocumentVersionEntry, loaded: SyncedDocument, installed = false) {
   const generation = entry.loadGeneration;
+  const epoch = entry.epoch;
   globalThis.setTimeout(() => {
-    const quiet = entry.loadGeneration === generation && entry.inFlight === 0;
-    if (isRedirected(entry) && (installed || quiet)) endRedirect(entry, loaded);
-    else if (quiet) adopt(entry, loaded);
+    if (isRedirected(entry)) {
+      if (installed && entry.epoch === epoch) endRedirect(entry, loaded);
+    } else if (entry.loadGeneration === generation && entry.inFlight === 0) {
+      adopt(entry, loaded);
+    }
   }, INSTALL_SETTLE_MS);
 }
 
+/** A document read for an editor. */
+export interface LoadedDocument<T> {
+  document: T;
+  /**
+   * Call once the editor shows `document`. Only then does a conflict
+   * redirect end, so a read that is thrown away never sends saves of what the
+   * editor still shows back to the document.
+   */
+  installed: () => void;
+}
+
 /** Reads a document for an editor and records it as that editor's base. */
-export async function loadDocument<T>(kind: DocumentKind, relativePath: string): Promise<T> {
+export async function readDocument<T>(kind: DocumentKind, relativePath: string): Promise<LoadedDocument<T>> {
   const entry = entryFor(relativePath);
   ensureCurrent(entry, relativePath);
   const generation = ++entry.loadGeneration;
+  const epoch = entry.epoch;
   const loaded = await documentsIpc.read<T>(kind, relativePath);
   ensureCurrent(entry, relativePath);
   if (entry.loadGeneration === generation && entry.inFlight === 0) adoptWhenSettled(entry, loaded);
-  return loaded.document;
+  const root = currentRoot();
+  return {
+    document: loaded.document,
+    installed: () => {
+      if (entry.epoch === epoch && isRedirected(entry) && isEntryCurrent(entry, root)) adoptWhenSettled(entry, loaded, true);
+    },
+  };
+}
+
+/** Reads a document without showing it in an editor; never ends a conflict redirect. */
+export async function loadDocument<T>(kind: DocumentKind, relativePath: string): Promise<T> {
+  return (await readDocument<T>(kind, relativePath)).document;
 }
 
 type SaveArgs = Record<string, unknown> & ({ relativePath: string } | { storyboardPath: string });

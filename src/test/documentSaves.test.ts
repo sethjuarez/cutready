@@ -18,6 +18,7 @@ import {
   isDocumentConflict,
   loadDocument,
   quiesceDocumentSaves,
+  readDocument,
   refreshOpenDocuments,
   saveDocument,
   settleBeforeRename,
@@ -527,10 +528,45 @@ describe("conflict redirects", () => {
 
     closeEditor();
     await vi.waitFor(() => expect(entry().inFlight).toBe(0));
-    expect(await loadDocument<Sketch>("sketch", "demo.sk")).toMatchObject({ title: "theirs" });
+    await useAppStore.getState().openSketch("demo.sk");
+    expect(useAppStore.getState().activeSketch).toMatchObject({ title: "theirs" });
     await settle();
     await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "reopened" });
     expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: "demo.sk", expectedVersion: "h9" }));
+  });
+
+  it("keeps the redirect when a load's document is never shown", async () => {
+    const { saved, copyPath, closeEditor } = await conflictInRefusingEditor(() => null);
+    await vi.waitFor(() => expect(ipc.read).toHaveBeenCalledTimes(2));
+    closeEditor();
+    await vi.waitFor(() => expect(entry().inFlight).toBe(0));
+
+    // A reload whose caller discards the result (e.g. typing happened during the read).
+    expect(await loadDocument<Sketch>("sketch", "demo.sk")).toMatchObject({ title: "theirs" });
+    const discarded = await readDocument<Sketch>("sketch", "demo.sk");
+    expect(discarded.document).toMatchObject({ title: "theirs" });
+    await settle();
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "still redirected" });
+    expect(saved[saved.length - 1]).toBe(`${copyPath()} still redirected`);
+  });
+
+  it("keeps the redirect when a tab's load is cancelled before it installs", async () => {
+    const { saved, copyPath, closeEditor } = await conflictInRefusingEditor(() => null);
+    await vi.waitFor(() => expect(ipc.read).toHaveBeenCalledTimes(2));
+    closeEditor();
+    await vi.waitFor(() => expect(entry().inFlight).toBe(0));
+
+    const read = deferred<ReturnType<typeof versioned>>();
+    ipc.read.mockReturnValueOnce(read.promise);
+    const opening = useAppStore.getState().openSketch("demo.sk");
+    // The user moves to another tab before the read finishes.
+    useAppStore.setState({ activeSketchPath: "other.sk", activeSketch: null });
+    read.resolve(versioned(sketch("theirs"), "h9"));
+    await opening;
+    expect(useAppStore.getState().activeSketch).toBeNull();
+    await settle();
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "still redirected" });
+    expect(saved[saved.length - 1]).toBe(`${copyPath()} still redirected`);
   });
 
   it("ends the redirect when a refresh shows the document from disk", async () => {

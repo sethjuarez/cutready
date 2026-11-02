@@ -10,7 +10,7 @@ import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, Check, Film, Image as 
 import { registerEditorFlush, shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import { useToastStore } from "../stores/toastStore";
-import { isHandledSaveError, loadDocument, saveDocument } from "../services/documentSaves";
+import { isHandledSaveError, readDocument, saveDocument } from "../services/documentSaves";
 import { useSettings } from "../hooks/useSettings";
 import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
 import { ScriptTable } from "./ScriptTable";
@@ -1086,11 +1086,11 @@ export function SketchForm() {
           rows !== null && saveDocument("update_sketch", { relativePath: path, rows }),
         ]);
         await useAppStore.getState().loadSketches();
-        const store = useAppStore.getState();
-        if (store.activeSketchPath === path) {
-          const sketch = await loadDocument<Sketch>("sketch", path);
+        if (useAppStore.getState().activeSketchPath === path) {
+          const { document: sketch, installed } = await readDocument<Sketch>("sketch", path);
           if (useAppStore.getState().activeSketchPath === path) {
             useAppStore.setState({ activeSketch: sketch });
+            installed();
           }
         }
         await useVersioningStore.getState().checkDirty();

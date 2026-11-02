@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "../services/tauri";
-import { isHandledSaveError, loadDocument, saveDocument } from "../services/documentSaves";
+import { isHandledSaveError, readDocument, saveDocument } from "../services/documentSaves";
 import { useDocumentReload } from "../hooks/useDocumentReload";
 import { X, MoreHorizontal, Search } from "lucide-react";
 import { registerEditorFlush, shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
@@ -345,13 +345,14 @@ function SketchSplitEditor({ path }: { path: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    loadDocument<Sketch>("sketch", path)
-      .then((s) => {
+    readDocument<Sketch>("sketch", path)
+      .then(({ document: s, installed }) => {
         if (!cancelled) {
           setSketch(s);
           setLocalRows(s.rows ?? []);
           setLocalTitle(s.title ?? "");
           setLocalDesc(typeof s.description === "string" ? s.description : "");
+          installed();
         }
       })
       .catch(() => { if (!cancelled) setError(true); });
@@ -565,13 +566,14 @@ function NoteSplitEditor({ path }: { path: string }) {
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      loadDocument<string>("note", path),
+      readDocument<string>("note", path),
       invoke<{ locked: boolean }>("get_note_lock", { relativePath: path }),
     ])
-      .then(([c, lock]) => {
+      .then(([{ document: c, installed }, lock]) => {
         if (!cancelled) {
           setContent(c);
           setLocked(lock.locked);
+          installed();
         }
       })
       .catch(() => { if (!cancelled) setError(true); });
