@@ -1417,8 +1417,8 @@ pub async fn copilot_auth_status(
 /// UI can fall back to guided steps.
 #[cfg(feature = "harness-copilot-sdk")]
 #[auditaur_command(skip_all, err)]
-pub async fn copilot_sign_in() -> Result<(), String> {
-    crate::engine::agent::harness::copilot_sdk::sign_in().await
+pub async fn copilot_sign_in() -> Result<(), CmdError> {
+    Ok(crate::engine::agent::harness::copilot_sdk::sign_in().await?)
 }
 
 /// Serializable result from the agentic chat.
@@ -1599,13 +1599,13 @@ pub async fn clear_memories(
 pub async fn azure_device_code_start(
     tenant_id: String,
     client_id: Option<String>,
-) -> Result<DeviceCodeResponse, String> {
+) -> Result<DeviceCodeResponse, CmdError> {
     let tid = if tenant_id.is_empty() {
         "organizations"
     } else {
         &tenant_id
     };
-    oauth::request_device_code(tid, client_id.as_deref(), None).await
+    Ok(oauth::request_device_code(tid, client_id.as_deref(), None).await?)
 }
 
 /// Poll for the token after the user has completed sign-in.
@@ -1617,13 +1617,13 @@ pub async fn azure_device_code_poll(
     interval: u64,
     timeout: u64,
     client_id: Option<String>,
-) -> Result<TokenResponse, String> {
+) -> Result<TokenResponse, CmdError> {
     let tid = if tenant_id.is_empty() {
         "organizations"
     } else {
         &tenant_id
     };
-    oauth::poll_for_token(tid, &device_code, interval, timeout, client_id.as_deref()).await
+    Ok(oauth::poll_for_token(tid, &device_code, interval, timeout, client_id.as_deref()).await?)
 }
 
 /// Refresh an Azure OAuth token using a refresh token.
@@ -1633,13 +1633,13 @@ pub async fn azure_token_refresh(
     refresh_token: String,
     client_id: Option<String>,
     scope: Option<String>,
-) -> Result<TokenResponse, String> {
+) -> Result<TokenResponse, CmdError> {
     let tid = if tenant_id.is_empty() {
         "organizations"
     } else {
         &tenant_id
     };
-    oauth::refresh_token(tid, &refresh_token, client_id.as_deref(), scope.as_deref()).await
+    Ok(oauth::refresh_token(tid, &refresh_token, client_id.as_deref(), scope.as_deref()).await?)
 }
 
 // ---------------------------------------------------------------------------
@@ -1683,7 +1683,7 @@ pub struct BrowserAuthStart {
 pub async fn azure_browser_auth_start(
     tenant_id: String,
     client_id: Option<String>,
-) -> Result<BrowserAuthStart, String> {
+) -> Result<BrowserAuthStart, CmdError> {
     let tid = if tenant_id.is_empty() {
         "organizations"
     } else {
@@ -1746,7 +1746,7 @@ pub async fn azure_browser_auth_complete(
     tenant_id: String,
     client_id: Option<String>,
     timeout: Option<u64>,
-) -> Result<TokenResponse, String> {
+) -> Result<TokenResponse, CmdError> {
     let tid = if tenant_id.is_empty() {
         "organizations"
     } else {
@@ -1794,7 +1794,7 @@ pub async fn azure_browser_auth_complete(
         }),
     );
 
-    result
+    Ok(result?)
 }
 
 /// Accept exactly one loopback redirect, parse the `code` (or `error`) query
@@ -2004,10 +2004,9 @@ impl From<PromptyFoundryProject> for FoundryProject {
 #[tauri::command]
 pub async fn list_azure_subscriptions(
     management_token: String,
-) -> Result<Vec<Subscription>, String> {
-    prompty_foundry::arm_discovery::list_subscriptions(&management_token)
-        .await
-        .map(|items| items.into_iter().map(Subscription::from).collect())
+) -> Result<Vec<Subscription>, CmdError> {
+    let items = prompty_foundry::arm_discovery::list_subscriptions(&management_token).await?;
+    Ok(items.into_iter().map(Subscription::from).collect())
 }
 
 /// List AI resources (Azure OpenAI / AI Services) in a subscription.
@@ -2015,10 +2014,11 @@ pub async fn list_azure_subscriptions(
 pub async fn list_azure_ai_resources(
     management_token: String,
     subscription_id: String,
-) -> Result<Vec<AiResource>, String> {
-    prompty_foundry::arm_discovery::list_ai_resources(&management_token, &subscription_id)
-        .await
-        .map(|items| items.into_iter().map(AiResource::from).collect())
+) -> Result<Vec<AiResource>, CmdError> {
+    let items =
+        prompty_foundry::arm_discovery::list_ai_resources(&management_token, &subscription_id)
+            .await?;
+    Ok(items.into_iter().map(AiResource::from).collect())
 }
 
 /// List Foundry projects under an AI resource.
@@ -2028,15 +2028,15 @@ pub async fn list_foundry_projects(
     subscription_id: String,
     resource_group: String,
     resource_name: String,
-) -> Result<Vec<FoundryProject>, String> {
-    prompty_foundry::arm_discovery::list_foundry_projects(
+) -> Result<Vec<FoundryProject>, CmdError> {
+    let items = prompty_foundry::arm_discovery::list_foundry_projects(
         &management_token,
         &subscription_id,
         &resource_group,
         &resource_name,
     )
-    .await
-    .map(|items| items.into_iter().map(FoundryProject::from).collect())
+    .await?;
+    Ok(items.into_iter().map(FoundryProject::from).collect())
 }
 
 #[cfg(test)]

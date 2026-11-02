@@ -81,3 +81,26 @@ fn converted_agent_command_rejects_with_command_failed_envelope() {
         serde_json::json!({ "code": "command_failed", "message": expected })
     );
 }
+
+/// The shape of every converted sign-in/token command body.
+#[allow(clippy::result_large_err)]
+fn lift(failure: Result<(), String>) -> Result<(), CmdError> {
+    Ok(failure?)
+}
+
+#[test]
+fn auth_provider_failures_keep_their_exact_text() {
+    // Device-code and token-refresh failures come back from prompty-foundry as
+    // strings; `?` lifts them unchanged, OAuth error codes and all.
+    for raw in [
+        "Token request failed (400): {\"error\":\"authorization_pending\"}",
+        "Device code expired_token: the user did not sign in in time",
+        "access_denied: The user declined the consent",
+        "Timed out waiting for browser redirect",
+    ] {
+        assert_eq!(
+            rejection(&lift(Err(raw.to_string())).unwrap_err()),
+            serde_json::json!({ "code": "command_failed", "message": raw })
+        );
+    }
+}

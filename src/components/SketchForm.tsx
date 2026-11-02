@@ -1884,7 +1884,7 @@ Rules:
       useToastStore.getState().show(`Generated narration for row ${rowIndex + 1}`, 4000, "success");
     } catch (err) {
       console.warn("[SketchForm] Failed to generate narration:", err);
-      useToastStore.getState().show(`Could not generate narration: ${err}`, 6000, "error");
+      useToastStore.getState().show(`Could not generate narration: ${commandErrorText(err)}`, 6000, "error");
     } finally {
       setNarrationSavingRows((rows) => {
         const next = new Set(rows);

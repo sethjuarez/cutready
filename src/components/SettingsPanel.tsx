@@ -216,8 +216,8 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
       });
       setOauthStatus("success");
     } catch (e) {
-      console.warn({ type: "cutready.ai.oauth", phase: "error", error: String(e) });
-      setOauthError(String(e));
+      console.warn({ type: "cutready.ai.oauth", phase: "error", error: commandErrorText(e) });
+      setOauthError(commandErrorText(e));
       setOauthStatus("error");
     }
   };

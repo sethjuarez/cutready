@@ -377,3 +377,63 @@ fn agent_events_keep_original_fields_when_client_run_id_is_added() {
     assert_eq!(payload["message"], "Thinking…");
     assert_eq!(payload["client_run_id"], "42");
 }
+
+/// Text a rejection reaches the frontend with: a bare string, or a CmdError's `message`.
+fn rejection_text(error: impl serde::Serialize) -> String {
+    match serde_json::to_value(error).unwrap() {
+        serde_json::Value::String(text) => text,
+        envelope => envelope["message"].as_str().unwrap().to_string(),
+    }
+}
+
+/// Port of the loopback redirect advertised in a browser auth URL.
+fn redirect_port(auth_url: &str) -> u16 {
+    let url = urlencoding::decode(auth_url).unwrap();
+    let rest = &url[url.find("http://localhost:").unwrap() + "http://localhost:".len()..];
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().unwrap()
+}
+
+// One test owns the process-wide pending browser flow, so the cases run in order.
+#[tokio::test]
+async fn browser_auth_failures_keep_their_text() {
+    let missing = azure_browser_auth_complete(String::new(), None, Some(1))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        serde_json::to_value(&missing).unwrap(),
+        serde_json::json!({ "code": "command_failed", "message": "No pending browser auth flow" })
+    );
+    assert_eq!(rejection_text(missing), "No pending browser auth flow");
+
+    azure_browser_auth_start(String::new(), None).await.unwrap();
+    let timed_out = azure_browser_auth_complete(String::new(), None, Some(0))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        rejection_text(timed_out),
+        "Timed out waiting for browser redirect"
+    );
+
+    let start = azure_browser_auth_start(String::new(), None).await.unwrap();
+    let port = redirect_port(&start.auth_url);
+    let browser = crate::util::spawn::spawn_named("test-auth-redirect", async move {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .unwrap();
+        stream
+            .write_all(
+                b"GET /?error=access_denied&error_description=User%20cancelled HTTP/1.1\r\n\r\n",
+            )
+            .await
+            .unwrap();
+        let mut page = Vec::new();
+        let _ = stream.read_to_end(&mut page).await;
+    });
+    let denied = azure_browser_auth_complete(String::new(), None, Some(10))
+        .await
+        .unwrap_err();
+    browser.await.unwrap();
+    assert_eq!(rejection_text(denied), "Auth error: User cancelled");
+}
