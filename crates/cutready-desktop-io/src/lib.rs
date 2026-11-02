@@ -1,7 +1,8 @@
 //! Desktop implementations of the `cutready-core` ports. The Tauri app, CLI
 //! and MCP server share these so every desktop host has the same file, lock
 //! and clock behavior, and resolve the same repository write lock and
-//! per-project state dir.
+//! per-project state dir. `secret_vault` locates the Stronghold credential
+//! vault and its salt; the app's Stronghold plugin reads and writes it.
 
 mod clock;
 mod files;
@@ -9,6 +10,7 @@ mod lock;
 mod log;
 mod op_log;
 pub mod repo_lock;
+pub mod secret_vault;
 pub mod state_dir;
 
 pub use clock::SystemClock;

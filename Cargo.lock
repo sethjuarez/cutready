@@ -1752,6 +1752,7 @@ dependencies = [
  "chrono",
  "cutready-core",
  "git2",
+ "log",
  "rusqlite",
  "serde_json",
  "tempfile",

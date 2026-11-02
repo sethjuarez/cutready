@@ -15,9 +15,21 @@ use std::path::{Path, PathBuf};
 
 const VAULT_FILE: &str = "vault.hold";
 const BACKUP_FILE: &str = "vault.hold.bak";
+const SALT_FILE: &str = "salt.txt";
 
 pub fn vault_path(app_data_dir: &Path) -> PathBuf {
     app_data_dir.join(VAULT_FILE)
+}
+
+/// The Argon2 salt Stronghold derives the vault key from. It lives in the app
+/// *local* data dir, not beside the vault.
+pub fn salt_path(app_local_data_dir: &Path) -> PathBuf {
+    app_local_data_dir.join(SALT_FILE)
+}
+
+/// Returns `<dir>/salt.txt` in the drill folder, creating it.
+pub fn drill_salt_path(dir: &Path) -> io::Result<PathBuf> {
+    Ok(drill_vault_path(dir)?.with_file_name(SALT_FILE))
 }
 
 pub fn legacy_vault_path(app_data_dir: &Path) -> PathBuf {
@@ -148,6 +160,16 @@ mod tests {
         std::env::set_var(DRILL_VAULT_DIR_ENV, root.path());
         assert_eq!(drill_vault_dir(), None);
         std::env::remove_var(DRILL_VAULT_DIR_ENV);
+    }
+
+    #[test]
+    fn salt_paths_match_the_plugin_setup() {
+        let dir = Path::new("C:/Users/me/AppData/Local/com.cutready.app");
+        assert_eq!(salt_path(dir), dir.join("salt.txt"));
+        let root = tempfile::tempdir().unwrap();
+        let drill = root.path().join("drill-vault");
+        assert_eq!(drill_salt_path(&drill).unwrap(), drill.join("salt.txt"));
+        assert!(drill.is_dir());
     }
 
     #[test]
