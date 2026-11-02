@@ -9,6 +9,7 @@ import { AppLayout } from "./components/AppLayout";
 import { ToastContainer } from "./components/ToastContainer";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AppCloseGuard } from "./components/AppCloseGuard";
+import { RecordingEventsHost } from "./components/RecordingEventsHost";
 import { invoke } from "./services/tauri";
 import { listenEvent } from "./ipc/events";
 import { commandRegistry } from "./services/commandRegistry";
@@ -144,30 +145,33 @@ function App() {
   }, []);
 
   return (
-    <ErrorBoundary
-      resetKey={errorBoundaryResetKey}
-      fallback={
-        <div className="h-full bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] flex items-center justify-center">
-          <div className="text-center space-y-4">
-            <p className="text-lg font-medium text-[rgb(var(--color-text))]">Something went wrong</p>
-            <p className="text-sm text-[rgb(var(--color-text-secondary))]">An unexpected error crashed the interface.</p>
-            <button
-              onClick={handleReset}
-              className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] text-sm font-medium hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
-            >
-              Reload interface
-            </button>
+    <>
+      <RecordingEventsHost />
+      <ErrorBoundary
+        resetKey={errorBoundaryResetKey}
+        fallback={
+          <div className="h-full bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] flex items-center justify-center">
+            <div className="text-center space-y-4">
+              <p className="text-lg font-medium text-[rgb(var(--color-text))]">Something went wrong</p>
+              <p className="text-sm text-[rgb(var(--color-text-secondary))]">An unexpected error crashed the interface.</p>
+              <button
+                onClick={handleReset}
+                className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] text-sm font-medium hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
+              >
+                Reload interface
+              </button>
+            </div>
           </div>
+        }
+      >
+        <div className={`h-full bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]${isMac ? " mac-window-shell" : ""}`}>
+          <AppLayout />
+          <AppCloseGuard />
+          <StatusBar onFeedback={() => commandRegistry.execute("view.sendFeedback")} />
+          <ToastContainer />
         </div>
-      }
-    >
-      <div className={`h-full bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]${isMac ? " mac-window-shell" : ""}`}>
-        <AppLayout />
-        <AppCloseGuard />
-        <StatusBar onFeedback={() => commandRegistry.execute("view.sendFeedback")} />
-        <ToastContainer />
-      </div>
-    </ErrorBoundary>
+      </ErrorBoundary>
+    </>
   );
 }
 

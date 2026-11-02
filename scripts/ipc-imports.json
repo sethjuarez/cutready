@@ -48,7 +48,7 @@
   "src/services/identity.ts": 3,
   "src/services/narrationVoicePreview.ts": 2,
   "src/services/richPaste.ts": 1,
-  "src/stores/appStore.ts": 60,
+  "src/stores/appStore.ts": 54,
   "src/utils/agentProvider.ts": 1,
   "src/utils/exportToWord.ts": 2,
   "src/utils/projectImage.ts": 1

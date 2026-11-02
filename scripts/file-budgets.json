@@ -45,7 +45,7 @@
     "src/devMock.ts": 1419,
     "src/hooks/useSettings.ts": 999,
     "src/services/draftlineVersioning.ts": 879,
-    "src/stores/appStore.ts": 2145,
+    "src/stores/appStore.ts": 1953,
     "src/theme/appThemePalettes.ts": 845
   }
 }
