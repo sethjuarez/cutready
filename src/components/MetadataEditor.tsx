@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, Plus } from "lucide-react";
 import type { DocumentMetadata } from "../types/sketch";
+import type { DraftFlushRef } from "./InlineDescriptionEditor";
 import {
   formatDurationSummary,
   normalizeMetadata,
@@ -10,11 +11,13 @@ import {
 
 interface MetadataEditorProps {
   metadata?: DocumentMetadata | null;
-  onChange: (metadata: DocumentMetadata) => void;
+  onChange: (metadata: DocumentMetadata) => void | Promise<void>;
   disabled?: boolean;
+  /** Set while a field edit waits for its debounce, so the owner can treat it as pending and flush it. */
+  draftRef?: DraftFlushRef;
 }
 
-export function MetadataEditor({ metadata, onChange, disabled = false }: MetadataEditorProps) {
+export function MetadataEditor({ metadata, onChange, disabled = false, draftRef }: MetadataEditorProps) {
   const fields = useMemo(
     () => Object.entries(metadata?.fields ?? {}).filter(([key]) => key.trim().length > 0),
     [metadata],
@@ -27,6 +30,8 @@ export function MetadataEditor({ metadata, onChange, disabled = false }: Metadat
   const pendingFieldsRef = useRef<Record<string, string> | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const draftRefRef = useRef(draftRef);
+  draftRefRef.current = draftRef;
 
   useEffect(() => {
     setLocalFields(Object.fromEntries(fields));
@@ -34,20 +39,25 @@ export function MetadataEditor({ metadata, onChange, disabled = false }: Metadat
 
   useEffect(() => () => {
     if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
-    if (pendingFieldsRef.current) onChangeRef.current(normalizeMetadata({ fields: pendingFieldsRef.current }));
+    if (draftRefRef.current) draftRefRef.current.current = null;
+    if (pendingFieldsRef.current) void onChangeRef.current(normalizeMetadata({ fields: pendingFieldsRef.current }));
   }, []);
 
   const commitFields = (next: Record<string, string>, immediate = false) => {
     pendingFieldsRef.current = next;
     if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
-    const commit = () => {
+    const commit = async () => {
+      if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = null;
       pendingFieldsRef.current = null;
-      onChangeRef.current(normalizeMetadata({ fields: next }));
+      if (draftRefRef.current?.current === commit) draftRefRef.current.current = null;
+      await onChangeRef.current(normalizeMetadata({ fields: next }));
     };
+    if (draftRefRef.current) draftRefRef.current.current = commit;
     if (immediate) {
-      commit();
+      void commit();
     } else {
-      commitTimerRef.current = setTimeout(commit, 500);
+      commitTimerRef.current = setTimeout(() => void commit(), 500);
     }
   };
 

@@ -35,7 +35,7 @@
     "src/components/SemanticConflictResolver.tsx": 1325,
     "src/components/settings/AgentsTab.tsx": 876,
     "src/components/settings/ExportTab.tsx": 836,
-    "src/components/SketchForm.tsx": 2937,
+    "src/components/SketchForm.tsx": 2935,
     "src/components/SketchVisualViews.tsx": 1304,
     "src/components/SnapshotGraph.tsx": 938,
     "src/components/SnapshotPreviewTab.tsx": 1079,

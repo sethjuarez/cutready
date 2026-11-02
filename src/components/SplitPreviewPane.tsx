@@ -19,7 +19,7 @@ import { DocumentHeader } from "./DocumentHeader";
 import { FieldAiButton } from "./FieldAiButton";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
 import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
-import { InlineDescriptionEditor } from "./InlineDescriptionEditor";
+import { InlineDescriptionEditor, type DraftFlushRef } from "./InlineDescriptionEditor";
 import { ChatArtifactViewer } from "./ChatArtifactViewer";
 
 /**
@@ -342,6 +342,7 @@ function SketchSplitEditor({ path }: { path: string }) {
   const pendingRowsRef = useRef<PlanningRow[] | null>(null);
   const pendingTitleRef = useRef<string | null>(null);
   const pendingDescRef = useRef<string | null>(null);
+  const descDraftRef: DraftFlushRef = useRef(null);
   const editor = useDocumentEditor(path);
 
   useEffect(() => {
@@ -381,6 +382,8 @@ function SketchSplitEditor({ path }: { path: string }) {
   }, [path]);
 
   useEffect(() => registerEditorFlush(async () => {
+    // The description editor keeps its own draft; saving it also clears pendingDescRef.
+    await descDraftRef.current?.();
     const title = pendingTitleRef.current;
     const desc = pendingDescRef.current;
     const rows = pendingRowsRef.current;
@@ -413,7 +416,7 @@ function SketchSplitEditor({ path }: { path: string }) {
     kind: "sketch",
     path,
     events: ["cutready:sketch-saved", "cutready:ai-sketch-updated"],
-    hasPending: () => pendingTitleRef.current !== null || pendingDescRef.current !== null || pendingRowsRef.current !== null,
+    hasPending: () => [pendingTitleRef, pendingDescRef, descDraftRef, pendingRowsRef].some((ref) => ref.current !== null),
     apply: (s) => {
       setSketch(s);
       setLocalRows(s.rows ?? []);
@@ -527,6 +530,7 @@ function SketchSplitEditor({ path }: { path: string }) {
             textareaClassName="w-full text-sm bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border border-[rgb(var(--color-border))] rounded-lg px-3 py-2 resize-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 transition-colors"
             onDraftChange={handleDescChange}
             onSave={handleDescSave}
+          draftRef={descDraftRef}
             action={!locked ? (
             <FieldAiButton
               onClick={() => void runBackgroundAgentAction(

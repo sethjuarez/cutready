@@ -23,7 +23,7 @@ import { FieldAiButton } from "./FieldAiButton";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
 import { NarrationRecordingDialog, type NarrationRecordingTake } from "./NarrationRecordingDialog";
 import { DurationBadge, MetadataEditor } from "./MetadataEditor";
-import { InlineDescriptionEditor } from "./InlineDescriptionEditor";
+import { InlineDescriptionEditor, type DraftFlushRef } from "./InlineDescriptionEditor";
 import type { PresentationMode } from "./presentation/types";
 import VisualCell from "./VisualCell";
 import { describeWordExport, exportSketchToWord, type WordOrientation } from "../utils/exportToWord";
@@ -1050,9 +1050,8 @@ export function SketchForm() {
   const aiSnapshotRef = useRef<{ rows: PlanningRow[]; changedIndices: number[] } | null>(null);
   const [visualPromptRow, setVisualPromptRow] = useState<number | null>(null);
   const [visualInstructions, setVisualInstructions] = useState("");
-  const [localDesc, setLocalDesc] = useState(
-    typeof activeSketch?.description === "string" ? activeSketch.description : ""
-  );
+  const [localDesc, setLocalDesc] = useState(typeof activeSketch?.description === "string" ? activeSketch.description : "");
+  const descDraftRef: DraftFlushRef = useRef(null), metaDraftRef: DraftFlushRef = useRef(null);
   const titleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [narrationDialogRow, setNarrationDialogRow] = useState<number | null>(null);
@@ -1110,13 +1109,9 @@ export function SketchForm() {
       const path = pendingPathRef.current;
       const title = pendingTitleRef.current;
       const rows = pendingRowsRef.current;
-      if (titleTimeoutRef.current) {
-        clearTimeout(titleTimeoutRef.current);
-        titleTimeoutRef.current = null;
-      }
-      if (rowsTimeoutRef.current) {
-        clearTimeout(rowsTimeoutRef.current);
-        rowsTimeoutRef.current = null;
+      for (const timer of [titleTimeoutRef, rowsTimeoutRef]) {
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = null;
       }
       pendingPathRef.current = null;
       pendingTitleRef.current = null;
@@ -1131,6 +1126,7 @@ export function SketchForm() {
     const path = pendingPathRef.current;
     const title = pendingTitleRef.current;
     const rows = pendingRowsRef.current;
+    await Promise.all([descDraftRef.current?.(), metaDraftRef.current?.()]);
     if (await flushPendingSketchEdits("flush")) return;
     if (path && shouldSuppressEditorFlush(path)) return;
     // Keep the unsaved edits so a later save still writes them.
@@ -1139,7 +1135,7 @@ export function SketchForm() {
     pendingRowsRef.current ??= rows;
     throw new Error("Couldn't save pending sketch changes");
   }), [flushPendingSketchEdits]);
-  useEffect(() => registerDocumentEditor(activeSketchPath, MAIN_EDITOR, () => pendingTitleRef.current !== null || pendingRowsRef.current !== null), [activeSketchPath]);
+  useEffect(() => registerDocumentEditor(activeSketchPath, MAIN_EDITOR, () => [pendingTitleRef, pendingRowsRef, descDraftRef, metaDraftRef].some((ref) => ref.current !== null)), [activeSketchPath]);
 
   // Reset local state when switching sketches; flush pending debounced saves by their captured path first.
   useEffect(() => {
@@ -2582,6 +2578,7 @@ Rules:
           textareaClassName="w-full resize-none text-sm bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border border-[rgb(var(--color-border))] rounded-lg px-3 py-2 focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 transition-colors"
           onDraftChange={setLocalDesc}
           onSave={(description) => updateSketch({ description })}
+          draftRef={descDraftRef}
           action={
             <FieldAiButton
               onClick={() => void runBackgroundAgentAction(
@@ -2603,6 +2600,7 @@ Rules:
             metadata={activeSketch.metadata}
             disabled={sketchLocked}
             onChange={(metadata) => updateSketch({ metadata })}
+            draftRef={metaDraftRef}
           />
         </div>
 
