@@ -8,13 +8,13 @@
   "src-tauri/src/commands/import.rs": 6,
   "src-tauri/src/commands/interaction.rs": 5,
   "src-tauri/src/commands/narration_preview.rs": 3,
-  "src-tauri/src/commands/note.rs": 15,
+  "src-tauri/src/commands/note.rs": 14,
   "src-tauri/src/commands/recording.rs": 18,
   "src-tauri/src/commands/review.rs": 3,
   "src-tauri/src/commands/screenshot.rs": 21,
   "src-tauri/src/commands/secrets.rs": 1,
-  "src-tauri/src/commands/sketch.rs": 13,
-  "src-tauri/src/commands/storyboard.rs": 11,
+  "src-tauri/src/commands/sketch.rs": 8,
+  "src-tauri/src/commands/storyboard.rs": 5,
   "src-tauri/src/commands/terminal.rs": 5,
   "src-tauri/src/commands/video_import.rs": 2
 }

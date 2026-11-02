@@ -10,6 +10,7 @@ import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, Check, Film, Image as 
 import { registerEditorFlush, shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import { useToastStore } from "../stores/toastStore";
+import { isDocumentConflict, loadDocument, saveDocument } from "../services/documentSaves";
 import { useSettings } from "../hooks/useSettings";
 import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
 import { ScriptTable } from "./ScriptTable";
@@ -1080,16 +1081,14 @@ export function SketchForm() {
     ): Promise<boolean> => {
       if (shouldSuppressEditorFlush(path)) return false;
       try {
-        if (title !== null) {
-          await invoke("update_sketch_title", { relativePath: path, title });
-        }
-        if (rows !== null) {
-          await invoke("update_sketch", { relativePath: path, rows });
-        }
+        await Promise.all([
+          title !== null && saveDocument("update_sketch_title", { relativePath: path, title }),
+          rows !== null && saveDocument("update_sketch", { relativePath: path, rows }),
+        ]);
         await useAppStore.getState().loadSketches();
         const store = useAppStore.getState();
         if (store.activeSketchPath === path) {
-          const sketch = await invoke<Sketch>("get_sketch", { relativePath: path });
+          const sketch = await loadDocument<Sketch>("sketch", path);
           if (useAppStore.getState().activeSketchPath === path) {
             useAppStore.setState({ activeSketch: sketch });
           }
@@ -1099,8 +1098,8 @@ export function SketchForm() {
         return true;
       } catch (err) {
         console.error(`[SketchForm] Failed to save pending sketch edits (${reason}):`, err);
-        useToastStore.getState().show("Failed to save pending sketch changes", 5000, "error");
-        return false;
+        if (!isDocumentConflict(err)) useToastStore.getState().show("Failed to save pending sketch changes", 5000, "error");
+        return isDocumentConflict(err);
       }
     },
     [],
@@ -1287,7 +1286,7 @@ export function SketchForm() {
   const handleSketchLockChange = useCallback(async (locked: boolean) => {
     if (!activeSketchPath) return;
     try {
-      const sketch = await invoke<Sketch>("set_sketch_lock", { relativePath: activeSketchPath, locked });
+      const sketch = await saveDocument<Sketch>("set_sketch_lock", { relativePath: activeSketchPath, locked });
       applySketchFromLockCommand(sketch);
       const { loadSketches } = useAppStore.getState();
       const { refreshChangedFiles, checkDirty } = useVersioningStore.getState();
@@ -1302,7 +1301,7 @@ export function SketchForm() {
   const handleRowLockChange = useCallback(async (index: number, locked: boolean) => {
     if (!activeSketchPath) return;
     try {
-      const sketch = await invoke<Sketch>("set_planning_row_lock", { relativePath: activeSketchPath, index, locked });
+      const sketch = await saveDocument<Sketch>("set_planning_row_lock", { relativePath: activeSketchPath, index, locked });
       applySketchFromLockCommand(sketch);
       const { refreshChangedFiles, checkDirty } = useVersioningStore.getState();
       await checkDirty();
@@ -1315,7 +1314,7 @@ export function SketchForm() {
   const handleCellLockChange = useCallback(async (index: number, field: string, locked: boolean) => {
     if (!activeSketchPath) return;
     try {
-      const sketch = await invoke<Sketch>("set_planning_cell_lock", { relativePath: activeSketchPath, index, field, locked });
+      const sketch = await saveDocument<Sketch>("set_planning_cell_lock", { relativePath: activeSketchPath, index, field, locked });
       applySketchFromLockCommand(sketch);
       const { refreshChangedFiles, checkDirty } = useVersioningStore.getState();
       await checkDirty();

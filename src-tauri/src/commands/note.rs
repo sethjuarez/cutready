@@ -7,8 +7,9 @@ use tauri_plugin_auditaur::auditaur_command;
 
 use serde_json::json;
 
-use crate::engine::document_writer::{self, Expected, WriteError};
-use crate::engine::project;
+use super::CmdError;
+use crate::engine::document_writer::{self, Expected, Versioned, WriteError};
+use crate::engine::{document_reads, project};
 use crate::models::script::ProjectView;
 use crate::AppState;
 use cutready_core::edit_ops::ContentEditError;
@@ -57,6 +58,17 @@ pub async fn get_note(relative_path: String, state: State<'_, AppState>) -> Resu
     project::read_note(&abs_path).map_err(|e| e.to_string())
 }
 
+/// [`get_note`] with the version an editor saves against.
+#[auditaur_command(skip_all, err)]
+pub async fn get_note_versioned(
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<Versioned<String>, CmdError> {
+    let root = project_root(&state)?;
+    let abs_path = project::safe_resolve(&root, &relative_path)?;
+    Ok(document_reads::read_note_versioned(&abs_path, &root)?)
+}
+
 #[auditaur_command(skip_all, err)]
 pub async fn get_note_lock(
     relative_path: String,
@@ -93,40 +105,51 @@ fn set_note_lock_at(
         return project::set_note_lock(root, rel, locked).map_err(|e| e.to_string());
     }
     let op = json!({ "kind": "set_lock", "locked": locked });
-    let written = document_writer::edit(root, rel, Expected::Unchecked, &[op])?;
+    let expected = document_writer::expected_on_disk(abs_path)?;
+    let written = document_writer::edit(root, rel, expected, &[op])?;
     let locked = written.note_lock.map_or(locked, |lock| lock.locked);
     Ok(project::NoteLockState { locked })
 }
 
+/// An app save of a note against `base`, the text the editor last loaded or
+/// saved (see `document_writer::save`). Without a base the note is new.
 #[auditaur_command(skip_all, err)]
 pub async fn update_note(
     relative_path: String,
+    expected_version: Option<String>,
+    base: Option<String>,
     content: String,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<Versioned<String>, CmdError> {
     let root = project_root(&state)?;
     let _write_guard = crate::engine::write_lock::lock(&root)?;
-    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+    project::safe_resolve(&root, &relative_path)?;
 
-    update_note_at(&root, &relative_path, &abs_path, content)
+    update_note_at(&root, &relative_path, expected_version.zip(base), content)
 }
 
-/// Saving a note that isn't on disk creates it, as before; the lock still
-/// applies because `write_note` follows it.
+/// Saving a note with no base creates it; the lock still applies because
+/// `write_note` follows it.
 fn update_note_at(
     root: &std::path::Path,
     rel: &str,
-    abs_path: &std::path::Path,
+    base: Option<(String, String)>,
     content: String,
-) -> Result<(), String> {
+) -> Result<Versioned<String>, CmdError> {
     let write = json!({ "kind": "write_note", "content": content });
-    let ops = if abs_path.exists() {
-        vec![write]
-    } else {
-        vec![json!({ "kind": "replace_note", "content": "" }), write]
-    };
-    document_writer::edit(root, rel, Expected::Unchecked, &ops)?;
-    Ok(())
+    match base {
+        Some((version, base)) => Ok(document_writer::save(root, rel, &version, &base, &[write])?),
+        None => {
+            let ops = [json!({ "kind": "replace_note", "content": "" }), write];
+            let created = document_writer::edit(root, rel, Expected::Absent, &ops).map_err(
+                |err| match err {
+                    WriteError::Edit(ContentEditError::Stale(stale)) => CmdError::from(&stale),
+                    other => other.into(),
+                },
+            )?;
+            Ok(created.into())
+        }
+    }
 }
 
 #[tauri::command]
@@ -381,15 +404,25 @@ mod tests {
         );
     }
 
+    /// An app save against the note on disk now, or a create when missing.
+    fn save(root: &std::path::Path, content: &str) -> Result<Versioned<String>, String> {
+        let base = std::fs::read_to_string(root.join("plan.md"))
+            .ok()
+            .map(|base| {
+                let version = cutready_core::edit_ops::document_version(base.as_bytes());
+                (version, base)
+            });
+        update_note_at(root, "plan.md", base, content.into()).map_err(|err| err.message)
+    }
+
     #[test]
     fn saving_writes_the_note_and_creates_a_missing_one() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
-        let abs = root.join("plan.md");
 
-        update_note_at(root, "plan.md", &abs, "# Draft".into()).unwrap();
+        save(root, "# Draft").unwrap();
         assert_eq!(note(root), "# Draft");
-        update_note_at(root, "plan.md", &abs, "# Final".into()).unwrap();
+        save(root, "# Final").unwrap();
         assert_eq!(note(root), "# Final");
     }
 
@@ -409,17 +442,11 @@ mod tests {
         let locked = project::ensure_note_unlocked(root, "plan.md")
             .unwrap_err()
             .to_string();
-        assert_eq!(
-            update_note_at(root, "plan.md", &abs, "x".into()).unwrap_err(),
-            locked
-        );
+        assert_eq!(save(root, "x").unwrap_err(), locked);
         assert_eq!(note(root), "");
 
         std::fs::remove_file(&abs).unwrap();
-        assert_eq!(
-            update_note_at(root, "plan.md", &abs, "x".into()).unwrap_err(),
-            locked
-        );
+        assert_eq!(save(root, "x").unwrap_err(), locked);
         assert!(!abs.exists());
 
         assert!(
@@ -427,7 +454,7 @@ mod tests {
                 .unwrap()
                 .locked
         );
-        update_note_at(root, "plan.md", &abs, "x".into()).unwrap();
+        save(root, "x").unwrap();
         assert_eq!(note(root), "x");
     }
 

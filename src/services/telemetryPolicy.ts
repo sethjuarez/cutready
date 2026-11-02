@@ -52,7 +52,7 @@ export const SENSITIVE_INVOKE_COMMANDS = new Set([
   "synthesize_narration_recording",
 ]);
 // Note commands are generic, but promoted chat artifacts (.cv) hold transcripts.
-const CHAT_ARTIFACT_NOTE_COMMANDS = new Set(["get_note", "update_note"]);
+const CHAT_ARTIFACT_NOTE_COMMANDS = new Set(["get_note", "get_note_versioned", "update_note"]);
 const SENSITIVE_TAURI_EVENTS = new Set(["agent-event"]);
 
 // Matched case-insensitively at any depth. Auditaur's defaults cover snake_case
@@ -77,6 +77,7 @@ export const REDACT_KEYS = [
   "systemPrompt",
   // Authored project content (notes, sketches, storyboards, visuals, narration).
   "content",
+  "base",
   "description",
   "narrative",
   "demo_actions",

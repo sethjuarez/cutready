@@ -14,7 +14,7 @@ use tauri::State;
 use cutready_core::import;
 use cutready_desktop_io::StdFiles;
 
-use crate::engine::document_writer;
+use crate::engine::document_writer::{self, Imported};
 use crate::engine::project;
 use crate::AppState;
 
@@ -82,7 +82,7 @@ pub async fn import_docx(
     let final_path = resolve_import_path(&root, &relative_path, "md", conflict)?;
     let abs_final = project::safe_resolve(&root, &final_path).map_err(|e| e.to_string())?;
 
-    document_writer::replace_note(&root, &abs_final, &markdown)?;
+    document_writer::import_document(&root, &abs_final, Imported::Note(&markdown))?;
     Ok(final_path)
 }
 
@@ -116,7 +116,7 @@ pub async fn import_pdf(
     let final_path = resolve_import_path(&root, &relative_path, "md", conflict)?;
     let abs_final = project::safe_resolve(&root, &final_path).map_err(|e| e.to_string())?;
 
-    document_writer::replace_note(&root, &abs_final, &markdown)?;
+    document_writer::import_document(&root, &abs_final, Imported::Note(&markdown))?;
     Ok(final_path)
 }
 
@@ -150,7 +150,7 @@ pub async fn import_pptx(
     let final_path = resolve_import_path(&root, &relative_path, "md", conflict)?;
     let abs_final = project::safe_resolve(&root, &final_path).map_err(|e| e.to_string())?;
 
-    document_writer::replace_note(&root, &abs_final, &markdown)?;
+    document_writer::import_document(&root, &abs_final, Imported::Note(&markdown))?;
     Ok(final_path)
 }
 
@@ -191,7 +191,7 @@ pub async fn import_markdown(
     }
 
     let abs_final = project::safe_resolve(&root, &final_path).map_err(|e| e.to_string())?;
-    document_writer::replace_note(&root, &abs_final, &content)?;
+    document_writer::import_document(&root, &abs_final, Imported::Note(&content))?;
     Ok(final_path)
 }
 
@@ -234,7 +234,7 @@ pub async fn import_sketch(
     }
 
     let abs_final = project::safe_resolve(&root, &final_path).map_err(|e| e.to_string())?;
-    document_writer::replace_sketch(&root, &abs_final, &sketch)?;
+    document_writer::import_document(&root, &abs_final, Imported::Sketch(&sketch))?;
     Ok(final_path)
 }
 
@@ -271,7 +271,7 @@ pub async fn import_storyboard(
     let final_path = resolve_import_path(&root, &relative_path, "sb", conflict)?;
     let abs_final = project::safe_resolve(&root, &final_path).map_err(|e| e.to_string())?;
 
-    document_writer::replace_storyboard(&root, &abs_final, &storyboard)?;
+    document_writer::import_document(&root, &abs_final, Imported::Storyboard(&storyboard))?;
     Ok(final_path)
 }
 

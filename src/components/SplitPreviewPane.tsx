@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "../services/tauri";
+import { isDocumentConflict, loadDocument, saveDocument } from "../services/documentSaves";
 import { X, MoreHorizontal, Search } from "lucide-react";
 import { registerEditorFlush, shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
@@ -343,7 +344,7 @@ function SketchSplitEditor({ path }: { path: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    invoke<Sketch>("get_sketch", { relativePath: path })
+    loadDocument<Sketch>("sketch", path)
       .then((s) => {
         if (!cancelled) {
           setSketch(s);
@@ -358,19 +359,19 @@ function SketchSplitEditor({ path }: { path: string }) {
       if (titleTimerRef.current && pendingTitleRef.current !== null) {
         clearTimeout(titleTimerRef.current);
         if (!shouldSuppressEditorFlush(path)) {
-          invoke("update_sketch_title", { relativePath: path, title: pendingTitleRef.current }).catch(() => {});
+          saveDocument("update_sketch_title", { relativePath: path, title: pendingTitleRef.current }).catch(() => {});
         }
       }
       if (descTimerRef.current && pendingDescRef.current !== null) {
         clearTimeout(descTimerRef.current);
         if (!shouldSuppressEditorFlush(path)) {
-          invoke("update_sketch", { relativePath: path, description: pendingDescRef.current }).catch(() => {});
+          saveDocument("update_sketch", { relativePath: path, description: pendingDescRef.current }).catch(() => {});
         }
       }
       if (saveTimerRef.current && pendingRowsRef.current) {
         clearTimeout(saveTimerRef.current);
         if (!shouldSuppressEditorFlush(path)) {
-          invoke("update_sketch", { relativePath: path, rows: pendingRowsRef.current }).catch(() => {});
+          saveDocument("update_sketch", { relativePath: path, rows: pendingRowsRef.current }).catch(() => {});
         }
       }
     };
@@ -389,10 +390,13 @@ function SketchSplitEditor({ path }: { path: string }) {
     pendingRowsRef.current = null;
     if (shouldSuppressEditorFlush(path)) return;
     try {
-      if (title !== null) await invoke("update_sketch_title", { relativePath: path, title });
-      if (desc !== null) await invoke("update_sketch", { relativePath: path, description: desc });
-      if (rows) await invoke("update_sketch", { relativePath: path, rows });
+      await Promise.all([
+        title !== null && saveDocument("update_sketch_title", { relativePath: path, title }),
+        desc !== null && saveDocument("update_sketch", { relativePath: path, description: desc }),
+        rows && saveDocument("update_sketch", { relativePath: path, rows }),
+      ]);
     } catch (err) {
+      if (isDocumentConflict(err)) return;
       pendingTitleRef.current ??= title;
       pendingDescRef.current ??= desc;
       pendingRowsRef.current ??= rows;
@@ -403,7 +407,7 @@ function SketchSplitEditor({ path }: { path: string }) {
   // Re-load when primary pane saves (so split stays in sync if primary edits)
   useEffect(() => {
     const handler = () => {
-      invoke<Sketch>("get_sketch", { relativePath: path })
+      loadDocument<Sketch>("sketch", path)
         .then((s) => {
           setSketch(s);
           setLocalRows(s.rows ?? []);
@@ -412,11 +416,16 @@ function SketchSplitEditor({ path }: { path: string }) {
         })
         .catch(() => {});
     };
+    const refreshed = (event: Event) => {
+      if ((event as CustomEvent<{ path?: string }>).detail?.path === path) handler();
+    };
     window.addEventListener("cutready:sketch-saved", handler);
     window.addEventListener("cutready:ai-sketch-updated", handler);
+    window.addEventListener("cutready:document-refreshed", refreshed);
     return () => {
       window.removeEventListener("cutready:sketch-saved", handler);
       window.removeEventListener("cutready:ai-sketch-updated", handler);
+      window.removeEventListener("cutready:document-refreshed", refreshed);
     };
   }, [path]);
 
@@ -428,7 +437,7 @@ function SketchSplitEditor({ path }: { path: string }) {
     titleTimerRef.current = setTimeout(() => {
       pendingTitleRef.current = null;
       if (shouldSuppressEditorFlush(path)) return;
-      invoke("update_sketch_title", { relativePath: path, title }).catch(() => {});
+      saveDocument("update_sketch_title", { relativePath: path, title }).catch(() => {});
       window.dispatchEvent(new CustomEvent("cutready:sketch-saved"));
     }, 500);
   };
@@ -441,7 +450,7 @@ function SketchSplitEditor({ path }: { path: string }) {
     descTimerRef.current = setTimeout(() => {
       pendingDescRef.current = null;
       if (shouldSuppressEditorFlush(path)) return;
-      invoke("update_sketch", { relativePath: path, description: desc }).catch(() => {});
+      saveDocument("update_sketch", { relativePath: path, description: desc }).catch(() => {});
     }, 500);
   };
 
@@ -454,7 +463,7 @@ function SketchSplitEditor({ path }: { path: string }) {
       descTimerRef.current = null;
     }
     if (shouldSuppressEditorFlush(path)) return;
-    await invoke("update_sketch", { relativePath: path, description: desc });
+    await saveDocument("update_sketch", { relativePath: path, description: desc });
     window.dispatchEvent(new CustomEvent("cutready:sketch-saved"));
   };
 
@@ -466,7 +475,7 @@ function SketchSplitEditor({ path }: { path: string }) {
     saveTimerRef.current = setTimeout(() => {
       pendingRowsRef.current = null;
       if (shouldSuppressEditorFlush(path)) return;
-      invoke("update_sketch", { relativePath: path, rows }).catch(() => {});
+      saveDocument("update_sketch", { relativePath: path, rows }).catch(() => {});
       window.dispatchEvent(new CustomEvent("cutready:sketch-saved"));
     }, 800);
   };
@@ -562,7 +571,7 @@ function NoteSplitEditor({ path }: { path: string }) {
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      invoke<string>("get_note", { relativePath: path }),
+      loadDocument<string>("note", path),
       invoke<{ locked: boolean }>("get_note_lock", { relativePath: path }),
     ])
       .then(([c, lock]) => {
@@ -578,7 +587,7 @@ function NoteSplitEditor({ path }: { path: string }) {
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
         if (!locked && pendingContentRef.current !== null && !shouldSuppressEditorFlush(path)) {
-          invoke("update_note", { relativePath: path, content: pendingContentRef.current }).catch(() => {});
+          saveDocument("update_note", { relativePath: path, content: pendingContentRef.current }).catch(() => {});
         }
       }
     };
@@ -591,8 +600,9 @@ function NoteSplitEditor({ path }: { path: string }) {
     pendingContentRef.current = null;
     if (locked || pending === null || shouldSuppressEditorFlush(path)) return;
     try {
-      await invoke("update_note", { relativePath: path, content: pending });
+      await saveDocument("update_note", { relativePath: path, content: pending });
     } catch (err) {
+      if (isDocumentConflict(err)) return;
       pendingContentRef.current ??= pending;
       throw err;
     }
@@ -604,12 +614,16 @@ function NoteSplitEditor({ path }: { path: string }) {
       const updatedPath = (event as CustomEvent<{ path?: string | null }>).detail?.path;
       if (updatedPath && updatedPath !== path) return;
       if (pendingContentRef.current !== null) return;
-      invoke<string>("get_note", { relativePath: path })
+      loadDocument<string>("note", path)
         .then((c) => setContent(c))
         .catch(() => {});
     };
     window.addEventListener("cutready:ai-note-updated", handler);
-    return () => window.removeEventListener("cutready:ai-note-updated", handler);
+    window.addEventListener("cutready:document-refreshed", handler);
+    return () => {
+      window.removeEventListener("cutready:ai-note-updated", handler);
+      window.removeEventListener("cutready:document-refreshed", handler);
+    };
   }, [path]);
 
   const handleChange = (value: string) => {
@@ -620,7 +634,7 @@ function NoteSplitEditor({ path }: { path: string }) {
     saveTimerRef.current = setTimeout(() => {
       pendingContentRef.current = null;
       if (shouldSuppressEditorFlush(path)) return;
-      invoke("update_note", { relativePath: path, content: value }).catch(() => {});
+      saveDocument("update_note", { relativePath: path, content: value }).catch(() => {});
     }, 800);
   };
 

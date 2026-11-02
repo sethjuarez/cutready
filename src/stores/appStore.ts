@@ -13,6 +13,7 @@ import {
 } from "../services/draftlineErrors";
 import { recordActivityEntries } from "../services/telemetry";
 import { useToastStore } from "./toastStore";
+import { loadDocument, saveDocument } from "../services/documentSaves";
 import { getStoryboardSketchPaths } from "../utils/storyboard";
 import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
 import type {
@@ -1332,7 +1333,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activeNoteLocked: false,
     });
     try {
-      const sketch = await invoke<Sketch>("get_sketch", { relativePath: sketchPath });
+      const sketch = await loadDocument<Sketch>("sketch", sketchPath);
       if (get().activeSketchPath !== sketchPath) return;
       set({
         activeSketchPath: sketchPath,
@@ -1349,7 +1350,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!activeSketchPath) return;
     if (shouldSuppressEditorFlush(activeSketchPath)) return;
     try {
-      await invoke("update_sketch", { relativePath: activeSketchPath, ...update });
+      await saveDocument("update_sketch", { relativePath: activeSketchPath, ...update });
       const { activeSketch, activeSketchPath: currentActiveSketchPath } = get();
       if (activeSketch && currentActiveSketchPath === activeSketchPath) {
         set({ activeSketch: { ...activeSketch, ...update } });
@@ -1366,7 +1367,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!get().activeSketchPath) return;
     if (shouldSuppressEditorFlush(sketchPath)) return;
     try {
-      await invoke("update_sketch_title", { relativePath: sketchPath, title });
+      await saveDocument("update_sketch_title", { relativePath: sketchPath, title });
       await get().loadSketches();
       const { activeSketch, activeSketchPath } = get();
       if (activeSketch && activeSketchPath === sketchPath) {
@@ -1394,7 +1395,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadStoryboards();
       const { activeStoryboardPath: currentActiveStoryboardPath } = get();
       if (currentActiveStoryboardPath) {
-        const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: currentActiveStoryboardPath });
+        const storyboard = await loadDocument<Storyboard>("storyboard", currentActiveStoryboardPath);
         if (get().activeStoryboardPath === currentActiveStoryboardPath) {
           set({ activeStoryboard: storyboard });
         }
@@ -1454,7 +1455,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activeNoteLocked: false,
     });
     try {
-      const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: storyboardPath });
+      const storyboard = await loadDocument<Storyboard>("storyboard", storyboardPath);
       if (get().activeStoryboardPath !== storyboardPath) return;
       set({
         activeStoryboardPath: storyboardPath,
@@ -1473,8 +1474,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!activeStoryboardPath) return;
     if (shouldSuppressEditorFlush(activeStoryboardPath)) return;
     try {
-      await invoke("update_storyboard", { relativePath: activeStoryboardPath, ...update });
-      const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
+      const storyboard = await saveDocument<Storyboard>("update_storyboard", { relativePath: activeStoryboardPath, ...update });
       if (get().activeStoryboardPath === activeStoryboardPath) {
         set({ activeStoryboard: storyboard });
       }
@@ -1490,7 +1490,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { activeStoryboardPath } = get();
     if (!activeStoryboardPath) return;
     try {
-      const storyboard = await invoke<Storyboard>("set_storyboard_lock", { relativePath: activeStoryboardPath, locked });
+      const storyboard = await saveDocument<Storyboard>("set_storyboard_lock", { relativePath: activeStoryboardPath, locked });
       if (get().activeStoryboardPath === activeStoryboardPath) {
         set({ activeStoryboard: storyboard });
       }
@@ -1531,12 +1531,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { activeStoryboardPath } = get();
     if (!activeStoryboardPath) return;
     try {
-      await invoke("add_sketch_to_storyboard", {
+      const storyboard = await saveDocument<Storyboard>("add_sketch_to_storyboard", {
         storyboardPath: activeStoryboardPath,
         sketchPath,
         position: position ?? null,
       });
-      const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
       set({ activeStoryboard: storyboard });
       await get().loadStoryboards();
       useVersioningStore.setState({ isDirty: true });
@@ -1550,11 +1549,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { activeStoryboardPath } = get();
     if (!activeStoryboardPath) return;
     try {
-      await invoke("remove_sketch_from_storyboard", {
+      const storyboard = await saveDocument<Storyboard>("remove_sketch_from_storyboard", {
         storyboardPath: activeStoryboardPath,
         position,
       });
-      const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
       set({ activeStoryboard: storyboard });
       await get().loadStoryboards();
       useVersioningStore.setState({ isDirty: true });
@@ -1568,13 +1566,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { activeStoryboardPath } = get();
     if (!activeStoryboardPath) return;
     try {
-      await invoke("add_section_to_storyboard", {
+      const storyboard = await saveDocument<Storyboard>("add_section_to_storyboard", {
         storyboardPath: activeStoryboardPath,
         title,
         description: null,
         position: position ?? null,
       });
-      const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
       set({ activeStoryboard: storyboard });
       await get().loadStoryboards();
       useVersioningStore.setState({ isDirty: true });
@@ -1588,11 +1585,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { activeStoryboardPath } = get();
     if (!activeStoryboardPath) return;
     try {
-      await invoke("reorder_storyboard_items", {
+      const storyboard = await saveDocument<Storyboard>("reorder_storyboard_items", {
         storyboardPath: activeStoryboardPath,
         items,
       });
-      const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
       set({ activeStoryboard: storyboard });
       useVersioningStore.setState({ isDirty: true });
       await useVersioningStore.getState().refreshChangedFiles();
@@ -1650,7 +1646,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     });
     try {
       const [content, lock] = await Promise.all([
-        invoke<string>("get_note", { relativePath: notePath }),
+        loadDocument<string>("note", notePath),
         invoke<{ locked: boolean }>("get_note_lock", { relativePath: notePath }),
       ]);
       if (get().activeNotePath !== notePath) return;
@@ -1676,7 +1672,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (shouldSuppressEditorFlush(activeNotePath)) return;
     if (activeNoteLocked) return;
     try {
-      await invoke("update_note", { relativePath: activeNotePath, content });
+      await saveDocument("update_note", { relativePath: activeNotePath, content });
       // Note content and dirty state live in separate stores; update both synchronously.
       if (get().activeNotePath === activeNotePath) set({ activeNoteContent: content });
       useVersioningStore.setState({ isDirty: true });

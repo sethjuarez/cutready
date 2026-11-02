@@ -5,8 +5,8 @@ const mockGetGitHubAuthStatus = vi.hoisted(() => vi.fn());
 const mockPreflightDraftlineSwitchVariation = vi.hoisted(() => vi.fn());
 const mockSwitchDraftlineVariation = vi.hoisted(() => vi.fn());
 
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: (...args: unknown[]) => mockInvoke(...args),
+vi.mock("@tauri-apps/api/core", async () => ({
+  invoke: (await import("./versionedInvoke")).versionedInvoke((...args: unknown[]) => mockInvoke(...args)),
   Channel: class {},
 }));
 

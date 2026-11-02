@@ -1513,6 +1513,10 @@ const threeRows = sketch([
 ]);
 const runOrder = edited(threeRows, (d) => { d.rows = [d.rows[2], d.rows[0], d.rows[1]]; });
 const theirOrder = edited(threeRows, (d) => { d.rows = [d.rows[1], d.rows[2], d.rows[0]]; });
+// An app save rebased onto a newer file (ADR 0002 "App saves") is
+// undoDocument(disk, [write(local, base)]): the save's own edits are the undo.
+const appLocal = edited(threeRows, (d) => { d.rows[0].narrative = "Mine A."; d.rows[1].narrative = "Mine B."; });
+const appDisk = edited(threeRows, (d) => { d.rows[1].narrative = "Theirs B."; });
 const renamedBoard = { ...openStoryboard, title: "Run's title", updated_at: NOW };
 const lockedRenamedBoard = { ...renamedBoard, locked: true };
 const undoDocumentVectors = [
@@ -1603,6 +1607,17 @@ const undoDocumentVectors = [
     input: undo("storyboard", sk({ ...renamedBoard, title: "Theirs" }), [write(sk(openStoryboard), sk(renamedBoard))]),
     expectedError: cmdError("undo_conflict", {
       conflicts: [{ path: "/title", expected_version: entityVersion("Run's title"), current_version: entityVersion("Theirs") }],
+    }),
+  },
+  {
+    name: "an app save rebased onto a concurrent edit keeps its disjoint row and conflicts only on the row both changed",
+    input: undo("sketch", sk(appDisk), [write(sk(appLocal), sk(threeRows))]),
+    expectedError: cmdError("undo_conflict", {
+      conflicts: [{
+        path: "/rows/b",
+        expected_version: entityVersion(rowContent(threeRows.rows[1])),
+        current_version: entityVersion(rowContent(appDisk.rows[1])),
+      }],
     }),
   },
   {

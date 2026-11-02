@@ -7,6 +7,9 @@
 // edits; they join multi-file transactions in 4.9.
 // Writes serialize on the repository file lock (engine/write_lock.rs, 4.9c);
 // the old in-process workspace mutex must not come back.
+// Every write states what it expects on disk (4.13, ADR 0002 "App saves"):
+// `Expected::Unchecked` appears only in document_writer::import_document, and
+// only the import commands may call that.
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,9 +17,18 @@ import { fileURLToPath } from "node:url";
 export const SOURCE_ROOT = "src-tauri/src";
 
 /** Files that may still call project::write_sketch/write_storyboard/write_note. */
-export const LEGACY_WRITERS = new Map([
-  ["engine/project.rs", "defines the helpers, which delegate to the writer"],
-  ["engine/document_goldens.rs", "test-only goldens"],
+export const LEGACY_WRITERS = new Map([["engine/document_goldens.rs", "test-only goldens"]]);
+
+/** The writer itself, whose write_* functions are the way in. */
+export const WRITER = "engine/document_writer.rs";
+
+/** The one function that may write without checking what's on disk. */
+export const UNCHECKED_ENTRY = "import_document";
+
+/** Files that may call it: importing a document replaces whatever is there. */
+export const IMPORTERS = new Map([
+  ["commands/import.rs", "document import"],
+  ["engine/video_import.rs", "video import"],
 ]);
 
 /** Document command files: raw fs mutations there must be marked asset writes. */
@@ -30,8 +42,6 @@ export const DOCUMENT_COMMANDS = [
 
 /** project.rs helpers that must stay thin wrappers over the writer. */
 export const DELEGATING_HELPERS = [
-  "write_sketch",
-  "write_storyboard",
   "delete_sketch",
   "delete_storyboard",
   "delete_note",
@@ -43,7 +53,10 @@ export const ASSET_MARKER = "// asset write";
 /** The in-process write mutex that engine/write_lock.rs replaced. */
 const IN_PROCESS_LOCK = /\b(workspace_write_lock|ProjectLock)\b/g;
 
-const LEGACY_CALL = /(?<!\bfn\s+)\b(?:project::)?(write_sketch|write_storyboard|write_note)\s*\(/g;
+const LEGACY_CALL =
+  /(?<!\bfn\s+|document_writer::)\b(?:project::)?(write_sketch|write_storyboard|write_note)\s*\(/g;
+const UNCHECKED = /\bUnchecked\b/g;
+const UNCHECKED_CALL = new RegExp(`(?<!\\bfn\\s+)\\b${UNCHECKED_ENTRY}\\s*\\(`, "g");
 const FS_MUTATION =
   /\b(?:std::)?fs::(write|remove_file|remove_dir|remove_dir_all|rename|copy|create_dir|create_dir_all|File::create|OpenOptions)\b|\bFile::create\b|\bOpenOptions::new\b/;
 
@@ -102,6 +115,8 @@ function matchBrace(code, open) {
   return code.length - 1;
 }
 
+const TEST_FILE = /_tests\.rs$/;
+
 /** Masks every `#[cfg(test)]` item, so test fixtures may write freely. */
 export function maskTests(code) {
   const out = code.split("");
@@ -147,9 +162,10 @@ export function checkDocumentWrites(files) {
   const problems = [];
   for (const { path, text } of files) {
     const normalized = text.replace(/\r\n/g, "\n");
-    const code = maskTests(maskNonCode(normalized));
+    // A `*_tests.rs` file is a `#[cfg(test)]` module split out of its parent.
+    const code = TEST_FILE.test(path) ? "" : maskTests(maskNonCode(normalized));
 
-    if (!LEGACY_WRITERS.has(path)) {
+    if (!LEGACY_WRITERS.has(path) && path !== WRITER) {
       for (const call of code.matchAll(LEGACY_CALL)) {
         problems.push(
           `${path}:${lineOf(code, call.index)}: ${call[1]} bypasses the document writer; use engine::document_writer`,
@@ -161,6 +177,21 @@ export function checkDocumentWrites(files) {
       problems.push(
         `${path}:${lineOf(normalized, use.index)}: ${use[1]} is gone; take engine::write_lock::lock(root)`,
       );
+    }
+
+    const entry = path === WRITER ? fnBody(code, UNCHECKED_ENTRY) : null;
+    for (const use of code.matchAll(UNCHECKED)) {
+      if (entry && use.index > entry.start && use.index < entry.end) continue;
+      problems.push(
+        `${path}:${lineOf(code, use.index)}: Expected::Unchecked overwrites edits made since the read; pass Expected::Version or Expected::Absent`,
+      );
+    }
+    if (path !== WRITER && !IMPORTERS.has(path)) {
+      for (const call of code.matchAll(UNCHECKED_CALL)) {
+        problems.push(
+          `${path}:${lineOf(code, call.index)}: ${UNCHECKED_ENTRY} is for importing documents only; use document_writer::save or edit`,
+        );
+      }
     }
 
     const lines = normalized.split("\n");
@@ -185,6 +216,10 @@ export function checkDocumentWrites(files) {
       }
     }
   }
+  const writer = files.find((file) => file.path === WRITER);
+  if (writer && !fnBody(maskTests(maskNonCode(writer.text.replace(/\r\n/g, "\n"))), UNCHECKED_ENTRY)) {
+    problems.push(`${WRITER}: ${UNCHECKED_ENTRY} is missing; update scripts/check-document-writes.mjs`);
+  }
   return problems;
 }
 
@@ -200,7 +235,7 @@ function rustFiles(dir, root = dir) {
 function main() {
   const files = rustFiles(SOURCE_ROOT);
   const problems = checkDocumentWrites(files);
-  for (const required of [...LEGACY_WRITERS.keys(), ...DOCUMENT_COMMANDS]) {
+  for (const required of [...LEGACY_WRITERS.keys(), WRITER, ...IMPORTERS.keys(), ...DOCUMENT_COMMANDS]) {
     if (!files.some((file) => file.path === required)) {
       problems.push(`${required} not found; update scripts/check-document-writes.mjs`);
     }

@@ -1211,8 +1211,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             const text = await navigator.clipboard.readText();
             if (text && text.trim().length > 0) {
               const notePath = "imported-clipboard.md";
-              await invoke("create_note", { relativePath: notePath });
-              await invoke("update_note", { relativePath: notePath, content: text.trim() });
+                      await invoke("update_note", { relativePath: notePath, content: text.trim() });
               await loadNotes();
               openNote(notePath);
             } else {

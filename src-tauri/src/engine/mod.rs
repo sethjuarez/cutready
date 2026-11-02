@@ -5,6 +5,7 @@ pub mod automation;
 pub mod diagnostics_sanitizer;
 #[cfg(test)]
 mod document_goldens;
+pub mod document_reads;
 pub mod document_writer;
 pub mod draftline_adapter;
 pub mod export;

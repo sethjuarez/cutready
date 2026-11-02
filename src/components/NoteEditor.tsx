@@ -7,6 +7,7 @@ import { useSettings } from "../hooks/useSettings";
 import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { invoke } from "../services/tauri";
+import { isDocumentConflict, saveDocument } from "../services/documentSaves";
 import type { TokenResponse } from "../types/auth";
 import { describeWordExport, exportNoteToWord } from "../utils/exportToWord";
 import { ProjectImage } from "./ProjectImage";
@@ -151,8 +152,9 @@ export function NoteEditor() {
     pendingContentRef.current = null;
     if (shouldSuppressEditorFlush(activeNotePath) || activeNoteLocked) return;
     try {
-      await invoke("update_note", { relativePath: activeNotePath, content });
+      await saveDocument("update_note", { relativePath: activeNotePath!, content });
     } catch (err) {
+      if (isDocumentConflict(err)) return;
       if (pendingContentRef.current === null) pendingContentRef.current = content;
       throw err;
     }
