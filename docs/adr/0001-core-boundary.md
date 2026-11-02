@@ -17,7 +17,7 @@ Document rules (edits, locks, saves, review, undo) used to live inside the Tauri
 | `Clock` | Current time |
 | `Lock` | Cross-process document lock |
 | `OpLogStore` | Edit runs and their writes |
-| `Secrets` | Credentials (desktop: Stronghold, read and written by the app's Stronghold plugin; vault and salt location in `cutready-desktop-io::secret_vault`) |
+| `Secrets` | Credentials (desktop: `StrongholdSecrets` in `cutready-desktop-io`, over the same vault the app's Stronghold plugin uses) |
 | `Log` | Diagnostics |
 
 Hosts supply the adapters:
@@ -26,7 +26,7 @@ Hosts supply the adapters:
 | --- | --- |
 | `cutready-core` | Document rules and ports; no I/O |
 | `cutready-contracts` | Types generated from `contracts/*.tsp` |
-| `cutready-desktop-io` | Desktop adapters: files, file lock, SQLite op log, state dir, Stronghold vault location and migration |
+| `cutready-desktop-io` | Desktop adapters: files, file lock, SQLite op log, state dir, Stronghold secrets and vault location |
 | `cutready-versioning` | Draftline-backed history, save, send |
 | `cutready-cli` | `cutready-cli` and its MCP server, runnable with the app closed |
 | `src-tauri` (`cutready`) | Desktop shell: Tauri commands, UI events |
@@ -38,7 +38,7 @@ Core has no dependency on Tauri, Draftline, git, SQLite, the network or platform
 - One implementation of each rule serves the app, the CLI, MCP and iOS.
 - Core tests run against in-memory ports with no temp folders or clocks.
 - New I/O needs a port or a host-side adapter, which costs a little ceremony.
-- No Rust code reads credentials yet, so desktop has no Rust `Secrets` adapter; the first Rust caller (CLI or agent) adds a Stronghold one in `cutready-desktop-io` that opens the same vault with the same Argon2 salt. `existing_vaults_still_open` in `src-tauri/src/commands/secrets.rs` pins that a committed vault still opens through today's path and salt resolution.
+- The app's frontend still reads and writes credentials through the Stronghold plugin; `StrongholdSecrets` opens the same vault (same path, Argon2 salt, password and client) for Rust callers such as the CLI or agent. The vault is one encrypted snapshot, so only one process may write it at a time. `existing_vaults_still_open` in `src-tauri/src/commands/secrets.rs` pins that a committed plugin-written vault opens through today's path resolution and through the port, and that the plugin reads what the port writes.
 
 ## Enforcement
 

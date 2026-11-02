@@ -27,7 +27,8 @@ pub async fn secret_vault_path(app: AppHandle) -> Result<String, String> {
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use cutready_desktop_io::secret_vault;
+    use cutready_core::Secrets;
+    use cutready_desktop_io::{secret_vault, StrongholdSecrets};
     use tauri_plugin_stronghold::{kdf::KeyDerivation, stronghold::Stronghold};
 
     // Must match VAULT_PASS and CLIENT_NAME in src/hooks/useSecretStore.ts.
@@ -68,6 +69,16 @@ mod tests {
             let vault = secret_vault::resolve_and_migrate(&app_data).unwrap();
             assert_eq!(vault, app_data.join("vault.hold"));
             assert_eq!(read_secret(&vault, &salt).as_deref(), Some(VALUE));
+
+            // The desktop-io Secrets port reads the plugin's vault, and the plugin
+            // reads what the port writes back.
+            let port = StrongholdSecrets::open(&vault, &salt).unwrap();
+            let value = std::str::from_utf8(VALUE).unwrap();
+            let key = std::str::from_utf8(KEY).unwrap();
+            assert_eq!(port.get(key).unwrap().as_deref(), Some(value));
+            port.set(key, "rotated").unwrap();
+            drop(port);
+            assert_eq!(read_secret(&vault, &salt).as_deref(), Some(&b"rotated"[..]));
         }
     }
 

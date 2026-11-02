@@ -15,6 +15,8 @@ use std::path::{Path, PathBuf};
 
 const VAULT_FILE: &str = "vault.hold";
 const BACKUP_FILE: &str = "vault.hold.bak";
+/// Log target from before the move into this crate, so filters keep matching.
+const LOG_TARGET: &str = "cutready_lib::engine::secret_vault";
 const SALT_FILE: &str = "salt.txt";
 
 pub fn vault_path(app_data_dir: &Path) -> PathBuf {
@@ -80,14 +82,14 @@ fn resolve_and_migrate_with(
 
     if new.exists() {
         if legacy.exists() && is_newer(&legacy, &new) {
-            log::warn!("[secrets] a newer legacy credential vault exists; using it and keeping the current one as a backup");
+            log::warn!(target: LOG_TARGET, "[secrets] a newer legacy credential vault exists; using it and keeping the current one as a backup");
             if let Err(err) = rename(&new, &app_data_dir.join(BACKUP_FILE)) {
-                log::warn!("[secrets] could not back up the current vault, keeping it: {err}");
+                log::warn!(target: LOG_TARGET, "[secrets] could not back up the current vault, keeping it: {err}");
                 return Ok(new);
             }
         } else {
             if legacy.exists() {
-                log::warn!("[secrets] ignoring an older legacy credential vault");
+                log::warn!(target: LOG_TARGET, "[secrets] ignoring an older legacy credential vault");
             }
             return Ok(new);
         }
@@ -100,16 +102,16 @@ fn resolve_and_migrate_with(
 
     match rename(&legacy, &new) {
         Ok(()) => {
-            log::info!("[secrets] moved the credential vault into the app data folder");
+            log::info!(target: LOG_TARGET, "[secrets] moved the credential vault into the app data folder");
             Ok(new)
         }
         // Another caller may have finished the move, so re-check before falling back.
         Err(err) if new.exists() => {
-            log::debug!("[secrets] vault already moved: {err}");
+            log::debug!(target: LOG_TARGET, "[secrets] vault already moved: {err}");
             Ok(new)
         }
         Err(err) if legacy.exists() => {
-            log::warn!("[secrets] could not move the credential vault, using it in place: {err}");
+            log::warn!(target: LOG_TARGET, "[secrets] could not move the credential vault, using it in place: {err}");
             Ok(legacy)
         }
         Err(err) => Err(err),
