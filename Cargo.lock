@@ -1752,11 +1752,17 @@ dependencies = [
  "chrono",
  "cutready-core",
  "git2",
+ "iota_stronghold",
+ "log",
+ "rand_chacha 0.9.0",
+ "rand_core 0.9.5",
  "rusqlite",
+ "rust-argon2 2.1.0",
  "serde_json",
  "tempfile",
  "tracing",
  "uuid",
+ "zeroize",
 ]
 
 [[package]]
