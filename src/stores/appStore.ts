@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { invoke, Channel, commandErrorText } from "../services/tauri";
+import { invoke, commandErrorText } from "../services/tauri";
 import {
   moveDraftlineProjectFolder,
   type MoveProjectFolderResult,
@@ -15,12 +15,6 @@ import { recordActivityEntries } from "../services/telemetry";
 import { useToastStore } from "./toastStore";
 import { getStoryboardSketchPaths } from "../utils/storyboard";
 import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
-import type {
-  BrowserProfile,
-  BrowserRunningStatus,
-  CapturedAction,
-  RecordedSession,
-} from "../types/recording";
 import type {
   Sketch,
   SketchSummary,
@@ -229,35 +223,6 @@ export interface AppStoreState {
   /** Sidebar display order manifest (paths per category). */
   sidebarOrder: SidebarOrder | null;
 
-  // ── Profile detection ─────────────────────────────────────
-
-  /** Browser profiles detected on the system. */
-  profiles: BrowserProfile[];
-  /** Which profile the user has selected (null for fresh browser). */
-  selectedProfile: BrowserProfile | null;
-  /** Which browsers are currently running. */
-  browserRunning: BrowserRunningStatus | null;
-
-  // ── Browser lifecycle ─────────────────────────────────────
-
-  /** Whether a recording browser is connected and ready. */
-  isBrowserReady: boolean;
-  /** Which browser channel was used ("chrome", "msedge", "chromium"). */
-  browserChannel: string | null;
-
-  // ── Recording lifecycle ───────────────────────────────────
-
-  /** Whether a recording (observation) is currently active. */
-  isRecording: boolean;
-  /** The ID of the active recording session. */
-  recordingSessionId: string | null;
-  /** Captured actions from the active (or most recent) recording session. */
-  capturedActions: CapturedAction[];
-  /** The most recently completed session. */
-  lastSession: RecordedSession | null;
-  /** Active channel reference (prevents GC during recording). */
-  _activeChannel: Channel<CapturedAction> | null;
-
   /** Clear the current error. */
   clearError: () => void;
   /** Switch to a different view. */
@@ -450,28 +415,6 @@ export interface AppStoreState {
   /** Save sidebar order manifest. */
   saveSidebarOrder: (order: SidebarOrder) => Promise<void>;
 
-  // ── Profile actions ───────────────────────────────────────
-
-  /** Detect browser profiles available on the system. */
-  detectProfiles: () => Promise<void>;
-  /** Check which browsers are currently running. */
-  checkBrowsersRunning: () => Promise<void>;
-  /** Select a profile (or null for fresh browser). */
-  setSelectedProfile: (profile: BrowserProfile | null) => void;
-
-  // ── Browser actions ───────────────────────────────────────
-
-  /** Launch a recording browser (with selected profile or fresh). */
-  prepareBrowser: () => Promise<void>;
-  /** Close the recording browser and disconnect. */
-  disconnectBrowser: () => Promise<void>;
-
-  // ── Recording actions ─────────────────────────────────────
-
-  /** Start observing in the prepared browser. */
-  startRecording: () => Promise<void>;
-  /** Stop the active recording (browser stays open). */
-  stopRecording: () => Promise<void>;
 }
 
 // ── Layout persistence helpers ─────────────────────────────────
@@ -662,20 +605,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   adoptionPrompt: null,
   moveFolderDialogOpen: false,
   sidebarOrder: null,
-
-  profiles: [],
-
-  selectedProfile: null,
-  browserRunning: null,
-
-  isBrowserReady: false,
-  browserChannel: null,
-
-  isRecording: false,
-  recordingSessionId: null,
-  capturedActions: [],
-  lastSession: null,
-  _activeChannel: null,
 
   clearError: () => set({ error: null }),
   setView: (view) => set({ view }),
@@ -2014,127 +1943,6 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await invoke("set_sidebar_order", { order });
     } catch (err) {
       console.error("Failed to save sidebar order:", err);
-    }
-  },
-
-  // ── Profile actions ───────────────────────────────────────
-
-  detectProfiles: async () => {
-    try {
-      const profiles = await invoke<BrowserProfile[]>(
-        "detect_browser_profiles"
-      );
-      const { selectedProfile } = get();
-      const newSelected =
-        selectedProfile ??
-        (profiles.length > 0 ? profiles[0] : null);
-      set({ profiles, selectedProfile: newSelected });
-    } catch (err) {
-      console.error("Failed to detect profiles:", err);
-    }
-  },
-
-  checkBrowsersRunning: async () => {
-    try {
-      const status = await invoke<BrowserRunningStatus>(
-        "check_browsers_running"
-      );
-      set({ browserRunning: status });
-    } catch (err) {
-      console.error("Failed to check browsers:", err);
-    }
-  },
-
-  setSelectedProfile: (profile) => set({ selectedProfile: profile }),
-
-  // ── Browser actions ───────────────────────────────────────
-
-  prepareBrowser: async () => {
-    set({ loading: true, error: null });
-    try {
-      const { selectedProfile } = get();
-      const channel = await invoke<string>("prepare_browser", {
-        userDataDir: selectedProfile?.user_data_dir ?? null,
-        profileDirectory: selectedProfile?.profile_directory ?? null,
-        browserChannel: selectedProfile?.browser ?? null,
-      });
-      set({
-        isBrowserReady: true,
-        browserChannel: channel,
-        capturedActions: [],
-        lastSession: null,
-        view: "recording",
-      });
-    } catch (err) {
-      console.error("Failed to prepare browser:", err);
-      set({ error: String(err) });
-    } finally {
-      set({ loading: false });
-    }
-  },
-
-  disconnectBrowser: async () => {
-    set({ loading: true });
-    try {
-      await invoke("disconnect_browser");
-    } catch (err) {
-      console.error("Failed to disconnect browser:", err);
-    } finally {
-      set({
-        loading: false,
-        isBrowserReady: false,
-        browserChannel: null,
-        isRecording: false,
-        recordingSessionId: null,
-        capturedActions: [],
-        lastSession: null,
-        _activeChannel: null,
-      });
-    }
-  },
-
-  // ── Recording actions ─────────────────────────────────────
-
-  startRecording: async () => {
-    set({ loading: true, capturedActions: [], lastSession: null });
-    try {
-      const channel = new Channel<CapturedAction>();
-      channel.onmessage = (action) => {
-        set((state) => ({
-          capturedActions: [...state.capturedActions, action],
-        }));
-      };
-
-      const sessionId = await invoke<string>("start_recording_session", {
-        onAction: channel,
-      });
-
-      set({
-        isRecording: true,
-        recordingSessionId: sessionId,
-        _activeChannel: channel,
-      });
-    } catch (err) {
-      console.error("Failed to start recording:", err);
-    } finally {
-      set({ loading: false });
-    }
-  },
-
-  stopRecording: async () => {
-    set({ loading: true });
-    try {
-      const session = await invoke<RecordedSession>("stop_recording_session");
-      set({
-        isRecording: false,
-        recordingSessionId: null,
-        lastSession: session,
-        _activeChannel: null,
-      });
-    } catch (err) {
-      console.error("Failed to stop recording:", err);
-    } finally {
-      set({ loading: false });
     }
   },
 }));

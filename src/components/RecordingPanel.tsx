@@ -1,28 +1,29 @@
 import { useRef, useEffect } from "react";
 import { AlertTriangle, X, Monitor } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
+import { useRecordingStore } from "../stores/recordingStore";
 import { ActionCard } from "./ActionCard";
 
 export function RecordingPanel() {
   const currentProject = useAppStore((s) => s.currentProject);
-  const isBrowserReady = useAppStore((s) => s.isBrowserReady);
-  const browserChannel = useAppStore((s) => s.browserChannel);
-  const isRecording = useAppStore((s) => s.isRecording);
-  const capturedActions = useAppStore((s) => s.capturedActions);
-  const lastSession = useAppStore((s) => s.lastSession);
+  const isBrowserReady = useRecordingStore((s) => s.isBrowserReady);
+  const browserChannel = useRecordingStore((s) => s.browserChannel);
+  const isRecording = useRecordingStore((s) => s.isRecording);
+  const capturedActions = useRecordingStore((s) => s.capturedActions);
+  const lastSession = useRecordingStore((s) => s.lastSession);
   const loading = useAppStore((s) => s.loading);
 
-  const profiles = useAppStore((s) => s.profiles);
-  const selectedProfile = useAppStore((s) => s.selectedProfile);
-  const browserRunning = useAppStore((s) => s.browserRunning);
+  const profiles = useRecordingStore((s) => s.profiles);
+  const selectedProfile = useRecordingStore((s) => s.selectedProfile);
+  const browserRunning = useRecordingStore((s) => s.browserRunning);
 
-  const prepareBrowser = useAppStore((s) => s.prepareBrowser);
-  const disconnectBrowser = useAppStore((s) => s.disconnectBrowser);
-  const startRecording = useAppStore((s) => s.startRecording);
-  const stopRecording = useAppStore((s) => s.stopRecording);
-  const detectProfiles = useAppStore((s) => s.detectProfiles);
-  const checkBrowsersRunning = useAppStore((s) => s.checkBrowsersRunning);
-  const setSelectedProfile = useAppStore((s) => s.setSelectedProfile);
+  const prepareBrowser = useRecordingStore((s) => s.prepareBrowser);
+  const disconnectBrowser = useRecordingStore((s) => s.disconnectBrowser);
+  const startRecording = useRecordingStore((s) => s.startRecording);
+  const stopRecording = useRecordingStore((s) => s.stopRecording);
+  const detectProfiles = useRecordingStore((s) => s.detectProfiles);
+  const checkBrowsersRunning = useRecordingStore((s) => s.checkBrowsersRunning);
+  const setSelectedProfile = useRecordingStore((s) => s.setSelectedProfile);
   const error = useAppStore((s) => s.error);
   const clearError = useAppStore((s) => s.clearError);
 

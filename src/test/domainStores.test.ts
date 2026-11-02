@@ -15,6 +15,7 @@ import {
 } from "../stores/versioningStore";
 import { initialSyncState, resetSyncState, useSyncStore } from "../stores/syncStore";
 import { initialChatState, useChatStore } from "../stores/chatStore";
+import { initialRecordingState, useRecordingStore } from "../stores/recordingStore";
 
 const alpha = { root: "D:\\workspace\\alpha", repo_root: "D:\\workspace", name: "Alpha" };
 const beta = { root: "D:\\workspace\\beta", repo_root: "D:\\workspace", name: "Beta" };
@@ -25,6 +26,7 @@ const originalAppState = { ...useAppStore.getState() };
 const originalVersioningState = { ...useVersioningStore.getState() };
 const originalSyncState = { ...useSyncStore.getState() };
 const originalChatState = { ...useChatStore.getState() };
+const originalRecordingState = { ...useRecordingStore.getState() };
 
 function pick<T extends object>(state: T, keys: string[]) {
   return Object.fromEntries(keys.map((key) => [key, (state as Record<string, unknown>)[key]]));
@@ -99,6 +101,29 @@ function expectChatReset(clearedKeys: (keyof typeof dirtyChat)[]) {
   expect(pick(useChatStore.getState(), Object.keys(dirtyChat))).toEqual(expected);
 }
 
+const dirtyRecording = {
+  profiles: [{ browser: "msedge", profile_directory: "Default", display_name: "Work", user_data_dir: "C:\\edge" }],
+  selectedProfile: { browser: "msedge", profile_directory: "Default", display_name: "Work", user_data_dir: "C:\\edge" },
+  browserRunning: { chrome: false, msedge: true },
+  isBrowserReady: true,
+  browserChannel: "msedge",
+  isRecording: true,
+  recordingSessionId: "session-1",
+  capturedActions: [{ action: { type: "Click" } }],
+  lastSession: { id: "previous" },
+  _activeChannel: {},
+} as never as ReturnType<typeof initialRecordingState>;
+
+const RECORDING_ACTIONS = [
+  "detectProfiles", "checkBrowsersRunning", "setSelectedProfile",
+  "prepareBrowser", "disconnectBrowser", "startRecording", "stopRecording",
+];
+
+/** Project lifecycle actions leave browser recording state alone (as they did in appStore). */
+function expectRecordingUntouched() {
+  expect(pick(useRecordingStore.getState(), Object.keys(dirtyRecording))).toEqual(dirtyRecording);
+}
+
 function stubLoaders() {
   useAppStore.setState({
     loadProjects: vi.fn(() => Promise.resolve()),
@@ -152,6 +177,7 @@ describe("domain stores", () => {
     useVersioningStore.setState(originalVersioningState, true);
     useSyncStore.setState(originalSyncState, true);
     useChatStore.setState(originalChatState, true);
+    useRecordingStore.setState(originalRecordingState, true);
   });
 
   it("keeps the moved versioning and sync keys out of appStore", () => {
@@ -331,5 +357,129 @@ describe("domain stores", () => {
     expectChatReset(["chatMessages", "chatSessionPath", "chatLoading", "chatError", "chatInputDraft"]);
     expect(useAppStore.getState().activityLog).toEqual([]);
     expect(persistTabs).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the moved recording keys out of appStore", () => {
+    const appKeys = new Set(Object.keys(useAppStore.getState()));
+    const recordingKeys = Object.keys(useRecordingStore.getState());
+    for (const key of [...Object.keys(initialRecordingState()), ...RECORDING_ACTIONS]) {
+      expect(appKeys.has(key)).toBe(false);
+      expect(recordingKeys).toContain(key);
+    }
+    const otherKeys = new Set([
+      ...Object.keys(useVersioningStore.getState()),
+      ...Object.keys(useSyncStore.getState()),
+      ...Object.keys(useChatStore.getState()),
+    ]);
+    expect(recordingKeys.filter((key) => appKeys.has(key) || otherKeys.has(key))).toEqual([]);
+    for (const key of ["loading", "error", "view", "clearError"]) {
+      expect(appKeys.has(key)).toBe(true);
+    }
+  });
+
+  it("starts the recording store from its initial state", () => {
+    expect(pick(useRecordingStore.getState(), Object.keys(initialRecordingState()))).toEqual(initialRecordingState());
+  });
+
+  it("opening a project leaves recording state alone", async () => {
+    useAppStore.setState({ currentProject: alpha });
+    useRecordingStore.setState(dirtyRecording);
+    stubLoaders();
+
+    await useAppStore.getState().openProject(beta.root);
+
+    expect(useAppStore.getState().currentProject).toEqual(beta);
+    expectRecordingUntouched();
+  });
+
+  it("closing a project leaves recording state alone", () => {
+    useAppStore.setState({ currentProject: alpha });
+    useRecordingStore.setState(dirtyRecording);
+
+    useAppStore.getState().closeProject();
+
+    expect(useAppStore.getState().currentProject).toBeNull();
+    expectRecordingUntouched();
+  });
+
+  it("switching projects leaves recording state alone", async () => {
+    mockInvoke.mockImplementation((command: string) =>
+      command === "switch_project" ? Promise.resolve(gamma) : Promise.resolve(null),
+    );
+    useAppStore.setState({ currentProject: alpha });
+    useRecordingStore.setState(dirtyRecording);
+    stubLoaders();
+
+    await useAppStore.getState().switchProject(gamma.root);
+
+    expect(useAppStore.getState().currentProject).toEqual(gamma);
+    expectRecordingUntouched();
+  });
+
+  it("preparing a browser updates recording state and the shared app loading, error and view", async () => {
+    mockInvoke.mockImplementation((command: string) =>
+      command === "prepare_browser" ? Promise.resolve("msedge") : Promise.resolve([]),
+    );
+    useAppStore.setState({ view: "project", error: "old", loading: false });
+    useRecordingStore.setState({ ...dirtyRecording, isBrowserReady: false, browserChannel: null });
+
+    const pending = useRecordingStore.getState().prepareBrowser();
+    expect(useAppStore.getState().loading).toBe(true);
+    expect(useAppStore.getState().error).toBeNull();
+    await pending;
+
+    expect(mockInvoke).toHaveBeenCalledWith("prepare_browser", {
+      userDataDir: "C:\\edge",
+      profileDirectory: "Default",
+      browserChannel: "msedge",
+    });
+    expect(useRecordingStore.getState()).toMatchObject({
+      isBrowserReady: true,
+      browserChannel: "msedge",
+      capturedActions: [],
+      lastSession: null,
+    });
+    expect(useAppStore.getState()).toMatchObject({ view: "recording", loading: false });
+  });
+
+  it("a failed browser launch reports the error on appStore", async () => {
+    mockInvoke.mockImplementation(() => Promise.reject("no browser"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await useRecordingStore.getState().prepareBrowser();
+    consoleError.mockRestore();
+
+    expect(useAppStore.getState()).toMatchObject({ error: "no browser", loading: false });
+    expect(useRecordingStore.getState().isBrowserReady).toBe(false);
+  });
+
+  it("starting and stopping a recording streams captured actions into the recording store", async () => {
+    const session = { id: "s1", actions: [] };
+    mockInvoke.mockImplementation((command: string) => {
+      if (command === "start_recording_session") return Promise.resolve("session-1");
+      if (command === "stop_recording_session") return Promise.resolve(session);
+      return Promise.resolve([]);
+    });
+    useRecordingStore.setState({ capturedActions: [{ action: "old" }] as never, lastSession: { id: "x" } as never });
+
+    await useRecordingStore.getState().startRecording();
+
+    const channel = useRecordingStore.getState()._activeChannel as unknown as { onmessage: (action: unknown) => void };
+    expect(mockInvoke).toHaveBeenCalledWith("start_recording_session", { onAction: channel });
+    expect(useRecordingStore.getState()).toMatchObject({ isRecording: true, recordingSessionId: "session-1", capturedActions: [], lastSession: null });
+    channel.onmessage({ action: "click" });
+    expect(useRecordingStore.getState().capturedActions).toEqual([{ action: "click" }]);
+    expect(useAppStore.getState().loading).toBe(false);
+
+    await useRecordingStore.getState().stopRecording();
+
+    expect(useRecordingStore.getState()).toMatchObject({
+      isRecording: false,
+      recordingSessionId: null,
+      lastSession: session,
+      _activeChannel: null,
+      capturedActions: [{ action: "click" }],
+    });
+    expect(useAppStore.getState().loading).toBe(false);
   });
 });

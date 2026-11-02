@@ -33,6 +33,8 @@ if (isViteDevelopment) {
   (window as any).__syncStore = useSyncStore;
   const { useChatStore } = await import("./stores/chatStore");
   (window as any).__chatStore = useChatStore;
+  const { useRecordingStore } = await import("./stores/recordingStore");
+  (window as any).__recordingStore = useRecordingStore;
   const { useToastStore } = await import("./stores/toastStore");
   (window as any).__toastStore = useToastStore;
 }
