@@ -369,17 +369,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         updated_at: "2025-01-15T12:30:00Z",
       };
     case "set_storyboard_lock":
-      return {
-        title: "Full Demo Flow",
-        description: "End-to-end walkthrough of the platform's key features",
-        locked: (args as { locked?: boolean })?.locked ?? false,
-        items: [
-          { type: "sketch_ref", path: "sketches/demo-introduction.sk" },
-          { type: "sketch_ref", path: "sketches/feature-deep-dive.sk" },
-        ],
-        created_at: "2025-01-15T09:00:00Z",
-        updated_at: "2025-01-15T12:30:00Z",
-      };
+      return { ...(mockInvoke("get_storyboard") as object), locked: (args as { locked?: boolean })?.locked ?? false };
     case "create_storyboard":
       return "storyboards/new.sb";
     case "delete_storyboard":
@@ -1001,10 +991,6 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     }
     case "set_sidebar_order":
     case "set_workspace_state":
-    case "update_sketch":
-    case "update_sketch_title":
-    case "update_storyboard":
-    case "update_note":
       return null;
     case "list_feedback":
       return [
@@ -1355,6 +1341,20 @@ function mockPluginEvent(cmd: string, args?: Record<string, unknown>): unknown {
   }
 }
 
+// App document reads and saves return versioned documents (ADR 0002 "App saves").
+const mockVersioned = (document: unknown) => {
+  const content = typeof document === "string" ? document : JSON.stringify(document);
+  return { document, content, version: `mock-${[...content].reduce((h, c) => Math.imul(h ^ c.codePointAt(0)!, 16777619) >>> 0, 2166136261).toString(16)}`, merged: false };
+};
+const MOCK_DOCUMENT_SAVE = /^(update_(sketch|sketch_title|storyboard)|set_(sketch|storyboard|planning_row|planning_cell)_lock|add_s\w+_to_storyboard|remove_sketch_from_storyboard|reorder_storyboard_items)$/;
+
+function mockDocumentResult(cmd: string, args?: Record<string, unknown>): unknown {
+  if (cmd === "update_note" || cmd === "create_document_copy") return mockVersioned(args?.content ?? "");
+  if (cmd.endsWith("_versioned")) return mockVersioned(mockInvoke(cmd.replace("_versioned", ""), args));
+  if (!MOCK_DOCUMENT_SAVE.test(cmd)) return undefined;
+  return mockVersioned(mockInvoke(cmd, args) ?? mockInvoke(cmd.includes("storyboard") ? "get_storyboard" : "get_sketch"));
+}
+
 /**
  * Install mocks on the window so Tauri API modules pick them up.
  * Must be called BEFORE any Tauri imports are evaluated.
@@ -1375,7 +1375,7 @@ export function installDevMocks() {
         if (cmd !== "agent_chat_with_tools") {
           await new Promise(r => setTimeout(r, 50));
         }
-        return mockInvoke(cmd, args);
+        return mockDocumentResult(cmd, args) ?? mockInvoke(cmd, args);
       },
       metadata: { currentWindow: { label: "main" }, currentWebview: { label: "main" } },
       convertFileSrc: (path: string) => path,

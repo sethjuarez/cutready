@@ -14,16 +14,18 @@ use crate::engine::document_writer::{self, Expected, WriteError};
 
 /// Save `after` over the sketch at `path` under `root`. `before` is what the
 /// tool read, or `None` when the tool creates the sketch (or overwrites an
-/// unreadable one).
+/// unreadable one). The dispatcher holds the write lock, so the bytes on
+/// disk are the ones the tool read.
 pub fn save_sketch(
     root: &Path,
     path: &Path,
     before: Option<&Sketch>,
     after: &Sketch,
 ) -> Result<(), WriteError> {
+    let expected = document_writer::expected_on_disk(path)?;
     match before.and_then(|before| sketch_ops(before, after)) {
-        Some(ops) => document_writer::edit_file(root, path, Expected::Unchecked, &ops).map(drop),
-        None => document_writer::replace_sketch(root, path, after).map(drop),
+        Some(ops) => document_writer::edit_file(root, path, expected, &ops).map(drop),
+        None => document_writer::write_sketch(root, path, after, expected).map(drop),
     }
 }
 
@@ -34,22 +36,24 @@ pub fn save_storyboard(
     before: Option<&Storyboard>,
     after: &Storyboard,
 ) -> Result<(), WriteError> {
+    let expected = document_writer::expected_on_disk(path)?;
     match before.and_then(|before| storyboard_ops(before, after)) {
-        Some(ops) => document_writer::edit_file(root, path, Expected::Unchecked, &ops).map(drop),
-        None => document_writer::replace_storyboard(root, path, after).map(drop),
+        Some(ops) => document_writer::edit_file(root, path, expected, &ops).map(drop),
+        None => document_writer::write_storyboard(root, path, after, expected).map(drop),
     }
 }
 
 /// Write a note's markdown. An existing note gets a lock-gated `write_note`; a
 /// new note is created with `replace_note`.
 pub fn save_note(root: &Path, rel: &str, abs: &Path, content: &str) -> Result<(), WriteError> {
-    let kind = if abs.exists() {
-        "write_note"
-    } else {
+    let expected = document_writer::expected_on_disk(abs)?;
+    let kind = if expected == Expected::Absent {
         "replace_note"
+    } else {
+        "write_note"
     };
     let op = json!({ "kind": kind, "content": content });
-    document_writer::edit(root, rel, Expected::Unchecked, &[op]).map(drop)
+    document_writer::edit(root, rel, expected, &[op]).map(drop)
 }
 
 /// The ops that turn `before` into `after`, or `None` when something other

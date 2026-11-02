@@ -10,6 +10,7 @@ import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, Check, Film, Image as 
 import { registerEditorFlush, shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import { useToastStore } from "../stores/toastStore";
+import { isHandledSaveError, MAIN_EDITOR, readDocument, registerDocumentEditor, saveDocument } from "../services/documentSaves";
 import { useSettings } from "../hooks/useSettings";
 import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
 import { ScriptTable } from "./ScriptTable";
@@ -22,7 +23,7 @@ import { FieldAiButton } from "./FieldAiButton";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
 import { NarrationRecordingDialog, type NarrationRecordingTake } from "./NarrationRecordingDialog";
 import { DurationBadge, MetadataEditor } from "./MetadataEditor";
-import { InlineDescriptionEditor } from "./InlineDescriptionEditor";
+import { InlineDescriptionEditor, type DraftFlushRef } from "./InlineDescriptionEditor";
 import type { PresentationMode } from "./presentation/types";
 import VisualCell from "./VisualCell";
 import { describeWordExport, exportSketchToWord, type WordOrientation } from "../utils/exportToWord";
@@ -1049,9 +1050,8 @@ export function SketchForm() {
   const aiSnapshotRef = useRef<{ rows: PlanningRow[]; changedIndices: number[] } | null>(null);
   const [visualPromptRow, setVisualPromptRow] = useState<number | null>(null);
   const [visualInstructions, setVisualInstructions] = useState("");
-  const [localDesc, setLocalDesc] = useState(
-    typeof activeSketch?.description === "string" ? activeSketch.description : ""
-  );
+  const [localDesc, setLocalDesc] = useState(typeof activeSketch?.description === "string" ? activeSketch.description : "");
+  const descDraftRef: DraftFlushRef = useRef(null), metaDraftRef: DraftFlushRef = useRef(null);
   const titleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [narrationDialogRow, setNarrationDialogRow] = useState<number | null>(null);
@@ -1080,18 +1080,16 @@ export function SketchForm() {
     ): Promise<boolean> => {
       if (shouldSuppressEditorFlush(path)) return false;
       try {
-        if (title !== null) {
-          await invoke("update_sketch_title", { relativePath: path, title });
-        }
-        if (rows !== null) {
-          await invoke("update_sketch", { relativePath: path, rows });
-        }
+        await Promise.all([
+          title !== null && saveDocument("update_sketch_title", { relativePath: path, title }),
+          rows !== null && saveDocument("update_sketch", { relativePath: path, rows }),
+        ]);
         await useAppStore.getState().loadSketches();
-        const store = useAppStore.getState();
-        if (store.activeSketchPath === path) {
-          const sketch = await invoke<Sketch>("get_sketch", { relativePath: path });
+        if (useAppStore.getState().activeSketchPath === path) {
+          const { document: sketch, installed } = await readDocument<Sketch>("sketch", path);
           if (useAppStore.getState().activeSketchPath === path) {
             useAppStore.setState({ activeSketch: sketch });
+            installed(MAIN_EDITOR);
           }
         }
         await useVersioningStore.getState().checkDirty();
@@ -1099,8 +1097,8 @@ export function SketchForm() {
         return true;
       } catch (err) {
         console.error(`[SketchForm] Failed to save pending sketch edits (${reason}):`, err);
-        useToastStore.getState().show("Failed to save pending sketch changes", 5000, "error");
-        return false;
+        if (!isHandledSaveError(err)) useToastStore.getState().show("Failed to save pending sketch changes", 5000, "error");
+        return isHandledSaveError(err);
       }
     },
     [],
@@ -1111,13 +1109,9 @@ export function SketchForm() {
       const path = pendingPathRef.current;
       const title = pendingTitleRef.current;
       const rows = pendingRowsRef.current;
-      if (titleTimeoutRef.current) {
-        clearTimeout(titleTimeoutRef.current);
-        titleTimeoutRef.current = null;
-      }
-      if (rowsTimeoutRef.current) {
-        clearTimeout(rowsTimeoutRef.current);
-        rowsTimeoutRef.current = null;
+      for (const timer of [titleTimeoutRef, rowsTimeoutRef]) {
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = null;
       }
       pendingPathRef.current = null;
       pendingTitleRef.current = null;
@@ -1132,6 +1126,7 @@ export function SketchForm() {
     const path = pendingPathRef.current;
     const title = pendingTitleRef.current;
     const rows = pendingRowsRef.current;
+    await Promise.all([descDraftRef.current?.(), metaDraftRef.current?.()]);
     if (await flushPendingSketchEdits("flush")) return;
     if (path && shouldSuppressEditorFlush(path)) return;
     // Keep the unsaved edits so a later save still writes them.
@@ -1140,9 +1135,9 @@ export function SketchForm() {
     pendingRowsRef.current ??= rows;
     throw new Error("Couldn't save pending sketch changes");
   }), [flushPendingSketchEdits]);
+  useEffect(() => registerDocumentEditor(activeSketchPath, MAIN_EDITOR, () => [pendingTitleRef, pendingRowsRef, descDraftRef, metaDraftRef].some((ref) => ref.current !== null)), [activeSketchPath]);
 
-  // Reset local state when switching to a different sketch
-  // Flush pending debounced saves by their captured path before showing another sketch.
+  // Reset local state when switching sketches; flush pending debounced saves by their captured path first.
   useEffect(() => {
     void flushPendingSketchEdits("sketch switch");
     setLocalTitle(activeSketch?.title ?? "");
@@ -1287,7 +1282,7 @@ export function SketchForm() {
   const handleSketchLockChange = useCallback(async (locked: boolean) => {
     if (!activeSketchPath) return;
     try {
-      const sketch = await invoke<Sketch>("set_sketch_lock", { relativePath: activeSketchPath, locked });
+      const sketch = await saveDocument<Sketch>("set_sketch_lock", { relativePath: activeSketchPath, locked });
       applySketchFromLockCommand(sketch);
       const { loadSketches } = useAppStore.getState();
       const { refreshChangedFiles, checkDirty } = useVersioningStore.getState();
@@ -1302,7 +1297,7 @@ export function SketchForm() {
   const handleRowLockChange = useCallback(async (index: number, locked: boolean) => {
     if (!activeSketchPath) return;
     try {
-      const sketch = await invoke<Sketch>("set_planning_row_lock", { relativePath: activeSketchPath, index, locked });
+      const sketch = await saveDocument<Sketch>("set_planning_row_lock", { relativePath: activeSketchPath, index, locked });
       applySketchFromLockCommand(sketch);
       const { refreshChangedFiles, checkDirty } = useVersioningStore.getState();
       await checkDirty();
@@ -1315,7 +1310,7 @@ export function SketchForm() {
   const handleCellLockChange = useCallback(async (index: number, field: string, locked: boolean) => {
     if (!activeSketchPath) return;
     try {
-      const sketch = await invoke<Sketch>("set_planning_cell_lock", { relativePath: activeSketchPath, index, field, locked });
+      const sketch = await saveDocument<Sketch>("set_planning_cell_lock", { relativePath: activeSketchPath, index, field, locked });
       applySketchFromLockCommand(sketch);
       const { refreshChangedFiles, checkDirty } = useVersioningStore.getState();
       await checkDirty();
@@ -2582,7 +2577,8 @@ Rules:
           previewClassName={`prose-desc min-h-[2rem] rounded-lg border border-transparent px-3 py-2 pr-10 text-sm leading-relaxed text-[rgb(var(--color-text))] transition-colors hover:border-[rgb(var(--color-border))] ${sketchLocked ? "cursor-default" : "cursor-text"}`}
           textareaClassName="w-full resize-none text-sm bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border border-[rgb(var(--color-border))] rounded-lg px-3 py-2 focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 transition-colors"
           onDraftChange={setLocalDesc}
-          onSave={(description) => updateSketch({ description })}
+          onSave={(description, flush) => updateSketch({ description }, { rethrow: flush })}
+          draftRef={descDraftRef}
           action={
             <FieldAiButton
               onClick={() => void runBackgroundAgentAction(
@@ -2603,7 +2599,8 @@ Rules:
           <MetadataEditor
             metadata={activeSketch.metadata}
             disabled={sketchLocked}
-            onChange={(metadata) => updateSketch({ metadata })}
+            onChange={(metadata, flush) => updateSketch({ metadata }, { rethrow: flush })}
+            draftRef={metaDraftRef}
           />
         </div>
 

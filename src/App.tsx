@@ -14,6 +14,7 @@ import { invoke } from "./services/tauri";
 import { listenEvent } from "./ipc/events";
 import { commandRegistry } from "./services/commandRegistry";
 import { onWorkspaceSnapshotDeferred } from "./services/identity";
+import { refreshOpenDocuments, watchOpenDocuments } from "./services/documentSaves";
 import { isMac } from "./utils/platform";
 
 import { useAppStore } from "./stores/appStore";
@@ -102,6 +103,7 @@ function App() {
               sync.refreshSyncStatus(),
               sync.refreshIncomingCommits(),
               versioning.checkProjectHealth({ probeContent: false }),
+              refreshOpenDocuments(),
             ]);
           }
         } while (rerun && !disposed);
@@ -110,6 +112,7 @@ function App() {
       }
     };
 
+    const stopWatchingDocuments = watchOpenDocuments();
     let unlisten: (() => void) | undefined;
     listenEvent("draftline://workspace_event", () => {
       void refreshFromDraftlineEvent();
@@ -139,6 +142,7 @@ function App() {
 
     return () => {
       disposed = true;
+      stopWatchingDocuments();
       unlisten?.();
       unlistenDeferred?.();
     };

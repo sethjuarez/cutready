@@ -7,8 +7,9 @@ use std::path::Path;
 use tauri::State;
 use tauri_plugin_auditaur::auditaur_command;
 
-use crate::engine::document_writer::{self, Expected, WriteError};
-use crate::engine::project;
+use super::CmdError;
+use crate::engine::document_writer::{self, Expected, SaveError, Versioned, WriteError};
+use crate::engine::{document_reads, project};
 use crate::AppState;
 use cutready_core::edit_ops::{ContentEditError, OpRejection};
 use cutready_core::models::sketch::{
@@ -41,14 +42,22 @@ fn set_referenced_sketches_lock(
         }
 
         let op = json!({ "kind": "set_lock", "locked": locked });
-        document_writer::edit(root, &sketch_path, Expected::Unchecked, &[op])?;
+        let expected = document_writer::expected_on_disk(&abs_path)?;
+        document_writer::edit(root, &sketch_path, expected, &[op])?;
     }
     Ok(())
 }
 
-/// Apply storyboard ops the way the legacy commands did: whatever is on disk.
-fn edit_storyboard(root: &Path, rel: &str, ops: &[Value]) -> Result<Storyboard, WriteError> {
-    document_writer::edit_storyboard(root, rel, Expected::Unchecked, ops)
+/// An app save of storyboard ops made against `base`; see
+/// `document_writer::save`.
+fn save_storyboard(
+    root: &Path,
+    rel: &str,
+    expected_version: &str,
+    base: &str,
+    ops: &[Value],
+) -> Result<Versioned<Storyboard>, SaveError> {
+    Ok(document_writer::save(root, rel, expected_version, base, ops)?.storyboard()?)
 }
 
 #[tauri::command]
@@ -88,19 +97,38 @@ pub async fn get_storyboard(
     project::read_storyboard(&abs_path).map_err(|e| e.to_string())
 }
 
+/// [`get_storyboard`] with the text and version an editor saves against.
 #[tauri::command]
+pub async fn get_storyboard_versioned(
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<Versioned<Storyboard>, CmdError> {
+    let root = project_root(&state)?;
+    let abs_path = project::safe_resolve(&root, &relative_path)?;
+    Ok(document_reads::read_storyboard_versioned(&abs_path, &root)?)
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn update_storyboard(
     relative_path: String,
+    expected_version: String,
+    base: String,
     title: Option<String>,
     description: Option<String>,
     metadata: Option<DocumentMetadata>,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<Versioned<Storyboard>, CmdError> {
     let root = project_root(&state)?;
     let _write_guard = crate::engine::write_lock::lock(&root)?;
     let ops = update_storyboard_ops(title, description, metadata);
-    edit_storyboard(&root, &relative_path, &ops)?;
-    Ok(())
+    Ok(save_storyboard(
+        &root,
+        &relative_path,
+        &expected_version,
+        &base,
+        &ops,
+    )?)
 }
 
 /// The fields `update_storyboard` sets. Every update marks the storyboard
@@ -126,19 +154,27 @@ fn update_storyboard_ops(
 #[tauri::command]
 pub async fn set_storyboard_lock(
     relative_path: String,
+    expected_version: String,
+    base: String,
     locked: bool,
     state: State<'_, AppState>,
-) -> Result<Storyboard, String> {
+) -> Result<Versioned<Storyboard>, CmdError> {
     let root = project_root(&state)?;
     let _write_guard = crate::engine::write_lock::lock(&root)?;
-    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
+    let abs_path = project::safe_resolve(&root, &relative_path)?;
 
     // Sketches first, then the storyboard, as before: one file per write
     // until multi-file edits land.
-    let sb = project::read_storyboard(&abs_path).map_err(|e| e.to_string())?;
+    let sb = project::read_storyboard(&abs_path)?;
     set_referenced_sketches_lock(&root, &sb, locked)?;
     let op = json!({ "kind": "set_lock", "locked": locked });
-    Ok(edit_storyboard(&root, &relative_path, &[op])?)
+    Ok(save_storyboard(
+        &root,
+        &relative_path,
+        &expected_version,
+        &base,
+        &[op],
+    )?)
 }
 
 #[tauri::command]
@@ -177,15 +213,17 @@ pub async fn list_storyboards(
 #[tauri::command]
 pub async fn add_sketch_to_storyboard(
     storyboard_path: String,
+    expected_version: String,
+    base: String,
     sketch_path: String,
     position: Option<usize>,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<Versioned<Storyboard>, CmdError> {
     let root = project_root(&state)?;
     let _write_guard = crate::engine::write_lock::lock(&root)?;
-    project::safe_resolve(&root, &storyboard_path).map_err(|e| e.to_string())?;
+    project::safe_resolve(&root, &storyboard_path)?;
     // Validate sketch_path too (even though it's stored as a reference)
-    project::safe_resolve(&root, &sketch_path).map_err(|e| e.to_string())?;
+    project::safe_resolve(&root, &sketch_path)?;
 
     // Gracefully check if sketch exists (warn but don't block)
     if !project::sketch_file_exists(&sketch_path, &root) {
@@ -193,43 +231,59 @@ pub async fn add_sketch_to_storyboard(
     }
 
     let item = StoryboardItem::SketchRef { path: sketch_path };
-    edit_storyboard(&root, &storyboard_path, &[insert_item_op(position, &item)])?;
-    Ok(())
+    let op = insert_item_op(position, &item);
+    Ok(save_storyboard(
+        &root,
+        &storyboard_path,
+        &expected_version,
+        &base,
+        &[op],
+    )?)
 }
 
 #[tauri::command]
 pub async fn remove_sketch_from_storyboard(
     storyboard_path: String,
+    expected_version: String,
+    base: String,
     position: usize,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<Versioned<Storyboard>, CmdError> {
     let root = project_root(&state)?;
     let _write_guard = crate::engine::write_lock::lock(&root)?;
-    remove_item_at(&root, &storyboard_path, position)
+    remove_item_at(&root, &storyboard_path, &expected_version, &base, position)
 }
 
 /// Any rejection other than the lock means the position was out of range.
-fn remove_item_at(root: &Path, rel: &str, position: usize) -> Result<(), String> {
+fn remove_item_at(
+    root: &Path,
+    rel: &str,
+    expected_version: &str,
+    base: &str,
+    position: usize,
+) -> Result<Versioned<Storyboard>, CmdError> {
     let op = json!({ "kind": "remove_storyboard_item", "index": position });
-    match edit_storyboard(root, rel, &[op]) {
-        Ok(_) => Ok(()),
-        Err(WriteError::Edit(ContentEditError::Op(err)))
+    match save_storyboard(root, rel, expected_version, base, &[op]) {
+        Err(SaveError::Write(WriteError::Edit(ContentEditError::Op(err))))
             if err.rejection != OpRejection::LockedStoryboard =>
         {
             Err("Position out of range".into())
         }
-        Err(err) => Err(err.to_string()),
+        other => Ok(other?),
     }
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn add_section_to_storyboard(
     storyboard_path: String,
+    expected_version: String,
+    base: String,
     title: String,
     description: Option<String>,
     position: Option<usize>,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<Versioned<Storyboard>, CmdError> {
     let root = project_root(&state)?;
     let _write_guard = crate::engine::write_lock::lock(&root)?;
     let item = StoryboardItem::Section {
@@ -237,8 +291,14 @@ pub async fn add_section_to_storyboard(
         description: description.unwrap_or_default(),
         sketches: Vec::new(),
     };
-    edit_storyboard(&root, &storyboard_path, &[insert_item_op(position, &item)])?;
-    Ok(())
+    let op = insert_item_op(position, &item);
+    Ok(save_storyboard(
+        &root,
+        &storyboard_path,
+        &expected_version,
+        &base,
+        &[op],
+    )?)
 }
 
 /// Insert at `position`, or append when it's missing or past the end.
@@ -249,14 +309,21 @@ fn insert_item_op(position: Option<usize>, item: &StoryboardItem) -> Value {
 #[tauri::command]
 pub async fn reorder_storyboard_items(
     storyboard_path: String,
+    expected_version: String,
+    base: String,
     items: Vec<StoryboardItem>,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<Versioned<Storyboard>, CmdError> {
     let root = project_root(&state)?;
     let _write_guard = crate::engine::write_lock::lock(&root)?;
     let op = json!({ "kind": "set_storyboard_items", "items": items });
-    edit_storyboard(&root, &storyboard_path, &[op])?;
-    Ok(())
+    Ok(save_storyboard(
+        &root,
+        &storyboard_path,
+        &expected_version,
+        &base,
+        &[op],
+    )?)
 }
 
 #[cfg(test)]
@@ -305,6 +372,21 @@ mod tests {
         let storyboard = Storyboard::new("Demo", Utc::now());
         let op = json!({ "kind": "replace_storyboard", "storyboard": storyboard });
         document_writer::edit_storyboard(root, "demo.sb", Expected::Absent, &[op]).unwrap()
+    }
+
+    /// An app save against the storyboard on disk now.
+    fn edit_storyboard(root: &Path, rel: &str, ops: &[Value]) -> Result<Storyboard, SaveError> {
+        let base = std::fs::read_to_string(root.join(rel)).unwrap();
+        let version = cutready_core::edit_ops::document_version(base.as_bytes());
+        save_storyboard(root, rel, &version, &base, ops).map(|saved| saved.document)
+    }
+
+    fn remove_at(root: &Path, position: usize) -> Result<(), String> {
+        let base = std::fs::read_to_string(root.join("demo.sb")).unwrap();
+        let version = cutready_core::edit_ops::document_version(base.as_bytes());
+        remove_item_at(root, "demo.sb", &version, &base, position)
+            .map(drop)
+            .map_err(|err| err.message)
     }
 
     fn sketch_ref(path: &str) -> StoryboardItem {
@@ -359,11 +441,8 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(
-            remove_item_at(root, "demo.sb", 1).unwrap_err(),
-            "Position out of range"
-        );
-        remove_item_at(root, "demo.sb", 0).unwrap();
+        assert_eq!(remove_at(root, 1).unwrap_err(), "Position out of range");
+        remove_at(root, 0).unwrap();
         let sb = project::read_storyboard(&root.join("demo.sb")).unwrap();
         assert!(sb.items.is_empty());
     }
@@ -392,7 +471,7 @@ mod tests {
         )
         .unwrap_err()
         .to_string();
-        assert_eq!(remove_item_at(root, "demo.sb", 0).unwrap_err(), locked);
+        assert_eq!(remove_at(root, 0).unwrap_err(), locked);
         let update = update_storyboard_ops(Some("New".into()), None, None);
         assert_eq!(
             edit_storyboard(root, "demo.sb", &update)

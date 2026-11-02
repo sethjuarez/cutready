@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockInvoke = vi.hoisted(() => vi.fn());
 
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: (...args: unknown[]) => mockInvoke(...args),
+vi.mock("@tauri-apps/api/core", async () => ({
+  invoke: (await import("./versionedInvoke")).versionedInvoke((...args: unknown[]) => mockInvoke(...args)),
   Channel: class {},
 }));
 

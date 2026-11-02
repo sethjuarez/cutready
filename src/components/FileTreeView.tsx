@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type RefObject } from "react";
 import { invoke } from "../services/tauri";
 import { commandErrorText } from "../services/commandErrors";
+import { documentRenamed, settleBeforeRename } from "../services/documentSaves";
 import {
   clearSuppressedEditorFlush,
   makeMainTabId,
@@ -307,8 +308,10 @@ export function FileTreeView() {
       return;
     }
     const suppressed = [renamingPath, newPath];
-    for (const path of suppressed) suppressEditorFlush(path);
     try {
+      // Pending edits reach the old file before it moves; editors stay quiet until the rename lands.
+      await settleBeforeRename();
+      for (const path of suppressed) suppressEditorFlush(path);
       const preview = await invoke<RenameProjectAssetPlan>("preview_rename_project_asset", {
         oldPath: renamingPath,
         newPath,
@@ -328,6 +331,7 @@ export function FileTreeView() {
         oldPath: renamingPath,
         newPath,
       });
+      documentRenamed(result.oldPath, result.newPath);
       await applySuccessfulRename(result);
       const updated = result.updatedReferences.reduce((sum, ref) => sum + ref.count, 0);
       showToast(updated > 0 ? `Renamed and updated ${updated} reference${updated === 1 ? "" : "s"}.` : "Renamed file.", 3500, "success");

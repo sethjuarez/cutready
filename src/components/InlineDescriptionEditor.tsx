@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { continueMarkdownList } from "../utils/markdownList";
+
+/** Holds a function that saves the unsaved draft now, or null when there is no draft. */
+export type DraftFlushRef = MutableRefObject<(() => Promise<void>) | null>;
 
 interface InlineDescriptionEditorProps {
   value: string;
@@ -16,8 +19,10 @@ interface InlineDescriptionEditorProps {
   textareaClassName?: string;
   action?: ReactNode;
   onDraftChange: (value: string) => void;
-  onSave: (value: string) => void | Promise<void>;
+  /** `flush` is true when a draft flush saves the value; the save should then reject on failure. */
+  onSave: (value: string, flush?: boolean) => void | Promise<void>;
   onEditingChange?: (editing: boolean) => void;
+  draftRef?: DraftFlushRef;
 }
 
 export function InlineDescriptionEditor({
@@ -33,6 +38,7 @@ export function InlineDescriptionEditor({
   onDraftChange,
   onSave,
   onEditingChange,
+  draftRef,
 }: InlineDescriptionEditorProps) {
   const [editing, setEditing] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -41,8 +47,18 @@ export function InlineDescriptionEditor({
   const pendingRef = useRef<string | null>(null);
   const savedValueRef = useRef(value);
   const editingRef = useRef(editing);
-  const saveDraftRef = useRef<(exitAfterSave: boolean) => Promise<boolean>>(async () => true);
+  const saveDraftRef = useRef<(exitAfterSave: boolean, flush?: boolean) => Promise<boolean>>(async () => true);
   const cursorRef = useRef<number | null>(null);
+  const draftRefRef = useRef(draftRef);
+  draftRefRef.current = draftRef;
+
+  const setPending = useCallback((next: string | null) => {
+    pendingRef.current = next;
+    if (!draftRefRef.current) return;
+    draftRefRef.current.current = next === null ? null : async () => {
+      if (!(await saveDraftRef.current(false, true))) throw new Error("Couldn't save the description");
+    };
+  }, []);
 
   const clearSaveTimer = useCallback(() => {
     if (saveTimerRef.current) {
@@ -95,10 +111,10 @@ export function InlineDescriptionEditor({
     cursorRef.current = null;
   }, [value]);
 
-  const saveDraft = useCallback(async (exitAfterSave: boolean) => {
+  const saveDraft = useCallback(async (exitAfterSave: boolean, flush = false) => {
     clearSaveTimer();
     const nextValue = pendingRef.current ?? value;
-    pendingRef.current = null;
+    setPending(null);
 
     if (nextValue === savedValueRef.current) {
       if (exitAfterSave) setEditingState(false);
@@ -107,19 +123,19 @@ export function InlineDescriptionEditor({
 
     setStatus("saving");
     try {
-      await onSave(nextValue);
+      await (flush ? onSave(nextValue, true) : onSave(nextValue));
       savedValueRef.current = nextValue;
       setStatus("saved");
       if (exitAfterSave) setEditingState(false);
       return true;
     } catch (error) {
       console.error("[InlineDescriptionEditor] Failed to save description:", error);
-      pendingRef.current = nextValue;
+      setPending(nextValue);
       setStatus("error");
       setEditingState(true);
       return false;
     }
-  }, [clearSaveTimer, onSave, setEditingState, value]);
+  }, [clearSaveTimer, onSave, setEditingState, setPending, value]);
 
   useEffect(() => {
     saveDraftRef.current = saveDraft;
@@ -128,13 +144,13 @@ export function InlineDescriptionEditor({
   const handleChange = useCallback((nextValue: string) => {
     if (disabled) return;
     onDraftChange(nextValue);
-    pendingRef.current = nextValue;
+    setPending(nextValue);
     setStatus("idle");
     clearSaveTimer();
     saveTimerRef.current = setTimeout(() => {
       void saveDraft(false);
     }, 800);
-  }, [clearSaveTimer, disabled, onDraftChange, saveDraft]);
+  }, [clearSaveTimer, disabled, onDraftChange, saveDraft, setPending]);
 
   const exitEdit = useCallback(() => {
     setEditingState(false);

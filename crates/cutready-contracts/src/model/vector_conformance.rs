@@ -2217,6 +2217,29 @@ pub fn run_edit_service_conformance<S: crate::model::EditService + ?Sized>(seam:
         let result = seam.undo_document(&request);
         assert!(result.is_err(), "{}: expected an error, got Ok", "a top-level field changed again since the run conflicts");
     }
+    // vector: an app save rebased onto a concurrent edit keeps its disjoint row and conflicts only on the row both changed
+    {
+        let request = crate::model::DocumentUndoRequest::from_json(
+            r####"
+{
+  "kind": "sketch",
+  "content": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"a\",\"time\":\"0:10\",\"narrative\":\"A.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"b\",\"time\":\"0:20\",\"narrative\":\"Theirs B.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"c\",\"time\":\"0:30\",\"narrative\":\"C.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"}",
+  "writes": [
+    {
+      "before": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"a\",\"time\":\"0:10\",\"narrative\":\"Mine A.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"b\",\"time\":\"0:20\",\"narrative\":\"Mine B.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"c\",\"time\":\"0:30\",\"narrative\":\"C.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-07-01T09:30:00Z\"}",
+      "after": "{\"title\":\"Contract sketch\",\"locked\":false,\"description\":null,\"rows\":[{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"a\",\"time\":\"0:10\",\"narrative\":\"A.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"b\",\"time\":\"0:20\",\"narrative\":\"B.\",\"demo_actions\":\"\"},{\"locked\":false,\"locks\":{\"time\":false,\"narrative\":false,\"demo_actions\":false,\"screenshot\":false,\"visual\":false,\"design_plan\":false},\"screenshot\":null,\"id\":\"c\",\"time\":\"0:30\",\"narrative\":\"C.\",\"demo_actions\":\"\"}],\"state\":\"draft\",\"created_at\":\"2026-06-28T20:00:00Z\",\"updated_at\":\"2026-06-28T20:20:00Z\"}"
+    }
+  ],
+  "note_locked": false,
+  "now": "2026-07-01T09:30:00Z"
+}
+"####,
+            &ctx,
+        )
+        .expect("request parses");
+        let result = seam.undo_document(&request);
+        assert!(result.is_err(), "{}: expected an error, got Ok", "an app save rebased onto a concurrent edit keeps its disjoint row and conflicts only on the row both changed");
+    }
     // vector: an earlier rejected op wins over a later malformed one
     {
         let sketch = crate::model::Sketch::from_json(

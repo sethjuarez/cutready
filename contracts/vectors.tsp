@@ -11751,6 +11751,35 @@ const UndoDocumentVectors = """
     }
   },
   {
+    "name": "an app save rebased onto a concurrent edit keeps its disjoint row and conflicts only on the row both changed",
+    "input": {
+      "request": {
+        "kind": "sketch",
+        "content": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"a\\",\\"time\\":\\"0:10\\",\\"narrative\\":\\"A.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"b\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Theirs B.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"c\\",\\"time\\":\\"0:30\\",\\"narrative\\":\\"C.\\",\\"demo_actions\\":\\"\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}",
+        "writes": [
+          {
+            "before": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"a\\",\\"time\\":\\"0:10\\",\\"narrative\\":\\"Mine A.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"b\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"Mine B.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"c\\",\\"time\\":\\"0:30\\",\\"narrative\\":\\"C.\\",\\"demo_actions\\":\\"\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-07-01T09:30:00Z\\"}",
+            "after": "{\\"title\\":\\"Contract sketch\\",\\"locked\\":false,\\"description\\":null,\\"rows\\":[{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"a\\",\\"time\\":\\"0:10\\",\\"narrative\\":\\"A.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"b\\",\\"time\\":\\"0:20\\",\\"narrative\\":\\"B.\\",\\"demo_actions\\":\\"\\"},{\\"locked\\":false,\\"locks\\":{\\"time\\":false,\\"narrative\\":false,\\"demo_actions\\":false,\\"screenshot\\":false,\\"visual\\":false,\\"design_plan\\":false},\\"screenshot\\":null,\\"id\\":\\"c\\",\\"time\\":\\"0:30\\",\\"narrative\\":\\"C.\\",\\"demo_actions\\":\\"\\"}],\\"state\\":\\"draft\\",\\"created_at\\":\\"2026-06-28T20:00:00Z\\",\\"updated_at\\":\\"2026-06-28T20:20:00Z\\"}"
+          }
+        ],
+        "note_locked": false,
+        "now": "2026-07-01T09:30:00Z"
+      }
+    },
+    "expectedError": {
+      "code": "undo_conflict",
+      "details": {
+        "conflicts": [
+          {
+            "path": "/rows/b",
+            "expected_version": "sha256:7db754d6e6547ff4784c6f8e93e47b822cdd12dadedf7513ab6ce281d1982029",
+            "current_version": "sha256:e5265878756f38f3dac8510364303c1d1de59118e099a039ea8dc95da5fb271e"
+          }
+        ]
+      }
+    }
+  },
+  {
     "name": "a document gone since the run conflicts",
     "input": {
       "request": {

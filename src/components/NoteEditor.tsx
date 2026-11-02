@@ -7,6 +7,7 @@ import { useSettings } from "../hooks/useSettings";
 import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { invoke } from "../services/tauri";
+import { isHandledSaveError, MAIN_EDITOR, registerDocumentEditor, saveDocument } from "../services/documentSaves";
 import type { TokenResponse } from "../types/auth";
 import { describeWordExport, exportNoteToWord } from "../utils/exportToWord";
 import { ProjectImage } from "./ProjectImage";
@@ -16,6 +17,7 @@ import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } fro
 import { NoteIcon } from "./Icons";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
 import { MetadataEditor } from "./MetadataEditor";
+import type { DraftFlushRef } from "./InlineDescriptionEditor";
 import { parseNoteDocument, serializeNoteDocument } from "../utils/documentMetadata";
 import { loadProviderSecrets } from "../hooks/useSecretStore";
 import {
@@ -123,6 +125,7 @@ export function NoteEditor() {
 
   const saveTimeoutRef= useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingContentRef = useRef<string | null>(null);
+  const metadataDraftRef: DraftFlushRef = useRef(null);
   const updateNoteRef = useRef(updateNote);
   updateNoteRef.current = updateNote;
 
@@ -141,7 +144,11 @@ export function NoteEditor() {
     [activeNoteLocked, activeNotePath, noteDocument.metadata],
   );
 
+  useEffect(() => registerDocumentEditor(activeNotePath, MAIN_EDITOR, () => pendingContentRef.current !== null || metadataDraftRef.current !== null), [activeNotePath]);
+
   useEffect(() => registerEditorFlush(async () => {
+    // A metadata edit saves the pending body with it.
+    await metadataDraftRef.current?.();
     const content = pendingContentRef.current;
     if (content === null) return;
     if (saveTimeoutRef.current) {
@@ -151,15 +158,16 @@ export function NoteEditor() {
     pendingContentRef.current = null;
     if (shouldSuppressEditorFlush(activeNotePath) || activeNoteLocked) return;
     try {
-      await invoke("update_note", { relativePath: activeNotePath, content });
+      await saveDocument("update_note", { relativePath: activeNotePath!, content });
     } catch (err) {
+      if (isHandledSaveError(err)) return;
       if (pendingContentRef.current === null) pendingContentRef.current = content;
       throw err;
     }
   }), [activeNotePath, activeNoteLocked]);
 
   const handleMetadataChange = useCallback(
-    (metadata: Parameters<typeof serializeNoteDocument>[0]) => {
+    (metadata: Parameters<typeof serializeNoteDocument>[0], flush = false) => {
       if (activeNoteLocked) return;
       const currentDocument = parseNoteDocument(pendingContentRef.current ?? activeNoteContent ?? "");
       const nextContent = serializeNoteDocument(metadata, currentDocument.body);
@@ -168,7 +176,11 @@ export function NoteEditor() {
         clearTimeout(saveTimeoutRef.current);
         saveTimeoutRef.current = null;
       }
-      updateNoteRef.current(nextContent);
+      return updateNoteRef.current(nextContent, { rethrow: flush }).catch((err) => {
+        // The failed save carried the pending body too; keep it.
+        pendingContentRef.current ??= nextContent;
+        throw err;
+      });
     },
     [activeNoteLocked, activeNoteContent],
   );
@@ -455,6 +467,7 @@ Use write_note to save the cleaned Markdown back to "${activeNotePath}". Do not 
           metadata={noteDocument.metadata}
           disabled={activeNoteLocked}
           onChange={handleMetadataChange}
+          draftRef={metadataDraftRef}
         />
 
         {/* Content */}

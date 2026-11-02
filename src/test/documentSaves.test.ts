@@ -1,0 +1,763 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const ipc = vi.hoisted(() => ({ read: vi.fn(), save: vi.fn(), createCopy: vi.fn() }));
+const mockInvoke = vi.hoisted(() => vi.fn());
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: (...args: unknown[]) => mockInvoke(...args),
+  Channel: class {},
+}));
+vi.mock("../ipc/documents", () => ({ documentsIpc: ipc }));
+
+import {
+  conflictStamp,
+  documentRenamed,
+  DocumentSaveDroppedError,
+  DocumentsUnsettledError,
+  INSTALL_SETTLE_MS,
+  isDocumentConflict,
+  loadDocument,
+  MAIN_EDITOR,
+  quiesceDocumentSaves,
+  readDocument,
+  registerDocumentEditor,
+  refreshOpenDocuments,
+  saveDocument,
+  settleBeforeRename,
+} from "../services/documentSaves";
+import { useAppStore } from "../stores/appStore";
+import { documentEntry, resetDocumentVersions } from "../stores/documentVersionStore";
+import { beginWorkspaceGeneration, registerEditorFlush } from "../stores/workspaceHelpers";
+import { useToastStore } from "../stores/toastStore";
+import type { ProjectView } from "../types/project";
+import type { Sketch } from "../types/sketch";
+
+const ROOT = "D:\\demo";
+const OTHER_ROOT = "D:\\other";
+
+function sketch(title: string): Sketch {
+  return { title, description: "", rows: [], created_at: "", updated_at: "" } as unknown as Sketch;
+}
+
+function versioned(document: unknown, version: string, extra: Record<string, unknown> = {}) {
+  return { document, content: JSON.stringify(document), version, merged: false, ...extra };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, INSTALL_SETTLE_MS + 20));
+const entry = (path = "demo.sk") => documentEntry(ROOT, path);
+const isDropped = (error: unknown) => error instanceof DocumentSaveDroppedError;
+
+/** Opens another project whose files have the same paths. */
+function switchProject() {
+  beginWorkspaceGeneration(OTHER_ROOT);
+  useAppStore.setState({ currentProject: { root: OTHER_ROOT, name: "other" } as unknown as ProjectView, activeSketch: null });
+}
+
+async function openSketch(document: Sketch, version: string) {
+  ipc.read.mockResolvedValueOnce(versioned(document, version));
+  await loadDocument<Sketch>("sketch", "demo.sk");
+  await settle();
+}
+
+beforeEach(() => {
+  resetDocumentVersions();
+  ipc.read.mockReset();
+  ipc.save.mockReset();
+  ipc.createCopy.mockReset();
+  mockInvoke.mockReset();
+  mockInvoke.mockResolvedValue([]);
+  useToastStore.setState({ toasts: [] });
+  useAppStore.setState({
+    currentProject: { root: ROOT, name: "demo" } as unknown as ProjectView,
+    openTabs: [{ id: "main:sketch:demo.sk", type: "sketch", path: "demo.sk", title: "Demo" }],
+    splitTabs: [],
+    activeSketchPath: "demo.sk",
+    activeSketch: sketch("v0"),
+  });
+});
+
+afterEach(() => {
+  useAppStore.setState({ currentProject: null, openTabs: [], splitTabs: [], activeSketchPath: null, activeSketch: null });
+});
+
+describe("document saves", () => {
+  it("sends the loaded base and its version with every save", async () => {
+    await openSketch(sketch("v0"), "h0");
+    ipc.save.mockResolvedValueOnce(versioned(sketch("v1"), "h1"));
+
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v1" });
+
+    expect(ipc.save).toHaveBeenCalledWith("update_sketch_title", {
+      relativePath: "demo.sk",
+      title: "v1",
+      expectedVersion: "h0",
+      base: JSON.stringify(sketch("v0")),
+    });
+    expect(entry()).toMatchObject({ baseVersion: "h1", inFlight: 0, editRevision: 1, savedRevision: 1 });
+  });
+
+  it("runs saves of one document one at a time, in order", async () => {
+    await openSketch(sketch("v0"), "h0");
+    const first = deferred<unknown>();
+    ipc.save.mockReturnValueOnce(first.promise).mockResolvedValueOnce(versioned(sketch("v2"), "h2"));
+
+    const one = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v1" });
+    const two = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v2" });
+    await Promise.resolve();
+    expect(ipc.save).toHaveBeenCalledTimes(1);
+
+    first.resolve(versioned(sketch("v1"), "h1"));
+    await Promise.all([one, two]);
+    expect(ipc.save).toHaveBeenCalledTimes(2);
+    expect(ipc.save.mock.calls[1][1]).toMatchObject({ title: "v2", expectedVersion: "h1" });
+  });
+
+  it("keeps the editor's own document as the base after a merged save, and installs the merge only once clean", async () => {
+    await openSketch(sketch("v0"), "h0");
+    const first = deferred<unknown>();
+    const local = sketch("local");
+    const merged = sketch("merged");
+    ipc.save
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(versioned(merged, "hm2", { merged: true, synced: { content: "local-2", version: "hl2" } }));
+
+    ipc.read.mockResolvedValue(versioned(merged, "hm2"));
+    const one = saveDocument("update_sketch", { relativePath: "demo.sk", rows: [] });
+    // The user keeps typing while the first save is in flight.
+    const two = saveDocument("update_sketch", { relativePath: "demo.sk", rows: [] });
+    first.resolve(versioned(merged, "hm1", { merged: true, synced: { content: JSON.stringify(local), version: "hl1" } }));
+    await one;
+    // The merged document isn't installed under the edit that's still saving.
+    expect(useAppStore.getState().activeSketch?.title).toBe("v0");
+    await vi.waitFor(() => expect(ipc.save).toHaveBeenCalledTimes(2));
+    expect(ipc.save.mock.calls[1][1]).toMatchObject({ expectedVersion: "hl1", base: JSON.stringify(local) });
+
+    await two;
+    await vi.waitFor(() => expect(useAppStore.getState().activeSketch?.title).toBe("merged"));
+    await settle();
+    expect(entry()).toMatchObject({ base: JSON.stringify(merged), baseVersion: "hm2" });
+  });
+
+  it("doesn't adopt an installed document as the base when a save starts before it settles", async () => {
+    await openSketch(sketch("v0"), "h0");
+    ipc.read.mockResolvedValue(versioned(sketch("external"), "hx"));
+    await refreshOpenDocuments();
+    expect(useAppStore.getState().activeSketch?.title).toBe("external");
+
+    // A save built from what the editor showed before the install.
+    ipc.save.mockResolvedValueOnce(versioned(sketch("x"), "hs"));
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "typed" });
+    expect(ipc.save.mock.calls[0][1]).toMatchObject({ expectedVersion: "h0" });
+  });
+
+  it("writes a conflicting save to one conflict copy, then reloads, then warns", async () => {
+    await openSketch(sketch("v0"), "h0");
+    const order: string[] = [];
+    const stale = deferred<unknown>();
+    ipc.save.mockImplementation((_: string, args: Record<string, unknown>) => {
+      order.push(`save ${args.relativePath}`);
+      if (args.relativePath === "demo.sk") return stale.promise;
+      return Promise.resolve(versioned(sketch("copy"), `c${order.length}`));
+    });
+    ipc.createCopy.mockImplementation((path: string, content: string) => {
+      order.push(`copy ${path}`);
+      return Promise.resolve({ document: content, content, version: "c0", merged: false });
+    });
+    ipc.read.mockImplementation(() => {
+      order.push("reload");
+      return Promise.resolve(versioned(sketch("theirs"), "h9"));
+    });
+    const show = vi.spyOn(useToastStore.getState(), "show");
+
+    const one = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "mine" });
+    const two = saveDocument("update_sketch", { relativePath: "demo.sk", rows: [] });
+    stale.reject({ code: "stale_document", message: "stale" });
+
+    const [first, second] = await Promise.allSettled([one, two]);
+    expect(first.status === "rejected" && isDocumentConflict(first.reason)).toBe(true);
+    expect(second.status).toBe("fulfilled");
+    await vi.waitFor(() => expect(show).toHaveBeenCalled());
+
+    expect(ipc.createCopy).toHaveBeenCalledTimes(1);
+    const copyPath = ipc.createCopy.mock.calls[0][0] as string;
+    expect(copyPath).toMatch(/^demo \(conflict \d{8}-\d{6}\)\.sk$/);
+    expect(ipc.createCopy.mock.calls[0][1]).toBe(JSON.stringify(sketch("v0")));
+    expect(order).toEqual([
+      "save demo.sk",
+      `copy ${copyPath}`,
+      `save ${copyPath}`,
+      `save ${copyPath}`,
+      "reload",
+    ]);
+    expect(show).toHaveBeenCalledWith(expect.stringContaining(copyPath), 10000, "warning");
+    expect(useAppStore.getState().activeSketch?.title).toBe("theirs");
+
+    // After the reload settles, saves go to the document again, from the reloaded base.
+    await settle();
+    ipc.save.mockImplementation(() => Promise.resolve(versioned(sketch("next"), "h10")));
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "next" });
+    expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: "demo.sk", expectedVersion: "h9" }));
+    expect(ipc.createCopy).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers the reload again after an editor that refused it has saved its edits into the copy", async () => {
+    await openSketch(sketch("v0"), "h0");
+    const order: string[] = [];
+    ipc.save.mockImplementation((_: string, args: Record<string, unknown>) => {
+      order.push(`save ${args.relativePath} ${String(args.title)}`);
+      return args.relativePath === "demo.sk"
+        ? Promise.reject({ code: "stale_document" })
+        : Promise.resolve(versioned(sketch("copy"), `c${order.length}`));
+    });
+    ipc.createCopy.mockResolvedValue({ document: "", content: "", version: "c0", merged: false });
+    const firstRead = deferred<unknown>();
+    ipc.read.mockReturnValueOnce(firstRead.promise).mockResolvedValue(versioned(sketch("theirs"), "h9"));
+    let pending: string | null = null;
+    const offers: string[] = [];
+    const editor = (event: Event) => {
+      offers.push(`${pending ? "refused" : "accepted"} with ${useAppStore.getState().activeSketch?.title}`);
+      if (pending) event.preventDefault();
+    };
+    window.addEventListener("cutready:document-refreshed", editor);
+    const unregister = registerEditorFlush(async () => {
+      const title = pending;
+      pending = null;
+      if (title) await saveDocument("update_sketch_title", { relativePath: "demo.sk", title });
+    });
+    const show = vi.spyOn(useToastStore.getState(), "show");
+    show.mockClear();
+    try {
+      const conflict = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "mine" });
+      // Typing that the editor hasn't saved yet when the reload is offered.
+      pending = "typed";
+      await expect(conflict).rejects.toSatisfy(isDocumentConflict);
+      // The flush on conflict wrote that typing into the copy; more arrives before the reload is offered.
+      await vi.waitFor(() => expect(ipc.read).toHaveBeenCalledTimes(2));
+      pending = "typed later";
+      firstRead.resolve(versioned(sketch("theirs"), "h9"));
+      await vi.waitFor(() => expect(useAppStore.getState().activeSketch?.title).toBe("theirs"));
+    } finally {
+      window.removeEventListener("cutready:document-refreshed", editor);
+      unregister();
+    }
+    const copyPath = ipc.createCopy.mock.calls[0][0] as string;
+    expect(offers).toEqual(["refused with v0", "accepted with v0"]);
+    expect(order).toEqual([
+      "save demo.sk mine",
+      `save ${copyPath} mine`,
+      `save ${copyPath} typed`,
+      `save ${copyPath} typed later`,
+    ]);
+    expect(ipc.read).toHaveBeenCalledTimes(3);
+    expect(show).toHaveBeenCalledTimes(1);
+
+    await settle();
+    ipc.save.mockImplementation(() => Promise.resolve(versioned(sketch("next"), "h10")));
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "next" });
+    expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: "demo.sk", expectedVersion: "h9" }));
+  });
+
+  it("numbers the conflict copy when the name is taken", async () => {
+    await openSketch(sketch("v0"), "h0");
+    ipc.save.mockImplementation((_: string, args: Record<string, unknown>) =>
+      args.relativePath === "demo.sk"
+        ? Promise.reject({ code: "stale_document" })
+        : Promise.resolve(versioned(sketch("copy"), "c1")));
+    ipc.createCopy
+      .mockRejectedValueOnce({ code: "file_exists" })
+      .mockResolvedValueOnce({ document: "", content: "", version: "c0", merged: false });
+    ipc.read.mockResolvedValue(versioned(sketch("theirs"), "h9"));
+
+    await expect(saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "mine" })).rejects.toSatisfy(isDocumentConflict);
+    expect(ipc.createCopy.mock.calls[1][0]).toMatch(/^demo \(conflict \d{8}-\d{6}-1\)\.sk$/);
+  });
+
+  it("refreshes clean documents that changed on disk and skips ones with edits in flight", async () => {
+    useAppStore.setState({
+      openTabs: [
+        { id: "main:sketch:demo.sk", type: "sketch", path: "demo.sk", title: "Demo" },
+        { id: "main:note:busy.md", type: "note", path: "busy.md", title: "Busy" },
+      ],
+    });
+    await openSketch(sketch("v0"), "h0");
+    ipc.read.mockResolvedValueOnce({ document: "n0", content: "n0", version: "n0", merged: false });
+    await loadDocument<string>("note", "busy.md");
+    await settle();
+    const pending = deferred<unknown>();
+    ipc.save.mockReturnValueOnce(pending.promise);
+    const busy = saveDocument("update_note", { relativePath: "busy.md", content: "typing" });
+
+    ipc.read.mockReset();
+    ipc.read.mockImplementation((kind: string) =>
+      Promise.resolve(kind === "sketch" ? versioned(sketch("external"), "h1") : { document: "x", content: "x", version: "nx", merged: false }));
+    await refreshOpenDocuments();
+
+    expect(ipc.read).toHaveBeenCalledTimes(1);
+    expect(ipc.read).toHaveBeenCalledWith("sketch", "demo.sk");
+    expect(useAppStore.getState().activeSketch?.title).toBe("external");
+    pending.resolve({ document: "typing", content: "typing", version: "n1", merged: false });
+    await busy;
+  });
+
+  it("leaves documents unchanged on disk alone", async () => {
+    await openSketch(sketch("v0"), "h0");
+    const shown = useAppStore.getState().activeSketch;
+    ipc.read.mockResolvedValue(versioned(sketch("v0"), "h0"));
+    await refreshOpenDocuments();
+    expect(useAppStore.getState().activeSketch).toBe(shown);
+  });
+
+  it("stamps conflict copies in filesystem-safe UTC", () => {
+    expect(conflictStamp(new Date(Date.UTC(2026, 0, 2, 3, 4, 5)))).toBe("20260102-030405");
+  });
+});
+
+describe("document saves across projects", () => {
+  it("drops a late load once another project with the same paths opens", async () => {
+    const read = deferred<unknown>();
+    ipc.read.mockReturnValueOnce(read.promise);
+    const late = loadDocument<Sketch>("sketch", "demo.sk");
+
+    switchProject();
+    ipc.read.mockResolvedValueOnce(versioned(sketch("other"), "o1"));
+    await expect(loadDocument<Sketch>("sketch", "demo.sk")).resolves.toMatchObject({ title: "other" });
+    read.resolve(versioned(sketch("first project"), "f1"));
+    await expect(late).rejects.toSatisfy(isDropped);
+
+    await settle();
+    expect(documentEntry(OTHER_ROOT, "demo.sk")).toMatchObject({ baseVersion: "o1", base: JSON.stringify(sketch("other")) });
+  });
+
+  it("drops a queued save once another project with the same paths opens", async () => {
+    await openSketch(sketch("v0"), "h0");
+    const first = deferred<unknown>();
+    ipc.save.mockReturnValueOnce(first.promise);
+    const one = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v1" });
+    const two = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v2" });
+    await vi.waitFor(() => expect(ipc.save).toHaveBeenCalledTimes(1));
+
+    switchProject();
+    first.resolve(versioned(sketch("v1"), "h1"));
+    await one;
+    await expect(two).rejects.toSatisfy(isDropped);
+    expect(ipc.save).toHaveBeenCalledTimes(1);
+
+    // The other project's document saves from its own base.
+    ipc.read.mockResolvedValueOnce(versioned(sketch("other"), "o1"));
+    ipc.save.mockResolvedValueOnce(versioned(sketch("o2"), "o2"));
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "o2" });
+    expect(ipc.save.mock.calls[1][1]).toMatchObject({ expectedVersion: "o1", base: JSON.stringify(sketch("other")) });
+  });
+
+  it("waits for queued saves before a project change, then holds new ones until released", async () => {
+    await openSketch(sketch("v0"), "h0");
+    const first = deferred<unknown>();
+    ipc.save.mockReturnValueOnce(first.promise).mockResolvedValueOnce(versioned(sketch("v2"), "h2"));
+    const one = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v1" });
+    const two = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v2" });
+
+    let quiesced = false;
+    const quiesce = quiesceDocumentSaves(1000).then((release) => {
+      quiesced = true;
+      return release;
+    });
+    await Promise.resolve();
+    expect(quiesced).toBe(false);
+    first.resolve(versioned(sketch("v1"), "h1"));
+    const release = await quiesce;
+    await Promise.all([one, two]);
+    expect(ipc.save).toHaveBeenCalledTimes(2);
+
+    await expect(saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "late" })).rejects.toSatisfy(isDropped);
+    expect(ipc.save).toHaveBeenCalledTimes(2);
+
+    // The project change failed, so the project stays open and saves run again.
+    release();
+    ipc.save.mockResolvedValueOnce(versioned(sketch("v3"), "h3"));
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v3" });
+    expect(ipc.save.mock.calls[2][1]).toMatchObject({ expectedVersion: "h2" });
+  });
+
+  it("fails a project change when a queued save doesn't finish in time, and keeps saving to this project", async () => {
+    await openSketch(sketch("v0"), "h0");
+    const stuck = deferred<unknown>();
+    ipc.save.mockReturnValueOnce(stuck.promise).mockResolvedValueOnce(versioned(sketch("v2"), "h2"));
+    const one = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "stuck" });
+    const two = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v2" });
+
+    await expect(quiesceDocumentSaves(10)).rejects.toBeInstanceOf(DocumentsUnsettledError);
+
+    stuck.resolve(versioned(sketch("v1"), "h1"));
+    await Promise.all([one, two]);
+    expect(ipc.save.mock.calls[1][1]).toMatchObject({ relativePath: "demo.sk", expectedVersion: "h1" });
+  });
+
+  it("fails a project change when an editor's edits can't be saved", async () => {
+    await openSketch(sketch("v0"), "h0");
+    const unregister = registerEditorFlush(() => Promise.reject(new Error("disk full")));
+    try {
+      await expect(quiesceDocumentSaves(10)).rejects.toThrow("couldn't save an open editor's latest changes");
+    } finally {
+      unregister();
+    }
+    ipc.save.mockResolvedValueOnce(versioned(sketch("v1"), "h1"));
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v1" });
+    expect(ipc.save).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the project open and says so when opening or switching can't save open documents first", async () => {
+    await openSketch(sketch("v0"), "h0");
+    const show = vi.spyOn(useToastStore.getState(), "show");
+    show.mockClear();
+    const unregister = registerEditorFlush(() => Promise.reject(new Error("disk full")));
+    try {
+      await useAppStore.getState().openProject(OTHER_ROOT);
+      await expect(useAppStore.getState().switchProject("other")).resolves.toBe(false);
+    } finally {
+      unregister();
+    }
+    expect(mockInvoke).not.toHaveBeenCalledWith("open_project_folder", expect.anything());
+    expect(mockInvoke).not.toHaveBeenCalledWith("switch_project", expect.anything());
+    expect(useAppStore.getState()).toMatchObject({ loading: false, projectSwitching: false, activeSketchPath: "demo.sk" });
+    expect(useAppStore.getState().currentProject?.root).toBe(ROOT);
+    expect(show).toHaveBeenCalledWith(expect.stringContaining("project stayed open"), 10000, "error");
+    expect(show).toHaveBeenCalledTimes(2);
+  });
+
+  it("closes the project only once open documents are saved", async () => {
+    await openSketch(sketch("v0"), "h0");
+    const show = vi.spyOn(useToastStore.getState(), "show");
+    show.mockClear();
+    const unregister = registerEditorFlush(() => Promise.reject(new Error("disk full")));
+    try {
+      await expect(useAppStore.getState().closeProject()).resolves.toBe(false);
+    } finally {
+      unregister();
+    }
+    expect(mockInvoke).not.toHaveBeenCalledWith("close_project");
+    expect(useAppStore.getState().currentProject?.root).toBe(ROOT);
+    expect(show).toHaveBeenCalledWith(expect.stringContaining("project stayed open"), 10000, "error");
+
+    // Retrying once the edits can be saved closes it.
+    await expect(useAppStore.getState().closeProject()).resolves.toBe(true);
+    expect(mockInvoke).toHaveBeenCalledWith("close_project");
+    expect(useAppStore.getState().currentProject).toBeNull();
+  });
+});
+
+describe("conflict redirects", () => {
+  let cleanup: () => void = () => undefined;
+  afterEach(() => cleanup());
+
+  /**
+   * A document whose first save conflicts, open in an editor that refuses the
+   * reload while it has typing (`pending`) and saves that typing when flushed.
+   */
+  async function conflictInRefusingEditor(flush: (state: { pending: string | null }) => string | null) {
+    await openSketch(sketch("v0"), "h0");
+    let conflicted = false;
+    const saved: string[] = [];
+    ipc.save.mockImplementation((_: string, args: Record<string, unknown>) => {
+      saved.push(`${args.relativePath} ${String(args.title)}`);
+      if (args.relativePath !== "demo.sk") return Promise.resolve(versioned(sketch("copy"), `c${saved.length}`));
+      if (conflicted) return Promise.resolve(versioned(sketch("next"), "h10"));
+      conflicted = true;
+      return Promise.reject({ code: "stale_document" });
+    });
+    ipc.createCopy.mockResolvedValue({ document: "", content: "", version: "c0", merged: false });
+    ipc.read.mockResolvedValue(versioned(sketch("theirs"), "h9"));
+    const state = { pending: null as string | null, offers: [] as boolean[] };
+    const editor = (event: Event) => {
+      state.offers.push(state.pending === null);
+      if (state.pending !== null) event.preventDefault();
+    };
+    window.addEventListener("cutready:document-refreshed", editor);
+    const unregister = registerEditorFlush(async () => {
+      const title = flush(state);
+      if (title) await saveDocument("update_sketch_title", { relativePath: "demo.sk", title });
+    });
+    cleanup = () => {
+      window.removeEventListener("cutready:document-refreshed", editor);
+      unregister();
+    };
+    const show = vi.spyOn(useToastStore.getState(), "show");
+    show.mockClear();
+    const conflict = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "mine" });
+    state.pending = "typed";
+    await expect(conflict).rejects.toSatisfy(isDocumentConflict);
+    const copyPath = () => ipc.createCopy.mock.calls[0][0] as string;
+    return { state, saved, show, copyPath, closeEditor: () => window.removeEventListener("cutready:document-refreshed", editor) };
+  }
+
+  it("keeps offering the reload after each save of the editor's typing, however many it takes", async () => {
+    let typed = 0;
+    // The user keeps typing: every flush saves one edit and leaves the next one pending, eight times.
+    const { state, saved, show, copyPath } = await conflictInRefusingEditor((editor) => {
+      const title = editor.pending;
+      editor.pending = typed < 8 ? `t${++typed}` : null;
+      return title;
+    });
+    await vi.waitFor(() => expect(useAppStore.getState().activeSketch?.title).toBe("theirs"));
+    expect(state.offers).toEqual([...Array(8).fill(false), true]);
+    expect(saved.slice(1)).toEqual([
+      `${copyPath()} mine`,
+      `${copyPath()} typed`,
+      ...Array.from({ length: 8 }, (_, i) => `${copyPath()} t${i + 1}`),
+    ]);
+    expect(show).toHaveBeenCalledWith(expect.stringContaining(`being saved to ${copyPath()}`), 10000, "warning");
+
+    await settle();
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "after" });
+    expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: "demo.sk", expectedVersion: "h9" }));
+  });
+
+  it("ends the redirect when the document is reopened from disk", async () => {
+    // The editor's typing never gets saved, so the reload is never accepted.
+    const { saved, copyPath, closeEditor } = await conflictInRefusingEditor(() => null);
+    await vi.waitFor(() => expect(ipc.read).toHaveBeenCalledTimes(2));
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "still mine" });
+    expect(saved[saved.length - 1]).toBe(`${copyPath()} still mine`);
+
+    closeEditor();
+    await vi.waitFor(() => expect(entry().inFlight).toBe(0));
+    await useAppStore.getState().openSketch("demo.sk");
+    expect(useAppStore.getState().activeSketch).toMatchObject({ title: "theirs" });
+    await settle();
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "reopened" });
+    expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: "demo.sk", expectedVersion: "h9" }));
+  });
+
+  it("keeps the redirect when a load's document is never shown", async () => {
+    const { saved, copyPath, closeEditor } = await conflictInRefusingEditor(() => null);
+    await vi.waitFor(() => expect(ipc.read).toHaveBeenCalledTimes(2));
+    closeEditor();
+    await vi.waitFor(() => expect(entry().inFlight).toBe(0));
+
+    // A reload whose caller discards the result (e.g. typing happened during the read).
+    expect(await loadDocument<Sketch>("sketch", "demo.sk")).toMatchObject({ title: "theirs" });
+    const discarded = await readDocument<Sketch>("sketch", "demo.sk");
+    expect(discarded.document).toMatchObject({ title: "theirs" });
+    await settle();
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "still redirected" });
+    expect(saved[saved.length - 1]).toBe(`${copyPath()} still redirected`);
+  });
+
+  it("keeps the redirect when a tab's load is cancelled before it installs", async () => {
+    const { saved, copyPath, closeEditor } = await conflictInRefusingEditor(() => null);
+    await vi.waitFor(() => expect(ipc.read).toHaveBeenCalledTimes(2));
+    closeEditor();
+    await vi.waitFor(() => expect(entry().inFlight).toBe(0));
+
+    const read = deferred<ReturnType<typeof versioned>>();
+    ipc.read.mockReturnValueOnce(read.promise);
+    const opening = useAppStore.getState().openSketch("demo.sk");
+    // The user moves to another tab before the read finishes.
+    useAppStore.setState({ activeSketchPath: "other.sk", activeSketch: null });
+    read.resolve(versioned(sketch("theirs"), "h9"));
+    await opening;
+    expect(useAppStore.getState().activeSketch).toBeNull();
+    await settle();
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "still redirected" });
+    expect(saved[saved.length - 1]).toBe(`${copyPath()} still redirected`);
+  });
+
+  it("ends the redirect when a refresh shows the document from disk", async () => {
+    const { state, saved, copyPath } = await conflictInRefusingEditor(() => null);
+    await vi.waitFor(() => expect(ipc.read).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(entry().inFlight).toBe(0));
+    expect(saved[saved.length - 1]).toBe(`${copyPath()} mine`);
+
+    // The typing was discarded; the next refresh is accepted.
+    state.pending = null;
+    await refreshOpenDocuments();
+    expect(useAppStore.getState().activeSketch?.title).toBe("theirs");
+    await settle();
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "refreshed" });
+    expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: "demo.sk", expectedVersion: "h9" }));
+  });
+});
+
+describe("conflict redirects with the document open in both panes", () => {
+  const SPLIT_EDITOR = Symbol("split editor");
+  let unregister: Array<() => void> = [];
+  afterEach(() => {
+    for (const each of unregister) each();
+    unregister = [];
+  });
+
+  /** Main and split panes show demo.sk; a save conflicts, and the split pane's typing refuses every reload. */
+  async function conflictInBothPanes() {
+    const closeSplit = registerDocumentEditor("demo.sk", SPLIT_EDITOR);
+    unregister = [registerDocumentEditor("demo.sk", MAIN_EDITOR), closeSplit];
+    await openSketch(sketch("v0"), "h0");
+    const saved: string[] = [];
+    ipc.save.mockImplementation((_: string, args: Record<string, unknown>) => {
+      saved.push(`${args.relativePath} ${String(args.title)}`);
+      if (args.relativePath !== "demo.sk") return Promise.resolve(versioned(sketch("copy"), `c${saved.length}`));
+      if (saved.length > 1) return Promise.resolve(versioned(sketch("next"), "h10"));
+      return Promise.reject({ code: "stale_document" });
+    });
+    ipc.createCopy.mockResolvedValue({ document: "", content: "", version: "c0", merged: false });
+    ipc.read.mockResolvedValue(versioned(sketch("theirs"), "h9"));
+    const refuse = (event: Event) => event.preventDefault();
+    window.addEventListener("cutready:document-refreshed", refuse);
+    unregister.push(() => window.removeEventListener("cutready:document-refreshed", refuse));
+    await expect(saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "mine" })).rejects.toSatisfy(isDocumentConflict);
+    await vi.waitFor(() => expect(ipc.read).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(entry().inFlight).toBe(0));
+    const copyPath = ipc.createCopy.mock.calls[0][0] as string;
+    const saveTo = async (title: string) => {
+      const count = saved.length;
+      await saveDocument("update_sketch_title", { relativePath: "demo.sk", title });
+      await vi.waitFor(() => expect(entry().inFlight).toBe(0));
+      return saved[count];
+    };
+    return { copyPath, closeSplit, saveTo };
+  }
+
+  it("keeps the redirect until both panes show the document from disk", async () => {
+    const { copyPath, saveTo } = await conflictInBothPanes();
+
+    (await readDocument<Sketch>("sketch", "demo.sk")).installed(MAIN_EDITOR);
+    await settle();
+    // The split pane still has its pre-conflict edits; they go to the copy.
+    expect(await saveTo("split edit")).toBe(`${copyPath} split edit`);
+
+    (await readDocument<Sketch>("sketch", "demo.sk")).installed(SPLIT_EDITOR);
+    await settle();
+    expect(await saveTo("both reloaded")).toBe("demo.sk both reloaded");
+    expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: "demo.sk", expectedVersion: "h9" }));
+  });
+
+  it("doesn't count an editor that never answered the reload", async () => {
+    unregister = [registerDocumentEditor("demo.sk", MAIN_EDITOR)];
+    await openSketch(sketch("v0"), "h0");
+    ipc.save.mockRejectedValueOnce({ code: "stale_document" });
+    ipc.save.mockImplementation((_: string, args: Record<string, unknown>) =>
+      Promise.resolve(versioned(sketch(String(args.title)), `s${ipc.save.mock.calls.length}`)));
+    ipc.createCopy.mockResolvedValue({ document: "", content: "", version: "c0", merged: false });
+    ipc.read.mockResolvedValue(versioned(sketch("theirs"), "h9"));
+    await expect(saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "mine" })).rejects.toSatisfy(isDocumentConflict);
+    // Nobody refused the reload, but the registered editor didn't acknowledge it either.
+    await vi.waitFor(() => expect(entry().inFlight).toBe(0));
+    await settle();
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "silent" });
+    const copyPath = ipc.createCopy.mock.calls[0][0] as string;
+    expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: copyPath, title: "silent" }));
+
+    (await readDocument<Sketch>("sketch", "demo.sk")).installed(MAIN_EDITOR);
+    await settle();
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "acknowledged" });
+    expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: "demo.sk", expectedVersion: "h9" }));
+  });
+
+  it("ends the redirect when the pane that never reloaded closes", async () => {
+    const { copyPath, closeSplit, saveTo } = await conflictInBothPanes();
+
+    (await readDocument<Sketch>("sketch", "demo.sk")).installed(MAIN_EDITOR);
+    await settle();
+    expect(await saveTo("split edit")).toBe(`${copyPath} split edit`);
+
+    closeSplit();
+    await settle();
+    expect(await saveTo("split closed")).toBe("demo.sk split closed");
+    expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: "demo.sk", expectedVersion: "h9" }));
+  });
+});
+
+describe("conflict copies that can't be written", () => {
+  async function conflictWith(setup: () => void) {
+    await openSketch(sketch("v0"), "h0");
+    setup();
+    const show = vi.spyOn(useToastStore.getState(), "show");
+    const result = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "mine" });
+    await expect(result).rejects.toMatchObject({ code: "io" });
+    expect(entry().savedRevision).toBeLessThan(entry().editRevision);
+    expect(entry().redirect).toBeUndefined();
+    expect(show).toHaveBeenCalledWith(expect.stringContaining("couldn't save your edits to a conflict copy"), 10000, "error");
+
+    // A refresh doesn't replace the unsaved edits with the disk version.
+    ipc.read.mockResolvedValue(versioned(sketch("theirs"), "h9"));
+    await refreshOpenDocuments();
+    expect(useAppStore.getState().activeSketch?.title).toBe("v0");
+    expect(ipc.read).toHaveBeenCalledTimes(1);
+  }
+
+  it("keeps the document dirty when the copy can't be created", async () => {
+    await conflictWith(() => {
+      ipc.save.mockRejectedValueOnce({ code: "stale_document" });
+      ipc.createCopy.mockRejectedValueOnce({ code: "io" });
+    });
+    expect(ipc.save).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the document dirty when the edits can't be written into the copy", async () => {
+    await conflictWith(() => {
+      ipc.save.mockRejectedValueOnce({ code: "stale_document" }).mockRejectedValueOnce({ code: "io" });
+      ipc.createCopy.mockResolvedValueOnce({ document: "", content: "", version: "c0", merged: false });
+    });
+    expect(ipc.save).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("renaming documents", () => {
+  it("waits for an in-flight save and a queued one, then saves the new path from the last version", async () => {
+    await openSketch(sketch("v0"), "h0");
+    const first = deferred<unknown>();
+    const second = sketch("v2");
+    ipc.save.mockReturnValueOnce(first.promise).mockResolvedValueOnce(versioned(second, "h2"));
+    const saves = Promise.all([
+      saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v1" }),
+      saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v2" }),
+    ]);
+
+    let settled = false;
+    const settling = settleBeforeRename(1000).then(() => { settled = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    first.resolve(versioned(sketch("v1"), "h1"));
+    await settling;
+    await saves;
+
+    documentRenamed("demo.sk", "renamed.sk");
+    ipc.save.mockResolvedValueOnce(versioned(sketch("v3"), "h3"));
+    await saveDocument("update_sketch_title", { relativePath: "renamed.sk", title: "v3" });
+    expect(ipc.save.mock.calls[2][1]).toMatchObject({ relativePath: "renamed.sk", expectedVersion: "h2", base: JSON.stringify(second) });
+    expect(ipc.read).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborts the rename when queued saves don't finish in time, keeping the old path's saves", async () => {
+    await openSketch(sketch("v0"), "h0");
+    const first = deferred<unknown>();
+    ipc.save.mockReturnValueOnce(first.promise).mockResolvedValueOnce(versioned(sketch("v2"), "h2"));
+    const one = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v1" });
+    const two = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v2" });
+
+    await expect(settleBeforeRename(10)).rejects.toBeInstanceOf(DocumentsUnsettledError);
+    expect(entry().inFlight).toBe(2);
+
+    first.resolve(versioned(sketch("v1"), "h1"));
+    await Promise.all([one, two]);
+    expect(ipc.save.mock.calls[1][1]).toMatchObject({ relativePath: "demo.sk", title: "v2", expectedVersion: "h1" });
+    expect(entry()).toMatchObject({ baseVersion: "h2", inFlight: 0, editRevision: 2, savedRevision: 2 });
+  });
+
+  it("doesn't rename while pending editor edits can't be saved", async () => {
+    const unregister = registerEditorFlush(() => Promise.reject(new Error("disk full")));
+    try {
+      await expect(settleBeforeRename(10)).rejects.toThrow("couldn't save an open editor's latest changes");
+    } finally {
+      unregister();
+    }
+  });
+});

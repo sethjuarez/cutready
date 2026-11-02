@@ -12,8 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     engine::{
-        document_writer::{self, Expected},
-        project, recording,
+        document_reads, document_writer, project, recording,
         speech::{SynthesisRequest, TtsConnection, TtsRegistry},
     },
     AppState,
@@ -271,8 +270,7 @@ fn persist_narration_asset(
     silence_threshold_db: Option<f32>,
     narration_plan: Option<NarrationPlan>,
 ) -> Result<Sketch, String> {
-    let sketch_abs = project::safe_resolve(root, sketch_path).map_err(|e| e.to_string())?;
-    let mut sketch = project::read_sketch(&sketch_abs).map_err(|e| e.to_string())?;
+    let (mut sketch, expected) = document_reads::sketch_for_edit(root, sketch_path)?;
     project::ensure_sketch_unlocked(&sketch).map_err(|e| e.to_string())?;
 
     let row = sketch
@@ -319,7 +317,7 @@ fn persist_narration_asset(
     row.motion_plan = None;
 
     let op = json!({ "kind": "replace_rows", "rows": sketch.rows });
-    let sketch = document_writer::edit_sketch(root, sketch_path, Expected::Unchecked, &[op])?;
+    let sketch = document_writer::edit_sketch(root, sketch_path, expected, &[op])?;
     tracing::info!(
         target: "cutready::recording",
         sketch_path = %sketch_path,

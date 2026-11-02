@@ -15,7 +15,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::engine::document_writer;
+use crate::engine::document_writer::{self, Expected};
 use crate::engine::draftline_adapter::CutReadyDraftlineAdapter;
 use crate::models::script::{ProjectEntry, ProjectManifest, ProjectView, RepoView};
 use cutready_core::assets::{
@@ -23,7 +23,8 @@ use cutready_core::assets::{
     replace_sketch_screenshot_references, replace_sketch_visual_references,
     rewrite_markdown_screenshot_refs,
 };
-use cutready_core::document;
+use cutready_core::document::{self, VisualFile};
+use cutready_core::edit_ops;
 use cutready_core::models::sketch::{
     NoteSummary, Sketch, SketchSummary, Storyboard, StoryboardSummary,
 };
@@ -1020,8 +1021,8 @@ pub fn write_visual(
     Ok(file.path)
 }
 
-fn write_visual_file(project_root: &Path, file: &document::VisualFile) -> Result<(), ProjectError> {
-    let abs_path = project_root.join(&file.path);
+pub(crate) fn write_visual_file(root: &Path, file: &VisualFile) -> Result<(), ProjectError> {
+    let abs_path = root.join(&file.path);
     if let Some(parent) = abs_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| ProjectError::Io(e.to_string()))?;
     }
@@ -1041,7 +1042,8 @@ pub fn read_visual(
     serde_json::from_str(&data).map_err(|e| ProjectError::Deserialize(e.to_string()))
 }
 
-/// Write a sketch to a `.sk` file.
+/// Write a sketch to a `.sk` file, whatever is on disk.
+#[cfg(test)]
 pub fn write_sketch(sketch: &Sketch, path: &Path, project_root: &Path) -> Result<(), ProjectError> {
     document_writer::replace_sketch(project_root, path, sketch)?;
     Ok(())
@@ -1097,23 +1099,15 @@ fn read_sketch_inner(path: &Path, project_root: Option<&Path>) -> Result<Sketch,
 
     // Migrate inline visuals to external files when project root is available
     if let Some(root) = project_root {
-        let migration =
-            document::externalize_inline_visuals(&mut sketch, |file| write_visual_file(root, file));
-        for e in &migration.failures {
-            eprintln!("[read_sketch] Failed to migrate inline visual: {e}");
-        }
-        if migration.changed {
-            // Rewrite .sk file with path references instead of inline blobs
-            if let Err(e) = write_sketch(&sketch, path, root) {
-                eprintln!("[read_sketch] Failed to rewrite migrated sketch: {e}");
-            }
-        }
+        crate::engine::document_reads::migrate_inline_visuals(&mut sketch, &data, path, root);
     }
 
     Ok(sketch)
 }
 
 /// Delete an unlocked sketch file and remove storyboard references to it.
+/// The caller holds the write lock, so each storyboard is rewritten over the
+/// version it was read at.
 pub fn delete_sketch(path: &Path, project_root: &Path) -> Result<(), ProjectError> {
     if path.exists() {
         let sketch = read_sketch(path)?;
@@ -1122,8 +1116,8 @@ pub fn delete_sketch(path: &Path, project_root: &Path) -> Result<(), ProjectErro
         let storyboard_updates = storyboards_with_sketch_removed(project_root, &sketch_rel_path)?;
 
         document_writer::delete(project_root, path)?;
-        for (storyboard_path, storyboard) in storyboard_updates {
-            write_storyboard(&storyboard, &storyboard_path, project_root)?;
+        for (path, storyboard, expected) in storyboard_updates {
+            document_writer::write_storyboard(project_root, &path, &storyboard, expected)?;
         }
     }
     Ok(())
@@ -1132,7 +1126,7 @@ pub fn delete_sketch(path: &Path, project_root: &Path) -> Result<(), ProjectErro
 fn storyboards_with_sketch_removed(
     project_root: &Path,
     sketch_rel_path: &str,
-) -> Result<Vec<(PathBuf, Storyboard)>, ProjectError> {
+) -> Result<Vec<(PathBuf, Storyboard, Expected)>, ProjectError> {
     let mut updates = Vec::new();
     let mut locked_error = None;
     scan_files_recursive(
@@ -1150,7 +1144,9 @@ fn storyboards_with_sketch_removed(
                             )));
                         } else {
                             storyboard.updated_at = chrono::Utc::now();
-                            updates.push((abs_path.to_path_buf(), storyboard));
+                            let version = edit_ops::document_version(data.as_bytes());
+                            let expected = Expected::Version(version);
+                            updates.push((abs_path.to_path_buf(), storyboard, expected));
                         }
                     }
                 }
@@ -1800,7 +1796,8 @@ fn rollback_rename_project_asset(
 
 // ── Storyboard file I/O (.sb) ─────────────────────────────────────
 
-/// Write a storyboard to a `.sb` file.
+/// Write a storyboard to a `.sb` file, whatever is on disk.
+#[cfg(test)]
 pub fn write_storyboard(
     sb: &Storyboard,
     path: &Path,
@@ -1827,20 +1824,22 @@ pub fn read_storyboard(path: &Path) -> Result<Storyboard, ProjectError> {
     let data = std::fs::read_to_string(path).map_err(|e| ProjectError::Io(e.to_string()))?;
     let (storyboard, upgraded) = document::storyboard_from_json(&data)?;
     if upgraded {
-        save_upgraded_storyboard(&storyboard, path);
+        save_upgraded_storyboard(&storyboard, path, &data);
     }
     Ok(storyboard)
 }
 
-/// Persist a storyboard whose older on-disk shape was just upgraded on read.
-/// Best effort: a failed write leaves the old file, which upgrades again next read.
-fn save_upgraded_storyboard(storyboard: &Storyboard, path: &Path) {
+/// Persist a storyboard whose older on-disk shape (`data`) was just upgraded
+/// on read. Best effort: a failed write, or a file that changed since the
+/// read, leaves the file, which upgrades again next read.
+fn save_upgraded_storyboard(storyboard: &Storyboard, path: &Path, data: &str) {
     // Only inside a project this process has open: never invent a state dir.
     let Some(root) = document_writer::project_root_for(path) else {
         log::debug!("not upgrading {} outside an open project", path.display());
         return;
     };
-    if let Err(err) = document_writer::replace_storyboard(&root, path, storyboard) {
+    let expected = Expected::Version(edit_ops::document_version(data.as_bytes()));
+    if let Err(err) = document_writer::write_storyboard(&root, path, storyboard, expected) {
         log::warn!(
             "could not save upgraded storyboard {}: {err}",
             path.display()
@@ -1892,7 +1891,7 @@ pub fn scan_storyboards(project_root: &Path) -> Result<Vec<StoryboardSummary>, P
             if let Ok(data) = std::fs::read_to_string(abs_path) {
                 if let Ok((sb, upgraded)) = document::storyboard_from_json(&data) {
                     if upgraded {
-                        save_upgraded_storyboard(&sb, abs_path);
+                        save_upgraded_storyboard(&sb, abs_path, &data);
                     }
                     summaries.push(StoryboardSummary::from_storyboard(&sb, rel_path));
                 }

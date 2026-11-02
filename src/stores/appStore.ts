@@ -13,6 +13,7 @@ import {
 } from "../services/draftlineErrors";
 import { recordActivityEntries } from "../services/telemetry";
 import { useToastStore } from "./toastStore";
+import { beginProjectChange, isHandledSaveError, loadDocument, MAIN_EDITOR, readDocument, saveDocument, type SaveOptions } from "../services/documentSaves";
 import { getStoryboardSketchPaths } from "../utils/storyboard";
 import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
 import type {
@@ -293,14 +294,15 @@ export interface AppStoreState {
    * then reopen it there. Throws (without changing anything) when the move is refused.
    */
   moveProjectFolder: (to: string) => Promise<MoveProjectFolderResult>;
-  closeProject: () => void;
+  /** Closes the project once open documents are saved (false if they couldn't be; it stays open). `force` closes at once. */
+  closeProject: (options?: { force?: boolean }) => Promise<boolean>;
 
   // ── Multi-project actions ──────────────────────────────────
 
   /** Load the list of projects in the current repo. */
   loadProjects: () => Promise<void>;
-  /** Switch to a different project within the repo. */
-  switchProject: (projectPath: string) => Promise<void>;
+  /** Switch to a different project within the repo (false if it didn't switch). */
+  switchProject: (projectPath: string) => Promise<boolean>;
   /** Create a new project within the current repo. */
   createProjectInRepo: (name: string, description?: string) => Promise<void>;
   /** Delete a project from the repo. */
@@ -315,7 +317,7 @@ export interface AppStoreState {
   /** Open a sketch for editing by path. */
   openSketch: (sketchPath: string) => Promise<void>;
   /** Update the active sketch (description and/or rows). */
-  updateSketch: (update: { description?: unknown; rows?: import("../types/sketch").PlanningRow[]; metadata?: import("../types/sketch").DocumentMetadata }) => Promise<void>;
+  updateSketch: (update: { description?: unknown; rows?: import("../types/sketch").PlanningRow[]; metadata?: import("../types/sketch").DocumentMetadata }, options?: SaveOptions) => Promise<void>;
   /** Update a sketch's title. */
   updateSketchTitle: (sketchPath: string, title: string) => Promise<void>;
   /** Delete a sketch. */
@@ -357,7 +359,7 @@ export interface AppStoreState {
   /** Open a note for editing by path. */
   openNote: (notePath: string) => Promise<void>;
   /** Update the active note content. */
-  updateNote: (content: string) => Promise<void>;
+  updateNote: (content: string, options?: SaveOptions) => Promise<void>;
   /** Lock or unlock a note. */
   setNoteLocked: (notePath: string, locked: boolean) => Promise<void>;
   /** Delete a note. */
@@ -938,6 +940,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   createProject: async (path) => {
     bumpRemoteDetectionGeneration();
     set({ loading: true });
+    const releaseDocuments = await beginProjectChange();
+    if (!releaseDocuments) return set({ loading: false });
     try {
       const project = await invoke<ProjectView>("create_project_folder", { path });
       beginWorkspaceGeneration(project.repo_root);
@@ -952,14 +956,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         splitTabs: [],
         splitActiveTabId: null,
         activeEditorGroup: "main",
-        activeSketchPath: null,
-        activeSketch: null,
-        activeStoryboardPath: null,
-        activeStoryboard: null,
-        activeNotePath: null,
-        activeNoteContent: null,
-        activeNoteLocked: false,
-        activeChatArtifactPath: null,
+        ...clearActiveDocumentState(),
       });
       localStorage.setItem("cutready:lastProject", path);
       await get().loadRecentProjects();
@@ -980,6 +977,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       console.error("Failed to create project:", err);
       set({ error: errorMessage(err) });
     } finally {
+      releaseDocuments();
       set({ loading: false });
     }
   },
@@ -987,6 +985,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   openProject: async (path, options) => {
     bumpRemoteDetectionGeneration();
     set({ loading: true, adoptionPrompt: null });
+    const releaseDocuments = await beginProjectChange();
+    if (!releaseDocuments) return set({ loading: false });
     try {
       const project = await invoke<ProjectView>("open_project_folder", { path, adopt: options?.adopt ?? false });
       beginWorkspaceGeneration(project.repo_root);
@@ -1007,14 +1007,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         splitTabs: [],
         splitActiveTabId: null,
         activeEditorGroup: "main",
-        activeSketchPath: null,
-        activeSketch: null,
-        activeStoryboardPath: null,
-        activeStoryboard: null,
-        activeNotePath: null,
-        activeNoteContent: null,
-        activeNoteLocked: false,
-        activeChatArtifactPath: null,
+        ...clearActiveDocumentState(),
       });
       localStorage.setItem("cutready:lastProject", path);
       // Surface interrupted operations before loaders that may refuse during recovery.
@@ -1050,6 +1043,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       console.error("Failed to open project:", err);
       set({ error: errorMessage(err) });
     } finally {
+      releaseDocuments();
       set({ loading: false });
     }
   },
@@ -1092,7 +1086,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         // Content and local history are split; stop writing until the user repairs it.
         set({ moveFolderDialogOpen: false });
         // Keep editor flushes suppressed so unmounting editors can't write into the split state.
-        get().closeProject();
+        void get().closeProject({ force: true });
         throw err;
       }
       clearSuppressedEditorFlushes(openPaths);
@@ -1109,7 +1103,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     // openProject installs a fresh project object only when it succeeds.
     if (!reopened || reopened === project) {
       const reason = get().error ?? "it didn't open";
-      get().closeProject();
+      void get().closeProject({ force: true });
       useToastStore.getState().show(
         `Moved the project to ${result.projectRoot}, but couldn't reopen it (${reason}). Open it from Recent Projects.`,
         10000,
@@ -1129,15 +1123,13 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     return result;
   },
 
-  closeProject: () => {
+  closeProject: async (options) => {
+    if (!options?.force && !(await beginProjectChange())) return false;
     bumpRemoteDetectionGeneration();
     invoke("close_project").catch(console.error);
     beginWorkspaceGeneration(null);
     localStorage.removeItem("cutready:lastProject");
-    // Clear workspace settings
-    import("../hooks/useSettings").then(({ useSettingsStore }) => {
-      useSettingsStore.getState()._clearWorkspaceSettings();
-    });
+    import("../hooks/useSettings").then(({ useSettingsStore }) => useSettingsStore.getState()._clearWorkspaceSettings());
     useVersioningStore.setState(resetVersioningState());
     useSyncStore.setState(resetSyncState());
     useChatStore.setState({
@@ -1153,17 +1145,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       isMultiProject: false,
       view: "home",
       sketches: [],
-      activeSketchPath: null,
-      activeSketch: null,
       storyboards: [],
-      activeStoryboardPath: null,
-      activeStoryboard: null,
       notes: [],
-      activeNotePath: null,
-      activeNoteContent: null,
-      activeNoteLocked: false,
       chatArtifacts: [],
-      activeChatArtifactPath: null,
+      ...clearActiveDocumentState(),
       assets: [],
       narrationAssets: [],
       activityLog: [],
@@ -1175,6 +1160,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       splitActiveTabId: null,
       activeEditorGroup: "main",
     });
+    return true;
   },
 
   // ── Multi-project actions ──────────────────────────────────
@@ -1193,8 +1179,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   switchProject: async (projectPath) => {
     set({ loading: true, projectSwitching: true });
+    const releaseDocuments = await beginProjectChange();
+    if (!releaseDocuments) {
+      set({ loading: false, projectSwitching: false });
+      return false;
+    }
     try {
-      // Save current workspace state before switching
       const { openTabs, activeTabId, currentProject } = get();
       const { startedBranchFromSnapshot } = useVersioningStore.getState();
       await invoke("set_workspace_state", {
@@ -1232,14 +1222,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         splitTabs: [],
         splitActiveTabId: null,
         activeEditorGroup: "main",
-        activeSketchPath: null,
-        activeSketch: null,
-        activeStoryboardPath: null,
-        activeStoryboard: null,
-        activeNotePath: null,
-        activeNoteContent: null,
-        activeNoteLocked: false,
-        activeChatArtifactPath: null,
+        ...clearActiveDocumentState(),
       });
       await get().loadSketches();
       await get().loadStoryboards();
@@ -1257,9 +1240,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     } catch (err) {
       console.error("Failed to switch project:", err);
       set({ error: commandErrorText(err) });
+      return false;
     } finally {
+      releaseDocuments();
       set({ loading: false, projectSwitching: false });
     }
+    return true;
   },
 
   createProjectInRepo: async (name, description) => {
@@ -1332,24 +1318,22 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activeNoteLocked: false,
     });
     try {
-      const sketch = await invoke<Sketch>("get_sketch", { relativePath: sketchPath });
+      const { document: sketch, installed } = await readDocument<Sketch>("sketch", sketchPath);
       if (get().activeSketchPath !== sketchPath) return;
-      set({
-        activeSketchPath: sketchPath,
-        activeSketch: sketch,
-      });
+      set({ activeSketchPath: sketchPath, activeSketch: sketch });
+      installed(MAIN_EDITOR);
       get().openTab({ type: "sketch", path: sketchPath, title: sketch.title });
     } catch (err) {
       console.error("Failed to open sketch:", err);
     }
   },
 
-  updateSketch: async (update) => {
+  updateSketch: async (update, options) => {
     const { activeSketchPath } = get();
     if (!activeSketchPath) return;
     if (shouldSuppressEditorFlush(activeSketchPath)) return;
     try {
-      await invoke("update_sketch", { relativePath: activeSketchPath, ...update });
+      await saveDocument("update_sketch", { relativePath: activeSketchPath, ...update });
       const { activeSketch, activeSketchPath: currentActiveSketchPath } = get();
       if (activeSketch && currentActiveSketchPath === activeSketchPath) {
         set({ activeSketch: { ...activeSketch, ...update } });
@@ -1358,6 +1342,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await useVersioningStore.getState().refreshChangedFiles();
     } catch (err) {
       console.error("Failed to update sketch:", err);
+      if (options?.rethrow && !isHandledSaveError(err)) throw err;
     }
   },
 
@@ -1366,7 +1351,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!get().activeSketchPath) return;
     if (shouldSuppressEditorFlush(sketchPath)) return;
     try {
-      await invoke("update_sketch_title", { relativePath: sketchPath, title });
+      await saveDocument("update_sketch_title", { relativePath: sketchPath, title });
       await get().loadSketches();
       const { activeSketch, activeSketchPath } = get();
       if (activeSketch && activeSketchPath === sketchPath) {
@@ -1394,7 +1379,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await get().loadStoryboards();
       const { activeStoryboardPath: currentActiveStoryboardPath } = get();
       if (currentActiveStoryboardPath) {
-        const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: currentActiveStoryboardPath });
+        const storyboard = await loadDocument<Storyboard>("storyboard", currentActiveStoryboardPath);
         if (get().activeStoryboardPath === currentActiveStoryboardPath) {
           set({ activeStoryboard: storyboard });
         }
@@ -1454,7 +1439,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activeNoteLocked: false,
     });
     try {
-      const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: storyboardPath });
+      const { document: storyboard, installed } = await readDocument<Storyboard>("storyboard", storyboardPath);
       if (get().activeStoryboardPath !== storyboardPath) return;
       set({
         activeStoryboardPath: storyboardPath,
@@ -1462,6 +1447,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeSketchPath: null,
         activeSketch: null,
       });
+      installed(MAIN_EDITOR);
       get().openTab({ type: "storyboard", path: storyboardPath, title: storyboard.title });
     } catch (err) {
       console.error("Failed to open storyboard:", err);
@@ -1473,8 +1459,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!activeStoryboardPath) return;
     if (shouldSuppressEditorFlush(activeStoryboardPath)) return;
     try {
-      await invoke("update_storyboard", { relativePath: activeStoryboardPath, ...update });
-      const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
+      const storyboard = await saveDocument<Storyboard>("update_storyboard", { relativePath: activeStoryboardPath, ...update });
       if (get().activeStoryboardPath === activeStoryboardPath) {
         set({ activeStoryboard: storyboard });
       }
@@ -1490,7 +1475,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { activeStoryboardPath } = get();
     if (!activeStoryboardPath) return;
     try {
-      const storyboard = await invoke<Storyboard>("set_storyboard_lock", { relativePath: activeStoryboardPath, locked });
+      const storyboard = await saveDocument<Storyboard>("set_storyboard_lock", { relativePath: activeStoryboardPath, locked });
       if (get().activeStoryboardPath === activeStoryboardPath) {
         set({ activeStoryboard: storyboard });
       }
@@ -1531,12 +1516,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { activeStoryboardPath } = get();
     if (!activeStoryboardPath) return;
     try {
-      await invoke("add_sketch_to_storyboard", {
+      const storyboard = await saveDocument<Storyboard>("add_sketch_to_storyboard", {
         storyboardPath: activeStoryboardPath,
         sketchPath,
         position: position ?? null,
       });
-      const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
       set({ activeStoryboard: storyboard });
       await get().loadStoryboards();
       useVersioningStore.setState({ isDirty: true });
@@ -1550,11 +1534,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { activeStoryboardPath } = get();
     if (!activeStoryboardPath) return;
     try {
-      await invoke("remove_sketch_from_storyboard", {
+      const storyboard = await saveDocument<Storyboard>("remove_sketch_from_storyboard", {
         storyboardPath: activeStoryboardPath,
         position,
       });
-      const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
       set({ activeStoryboard: storyboard });
       await get().loadStoryboards();
       useVersioningStore.setState({ isDirty: true });
@@ -1568,13 +1551,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { activeStoryboardPath } = get();
     if (!activeStoryboardPath) return;
     try {
-      await invoke("add_section_to_storyboard", {
+      const storyboard = await saveDocument<Storyboard>("add_section_to_storyboard", {
         storyboardPath: activeStoryboardPath,
         title,
         description: null,
         position: position ?? null,
       });
-      const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
       set({ activeStoryboard: storyboard });
       await get().loadStoryboards();
       useVersioningStore.setState({ isDirty: true });
@@ -1588,11 +1570,10 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { activeStoryboardPath } = get();
     if (!activeStoryboardPath) return;
     try {
-      await invoke("reorder_storyboard_items", {
+      const storyboard = await saveDocument<Storyboard>("reorder_storyboard_items", {
         storyboardPath: activeStoryboardPath,
         items,
       });
-      const storyboard = await invoke<Storyboard>("get_storyboard", { relativePath: activeStoryboardPath });
       set({ activeStoryboard: storyboard });
       useVersioningStore.setState({ isDirty: true });
       await useVersioningStore.getState().refreshChangedFiles();
@@ -1649,8 +1630,8 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       activeStoryboard: null,
     });
     try {
-      const [content, lock] = await Promise.all([
-        invoke<string>("get_note", { relativePath: notePath }),
+      const [{ document: content, installed }, lock] = await Promise.all([
+        readDocument<string>("note", notePath),
         invoke<{ locked: boolean }>("get_note_lock", { relativePath: notePath }),
       ]);
       if (get().activeNotePath !== notePath) return;
@@ -1664,34 +1645,34 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeStoryboardPath: null,
         activeStoryboard: null,
       });
+      installed(MAIN_EDITOR);
       get().openTab({ type: "note", path: notePath, title });
     } catch (err) {
       console.error("Failed to open note:", err);
     }
   },
 
-  updateNote: async (content) => {
+  updateNote: async (content, options) => {
     const { activeNotePath, activeNoteLocked } = get();
     if (!activeNotePath) return;
     if (shouldSuppressEditorFlush(activeNotePath)) return;
     if (activeNoteLocked) return;
     try {
-      await invoke("update_note", { relativePath: activeNotePath, content });
+      await saveDocument("update_note", { relativePath: activeNotePath, content });
       // Note content and dirty state live in separate stores; update both synchronously.
       if (get().activeNotePath === activeNotePath) set({ activeNoteContent: content });
       useVersioningStore.setState({ isDirty: true });
       await useVersioningStore.getState().refreshChangedFiles();
     } catch (err) {
       console.error("Failed to update note:", err);
+      if (options?.rethrow && !isHandledSaveError(err)) throw err;
     }
   },
 
   setNoteLocked: async (notePath, locked) => {
     try {
       const lock = await invoke<{ locked: boolean }>("set_note_lock", { relativePath: notePath, locked });
-      if (get().activeNotePath === notePath) {
-        set({ activeNoteLocked: lock.locked });
-      }
+      if (get().activeNotePath === notePath) set({ activeNoteLocked: lock.locked });
     } catch (err) {
       console.error("Failed to update note lock:", err);
     }

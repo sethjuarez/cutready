@@ -9,8 +9,9 @@ use tauri_plugin_auditaur::auditaur_command;
 
 use serde_json::{json, Value};
 
-use crate::engine::document_writer::{self, Expected, WriteError};
-use crate::engine::project;
+use super::CmdError;
+use crate::engine::document_writer::{self, Expected, Versioned, WriteError};
+use crate::engine::{document_reads, project};
 use crate::models::script::ProjectView;
 use crate::AppState;
 use cutready_core::edit_ops::ContentEditError;
@@ -56,19 +57,34 @@ fn create_sketch_at(root: &Path, rel: &str, title: String) -> Result<Sketch, Str
     })
 }
 
+/// App saves send the version and text of the document the editor last
+/// loaded or saved (`base`); see `document_writer::save`.
 #[auditaur_command(skip_all, err)]
+#[allow(clippy::too_many_arguments)]
 pub async fn update_sketch(
     relative_path: String,
+    expected_version: String,
+    base: String,
     description: Option<serde_json::Value>,
     rows: Option<Vec<cutready_core::models::sketch::PlanningRow>>,
     metadata: Option<DocumentMetadata>,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<Versioned<Sketch>, CmdError> {
     let root = project_root(&state)?;
     let _write_guard = crate::engine::write_lock::lock(&root)?;
     let ops = update_sketch_ops(description, rows, metadata);
-    document_writer::edit(&root, &relative_path, Expected::Unchecked, &ops)?;
-    Ok(())
+    save_sketch(&root, &relative_path, &expected_version, &base, &ops)
+}
+
+fn save_sketch(
+    root: &Path,
+    rel: &str,
+    expected_version: &str,
+    base: &str,
+    ops: &[Value],
+) -> Result<Versioned<Sketch>, CmdError> {
+    let saved = document_writer::save(root, rel, expected_version, base, ops)?;
+    Ok(saved.sketch()?)
 }
 
 /// The fields `update_sketch` sets, in the legacy order. Every update marks
@@ -97,14 +113,15 @@ fn update_sketch_ops(
 #[tauri::command]
 pub async fn update_sketch_title(
     relative_path: String,
+    expected_version: String,
+    base: String,
     title: String,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<Versioned<Sketch>, CmdError> {
     let root = project_root(&state)?;
     let _write_guard = crate::engine::write_lock::lock(&root)?;
     let op = json!({ "kind": "set_title", "title": title });
-    document_writer::edit(&root, &relative_path, Expected::Unchecked, &[op])?;
-    Ok(())
+    save_sketch(&root, &relative_path, &expected_version, &base, &[op])
 }
 
 #[tauri::command]
@@ -148,72 +165,97 @@ pub async fn get_sketch(
     project::read_sketch_with_migration(&abs_path, &root).map_err(|e| e.to_string())
 }
 
+/// [`get_sketch`] with the text and version an editor saves against.
+#[auditaur_command(skip_all, err)]
+pub async fn get_sketch_versioned(
+    relative_path: String,
+    state: State<'_, AppState>,
+) -> Result<Versioned<Sketch>, CmdError> {
+    let root = project_root(&state)?;
+    let abs_path = project::safe_resolve(&root, &relative_path)?;
+    Ok(document_reads::read_sketch_versioned(&abs_path, &root)?)
+}
+
+/// Write a conflict copy of a document: `content` at a new path. Refuses with
+/// `file_exists` when the path is taken.
+#[tauri::command]
+pub async fn create_document_copy(
+    relative_path: String,
+    content: String,
+    state: State<'_, AppState>,
+) -> Result<Versioned<String>, CmdError> {
+    let root = project_root(&state)?;
+    let _write_guard = crate::engine::write_lock::lock(&root)?;
+    create_document_copy_at(&root, &relative_path, &content)
+}
+
+fn create_document_copy_at(
+    root: &Path,
+    rel: &str,
+    content: &str,
+) -> Result<Versioned<String>, CmdError> {
+    document_writer::create_from_text(root, rel, content).map_err(|err| match err {
+        WriteError::Edit(ContentEditError::Stale(_)) => CmdError::file_exists(rel),
+        other => other.into(),
+    })
+}
+
 #[tauri::command]
 pub async fn set_sketch_lock(
     relative_path: String,
+    expected_version: String,
+    base: String,
     locked: bool,
     state: State<'_, AppState>,
-) -> Result<Sketch, String> {
+) -> Result<Versioned<Sketch>, CmdError> {
     let root = project_root(&state)?;
     let _write_guard = crate::engine::write_lock::lock(&root)?;
     let op = json!({ "kind": "set_lock", "locked": locked });
-    Ok(document_writer::edit_sketch(
-        &root,
-        &relative_path,
-        Expected::Unchecked,
-        &[op],
-    )?)
+    save_sketch(&root, &relative_path, &expected_version, &base, &[op])
 }
 
 #[tauri::command]
 pub async fn set_planning_row_lock(
     relative_path: String,
+    expected_version: String,
+    base: String,
     index: usize,
     locked: bool,
     state: State<'_, AppState>,
-) -> Result<Sketch, String> {
+) -> Result<Versioned<Sketch>, CmdError> {
     let root = project_root(&state)?;
     let _write_guard = crate::engine::write_lock::lock(&root)?;
-    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
-
-    let row_id = row_id_at(&abs_path, index)?;
+    let row_id = row_id_at(&base, index)?;
     let op = json!({ "kind": "set_lock", "row_id": row_id, "locked": locked });
-    Ok(document_writer::edit_sketch(
-        &root,
-        &relative_path,
-        Expected::Unchecked,
-        &[op],
-    )?)
+    save_sketch(&root, &relative_path, &expected_version, &base, &[op])
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn set_planning_cell_lock(
     relative_path: String,
+    expected_version: String,
+    base: String,
     index: usize,
     field: String,
     locked: bool,
     state: State<'_, AppState>,
-) -> Result<Sketch, String> {
+) -> Result<Versioned<Sketch>, CmdError> {
     let root = project_root(&state)?;
     let _write_guard = crate::engine::write_lock::lock(&root)?;
-    let abs_path = project::safe_resolve(&root, &relative_path).map_err(|e| e.to_string())?;
-
-    let row_id = row_id_at(&abs_path, index)?;
+    let row_id = row_id_at(&base, index)?;
     if !PlanningCellLocks::default().set(&field, locked) {
-        return Err(format!("Unknown planning cell field: {field}"));
+        return Err(format!("Unknown planning cell field: {field}").into());
     }
     let op = json!({ "kind": "set_lock", "row_id": row_id, "field": field, "locked": locked });
-    Ok(document_writer::edit_sketch(
-        &root,
-        &relative_path,
-        Expected::Unchecked,
-        &[op],
-    )?)
+    save_sketch(&root, &relative_path, &expected_version, &base, &[op])
 }
 
-/// The stable id of the row at a legacy row index.
-fn row_id_at(abs_path: &Path, index: usize) -> Result<String, String> {
-    let sketch = project::read_sketch(abs_path).map_err(|e| e.to_string())?;
+/// The stable id of the row at a legacy row index in `base`, the sketch the
+/// editor shows.
+fn row_id_at(base: &str, index: usize) -> Result<String, String> {
+    let sketch = cutready_core::document::sketch_from_json(base)
+        .map_err(|e| project::ProjectError::from(e).to_string())?;
     sketch
         .rows
         .get(index)
@@ -349,9 +391,9 @@ mod tests {
             ),
         )
         .unwrap();
-        let abs = root.join("intro.sk");
+        let base = std::fs::read_to_string(root.join("intro.sk")).unwrap();
 
-        let second = row_id_at(&abs, 1).unwrap();
+        let second = row_id_at(&base, 1).unwrap();
         let op =
             json!({ "kind": "set_lock", "row_id": second, "field": "narrative", "locked": true });
         edit(root, &[op]).unwrap();
@@ -359,7 +401,7 @@ mod tests {
         assert!(!sketch.rows[0].locks.any());
         assert!(sketch.rows[1].locks.narrative);
 
-        assert_eq!(row_id_at(&abs, 2).unwrap_err(), "Row 3 does not exist");
+        assert_eq!(row_id_at(&base, 2).unwrap_err(), "Row 3 does not exist");
     }
 
     #[test]

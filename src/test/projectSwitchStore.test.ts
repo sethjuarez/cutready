@@ -5,8 +5,8 @@ const mockGetGitHubAuthStatus = vi.hoisted(() => vi.fn());
 const mockPreflightDraftlineSwitchVariation = vi.hoisted(() => vi.fn());
 const mockSwitchDraftlineVariation = vi.hoisted(() => vi.fn());
 
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: (...args: unknown[]) => mockInvoke(...args),
+vi.mock("@tauri-apps/api/core", async () => ({
+  invoke: (await import("./versionedInvoke")).versionedInvoke((...args: unknown[]) => mockInvoke(...args)),
   Channel: class {},
 }));
 
@@ -197,6 +197,19 @@ describe("project switch store side effects", () => {
     });
     expect(useAppStore.getState().projectSwitching).toBe(false);
     expect(useChatStore.getState().chatSessionPath).toBeNull();
+    await expect(switchPromise).resolves.toBe(true);
+  });
+
+  it("reports a failed switch and keeps the current project", async () => {
+    mockInvoke.mockImplementation((command: string) =>
+      command === "switch_project" ? Promise.reject(new Error("project is gone")) : Promise.resolve(null),
+    );
+    useAppStore.setState({ currentProject: oldProject });
+
+    await expect(useAppStore.getState().switchProject("beta")).resolves.toBe(false);
+
+    expect(useAppStore.getState().currentProject).toEqual(oldProject);
+    expect(useAppStore.getState()).toMatchObject({ error: expect.stringContaining("project is gone"), loading: false, projectSwitching: false });
   });
 
   it("clears stale chat when opening a project with no saved chat session", async () => {
@@ -362,7 +375,10 @@ describe("project switch store side effects", () => {
       useAppStore.setState({ error: "folder is busy" });
     });
     const realCloseProject = useAppStore.getState().closeProject;
-    const closeProject = vi.fn(() => useAppStore.setState({ currentProject: null }));
+    const closeProject = vi.fn(async () => {
+      useAppStore.setState({ currentProject: null });
+      return true;
+    });
     setDraftlineWorkspacePath("D:\\workspace");
     mockInvoke.mockImplementation((command: string) =>
       command === "move_project_folder"
@@ -583,7 +599,7 @@ describe("project switch store side effects", () => {
     const load = useVersioningStore.getState().loadVersions();
 
     // The workspace closes while inspect is still pending.
-    useAppStore.getState().closeProject();
+    await useAppStore.getState().closeProject();
     // A sentinel the new (empty) workspace owns; the stale load must not clobber it.
     useVersioningStore.setState({ versions: sentinelVersions });
 

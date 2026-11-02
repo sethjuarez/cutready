@@ -7,8 +7,8 @@ import type { Sketch, SketchSummary, Storyboard, StoryboardItem } from "../types
 const mockInvoke = vi.fn();
 const mockRunBackgroundAgentAction = vi.fn();
 
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: (...args: unknown[]) => mockInvoke(...args),
+vi.mock("@tauri-apps/api/core", async () => ({
+  invoke: (await import("./versionedInvoke")).versionedInvoke((...args: unknown[]) => mockInvoke(...args)),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -65,6 +65,10 @@ function fullSketch(title: string): Sketch {
   };
 }
 
+const settle = async () => {
+  for (let i = 0; i < 10; i += 1) await Promise.resolve();
+};
+
 describe("StoryboardView", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -73,6 +77,7 @@ describe("StoryboardView", () => {
       if (command === "get_storyboard") return Promise.resolve(activeStoryboard("Updated description"));
       if (command === "set_storyboard_lock") return Promise.resolve(activeStoryboard("Original description", true));
       if (command === "list_storyboards") return Promise.resolve([]);
+      if (/storyboard/.test(command)) return Promise.resolve(activeStoryboard());
       return Promise.resolve([]);
     });
     useAppStore.setState({
@@ -116,7 +121,7 @@ describe("StoryboardView", () => {
 
     await act(async () => {
       vi.advanceTimersByTime(1);
-      await Promise.resolve();
+      await settle();
     });
     expect(mockInvoke).toHaveBeenCalledWith(
       "update_storyboard",
@@ -147,7 +152,7 @@ describe("StoryboardView", () => {
 
     await act(async () => {
       vi.advanceTimersByTime(800);
-      await Promise.resolve();
+      await settle();
     });
   });
 
@@ -164,13 +169,13 @@ describe("StoryboardView", () => {
 
     await act(async () => {
       fireEvent.click(screen.getByTitle("Unlock storyboard"));
-      await Promise.resolve();
+      await settle();
     });
 
-    expect(mockInvoke).toHaveBeenCalledWith("set_storyboard_lock", {
+    expect(mockInvoke).toHaveBeenCalledWith("set_storyboard_lock", expect.objectContaining({
       relativePath: "demo.sb",
       locked: false,
-    });
+    }));
   });
 
   it("toggles a section by clicking its title", () => {
@@ -230,17 +235,17 @@ describe("StoryboardView", () => {
     });
     await act(async () => {
       fireEvent.blur(title);
-      await Promise.resolve();
+      await settle();
     });
 
-    expect(mockInvoke).toHaveBeenCalledWith("reorder_storyboard_items", {
+    expect(mockInvoke).toHaveBeenCalledWith("reorder_storyboard_items", expect.objectContaining({
       storyboardPath: "demo.sb",
       items: [expect.objectContaining({
         type: "section",
         title: "Build chapter",
         description: "Original section framing",
       })],
-    });
+    }));
   });
 
   it("renders section descriptions as read-only markdown until edited", async () => {
@@ -266,17 +271,17 @@ describe("StoryboardView", () => {
     });
     await act(async () => {
       fireEvent.blur(description);
-      await Promise.resolve();
+      await settle();
     });
 
-    expect(mockInvoke).toHaveBeenCalledWith("reorder_storyboard_items", {
+    expect(mockInvoke).toHaveBeenCalledWith("reorder_storyboard_items", expect.objectContaining({
       storyboardPath: "demo.sb",
       items: [expect.objectContaining({
         type: "section",
         title: "Build",
         description: "Updated section framing",
       })],
-    });
+    }));
   });
 
   it("removes a storyboard section", async () => {
@@ -300,13 +305,13 @@ describe("StoryboardView", () => {
     expect(within(dialog).getByText("Remove section?")).toBeInTheDocument();
     await act(async () => {
       fireEvent.click(within(dialog).getByText("Remove"));
-      await Promise.resolve();
+      await settle();
     });
 
-    expect(mockInvoke).toHaveBeenCalledWith("reorder_storyboard_items", {
+    expect(mockInvoke).toHaveBeenCalledWith("reorder_storyboard_items", expect.objectContaining({
       storyboardPath: "demo.sb",
       items: [{ type: "sketch_ref", path: "intro.sk" }],
-    });
+    }));
   });
 
   it("keeps empty sections manageable in screen view", async () => {
@@ -329,7 +334,7 @@ describe("StoryboardView", () => {
 
     await act(async () => {
       fireEvent.click(screen.getByTitle("Remove section"));
-      await Promise.resolve();
+      await settle();
     });
 
     expect(screen.getByRole("dialog")).toHaveTextContent("Remove section?");
@@ -354,8 +359,8 @@ describe("StoryboardView", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Screen" }));
     await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
+      await settle();
+      await settle();
     });
 
     expect(screen.getByRole("button", { name: "Collapse Intro" })).toBeInTheDocument();
@@ -407,7 +412,7 @@ describe("StoryboardView", () => {
 
     await act(async () => {
       fireEvent.click(screen.getByTitle("Improve section description with AI"));
-      await Promise.resolve();
+      await settle();
     });
 
     expect(mockRunBackgroundAgentAction).toHaveBeenCalledWith(

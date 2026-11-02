@@ -1,6 +1,7 @@
 import { invoke } from "../services/tauri";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "../stores/appStore";
+import { beginProjectChange } from "../services/documentSaves";
 import { useVersioningStore } from "../stores/versioningStore";
 import type { ProjectEntry } from "../types/project";
 import { Folder, ChevronDown, Pencil, Check, Plus, RefreshCw, Trash2, X } from "lucide-react";
@@ -145,12 +146,21 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
     setDeleting(true);
     try {
       const remaining = useAppStore.getState().projects.filter((p) => p.path !== project.path);
+      // Leave the project first; if that fails, it stays open and isn't deleted.
       if (isActive && remaining.length > 0) {
-        await switchProject(remaining[0].path);
+        const leaving = useAppStore.getState().currentProject?.root;
+        if (!(await switchProject(remaining[0].path)) || useAppStore.getState().currentProject?.root === leaving) return;
       }
-      await deleteProjectFromRepo(project.path, deleteFiles);
+      const releaseDocuments = isActive && remaining.length === 0 ? await beginProjectChange() : () => undefined;
+      if (!releaseDocuments) return;
+      try {
+        await deleteProjectFromRepo(project.path, deleteFiles);
+      } catch (err) {
+        releaseDocuments();
+        throw err;
+      }
       if (isActive && remaining.length === 0) {
-        useAppStore.getState().closeProject();
+        await useAppStore.getState().closeProject({ force: true });
       }
       setDeletingPath(null);
     } finally {

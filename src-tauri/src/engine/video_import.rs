@@ -408,7 +408,7 @@ where
     sketch.updated_at = Utc::now();
 
     let sketch_abs = project::safe_resolve(project_root, sketch_relative_path)?;
-    document_writer::replace_sketch(project_root, &sketch_abs, &sketch)?;
+    document_writer::import_document(project_root, &sketch_abs, &sketch)?;
     let note = build_summary_note(
         title,
         video_path,
@@ -418,7 +418,7 @@ where
         planning_context.as_ref(),
     );
     let note_abs = project::safe_resolve(project_root, note_relative_path)?;
-    document_writer::replace_note(project_root, &note_abs, &note)?;
+    document_writer::import_document(project_root, &note_abs, &note)?;
 
     let manifest = VideoImportManifest {
         schema_version: 1,

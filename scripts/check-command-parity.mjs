@@ -58,7 +58,7 @@ export function registeredCommands(libRs) {
 }
 
 /** Callees whose first argument is a Tauri command name. */
-const COMMAND_CALLEES = ["invoke", "importWithConflict"];
+const COMMAND_CALLEES = ["invoke", "importWithConflict", "saveDocument"];
 
 /**
  * Literal command names passed to `invoke("...")`, `invoke<T>("...")`, any alias

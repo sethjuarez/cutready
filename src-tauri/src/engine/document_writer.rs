@@ -17,10 +17,10 @@ use std::sync::{LazyLock, Mutex};
 
 use cutready_core::contracts::{DocumentKind, RunReview};
 use cutready_core::document::{self, DocumentError};
-use cutready_core::edit_ops::{ContentEditError, NoteLock};
+use cutready_core::edit_ops::{self, ContentEditError, NoteLock};
 pub use cutready_core::edit_session::Expected;
 use cutready_core::edit_session::{
-    EditSession, NoteLockPolicy, Reconciled, ReviewError, USER_ACTOR,
+    EditSession, NoteLockPolicy, RebaseError, Reconciled, ReviewError, USER_ACTOR,
 };
 use cutready_core::models::sketch::{Sketch, Storyboard};
 use cutready_core::{OpLogStore, PortError, PortErrorKind};
@@ -151,26 +151,223 @@ pub fn edit_storyboard(
     edit(root, rel, expected, ops)?.storyboard()
 }
 
-/// Write a whole sketch at `abs` under `root`, creating or replacing it.
-pub fn replace_sketch(root: &Path, abs: &Path, sketch: &Sketch) -> Result<Written, WriteError> {
-    let op = json!({ "kind": "replace_sketch", "sketch": to_value(sketch)? });
-    replace(root, abs, DocumentKind::Sketch, op)
+/// Write a whole sketch at `abs` under `root` over the version the caller
+/// read (`Absent` to create it).
+pub fn write_sketch(
+    root: &Path,
+    abs: &Path,
+    sketch: &Sketch,
+    expected: Expected,
+) -> Result<Written, WriteError> {
+    replace(root, abs, Imported::Sketch(sketch), expected)
 }
 
-/// Write a whole storyboard, creating or replacing the file.
+/// Write a whole storyboard over the version the caller read, like
+/// [`write_sketch`].
+pub fn write_storyboard(
+    root: &Path,
+    abs: &Path,
+    storyboard: &Storyboard,
+    expected: Expected,
+) -> Result<Written, WriteError> {
+    replace(root, abs, Imported::Storyboard(storyboard), expected)
+}
+
+/// Write a whole note over the version the caller read. Not lock-gated.
+pub fn write_note(
+    root: &Path,
+    abs: &Path,
+    content: &str,
+    expected: Expected,
+) -> Result<Written, WriteError> {
+    replace(root, abs, Imported::Note(content), expected)
+}
+
+/// A whole document an import writes.
+pub enum Imported<'a> {
+    Sketch(&'a Sketch),
+    Storyboard(&'a Storyboard),
+    Note(&'a str),
+}
+
+impl<'a> From<&'a Sketch> for Imported<'a> {
+    fn from(sketch: &'a Sketch) -> Self {
+        Self::Sketch(sketch)
+    }
+}
+
+impl<'a> From<&'a String> for Imported<'a> {
+    fn from(note: &'a String) -> Self {
+        Self::Note(note)
+    }
+}
+
+/// The one unchecked write: an import that may overwrite whatever is on
+/// disk. `scripts/check-document-writes.mjs` keeps its callers to the import
+/// entry points; every other write states the version it expects.
+pub(crate) fn import_document<'a>(
+    root: &Path,
+    abs: &Path,
+    document: impl Into<Imported<'a>>,
+) -> Result<Written, WriteError> {
+    replace(root, abs, document.into(), Expected::Unchecked)
+}
+
+#[cfg(test)]
+pub fn replace_sketch(root: &Path, abs: &Path, sketch: &Sketch) -> Result<Written, WriteError> {
+    import_document(root, abs, Imported::Sketch(sketch))
+}
+
+#[cfg(test)]
 pub fn replace_storyboard(
     root: &Path,
     abs: &Path,
     storyboard: &Storyboard,
 ) -> Result<Written, WriteError> {
-    let op = json!({ "kind": "replace_storyboard", "storyboard": to_value(storyboard)? });
-    replace(root, abs, DocumentKind::Storyboard, op)
+    import_document(root, abs, Imported::Storyboard(storyboard))
 }
 
-/// Write a whole note, creating or replacing the file. Not lock-gated.
+#[cfg(test)]
 pub fn replace_note(root: &Path, abs: &Path, content: &str) -> Result<Written, WriteError> {
-    let op = json!({ "kind": "replace_note", "content": content });
-    replace(root, abs, DocumentKind::Note, op)
+    import_document(root, abs, Imported::Note(content))
+}
+
+/// What the caller expects on disk at `abs`, from the bytes there now: the
+/// file's version, or `Absent`. Call it under the write lock, after reading
+/// the document being replaced.
+pub fn expected_on_disk(abs: &Path) -> Result<Expected, WriteError> {
+    match std::fs::read(abs) {
+        Ok(bytes) => Ok(Expected::Version(edit_ops::document_version(&bytes))),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(Expected::Absent),
+        Err(err) => Err(ProjectError::Io(err.to_string()).into()),
+    }
+}
+
+/// A document with the version of the bytes it came from.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Versioned<T> {
+    pub document: T,
+    /// The exact file text, which the app sends back as a save's base.
+    pub content: String,
+    pub version: String,
+    /// Whether a save was merged onto changes made since its base.
+    pub merged: bool,
+    /// For a merged save, its base with its ops applied: what the app's
+    /// editor holds, so its next base while the merged document can't be
+    /// shown. Absent otherwise, where `content` is that document.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub synced: Option<Synced>,
+}
+
+/// A document text and its version.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Synced {
+    pub content: String,
+    pub version: String,
+}
+
+impl Synced {
+    fn of(content: String) -> Self {
+        let version = cutready_core::edit_ops::document_version(content.as_bytes());
+        Self { content, version }
+    }
+}
+
+impl Versioned<String> {
+    pub fn sketch(self) -> Result<Versioned<Sketch>, WriteError> {
+        Ok(Versioned {
+            document: document::sketch_from_json(&self.content)?,
+            content: self.content,
+            version: self.version,
+            merged: self.merged,
+            synced: self.synced,
+        })
+    }
+
+    pub fn storyboard(self) -> Result<Versioned<Storyboard>, WriteError> {
+        Ok(Versioned {
+            document: document::storyboard_from_json(&self.content)?.0,
+            content: self.content,
+            version: self.version,
+            merged: self.merged,
+            synced: self.synced,
+        })
+    }
+}
+
+impl From<Written> for Versioned<String> {
+    fn from(written: Written) -> Self {
+        Self {
+            document: written.content.clone(),
+            content: written.content,
+            version: written.version,
+            merged: false,
+            synced: None,
+        }
+    }
+}
+
+/// A new document at `rel` holding `content` (a conflict copy). Refuses as
+/// stale when the file exists.
+pub fn create_from_text(
+    root: &Path,
+    rel: &str,
+    content: &str,
+) -> Result<Versioned<String>, WriteError> {
+    let abs = project::safe_resolve(root, rel)?;
+    let written = match kind_of(&abs)? {
+        DocumentKind::Sketch => {
+            let sketch = document::sketch_from_json(content)?;
+            write_sketch(root, &abs, &sketch, Expected::Absent)
+        }
+        DocumentKind::Storyboard => {
+            let storyboard = document::storyboard_from_json(content)?.0;
+            write_storyboard(root, &abs, &storyboard, Expected::Absent)
+        }
+        DocumentKind::Note => write_note(root, &abs, content, Expected::Absent),
+    }?;
+    Ok(written.into())
+}
+
+/// Why an app save wrote nothing.
+#[derive(Debug, thiserror::Error)]
+pub enum SaveError {
+    #[error(transparent)]
+    Write(#[from] WriteError),
+    #[error(transparent)]
+    Rebase(RebaseError),
+}
+
+/// An app save: `ops` made against `base`, the document the editor last
+/// loaded or saved, whose version is `expected_version`. When the file
+/// changed since, the save is three-way merged onto it, or rejected as stale
+/// when the changes overlap.
+pub fn save(
+    root: &Path,
+    rel: &str,
+    expected_version: &str,
+    base: &str,
+    ops: &[Value],
+) -> Result<Versioned<String>, SaveError> {
+    let abs = project::safe_resolve(root, rel).map_err(WriteError::from)?;
+    kind_of(&abs).map_err(WriteError::from)?;
+    let rel = relative(root, &abs)?;
+    let ports = Ports::open(root)?;
+    let session = ports.session();
+    let run = ports.run(&session).map_err(WriteError::from)?;
+    let rebased = session
+        .apply_rebased(&run, &rel, expected_version, base, ops)
+        .map_err(|err| match err {
+            RebaseError::Edit(edit) => SaveError::Write(not_found_as_project(edit, &abs)),
+            stale => SaveError::Rebase(stale),
+        })?;
+    Ok(Versioned {
+        document: rebased.applied.content.clone(),
+        content: rebased.applied.content,
+        version: rebased.applied.version,
+        merged: rebased.merged,
+        synced: rebased.local.map(Synced::of),
+    })
 }
 
 /// Remove a document file under `root`, holding the repository write lock so
@@ -254,24 +451,55 @@ thread_local! {
     static AGENT_RUN: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
-fn replace(root: &Path, abs: &Path, kind: DocumentKind, op: Value) -> Result<Written, WriteError> {
+fn replace(
+    root: &Path,
+    abs: &Path,
+    document: Imported<'_>,
+    expected: Expected,
+) -> Result<Written, WriteError> {
+    let (kind, op) = match document {
+        Imported::Sketch(sketch) => (
+            DocumentKind::Sketch,
+            json!({ "kind": "replace_sketch", "sketch": to_value(sketch)? }),
+        ),
+        Imported::Storyboard(storyboard) => (
+            DocumentKind::Storyboard,
+            json!({ "kind": "replace_storyboard", "storyboard": to_value(storyboard)? }),
+        ),
+        Imported::Note(content) => (
+            DocumentKind::Note,
+            json!({ "kind": "replace_note", "content": content }),
+        ),
+    };
     if kind_of(abs)? != kind {
         return Err(
             ProjectError::Invalid(format!("Not a {kind:?} document: {}", abs.display())).into(),
         );
     }
-    apply(
-        root,
-        abs,
-        Expected::Unchecked,
-        &[op],
-        NoteLockPolicy::Ignore,
-    )
+    apply(root, abs, expected, &[op], NoteLockPolicy::Ignore)
 }
 
 fn to_value<T: serde::Serialize>(value: &T) -> Result<Value, WriteError> {
     serde_json::to_value(value)
         .map_err(|e| WriteError::Project(ProjectError::Invalid(e.to_string())))
+}
+
+fn relative(root: &Path, abs: &Path) -> Result<String, WriteError> {
+    let rel = abs
+        .strip_prefix(root)
+        .map_err(|_| ProjectError::PathTraversal(abs.to_string_lossy().into_owned()))?;
+    Ok(rel.to_string_lossy().replace('\\', "/"))
+}
+
+/// Legacy commands read the file first and fail when it's gone.
+fn not_found_as_project(err: ContentEditError, abs: &Path) -> WriteError {
+    match err {
+        ContentEditError::Document(DocumentError::Port(PortError {
+            kind: PortErrorKind::NotFound,
+            ..
+        })) => ProjectError::NotFound(abs.to_string_lossy().into_owned()).into(),
+        other => WriteError::from(other),
+    }
 }
 
 fn apply(
@@ -282,23 +510,13 @@ fn apply(
     policy: NoteLockPolicy,
 ) -> Result<Written, WriteError> {
     kind_of(abs)?;
-    let rel = abs
-        .strip_prefix(root)
-        .map_err(|_| ProjectError::PathTraversal(abs.to_string_lossy().into_owned()))?;
-    let rel = rel.to_string_lossy().replace('\\', "/");
+    let rel = relative(root, abs)?;
     let ports = Ports::open(root)?;
     let session = ports.session();
     let run = ports.run(&session)?;
     let applied = session
         .apply_with(&run, &rel, expected, ops, policy)
-        .map_err(|err| match err {
-            // Legacy commands read the file first and fail when it's gone.
-            ContentEditError::Document(DocumentError::Port(PortError {
-                kind: PortErrorKind::NotFound,
-                ..
-            })) => ProjectError::NotFound(abs.to_string_lossy().into_owned()).into(),
-            other => WriteError::from(other),
-        })?;
+        .map_err(|err| not_found_as_project(err, abs))?;
     Ok(Written {
         content: applied.content,
         version: applied.version,
@@ -394,338 +612,5 @@ fn state_dir(root: &Path) -> PathBuf {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use cutready_core::models::sketch::PlanningRow;
-
-    fn project() -> tempfile::TempDir {
-        tempfile::tempdir().unwrap()
-    }
-
-    fn files_in(dir: &Path) -> Vec<String> {
-        let mut names: Vec<_> = std::fs::read_dir(dir)
-            .unwrap()
-            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
-            .collect();
-        names.sort();
-        names
-    }
-
-    #[test]
-    fn replace_creates_then_replaces_without_leaving_temp_files() {
-        let dir = project();
-        let path = dir.path().join("nested/intro.sk");
-        let mut sketch = Sketch::new("Intro", chrono::Utc::now());
-        let first = replace_sketch(dir.path(), &path, &sketch).unwrap();
-        assert!(first.changed);
-        assert_eq!(
-            std::fs::read_to_string(&path).unwrap(),
-            document::sketch_to_json(&sketch).unwrap()
-        );
-
-        sketch.title = "Renamed".into();
-        let second = replace_sketch(dir.path(), &path, &sketch).unwrap();
-        assert!(second.changed);
-        assert_ne!(first.version, second.version);
-        assert_eq!(files_in(&dir.path().join("nested")), vec!["intro.sk"]);
-    }
-
-    #[test]
-    fn unchanged_bytes_are_not_rewritten() {
-        let dir = project();
-        let path = dir.path().join("intro.sk");
-        let sketch = Sketch::new("Intro", chrono::Utc::now());
-        replace_sketch(dir.path(), &path, &sketch).unwrap();
-        let again = replace_sketch(dir.path(), &path, &sketch).unwrap();
-        assert!(!again.changed);
-    }
-
-    #[test]
-    fn expected_absent_rejects_an_existing_file() {
-        let dir = project();
-        replace_note(dir.path(), &dir.path().join("a.md"), "hi").unwrap();
-        let op = json!({ "kind": "replace_note", "content": "" });
-        let err = edit(dir.path(), "a.md", Expected::Absent, &[op]).unwrap_err();
-        assert!(matches!(
-            err,
-            WriteError::Edit(ContentEditError::Stale(ref stale)) if stale.current_version.is_some()
-        ));
-        assert_eq!(
-            std::fs::read_to_string(dir.path().join("a.md")).unwrap(),
-            "hi"
-        );
-    }
-
-    #[test]
-    fn expected_version_must_match() {
-        let dir = project();
-        let written = replace_note(dir.path(), &dir.path().join("a.md"), "one").unwrap();
-        let op = json!({ "kind": "write_note", "content": "two" });
-        let stale = edit(
-            dir.path(),
-            "a.md",
-            Expected::Version("sha256:00".into()),
-            std::slice::from_ref(&op),
-        );
-        assert!(stale.is_err());
-        let ok = edit(
-            dir.path(),
-            "a.md",
-            Expected::Version(written.version),
-            &[op],
-        )
-        .unwrap();
-        assert_eq!(ok.content, "two");
-    }
-
-    #[test]
-    fn unchecked_edit_of_a_missing_file_is_not_found() {
-        let dir = project();
-        let op = json!({ "kind": "set_title", "title": "x" });
-        let err = edit(dir.path(), "gone.sk", Expected::Unchecked, &[op]).unwrap_err();
-        assert!(err.to_string().starts_with("Project not found:"), "{err}");
-    }
-
-    #[test]
-    fn note_lock_ops_update_the_manifest_not_the_note() {
-        let dir = project();
-        replace_note(dir.path(), &dir.path().join("notes/a.md"), "body").unwrap();
-        let lock = json!({ "kind": "set_lock", "locked": true });
-        let written = edit(dir.path(), "notes/a.md", Expected::Unchecked, &[lock]).unwrap();
-        assert!(!written.changed);
-        assert!(
-            project::get_note_lock(dir.path(), "notes/a.md")
-                .unwrap()
-                .locked
-        );
-
-        let write = json!({ "kind": "write_note", "content": "new" });
-        let err = edit(dir.path(), "notes/a.md", Expected::Unchecked, &[write]).unwrap_err();
-        assert_eq!(err.to_string(), cutready_core::notes::NOTE_LOCKED_MESSAGE);
-        assert_eq!(
-            std::fs::read_to_string(dir.path().join("notes/a.md")).unwrap(),
-            "body"
-        );
-    }
-
-    #[test]
-    fn rejected_batches_leave_the_file_untouched() {
-        let dir = project();
-        let path = dir.path().join("intro.sk");
-        let mut sketch = Sketch::new("Intro", chrono::Utc::now());
-        sketch.rows.push(PlanningRow::new());
-        sketch.locked = true;
-        replace_sketch(dir.path(), &path, &sketch).unwrap();
-        let before = std::fs::read(&path).unwrap();
-
-        let op = json!({ "kind": "set_title", "title": "x" });
-        let err = edit(dir.path(), "intro.sk", Expected::Unchecked, &[op]).unwrap_err();
-        assert!(err.to_string().contains("locked"), "{err}");
-        assert_eq!(std::fs::read(&path).unwrap(), before);
-    }
-
-    #[test]
-    fn unreadable_documents_keep_the_project_error_wording() {
-        let dir = project();
-        std::fs::write(dir.path().join("bad.sk"), "{").unwrap();
-        let op = json!({ "kind": "touch" });
-        let err = edit(dir.path(), "bad.sk", Expected::Unchecked, &[op]).unwrap_err();
-        assert!(
-            err.to_string().starts_with("Deserialization error"),
-            "{err}"
-        );
-    }
-
-    #[test]
-    fn non_documents_are_refused() {
-        let dir = project();
-        let op = json!({ "kind": "touch" });
-        assert!(edit(dir.path(), "a.json", Expected::Unchecked, &[op]).is_err());
-        assert!(delete(dir.path(), &dir.path().join("a.json")).is_err());
-    }
-
-    #[test]
-    fn delete_tolerates_a_missing_file() {
-        let dir = project();
-        let path = dir.path().join("a.md");
-        replace_note(dir.path(), &path, "x").unwrap();
-        delete(dir.path(), &path).unwrap();
-        delete(dir.path(), &path).unwrap();
-        assert!(!path.exists());
-    }
-
-    fn op_log(root: &Path) -> SqliteOpLogStore {
-        SqliteOpLogStore::open(&state_dir(root).join(OP_LOG_FILENAME)).unwrap()
-    }
-
-    #[test]
-    fn writes_are_logged_in_the_process_user_run() {
-        let dir = project();
-        let first = replace_note(dir.path(), &dir.path().join("a.md"), "one").unwrap();
-        let second = replace_note(dir.path(), &dir.path().join("a.md"), "two").unwrap();
-        let unchanged = replace_note(dir.path(), &dir.path().join("a.md"), "two").unwrap();
-        assert!(dir
-            .path()
-            .join(".git/cutready")
-            .join(OP_LOG_FILENAME)
-            .is_file());
-        assert_eq!(unchanged.seq, None);
-
-        let log = op_log(dir.path());
-        let entry = log.pending().unwrap();
-        assert!(entry.is_empty());
-        let run_id = {
-            let runs = RUNS.lock().unwrap();
-            runs[&state_dir(dir.path())].user.clone().unwrap()
-        };
-        assert_eq!(log.run(&run_id).unwrap().actor, USER_ACTOR);
-        let entries = log.entries_for_run(&run_id).unwrap();
-        assert_eq!(
-            entries.iter().map(|e| Some(e.seq)).collect::<Vec<_>>(),
-            vec![first.seq, second.seq]
-        );
-        assert!(entries
-            .iter()
-            .all(|e| e.state == cutready_core::OpLogState::Committed && e.write.doc == "a.md"));
-        assert_eq!(
-            entries[0].write.baseline,
-            Some(cutready_core::Baseline::Absent)
-        );
-        assert_eq!(entries[1].write.baseline, None);
-    }
-
-    #[test]
-    fn agent_writes_join_their_own_run_and_scope_is_restored() {
-        let dir = project();
-        let path = dir.path().join("a.md");
-        replace_note(dir.path(), &path, "user").unwrap();
-        let agent_seq = in_agent_run("run-1", || {
-            let seq = replace_note(dir.path(), &path, "agent").unwrap().seq;
-            // Nested scopes restore the outer one.
-            in_agent_run("run-2", || {
-                replace_note(dir.path(), &path, "other").unwrap()
-            });
-            (
-                seq,
-                replace_note(dir.path(), &path, "agent again").unwrap().seq,
-            )
-        });
-        replace_note(dir.path(), &path, "user again").unwrap();
-
-        let (user, agent1, agent2) = {
-            let runs = RUNS.lock().unwrap();
-            let runs = &runs[&state_dir(dir.path())];
-            (
-                runs.user.clone().unwrap(),
-                runs.agents["run-1"].clone(),
-                runs.agents["run-2"].clone(),
-            )
-        };
-        let log = op_log(dir.path());
-        assert_eq!(log.run(&agent1).unwrap().actor, AGENT_ACTOR);
-        assert_eq!(log.entries_for_run(&user).unwrap().len(), 2);
-        let agent_entries = log.entries_for_run(&agent1).unwrap();
-        assert_eq!(
-            agent_entries
-                .iter()
-                .map(|e| Some(e.seq))
-                .collect::<Vec<_>>(),
-            vec![agent_seq.0, agent_seq.1]
-        );
-        assert_eq!(
-            agent_entries[0].write.baseline,
-            Some(cutready_core::Baseline::Content("user".into()))
-        );
-        assert_eq!(log.entries_for_run(&agent2).unwrap().len(), 1);
-    }
-
-    #[test]
-    fn open_project_settles_writes_a_crash_interrupted() {
-        let dir = project();
-        replace_note(dir.path(), &dir.path().join("a.md"), "before").unwrap();
-        let log = op_log(dir.path());
-        let run = log.begin_run(USER_ACTOR, chrono::Utc::now()).unwrap();
-        let pending = |doc: &str, after: &str| {
-            log.append_pending(cutready_core::NewOpLogEntry {
-                run_id: run.clone(),
-                doc: doc.into(),
-                actor: USER_ACTOR.into(),
-                ops: json!([]),
-                before_hash: String::new(),
-                after_hash: cutready_core::edit_ops::document_version(after.as_bytes()),
-                at: chrono::Utc::now(),
-                baseline: None,
-                images: None,
-                effect: cutready_core::ReviewEffect::Review,
-            })
-            .unwrap()
-        };
-        // The file write landed before the crash...
-        let landed = pending("a.md", "after");
-        std::fs::write(dir.path().join("a.md"), "after").unwrap();
-        // ...or it didn't.
-        let lost = pending("b.md", "never written");
-
-        let settled = open_project(dir.path()).unwrap();
-        assert_eq!(settled.committed, vec![landed]);
-        assert_eq!(settled.abandoned, vec![lost]);
-        assert!(log.pending().unwrap().is_empty());
-        let again = open_project(dir.path()).unwrap();
-        assert!(again.committed.is_empty() && again.abandoned.is_empty());
-    }
-
-    #[test]
-    fn concurrent_writers_never_lose_an_edit() {
-        let dir = project();
-        let path = dir.path().join("story.sb");
-        replace_storyboard(
-            dir.path(),
-            &path,
-            &Storyboard::new("Story", chrono::Utc::now()),
-        )
-        .unwrap();
-        std::thread::scope(|scope| {
-            for t in 0..4 {
-                let root = dir.path();
-                scope.spawn(move || {
-                    for i in 0..5 {
-                        let op = json!({
-                            "kind": "insert_storyboard_item",
-                            "index": null,
-                            "item": { "type": "sketch_ref", "path": format!("s{t}-{i}.sk") },
-                        });
-                        let write = || {
-                            edit(
-                                root,
-                                "story.sb",
-                                Expected::Unchecked,
-                                std::slice::from_ref(&op),
-                            )
-                        };
-                        if t % 2 == 0 {
-                            write().unwrap();
-                        } else {
-                            in_agent_run(&format!("agent-{t}"), write).unwrap();
-                        }
-                    }
-                });
-            }
-        });
-        let saved = project::read_storyboard(&path).unwrap();
-        assert_eq!(saved.sketch_paths().len(), 20);
-        assert!(op_log(dir.path()).pending().unwrap().is_empty());
-    }
-
-    #[test]
-    fn project_root_for_prefers_the_deepest_known_project() {
-        let dir = project();
-        let outer = dir.path().join("outer");
-        let inner = outer.join("inner");
-        std::fs::create_dir_all(&inner).unwrap();
-        open_project(&outer).unwrap();
-        open_project(&inner).unwrap();
-        assert_eq!(project_root_for(&inner.join("x/a.sb")), Some(inner));
-        assert_eq!(project_root_for(&outer.join("b.sb")), Some(outer));
-        assert_eq!(project_root_for(&dir.path().join("elsewhere/c.sb")), None);
-    }
-}
+#[path = "document_writer_tests.rs"]
+mod tests;
