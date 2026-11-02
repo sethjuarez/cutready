@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error - plain .mjs script without type declarations
-import { checkDocumentWrites, maskNonCode } from "../../scripts/check-document-writes.mjs";
+import { checkDocumentWrites, maskNonCode, missingAllowlisted } from "../../scripts/check-document-writes.mjs";
 
 const delegatingProject = `
 pub fn delete_sketch(path: &Path, root: &Path) -> Result<(), ProjectError> {
@@ -25,7 +25,7 @@ describe("check-document-writes", () => {
       {
         path: "commands/note.rs",
         text: [
-          "fn save() {",
+          "fn save_pasted_image() {",
           '    let msg = "std::fs::write is fine in a string";',
           "    // asset write: image",
           "    std::fs::write(&image, &data)?;",
@@ -88,8 +88,8 @@ describe("check-document-writes", () => {
   it("allows Expected::Unchecked only in import_document, called only by importers", () => {
     const problems = checkDocumentWrites([
       { path: "engine/document_writer.rs", text: writer },
-      { path: "commands/import.rs", text: "fn f() { document_writer::import_document(&r, &p, Imported::Note(&m))?; }" },
-      { path: "engine/video_import.rs", text: "fn f() { document_writer::import_document(&r, &p, doc)?; }" },
+      { path: "commands/import.rs", text: "fn import_docx() { document_writer::import_document(&r, &p, Imported::Note(&m))?; }" },
+      { path: "engine/video_import.rs", text: "fn import_video_from_sidecar_with_progress() { document_writer::import_document(&r, &p, doc)?; }" },
       { path: "engine/agent/document_ops.rs", text: "fn f() { document_writer::write_note(r, p, c, expected)?; }" },
     ]);
     expect(problems).toEqual([]);
@@ -112,6 +112,37 @@ describe("check-document-writes", () => {
       { path: "commands/note.rs", text: "fn save() {\n    document_writer::import_document(&r, &p, Imported::Note(&c))?;\n}" },
     ]);
     expect(problems).toEqual([expect.stringContaining("commands/note.rs:2: import_document is for importing")]);
+  });
+
+  it("rejects import_document in importer files outside the import functions", () => {
+    const problems = checkDocumentWrites([
+      {
+        path: "commands/import.rs",
+        text: "fn import_docx() { import_document(&r, &p, doc)?; }\nfn sync_imports() {\n    import_document(&r, &p, doc)?;\n}",
+      },
+    ]);
+    expect(problems).toEqual([expect.stringContaining("commands/import.rs:3: import_document is for importing")]);
+  });
+
+  it("rejects asset write marks outside the allowlisted asset helpers", () => {
+    const marked = "    // asset write: not really\n    std::fs::write(&abs, json)?;";
+    const problems = checkDocumentWrites([
+      { path: "commands/note.rs", text: `fn save_pasted_image() {}\nfn update_note() {\n${marked}\n}` },
+      { path: "commands/storyboard.rs", text: `fn update_storyboard() {\n${marked}\n}` },
+      { path: "engine/project.rs", text: delegatingProject.replace("document_writer::delete(root, path)?;", "// asset write\n    std::fs::remove_file(path)?;") },
+    ]);
+    expect(problems).toEqual([
+      expect.stringContaining('commands/note.rs:4: "// asset write" is only for the asset helpers'),
+      expect.stringContaining('commands/storyboard.rs:3: "// asset write" is only for the asset helpers'),
+      expect.stringContaining('engine/project.rs:5: "// asset write" is only for the asset helpers'),
+    ]);
+  });
+
+  it("reports allowlisted importer and asset functions that no longer exist", () => {
+    const problems = missingAllowlisted([
+      { path: "commands/sketch.rs", text: "fn update_sketch() {}\n#[cfg(test)]\nmod tests { fn write_visual_doc() {} }" },
+    ]);
+    expect(problems).toEqual([expect.stringContaining("commands/sketch.rs: write_visual_doc is missing")]);
   });
 
   it("requires the writer to keep import_document", () => {

@@ -11,19 +11,25 @@ vi.mock("../ipc/documents", () => ({ documentsIpc: ipc }));
 
 import {
   conflictStamp,
+  documentRenamed,
+  DocumentSaveDroppedError,
   INSTALL_SETTLE_MS,
   isDocumentConflict,
   loadDocument,
+  quiesceDocumentSaves,
   refreshOpenDocuments,
   saveDocument,
+  settleBeforeRename,
 } from "../services/documentSaves";
 import { useAppStore } from "../stores/appStore";
 import { documentEntry, resetDocumentVersions } from "../stores/documentVersionStore";
+import { beginWorkspaceGeneration, registerEditorFlush } from "../stores/workspaceHelpers";
 import { useToastStore } from "../stores/toastStore";
 import type { ProjectView } from "../types/project";
 import type { Sketch } from "../types/sketch";
 
 const ROOT = "D:\\demo";
+const OTHER_ROOT = "D:\\other";
 
 function sketch(title: string): Sketch {
   return { title, description: "", rows: [], created_at: "", updated_at: "" } as unknown as Sketch;
@@ -45,6 +51,13 @@ function deferred<T>() {
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, INSTALL_SETTLE_MS + 20));
 const entry = (path = "demo.sk") => documentEntry(ROOT, path);
+const isDropped = (error: unknown) => error instanceof DocumentSaveDroppedError;
+
+/** Opens another project whose files have the same paths. */
+function switchProject() {
+  beginWorkspaceGeneration(OTHER_ROOT);
+  useAppStore.setState({ currentProject: { root: OTHER_ROOT, name: "other" } as unknown as ProjectView, activeSketch: null });
+}
 
 async function openSketch(document: Sketch, version: string) {
   ipc.read.mockResolvedValueOnce(versioned(document, version));
@@ -245,5 +258,172 @@ describe("document saves", () => {
 
   it("stamps conflict copies in filesystem-safe UTC", () => {
     expect(conflictStamp(new Date(Date.UTC(2026, 0, 2, 3, 4, 5)))).toBe("20260102-030405");
+  });
+});
+
+describe("document saves across projects", () => {
+  it("drops a late load once another project with the same paths opens", async () => {
+    const read = deferred<unknown>();
+    ipc.read.mockReturnValueOnce(read.promise);
+    const late = loadDocument<Sketch>("sketch", "demo.sk");
+
+    switchProject();
+    ipc.read.mockResolvedValueOnce(versioned(sketch("other"), "o1"));
+    await expect(loadDocument<Sketch>("sketch", "demo.sk")).resolves.toMatchObject({ title: "other" });
+    read.resolve(versioned(sketch("first project"), "f1"));
+    await expect(late).rejects.toSatisfy(isDropped);
+
+    await settle();
+    expect(documentEntry(OTHER_ROOT, "demo.sk")).toMatchObject({ baseVersion: "o1", base: JSON.stringify(sketch("other")) });
+  });
+
+  it("drops a queued save once another project with the same paths opens", async () => {
+    await openSketch(sketch("v0"), "h0");
+    const first = deferred<unknown>();
+    ipc.save.mockReturnValueOnce(first.promise);
+    const one = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v1" });
+    const two = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v2" });
+    await vi.waitFor(() => expect(ipc.save).toHaveBeenCalledTimes(1));
+
+    switchProject();
+    first.resolve(versioned(sketch("v1"), "h1"));
+    await one;
+    await expect(two).rejects.toSatisfy(isDropped);
+    expect(ipc.save).toHaveBeenCalledTimes(1);
+
+    // The other project's document saves from its own base.
+    ipc.read.mockResolvedValueOnce(versioned(sketch("other"), "o1"));
+    ipc.save.mockResolvedValueOnce(versioned(sketch("o2"), "o2"));
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "o2" });
+    expect(ipc.save.mock.calls[1][1]).toMatchObject({ expectedVersion: "o1", base: JSON.stringify(sketch("other")) });
+  });
+
+  it("waits for queued saves before a project change, then holds new ones until released", async () => {
+    await openSketch(sketch("v0"), "h0");
+    const first = deferred<unknown>();
+    ipc.save.mockReturnValueOnce(first.promise).mockResolvedValueOnce(versioned(sketch("v2"), "h2"));
+    const one = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v1" });
+    const two = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v2" });
+
+    let quiesced = false;
+    const quiesce = quiesceDocumentSaves(1000).then((release) => {
+      quiesced = true;
+      return release;
+    });
+    await Promise.resolve();
+    expect(quiesced).toBe(false);
+    first.resolve(versioned(sketch("v1"), "h1"));
+    const release = await quiesce;
+    await Promise.all([one, two]);
+    expect(ipc.save).toHaveBeenCalledTimes(2);
+
+    await expect(saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "late" })).rejects.toSatisfy(isDropped);
+    expect(ipc.save).toHaveBeenCalledTimes(2);
+
+    // The project change failed, so the project stays open and saves run again.
+    release();
+    ipc.save.mockResolvedValueOnce(versioned(sketch("v3"), "h3"));
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v3" });
+    expect(ipc.save.mock.calls[2][1]).toMatchObject({ expectedVersion: "h2" });
+  });
+
+  it("stops waiting for a stuck save after the timeout", async () => {
+    await openSketch(sketch("v0"), "h0");
+    ipc.save.mockReturnValueOnce(new Promise(() => {}));
+    void saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "stuck" });
+    await expect(quiesceDocumentSaves(10)).resolves.toBeTypeOf("function");
+  });
+});
+
+describe("conflict copies that can't be written", () => {
+  async function conflictWith(setup: () => void) {
+    await openSketch(sketch("v0"), "h0");
+    setup();
+    const show = vi.spyOn(useToastStore.getState(), "show");
+    const result = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "mine" });
+    await expect(result).rejects.toMatchObject({ code: "io" });
+    expect(entry().savedRevision).toBeLessThan(entry().editRevision);
+    expect(entry().redirect).toBeUndefined();
+    expect(show).toHaveBeenCalledWith(expect.stringContaining("couldn't save your edits to a conflict copy"), 10000, "error");
+
+    // A refresh doesn't replace the unsaved edits with the disk version.
+    ipc.read.mockResolvedValue(versioned(sketch("theirs"), "h9"));
+    await refreshOpenDocuments();
+    expect(useAppStore.getState().activeSketch?.title).toBe("v0");
+    expect(ipc.read).toHaveBeenCalledTimes(1);
+  }
+
+  it("keeps the document dirty when the copy can't be created", async () => {
+    await conflictWith(() => {
+      ipc.save.mockRejectedValueOnce({ code: "stale_document" });
+      ipc.createCopy.mockRejectedValueOnce({ code: "io" });
+    });
+    expect(ipc.save).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the document dirty when the edits can't be written into the copy", async () => {
+    await conflictWith(() => {
+      ipc.save.mockRejectedValueOnce({ code: "stale_document" }).mockRejectedValueOnce({ code: "io" });
+      ipc.createCopy.mockResolvedValueOnce({ document: "", content: "", version: "c0", merged: false });
+    });
+    expect(ipc.save).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("renaming documents", () => {
+  it("waits for an in-flight save and a queued one, then saves the new path from the last version", async () => {
+    await openSketch(sketch("v0"), "h0");
+    const first = deferred<unknown>();
+    const second = sketch("v2");
+    ipc.save.mockReturnValueOnce(first.promise).mockResolvedValueOnce(versioned(second, "h2"));
+    const saves = Promise.all([
+      saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v1" }),
+      saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v2" }),
+    ]);
+
+    let settled = false;
+    const settling = settleBeforeRename(1000).then(() => { settled = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    first.resolve(versioned(sketch("v1"), "h1"));
+    await settling;
+    await saves;
+
+    documentRenamed("demo.sk", "renamed.sk");
+    ipc.save.mockResolvedValueOnce(versioned(sketch("v3"), "h3"));
+    await saveDocument("update_sketch_title", { relativePath: "renamed.sk", title: "v3" });
+    expect(ipc.save.mock.calls[2][1]).toMatchObject({ relativePath: "renamed.sk", expectedVersion: "h2", base: JSON.stringify(second) });
+    expect(ipc.read).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops the old path's queued save when the rename goes ahead without it", async () => {
+    await openSketch(sketch("v0"), "h0");
+    const first = deferred<unknown>();
+    ipc.save.mockReturnValueOnce(first.promise);
+    const one = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v1" });
+    const two = saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "v2" });
+    await settleBeforeRename(10);
+
+    documentRenamed("demo.sk", "renamed.sk");
+    first.resolve(versioned(sketch("v1"), "h1"));
+    await one;
+    await expect(two).rejects.toSatisfy(isDropped);
+    expect(ipc.save).toHaveBeenCalledTimes(1);
+
+    // The renamed document's base was unsettled, so its next save reads one first.
+    ipc.read.mockResolvedValueOnce(versioned(sketch("v1"), "h1"));
+    ipc.save.mockResolvedValueOnce(versioned(sketch("v3"), "h3"));
+    await saveDocument("update_sketch_title", { relativePath: "renamed.sk", title: "v3" });
+    expect(ipc.read).toHaveBeenLastCalledWith("sketch", "renamed.sk");
+    expect(ipc.save.mock.calls[1][1]).toMatchObject({ relativePath: "renamed.sk", expectedVersion: "h1" });
+  });
+
+  it("doesn't rename while pending editor edits can't be saved", async () => {
+    const unregister = registerEditorFlush(() => Promise.reject(new Error("disk full")));
+    try {
+      await expect(settleBeforeRename(10)).rejects.toThrow("couldn't save an open editor's latest changes");
+    } finally {
+      unregister();
+    }
   });
 });

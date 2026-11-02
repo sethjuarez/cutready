@@ -4,7 +4,9 @@
 // otherwise three-way merges it onto the newer file. A save that can't merge
 // is written to a conflict copy, the document is reloaded and a warning toast
 // says where the edits went. Open documents also refresh when the window
-// regains focus or Draftline reports a workspace change.
+// regains focus or Draftline reports a workspace change. Saves and loads belong
+// to the project they started in: once another project opens (or this one
+// closes) they are dropped before touching disk or an editor.
 import {
   documentsIpc,
   type DocumentKind,
@@ -13,13 +15,29 @@ import {
   type Versioned,
 } from "../ipc/documents";
 import { useAppStore } from "../stores/appStore";
-import { documentEntry, isClean, type DocumentVersionEntry } from "../stores/documentVersionStore";
+import {
+  closeDocumentScope,
+  documentEntries,
+  documentEntry,
+  isClean,
+  isEntryCurrent,
+  moveDocumentEntry,
+  type DocumentVersionEntry,
+} from "../stores/documentVersionStore";
 import { useToastStore } from "../stores/toastStore";
 import { flushEditorWrites } from "../stores/workspaceHelpers";
 
 /** How long an installed document waits for its editor to render before it becomes the base. */
 export const INSTALL_SETTLE_MS = 100;
+/** How long a project change or rename waits for queued saves before going ahead. */
+export const SETTLE_TIMEOUT_MS = 5000;
 const MAX_COPY_ATTEMPTS = 50;
+
+/** Detail of `cutready:document-refreshed`; cancel the event to keep unsaved edits shown. */
+export interface DocumentRefreshedDetail extends SyncedDocument {
+  path: string;
+  document: unknown;
+}
 
 /** A save that couldn't merge with changes made elsewhere; its edits are in `copyPath`. */
 export class DocumentConflictError extends Error {
@@ -33,14 +51,36 @@ export function isDocumentConflict(error: unknown): error is DocumentConflictErr
   return error instanceof DocumentConflictError;
 }
 
+/** A save or load from a project that is no longer open; nothing was written or shown. */
+export class DocumentSaveDroppedError extends Error {
+  constructor(readonly path: string) {
+    super(`${path} belongs to a project that is no longer open`);
+    this.name = "DocumentSaveDroppedError";
+  }
+}
+
+/** The save needs no retry: its edits went to a conflict copy, or its project closed. */
+export function isHandledSaveError(error: unknown): boolean {
+  return isDocumentConflict(error) || error instanceof DocumentSaveDroppedError;
+}
+
 export function documentKind(path: string): DocumentKind {
   if (path.endsWith(".sk")) return "sketch";
   if (path.endsWith(".sb")) return "storyboard";
   return "note";
 }
 
+function currentRoot(): string {
+  return useAppStore.getState().currentProject?.root ?? "";
+}
+
 function entryFor(path: string): DocumentVersionEntry {
-  return documentEntry(useAppStore.getState().currentProject?.root ?? "", path);
+  return documentEntry(currentRoot(), path);
+}
+
+/** Throws DocumentSaveDroppedError unless `entry` still belongs to the open project. */
+function ensureCurrent(entry: DocumentVersionEntry, path: string) {
+  if (!isEntryCurrent(entry, currentRoot())) throw new DocumentSaveDroppedError(path);
 }
 
 function hasCode(error: unknown, code: string): boolean {
@@ -67,8 +107,10 @@ function adoptWhenSettled(entry: DocumentVersionEntry, loaded: SyncedDocument) {
 /** Reads a document for an editor and records it as that editor's base. */
 export async function loadDocument<T>(kind: DocumentKind, relativePath: string): Promise<T> {
   const entry = entryFor(relativePath);
+  ensureCurrent(entry, relativePath);
   const generation = ++entry.loadGeneration;
   const loaded = await documentsIpc.read<T>(kind, relativePath);
+  ensureCurrent(entry, relativePath);
   if (entry.loadGeneration === generation && entry.inFlight === 0) adoptWhenSettled(entry, loaded);
   return loaded.document;
 }
@@ -78,7 +120,8 @@ type SaveArgs = Record<string, unknown> & ({ relativePath: string } | { storyboa
 /**
  * Saves an open document. Saves of one document run one at a time, in order.
  * Resolves with the committed document; rejects with DocumentConflictError
- * when the save conflicted with changes made elsewhere.
+ * when the save conflicted with changes made elsewhere, and with
+ * DocumentSaveDroppedError when its project closed before it ran.
  */
 export function saveDocument<T>(command: DocumentSaveCommand, args: SaveArgs): Promise<T> {
   const pathKey = "storyboardPath" in args ? "storyboardPath" : "relativePath";
@@ -103,6 +146,7 @@ async function runSave<T>(
   const path = args[pathKey] as string;
   let merged = false;
   try {
+    ensureCurrent(entry, path);
     const redirect = entry.redirect?.epoch === epoch ? entry.redirect : undefined;
     if (redirect) {
       const saved = await documentsIpc.save<T>(command, { ...args, [pathKey]: redirect.path, expectedVersion: redirect.version, base: redirect.content });
@@ -111,13 +155,13 @@ async function runSave<T>(
       return saved.document;
     }
     if (entry.base === undefined) await readBase(entry, path);
+    ensureCurrent(entry, path);
     let saved: Versioned<T>;
     try {
       saved = await documentsIpc.save<T>(command, { ...args, expectedVersion: entry.baseVersion, base: entry.base });
     } catch (error) {
       if (!hasCode(error, "stale_document")) throw error;
-      entry.savedRevision = Math.max(entry.savedRevision, revision);
-      return await resolveConflict(entry, command, args, pathKey, epoch);
+      return await resolveConflict(entry, command, args, pathKey, revision, epoch);
     }
     entry.savedRevision = Math.max(entry.savedRevision, revision);
     // The editor holds what this save sent; a merged document is shown by the refresh.
@@ -152,10 +196,11 @@ export function conflictStamp(now: Date): string {
   return now.toISOString().slice(0, 19).replace(/[-:]/g, "").replace("T", "-");
 }
 
-async function createConflictCopy(path: string, content: string): Promise<Versioned<string> & { path: string }> {
+async function createConflictCopy(entry: DocumentVersionEntry, path: string, content: string): Promise<Versioned<string> & { path: string }> {
   const stamp = conflictStamp(new Date());
   for (let attempt = 0; ; attempt += 1) {
     const copyPath = conflictPath(path, stamp, attempt);
+    ensureCurrent(entry, path);
     try {
       return { ...(await documentsIpc.createCopy(copyPath, content)), path: copyPath };
     } catch (error) {
@@ -164,23 +209,42 @@ async function createConflictCopy(path: string, content: string): Promise<Versio
   }
 }
 
+const fileName = (path: string) => path.split("/").pop() ?? path;
+
 /**
  * Keeps the user's edits in a sibling conflict copy, then reloads the
  * document and says so. Saves already queued for this document, and edits
  * still pending in its editors (written out now, so they queue behind them),
  * follow into the copy; the reload runs after them, and saves made after it
- * go to the document again.
+ * go to the document again. If the copy can't be written the save fails and
+ * the document stays unsaved, so nothing replaces the edits in the editor.
  */
 async function resolveConflict(
   entry: DocumentVersionEntry,
   command: DocumentSaveCommand,
   args: SaveArgs,
   pathKey: "relativePath" | "storyboardPath",
+  revision: number,
   epoch: number,
 ): Promise<never> {
   const path = args[pathKey] as string;
-  const copy = await createConflictCopy(path, entry.base ?? "");
-  const local = await documentsIpc.save(command, { ...args, [pathKey]: copy.path, expectedVersion: copy.version, base: copy.content });
+  let copy: Versioned<string> & { path: string };
+  let local: Versioned<unknown>;
+  try {
+    copy = await createConflictCopy(entry, path, entry.base ?? "");
+    ensureCurrent(entry, path);
+    local = await documentsIpc.save(command, { ...args, [pathKey]: copy.path, expectedVersion: copy.version, base: copy.content });
+  } catch (error) {
+    if (!(error instanceof DocumentSaveDroppedError)) {
+      useToastStore.getState().show(
+        `${fileName(path)} changed outside CutReady while you were editing, and CutReady couldn't save your edits to a conflict copy. They're still open here; try again.`,
+        10000,
+        "error",
+      );
+    }
+    throw error;
+  }
+  entry.savedRevision = Math.max(entry.savedRevision, revision);
   entry.redirect = { epoch, path: copy.path, content: local.content, version: local.version };
   void flushEditorWrites().catch(() => undefined);
   entry.inFlight += 1;
@@ -192,9 +256,11 @@ async function resolveConflict(
 async function reloadAfterConflict(entry: DocumentVersionEntry, path: string, copyPath: string) {
   const kind = documentKind(path);
   try {
+    ensureCurrent(entry, path);
     const reloaded = await documentsIpc.read(kind, path);
+    ensureCurrent(entry, path);
     entry.loadGeneration += 1;
-    install(kind, path, reloaded);
+    install(kind, path, reloaded, false);
     // Saves made before the editor shows the reload still go to the copy.
     globalThis.setTimeout(() => {
       entry.epoch += 1;
@@ -202,9 +268,8 @@ async function reloadAfterConflict(entry: DocumentVersionEntry, path: string, co
     }, INSTALL_SETTLE_MS);
     const app = useAppStore.getState();
     await (kind === "sketch" ? app.loadSketches() : kind === "storyboard" ? app.loadStoryboards() : app.loadNotes());
-    const name = (p: string) => p.split("/").pop() ?? p;
     useToastStore.getState().show(
-      `${name(path)} changed outside CutReady while you were editing. Your edits were saved to ${name(copyPath)}.`,
+      `${fileName(path)} changed outside CutReady while you were editing. Your edits were saved to ${fileName(copyPath)}.`,
       10000,
       "warning",
     );
@@ -213,8 +278,14 @@ async function reloadAfterConflict(entry: DocumentVersionEntry, path: string, co
   }
 }
 
-/** Shows a document read from disk in the editors that have it open. */
-function install(kind: DocumentKind, path: string, loaded: Versioned<unknown>) {
+/**
+ * Shows a document read from disk in the editors that have it open. When
+ * `cancelable`, an editor with unsaved edits may cancel to keep them on
+ * screen; then nothing is installed and this returns false.
+ */
+function install(kind: DocumentKind, path: string, loaded: Versioned<unknown>, cancelable: boolean): boolean {
+  const detail: DocumentRefreshedDetail = { path, document: loaded.document, content: loaded.content, version: loaded.version };
+  if (!window.dispatchEvent(new CustomEvent("cutready:document-refreshed", { detail, cancelable }))) return false;
   const app = useAppStore.getState();
   if (kind === "sketch" && app.activeSketchPath === path) {
     useAppStore.setState({ activeSketch: loaded.document as typeof app.activeSketch });
@@ -223,7 +294,7 @@ function install(kind: DocumentKind, path: string, loaded: Versioned<unknown>) {
   } else if (kind === "note" && app.activeNotePath === path) {
     useAppStore.setState({ activeNoteContent: loaded.content });
   }
-  window.dispatchEvent(new CustomEvent("cutready:document-refreshed", { detail: { path } }));
+  return true;
 }
 
 function openDocumentPaths(): string[] {
@@ -243,17 +314,70 @@ async function refreshDocument(path: string) {
   const entry = entryFor(path);
   const kind = documentKind(path);
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    if (entry.base === undefined || !isClean(entry)) return;
+    if (entry.base === undefined || !isClean(entry) || !isEntryCurrent(entry, currentRoot())) return;
     const loaded = await documentsIpc.read(kind, path).catch(() => null);
     if (!loaded || loaded.version === entry.baseVersion) return;
     const { editRevision, loadGeneration } = entry;
     await flushEditorWrites().catch(() => undefined);
+    if (!isEntryCurrent(entry, currentRoot())) return;
     if (entry.editRevision !== editRevision || entry.loadGeneration !== loadGeneration || !isClean(entry)) continue;
     entry.loadGeneration += 1;
-    install(kind, path, loaded);
-    adoptWhenSettled(entry, loaded);
+    // An editor that kept its unsaved edits saves them against the old base, which merges.
+    if (install(kind, path, loaded, true)) adoptWhenSettled(entry, loaded);
     return;
   }
+}
+
+/** Waits for `promise`, but no longer than `timeoutMs`. */
+async function within(promise: Promise<unknown>, timeoutMs: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<void>((resolve) => {
+    timer = globalThis.setTimeout(resolve, timeoutMs);
+  });
+  try {
+    await Promise.race([promise, timedOut]);
+  } finally {
+    globalThis.clearTimeout(timer);
+  }
+}
+
+/** Waits until every queued save and conflict reload has finished, or `timeoutMs` passes. */
+function drainDocumentQueues(timeoutMs: number): Promise<void> {
+  return within((async () => {
+    for (;;) {
+      const entries = documentEntries();
+      const tails = entries.map((entry) => entry.tail);
+      await Promise.all(tails);
+      // A conflict queues its reload behind the save; wait for that too.
+      if (documentEntries().every((entry) => tails[entries.indexOf(entry)] === entry.tail)) return;
+    }
+  })(), timeoutMs);
+}
+
+/**
+ * Before opening, switching or closing a project: writes out pending editor
+ * edits, waits (at most `timeoutMs` each) for them and queued saves, then
+ * stops this project's saves and loads. Call the returned function if the
+ * project stays open after all; once another project opens they stay stopped.
+ */
+export async function quiesceDocumentSaves(timeoutMs = SETTLE_TIMEOUT_MS): Promise<() => void> {
+  await within(flushEditorWrites().catch(() => undefined), timeoutMs);
+  await drainDocumentQueues(timeoutMs);
+  return closeDocumentScope();
+}
+
+/**
+ * Before renaming project files: writes out pending editor edits (throws if
+ * any can't be saved, so nothing is renamed) and waits for queued saves.
+ */
+export async function settleBeforeRename(timeoutMs = SETTLE_TIMEOUT_MS): Promise<void> {
+  await flushEditorWrites();
+  await drainDocumentQueues(timeoutMs);
+}
+
+/** After a rename: saves of `from` stop, and saves of `to` continue from its synced text. */
+export function documentRenamed(from: string, to: string) {
+  moveDocumentEntry(from, to);
 }
 
 let refreshing: Promise<void> | null = null;

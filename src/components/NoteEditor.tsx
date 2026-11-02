@@ -7,7 +7,7 @@ import { useSettings } from "../hooks/useSettings";
 import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { invoke } from "../services/tauri";
-import { isDocumentConflict, saveDocument } from "../services/documentSaves";
+import { isHandledSaveError, saveDocument } from "../services/documentSaves";
 import type { TokenResponse } from "../types/auth";
 import { describeWordExport, exportNoteToWord } from "../utils/exportToWord";
 import { ProjectImage } from "./ProjectImage";
@@ -154,7 +154,7 @@ export function NoteEditor() {
     try {
       await saveDocument("update_note", { relativePath: activeNotePath!, content });
     } catch (err) {
-      if (isDocumentConflict(err)) return;
+      if (isHandledSaveError(err)) return;
       if (pendingContentRef.current === null) pendingContentRef.current = content;
       throw err;
     }

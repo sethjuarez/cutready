@@ -39,12 +39,12 @@
     "src/components/SketchVisualViews.tsx": 1304,
     "src/components/SnapshotGraph.tsx": 938,
     "src/components/SnapshotPreviewTab.tsx": 1079,
-    "src/components/StoryboardList.tsx": 2069,
+    "src/components/StoryboardList.tsx": 2067,
     "src/components/StoryboardView.tsx": 1542,
     "src/devMock.ts": 1419,
     "src/hooks/useSettings.ts": 999,
     "src/services/draftlineVersioning.ts": 879,
-    "src/stores/appStore.ts": 1949,
+    "src/stores/appStore.ts": 1934,
     "src/theme/appThemePalettes.ts": 845
   }
 }

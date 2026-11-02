@@ -10,7 +10,7 @@ import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, Check, Film, Image as 
 import { registerEditorFlush, shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import { useToastStore } from "../stores/toastStore";
-import { isDocumentConflict, loadDocument, saveDocument } from "../services/documentSaves";
+import { isHandledSaveError, loadDocument, saveDocument } from "../services/documentSaves";
 import { useSettings } from "../hooks/useSettings";
 import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
 import { ScriptTable } from "./ScriptTable";
@@ -1098,8 +1098,8 @@ export function SketchForm() {
         return true;
       } catch (err) {
         console.error(`[SketchForm] Failed to save pending sketch edits (${reason}):`, err);
-        if (!isDocumentConflict(err)) useToastStore.getState().show("Failed to save pending sketch changes", 5000, "error");
-        return isDocumentConflict(err);
+        if (!isHandledSaveError(err)) useToastStore.getState().show("Failed to save pending sketch changes", 5000, "error");
+        return isHandledSaveError(err);
       }
     },
     [],

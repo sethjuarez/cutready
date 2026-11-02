@@ -26,6 +26,7 @@ import {
 } from "../stores/appStore";
 import type { ProjectEntry } from "../types/project";
 import { commandErrorText, transferConflictPath } from "../services/commandErrors";
+import { documentRenamed, settleBeforeRename } from "../services/documentSaves";
 import { ChatArtifactIcon, SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
@@ -668,13 +669,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     if (renameInFlightRef.current) return;
     renameInFlightRef.current = true;
     const newStem = renameValue.trim();
-    if (!newStem) {
-      renameInFlightRef.current = false;
-      setRenamingItem(null);
-      return;
-    }
-
-    const slug = slugify(newStem);
+    const slug = newStem ? slugify(newStem) : "";
     if (!slug) {
       renameInFlightRef.current = false;
       setRenamingItem(null);
@@ -694,6 +689,8 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
 
     let suppressedPaths = Array.from(new Set([oldPath, newPath]));
     try {
+      // Pending edits reach the old file before it moves; editors stay quiet until the rename lands.
+      await settleBeforeRename();
       for (const path of suppressedPaths) suppressEditorFlush(path);
       const preview = await invoke<RenameProjectAssetPlan>("preview_rename_project_asset", { oldPath, newPath });
       suppressedPaths = Array.from(new Set([...suppressedPaths, ...preview.updatedReferences.map((ref) => ref.path)]));
@@ -711,6 +708,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
       }
 
       const result = await invoke<RenameProjectAssetPlan>("rename_project_asset", { oldPath, newPath });
+      documentRenamed(result.oldPath, result.newPath);
       suppressedPaths = Array.from(new Set([...suppressedPaths, ...result.updatedReferences.map((ref) => ref.path)]));
       for (const path of suppressedPaths) suppressEditorFlush(path);
 

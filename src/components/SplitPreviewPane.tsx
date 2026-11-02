@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "../services/tauri";
-import { isDocumentConflict, loadDocument, saveDocument } from "../services/documentSaves";
+import { isHandledSaveError, loadDocument, saveDocument } from "../services/documentSaves";
+import { useDocumentReload } from "../hooks/useDocumentReload";
 import { X, MoreHorizontal, Search } from "lucide-react";
 import { registerEditorFlush, shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
@@ -396,7 +397,7 @@ function SketchSplitEditor({ path }: { path: string }) {
         rows && saveDocument("update_sketch", { relativePath: path, rows }),
       ]);
     } catch (err) {
-      if (isDocumentConflict(err)) return;
+      if (isHandledSaveError(err)) return;
       pendingTitleRef.current ??= title;
       pendingDescRef.current ??= desc;
       pendingRowsRef.current ??= rows;
@@ -405,32 +406,22 @@ function SketchSplitEditor({ path }: { path: string }) {
   }), [path]);
 
   // Re-load when primary pane saves (so split stays in sync if primary edits)
-  useEffect(() => {
-    const handler = () => {
-      loadDocument<Sketch>("sketch", path)
-        .then((s) => {
-          setSketch(s);
-          setLocalRows(s.rows ?? []);
-          setLocalTitle(s.title ?? "");
-          setLocalDesc(typeof s.description === "string" ? s.description : "");
-        })
-        .catch(() => {});
-    };
-    const refreshed = (event: Event) => {
-      if ((event as CustomEvent<{ path?: string }>).detail?.path === path) handler();
-    };
-    window.addEventListener("cutready:sketch-saved", handler);
-    window.addEventListener("cutready:ai-sketch-updated", handler);
-    window.addEventListener("cutready:document-refreshed", refreshed);
-    return () => {
-      window.removeEventListener("cutready:sketch-saved", handler);
-      window.removeEventListener("cutready:ai-sketch-updated", handler);
-      window.removeEventListener("cutready:document-refreshed", refreshed);
-    };
-  }, [path]);
+  const markEdited = useDocumentReload<Sketch>({
+    kind: "sketch",
+    path,
+    events: ["cutready:sketch-saved", "cutready:ai-sketch-updated"],
+    hasPending: () => pendingTitleRef.current !== null || pendingDescRef.current !== null || pendingRowsRef.current !== null,
+    apply: (s) => {
+      setSketch(s);
+      setLocalRows(s.rows ?? []);
+      setLocalTitle(s.title ?? "");
+      setLocalDesc(typeof s.description === "string" ? s.description : "");
+    },
+  });
 
   const handleTitleChange = (title: string) => {
     if (sketch?.locked) return;
+    markEdited();
     setLocalTitle(title);
     pendingTitleRef.current = title;
     if (titleTimerRef.current) clearTimeout(titleTimerRef.current);
@@ -444,6 +435,7 @@ function SketchSplitEditor({ path }: { path: string }) {
 
   const handleDescChange = (desc: string) => {
     if (sketch?.locked) return;
+    markEdited();
     setLocalDesc(desc);
     pendingDescRef.current = desc;
     if (descTimerRef.current) clearTimeout(descTimerRef.current);
@@ -456,6 +448,7 @@ function SketchSplitEditor({ path }: { path: string }) {
 
   const handleDescSave = async (desc: string) => {
     if (sketch?.locked) return;
+    markEdited();
     setLocalDesc(desc);
     pendingDescRef.current = null;
     if (descTimerRef.current) {
@@ -469,6 +462,7 @@ function SketchSplitEditor({ path }: { path: string }) {
 
   const handleRowsChange = (rows: PlanningRow[]) => {
     if (sketch?.locked) return;
+    markEdited();
     setLocalRows(rows);
     pendingRowsRef.current = rows;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -602,32 +596,28 @@ function NoteSplitEditor({ path }: { path: string }) {
     try {
       await saveDocument("update_note", { relativePath: path, content: pending });
     } catch (err) {
-      if (isDocumentConflict(err)) return;
+      if (isHandledSaveError(err)) return;
       pendingContentRef.current ??= pending;
       throw err;
     }
   }), [path, locked]);
 
   // Re-load when AI updates
-  useEffect(() => {
-    const handler = (event: Event) => {
+  const markEdited = useDocumentReload<string>({
+    kind: "note",
+    path,
+    events: ["cutready:ai-note-updated"],
+    accepts: (event) => {
       const updatedPath = (event as CustomEvent<{ path?: string | null }>).detail?.path;
-      if (updatedPath && updatedPath !== path) return;
-      if (pendingContentRef.current !== null) return;
-      loadDocument<string>("note", path)
-        .then((c) => setContent(c))
-        .catch(() => {});
-    };
-    window.addEventListener("cutready:ai-note-updated", handler);
-    window.addEventListener("cutready:document-refreshed", handler);
-    return () => {
-      window.removeEventListener("cutready:ai-note-updated", handler);
-      window.removeEventListener("cutready:document-refreshed", handler);
-    };
-  }, [path]);
+      return (!updatedPath || updatedPath === path) && pendingContentRef.current === null;
+    },
+    hasPending: () => pendingContentRef.current !== null,
+    apply: setContent,
+  });
 
   const handleChange = (value: string) => {
     if (locked) return;
+    markEdited();
     setContent(value);
     pendingContentRef.current = value;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);

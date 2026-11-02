@@ -1344,7 +1344,7 @@ function mockPluginEvent(cmd: string, args?: Record<string, unknown>): unknown {
 // App document reads and saves return versioned documents (ADR 0002 "App saves").
 const mockVersioned = (document: unknown) => {
   const content = typeof document === "string" ? document : JSON.stringify(document);
-  return { document, content, version: `mock-${content.length}`, merged: false };
+  return { document, content, version: `mock-${[...content].reduce((h, c) => Math.imul(h ^ c.codePointAt(0)!, 16777619) >>> 0, 2166136261).toString(16)}`, merged: false };
 };
 const MOCK_DOCUMENT_SAVE = /^(update_(sketch|sketch_title|storyboard)|set_(sketch|storyboard|planning_row|planning_cell)_lock|add_s\w+_to_storyboard|remove_sketch_from_storyboard|reorder_storyboard_items)$/;
 

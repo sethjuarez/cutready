@@ -13,7 +13,7 @@ import {
 } from "../services/draftlineErrors";
 import { recordActivityEntries } from "../services/telemetry";
 import { useToastStore } from "./toastStore";
-import { loadDocument, saveDocument } from "../services/documentSaves";
+import { loadDocument, quiesceDocumentSaves, saveDocument } from "../services/documentSaves";
 import { getStoryboardSketchPaths } from "../utils/storyboard";
 import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
 import type {
@@ -939,6 +939,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   createProject: async (path) => {
     bumpRemoteDetectionGeneration();
     set({ loading: true });
+    const releaseDocuments = await quiesceDocumentSaves();
     try {
       const project = await invoke<ProjectView>("create_project_folder", { path });
       beginWorkspaceGeneration(project.repo_root);
@@ -953,14 +954,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         splitTabs: [],
         splitActiveTabId: null,
         activeEditorGroup: "main",
-        activeSketchPath: null,
-        activeSketch: null,
-        activeStoryboardPath: null,
-        activeStoryboard: null,
-        activeNotePath: null,
-        activeNoteContent: null,
-        activeNoteLocked: false,
-        activeChatArtifactPath: null,
+        ...clearActiveDocumentState(),
       });
       localStorage.setItem("cutready:lastProject", path);
       await get().loadRecentProjects();
@@ -981,6 +975,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       console.error("Failed to create project:", err);
       set({ error: errorMessage(err) });
     } finally {
+      releaseDocuments();
       set({ loading: false });
     }
   },
@@ -988,6 +983,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   openProject: async (path, options) => {
     bumpRemoteDetectionGeneration();
     set({ loading: true, adoptionPrompt: null });
+    const releaseDocuments = await quiesceDocumentSaves();
     try {
       const project = await invoke<ProjectView>("open_project_folder", { path, adopt: options?.adopt ?? false });
       beginWorkspaceGeneration(project.repo_root);
@@ -1008,14 +1004,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         splitTabs: [],
         splitActiveTabId: null,
         activeEditorGroup: "main",
-        activeSketchPath: null,
-        activeSketch: null,
-        activeStoryboardPath: null,
-        activeStoryboard: null,
-        activeNotePath: null,
-        activeNoteContent: null,
-        activeNoteLocked: false,
-        activeChatArtifactPath: null,
+        ...clearActiveDocumentState(),
       });
       localStorage.setItem("cutready:lastProject", path);
       // Surface interrupted operations before loaders that may refuse during recovery.
@@ -1051,6 +1040,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       console.error("Failed to open project:", err);
       set({ error: errorMessage(err) });
     } finally {
+      releaseDocuments();
       set({ loading: false });
     }
   },
@@ -1194,6 +1184,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
 
   switchProject: async (projectPath) => {
     set({ loading: true, projectSwitching: true });
+    const releaseDocuments = await quiesceDocumentSaves();
     try {
       // Save current workspace state before switching
       const { openTabs, activeTabId, currentProject } = get();
@@ -1233,14 +1224,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         splitTabs: [],
         splitActiveTabId: null,
         activeEditorGroup: "main",
-        activeSketchPath: null,
-        activeSketch: null,
-        activeStoryboardPath: null,
-        activeStoryboard: null,
-        activeNotePath: null,
-        activeNoteContent: null,
-        activeNoteLocked: false,
-        activeChatArtifactPath: null,
+        ...clearActiveDocumentState(),
       });
       await get().loadSketches();
       await get().loadStoryboards();
@@ -1259,6 +1243,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       console.error("Failed to switch project:", err);
       set({ error: commandErrorText(err) });
     } finally {
+      releaseDocuments();
       set({ loading: false, projectSwitching: false });
     }
   },
