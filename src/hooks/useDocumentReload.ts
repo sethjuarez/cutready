@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useRef } from "react";
-import { readDocument, type DocumentRefreshedDetail } from "../services/documentSaves";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { readDocument, registerDocumentEditor, type DocumentEditor, type DocumentRefreshedDetail } from "../services/documentSaves";
 import type { DocumentKind } from "../ipc/documents";
 
 interface DocumentReloadOptions<T> {
+  /** The editor, from useDocumentEditor. */
+  editor: DocumentEditor;
   kind: DocumentKind;
   path: string;
   /** Window events that make the editor re-read the document. */
@@ -22,7 +24,14 @@ interface DocumentReloadOptions<T> {
  * reload events re-read the document and show it only if nothing was typed
  * meanwhile. Call the returned function on every local edit.
  */
-export function useDocumentReload<T>({ kind, path, events, accepts, hasPending, apply }: DocumentReloadOptions<T>): () => void {
+/** Counts a split editor as showing `path` while it is mounted; returns the identity its installs acknowledge with. */
+export function useDocumentEditor(path: string): DocumentEditor {
+  const [editor] = useState<DocumentEditor>(() => Symbol("split editor"));
+  useEffect(() => registerDocumentEditor(path, editor), [path, editor]);
+  return editor;
+}
+
+export function useDocumentReload<T>({ editor, kind, path, events, accepts, hasPending, apply }: DocumentReloadOptions<T>): () => void {
   const editGeneration = useRef(0);
   const latest = useRef({ accepts, hasPending, apply });
   latest.current = { accepts, hasPending, apply };
@@ -36,7 +45,7 @@ export function useDocumentReload<T>({ kind, path, events, accepts, hasPending, 
           if (editGeneration.current !== generation || latest.current.hasPending()) return;
           editGeneration.current += 1;
           latest.current.apply(document);
-          installed();
+          installed(editor);
         })
         .catch(() => {});
     };
@@ -57,7 +66,7 @@ export function useDocumentReload<T>({ kind, path, events, accepts, hasPending, 
       window.removeEventListener("cutready:document-refreshed", refreshed);
     };
     // `events` is a fixed list per editor.
-  }, [kind, path]);
+  }, [editor, kind, path]);
 
   return useCallback(() => {
     editGeneration.current += 1;

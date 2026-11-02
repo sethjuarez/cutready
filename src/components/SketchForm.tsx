@@ -10,7 +10,7 @@ import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, Check, Film, Image as 
 import { registerEditorFlush, shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import { useToastStore } from "../stores/toastStore";
-import { isHandledSaveError, readDocument, saveDocument } from "../services/documentSaves";
+import { isHandledSaveError, MAIN_EDITOR, readDocument, registerDocumentEditor, saveDocument } from "../services/documentSaves";
 import { useSettings } from "../hooks/useSettings";
 import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
 import { ScriptTable } from "./ScriptTable";
@@ -1090,7 +1090,7 @@ export function SketchForm() {
           const { document: sketch, installed } = await readDocument<Sketch>("sketch", path);
           if (useAppStore.getState().activeSketchPath === path) {
             useAppStore.setState({ activeSketch: sketch });
-            installed();
+            installed(MAIN_EDITOR);
           }
         }
         await useVersioningStore.getState().checkDirty();
@@ -1139,9 +1139,9 @@ export function SketchForm() {
     pendingRowsRef.current ??= rows;
     throw new Error("Couldn't save pending sketch changes");
   }), [flushPendingSketchEdits]);
+  useEffect(() => registerDocumentEditor(activeSketchPath, MAIN_EDITOR), [activeSketchPath]);
 
-  // Reset local state when switching to a different sketch
-  // Flush pending debounced saves by their captured path before showing another sketch.
+  // Reset local state when switching sketches; flush pending debounced saves by their captured path first.
   useEffect(() => {
     void flushPendingSketchEdits("sketch switch");
     setLocalTitle(activeSketch?.title ?? "");

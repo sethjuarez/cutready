@@ -7,7 +7,7 @@ import { useSettings } from "../hooks/useSettings";
 import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { invoke } from "../services/tauri";
-import { isHandledSaveError, saveDocument } from "../services/documentSaves";
+import { isHandledSaveError, MAIN_EDITOR, registerDocumentEditor, saveDocument } from "../services/documentSaves";
 import type { TokenResponse } from "../types/auth";
 import { describeWordExport, exportNoteToWord } from "../utils/exportToWord";
 import { ProjectImage } from "./ProjectImage";
@@ -141,6 +141,8 @@ export function NoteEditor() {
     },
     [activeNoteLocked, activeNotePath, noteDocument.metadata],
   );
+
+  useEffect(() => registerDocumentEditor(activeNotePath, MAIN_EDITOR), [activeNotePath]);
 
   useEffect(() => registerEditorFlush(async () => {
     const content = pendingContentRef.current;

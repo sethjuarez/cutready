@@ -22,10 +22,12 @@ import {
   isClean,
   isEntryCurrent,
   moveDocumentEntry,
+  peekDocumentEntry,
   type DocumentVersionEntry,
+  type RedirectInstalls,
 } from "../stores/documentVersionStore";
 import { useToastStore } from "../stores/toastStore";
-import { flushEditorWrites } from "../stores/workspaceHelpers";
+import { flushEditorWrites, normalizeRelativePath } from "../stores/workspaceHelpers";
 
 /** How long an installed document waits for its editor to render before it becomes the base. */
 export const INSTALL_SETTLE_MS = 100;
@@ -106,6 +108,7 @@ const isRedirected = (entry: DocumentVersionEntry) => entry.redirect?.epoch === 
 function endRedirect(entry: DocumentVersionEntry, loaded: SyncedDocument) {
   entry.epoch += 1;
   entry.pendingReload = undefined;
+  entry.installs = undefined;
   adopt(entry, loaded);
 }
 
@@ -113,18 +116,67 @@ function endRedirect(entry: DocumentVersionEntry, loaded: SyncedDocument) {
  * Makes `loaded` the base once its editor has had time to render it, unless a
  * save or load started meanwhile. Until then the older base stays: a save
  * built from content the editor showed before the install still merges.
- * A conflict redirect ends only when `installed` says every editor shows
- * `loaded`; until then saves keep going to the copy.
+ * During a conflict redirect nothing is adopted here; see acknowledgeInstall.
  */
-function adoptWhenSettled(entry: DocumentVersionEntry, loaded: SyncedDocument, installed = false) {
+function adoptWhenSettled(entry: DocumentVersionEntry, loaded: SyncedDocument) {
   const generation = entry.loadGeneration;
+  globalThis.setTimeout(() => {
+    if (!isRedirected(entry) && entry.loadGeneration === generation && entry.inFlight === 0) adopt(entry, loaded);
+  }, INSTALL_SETTLE_MS);
+}
+
+/** An open editor of a document: the main pane's, or one split editor. */
+export type DocumentEditor = symbol;
+/** The main pane's editor; the app store installs the documents it shows. */
+export const MAIN_EDITOR: DocumentEditor = Symbol("main editor");
+const openEditors = new Map<string, Map<DocumentEditor, number>>();
+
+const editorsOf = (path: string) => Array.from(openEditors.get(normalizeRelativePath(path))?.keys() ?? []);
+
+/**
+ * Counts `editor` as showing `path` until the returned function is called.
+ * A conflict redirect ends only once every editor showing the document has
+ * installed it from disk; an editor that closes no longer counts.
+ */
+export function registerDocumentEditor(path: string | null, editor: DocumentEditor): () => void {
+  if (!path) return () => undefined;
+  const key = normalizeRelativePath(path);
+  const counts = openEditors.get(key) ?? new Map<DocumentEditor, number>();
+  openEditors.set(key, counts);
+  counts.set(editor, (counts.get(editor) ?? 0) + 1);
+  return () => {
+    const count = (counts.get(editor) ?? 1) - 1;
+    if (count > 0) counts.set(editor, count);
+    else counts.delete(editor);
+    if (counts.size === 0 && openEditors.get(key) === counts) openEditors.delete(key);
+    const entry = peekDocumentEntry(currentRoot(), path);
+    if (entry) scheduleRedirectEnd(entry, path);
+  };
+}
+
+/**
+ * Records that `editor` (null: every open editor, as a refresh shows it in all
+ * of them) shows `loaded` from disk. Acknowledgements of another version
+ * start over, so every editor must show the same one.
+ */
+function acknowledgeInstall(entry: DocumentVersionEntry, path: string, loaded: SyncedDocument, editor: DocumentEditor | null) {
+  if (!isRedirected(entry)) return;
+  const prior = entry.installs;
+  const installs: RedirectInstalls = prior?.epoch === entry.epoch && prior.loaded.version === loaded.version
+    ? prior
+    : { epoch: entry.epoch, loaded, editors: new Set() };
+  entry.installs = installs;
+  for (const each of editor ? [editor] : editorsOf(path)) installs.editors.add(each);
+  scheduleRedirectEnd(entry, path);
+}
+
+/** Once installs have had time to render, ends the redirect if every open editor shows the document from disk. */
+function scheduleRedirectEnd(entry: DocumentVersionEntry, path: string) {
   const epoch = entry.epoch;
   globalThis.setTimeout(() => {
-    if (isRedirected(entry)) {
-      if (installed && entry.epoch === epoch) endRedirect(entry, loaded);
-    } else if (entry.loadGeneration === generation && entry.inFlight === 0) {
-      adopt(entry, loaded);
-    }
+    const installs = entry.installs;
+    if (entry.epoch !== epoch || !isRedirected(entry) || installs?.epoch !== epoch) return;
+    if (editorsOf(path).every((editor) => installs.editors.has(editor))) endRedirect(entry, installs.loaded);
   }, INSTALL_SETTLE_MS);
 }
 
@@ -132,11 +184,12 @@ function adoptWhenSettled(entry: DocumentVersionEntry, loaded: SyncedDocument, i
 export interface LoadedDocument<T> {
   document: T;
   /**
-   * Call once the editor shows `document`. Only then does a conflict
-   * redirect end, so a read that is thrown away never sends saves of what the
-   * editor still shows back to the document.
+   * Call once `editor` shows `document`. A conflict redirect ends only when
+   * every open editor of the document has, so a read that is thrown away, or
+   * shown in one pane while another still has older edits, never sends saves
+   * of those edits back to the document.
    */
-  installed: () => void;
+  installed: (editor: DocumentEditor) => void;
 }
 
 /** Reads a document for an editor and records it as that editor's base. */
@@ -151,8 +204,8 @@ export async function readDocument<T>(kind: DocumentKind, relativePath: string):
   const root = currentRoot();
   return {
     document: loaded.document,
-    installed: () => {
-      if (entry.epoch === epoch && isRedirected(entry) && isEntryCurrent(entry, root)) adoptWhenSettled(entry, loaded, true);
+    installed: (editor) => {
+      if (entry.epoch === epoch && isEntryCurrent(entry, root)) acknowledgeInstall(entry, relativePath, loaded, editor);
     },
   };
 }
@@ -325,8 +378,8 @@ async function reloadAfterConflict(entry: DocumentVersionEntry, path: string, co
     entry.loadGeneration += 1;
     const installed = install(kind, path, reloaded);
     if (installed) {
-      // Saves made before the editor shows the reload still go to the copy.
-      adoptWhenSettled(entry, reloaded, true);
+      // Saves made before the editors show the reload still go to the copy.
+      acknowledgeInstall(entry, path, reloaded, null);
     } else {
       // Set before flushing: the editors' saves queue now and the retry runs after them.
       entry.pendingReload = () => reloadAfterConflict(entry, path, copyPath, epoch, false);
@@ -392,7 +445,10 @@ async function refreshDocument(path: string) {
     if (entry.editRevision !== editRevision || entry.loadGeneration !== loadGeneration || !isClean(entry)) continue;
     entry.loadGeneration += 1;
     // An editor that kept its unsaved edits saves them against the old base, which merges.
-    if (install(kind, path, loaded)) adoptWhenSettled(entry, loaded, true);
+    if (install(kind, path, loaded)) {
+      adoptWhenSettled(entry, loaded);
+      acknowledgeInstall(entry, path, loaded, null);
+    }
     return;
   }
 }

@@ -17,8 +17,10 @@ import {
   INSTALL_SETTLE_MS,
   isDocumentConflict,
   loadDocument,
+  MAIN_EDITOR,
   quiesceDocumentSaves,
   readDocument,
+  registerDocumentEditor,
   refreshOpenDocuments,
   saveDocument,
   settleBeforeRename,
@@ -581,6 +583,72 @@ describe("conflict redirects", () => {
     expect(useAppStore.getState().activeSketch?.title).toBe("theirs");
     await settle();
     await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "refreshed" });
+    expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: "demo.sk", expectedVersion: "h9" }));
+  });
+});
+
+describe("conflict redirects with the document open in both panes", () => {
+  const SPLIT_EDITOR = Symbol("split editor");
+  let unregister: Array<() => void> = [];
+  afterEach(() => {
+    for (const each of unregister) each();
+    unregister = [];
+  });
+
+  /** Main and split panes show demo.sk; a save conflicts, and the split pane's typing refuses every reload. */
+  async function conflictInBothPanes() {
+    const closeSplit = registerDocumentEditor("demo.sk", SPLIT_EDITOR);
+    unregister = [registerDocumentEditor("demo.sk", MAIN_EDITOR), closeSplit];
+    await openSketch(sketch("v0"), "h0");
+    const saved: string[] = [];
+    ipc.save.mockImplementation((_: string, args: Record<string, unknown>) => {
+      saved.push(`${args.relativePath} ${String(args.title)}`);
+      if (args.relativePath !== "demo.sk") return Promise.resolve(versioned(sketch("copy"), `c${saved.length}`));
+      if (saved.length > 1) return Promise.resolve(versioned(sketch("next"), "h10"));
+      return Promise.reject({ code: "stale_document" });
+    });
+    ipc.createCopy.mockResolvedValue({ document: "", content: "", version: "c0", merged: false });
+    ipc.read.mockResolvedValue(versioned(sketch("theirs"), "h9"));
+    const refuse = (event: Event) => event.preventDefault();
+    window.addEventListener("cutready:document-refreshed", refuse);
+    unregister.push(() => window.removeEventListener("cutready:document-refreshed", refuse));
+    await expect(saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "mine" })).rejects.toSatisfy(isDocumentConflict);
+    await vi.waitFor(() => expect(ipc.read).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(entry().inFlight).toBe(0));
+    const copyPath = ipc.createCopy.mock.calls[0][0] as string;
+    const saveTo = async (title: string) => {
+      const count = saved.length;
+      await saveDocument("update_sketch_title", { relativePath: "demo.sk", title });
+      await vi.waitFor(() => expect(entry().inFlight).toBe(0));
+      return saved[count];
+    };
+    return { copyPath, closeSplit, saveTo };
+  }
+
+  it("keeps the redirect until both panes show the document from disk", async () => {
+    const { copyPath, saveTo } = await conflictInBothPanes();
+
+    (await readDocument<Sketch>("sketch", "demo.sk")).installed(MAIN_EDITOR);
+    await settle();
+    // The split pane still has its pre-conflict edits; they go to the copy.
+    expect(await saveTo("split edit")).toBe(`${copyPath} split edit`);
+
+    (await readDocument<Sketch>("sketch", "demo.sk")).installed(SPLIT_EDITOR);
+    await settle();
+    expect(await saveTo("both reloaded")).toBe("demo.sk both reloaded");
+    expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: "demo.sk", expectedVersion: "h9" }));
+  });
+
+  it("ends the redirect when the pane that never reloaded closes", async () => {
+    const { copyPath, closeSplit, saveTo } = await conflictInBothPanes();
+
+    (await readDocument<Sketch>("sketch", "demo.sk")).installed(MAIN_EDITOR);
+    await settle();
+    expect(await saveTo("split edit")).toBe(`${copyPath} split edit`);
+
+    closeSplit();
+    await settle();
+    expect(await saveTo("split closed")).toBe("demo.sk split closed");
     expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: "demo.sk", expectedVersion: "h9" }));
   });
 });

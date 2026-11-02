@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "../services/tauri";
 import { isHandledSaveError, readDocument, saveDocument } from "../services/documentSaves";
-import { useDocumentReload } from "../hooks/useDocumentReload";
+import { useDocumentEditor, useDocumentReload } from "../hooks/useDocumentReload";
 import { X, MoreHorizontal, Search } from "lucide-react";
 import { registerEditorFlush, shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import type { EditorTab } from "../stores/appStore";
@@ -342,6 +342,7 @@ function SketchSplitEditor({ path }: { path: string }) {
   const pendingRowsRef = useRef<PlanningRow[] | null>(null);
   const pendingTitleRef = useRef<string | null>(null);
   const pendingDescRef = useRef<string | null>(null);
+  const editor = useDocumentEditor(path);
 
   useEffect(() => {
     let cancelled = false;
@@ -352,7 +353,7 @@ function SketchSplitEditor({ path }: { path: string }) {
           setLocalRows(s.rows ?? []);
           setLocalTitle(s.title ?? "");
           setLocalDesc(typeof s.description === "string" ? s.description : "");
-          installed();
+          installed(editor);
         }
       })
       .catch(() => { if (!cancelled) setError(true); });
@@ -408,6 +409,7 @@ function SketchSplitEditor({ path }: { path: string }) {
 
   // Re-load when primary pane saves (so split stays in sync if primary edits)
   const markEdited = useDocumentReload<Sketch>({
+    editor,
     kind: "sketch",
     path,
     events: ["cutready:sketch-saved", "cutready:ai-sketch-updated"],
@@ -562,6 +564,7 @@ function NoteSplitEditor({ path }: { path: string }) {
   const projectRoot = useAppStore((s) => s.currentProject?.root ?? "");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingContentRef = useRef<string | null>(null);
+  const editor = useDocumentEditor(path);
 
   useEffect(() => {
     let cancelled = false;
@@ -573,7 +576,7 @@ function NoteSplitEditor({ path }: { path: string }) {
         if (!cancelled) {
           setContent(c);
           setLocked(lock.locked);
-          installed();
+          installed(editor);
         }
       })
       .catch(() => { if (!cancelled) setError(true); });
@@ -606,6 +609,7 @@ function NoteSplitEditor({ path }: { path: string }) {
 
   // Re-load when AI updates
   const markEdited = useDocumentReload<string>({
+    editor,
     kind: "note",
     path,
     events: ["cutready:ai-note-updated"],

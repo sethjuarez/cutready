@@ -13,7 +13,7 @@ import {
 } from "../services/draftlineErrors";
 import { recordActivityEntries } from "../services/telemetry";
 import { useToastStore } from "./toastStore";
-import { beginProjectChange, loadDocument, readDocument, saveDocument } from "../services/documentSaves";
+import { beginProjectChange, loadDocument, MAIN_EDITOR, readDocument, saveDocument } from "../services/documentSaves";
 import { getStoryboardSketchPaths } from "../utils/storyboard";
 import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
 import type {
@@ -1321,7 +1321,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const { document: sketch, installed } = await readDocument<Sketch>("sketch", sketchPath);
       if (get().activeSketchPath !== sketchPath) return;
       set({ activeSketchPath: sketchPath, activeSketch: sketch });
-      installed();
+      installed(MAIN_EDITOR);
       get().openTab({ type: "sketch", path: sketchPath, title: sketch.title });
     } catch (err) {
       console.error("Failed to open sketch:", err);
@@ -1446,7 +1446,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeSketchPath: null,
         activeSketch: null,
       });
-      installed();
+      installed(MAIN_EDITOR);
       get().openTab({ type: "storyboard", path: storyboardPath, title: storyboard.title });
     } catch (err) {
       console.error("Failed to open storyboard:", err);
@@ -1644,7 +1644,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
         activeStoryboardPath: null,
         activeStoryboard: null,
       });
-      installed();
+      installed(MAIN_EDITOR);
       get().openTab({ type: "note", path: notePath, title });
     } catch (err) {
       console.error("Failed to open note:", err);

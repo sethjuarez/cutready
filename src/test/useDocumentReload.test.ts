@@ -17,12 +17,14 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+const EDITOR = Symbol("split editor");
 let pending = false;
 const apply = vi.fn();
 
 function renderEditor(path = "demo.sk") {
   return renderHook(() =>
     useDocumentReload<{ title: string }>({
+      editor: EDITOR,
       kind: "sketch",
       path,
       events: ["cutready:sketch-saved"],
@@ -107,6 +109,6 @@ describe("useDocumentReload", () => {
     window.dispatchEvent(new CustomEvent("cutready:sketch-saved"));
     await act(async () => read.resolve({ title: "saved" }));
     expect(apply).toHaveBeenCalledWith({ title: "saved" });
-    expect(installed).toHaveBeenCalledTimes(1);
+    expect(installed).toHaveBeenCalledWith(EDITOR);
   });
 });

@@ -35,6 +35,14 @@ export interface DocumentVersionEntry {
   redirect?: ConflictRedirect;
   /** A conflict reload an editor refused; it runs again after the next save of this document. */
   pendingReload?: () => Promise<void>;
+  /** During a redirect: the editors that show `loaded` from disk again. */
+  installs?: RedirectInstalls;
+}
+
+export interface RedirectInstalls {
+  epoch: number;
+  loaded: SyncedDocument;
+  editors: Set<symbol>;
 }
 
 const entries = new Map<string, DocumentVersionEntry>();
@@ -74,6 +82,12 @@ export function isEntryCurrent(entry: DocumentVersionEntry, root: string | undef
     && entry.root === root
     && entry.generation === currentWorkspaceGeneration()
     && entry.generation !== closingGeneration;
+}
+
+/** The tracked entry of `path` in the project at `root`, without starting one. */
+export function peekDocumentEntry(root: string, path: string): DocumentVersionEntry | undefined {
+  const entry = entries.get(normalizeRelativePath(path));
+  return entry && isEntryCurrent(entry, root) ? entry : undefined;
 }
 
 /** Every entry of the current project. */
