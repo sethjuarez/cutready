@@ -132,6 +132,8 @@ function adoptWhenSettled(entry: DocumentVersionEntry, loaded: SyncedDocument) {
 
 /** An open editor of a document: the main pane's, or one split editor. */
 export type DocumentEditor = symbol;
+/** `rethrow` makes a store save reject on failure, so a draft flush keeps the draft. */
+export interface SaveOptions { rethrow?: boolean }
 /** The main pane's editor; the app store installs the documents it shows. */
 export const MAIN_EDITOR: DocumentEditor = Symbol("main editor");
 const openEditors = new Map<string, Map<DocumentEditor, number>>();

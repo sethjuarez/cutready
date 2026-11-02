@@ -2577,7 +2577,7 @@ Rules:
           previewClassName={`prose-desc min-h-[2rem] rounded-lg border border-transparent px-3 py-2 pr-10 text-sm leading-relaxed text-[rgb(var(--color-text))] transition-colors hover:border-[rgb(var(--color-border))] ${sketchLocked ? "cursor-default" : "cursor-text"}`}
           textareaClassName="w-full resize-none text-sm bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border border-[rgb(var(--color-border))] rounded-lg px-3 py-2 focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 transition-colors"
           onDraftChange={setLocalDesc}
-          onSave={(description) => updateSketch({ description })}
+          onSave={(description, flush) => updateSketch({ description }, { rethrow: flush })}
           draftRef={descDraftRef}
           action={
             <FieldAiButton
@@ -2599,7 +2599,7 @@ Rules:
           <MetadataEditor
             metadata={activeSketch.metadata}
             disabled={sketchLocked}
-            onChange={(metadata) => updateSketch({ metadata })}
+            onChange={(metadata, flush) => updateSketch({ metadata }, { rethrow: flush })}
             draftRef={metaDraftRef}
           />
         </div>

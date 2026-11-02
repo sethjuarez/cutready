@@ -24,7 +24,7 @@ describe("editor draft refs", () => {
 
     await act(async () => ref.current!());
     expect(onChange).toHaveBeenCalledTimes(1);
-    expect(onChange).toHaveBeenCalledWith({ fields: { owner: "b" } });
+    expect(onChange).toHaveBeenCalledWith({ fields: { owner: "b" } }, true);
     expect(ref.current).toBeNull();
 
     // The debounce was cancelled, so the edit isn't saved a second time.
@@ -46,7 +46,7 @@ describe("editor draft refs", () => {
     expect(ref.current).not.toBeNull();
 
     await act(async () => ref.current!());
-    expect(onSave).toHaveBeenLastCalledWith("typed");
+    expect(onSave).toHaveBeenLastCalledWith("typed", true);
     expect(ref.current).toBeNull();
   });
 });

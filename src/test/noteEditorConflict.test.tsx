@@ -1,10 +1,12 @@
-import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ipc = vi.hoisted(() => ({ read: vi.fn(), save: vi.fn(), createCopy: vi.fn() }));
 
+const mockInvoke = vi.hoisted(() => vi.fn());
+
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(() => Promise.resolve([])),
+  invoke: (...args: unknown[]) => mockInvoke(...args),
   Channel: class {},
   convertFileSrc: (path: string) => path,
 }));
@@ -32,6 +34,8 @@ beforeEach(() => {
   ipc.read.mockReset();
   ipc.save.mockReset();
   ipc.createCopy.mockReset();
+  mockInvoke.mockReset();
+  mockInvoke.mockResolvedValue([]);
   useAppStore.setState({
     currentProject: { root: "D:\\demo", name: "demo" } as unknown as ProjectView,
     openTabs: [{ id: `main:note:${PATH}`, type: "note", path: PATH, title: "demo" }],
@@ -85,5 +89,32 @@ describe("main note editor during a conflict", () => {
     await saveDocument("update_note", { relativePath: PATH, content: "after" });
     expect(saves.filter((save) => save.content.includes("typed")).map((save) => save.path)).toEqual([copyPath]);
     expect(saves[saves.length - 1]).toMatchObject({ path: PATH, content: "after", expectedVersion: "h9" });
+  });
+});
+
+describe("main note editor draft flush failures", () => {
+  it("keeps a metadata draft, the typed body and the project when the flush save fails", async () => {
+    const content = "---\nowner: a\n---\nbase";
+    useAppStore.setState({ activeNoteContent: content });
+    ipc.read.mockResolvedValueOnce(note(content, "h0"));
+    await loadDocument("note", PATH);
+    await settle();
+    render(<NoteEditor />);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    ipc.save.mockRejectedValue(new Error("disk full"));
+
+    fireEvent.change(screen.getByLabelText("note markdown"), { target: { value: "typed" } });
+    fireEvent.change(screen.getByLabelText("Metadata value for owner"), { target: { value: "b" } });
+    await act(async () => expect(useAppStore.getState().switchProject("other")).resolves.toBe(false));
+
+    const flushed = "---\nowner: b\n---\ntyped";
+    expect(ipc.save).toHaveBeenCalledWith("update_note", expect.objectContaining({ content: flushed }));
+    expect(mockInvoke).not.toHaveBeenCalledWith("switch_project", expect.anything());
+    expect(useAppStore.getState().currentProject?.root).toBe("D:\\demo");
+
+    // Both the metadata edit and the body it carried are still pending.
+    ipc.save.mockClear();
+    await act(async () => expect(useAppStore.getState().switchProject("other")).resolves.toBe(false));
+    expect(ipc.save).toHaveBeenCalledWith("update_note", expect.objectContaining({ content: flushed }));
   });
 });

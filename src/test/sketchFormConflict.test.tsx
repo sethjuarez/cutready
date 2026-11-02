@@ -3,8 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ipc = vi.hoisted(() => ({ read: vi.fn(), save: vi.fn(), createCopy: vi.fn() }));
 
+const mockInvoke = vi.hoisted(() => vi.fn());
+
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(() => Promise.resolve([])),
+  invoke: (...args: unknown[]) => mockInvoke(...args),
   Channel: class {},
   convertFileSrc: (path: string) => path,
 }));
@@ -33,6 +35,8 @@ beforeEach(() => {
   ipc.read.mockReset();
   ipc.save.mockReset();
   ipc.createCopy.mockReset();
+  mockInvoke.mockReset();
+  mockInvoke.mockResolvedValue([]);
   useAppStore.setState({
     currentProject: { root: "D:\\demo", name: "demo" } as unknown as ProjectView,
     openTabs: [{ id: `main:sketch:${PATH}`, type: "sketch", path: PATH, title: "Demo" }],
@@ -84,5 +88,31 @@ describe("main sketch editor during a conflict", () => {
     await saveDocument("update_sketch_title", { relativePath: PATH, title: "after" });
     expect(saves[saves.length - 1]).toMatchObject({ path: PATH, args: { title: "after", expectedVersion: "h9" } });
     expect(saves.filter((save) => save.args.description === "typed").map((save) => save.path)).toEqual([copyPath]);
+  });
+});
+
+describe("main sketch editor draft flush failures", () => {
+  it("keeps a description draft and the project when its flush save fails", async () => {
+    ipc.read.mockResolvedValueOnce(versioned(sketch("v0", "base"), "h0"));
+    await loadDocument("sketch", PATH);
+    await settle();
+    render(<SketchForm />);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    ipc.save.mockRejectedValue(new Error("disk full"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Sketch description" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Sketch description" }), { target: { value: "typed" } });
+    await act(async () => expect(useAppStore.getState().switchProject("other")).resolves.toBe(false));
+
+    // The flush tried to save the draft, the save failed, and the project change stopped.
+    expect(ipc.save).toHaveBeenCalledWith("update_sketch", expect.objectContaining({ description: "typed" }));
+    expect(mockInvoke).not.toHaveBeenCalledWith("switch_project", expect.anything());
+    expect(useAppStore.getState().currentProject?.root).toBe("D:\\demo");
+
+    // The draft is still pending: the next attempt saves it again.
+    ipc.save.mockClear();
+    await act(async () => expect(useAppStore.getState().switchProject("other")).resolves.toBe(false));
+    expect(ipc.save).toHaveBeenCalledWith("update_sketch", expect.objectContaining({ description: "typed" }));
+    expect(screen.getByRole("textbox", { name: "Sketch description" })).toHaveProperty("value", "typed");
   });
 });

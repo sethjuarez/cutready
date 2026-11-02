@@ -11,7 +11,8 @@ import {
 
 interface MetadataEditorProps {
   metadata?: DocumentMetadata | null;
-  onChange: (metadata: DocumentMetadata) => void | Promise<void>;
+  /** `flush` is true when a draft flush saves the edit; the save should then reject on failure. */
+  onChange: (metadata: DocumentMetadata, flush?: boolean) => void | Promise<void>;
   disabled?: boolean;
   /** Set while a field edit waits for its debounce, so the owner can treat it as pending and flush it. */
   draftRef?: DraftFlushRef;
@@ -46,18 +47,29 @@ export function MetadataEditor({ metadata, onChange, disabled = false, draftRef 
   const commitFields = (next: Record<string, string>, immediate = false) => {
     pendingFieldsRef.current = next;
     if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
-    const commit = async () => {
+    const commit = async (flush = false) => {
       if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
       commitTimerRef.current = null;
       pendingFieldsRef.current = null;
-      if (draftRefRef.current?.current === commit) draftRefRef.current.current = null;
-      await onChangeRef.current(normalizeMetadata({ fields: next }));
+      if (draftRefRef.current?.current === flushNow) draftRefRef.current.current = null;
+      try {
+        const metadata = normalizeMetadata({ fields: next });
+        await (flush ? onChangeRef.current(metadata, true) : onChangeRef.current(metadata));
+      } catch (err) {
+        // Keep the edit pending unless a newer one replaced it.
+        if (pendingFieldsRef.current === null) {
+          pendingFieldsRef.current = next;
+          if (draftRefRef.current) draftRefRef.current.current = flushNow;
+        }
+        throw err;
+      }
     };
-    if (draftRefRef.current) draftRefRef.current.current = commit;
+    const flushNow = () => commit(true);
+    if (draftRefRef.current) draftRefRef.current.current = flushNow;
     if (immediate) {
-      void commit();
+      commit().catch(() => {});
     } else {
-      commitTimerRef.current = setTimeout(() => void commit(), 500);
+      commitTimerRef.current = setTimeout(() => commit().catch(() => {}), 500);
     }
   };
 

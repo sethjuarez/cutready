@@ -19,7 +19,8 @@ interface InlineDescriptionEditorProps {
   textareaClassName?: string;
   action?: ReactNode;
   onDraftChange: (value: string) => void;
-  onSave: (value: string) => void | Promise<void>;
+  /** `flush` is true when a draft flush saves the value; the save should then reject on failure. */
+  onSave: (value: string, flush?: boolean) => void | Promise<void>;
   onEditingChange?: (editing: boolean) => void;
   draftRef?: DraftFlushRef;
 }
@@ -46,7 +47,7 @@ export function InlineDescriptionEditor({
   const pendingRef = useRef<string | null>(null);
   const savedValueRef = useRef(value);
   const editingRef = useRef(editing);
-  const saveDraftRef = useRef<(exitAfterSave: boolean) => Promise<boolean>>(async () => true);
+  const saveDraftRef = useRef<(exitAfterSave: boolean, flush?: boolean) => Promise<boolean>>(async () => true);
   const cursorRef = useRef<number | null>(null);
   const draftRefRef = useRef(draftRef);
   draftRefRef.current = draftRef;
@@ -55,7 +56,7 @@ export function InlineDescriptionEditor({
     pendingRef.current = next;
     if (!draftRefRef.current) return;
     draftRefRef.current.current = next === null ? null : async () => {
-      if (!(await saveDraftRef.current(false))) throw new Error("Couldn't save the description");
+      if (!(await saveDraftRef.current(false, true))) throw new Error("Couldn't save the description");
     };
   }, []);
 
@@ -110,7 +111,7 @@ export function InlineDescriptionEditor({
     cursorRef.current = null;
   }, [value]);
 
-  const saveDraft = useCallback(async (exitAfterSave: boolean) => {
+  const saveDraft = useCallback(async (exitAfterSave: boolean, flush = false) => {
     clearSaveTimer();
     const nextValue = pendingRef.current ?? value;
     setPending(null);
@@ -122,7 +123,7 @@ export function InlineDescriptionEditor({
 
     setStatus("saving");
     try {
-      await onSave(nextValue);
+      await (flush ? onSave(nextValue, true) : onSave(nextValue));
       savedValueRef.current = nextValue;
       setStatus("saved");
       if (exitAfterSave) setEditingState(false);

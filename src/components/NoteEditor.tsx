@@ -167,7 +167,7 @@ export function NoteEditor() {
   }), [activeNotePath, activeNoteLocked]);
 
   const handleMetadataChange = useCallback(
-    (metadata: Parameters<typeof serializeNoteDocument>[0]) => {
+    (metadata: Parameters<typeof serializeNoteDocument>[0], flush = false) => {
       if (activeNoteLocked) return;
       const currentDocument = parseNoteDocument(pendingContentRef.current ?? activeNoteContent ?? "");
       const nextContent = serializeNoteDocument(metadata, currentDocument.body);
@@ -176,7 +176,11 @@ export function NoteEditor() {
         clearTimeout(saveTimeoutRef.current);
         saveTimeoutRef.current = null;
       }
-      return updateNoteRef.current(nextContent);
+      return updateNoteRef.current(nextContent, { rethrow: flush }).catch((err) => {
+        // The failed save carried the pending body too; keep it.
+        pendingContentRef.current ??= nextContent;
+        throw err;
+      });
     },
     [activeNoteLocked, activeNoteContent],
   );

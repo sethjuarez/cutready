@@ -13,7 +13,7 @@ import {
 } from "../services/draftlineErrors";
 import { recordActivityEntries } from "../services/telemetry";
 import { useToastStore } from "./toastStore";
-import { beginProjectChange, loadDocument, MAIN_EDITOR, readDocument, saveDocument } from "../services/documentSaves";
+import { beginProjectChange, isHandledSaveError, loadDocument, MAIN_EDITOR, readDocument, saveDocument, type SaveOptions } from "../services/documentSaves";
 import { getStoryboardSketchPaths } from "../utils/storyboard";
 import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
 import type {
@@ -317,7 +317,7 @@ export interface AppStoreState {
   /** Open a sketch for editing by path. */
   openSketch: (sketchPath: string) => Promise<void>;
   /** Update the active sketch (description and/or rows). */
-  updateSketch: (update: { description?: unknown; rows?: import("../types/sketch").PlanningRow[]; metadata?: import("../types/sketch").DocumentMetadata }) => Promise<void>;
+  updateSketch: (update: { description?: unknown; rows?: import("../types/sketch").PlanningRow[]; metadata?: import("../types/sketch").DocumentMetadata }, options?: SaveOptions) => Promise<void>;
   /** Update a sketch's title. */
   updateSketchTitle: (sketchPath: string, title: string) => Promise<void>;
   /** Delete a sketch. */
@@ -359,7 +359,7 @@ export interface AppStoreState {
   /** Open a note for editing by path. */
   openNote: (notePath: string) => Promise<void>;
   /** Update the active note content. */
-  updateNote: (content: string) => Promise<void>;
+  updateNote: (content: string, options?: SaveOptions) => Promise<void>;
   /** Lock or unlock a note. */
   setNoteLocked: (notePath: string, locked: boolean) => Promise<void>;
   /** Delete a note. */
@@ -1328,7 +1328,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
-  updateSketch: async (update) => {
+  updateSketch: async (update, options) => {
     const { activeSketchPath } = get();
     if (!activeSketchPath) return;
     if (shouldSuppressEditorFlush(activeSketchPath)) return;
@@ -1342,6 +1342,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await useVersioningStore.getState().refreshChangedFiles();
     } catch (err) {
       console.error("Failed to update sketch:", err);
+      if (options?.rethrow && !isHandledSaveError(err)) throw err;
     }
   },
 
@@ -1651,7 +1652,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
-  updateNote: async (content) => {
+  updateNote: async (content, options) => {
     const { activeNotePath, activeNoteLocked } = get();
     if (!activeNotePath) return;
     if (shouldSuppressEditorFlush(activeNotePath)) return;
@@ -1664,15 +1665,14 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       await useVersioningStore.getState().refreshChangedFiles();
     } catch (err) {
       console.error("Failed to update note:", err);
+      if (options?.rethrow && !isHandledSaveError(err)) throw err;
     }
   },
 
   setNoteLocked: async (notePath, locked) => {
     try {
       const lock = await invoke<{ locked: boolean }>("set_note_lock", { relativePath: notePath, locked });
-      if (get().activeNotePath === notePath) {
-        set({ activeNoteLocked: lock.locked });
-      }
+      if (get().activeNotePath === notePath) set({ activeNoteLocked: lock.locked });
     } catch (err) {
       console.error("Failed to update note lock:", err);
     }
