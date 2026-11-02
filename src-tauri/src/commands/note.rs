@@ -136,6 +136,9 @@ fn update_note_at(
     base: Option<(String, String)>,
     content: String,
 ) -> Result<Versioned<String>, CmdError> {
+    if base.is_none() && document_writer::is_chat_artifact(std::path::Path::new(rel)) {
+        return Ok(document_writer::create_chat_artifact(root, rel, &content)?);
+    }
     let write = json!({ "kind": "write_note", "content": content });
     match base {
         Some((version, base)) => Ok(document_writer::save(root, rel, &version, &base, &[write])?),
@@ -456,6 +459,32 @@ mod tests {
         );
         save(root, "x").unwrap();
         assert_eq!(note(root), "x");
+    }
+
+    #[test]
+    fn a_promoted_chat_is_created_once_and_deletes() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let rel = "chat-artifacts/plan-20260101120000.cv";
+        let content = "{\n  \"title\": \"Plan\"\n}\n";
+
+        let created = update_note_at(root, rel, None, content.into()).unwrap();
+
+        assert_eq!(std::fs::read_to_string(root.join(rel)).unwrap(), content);
+        assert_eq!(
+            created.version,
+            cutready_core::edit_ops::document_version(content.as_bytes())
+        );
+        assert_eq!(
+            update_note_at(root, rel, None, "{}".into())
+                .unwrap_err()
+                .message,
+            format!("File already exists: {rel}")
+        );
+        assert_eq!(std::fs::read_to_string(root.join(rel)).unwrap(), content);
+
+        project::delete_note(&root.join(rel), root).unwrap();
+        assert!(!root.join(rel).exists());
     }
 
     #[test]

@@ -1,4 +1,5 @@
-//! The desktop's single write path for project documents (`.sk`, `.sb`, `.md`).
+//! The desktop's single write path for project documents (`.sk`, `.sb`, `.md`),
+//! plus promoted chats (`.cv`), which are created whole.
 //!
 //! Every edit is a run-scoped transaction through
 //! `cutready_core::edit_session::EditSession`: the repository write lock
@@ -23,7 +24,7 @@ use cutready_core::edit_session::{
     EditSession, NoteLockPolicy, RebaseError, Reconciled, ReviewError, USER_ACTOR,
 };
 use cutready_core::models::sketch::{Sketch, Storyboard};
-use cutready_core::{OpLogStore, PortError, PortErrorKind};
+use cutready_core::{Files, OpLogStore, PortError, PortErrorKind};
 use cutready_desktop_io::{SqliteOpLogStore, StdFiles, SystemClock};
 use serde_json::{json, Value};
 
@@ -329,6 +330,42 @@ pub fn create_from_text(
     Ok(written.into())
 }
 
+/// Whether `path` is a promoted chat (`.cv`). Chat artifacts are written
+/// whole by [`create_chat_artifact`], not edited through ops.
+pub fn is_chat_artifact(path: &Path) -> bool {
+    path.extension().and_then(|ext| ext.to_str()) == Some("cv")
+}
+
+/// A promoted chat at `rel` holding `content`. It isn't an edit-op
+/// document, so it skips the op log, but it takes the repository write lock
+/// and writes atomically. Refuses when the file exists.
+pub fn create_chat_artifact(
+    root: &Path,
+    rel: &str,
+    content: &str,
+) -> Result<Versioned<String>, WriteError> {
+    let abs = project::safe_resolve(root, rel)?;
+    if !is_chat_artifact(&abs) {
+        return Err(
+            ProjectError::Invalid(format!("Not a chat artifact: {}", abs.display())).into(),
+        );
+    }
+    let rel = relative(root, &abs)?;
+    let _guard = write_lock::lock(root).map_err(ProjectError::Io)?;
+    let files = StdFiles::new(root);
+    if files.exists(Path::new(&rel))? {
+        return Err(ProjectError::Invalid(format!("File already exists: {rel}")).into());
+    }
+    files.write_atomic(Path::new(&rel), content.as_bytes())?;
+    Ok(Versioned {
+        document: content.to_string(),
+        content: content.to_string(),
+        version: edit_ops::document_version(content.as_bytes()),
+        merged: false,
+        synced: None,
+    })
+}
+
 /// Why an app save wrote nothing.
 #[derive(Debug, thiserror::Error)]
 pub enum SaveError {
@@ -374,7 +411,9 @@ pub fn save(
 /// it never interleaves with another process's write. A missing file is
 /// already deleted. Not yet logged: review of deletes arrives with Keep/Undo.
 pub fn delete(root: &Path, path: &Path) -> Result<(), WriteError> {
-    kind_of(path)?;
+    if !is_chat_artifact(path) {
+        kind_of(path)?;
+    }
     let _guard = write_lock::lock(root).map_err(ProjectError::Io)?;
     match std::fs::remove_file(path) {
         Ok(()) => Ok(()),
