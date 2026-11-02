@@ -142,7 +142,7 @@ export function NoteEditor() {
     [activeNoteLocked, activeNotePath, noteDocument.metadata],
   );
 
-  useEffect(() => registerDocumentEditor(activeNotePath, MAIN_EDITOR), [activeNotePath]);
+  useEffect(() => registerDocumentEditor(activeNotePath, MAIN_EDITOR, () => pendingContentRef.current !== null), [activeNotePath]);
 
   useEffect(() => registerEditorFlush(async () => {
     const content = pendingContentRef.current;

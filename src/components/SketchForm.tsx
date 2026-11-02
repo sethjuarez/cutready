@@ -1139,7 +1139,7 @@ export function SketchForm() {
     pendingRowsRef.current ??= rows;
     throw new Error("Couldn't save pending sketch changes");
   }), [flushPendingSketchEdits]);
-  useEffect(() => registerDocumentEditor(activeSketchPath, MAIN_EDITOR), [activeSketchPath]);
+  useEffect(() => registerDocumentEditor(activeSketchPath, MAIN_EDITOR, () => pendingTitleRef.current !== null || pendingRowsRef.current !== null), [activeSketchPath]);
 
   // Reset local state when switching sketches; flush pending debounced saves by their captured path first.
   useEffect(() => {

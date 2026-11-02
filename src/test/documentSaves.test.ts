@@ -639,6 +639,28 @@ describe("conflict redirects with the document open in both panes", () => {
     expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: "demo.sk", expectedVersion: "h9" }));
   });
 
+  it("doesn't count an editor that never answered the reload", async () => {
+    unregister = [registerDocumentEditor("demo.sk", MAIN_EDITOR)];
+    await openSketch(sketch("v0"), "h0");
+    ipc.save.mockRejectedValueOnce({ code: "stale_document" });
+    ipc.save.mockImplementation((_: string, args: Record<string, unknown>) =>
+      Promise.resolve(versioned(sketch(String(args.title)), `s${ipc.save.mock.calls.length}`)));
+    ipc.createCopy.mockResolvedValue({ document: "", content: "", version: "c0", merged: false });
+    ipc.read.mockResolvedValue(versioned(sketch("theirs"), "h9"));
+    await expect(saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "mine" })).rejects.toSatisfy(isDocumentConflict);
+    // Nobody refused the reload, but the registered editor didn't acknowledge it either.
+    await vi.waitFor(() => expect(entry().inFlight).toBe(0));
+    await settle();
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "silent" });
+    const copyPath = ipc.createCopy.mock.calls[0][0] as string;
+    expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: copyPath, title: "silent" }));
+
+    (await readDocument<Sketch>("sketch", "demo.sk")).installed(MAIN_EDITOR);
+    await settle();
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "acknowledged" });
+    expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: "demo.sk", expectedVersion: "h9" }));
+  });
+
   it("ends the redirect when the pane that never reloaded closes", async () => {
     const { copyPath, closeSplit, saveTo } = await conflictInBothPanes();
 

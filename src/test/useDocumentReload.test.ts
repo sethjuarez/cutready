@@ -20,6 +20,7 @@ function deferred<T>() {
 const EDITOR = Symbol("split editor");
 let pending = false;
 const apply = vi.fn();
+const acknowledge = vi.fn();
 
 function renderEditor(path = "demo.sk") {
   return renderHook(() =>
@@ -37,7 +38,7 @@ function renderEditor(path = "demo.sk") {
 const refreshed = (path: string, title: string) =>
   window.dispatchEvent(
     new CustomEvent("cutready:document-refreshed", {
-      detail: { path, document: { title }, content: title, version: title },
+      detail: { path, document: { title }, content: title, version: title, acknowledge },
       cancelable: true,
     }),
   );
@@ -45,6 +46,7 @@ const refreshed = (path: string, title: string) =>
 beforeEach(() => {
   pending = false;
   apply.mockReset();
+  acknowledge.mockReset();
   load.mockReset();
   installed.mockReset();
 });
@@ -54,6 +56,7 @@ describe("useDocumentReload", () => {
     renderEditor();
     expect(refreshed("demo.sk", "disk")).toBe(true);
     expect(apply).toHaveBeenCalledWith({ title: "disk" });
+    expect(acknowledge).toHaveBeenCalledWith(EDITOR);
     expect(load).not.toHaveBeenCalled();
   });
 
@@ -63,6 +66,7 @@ describe("useDocumentReload", () => {
     expect(refreshed("demo.sk", "disk")).toBe(false);
     expect(refreshed("other.sk", "disk")).toBe(true);
     expect(apply).not.toHaveBeenCalled();
+    expect(acknowledge).not.toHaveBeenCalled();
   });
 
   it("drops a delayed read when typing happens after the reload event", async () => {

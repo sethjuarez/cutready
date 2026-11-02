@@ -35,10 +35,15 @@ export const INSTALL_SETTLE_MS = 100;
 export const SETTLE_TIMEOUT_MS = 5000;
 const MAX_COPY_ATTEMPTS = 50;
 
-/** Detail of `cutready:document-refreshed`; cancel the event to keep unsaved edits shown. */
+/**
+ * Detail of `cutready:document-refreshed`. Every editor of `path` either
+ * cancels the event to keep its unsaved edits shown, or shows `document` and
+ * calls `acknowledge` with its identity.
+ */
 export interface DocumentRefreshedDetail extends SyncedDocument {
   path: string;
   document: unknown;
+  acknowledge: (editor: DocumentEditor) => void;
 }
 
 /** A save that couldn't merge with changes made elsewhere; its edits are in `copyPath`. */
@@ -136,15 +141,25 @@ const editorsOf = (path: string) => Array.from(openEditors.get(normalizeRelative
 /**
  * Counts `editor` as showing `path` until the returned function is called.
  * A conflict redirect ends only once every editor showing the document has
- * installed it from disk; an editor that closes no longer counts.
+ * installed it from disk; an editor that closes no longer counts. With
+ * `hasPending`, the editor answers refreshes here: it refuses while it has
+ * unsaved edits and otherwise accepts (the app store shows the document).
  */
-export function registerDocumentEditor(path: string | null, editor: DocumentEditor): () => void {
+export function registerDocumentEditor(path: string | null, editor: DocumentEditor, hasPending?: () => boolean): () => void {
   if (!path) return () => undefined;
   const key = normalizeRelativePath(path);
   const counts = openEditors.get(key) ?? new Map<DocumentEditor, number>();
   openEditors.set(key, counts);
   counts.set(editor, (counts.get(editor) ?? 0) + 1);
+  const refreshed = (event: Event) => {
+    const detail = (event as CustomEvent<DocumentRefreshedDetail>).detail;
+    if (!detail || normalizeRelativePath(detail.path) !== key) return;
+    if (hasPending?.()) event.preventDefault();
+    else detail.acknowledge(editor);
+  };
+  if (hasPending) window.addEventListener("cutready:document-refreshed", refreshed);
   return () => {
+    if (hasPending) window.removeEventListener("cutready:document-refreshed", refreshed);
     const count = (counts.get(editor) ?? 1) - 1;
     if (count > 0) counts.set(editor, count);
     else counts.delete(editor);
@@ -155,18 +170,17 @@ export function registerDocumentEditor(path: string | null, editor: DocumentEdit
 }
 
 /**
- * Records that `editor` (null: every open editor, as a refresh shows it in all
- * of them) shows `loaded` from disk. Acknowledgements of another version
- * start over, so every editor must show the same one.
+ * Records that `editors` show `loaded` from disk. Acknowledgements of another
+ * version start over, so every editor must show the same one.
  */
-function acknowledgeInstall(entry: DocumentVersionEntry, path: string, loaded: SyncedDocument, editor: DocumentEditor | null) {
+function acknowledgeInstall(entry: DocumentVersionEntry, path: string, loaded: SyncedDocument, editors: Iterable<DocumentEditor>) {
   if (!isRedirected(entry)) return;
   const prior = entry.installs;
   const installs: RedirectInstalls = prior?.epoch === entry.epoch && prior.loaded.version === loaded.version
     ? prior
     : { epoch: entry.epoch, loaded, editors: new Set() };
   entry.installs = installs;
-  for (const each of editor ? [editor] : editorsOf(path)) installs.editors.add(each);
+  for (const editor of editors) installs.editors.add(editor);
   scheduleRedirectEnd(entry, path);
 }
 
@@ -205,7 +219,7 @@ export async function readDocument<T>(kind: DocumentKind, relativePath: string):
   return {
     document: loaded.document,
     installed: (editor) => {
-      if (entry.epoch === epoch && isEntryCurrent(entry, root)) acknowledgeInstall(entry, relativePath, loaded, editor);
+      if (entry.epoch === epoch && isEntryCurrent(entry, root)) acknowledgeInstall(entry, relativePath, loaded, [editor]);
     },
   };
 }
@@ -376,10 +390,11 @@ async function reloadAfterConflict(entry: DocumentVersionEntry, path: string, co
     ensureCurrent(entry, path);
     if (entry.epoch !== epoch) return;
     entry.loadGeneration += 1;
-    const installed = install(kind, path, reloaded);
-    if (installed) {
+    const accepted = install(kind, path, reloaded);
+    const installed = accepted !== null;
+    if (accepted) {
       // Saves made before the editors show the reload still go to the copy.
-      acknowledgeInstall(entry, path, reloaded, null);
+      acknowledgeInstall(entry, path, reloaded, accepted);
     } else {
       // Set before flushing: the editors' saves queue now and the retry runs after them.
       entry.pendingReload = () => reloadAfterConflict(entry, path, copyPath, epoch, false);
@@ -401,13 +416,21 @@ async function reloadAfterConflict(entry: DocumentVersionEntry, path: string, co
 }
 
 /**
- * Shows a document read from disk in the editors that have it open. An editor
- * with unsaved edits may cancel to keep them on screen; then nothing is
- * installed and this returns false.
+ * Shows a document read from disk in the editors that have it open, and
+ * returns the editors that acknowledged showing it. An editor with unsaved
+ * edits may cancel to keep them on screen; then nothing is installed and this
+ * returns null.
  */
-function install(kind: DocumentKind, path: string, loaded: Versioned<unknown>): boolean {
-  const detail: DocumentRefreshedDetail = { path, document: loaded.document, content: loaded.content, version: loaded.version };
-  if (!window.dispatchEvent(new CustomEvent("cutready:document-refreshed", { detail, cancelable: true }))) return false;
+function install(kind: DocumentKind, path: string, loaded: Versioned<unknown>): Set<DocumentEditor> | null {
+  const accepted = new Set<DocumentEditor>();
+  const detail: DocumentRefreshedDetail = {
+    path,
+    document: loaded.document,
+    content: loaded.content,
+    version: loaded.version,
+    acknowledge: (editor) => accepted.add(editor),
+  };
+  if (!window.dispatchEvent(new CustomEvent("cutready:document-refreshed", { detail, cancelable: true }))) return null;
   const app = useAppStore.getState();
   if (kind === "sketch" && app.activeSketchPath === path) {
     useAppStore.setState({ activeSketch: loaded.document as typeof app.activeSketch });
@@ -416,7 +439,7 @@ function install(kind: DocumentKind, path: string, loaded: Versioned<unknown>): 
   } else if (kind === "note" && app.activeNotePath === path) {
     useAppStore.setState({ activeNoteContent: loaded.content });
   }
-  return true;
+  return accepted;
 }
 
 function openDocumentPaths(): string[] {
@@ -445,9 +468,10 @@ async function refreshDocument(path: string) {
     if (entry.editRevision !== editRevision || entry.loadGeneration !== loadGeneration || !isClean(entry)) continue;
     entry.loadGeneration += 1;
     // An editor that kept its unsaved edits saves them against the old base, which merges.
-    if (install(kind, path, loaded)) {
+    const accepted = install(kind, path, loaded);
+    if (accepted) {
       adoptWhenSettled(entry, loaded);
-      acknowledgeInstall(entry, path, loaded, null);
+      acknowledgeInstall(entry, path, loaded, accepted);
     }
     return;
   }

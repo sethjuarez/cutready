@@ -58,6 +58,7 @@ export function useDocumentReload<T>({ editor, kind, path, events, accepts, hasP
       }
       editGeneration.current += 1;
       latest.current.apply(detail.document as T);
+      detail.acknowledge(editor);
     };
     for (const name of events) window.addEventListener(name, reload);
     window.addEventListener("cutready:document-refreshed", refreshed);
