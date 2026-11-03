@@ -112,7 +112,6 @@ export function PlanningRowCard({
   };
 
   const accentColor = getRowColor(idx);
-  const rowBg = idx % 2 === 0 ? "rgb(var(--color-surface-alt))" : "rgb(var(--color-surface-inset))";
 
   const confirmRemoveScreenshot = async () => {
     const confirmed = await confirm({
@@ -136,11 +135,14 @@ export function PlanningRowCard({
 
   return (
     <>
-    <tr
+    <div
       ref={setNodeRef}
+      role="listitem"
+      data-planning-row=""
+      data-readonly={readOnly || undefined}
       data-testid={`planning-row-${idx + 1}`}
-      style={{ ...style, backgroundColor: isHighlighted ? undefined : rowBg }}
-      className={`card-row group hover:shadow-sm ${isSorting ? "" : "transition-all"} ${isHighlighted ? "ai-highlight-row" : ""} ${rowLocked ? "ring-1 ring-[rgb(var(--color-warning))]/15" : ""}`}
+      style={style}
+      className={`planning-grid planning-card group ${isSorting ? "" : "transition-[box-shadow,border-color] duration-fast ease-fluent"} ${isHighlighted ? "ai-highlight-row" : ""} ${rowLocked ? "planning-card-locked" : ""}`}
       onKeyDown={(e) => {
         if (readOnly) return;
         // Ctrl+Enter → add row below
@@ -150,8 +152,8 @@ export function PlanningRowCard({
           addRow(idx);
           // Focus first editable cell in new row on next tick
           requestAnimationFrame(() => {
-            const tr = (e.target as HTMLElement).closest("tr");
-            const nextRow = tr?.nextElementSibling;
+            const card = (e.target as HTMLElement).closest("[data-planning-row]");
+            const nextRow = card?.nextElementSibling;
             const cell = nextRow?.querySelector<HTMLElement>("input:not([readonly]), [data-cell]");
             cell?.focus();
           });
@@ -166,16 +168,17 @@ export function PlanningRowCard({
         }
       }}
     >
+      <span aria-hidden="true" className="absolute inset-y-3 left-0 w-[3px] rounded-r" style={{ background: accentColor }} />
       {!readOnly && (
-        <td className="p-0 align-middle" style={{ borderLeft: `3px solid ${accentColor}` }}>
+        <div style={{ gridArea: "handle" }} className="flex justify-center pt-2">
           <div
-            className={`${hasAnyLock(row) ? "cursor-default text-[rgb(var(--color-warning))]" : "cursor-grab active:cursor-grabbing text-[rgb(var(--color-text-secondary))]"} flex items-center justify-center h-full`}
+            className={`${hasAnyLock(row) ? "cursor-default text-[rgb(var(--color-warning))]" : "cursor-grab active:cursor-grabbing text-[rgb(var(--color-text-secondary))]"} flex h-6 w-6 items-center justify-center rounded-control focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]`}
             {...attributes}
             {...listeners}
             aria-label={`Move row ${idx + 1}`}
           >
             {/* Row number (visible by default), drag icon on hover */}
-            <span className="text-[0.625rem] font-medium opacity-40 group-hover:hidden">{rowLocked ? <Lock className="w-3 h-3 opacity-80" /> : idx + 1}</span>
+            <span className="text-xs font-medium tabular-nums group-hover:hidden">{rowLocked ? <Lock className="w-3 h-3 opacity-80" /> : idx + 1}</span>
             {!hasAnyLock(row) && <svg className="hidden group-hover:block opacity-50 hover:opacity-100 transition-opacity" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
               <circle cx="9" cy="5" r="1.5" />
               <circle cx="15" cy="5" r="1.5" />
@@ -185,9 +188,9 @@ export function PlanningRowCard({
               <circle cx="15" cy="19" r="1.5" />
             </svg>}
           </div>
-        </td>
+        </div>
       )}
-      <td className="py-2 px-1.5 align-top text-[0.8125rem]" style={readOnly ? { borderLeft: `3px solid ${accentColor}` } : undefined}>
+      <div style={{ gridArea: "time" }} className="min-w-0 py-2">
         <div data-tab-cell={idx * 3} className="relative group/cell">
           <LocalInput
             value={row.time}
@@ -204,8 +207,9 @@ export function PlanningRowCard({
             </CellActionRail>
           )}
         </div>
-      </td>
-      <td className="script-table-td align-top overflow-hidden">
+      </div>
+      <div style={{ gridArea: "narr" }} className="script-table-td min-w-0">
+        <span aria-hidden="true" className="planning-field-label">Narrative</span>
         <div data-tab-cell={idx * 3 + 1} className="relative group/cell">
           <MarkdownCell
             value={row.narrative}
@@ -229,8 +233,9 @@ export function PlanningRowCard({
             </CellActionRail>
           )}
         </div>
-      </td>
-      <td className="script-table-td align-top overflow-hidden">
+      </div>
+      <div style={{ gridArea: "act" }} className="script-table-td min-w-0 text-[rgb(var(--color-text-secondary))]">
+        <span aria-hidden="true" className="planning-field-label">Actions</span>
         <div data-tab-cell={idx * 3 + 2} className="relative group/cell">
           <MarkdownCell
             value={row.demo_actions}
@@ -254,8 +259,9 @@ export function PlanningRowCard({
             </CellActionRail>
           )}
         </div>
-      </td>
-      <td className="script-table-td align-top">
+      </div>
+      <div style={{ gridArea: "assets" }} role="group" aria-label={`Row ${idx + 1} assets`} className="script-table-td min-w-0">
+        <span aria-hidden="true" className="planning-field-label">Assets</span>
         <div className="flex min-h-8 w-full flex-col items-stretch gap-2">
           {row.screenshot ? (
             <div className="relative group/ss h-24 w-full rounded-md bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] overflow-hidden cursor-pointer"
@@ -496,10 +502,10 @@ export function PlanningRowCard({
             )}
           </div>
         </div>
-      </td>
+      </div>
       {!readOnly && (
-        <td className="p-1 align-top">
-          <div className={`flex flex-col gap-0.5 transition-opacity ${rowLocked ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+        <div style={{ gridArea: "ctl" }} className="py-2">
+          <div className={`flex flex-col items-center gap-0.5 transition-opacity duration-fast ${rowLocked ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"}`}>
             {onRowLockChange && (
               <button
                 onClick={() => onRowLockChange(idx, !rowLocked)}
@@ -531,14 +537,12 @@ export function PlanningRowCard({
               <X className="w-3 h-3" />
             </button>}
           </div>
-        </td>
+        </div>
       )}
-    </tr>
-    {/* AI diff strip — shows inline diffs below changed rows */}
-    {isHighlighted && rowDiff && diffExpanded && (
-      <tr>
-        <td colSpan={readOnly ? 4 : 6} className="p-0">
-          <div className="ai-diff-strip mx-2 mb-1 px-3 py-2 rounded-b-lg text-xs">
+      {/* AI diff strip — shows inline diffs below changed rows */}
+      {isHighlighted && rowDiff && diffExpanded && (
+        <div style={{ gridColumn: "1 / -1" }} className="pb-1 pl-3 pr-2">
+          <div className="ai-diff-strip rounded-control px-3 py-2 text-xs">
             <div className="flex items-center justify-between mb-1">
               <span className="font-medium text-[rgb(var(--color-accent))] flex items-center gap-1.5">
                 <Sparkles className="w-3 h-3" />
@@ -563,9 +567,9 @@ export function PlanningRowCard({
               </div>
             ))}
           </div>
-        </td>
-      </tr>
-    )}
+        </div>
+      )}
+    </div>
     {confirmationDialog}
     </>
   );

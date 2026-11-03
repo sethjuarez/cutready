@@ -17,6 +17,7 @@ import {
 import { invoke } from "../services/tauri";
 import {
   Eye,
+  Plus,
   X,
   Sparkles,
   Check,
@@ -272,7 +273,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
       const cellIdx = focusCellAfterRender.current;
       focusCellAfterRender.current = null;
       requestAnimationFrame(() => {
-        const table = document.querySelector(".script-table-wrapper table");
+        const table = document.querySelector(".script-table-wrapper");
         if (!table) return;
         const cell = table.querySelector<HTMLElement>(`[data-tab-cell="${cellIdx}"]`);
         if (!cell) return;
@@ -648,7 +649,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
   if (rows.length === 0) return null;
 
   return (
-    <div className={`script-table-wrapper overflow-x-auto overflow-y-visible${readOnly ? "" : " my-4"}`}>
+    <div className={`script-table-wrapper${readOnly ? "" : " my-4"}`}>
       {/* Re-show last AI changes button */}
       {hasLastAiDiffs && onReShowHighlights && (
         <div className="flex justify-end px-1 pb-1.5">
@@ -664,9 +665,9 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
         </div>
       )}
       {rows.length === 1 && !rows[0].time && !rows[0].narrative && !rows[0].demo_actions && !readOnly && (
-        <div className="mb-3 px-4 py-3 rounded-lg bg-[rgb(var(--color-accent))]/5 border border-[rgb(var(--color-accent))]/15 text-xs text-[rgb(var(--color-text-secondary))] leading-relaxed">
+        <div className="mb-3 rounded-card border border-[rgb(var(--color-accent))]/15 bg-[rgb(var(--color-accent))]/5 px-4 py-3 text-sm leading-relaxed text-[rgb(var(--color-text-secondary))]">
           <p className="font-medium text-[rgb(var(--color-text))] mb-1.5">Plan your demo scene</p>
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
             <div><span className="font-medium text-[rgb(var(--color-text))]">Time</span> — Duration or timestamp</div>
             <div><span className="font-medium text-[rgb(var(--color-text))]">Narrative</span> — What you&apos;ll say</div>
             <div><span className="font-medium text-[rgb(var(--color-text))]">Actions</span> — What happens on screen</div>
@@ -680,88 +681,77 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
         onDragEnd={handleDragEnd}
       >
         <SortableContext items={rowIds} strategy={verticalListSortingStrategy}>
-          <table className="w-full min-w-[640px]" style={{ tableLayout: "fixed", borderSpacing: "0 4px", borderCollapse: "separate" }}>
-            <colgroup>
-              {!readOnly && <col style={{ width: 28 }} />}
-              <col style={{ width: 72 }} />
-              <col />
-              <col />
-              <col style={{ width: 210 }} />
-              {!readOnly && <col style={{ width: 36 }} />}
-            </colgroup>
-            <thead>
-              <tr>
-                {!readOnly && <th className="script-table-th" />}
-                <th className="script-table-th">Time</th>
-                <th className="script-table-th">Narrative</th>
-                <th className="script-table-th">Actions</th>
-                <th className="script-table-th">Assets</th>
-                {!readOnly && <th className="script-table-th" />}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, idx) => (
-                <PlanningRowCard
-                  key={rowIds[idx]}
-                  id={rowIds[idx]}
-                  row={row}
-                  idx={idx}
-                  readOnly={readOnly}
-                  updateRow={updateRow}
-                  addRow={addRow}
-                  deleteRow={deleteRow}
-                  isDragging={activeIdx === idx}
-                  isLastRow={idx === rows.length - 1}
-                  onCaptureScreenshot={onCaptureScreenshot}
-                  onPasteImage={onPasteImage}
-                  onPickImage={onPickImage}
-                  onBrowseImage={onBrowseImage}
-                  onSparkle={onSparkle}
-                  onGenerateVisual={onGenerateVisual}
-                  onRemoveVisual={removeVisual}
-                  onRemoveNarration={removeNarration}
-                  projectRoot={projectRoot}
-                  sketchPath={sketchPath}
-                  onImageClick={(src, rowIndex) => setLightboxImage({ src, rowIndex })}
-                  onVisualClick={(visualPath, rowIdx) => setVisualLightbox({ visualPath, rowIndex: rowIdx })}
-                  isHighlighted={highlightedRows?.has(idx) ?? false}
-                  rowDiff={rowDiffs?.find((d) => d.rowIndex === idx)}
-                  onDismissHighlight={onDismissHighlights}
-                  visualVersion={visualVersion}
-                  onRowLockChange={onRowLockChange}
-                  onCellLockChange={onCellLockChange}
-                  onStartNarrationRecording={onStartNarrationRecording}
-                  onGenerateNarration={onGenerateNarration}
-                  onPickNarration={onPickNarration}
-                  onStopNarrationRecording={onStopNarrationRecording}
-                  narrationRecordingRow={narrationRecordingRow}
-                  narrationSavingRows={narrationSavingRows}
-                />
-              ))}
-            </tbody>
-          </table>
+          <div className="planning-grid planning-grid-head" data-readonly={readOnly || undefined} aria-hidden="true">
+            <span style={{ gridArea: "time" }}>Time</span>
+            <span style={{ gridArea: "narr" }}>Narrative</span>
+            <span style={{ gridArea: "act" }}>Actions</span>
+            <span style={{ gridArea: "assets" }}>Assets</span>
+          </div>
+          <div role="list" aria-label="Planning rows" className="flex flex-col gap-2.5">
+            {rows.map((row, idx) => (
+              <PlanningRowCard
+                key={rowIds[idx]}
+                id={rowIds[idx]}
+                row={row}
+                idx={idx}
+                readOnly={readOnly}
+                updateRow={updateRow}
+                addRow={addRow}
+                deleteRow={deleteRow}
+                isDragging={activeIdx === idx}
+                isLastRow={idx === rows.length - 1}
+                onCaptureScreenshot={onCaptureScreenshot}
+                onPasteImage={onPasteImage}
+                onPickImage={onPickImage}
+                onBrowseImage={onBrowseImage}
+                onSparkle={onSparkle}
+                onGenerateVisual={onGenerateVisual}
+                onRemoveVisual={removeVisual}
+                onRemoveNarration={removeNarration}
+                projectRoot={projectRoot}
+                sketchPath={sketchPath}
+                onImageClick={(src, rowIndex) => setLightboxImage({ src, rowIndex })}
+                onVisualClick={(visualPath, rowIdx) => setVisualLightbox({ visualPath, rowIndex: rowIdx })}
+                isHighlighted={highlightedRows?.has(idx) ?? false}
+                rowDiff={rowDiffs?.find((d) => d.rowIndex === idx)}
+                onDismissHighlight={onDismissHighlights}
+                visualVersion={visualVersion}
+                onRowLockChange={onRowLockChange}
+                onCellLockChange={onCellLockChange}
+                onStartNarrationRecording={onStartNarrationRecording}
+                onGenerateNarration={onGenerateNarration}
+                onPickNarration={onPickNarration}
+                onStopNarrationRecording={onStopNarrationRecording}
+                narrationRecordingRow={narrationRecordingRow}
+                narrationSavingRows={narrationSavingRows}
+              />
+            ))}
+          </div>
         </SortableContext>
         <DragOverlay>
           {activeIdx >= 0 ? (
-            <table className="w-full" style={{ borderCollapse: "separate" }}>
-              <tbody>
-                <tr className="card-row shadow-lg" style={{ backgroundColor: "rgb(var(--color-surface-alt))" }}>
-                  {!readOnly && <td className="p-1 w-7" style={{ borderLeft: `3px solid ${getRowColor(activeIdx)}` }} />}
-                  <td className="script-table-td text-xs" style={{ width: 72 }}>{rows[activeIdx].time}</td>
-                  <td className="script-table-td text-xs">
-                    {rows[activeIdx].narrative || "—"}
-                  </td>
-                  <td className="script-table-td text-xs">
-                    {rows[activeIdx].demo_actions || "—"}
-                  </td>
-                  <td className="script-table-td text-xs text-center">—</td>
-                  {!readOnly && <td className="script-table-td" />}
-                </tr>
-              </tbody>
-            </table>
+            <div
+              className="planning-grid relative rounded-card border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] py-3 text-sm shadow-lg"
+              data-readonly={readOnly || undefined}
+            >
+              <span aria-hidden="true" className="absolute inset-y-3 left-0 w-[3px] rounded-r" style={{ background: getRowColor(activeIdx) }} />
+              <span style={{ gridArea: "time" }} className="font-semibold tabular-nums">{rows[activeIdx].time}</span>
+              <span style={{ gridArea: "narr" }} className="truncate">{rows[activeIdx].narrative || "—"}</span>
+              <span style={{ gridArea: "act" }} className="truncate text-[rgb(var(--color-text-secondary))]">{rows[activeIdx].demo_actions || "—"}</span>
+            </div>
           ) : null}
         </DragOverlay>
       </DndContext>
+      {!readOnly && (
+        <button
+          type="button"
+          onClick={() => addRow(rows.length - 1)}
+          className="mt-2.5 inline-flex h-control items-center gap-1.5 rounded-control px-2.5 text-sm text-[rgb(var(--color-text-secondary))] transition-colors duration-fast hover:bg-fill-hover hover:text-[rgb(var(--color-text))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]"
+        >
+          <Plus className="h-4 w-4" />
+          Add row
+        </button>
+      )}
 
       {/* Lightbox overlay */}
       {lightboxImage && (
