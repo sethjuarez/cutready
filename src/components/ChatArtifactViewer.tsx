@@ -3,7 +3,7 @@ import { Clock, MessageSquareText } from "lucide-react";
 import { invoke } from "../services/tauri";
 import { ChatArtifact } from "../contracts/generated/model/chat-artifact";
 import type { ChatMessage, ChatToolActivity } from "../types/sketch";
-import { MessageRow } from "./ChatPanel";
+import { MessageRow } from "./chat/ChatMessageRow";
 import { ChatArtifactIcon } from "./Icons";
 
 interface ChatArtifactViewerProps {
