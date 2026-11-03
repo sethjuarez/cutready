@@ -21,7 +21,7 @@ export function StatusBar({ onFeedback }: StatusBarProps) {
 
   return (
     <div
-      className="no-select fixed bottom-0 left-0 right-0 z-chrome flex items-center border-t border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] px-3 text-xs text-[rgb(var(--color-text-secondary))]"
+      className="no-select fixed bottom-0 left-0 right-0 z-chrome flex items-center bg-[rgb(var(--color-surface-inset))] px-3 text-xs text-[rgb(var(--color-text-secondary))]"
       style={{ height: "var(--statusbar-height)" }}
     >
       <div className="flex min-w-0 flex-1 items-center gap-2">

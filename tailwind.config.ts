@@ -59,6 +59,9 @@ export default {
         card: "var(--radius-card)",
         pill: "var(--radius-pill)",
       },
+      boxShadow: {
+        layer: "var(--shadow-layer)",
+      },
       transitionDuration: {
         fast: "var(--motion-fast)",
         normal: "var(--motion-normal)",
