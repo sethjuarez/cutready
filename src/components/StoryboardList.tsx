@@ -216,7 +216,7 @@ function VideoImportProgressDialog({
       width={`w-full ${isFailed ? "max-w-lg" : "max-w-md"} mx-4`}
       labelledBy="video-import-progress-title"
     >
-      <div className="cr-modal-surface overflow-hidden rounded-2xl">
+      <div className="cr-modal-surface overflow-hidden">
         <div className="px-5 py-5">
           <div className="flex items-start gap-3">
             <div className="relative grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
@@ -327,7 +327,7 @@ function VideoImportPlanningContextDialog({
       width="w-full max-w-xl mx-4"
       labelledBy="video-import-context-title"
     >
-      <div className="cr-modal-surface overflow-hidden rounded-2xl">
+      <div className="cr-modal-surface overflow-hidden">
         <div className="px-5 py-5">
           <div className="flex items-start gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
@@ -1881,7 +1881,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
       {/* Delete confirmation overlay */}
       {pendingDelete && (
         <div className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center">
-          <div className="cr-modal-surface rounded-xl p-5 max-w-sm mx-4" role="dialog" aria-modal="true" aria-labelledby="delete-asset-title" data-testid="delete-asset-dialog">
+          <div className="cr-modal-surface p-5 max-w-sm mx-4" role="dialog" aria-modal="true" aria-labelledby="delete-asset-title" data-testid="delete-asset-dialog">
             <p id="delete-asset-title" className="text-sm text-[rgb(var(--color-text))] mb-1 font-medium">Delete {deleteAssetLabel(pendingDelete.type)}?</p>
             <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-2">
               "{pendingDelete.title}" will be permanently deleted.
@@ -1974,7 +1974,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
       {/* Transfer warning: moving a sketch used by storyboards */}
       {transferWarning && (
         <div className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center">
-          <div className="cr-modal-surface rounded-xl p-5 max-w-sm mx-4">
+          <div className="cr-modal-surface p-5 max-w-sm mx-4">
             <p className="text-sm text-[rgb(var(--color-text))] mb-2 font-medium">
               Move "{transferWarning.sourceTitle}"?
             </p>
@@ -2012,7 +2012,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
       {/* Transfer conflict: file already exists at destination */}
       {transferConflict && (
         <div className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center">
-          <div className="cr-modal-surface rounded-xl p-5 max-w-sm mx-4">
+          <div className="cr-modal-surface p-5 max-w-sm mx-4">
             <p className="text-sm text-[rgb(var(--color-text))] mb-1 font-medium">File already exists</p>
             <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-3">
               A file with this name already exists in "{transferConflict.destProject.name}". Enter a new name:

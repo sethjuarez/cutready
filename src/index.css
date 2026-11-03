@@ -138,10 +138,96 @@ select option {
   backdrop-filter: blur(4px);
 }
 
-.cr-modal-surface {
-  border: 1px solid rgb(var(--color-border));
-  background: rgb(var(--color-surface));
-  box-shadow: 0 24px 64px rgb(var(--color-overlay-scrim) / 0.22);
+/* Layered so Tailwind radius utilities can still override it. */
+@layer components {
+  .cr-modal-surface {
+    border: 1px solid rgb(var(--color-border));
+    border-radius: var(--radius-card);
+    background: rgb(var(--color-surface));
+    box-shadow: 0 24px 64px rgb(var(--color-overlay-scrim) / 0.22);
+  }
+}
+
+/* Dialog and form buttons: one height, radius and type size everywhere. */
+@layer components {
+  .cr-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: var(--control-height);
+    padding: 0 12px;
+    border-radius: var(--radius-control);
+    border: 1px solid rgb(var(--color-border));
+    background: rgb(var(--color-surface));
+    color: rgb(var(--color-text));
+    font-size: var(--text-sm);
+    line-height: var(--text-sm-lh);
+    font-weight: 500;
+    white-space: nowrap;
+    transition: background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
+  }
+  .cr-btn:hover:not(:disabled) {
+    background: rgb(var(--color-text) / 0.06);
+  }
+  .cr-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .cr-btn-accent {
+    border-color: transparent;
+    background: rgb(var(--color-accent));
+    color: rgb(var(--color-accent-fg));
+    font-weight: 600;
+  }
+  .cr-btn-accent:hover:not(:disabled) {
+    background: rgb(var(--color-accent-hover));
+  }
+  .cr-btn-danger {
+    border-color: transparent;
+    background: rgb(var(--color-error));
+    color: rgb(var(--color-accent-fg));
+    font-weight: 600;
+  }
+  .cr-btn-danger:hover:not(:disabled) {
+    background: rgb(var(--color-error) / 0.85);
+  }
+  .cr-btn-warning {
+    border-color: transparent;
+    background: rgb(var(--color-warning));
+    color: rgb(var(--color-accent-fg));
+    font-weight: 600;
+  }
+  .cr-btn-warning:hover:not(:disabled) {
+    background: rgb(var(--color-warning) / 0.85);
+  }
+  .cr-btn-subtle {
+    border-color: transparent;
+    background: transparent;
+    color: rgb(var(--color-text-secondary));
+  }
+  .cr-btn-subtle:hover:not(:disabled) {
+    color: rgb(var(--color-text));
+  }
+  .cr-input {
+    width: 100%;
+    height: var(--control-height);
+    padding: 0 10px;
+    border-radius: var(--radius-control);
+    border: 1px solid rgb(var(--color-border));
+    border-bottom-color: rgb(var(--color-text-secondary) / 0.8);
+    background: rgb(var(--color-surface));
+    color: rgb(var(--color-text));
+    font-size: var(--text-sm);
+    outline: none;
+    transition: border-color var(--motion-fast) var(--motion-ease);
+  }
+  .cr-input::placeholder {
+    color: rgb(var(--color-text-secondary) / 0.7);
+  }
+  .cr-input:focus {
+    border-bottom: 2px solid rgb(var(--color-accent));
+  }
 }
 
 /* Keyboard-only focus indicators (WCAG 2.4.7) */

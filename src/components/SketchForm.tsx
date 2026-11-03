@@ -390,7 +390,7 @@ function VideoExportReadinessDialog({
       width="w-full max-w-lg mx-4"
       labelledBy="video-export-readiness-title"
     >
-      <div className="cr-modal-surface overflow-hidden rounded-2xl">
+      <div className="cr-modal-surface overflow-hidden">
         <div className="flex items-start gap-3 border-b border-[rgb(var(--color-border))] px-5 py-4">
           <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
             <Film className="h-4 w-4" />
@@ -470,7 +470,7 @@ function VideoExportProgressDialog({
       width="w-full max-w-md mx-4"
       labelledBy="video-export-progress-title"
     >
-      <div className="cr-modal-surface overflow-hidden rounded-2xl">
+      <div className="cr-modal-surface overflow-hidden">
         <div className="px-5 py-5">
           <div className="flex items-start gap-3">
             <div className="relative grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
@@ -530,7 +530,7 @@ function NarrationGenerationProgressDialog({
       width="w-full max-w-md mx-4"
       labelledBy="narration-generation-progress-title"
     >
-      <div className="cr-modal-surface overflow-hidden rounded-2xl">
+      <div className="cr-modal-surface overflow-hidden">
         <div className="px-5 py-5">
           <div className="flex items-start gap-3">
             <div className="relative grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
@@ -613,7 +613,7 @@ export function SketchRowAssetPicker({
         role="dialog"
         aria-modal="true"
         aria-labelledby="sketch-row-asset-picker-title"
-        className="cr-modal-surface rounded-2xl w-full max-h-[calc(100vh-32px)] flex flex-col overflow-hidden"
+        className="cr-modal-surface w-full max-h-[calc(100vh-32px)] flex flex-col overflow-hidden"
         style={{ width: "min(1180px, calc(100vw - 32px))" }}
         onClick={(event) => event.stopPropagation()}
       >
@@ -877,7 +877,7 @@ function SketchRowNarrationPicker({
         role="dialog"
         aria-modal="true"
         aria-labelledby="sketch-row-narration-picker-title"
-        className="cr-modal-surface flex max-h-[calc(100vh-32px)] w-full max-w-3xl flex-col overflow-hidden rounded-xl"
+        className="cr-modal-surface flex max-h-[calc(100vh-32px)] w-full max-w-3xl flex-col overflow-hidden"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 border-b border-[rgb(var(--color-border))] px-5 py-4">
@@ -2825,7 +2825,7 @@ The row already has a visual and design_plan. You may read the sketch for contex
             role="dialog"
             aria-modal="true"
             aria-labelledby="narration-setup-title"
-            className="cr-modal-surface w-full max-w-sm rounded-2xl p-5"
+            className="cr-modal-surface w-full max-w-sm p-5"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start gap-3">
@@ -2868,7 +2868,7 @@ The row already has a visual and design_plan. You may read the sketch for contex
       {/* Visual generation instructions popup */}
       {visualPromptRow !== null && (
         <div className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center" onClick={() => setVisualPromptRow(null)}>
-          <div className="cr-modal-surface rounded-xl w-full max-w-md flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="cr-modal-surface w-full max-w-md flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b border-[rgb(var(--color-border))]">
               <span className="text-sm font-medium text-[rgb(var(--color-text))]">
                 Generate Visual — Row {visualPromptRow + 1}

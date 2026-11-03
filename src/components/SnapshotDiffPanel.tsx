@@ -25,7 +25,7 @@ export function SnapshotDiffPanel() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="snapshot-diff-title"
-        className="cr-modal-surface flex max-h-full w-full max-w-xl flex-col overflow-hidden rounded-2xl"
+        className="cr-modal-surface flex max-h-full w-full max-w-xl flex-col overflow-hidden"
       >
         <div className="flex items-start gap-3 border-b border-[rgb(var(--color-border))] px-4 py-3">
           <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">

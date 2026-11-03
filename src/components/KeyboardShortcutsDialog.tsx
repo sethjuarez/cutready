@@ -15,7 +15,7 @@ const generalShortcuts = [
 
 function Kbd({ children }: { children: string }) {
   return (
-    <kbd className="px-1.5 py-0.5 rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-2xs font-mono text-[rgb(var(--color-text-secondary))]">
+    <kbd className="px-1.5 py-0.5 rounded-control border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-xs font-mono text-[rgb(var(--color-text-secondary))]">
       {children}
     </kbd>
   );
@@ -27,7 +27,7 @@ function KeybindingBadge({ keybinding }: { keybinding: string }) {
     <span className="flex items-center gap-0.5">
       {parts.map((part, i) => (
         <span key={i} className="flex items-center gap-0.5">
-          {i > 0 && <span className="text-2xs text-[rgb(var(--color-text-secondary))]">+</span>}
+          {i > 0 && <span className="text-xs text-[rgb(var(--color-text-secondary))]">+</span>}
           <Kbd>{part}</Kbd>
         </span>
       ))}
@@ -48,19 +48,20 @@ export function KeyboardShortcutsDialog({ open, onClose }: KeyboardShortcutsDial
   }
 
   return (
-    <Dialog isOpen={open} onClose={onClose} align="top" topOffset="18vh" width="w-full max-w-lg mx-4">
-      <div className="cr-modal-surface rounded-xl overflow-hidden">
+    <Dialog isOpen={open} onClose={onClose} align="top" topOffset="18vh" width="w-full max-w-lg mx-4" labelledBy="keyboard-shortcuts-title">
+      <div className="cr-modal-surface overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-[rgb(var(--color-border))]">
           <div className="flex items-center gap-2">
-            <Terminal className="w-4 h-4 text-[rgb(var(--color-text-secondary))]" />
-            <h2 className="text-sm font-semibold text-[rgb(var(--color-text))]">Keyboard Shortcuts</h2>
+            <Terminal aria-hidden="true" className="w-4 h-4 text-[rgb(var(--color-text-secondary))]" />
+            <h2 id="keyboard-shortcuts-title" className="text-[15px] font-semibold text-[rgb(var(--color-text))]">Keyboard shortcuts</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
+            aria-label="Close"
+            className="grid h-8 w-8 place-items-center rounded-control text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-fill-hover hover:text-[rgb(var(--color-text))]"
           >
-            <X className="w-4 h-4" />
+            <X aria-hidden="true" className="w-4 h-4" />
           </button>
         </div>
 
@@ -68,13 +69,13 @@ export function KeyboardShortcutsDialog({ open, onClose }: KeyboardShortcutsDial
         <div className="px-5 py-3 space-y-4">
           {[...groups.entries()].map(([category, shortcuts]) => (
             <section key={category}>
-              <h3 className="text-2xs font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))] mb-1.5">
+              <h3 className="mb-1 text-xs font-semibold text-[rgb(var(--color-text-secondary))]">
                 {category}
               </h3>
               <div className="space-y-0.5">
                 {shortcuts.map((s) => (
                   <div key={s.title} className="flex items-center justify-between py-1.5">
-                    <span className="text-xs text-[rgb(var(--color-text))]">{s.title}</span>
+                    <span className="text-sm text-[rgb(var(--color-text))]">{s.title}</span>
                     <KeybindingBadge keybinding={s.keybinding} />
                   </div>
                 ))}
@@ -84,13 +85,13 @@ export function KeyboardShortcutsDialog({ open, onClose }: KeyboardShortcutsDial
 
           {/* General section */}
           <section>
-            <h3 className="text-2xs font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))] mb-1.5">
+            <h3 className="mb-1 text-xs font-semibold text-[rgb(var(--color-text-secondary))]">
               General
             </h3>
             <div className="space-y-0.5">
               {generalShortcuts.map((s) => (
                 <div key={s.title} className="flex items-center justify-between py-1.5">
-                  <span className="text-xs text-[rgb(var(--color-text))]">{s.title}</span>
+                  <span className="text-sm text-[rgb(var(--color-text))]">{s.title}</span>
                   <KeybindingBadge keybinding={s.keybinding} />
                 </div>
               ))}
