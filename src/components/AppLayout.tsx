@@ -9,6 +9,7 @@ import { HomePanel } from "./HomePanel";
 import { RecordingPanel } from "./RecordingPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { Sidebar } from "./Sidebar";
+import { panelOwner } from "../utils/navigation";
 import { StoryboardPanel } from "./StoryboardPanel";
 import { StoryboardList } from "./StoryboardList";
 import { AssetList } from "./AssetList";
@@ -61,6 +62,7 @@ export function AppLayout() {
   const view = useAppStore((s) => s.view);
   const setView = useAppStore((s) => s.setView);
   const sidebarVisible = useAppStore((s) => s.sidebarVisible);
+  const sidebarWidth = useAppStore((s) => s.sidebarWidth);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const outputVisible = useAppStore((s) => s.outputVisible);
   const outputHeight = useAppStore((s) => s.outputHeight);
@@ -438,17 +440,16 @@ export function AppLayout() {
         }}
       >
         <div className="flex flex-1 overflow-hidden" ref={mainRef}>
-          {/* Activity bar (hidden on home) */}
+          {/* Navigation pane (hidden on home): labelled rows with the active panel, or an icon rail */}
           {view !== "home" && (
-            <Sidebar
+            <NavPane
+              contentView={contentView}
+              showPanel={!projectSwitching}
               onFeedback={() => setFeedbackOpen(true)}
               onChatToggle={toggleChatSurface}
               chatActive={chatFocusMode || showSecondaryPanel || view === "chat"}
             />
           )}
-
-          {/* Primary sidebar (hidden on home and chat) */}
-          {contentView !== "home" && contentView !== "chat" && !projectSwitching && sidebarVisible && <PrimarySidebar viewOverride={contentView} />}
 
           {/* Center column: content + output panel */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -500,7 +501,7 @@ export function AppLayout() {
           style={{
             top: "var(--titlebar-height)",
             bottom: "var(--statusbar-height)",
-            left: "3rem",
+            left: sidebarVisible ? sidebarWidth : "3rem",
             right: 0,
           }}
           role="dialog"
@@ -607,10 +608,18 @@ function ProjectSwitchingState() {
   );
 }
 
-/** Primary sidebar with resize handle. Content switches based on active view. */
-function PrimarySidebar({ viewOverride }: { viewOverride?: AppView }) {
-  const storeView = useAppStore((s) => s.view);
-  const view = viewOverride ?? storeView;
+interface NavPaneProps {
+  contentView: AppView;
+  showPanel: boolean;
+  onFeedback: () => void;
+  onChatToggle: () => void;
+  chatActive: boolean;
+}
+
+/** Navigation pane with resize handle. The panel under the active row switches with the view. */
+function NavPane({ contentView, showPanel, ...navProps }: NavPaneProps) {
+  const sidebarVisible = useAppStore((s) => s.sidebarVisible);
+  const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const sidebarWidth = useAppStore((s) => s.sidebarWidth);
   const setSidebarWidth = useAppStore((s) => s.setSidebarWidth);
 
@@ -619,20 +628,24 @@ function PrimarySidebar({ viewOverride }: { viewOverride?: AppView }) {
     [setSidebarWidth],
   );
 
+  const owner = panelOwner(contentView);
+  const panel = !showPanel || owner === null ? null
+    : owner === "assets" ? <AssetList />
+    : owner === "narrations" ? <NarrationList />
+    : owner === "changes" ? <ChangesPanel />
+    : <StoryboardList />;
+
   return (
     <>
-      <div className="h-full shrink-0" style={{ width: sidebarWidth }}>
-        {view === "assets" ? (
-          <AssetList />
-        ) : view === "narrations" ? (
-          <NarrationList />
-        ) : view === "changes" ? (
-          <ChangesPanel />
-        ) : (
-          <StoryboardList />
-        )}
-      </div>
-      <ResizeHandle direction="horizontal" onResize={handleResize} />
+      <Sidebar
+        {...navProps}
+        panelView={contentView}
+        expanded={sidebarVisible}
+        onToggleExpanded={toggleSidebar}
+        panel={panel}
+        width={sidebarWidth}
+      />
+      {sidebarVisible && <ResizeHandle direction="horizontal" onResize={handleResize} />}
     </>
   );
 }

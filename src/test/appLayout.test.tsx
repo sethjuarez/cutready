@@ -27,7 +27,6 @@ vi.mock("../components/StoryboardPanel", () => ({
 }));
 vi.mock("../components/StoryboardList", () => ({
   StoryboardList: () => <div />,
-  PrimarySidebar: () => <div />,
 }));
 vi.mock("../components/AssetList", () => ({
   AssetList: () => <div />,
@@ -153,6 +152,18 @@ describe("AppLayout titlebar spacing", () => {
       top: "var(--titlebar-height)",
       bottom: "var(--statusbar-height)",
     });
+  });
+
+  it("starts chat focus mode at the navigation pane edge", () => {
+    act(() => useChatStore.setState({ chatFocusMode: true }));
+    act(() => useAppStore.setState({ view: "project", sidebarVisible: true, sidebarWidth: 260 }));
+    const { unmount } = render(<AppLayout />);
+    expect(screen.getByTestId("chat-focus-shell")).toHaveStyle({ left: "260px" });
+    unmount();
+
+    act(() => useAppStore.setState({ sidebarVisible: false }));
+    render(<AppLayout />);
+    expect(screen.getByTestId("chat-focus-shell")).toHaveStyle({ left: "3rem" });
   });
 
   it("keeps chat focus mode below the native traffic light toolbar on macOS", () => {

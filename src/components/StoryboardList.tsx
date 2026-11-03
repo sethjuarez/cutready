@@ -1293,12 +1293,9 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     <div
       className="flex flex-col h-full bg-[rgb(var(--color-surface-inset))]"
     >
-      {/* ── Documents header (all-mode only) ──────────────────────────────── */}
+      {/* ── Toolbar under the Documents nav row (all-mode only) ────────────── */}
       {resolvedMode === "all" && (
-        <div className="flex h-8 shrink-0 items-center justify-between border-b border-[rgb(var(--color-border))] px-3">
-          <span className="text-xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
-            Documents
-          </span>
+        <div className="flex h-8 shrink-0 items-center justify-end border-b border-[rgb(var(--color-border))] px-2">
           <div className="flex items-center gap-1">
             {importButton}
           </div>
