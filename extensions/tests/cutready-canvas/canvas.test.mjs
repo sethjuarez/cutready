@@ -39,19 +39,33 @@ function http(url, { method = "GET", headers = {}, body } = {}) {
  * emitted after that are never missed. `until(predicate)` resolves with every
  * event so far once one matches, and closes the stream.
  */
-function listen(url) {
+function listen(url, timeoutMs = 10_000) {
     return new Promise((ready, reject) => {
         const events = [];
         let waiting;
+        let done = false;
+        let failure;
+        const fail = (err) => {
+            if (done) return;
+            done = true;
+            failure = err;
+            clearTimeout(timer);
+            req.destroy();
+            reject(err);
+            waiting?.reject(err);
+        };
+        const timer = setTimeout(() => fail(new Error(`no matching event within ${timeoutMs} ms`)), timeoutMs);
         const check = () => {
-            if (waiting && events.some(waiting.predicate)) {
-                req.destroy();
-                waiting.resolve(events);
-            }
+            if (done || !waiting || !events.some(waiting.predicate)) return;
+            done = true;
+            clearTimeout(timer);
+            req.destroy();
+            waiting.resolve(events);
         };
         const req = request(url, (res) => {
             let buffer = "";
             res.setEncoding("utf8");
+            res.on("close", () => fail(new Error("the event stream ended early")));
             res.on("data", (chunk) => {
                 buffer += chunk;
                 let end;
@@ -64,8 +78,9 @@ function listen(url) {
                     if (name === "hello") {
                         ready({
                             until: (predicate) =>
-                                new Promise((resolve) => {
-                                    waiting = { predicate, resolve };
+                                new Promise((resolve, rejectUntil) => {
+                                    if (failure) return rejectUntil(failure);
+                                    waiting = { predicate, resolve, reject: rejectUntil };
                                     check();
                                 }),
                         });
@@ -74,7 +89,7 @@ function listen(url) {
                 }
             });
         });
-        req.on("error", (err) => (err.code === "ECONNRESET" ? undefined : reject(err)));
+        req.on("error", fail);
         req.end();
     });
 }
