@@ -1,0 +1,170 @@
+/*
+ * Accessibility preferences. useApplyAccessibility resolves each setting onto
+ * <html>; components opt in through these selectors. No global token swaps.
+ */
+
+/* Show pointer on hover */
+html.pointer-on-hover
+  :is(
+    button:not(:disabled),
+    a[href],
+    [role="button"]:not([aria-disabled="true"]),
+    [role="option"]:not([aria-disabled="true"]),
+    [role="menuitem"]:not([aria-disabled="true"]),
+    [role="switch"]:not([aria-disabled="true"]),
+    [role="tab"]:not([aria-disabled="true"]),
+    select:not(:disabled),
+    input[type="checkbox"]:not(:disabled),
+    input[type="radio"]:not(:disabled)
+  ) {
+  cursor: pointer;
+}
+
+/* Show underlines */
+[data-show-underlines] .show-underlines-target {
+  text-decoration-line: underline;
+  text-decoration-color: currentColor;
+  text-underline-offset: 2px;
+}
+[data-show-underlines] .show-underlines-target:hover {
+  text-decoration-line: none;
+}
+
+/* Switch (shared by Settings and dialogs) */
+.cr-switch {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  border: 0 solid transparent;
+  background: rgb(var(--color-border));
+  transition: background-color 150ms ease;
+}
+.cr-switch[aria-checked="true"] {
+  background: rgb(var(--color-accent));
+}
+.cr-switch:disabled {
+  opacity: 0.5;
+}
+.cr-switch:focus-visible {
+  outline: 2px solid rgb(var(--color-accent));
+  outline-offset: 2px;
+}
+.cr-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+  transition: transform 150ms ease;
+}
+.cr-switch[aria-checked="true"] .cr-switch-thumb {
+  transform: translateX(16px);
+}
+.cr-switch-glyph {
+  display: none;
+}
+.cr-switch-sm {
+  width: 28px;
+  height: 16px;
+}
+.cr-switch-sm .cr-switch-thumb {
+  width: 12px;
+  height: 12px;
+}
+.cr-switch-sm[aria-checked="true"] .cr-switch-thumb {
+  transform: translateX(12px);
+}
+
+/* Increase contrast: stronger hairlines on controls and cards */
+[data-increase-contrast] .cr-switch[aria-checked="false"] {
+  border-width: 2px;
+  border-color: rgb(var(--color-text-secondary));
+}
+[data-increase-contrast] .cr-switch[aria-checked="false"] .cr-switch-thumb {
+  top: 0;
+  left: 0;
+  box-shadow: none;
+  outline: 2px solid rgb(var(--color-text-secondary));
+  outline-offset: -2px;
+}
+[data-increase-contrast]
+  :is(
+    textarea,
+    select,
+    input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="hidden"])
+  ),
+[data-increase-contrast] .rounded-card.border {
+  border-color: rgb(var(--color-text-secondary));
+}
+
+/* Differentiate without color: switches spell their state out */
+[data-differentiate-without-color] .cr-switch-glyph {
+  position: absolute;
+  top: 50%;
+  display: block;
+  transform: translateY(-50%);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+}
+[data-differentiate-without-color] .cr-switch-glyph-on {
+  left: 6px;
+  color: rgb(var(--color-accent-fg));
+}
+[data-differentiate-without-color] .cr-switch-glyph-off {
+  right: 5px;
+  color: rgb(var(--color-text-secondary));
+}
+[data-differentiate-without-color] .cr-switch[aria-checked="true"] .cr-switch-glyph-off,
+[data-differentiate-without-color] .cr-switch[aria-checked="false"] .cr-switch-glyph-on {
+  display: none;
+}
+[data-differentiate-without-color] .cr-switch-sm .cr-switch-glyph {
+  font-size: 7px;
+}
+[data-differentiate-without-color] .cr-switch-sm .cr-switch-glyph-on {
+  left: 4px;
+}
+[data-differentiate-without-color] .cr-switch-sm .cr-switch-glyph-off {
+  right: 3px;
+}
+/* State spelled out beside the switch; the name still comes from its label. */
+[data-differentiate-without-color] .cr-switch:not(.cr-switch-sm)::after {
+  position: absolute;
+  right: calc(100% + 6px);
+  font-size: 11px;
+  font-weight: 500;
+  color: rgb(var(--color-text-secondary));
+  content: "Off";
+}
+[data-differentiate-without-color] .cr-switch:not(.cr-switch-sm)[aria-checked="true"]::after {
+  content: "On";
+}
+
+/* Differentiate without color: status dots get a shape per state */
+[data-differentiate-without-color] [data-status] {
+  border-radius: 999px;
+}
+[data-differentiate-without-color] [data-status="warn"] {
+  border-radius: 1px;
+  transform: rotate(45deg) scale(0.85);
+}
+[data-differentiate-without-color] [data-status="busy"] {
+  background: transparent !important;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+[data-differentiate-without-color] [data-status="off"] {
+  border-radius: 1px;
+}
+[data-differentiate-without-color] [data-status="error"] {
+  border-radius: 0;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}

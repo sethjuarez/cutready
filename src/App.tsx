@@ -7,6 +7,7 @@ import { warmFfmpegStatus } from "./hooks/useFfmpegStatus";
 import { StatusBar } from "./components/StatusBar";
 import { AppLayout } from "./components/AppLayout";
 import { ToastContainer } from "./components/ToastContainer";
+import { ChatAnnouncer } from "./components/ChatAnnouncer";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { AppCloseGuard } from "./components/AppCloseGuard";
 import { RecordingEventsHost } from "./components/RecordingEventsHost";
@@ -173,6 +174,7 @@ function App() {
           <AppCloseGuard />
           <StatusBar onFeedback={() => commandRegistry.execute("view.sendFeedback")} />
           <ToastContainer />
+          <ChatAnnouncer />
         </div>
       </ErrorBoundary>
     </>

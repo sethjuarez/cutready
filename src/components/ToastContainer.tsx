@@ -23,15 +23,19 @@ export function ToastContainer() {
   const toasts = useToastStore((s) => s.toasts);
   const dismiss = useToastStore((s) => s.dismiss);
 
-  if (toasts.length === 0) return null;
-
+  // Always mounted so screen readers hear toasts added to an existing region.
   return (
-    <div className="fixed top-4 right-4 z-toast flex flex-col gap-2 items-end">
+    <div
+      role="region"
+      aria-label="Notifications"
+      className="fixed top-4 right-4 z-toast flex flex-col gap-2 items-end"
+    >
       {toasts.map((t) => {
         const { icon: Icon, color } = toastIconMap[t.type];
         return (
           <div
             key={t.id}
+            role={t.type === "error" ? "alert" : "status"}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] shadow-lg text-xs text-[rgb(var(--color-text))]"
             style={{
               animation: "toastIn 0.2s ease-out",
@@ -39,24 +43,27 @@ export function ToastContainer() {
               borderLeftColor: color,
             }}
           >
-            <Icon className="w-3.5 h-3.5 shrink-0" style={{ stroke: color }} />
+            <Icon aria-hidden="true" className="w-3.5 h-3.5 shrink-0" style={{ stroke: color }} />
             <span>{t.message}</span>
             {t.link && (
               <button
+                type="button"
                 onClick={() => {
                   void shellOpen(t.link!.url).catch((err) => console.warn("Failed to open link:", err));
                 }}
                 title={t.link.url}
-                className="ml-1 font-medium text-[rgb(var(--color-accent))] hover:underline"
+                className="show-underlines-target ml-1 font-medium text-[rgb(var(--color-accent))] hover:underline"
               >
                 {t.link.label}
               </button>
             )}
             <button
+              type="button"
+              aria-label="Dismiss notification"
               onClick={() => dismiss(t.id)}
               className="p-0.5 ml-1 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
             >
-              <X className="w-2.5 h-2.5" />
+              <X aria-hidden="true" className="w-2.5 h-2.5" />
             </button>
           </div>
         );

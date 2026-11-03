@@ -3,6 +3,7 @@ import { listenEvent } from "../ipc/events";
 import { useAppStore } from "../stores/appStore";
 import { useRecordingStore } from "../stores/recordingStore";
 import { useSettingsStore } from "../hooks/useSettings";
+import { shortcutsEnabled } from "../stores/accessibilityStore";
 
 /**
  * Main-window recording event subscriptions (architecture v3 F5), moved
@@ -15,7 +16,7 @@ export function RecordingEventsHost() {
   useEffect(() => {
     const unlisten = listenEvent("toggle-recording", () => {
       const settings = useSettingsStore.getState().settings;
-      if (!settings.featureRecording) return;
+      if (!settings.featureRecording || !shortcutsEnabled()) return;
 
       const { currentProject, loading } = useAppStore.getState();
       const {

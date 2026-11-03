@@ -168,7 +168,7 @@ export const MarkdownContent = memo(function MarkdownContent({ content, projectR
           <td className="border-b border-r border-[rgb(var(--color-border-subtle))] px-3 py-2.5 align-top last:border-r-0">{children}</td>
         ),
         a: ({ href, children }) => (
-          <a href={href} className="text-[rgb(var(--color-accent))] hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>
+          <a href={href} className="show-underlines-target text-[rgb(var(--color-accent))] hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>
         ),
         blockquote: ({ children }) => (
           <div className="my-3 rounded-r-lg border-l-2 border-[rgb(var(--color-accent))]/70 bg-[rgb(var(--color-accent))]/5 px-3 py-2 text-[rgb(var(--color-text-secondary))]">{children}</div>

@@ -294,7 +294,7 @@ export function HomePanel() {
         <button
           type="button"
           onClick={handleOpen}
-          className="rounded-control text-sm text-[rgb(var(--color-accent))] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]"
+          className="show-underlines-target rounded-control text-sm text-[rgb(var(--color-accent))] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]"
         >
           Open folder…
         </button>

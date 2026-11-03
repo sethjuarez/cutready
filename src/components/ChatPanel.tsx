@@ -1951,7 +1951,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
             Configure a Connection and model in Settings to use the assistant
           </p>
           <button
-            className="text-xs text-[rgb(var(--color-accent))] hover:underline"
+            className="show-underlines-target text-xs text-[rgb(var(--color-accent))] hover:underline"
             onClick={() => useAppStore.getState().setView("settings")}
           >
             Open Settings →
@@ -2151,7 +2151,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                   <FileTypeIcon type={ref.type} />
                   {ref.type === "web" ? (
                     <button
-                      className="max-w-[180px] truncate hover:underline"
+                      className="show-underlines-target max-w-[180px] truncate hover:underline"
                       onClick={() => setExpandedWebRef(expandedWebRef === ref.path ? null : ref.path)}
                       title={ref.webStatus === "queued" ? "Fetched when you send" : ref.webStatus === "loading" ? "Fetching…" : "Click to preview"}
                     >
@@ -2227,7 +2227,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           )}
 
           <textarea
-            ref={inputRef}
+            ref={inputRef} aria-describedby="chat-input-hint"
             className="w-full resize-none bg-transparent px-2.5 py-2 text-[13px] text-[rgb(var(--color-text))] placeholder-[rgb(var(--color-text-secondary))]/60 focus:outline-none leading-[1.5]"
             style={{ maxHeight: 300 }}
             rows={3}
@@ -2764,7 +2764,7 @@ function ChatErrorCard({ error, onRetry, onDismiss }: { error: string; onRetry: 
       <div className="flex items-center gap-2 px-3 pb-2">
         <button
           onClick={onRetry}
-          className="text-xs font-medium text-[rgb(var(--color-accent))] hover:underline"
+          className="show-underlines-target text-xs font-medium text-[rgb(var(--color-accent))] hover:underline"
         >
           Try again
         </button>

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { invoke } from "../services/tauri";
 import { useSettings } from "../hooks/useSettings";
 import { useToastStore } from "../stores/toastStore";
+import { useShortcutsEnabled } from "../stores/accessibilityStore";
 
 /**
  * Configures the presentation hotkeys registered by the Rust backend.
@@ -10,9 +11,10 @@ import { useToastStore } from "../stores/toastStore";
  */
 export function useGlobalHotkeys() {
   const { settings, loaded } = useSettings();
+  const shortcuts = useShortcutsEnabled();
 
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || !shortcuts) return;
 
     const bindings = [
       { action: "next", hotkey: settings.presentationNextHotkey },
@@ -36,6 +38,7 @@ export function useGlobalHotkeys() {
     };
   }, [
     loaded,
+    shortcuts,
     settings.presentationNextHotkey,
     settings.presentationPreviousHotkey,
     settings.presentationPlayPauseHotkey,

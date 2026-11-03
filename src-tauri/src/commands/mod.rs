@@ -1,3 +1,4 @@
+pub mod accessibility;
 // CmdError is serialized straight across IPC, so its size never sits on a hot path.
 #[allow(clippy::result_large_err)]
 pub mod agent;

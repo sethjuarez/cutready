@@ -61,7 +61,7 @@ export function SafeMarkdown({
               e.preventDefault();
               openExternal(href);
             }}
-            className="text-[rgb(var(--color-accent))] hover:underline cursor-pointer"
+            className="show-underlines-target text-[rgb(var(--color-accent))] hover:underline cursor-pointer"
           >
             {linkChildren}
           </a>

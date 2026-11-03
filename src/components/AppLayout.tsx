@@ -37,6 +37,8 @@ import { invoke } from "../services/tauri";
 import { useTheme } from "../hooks/useTheme";
 import { isMac } from "../utils/platform";
 import { useApplyDisplaySettings } from "../hooks/useApplyDisplaySettings";
+import { useApplyAccessibility } from "../accessibility/useApplyAccessibility";
+import { shortcutsEnabled } from "../stores/accessibilityStore";
 import {
   House,
   Layers,
@@ -334,7 +336,9 @@ export function AppLayout() {
         return;
       }
 
-      // Always allow Mod+Shift+P to toggle the command palette
+      if (!shortcutsEnabled()) return;
+
+      // Mod+Shift+P toggles the command palette even while it is open
       if (mod && e.shiftKey && (e.key === "P" || e.key === "p")) {
         e.preventDefault();
         setCommandPaletteOpen((prev) => !prev);
@@ -391,6 +395,8 @@ export function AppLayout() {
     toggleSidebar,
     toggleTheme,
   ]);
+
+  useApplyAccessibility();
 
   // Apply display settings as CSS variables
   const { settings: displaySettings, loaded: displaySettingsLoaded } = useSettings();

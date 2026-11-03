@@ -111,6 +111,7 @@ comrak = { version = "0.54", default-features = false }
 [target.'cfg(target_os = "macos")'.dependencies]
 openssl-sys = { version = "0.9", features = ["vendored"] }
 screencapturekit = "2"
+objc2 = "0.6"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 wasapi = "0.23.0"

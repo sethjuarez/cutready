@@ -13,6 +13,7 @@ import "@fontsource/lora/600.css";
 import "@fontsource/lora/700.css";
 import "./index.css";
 import "./styles/nav.css";
+import "./styles/a11y.css";
 import { initializeAuditaur, flushAuditaur } from "./services/auditaur";
 
 // Install dev mocks when running in browser without Tauri runtime.

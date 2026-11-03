@@ -684,7 +684,7 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
     await get().loadGraphData();
     await get().loadTimelines();
     await get().checkDirty();
-    useToastStore.getState().show(base ? `Updates from ${base} brought in.` : "Incoming saves merged.", 4000, "success");
+    useToastStore.getState().showUpdate(base ? `Updates from ${base} brought in.` : "Incoming saves merged.", "success");
     return commitId;
   },
 

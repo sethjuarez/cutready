@@ -47,7 +47,7 @@ function CaptionButton({
       aria-label={label}
       title={label}
       className={[
-        "inline-flex h-full w-[46px] items-center justify-center text-[rgb(var(--color-text))]",
+        "inline-flex h-full w-[calc(46px/var(--app-zoom,1))] items-center justify-center text-[rgb(var(--color-text))]",
         "transition-colors duration-fast ease-fluent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgb(var(--color-accent))]",
         danger
           ? "hover:bg-error hover:text-accent-fg active:bg-error/90"

@@ -1,4 +1,5 @@
-import { useCallback, useRef, useEffect, useState } from "react";
+import { useCallback, useId, useRef, useEffect, useState } from "react";
+import { useInteractionHints } from "../stores/accessibilityStore";
 
 interface ResizeHandleProps {
   direction: "horizontal" | "vertical";
@@ -24,6 +25,8 @@ export function ResizeHandle({ direction, onResize, onResizeEnd, subtle = false,
   const dragging = useRef(false);
   const lastPos = useRef(0);
   const [isDragging, setIsDragging] = useState(false);
+  const hintId = useId();
+  const showHint = useInteractionHints() && Boolean(onStep);
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -99,6 +102,7 @@ export function ResizeHandle({ direction, onResize, onResizeEnd, subtle = false,
       aria-valuemin={value?.min}
       aria-valuemax={value?.max}
       aria-controls={controls}
+      aria-describedby={showHint ? hintId : undefined}
       tabIndex={onStep ? 0 : undefined}
       onPointerDown={handlePointerDown}
       onDoubleClick={onReset}
@@ -111,6 +115,11 @@ export function ResizeHandle({ direction, onResize, onResizeEnd, subtle = false,
         onStep(event.key === back ? -step : step);
       } : undefined}
     >
+      {showHint && (
+        <span id={hintId} hidden>
+          {`Use arrow keys to resize, Shift for larger steps.${onReset ? " Double-click to reset." : ""}`}
+        </span>
+      )}
       {/* Invisible wider hit area overlapping adjacent panels */}
       <div
         className={`absolute z-sticky ${
