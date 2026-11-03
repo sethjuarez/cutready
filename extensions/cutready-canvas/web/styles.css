@@ -1,0 +1,278 @@
+/* Uses the Copilot app's theme tokens, with fallbacks for a plain browser. */
+:root {
+    --bg: var(--background-color-default, #fff);
+    --fg: var(--text-color-default, #1f2328);
+    --muted: var(--text-color-muted, #656d76);
+    --border: var(--border-color-default, #d0d7de);
+    --focus: var(--color-focus-outline, #6b5ce7);
+    --danger: var(--true-color-red, #cf222e);
+    --accent: #6b5ce7;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans, system-ui, sans-serif);
+    font-size: var(--text-body-medium, 14px);
+    line-height: var(--leading-body-medium, 1.5);
+}
+
+.app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+.bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.spacer {
+    flex: 1;
+}
+
+.muted {
+    color: var(--muted);
+}
+
+.small {
+    font-size: 0.85em;
+}
+
+.layout {
+    display: grid;
+    grid-template-columns: minmax(160px, 220px) 1fr minmax(180px, 260px);
+    flex: 1;
+    min-height: 0;
+}
+
+@media (max-width: 760px) {
+    .layout {
+        grid-template-columns: 1fr;
+        overflow: auto;
+    }
+}
+
+.pane {
+    overflow: auto;
+    padding: 12px;
+    min-width: 0;
+}
+
+.browser {
+    border-right: 1px solid var(--border);
+}
+
+.review {
+    border-left: 1px solid var(--border);
+}
+
+h1 {
+    font-size: 1.1em;
+    margin: 0;
+    font-family: var(--font-mono, monospace);
+}
+
+h2 {
+    font-size: 0.8em;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin: 12px 0 6px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+ul,
+ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+button,
+input,
+textarea,
+select {
+    font: inherit;
+    color: inherit;
+}
+
+button {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 10px;
+    cursor: pointer;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+button.item,
+button.link {
+    border: 0;
+    width: 100%;
+    text-align: left;
+    padding: 4px 6px;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.9em;
+    overflow-wrap: anywhere;
+}
+
+button.item.selected {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
+}
+
+input,
+textarea,
+select {
+    width: 100%;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 6px;
+}
+
+textarea {
+    resize: vertical;
+}
+
+input:disabled,
+textarea:disabled {
+    border-style: dashed;
+}
+
+.sketch > *,
+.storyboard > * {
+    margin-bottom: 10px;
+}
+
+.doc-header {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.badge {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0 8px;
+    font-size: 0.75em;
+    color: var(--muted);
+}
+
+.badge.danger {
+    color: var(--danger);
+    border-color: var(--danger);
+    margin-left: 6px;
+}
+
+table.planning {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+table.planning th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 0.85em;
+}
+
+table.planning td,
+table.planning th {
+    padding: 3px;
+    vertical-align: top;
+}
+
+table.planning td:first-child {
+    width: 72px;
+}
+
+tr.locked td {
+    opacity: 0.7;
+}
+
+.row-actions {
+    white-space: nowrap;
+    display: inline-flex;
+    gap: 4px;
+}
+
+.items li,
+.pending li {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.items li {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.actions select {
+    width: auto;
+    flex: 1;
+}
+
+.note-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    height: calc(100% - 40px);
+}
+
+textarea.note {
+    flex: 1;
+    min-height: 240px;
+    font-family: var(--font-mono, monospace);
+}
+
+.error {
+    margin: 8px 12px 0;
+    padding: 8px 10px;
+    border: 1px solid var(--danger);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.error code {
+    color: var(--danger);
+}

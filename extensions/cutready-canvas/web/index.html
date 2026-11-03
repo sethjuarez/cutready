@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>CutReady</title>
+        <link rel="icon" href="data:," />
+        <link rel="stylesheet" href="/styles.css" />
+        <script type="module" src="/app.js"></script>
+    </head>
+    <body>
+        <div id="app" class="app">
+            <header class="bar">
+                <strong>CutReady</strong>
+                <span id="project" class="muted"></span>
+                <span class="spacer"></span>
+                <button id="refresh" type="button" aria-label="Refresh">Refresh</button>
+            </header>
+            <div id="error" role="alert"></div>
+            <main class="layout">
+                <nav id="browser" class="pane browser" aria-label="Documents"></nav>
+                <section id="document" class="pane document" aria-label="Document"></section>
+                <aside id="review" class="pane review" aria-label="Pending review"></aside>
+            </main>
+        </div>
+    </body>
+</html>
