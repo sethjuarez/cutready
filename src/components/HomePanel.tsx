@@ -1,66 +1,53 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useAppStore } from "../stores/appStore";
 import { open } from "../dialogs";
 import { invoke } from "../services/tauri";
-import { Plus, Download, Folder, X, XCircle } from "lucide-react";
+import { Plus, Download, FolderOpen, XCircle } from "lucide-react";
 import { GitHubConnectionCard } from "./GitHubConnectionCard";
+import { RecentWorkspaceList } from "./RecentWorkspaceList";
 
-/* ── Decorative icon components ───────────────────────────── */
+const formCard =
+  "mt-4 rounded-card border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] p-4 shadow-layer animate-[fadeSlideIn_0.15s_ease-out]";
+const fieldClass =
+  "h-control rounded-control border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 text-sm text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]";
+const primaryButton =
+  "h-control rounded-control bg-[rgb(var(--color-accent))] px-3 text-sm font-semibold text-[rgb(var(--color-accent-fg))] transition-colors duration-fast hover:bg-[rgb(var(--color-accent-hover))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))] focus-visible:ring-offset-2 focus-visible:ring-offset-[rgb(var(--color-surface))] disabled:cursor-not-allowed disabled:opacity-40";
+const subtleButton =
+  "h-control rounded-control px-3 text-sm text-[rgb(var(--color-text-secondary))] transition-colors duration-fast hover:bg-fill-hover hover:text-[rgb(var(--color-text))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]";
 
-function LogoMark() {
+function StarterCard({
+  icon,
+  title,
+  subtitle,
+  active,
+  onClick,
+}: {
+  icon: ReactNode;
+  title: string;
+  subtitle: string;
+  active?: boolean;
+  onClick: () => void;
+}) {
   return (
-    <div className="relative w-16 h-16">
-      {/* Gradient glow behind the icon */}
-      <div
-        className="absolute inset-0 rounded-2xl blur-xl opacity-40"
-        style={{ background: "linear-gradient(135deg, rgb(var(--color-accent)), rgb(var(--color-tertiary)))" }}
-      />
-      <img
-        src="/cutready.svg"
-        alt="CutReady"
-        className="relative w-16 h-16 drop-shadow-lg"
-        draggable={false}
-      />
-    </div>
-  );
-}
-
-function ActionIcon({ type }: { type: "new" | "open" | "clone" }) {
-  if (type === "new") {
-    return (
-      <Plus className="w-5 h-5" />
-    );
-  }
-  if (type === "clone") {
-    return (
-      <Download className="w-5 h-5" />
-    );
-  }
-  return (
-    <Folder className="w-5 h-5" />
-  );
-}
-
-function ProjectAvatar({ name }: { name: string }) {
-  const initials = name
-    .split(/[-_ ]+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
-
-  // Deterministic color from name
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  const hues = [260, 200, 330, 170, 20, 45]; // purple, blue, pink, teal, orange, amber
-  const hue = hues[Math.abs(hash) % hues.length];
-
-  return (
-    <div
-      className="w-10 h-10 rounded-lg flex items-center justify-center text-[rgb(var(--color-accent-fg))] text-xs font-bold shrink-0 transition-transform group-hover:scale-105"
-      style={{ background: `hsl(${hue}, 55%, 55%)` }}
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={active}
+      className={`flex items-start gap-3 rounded-card border bg-[rgb(var(--color-surface))] p-3.5 text-left shadow-layer transition-colors duration-fast ease-fluent hover:border-[rgb(var(--color-accent))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))] ${
+        active ? "border-[rgb(var(--color-accent))]" : "border-[rgb(var(--color-border-subtle))]"
+      }`}
     >
-      {initials || "?"}
-    </div>
+      <span
+        aria-hidden="true"
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-control bg-[rgb(var(--color-accent))]/15 text-[rgb(var(--color-accent))]"
+      >
+        {icon}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold">{title}</span>
+        <span className="mt-0.5 block text-xs text-[rgb(var(--color-text-secondary))]">{subtitle}</span>
+      </span>
+    </button>
   );
 }
 
@@ -190,273 +177,147 @@ export function HomePanel() {
   );
 
   return (
-    <div className="flex items-center justify-center h-full overflow-y-auto px-6 py-6">
-      {/* ── Decorative background gradient ── */}
-      <div
-        className="pointer-events-none fixed inset-0 opacity-[0.04]"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 60% at 50% 20%, rgb(var(--color-accent)), transparent)",
-        }}
-      />
-
-      {/* Responsive: column (below) by default, row (side-by-side) on wide screens */}
-      <div className="relative flex flex-col lg:flex-row lg:items-start items-center gap-8 lg:gap-12 w-full max-w-md lg:max-w-3xl">
-        {/* ── Left / top column: hero + actions ── */}
-        <div className="flex flex-col items-center lg:items-start flex-1 min-w-0 w-full lg:w-auto">
-          {/* Hero */}
-          <div className="flex flex-col items-center lg:flex-row lg:items-center gap-4 mb-6">
-            <LogoMark />
-            <div className="text-center lg:text-left">
-              <h1 className="text-3xl font-bold tracking-tight">CutReady</h1>
-              <p className="text-[rgb(var(--color-text-secondary))] text-sm leading-relaxed mt-0.5">
-                Plan, record, and produce polished demo videos.
-              </p>
-            </div>
-          </div>
-
-          {/* Action cards */}
-          <div className="grid grid-cols-3 gap-3 w-full mb-6">
-            <button
-              onClick={() => { setShowCreate(true); setShowClone(false); }}
-              className="group flex flex-col items-center gap-2 p-4 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] hover:border-[rgb(var(--color-accent))] hover:shadow-lg hover:shadow-[rgb(var(--color-accent))]/5 transition-all"
-            >
-              <div className="w-9 h-9 rounded-lg bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] flex items-center justify-center group-hover:scale-110 transition-transform">
-                <ActionIcon type="new" />
-              </div>
-              <div>
-                <div className="text-sm font-semibold">New Workspace</div>
-                <div className="text-xs text-[rgb(var(--color-text-secondary))] mt-0.5">
-                  Start from scratch
-                </div>
-              </div>
-            </button>
-            <button
-              onClick={() => { setShowClone(true); setShowCreate(false); }}
-              className="group flex flex-col items-center gap-2 p-4 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] hover:border-[rgb(var(--color-accent))] hover:shadow-lg hover:shadow-[rgb(var(--color-accent))]/5 transition-all"
-            >
-              <div className="w-9 h-9 rounded-lg border-2 border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] flex items-center justify-center group-hover:border-[rgb(var(--color-accent))] group-hover:text-[rgb(var(--color-accent))] group-hover:scale-110 transition-all">
-                <ActionIcon type="clone" />
-              </div>
-              <div>
-                <div className="text-sm font-semibold">Clone Workspace</div>
-                <div className="text-xs text-[rgb(var(--color-text-secondary))] mt-0.5">
-                  From a Git URL
-                </div>
-              </div>
-            </button>
-            <button
-              onClick={handleOpen}
-              className="group flex flex-col items-center gap-2 p-4 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] hover:border-[rgb(var(--color-accent))] hover:shadow-lg hover:shadow-[rgb(var(--color-accent))]/5 transition-all"
-            >
-              <div className="w-9 h-9 rounded-lg border-2 border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] flex items-center justify-center group-hover:border-[rgb(var(--color-accent))] group-hover:text-[rgb(var(--color-accent))] group-hover:scale-110 transition-all">
-                <ActionIcon type="open" />
-              </div>
-              <div>
-                <div className="text-sm font-semibold">Open Workspace</div>
-                <div className="text-xs text-[rgb(var(--color-text-secondary))] mt-0.5">
-                  Pick an existing folder
-                </div>
-              </div>
-            </button>
-          </div>
-
-          {/* Create project inline form */}
-          {showCreate && (
-            <div className="w-full mb-6 p-4 rounded-xl bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-accent))] shadow-lg shadow-[rgb(var(--color-accent))]/5 animate-[fadeSlideIn_0.15s_ease-out]">
-              <label className="block text-sm font-medium mb-2">Workspace name</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="My Demo"
-                  aria-label="Workspace name"
-                  autoFocus
-                  className="flex-1 px-3 py-2 rounded-lg bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-sm text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-accent))]/40"
-                />
-                <button
-                  onClick={handleCreate}
-                  disabled={!slug}
-                  className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] text-sm font-medium hover:bg-[rgb(var(--color-accent-hover))] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Choose Folder
-                </button>
-                <button
-                  onClick={() => { setShowCreate(false); setNewName(""); }}
-                  className="px-3 py-2 rounded-lg text-sm text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface))] transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-              {slug && (
-                <div className="mt-2 text-xs text-[rgb(var(--color-text-secondary))]">
-                  Folder: <span className="font-mono text-[rgb(var(--color-text))]">{slug}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Clone workspace inline form */}
-          {showClone && (
-            <div className="w-full mb-6 p-4 rounded-xl bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-accent))] shadow-lg shadow-[rgb(var(--color-accent))]/5 animate-[fadeSlideIn_0.15s_ease-out]">
-              <label className="block text-sm font-medium mb-2">Workspace URL</label>
-              <input
-                type="text"
-                value={cloneUrl}
-                onChange={(e) => setCloneUrl(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleClone();
-                  if (e.key === "Escape") { setShowClone(false); setCloneUrl(""); setCloneError(null); }
-                }}
-                placeholder="https://github.com/org/repo.git"
-                autoFocus
-                className="w-full px-3 py-2 rounded-lg bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-sm text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-accent))]/40 mb-2"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={handleClone}
-                  disabled={!cloneUrl.trim() || cloning}
-                  className="px-4 py-2 rounded-lg bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] text-sm font-medium hover:bg-[rgb(var(--color-accent-hover))] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {cloning ? "Cloning..." : "Choose Folder & Clone"}
-                </button>
-                <button
-                  onClick={() => { setShowClone(false); setCloneUrl(""); setCloneError(null); }}
-                  className="px-3 py-2 rounded-lg text-sm text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface))] transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-              {cloneError?.type === "auth" && (
-                <div className="mt-3 rounded-lg border border-[rgb(var(--color-error))]/30 bg-[rgb(var(--color-error))]/5 p-3">
-                  <div className="flex items-start gap-2">
-                    <XCircle className="w-4 h-4 text-[rgb(var(--color-error))] shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-[rgb(var(--color-error))] mb-2">Authentication required</p>
-                      <p className="text-xs text-[rgb(var(--color-text-secondary))]">
-                        Connect GitHub in CutReady, then try cloning again.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <GitHubConnectionCard compact />
-                  </div>
-                </div>
-              )}
-              {cloneError?.type === "generic" && (
-                <div className="mt-3 flex items-start gap-2 text-xs text-[rgb(var(--color-error))]">
-                  <XCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                  <span className="break-all">{cloneError.message}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Keyboard shortcut hint */}
-          <div className="pt-2 text-center lg:text-left">
-            <span className="text-xs text-[rgb(var(--color-text-secondary))] opacity-60">
-              <kbd className="px-1.5 py-0.5 rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-2xs font-mono">Ctrl</kbd>
-              {" + "}
-              <kbd className="px-1.5 py-0.5 rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-2xs font-mono">Shift</kbd>
-              {" + "}
-              <kbd className="px-1.5 py-0.5 rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-2xs font-mono">P</kbd>
-              {" "}
-              Command Palette
-            </span>
-          </div>
-        </div>
-
-        {/* ── Right / bottom column: recent workspaces ── */}
-        <div className="w-full lg:w-72 lg:shrink-0 min-h-0">
-          {loading && recentProjects.length === 0 ? (
-            <div className="text-center text-[rgb(var(--color-text-secondary))] py-6">
-              Loading...
-            </div>
-          ) : recentProjects.length === 0 ? (
-            <div className="text-center py-4">
-              <p className="text-sm text-[rgb(var(--color-text-secondary))]">
-                No recent workspaces yet.
-              </p>
-            </div>
-          ) : (
-            <>
-              <h2 className="text-xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider mb-2">
-                Recent Workspaces
-              </h2>
-              <div className="flex flex-col gap-1.5 max-h-[60vh] overflow-y-auto pr-1">
-                {recentProjects.map((p) => {
-                  const name = p.path.split(/[/\\]/).pop() ?? "workspace";
-                  return (
-                    <div
-                      key={p.path}
-                      className="group flex items-center gap-3 p-2.5 rounded-xl bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] hover:border-[rgb(var(--color-accent))] hover:shadow-md hover:shadow-[rgb(var(--color-accent))]/5 transition-all cursor-pointer"
-                      onClick={() => openProject(p.path)}
-                    >
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openProject(p.path);
-                        }}
-                        className="flex items-center gap-3 min-w-0 flex-1 text-left rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]"
-                        aria-label={`Open ${name} workspace`}
-                        title={p.path}
-                      >
-                        <ProjectAvatar name={name} />
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-medium truncate">{name}</div>
-                          <div className="text-xs text-[rgb(var(--color-text-secondary))] mt-0.5 truncate">
-                            {p.path}
-                          </div>
-                        </div>
-                      </button>
-                      <div className="flex items-center gap-1 ml-1 shrink-0">
-                        <span className="text-2xs text-[rgb(var(--color-text-secondary))]">
-                          {formatRelativeDate(p.last_opened)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeRecentProject(p.path);
-                          }}
-                          className="p-1 rounded opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-[rgb(var(--color-text-secondary))] hover:text-error transition-all"
-                          title="Remove from recent"
-                          aria-label={`Remove ${name} from recent`}
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </div>
+    <div className="mx-auto w-full max-w-[900px] px-10 pb-20 pt-10">
+      <div className="mb-1.5 inline-flex items-center gap-1.5 text-sm text-[rgb(var(--color-text-secondary))]">
+        <img src="/cutready.svg" alt="" className="h-4 w-4" draggable={false} />
+        CutReady
       </div>
+      <h1 className="text-[28px] font-semibold leading-9 tracking-tight">What are you demoing?</h1>
+      <p className="mt-1.5 text-sm text-[rgb(var(--color-text-secondary))]">
+        Plan, record, and produce polished demo videos. Start a workspace or pick up where you left off.
+      </p>
+
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <StarterCard
+          icon={<Plus className="h-5 w-5" />}
+          title="New workspace"
+          subtitle="Start from scratch"
+          active={showCreate}
+          onClick={() => { setShowCreate(true); setShowClone(false); }}
+        />
+        <StarterCard
+          icon={<Download className="h-5 w-5" />}
+          title="Clone workspace"
+          subtitle="From a Git URL"
+          active={showClone}
+          onClick={() => { setShowClone(true); setShowCreate(false); }}
+        />
+        <StarterCard
+          icon={<FolderOpen className="h-5 w-5" />}
+          title="Open workspace"
+          subtitle="A project folder or code repo"
+          onClick={handleOpen}
+        />
+      </div>
+
+      {showCreate && (
+        <div className={formCard}>
+          <label htmlFor="home-workspace-name" className="mb-2 block text-sm font-medium">Workspace name</label>
+          <div className="flex gap-2">
+            <input
+              id="home-workspace-name"
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="My Demo"
+              aria-label="Workspace name"
+              autoFocus
+              className={`${fieldClass} min-w-0 flex-1`}
+            />
+            <button onClick={handleCreate} disabled={!slug} className={primaryButton}>
+              Choose Folder
+            </button>
+            <button onClick={() => { setShowCreate(false); setNewName(""); }} className={subtleButton}>
+              Cancel
+            </button>
+          </div>
+          {slug && (
+            <div className="mt-2 text-xs text-[rgb(var(--color-text-secondary))]">
+              Folder: <span className="font-mono text-[rgb(var(--color-text))]">{slug}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {showClone && (
+        <div className={formCard}>
+          <label htmlFor="home-clone-url" className="mb-2 block text-sm font-medium">Workspace URL</label>
+          <div className="flex gap-2">
+            <input
+              id="home-clone-url"
+              type="text"
+              value={cloneUrl}
+              onChange={(e) => setCloneUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleClone();
+                if (e.key === "Escape") { setShowClone(false); setCloneUrl(""); setCloneError(null); }
+              }}
+              placeholder="https://github.com/org/repo.git"
+              autoFocus
+              className={`${fieldClass} min-w-0 flex-1`}
+            />
+            <button onClick={handleClone} disabled={!cloneUrl.trim() || cloning} className={primaryButton}>
+              {cloning ? "Cloning..." : "Choose Folder & Clone"}
+            </button>
+            <button onClick={() => { setShowClone(false); setCloneUrl(""); setCloneError(null); }} className={subtleButton}>
+              Cancel
+            </button>
+          </div>
+          {cloneError?.type === "auth" && (
+            <div className="mt-3 rounded-card border border-[rgb(var(--color-error))]/30 bg-[rgb(var(--color-error))]/5 p-3">
+              <div className="flex items-start gap-2">
+                <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-[rgb(var(--color-error))]" />
+                <div className="min-w-0 flex-1">
+                  <p className="mb-2 text-xs font-medium text-[rgb(var(--color-error))]">Authentication required</p>
+                  <p className="text-xs text-[rgb(var(--color-text-secondary))]">
+                    Connect GitHub in CutReady, then try cloning again.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3">
+                <GitHubConnectionCard compact />
+              </div>
+            </div>
+          )}
+          {cloneError?.type === "generic" && (
+            <div className="mt-3 flex items-start gap-2 text-xs text-[rgb(var(--color-error))]">
+              <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span className="break-all">{cloneError.message}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="mb-2.5 mt-7 flex items-baseline justify-between">
+        <h2 className="text-sm font-semibold">Recent workspaces</h2>
+        <button
+          type="button"
+          onClick={handleOpen}
+          className="rounded-control text-sm text-[rgb(var(--color-accent))] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]"
+        >
+          Open folder…
+        </button>
+      </div>
+      {loading && recentProjects.length === 0 ? (
+        <p className="py-6 text-sm text-[rgb(var(--color-text-secondary))]">Loading...</p>
+      ) : recentProjects.length === 0 ? (
+        <p className="rounded-card border border-dashed border-[rgb(var(--color-border))] px-4 py-6 text-center text-sm text-[rgb(var(--color-text-secondary))]">
+          No recent workspaces yet.
+        </p>
+      ) : (
+        <RecentWorkspaceList projects={recentProjects} onOpen={openProject} onRemove={removeRecentProject} />
+      )}
+
+      <p className="mt-6 text-xs text-[rgb(var(--color-text-secondary))]">
+        <kbd className="rounded-control border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 font-mono text-2xs">Ctrl</kbd>
+        {" + "}
+        <kbd className="rounded-control border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 font-mono text-2xs">Shift</kbd>
+        {" + "}
+        <kbd className="rounded-control border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 font-mono text-2xs">P</kbd>
+        {" "}
+        Command Palette
+      </p>
     </div>
   );
-}
-
-/* ── Helpers ───────────────────────────────────────────────── */
-
-function formatRelativeDate(isoString: string): string {
-  const date = new Date(isoString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
-
-  return date.toLocaleDateString();
 }
