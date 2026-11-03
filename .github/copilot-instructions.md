@@ -89,6 +89,7 @@ contoso-app/                    # Developer's code repo (owned by git, not Draft
 ```text
 cutready/
 ├── docs/                          # Astro Starlight docs site + north star docs
+├── extensions/cutready-canvas/    # GitHub Copilot app canvas: edits via `cutready-cli mcp` only (ADR 0005)
 ├── playwright-sidecar/            # Playwright Node.js sidecar for browser automation
 ├── scripts/                       # Build/release helper scripts
 ├── src/                           # React + TypeScript frontend
@@ -244,7 +245,7 @@ After the agentive `azure_oauth` module lands, CutReady's migration should also:
 
 ## Testing & Validation
 
-- **Gate**: `npm run check` = `check:frontend` (file-budget and raw-`invoke` ratchets, tsc, contract typecheck, Vitest) + `check:rust` (core, document-write and CLI-output guards, clippy, `cargo test --workspace --locked`). `.github/workflows/ci.yml` runs the same scripts on every pull request.
+- **Gate**: `npm run check` = `check:frontend` (file-budget and raw-`invoke` ratchets, tsc, contract typecheck, Vitest) + `check:rust` (core, document-write and CLI-output guards, clippy, `cargo test --workspace --locked`) + `check:canvas` (`node --test` canvas tests against the real `cutready-cli`). `.github/workflows/ci.yml` runs the same scripts on every pull request.
 - **Ratchets**: `scripts/file-budgets.json` pins source files over 800 lines at their size and `scripts/ipc-imports.json` caps raw `invoke` calls per file. New files may not exceed 800 lines or import `invoke`. After a split or moving calls into `src/ipc/`, run the script with `--update` to lower them. Raising one is an explicit PR edit.
 - **Build**: `npm run build` (tsc + vite)
 - **TypeScript check**: `npx tsc --noEmit`

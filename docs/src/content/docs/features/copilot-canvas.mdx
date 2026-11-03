@@ -1,0 +1,90 @@
+---
+title: Copilot Canvas
+description: Browse, edit and review a CutReady project from the GitHub Copilot app through the CutReady canvas.
+sidebar:
+  order: 12
+---
+
+import { Aside, Badge } from '@astrojs/starlight/components';
+
+<Badge text="Preview" variant="caution" />
+
+The **CutReady canvas** is a GitHub Copilot app extension. It opens a CutReady
+project in a side panel next to your Copilot session, so you and the agent can
+work on sketches, storyboards and notes together.
+
+- **Browse** the project's sketches (`.sk`), storyboards (`.sb`) and notes (`.md`).
+- **Edit** a document. Each change is a typed edit inside a run, just like an
+  edit from the CutReady app or `cutready-cli`. Your own edits in the panel are
+  kept at once.
+- **Review** the agent's edits. They stay pending until you **Keep** or
+  **Undo** them.
+
+The canvas talks only to `cutready-cli mcp` over stdio. It never writes project
+files itself and never talks to the running app, so the app picks up its runs
+in its own review list.
+
+## Install
+
+In the GitHub Copilot app, ask Copilot to install the extension from:
+
+```text
+https://github.com/sethjuarez/cutready/tree/main/extensions/cutready-canvas
+```
+
+Then ask Copilot to open the **CutReady** canvas. It opens the session's
+working folder by default; pass `project` to open another folder.
+
+<Aside type="note">
+The canvas needs `cutready-cli`. Installing the CutReady app is enough: on
+start, the app registers the CLI it ships with. You can also install a
+standalone `cutready-cli` archive from the release page and run
+`cutready-cli register`.
+</Aside>
+
+## How the canvas finds the CLI
+
+| Order | Source | Notes |
+| --- | --- | --- |
+| 1 | `cliPath` canvas input | The path must exist |
+| 2 | `CUTREADY_CLI` environment variable | The path must exist |
+| 3 | Registration (`<config dir>/cutready/cli.json`) | Written by `cutready-cli register` and by the app on start |
+| 4 | The app's install folder | Used only when nothing is registered |
+
+The canvas starts `cutready-cli mcp <project>` and checks the **edit contract
+version** during the handshake. If the CLI speaks a different version, the
+canvas stops with a `contract_mismatch` error instead of editing. Update the
+app (or the CLI) and the canvas so they match.
+
+A registration whose binary is gone fails with `cli_not_found` rather than
+quietly starting some other CLI. Start the app, or run
+`cutready-cli register --force`.
+
+## Agent actions
+
+Copilot drives the canvas through these actions:
+
+| Action | What it does |
+| --- | --- |
+| `list_documents` | Lists sketches, storyboards and notes with their versions |
+| `read_document` | Returns a document's content and version |
+| `open_document` | Shows a document in the panel |
+| `apply_ops` | Applies typed edit ops to a document, checked against `expected_version` |
+| `review` | Lists the canvas's pending runs |
+| `keep` / `undo` | Resolves a pending run for one document |
+| `refresh` | Reloads the panel |
+
+The agent should leave **Keep** and **Undo** to you unless you ask it to
+resolve a run.
+
+## Errors
+
+Errors show their code and a hint for what to do next. The most common:
+
+| Code | Meaning |
+| --- | --- |
+| `stale_document` | The document changed since it was read; reload and retry |
+| `locked_document`, `locked_row`, `locked_cell` | The document, row or cell is locked in CutReady |
+| `row_not_found` | The row the edit targets no longer exists |
+| `contract_mismatch` | The CLI and canvas speak different edit contracts |
+| `cli_not_found` | No usable `cutready-cli` was found |

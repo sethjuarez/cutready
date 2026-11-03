@@ -8,6 +8,7 @@ Short records of decisions that shape CutReady's architecture. Each one says wha
 | [0002](0002-edit-sessions-and-op-log.md) | Every document write goes through an edit session recorded in the op log | Accepted |
 | [0003](0003-error-envelope.md) | Commands fail with a typed `CmdError` envelope; clients branch on `code` | Accepted |
 | [0004](0004-history-never-rewritten.md) | Shared history is never rewritten; Send pushes saves as they are | Accepted |
+| [0005](0005-agent-hosts-use-cli-mcp.md) | Agent hosts edit only through `cutready-cli mcp`, found by registration; contract mismatch fails closed | Accepted |
 
 ## Rules
 
