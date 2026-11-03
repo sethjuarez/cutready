@@ -1,13 +1,12 @@
-import { Children, isValidElement, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject, type UIEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject, type UIEvent } from "react";
 import { commandErrorText, invoke } from "../services/tauri";
 import { listenEvent } from "../ipc/events";
-import { SafeMarkdown } from "./SafeMarkdown";
 import { AgentRunInspector } from "./AgentRunInspector";
 import { AgentStateDatabasePanel } from "./AgentStateDatabasePanel";
 import { SessionHistoryPanel } from "./SessionHistoryPanel";
-import { ProjectImage } from "./ProjectImage";
-import { projectRelativeScreenshotPath } from "../utils/projectImage";
-import { contentTypeTone } from "../utils/contentTypeTheme";
+import { MessageRow, WorkingNotesInline } from "./chat/ChatMessageRow";
+import { FileTypeIcon, typeColors } from "./chat/chatFileTypes";
+import { NO_TOOL_ACTIVITY, describeToolCall, fetchWebReferenceContent, textContent } from "./chat/chatText";
 
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useChatStore } from "../stores/chatStore";
@@ -37,7 +36,6 @@ import {
   resolveEffectiveProvider,
   resolveAgentModelOverride,
 } from "../utils/agentProvider";
-import { ChatArtifactIcon, SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import type { ChatMessage, ChatRunDetails, ChatToolActivity, ChatWorkingNotes } from "../types/sketch";
 import {
   Sparkles,
@@ -45,15 +43,12 @@ import {
   Clock,
   Send,
   FileText,
-  Globe,
-  Wrench,
   Plus,
   Paperclip,
   ChevronDown,
   Check,
   User,
   X,
-  Menu,
   Square,
   Activity,
   CircleHelp,
@@ -63,11 +58,10 @@ import {
   Pin,
 } from "lucide-react";
 
-// ── Helpers ──────────────────────────────────────────────────────
+export { describeToolCall, fetchWebReferenceContent, workingNotesPreview } from "./chat/chatText";
 
 const CHAT_AUTO_SCROLL_THRESHOLD_PX = 48;
 const TOOL_ACTIVITY_PREVIEW_MAX_CHARS = 1_200;
-const webContentRequests = new Map<string, Promise<string>>();
 
 interface AgentContextItem {
   id: string;
@@ -97,24 +91,6 @@ export function toolResultActivityLevel(
 function formatContextBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   return `${(bytes / 1024).toFixed(bytes >= 10_240 ? 0 : 1)} KB`;
-}
-
-export function fetchWebReferenceContent(
-  url: string,
-  fetcher: (referenceUrl: string) => Promise<string> = (referenceUrl) =>
-    invoke<string>("fetch_url_content", { url: referenceUrl }),
-): Promise<string> {
-  const existing = webContentRequests.get(url);
-  if (existing) return existing;
-
-  const request = fetcher(url);
-  webContentRequests.set(url, request);
-  void request.then(() => {
-    webContentRequests.delete(url);
-  }, () => {
-    webContentRequests.delete(url);
-  });
-  return request;
 }
 
 export function chatSessionTitle(messages: ChatMessage[]): string {
@@ -179,14 +155,6 @@ export function buildLiveChatWorkingNotes(input: { drafts: string[]; thinking: s
   return buildChatWorkingNotes({ drafts: liveDrafts, thinking: input.thinking });
 }
 
-export function workingNotesPreview(notes: ChatWorkingNotes, maxLength = 120): string {
-  const drafts = notes.drafts ?? [];
-  const raw = notes.thinking?.trim() || drafts[drafts.length - 1]?.trim() || "";
-  const normalized = raw.replace(/\s+/g, " ").trim();
-  if (normalized.length <= maxLength) return normalized;
-  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
-}
-
 export function extractInlineToolActivity(message: ChatMessage, followingMessages: ChatMessage[]): ChatToolActivity[] {
   const toolCalls = message.tool_calls ?? [];
   if (toolCalls.length === 0) return [];
@@ -209,8 +177,6 @@ export function extractInlineToolActivity(message: ChatMessage, followingMessage
 function hasToolCalls(message: ChatMessage): boolean {
   return (message.tool_calls?.length ?? 0) > 0;
 }
-
-const NO_TOOL_ACTIVITY: ChatToolActivity[] = [];
 
 /**
  * Inline tool activity for every message in one backward pass — equivalent to
@@ -261,26 +227,6 @@ export async function cancelAgentChatRun(
     invoke("cancel_agent_chat_run", { clientRunId: id }),
 ): Promise<void> {
   await cancel(clientRunId.toString());
-}
-
-/**
- * Safely extract text from a ChatMessage content field.
- * The backend may return content as a plain string OR as an array of
- * ContentPart objects ({type: "text", text: "..."} / {type: "image_url", ...}).
- * This normalizes both to a plain string for rendering.
- */
-function textContent(content: ChatMessage["content"]): string {
-  if (content == null) return "";
-  if (typeof content === "string") return content;
-  // Array of content parts — extract text parts
-  if (Array.isArray(content)) {
-    return (content as Array<{ type: string; text?: string }>)
-      .filter((p) => p.type === "text" && p.text)
-      .map((p) => p.text!)
-      .join("\n");
-  }
-  // Unknown shape — coerce to string as last resort
-  return String(content);
 }
 
 // ── Types ────────────────────────────────────────────────────────
@@ -656,14 +602,6 @@ function IconDatabase({ size = 14 }: { size?: number }) {
 
 function IconSend({ size = 14 }: { size?: number }) {
   return <Send width={size} height={size} />;
-}
-
-function IconFile({ size = 12 }: { size?: number }) {
-  return <FileText width={size} height={size} />;
-}
-
-function IconGlobe({ size = 12 }: { size?: number }) {
-  return <Globe width={size} height={size} />;
 }
 
 function IconPlus({ size = 14 }: { size?: number }) {
@@ -2517,282 +2455,6 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   );
 }
 
-// ── User Content — renders [Web: URL] as styled reference chips ──
-
-function UserMarkdownSegment({ text }: { text: string }) {
-  return (
-    <SafeMarkdown
-      components={{
-        // Keep user messages compact — render paragraphs inline-ish
-        p: ({ children }) => <div className="my-0.5">{children}</div>,
-        strong: ({ children }) => <strong className="font-bold text-[rgb(var(--color-text))]">{children}</strong>,
-        em: ({ children }) => <em className="italic">{children}</em>,
-        code: ({ className, children }) => {
-          const isBlock = className?.includes("language-");
-          if (isBlock) {
-            return (
-              <pre className="my-1.5 p-2 rounded bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] overflow-x-auto text-2xs leading-relaxed">
-                <code>{children}</code>
-              </pre>
-            );
-          }
-          return (
-            <code className="px-1 py-0.5 bg-[rgb(var(--color-surface-alt))] rounded text-2xs border border-[rgb(var(--color-border))]">
-              {children}
-            </code>
-          );
-        },
-        pre: ({ children }) => <>{children}</>,
-        ul: ({ children }) => <ul className="ml-3 my-0.5 list-disc list-outside">{children}</ul>,
-        ol: ({ children }) => <ol className="ml-3 my-0.5 list-decimal list-outside">{children}</ol>,
-        li: ({ children }) => <li className="my-0.5 pl-0.5">{children}</li>,
-        a: ({ href, children }) => (
-          <a href={href} className="text-[rgb(var(--color-accent))] hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>
-        ),
-        blockquote: ({ children }) => (
-          <div className="border-l-2 border-[rgb(var(--color-accent))] pl-2 my-1 text-[rgb(var(--color-text-secondary))]">{children}</div>
-        ),
-        h1: ({ children }) => <div className="font-bold text-xs mt-2 mb-1">{children}</div>,
-        h2: ({ children }) => <div className="font-semibold text-xs mt-2 mb-0.5">{children}</div>,
-        h3: ({ children }) => <div className="font-semibold text-xs mt-2 mb-0.5">{children}</div>,
-        hr: () => <div className="border-t border-[rgb(var(--color-border))] my-2" />,
-        table: ({ children }) => (
-          <div className="my-1.5 overflow-x-auto rounded border border-[rgb(var(--color-border))]">
-            <table className="w-full text-2xs border-collapse">{children}</table>
-          </div>
-        ),
-        thead: ({ children }) => (
-          <thead className="bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))]">{children}</thead>
-        ),
-        th: ({ children }) => (
-          <th className="px-2 py-1 text-left font-medium border-b border-[rgb(var(--color-border))]">{children}</th>
-        ),
-        td: ({ children }) => (
-          <td className="px-2 py-1 border-b border-[rgb(var(--color-border))]">{children}</td>
-        ),
-      }}
-    >
-      {text}
-    </SafeMarkdown>
-  );
-}
-
-function UserContent({ content }: { content: string }) {
-  // Split on [Web: ...], [References: ...], and inline @URL patterns
-  const parts: React.ReactNode[] = [];
-  let lastIndex = 0;
-  const combined = /\[(Web|References):\s*([^\]]+)\]|@(?:web:)?(https?:\/\/\S+)/g;
-  let match;
-  while ((match = combined.exec(content)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push(<UserMarkdownSegment key={`md-${lastIndex}`} text={content.slice(lastIndex, match.index)} />);
-    }
-    if (match[1] === "Web") {
-      parts.push(<WebRefChip key={match.index} url={match[2].trim()} />);
-    } else if (match[1] === "References") {
-      const refStr = match[2].trim();
-      const refs = refStr.split(/,\s*/);
-      refs.forEach((ref, i) => {
-        const refMatch = ref.match(/^@(note|sketch|storyboard|chat-artifact):(.+)$/);
-        if (refMatch) {
-          const [, type, path] = refMatch;
-          const c = typeColors(type);
-          const title = path.replace(/\.\w+$/, "").split("/").pop() ?? path;
-          parts.push(
-            <span
-              key={`${match!.index}-${i}`}
-              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs font-mono align-baseline mr-0.5 ${c.bg} ${c.text} ${c.border}`}
-            >
-              <FileTypeIcon type={type} />
-              <span className="max-w-[140px] truncate">{title}</span>
-            </span>
-          );
-        } else {
-          parts.push(
-            <span
-              key={`${match!.index}-${i}`}
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-text-secondary))] font-mono align-baseline mr-0.5"
-            >
-              <FileTypeIcon type="file" />
-              <span className="max-w-[140px] truncate">{ref}</span>
-            </span>
-          );
-        }
-      });
-    } else if (match[3]) {
-      parts.push(
-        <span key={match.index} className="text-[rgb(var(--color-accent))] font-mono text-xs">
-          @<span className="underline decoration-[rgb(var(--color-accent))]/40">{match[3]}</span>
-        </span>
-      );
-    }
-    lastIndex = match.index + match[0].length;
-  }
-  if (lastIndex < content.length) {
-    parts.push(<UserMarkdownSegment key={`md-${lastIndex}`} text={content.slice(lastIndex)} />);
-  }
-  return <>{parts}</>;
-}
-
-function WebRefChip({ url }: { url: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const [content, setContent] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const handleExpand = async () => {
-    if (expanded) { setExpanded(false); return; }
-    setExpanded(true);
-    if (content) return;
-    setLoading(true);
-    try {
-      const result = await fetchWebReferenceContent(url);
-      setContent(result);
-    } catch {
-      setContent("Failed to fetch content");
-    }
-    setLoading(false);
-  };
-
-  const shortUrl = url.replace(/^https?:\/\//, "");
-
-  return (
-    <>
-      <button
-        onClick={handleExpand}
-        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-surface-toolbar))] transition-colors font-mono align-baseline"
-      >
-        <Globe className="w-2.5 h-2.5 shrink-0" />
-        <span className="max-w-[200px] truncate">{shortUrl}</span>
-        <ChevronDown className={`w-2 h-2 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} />
-      </button>
-      {expanded && (
-        <span className="block mt-1">
-          <span className="block rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] overflow-hidden">
-            <span className="flex items-center justify-between px-2 py-1 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-toolbar))]">
-              <span className="text-2xs text-[rgb(var(--color-text-secondary))] font-mono truncate">{url}</span>
-              {content && <span className="shrink-0 text-2xs text-[rgb(var(--color-text-secondary))] tabular-nums ml-2">{content.length.toLocaleString()} chars</span>}
-            </span>
-            <span className="block max-h-[150px] overflow-y-auto p-2 text-xs font-mono text-[rgb(var(--color-text-secondary))] whitespace-pre-wrap break-words leading-[1.4]">
-              {loading ? "Loading…" : content || "No content"}
-            </span>
-          </span>
-        </span>
-      )}
-    </>
-  );
-}
-
-// ── Message Row (VS Code Copilot chat style) ────────────────────
-
-export const MessageRow = memo(function MessageRow({
-  message,
-  index,
-  inlineToolActivity = NO_TOOL_ACTIVITY,
-  agentName,
-  projectRoot,
-  onDelete,
-}: {
-  message: ChatMessage;
-  index: number;
-  inlineToolActivity?: ChatToolActivity[];
-  agentName: string;
-  projectRoot?: string;
-  onDelete?: (index: number, message: ChatMessage) => void;
-}) {
-  if (message.role === "user") {
-    return (
-      <div className="group px-3.5 py-2.5 flex justify-end items-start gap-1.5">
-        {onDelete && (
-          <button
-            onClick={() => onDelete(index, message)}
-            className="shrink-0 mt-6 p-1 rounded opacity-0 group-hover:opacity-100 text-[rgb(var(--color-text-secondary))] hover:text-error hover:bg-error/10 transition-all"
-            title="Remove message"
-          >
-            <X className="w-3 h-3" />
-          </button>
-        )}
-        <div className="flex max-w-[82%] flex-col items-end gap-1">
-          <div className="flex items-center gap-1.5 text-2xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))]/80">
-            You
-            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
-              <IconUser size={9} />
-            </span>
-          </div>
-          <div className={`rounded-2xl rounded-tr-sm px-3.5 py-2.5 text-[13px] text-[rgb(var(--color-text))] break-words leading-[1.6] shadow-sm ${
-          message.pending
-            ? "bg-[rgb(var(--color-surface-alt))] border border-dashed border-[rgb(var(--color-border))] opacity-70"
-            : "bg-[rgb(var(--color-accent))]/[0.07] border border-[rgb(var(--color-accent))]/30"
-        }`}>
-            {message.pending && (
-              <span className="inline-flex items-center gap-1 text-2xs text-[rgb(var(--color-text-secondary))] mb-1">
-                <Clock className="w-2.5 h-2.5" />
-                Pending
-              </span>
-            )}
-            <UserContent content={textContent(message.content)} />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (message.role === "tool") {
-    return null;
-  }
-
-  // Compaction / system events — rendered like a tool-call pill
-  if (message.role === "system" && message.content) {
-    return (
-      <div className="px-4 py-1">
-        <div className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/60 px-2.5 py-1 text-xs text-[rgb(var(--color-text-secondary))] transition-colors">
-          <Menu className="w-3 h-3 opacity-70 shrink-0" />
-          <span className="font-medium truncate">{textContent(message.content)}</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (message.role === "assistant") {
-    const assistantText = textContent(message.content).trim();
-    const workingNotes = message.cutready?.workingNotes;
-    if (!assistantText && inlineToolActivity.length === 0 && !workingNotes) return null;
-
-    return (
-      <div className="px-3.5 py-2.5">
-        <div className="w-full max-w-[70ch] min-w-0">
-          {workingNotes && (
-            <div className={assistantText || inlineToolActivity.length > 0 ? "mb-2" : ""}>
-              <WorkingNotesInline notes={workingNotes} />
-            </div>
-          )}
-          {assistantText && (
-            <>
-              <div className="mb-1.5 flex items-center gap-2 text-2xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/85">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
-                  <IconSparkles size={11} />
-                </span>
-                {agentName}
-              </div>
-              <div className="rounded-2xl rounded-tl-sm border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/80 shadow-sm">
-                <div className="px-5 py-[1.125rem] text-[14px] leading-[1.78] text-[rgb(var(--color-text)_/_0.92)]">
-                  <MarkdownContent content={assistantText} projectRoot={projectRoot} />
-                </div>
-              </div>
-            </>
-          )}
-          {inlineToolActivity.length > 0 && (
-            <div className={assistantText ? "mt-2" : ""}>
-              <ToolActivityTimeline activity={inlineToolActivity} />
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  return null;
-});
-
 function RunDetailsPopover({
   details,
   toolCount = 0,
@@ -2940,388 +2602,6 @@ function ReasoningEffortPicker({
     </div>
   );
 }
-
-function WorkingNotesInline({ notes, defaultOpen = false, live = false }: { notes: ChatWorkingNotes; defaultOpen?: boolean; live?: boolean }) {
-  const [expanded, setExpanded] = useState(defaultOpen);
-  const drafts = notes.drafts ?? [];
-  const itemCount = drafts.length + (notes.thinking ? 1 : 0);
-  const preview = workingNotesPreview(notes);
-  if (itemCount === 0) return null;
-
-  return (
-    <div
-      className={`overflow-hidden border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/20 shadow-sm ${live ? "rounded-2xl" : "rounded-2xl rounded-tl-sm"}`}
-    >
-      <button
-        type="button"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}
-        className="flex w-full cursor-pointer select-none items-center gap-2 px-4 py-2.5 text-left text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))]/55"
-      >
-        <span className="flex h-5 w-5 items-center justify-center rounded-full border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
-          <Activity className="h-3 w-3" />
-        </span>
-        <span className="font-medium">{live ? "Working notes live" : "Working notes"}</span>
-        <span className="rounded-full border border-[rgb(var(--color-border-subtle))] px-1.5 py-0.5 text-2xs tabular-nums text-[rgb(var(--color-text-secondary))]/80">
-          {itemCount}
-        </span>
-        {preview && (
-          <span className="min-w-0 flex-1 truncate text-xs text-[rgb(var(--color-text-secondary))]/75">
-            {preview}
-          </span>
-        )}
-        <ChevronDown className={`ml-auto h-3 w-3 transition-transform ${expanded ? "rotate-180" : ""}`} />
-      </button>
-      {expanded && <div className="space-y-3 px-4 pb-4">
-        {drafts.length > 0 && (
-          <div className="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/45">
-            <div className="border-b border-[rgb(var(--color-border-subtle))] px-3 py-2 text-2xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/80">
-              Drafts before tool rounds
-            </div>
-            <div className="divide-y divide-[rgb(var(--color-border-subtle))]">
-              {drafts.map((draft, index) => (
-                <div key={`${index}-${draft.slice(0, 24)}`} className="px-3 py-2.5">
-                  <div className="mb-1 text-2xs font-medium text-[rgb(var(--color-text-secondary))]/75">
-                    Draft {index + 1}
-                  </div>
-                  <div className="text-xs leading-[1.6] text-[rgb(var(--color-text-secondary))]">
-                    <MarkdownContent content={draft} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        {notes.thinking && (
-          <div className="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/45">
-            <div className="border-b border-[rgb(var(--color-border-subtle))] px-3 py-2 text-2xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/80">
-              Thinking stream
-            </div>
-            <pre className="max-h-56 overflow-auto whitespace-pre-wrap px-3 py-2.5 text-xs leading-[1.55] text-[rgb(var(--color-text-secondary))]">
-              {notes.thinking}
-            </pre>
-          </div>
-        )}
-      </div>}
-    </div>
-  );
-}
-
-function ToolActivityTimeline({ activity }: { activity: ChatToolActivity[] }) {
-  const [expanded, setExpanded] = useState(false);
-  if (activity.length === 0) return null;
-
-  return (
-    <div className="overflow-hidden rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/25 shadow-sm">
-      <button
-        type="button"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}
-        className="flex w-full cursor-pointer select-none items-center gap-2 px-4 py-2.5 text-left text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))]/55"
-      >
-        <span className="flex h-5 w-5 items-center justify-center rounded-full border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
-          <Wrench className="h-3 w-3" />
-        </span>
-        <span className="font-medium">Used tools</span>
-        <span className="rounded-full border border-[rgb(var(--color-border-subtle))] px-1.5 py-0.5 text-2xs tabular-nums text-[rgb(var(--color-text-secondary))]/80">
-          {activity.length}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-2xs text-[rgb(var(--color-text-secondary))]/75">
-          {activity.map((item) => formatToolName(item.name)).join(" · ")}
-        </span>
-        <ChevronDown className={`ml-auto h-3 w-3 transition-transform ${expanded ? "rotate-180" : ""}`} />
-      </button>
-      {expanded && (
-        <div className="space-y-2 px-4 pb-4">
-          {activity.map((item) => (
-            <div key={item.id} className="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/45">
-              <div className="flex items-center gap-2 border-b border-[rgb(var(--color-border-subtle))] px-3 py-2 text-2xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))]/80">
-                <span className="truncate">{formatToolName(item.name)}</span>
-                {item.result !== undefined && (
-                  <span className="ml-auto rounded-full border border-[rgb(var(--color-border-subtle))] px-1.5 py-0.5 text-2xs normal-case tracking-normal">
-                    completed
-                  </span>
-                )}
-              </div>
-              <div className="space-y-2 px-3 py-2.5">
-                <ToolJsonBlock label="Args" value={item.arguments} />
-                {item.result !== undefined && <ToolJsonBlock label="Result" value={item.result} />}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ToolJsonBlock({ label, value }: { label: string; value: string }) {
-  const formatted = formatMaybeJson(value);
-  return (
-    <div>
-      <div className="mb-1 text-2xs font-medium text-[rgb(var(--color-text-secondary))]/75">{label}</div>
-      <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/70 p-2.5 text-2xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
-        {formatted}
-      </pre>
-    </div>
-  );
-}
-
-function formatToolName(name: string): string {
-  return name.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-export function describeToolCall(name: string, argumentsJson: string): string {
-  let args: Record<string, unknown> = {};
-  try {
-    const parsed = JSON.parse(argumentsJson);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      args = parsed as Record<string, unknown>;
-    }
-  } catch {
-    // The expandable tool timeline still exposes the original arguments.
-  }
-
-  if (name === "update_planning_row") {
-    const rowNumber = args.row_number;
-    const legacyRowIndex = args.row_index ?? args.rowIndex;
-    const path = typeof args.path === "string" ? args.path.split(/[\\/]/).pop() : undefined;
-    const rowLabel = typeof rowNumber === "number"
-      ? ` ${rowNumber}`
-      : typeof legacyRowIndex === "number"
-        ? ` ${legacyRowIndex + 1}`
-        : "";
-    return `Updating planning row${rowLabel}${path ? ` in ${path}` : ""}`;
-  }
-  if (name === "read_sketch" && typeof args.path === "string") {
-    return `Reading ${args.path.split(/[\\/]/).pop()}`;
-  }
-  if (name === "write_note" && typeof args.path === "string") {
-    return `Writing ${args.path.split(/[\\/]/).pop()}`;
-  }
-
-  return `${formatToolName(name)} started`;
-}
-
-function formatMaybeJson(value: string): string {
-  try {
-    return JSON.stringify(JSON.parse(value), null, 2);
-  } catch {
-    return value;
-  }
-}
-
-// ── Simple Markdown Renderer ─────────────────────────────────────
-
-type CalloutKind = "note" | "tip" | "important" | "warning" | "next";
-
-const CALLOUT_PATTERN = /^(note|tip|important|warning|caution|recommendation|next steps?|action):\s*/i;
-
-function textFromNode(node: ReactNode): string {
-  if (typeof node === "string" || typeof node === "number") return String(node);
-  if (Array.isArray(node)) return node.map(textFromNode).join("");
-  if (isValidElement(node)) {
-    return textFromNode((node.props as { children?: ReactNode }).children);
-  }
-  return "";
-}
-
-function stripCalloutPrefix(node: ReactNode): ReactNode {
-  const parts = Children.toArray(node);
-  if (typeof parts[0] === "string") {
-    const stripped = parts[0].replace(CALLOUT_PATTERN, "");
-    return [stripped, ...parts.slice(1)];
-  }
-  return node;
-}
-
-function calloutKind(label: string): CalloutKind {
-  const normalized = label.toLowerCase();
-  if (normalized === "tip" || normalized === "recommendation") return "tip";
-  if (normalized === "important") return "important";
-  if (normalized === "warning" || normalized === "caution") return "warning";
-  if (normalized.startsWith("next") || normalized === "action") return "next";
-  return "note";
-}
-
-function MarkdownParagraph({ children }: { children: ReactNode }) {
-  const label = textFromNode(children).trim().match(CALLOUT_PATTERN)?.[1];
-  if (!label) {
-    return <div className="my-2.5 first:mt-0 last:mb-0">{children}</div>;
-  }
-
-  const kind = calloutKind(label);
-  const tone: Record<CalloutKind, string> = {
-    note: "border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/70 text-[rgb(var(--color-text-secondary))]",
-    tip: "border-[rgb(var(--color-success))]/35 bg-[rgb(var(--color-success))]/10 text-[rgb(var(--color-text))]",
-    important: "border-[rgb(var(--color-accent))]/40 bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text))]",
-    warning: "border-[rgb(var(--color-warning))]/45 bg-[rgb(var(--color-warning))]/10 text-[rgb(var(--color-text))]",
-    next: "border-[rgb(var(--color-accent))]/35 bg-[rgb(var(--color-accent))]/[0.07] text-[rgb(var(--color-text))]",
-  };
-  const title = kind === "next" ? "Next step" : label.replace(/\b\w/g, (c) => c.toUpperCase());
-
-  return (
-    <div className={`my-3 rounded-xl border px-3 py-2.5 ${tone[kind]}`}>
-      <div className="mb-1 text-2xs font-semibold uppercase tracking-[0.14em] opacity-75">{title}</div>
-      <div className="leading-[1.65]">{stripCalloutPrefix(children)}</div>
-    </div>
-  );
-}
-
-function hasTaskCheckbox(node: ReactNode): boolean {
-  return Children.toArray(node).some((child) => {
-    if (!isValidElement(child)) return false;
-    if (child.type === "input" && (child.props as { type?: string }).type === "checkbox") return true;
-    return hasTaskCheckbox((child.props as { children?: ReactNode }).children);
-  });
-}
-
-const MarkdownContent = memo(function MarkdownContent({ content, projectRoot }: { content: string; projectRoot?: string }) {
-  return (
-    <SafeMarkdown
-      components={{
-        h1: ({ children }) => (
-          <div className="mt-6 mb-3 first:mt-0">
-            <div className="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2.5 shadow-sm">
-              <div className="text-[17px] font-semibold leading-tight tracking-[-0.02em] text-[rgb(var(--color-text))]">
-                {children}
-              </div>
-            </div>
-          </div>
-        ),
-        h2: ({ children }) => (
-          <div className="mt-5 mb-2.5 max-w-full first:mt-0">
-            <div className="flex items-center gap-3">
-              <span className="h-5 w-1 rounded-full bg-[rgb(var(--color-accent))]/65" />
-              <span className="min-w-0 text-[14.5px] font-semibold leading-snug tracking-[-0.015em] text-[rgb(var(--color-text))]">
-                {children}
-              </span>
-              <span className="h-px min-w-8 flex-1 bg-gradient-to-r from-[rgb(var(--color-border-subtle))] to-transparent" />
-            </div>
-          </div>
-        ),
-        h3: ({ children }) => (
-          <div className="mt-4 mb-1.5 border-l-2 border-[rgb(var(--color-accent))]/45 pl-2.5 text-[13.75px] font-semibold leading-snug text-[rgb(var(--color-text))] first:mt-0">
-            {children}
-          </div>
-        ),
-        h4: ({ children }) => (
-          <div className="mt-3 mb-1 text-xs font-semibold uppercase leading-snug tracking-[0.12em] text-[rgb(var(--color-accent))] first:mt-0">
-            {children}
-          </div>
-        ),
-        h5: ({ children }) => (
-          <div className="mt-2.5 mb-1 inline-flex rounded-full border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/70 px-2 py-0.5 text-xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))] first:mt-0">
-            {children}
-          </div>
-        ),
-        h6: ({ children }) => (
-          <div className="mt-2 mb-0.5 text-xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/80 first:mt-0">
-            {children}
-          </div>
-        ),
-        p: ({ children }) => <MarkdownParagraph>{children}</MarkdownParagraph>,
-        strong: ({ children }) => <strong className="font-bold text-[rgb(var(--color-text))]">{children}</strong>,
-        em: ({ children }) => <em className="italic text-[rgb(var(--color-accent))]">{children}</em>,
-        code: ({ className, children }) => {
-          const isBlock = className?.includes("language-");
-          if (isBlock) {
-            return (
-              <pre className="my-3 overflow-x-auto rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-inset))]/70 p-3 text-[11.5px] leading-relaxed">
-                <code>{children}</code>
-              </pre>
-            );
-          }
-          // Inline code — colorize if it looks like a project file path
-          const text = typeof children === "string" ? children : "";
-          const fileType = detectFileType(text);
-          if (fileType) {
-            const c = typeColors(fileType);
-            return (
-              <code className={`rounded-md border px-1.5 py-0.5 text-xs ${c.bg} ${c.text} ${c.border}`}>
-                {children}
-              </code>
-            );
-          }
-          return (
-            <code className="rounded-md border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-xs">
-              {children}
-            </code>
-          );
-        },
-        pre: ({ children }) => <>{children}</>,
-        ul: ({ children }) => <ul className="ml-5 my-3 list-disc list-outside space-y-2">{children}</ul>,
-        ol: ({ children }) => <ol className="ml-5 my-3 list-decimal list-outside space-y-2">{children}</ol>,
-        li: ({ children }) => {
-          const isTask = hasTaskCheckbox(children);
-          return (
-            <li className={isTask ? "-ml-5 flex list-none items-start gap-2 rounded-lg bg-[rgb(var(--color-surface-alt))]/45 px-2 py-1.5" : "pl-1"}>
-              {children}
-            </li>
-          );
-        },
-        input: ({ checked, type }) => {
-          if (type !== "checkbox") return null;
-          return (
-            <span
-              className={`mt-[0.2em] flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                checked
-                  ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))]"
-                  : "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]"
-              }`}
-              aria-hidden="true"
-            >
-              {checked && <Check className="h-3 w-3" />}
-            </span>
-          );
-        },
-        table: ({ children }) => (
-          <div className="my-3 max-w-full overflow-x-auto rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] shadow-sm">
-            <table className="w-full border-separate border-spacing-0 text-xs">{children}</table>
-          </div>
-        ),
-        thead: ({ children }) => (
-          <thead className="bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))]">{children}</thead>
-        ),
-        tbody: ({ children }) => (
-          <tbody className="[&>tr:nth-child(even)]:bg-[rgb(var(--color-surface-alt))]/35">{children}</tbody>
-        ),
-        tr: ({ children }) => (
-          <tr className="transition-colors hover:bg-[rgb(var(--color-accent))]/[0.04]">{children}</tr>
-        ),
-        th: ({ children }) => (
-          <th className="border-b border-r border-[rgb(var(--color-border-subtle))] px-3 py-2 text-left text-2xs font-semibold uppercase tracking-[0.12em] last:border-r-0">{children}</th>
-        ),
-        td: ({ children }) => (
-          <td className="border-b border-r border-[rgb(var(--color-border-subtle))] px-3 py-2.5 align-top last:border-r-0">{children}</td>
-        ),
-        a: ({ href, children }) => (
-          <a href={href} className="text-[rgb(var(--color-accent))] hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>
-        ),
-        blockquote: ({ children }) => (
-          <div className="my-3 rounded-r-lg border-l-2 border-[rgb(var(--color-accent))]/70 bg-[rgb(var(--color-accent))]/5 px-3 py-2 text-[rgb(var(--color-text-secondary))]">{children}</div>
-        ),
-        hr: () => (
-          <div className="my-5 flex items-center gap-3">
-            <span className="h-px flex-1 bg-gradient-to-r from-transparent via-[rgb(var(--color-border-subtle))] to-[rgb(var(--color-border-subtle))]" />
-            <span className="h-1.5 w-1.5 rounded-full bg-[rgb(var(--color-accent))]/50" />
-            <span className="h-px flex-1 bg-gradient-to-r from-[rgb(var(--color-border-subtle))] to-transparent" />
-          </div>
-        ),
-        img: ({ src, alt, ...props }) => {
-          let resolvedSrc = src ?? "";
-          const relativePath = projectRelativeScreenshotPath(resolvedSrc);
-          if (projectRoot && relativePath) {
-            return <ProjectImage relativePath={relativePath} projectRoot={projectRoot} alt={alt ?? ""} {...props} className="my-3 max-w-full rounded-xl border border-[rgb(var(--color-border-subtle))]" />;
-          }
-          return <img src={resolvedSrc} alt={alt ?? ""} {...props} className="my-3 max-w-full rounded-xl border border-[rgb(var(--color-border-subtle))]" />;
-        },
-      }}
-    >
-      {content}
-    </SafeMarkdown>
-  );
-});
 
 // ── Model list cache (module-level, survives re-renders) ─────────
 
@@ -3511,46 +2791,4 @@ function ChatErrorCard({ error, onRetry, onDismiss }: { error: string; onRetry: 
       )}
     </div>
   );
-}
-
-// ── Helpers ──────────────────────────────────────────────────────
-
-/** Type-specific accent colors — matches the explorer sidebar selected styles. */
-function typeColors(type: string): { text: string; bg: string; border: string } {
-  const tone = contentTypeTone(type);
-  if (tone) return { text: tone.text, bg: tone.activeBg, border: tone.border };
-  if (type === "web") return { text: "text-accent", bg: "bg-accent/10", border: "border-accent/25" };
-  return { text: "text-[rgb(var(--color-text-secondary))]", bg: "bg-[rgb(var(--color-surface))]", border: "border-[rgb(var(--color-border))]" };
-}
-
-/** Detect file type from a path string for colorizing. */
-function detectFileType(text: string): string | null {
-  if (!text) return null;
-  const t = text.trim();
-  if (/\.sk$/i.test(t)) return "sketch";
-  if (/\.md$/i.test(t) || /^notes?\//i.test(t)) return "note";
-  if (/\.sb$/i.test(t) || /^storyboards?\//i.test(t)) return "storyboard";
-  // Also match tool-style references
-  if (/^(read_|set_|update_).*sketch|planning_row/i.test(t)) return "sketch";
-  if (/^read_note/i.test(t)) return "note";
-  return null;
-}
-
-function FileTypeIcon({ type }: { type: string }) {
-  const c = typeColors(type);
-  const cls = `shrink-0 ${c.text}`;
-  switch (type) {
-    case "sketch":
-      return <span className={cls}><SketchIcon size={12} /></span>;
-    case "note":
-      return <span className={cls}><NoteIcon size={12} /></span>;
-    case "storyboard":
-      return <span className={cls}><StoryboardIcon size={12} /></span>;
-    case "chat-artifact":
-      return <span className={cls}><ChatArtifactIcon size={12} /></span>;
-    case "web":
-      return <span className={cls}><IconGlobe /></span>;
-    default:
-      return <span className={cls}><IconFile /></span>;
-  }
 }
