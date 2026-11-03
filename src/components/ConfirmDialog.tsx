@@ -37,26 +37,25 @@ export function ConfirmDialog({
 
   if (!open) return null;
 
-  const variantColors = {
-    default: { bg: "rgb(var(--color-accent))" },
-    warning: { bg: "rgb(var(--color-warning))" },
-    error: { bg: "rgb(var(--color-error))" },
-  };
-  const colors = variantColors[variant];
+  const confirmClass = {
+    default: "cr-btn-accent",
+    warning: "cr-btn-warning",
+    error: "cr-btn-danger",
+  }[variant];
 
   return (
-    <Dialog isOpen={open} onClose={onCancel} align="top" topOffset="20vh"     width="w-full max-w-sm mx-4" labelledBy={titleId}>
-      <div className="cr-modal-surface rounded-xl overflow-hidden">
+    <Dialog isOpen={open} onClose={onCancel} align="top" topOffset="20vh" width="w-full max-w-sm mx-4" labelledBy={titleId}>
+      <div className="cr-modal-surface overflow-hidden">
         <div className="px-5 pt-5 pb-4">
-              <h2 id={titleId} className="text-sm font-semibold text-[rgb(var(--color-text))] mb-2">{title}</h2>
-          <p className="text-xs text-[rgb(var(--color-text-secondary))] leading-relaxed whitespace-pre-line">{message}</p>
+          <h2 id={titleId} className="mb-2 text-[15px] font-semibold text-[rgb(var(--color-text))]">{title}</h2>
+          <p className="whitespace-pre-line text-sm text-[rgb(var(--color-text-secondary))]">{message}</p>
         </div>
         <div className="flex items-center justify-end gap-2 px-5 pb-4">
           <button
             ref={cancelRef}
             type="button"
             onClick={onCancel}
-            className="px-3 py-1.5 rounded-lg text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
+            className="cr-btn"
           >
             {cancelLabel}
           </button>
@@ -64,8 +63,7 @@ export function ConfirmDialog({
             ref={confirmRef}
             type="button"
             onClick={onConfirm}
-            className="px-4 py-1.5 rounded-lg text-xs font-medium text-[rgb(var(--color-accent-fg))] transition-colors"
-            style={{ backgroundColor: colors.bg }}
+            className={`cr-btn ${confirmClass}`}
           >
             {confirmLabel}
           </button>

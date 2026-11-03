@@ -83,7 +83,7 @@ export function UpdateAvailableButton() {
             }
           }}
         >
-          <div className="cr-modal-surface relative flex max-h-[min(720px,calc(100vh-48px))] w-full max-w-2xl flex-col overflow-hidden rounded-2xl">
+          <div className="cr-modal-surface relative flex max-h-[min(720px,calc(100vh-48px))] w-full max-w-2xl flex-col overflow-hidden">
             <div className="relative overflow-hidden border-b border-[rgb(var(--color-border))] px-6 py-5">
               <div className="absolute -right-16 -top-24 h-48 w-48 rounded-full bg-[rgb(var(--color-accent))]/18 blur-3xl" />
               <div className="relative flex items-start justify-between gap-4">

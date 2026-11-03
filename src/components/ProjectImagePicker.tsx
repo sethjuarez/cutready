@@ -59,7 +59,7 @@ export function ProjectImagePicker({ onSelect, onCancel }: ProjectImagePickerPro
         role="dialog"
         aria-modal="true"
         aria-labelledby="project-image-picker-title"
-        className="cr-modal-surface flex flex-col rounded-2xl overflow-hidden"
+        className="cr-modal-surface flex flex-col overflow-hidden"
         style={{ width: "min(1180px, calc(100vw - 32px))", maxHeight: "calc(100vh - 32px)" }}
         onClick={(e) => e.stopPropagation()}
       >

@@ -677,7 +677,7 @@ export function FeedbackListTab() {
         width="w-[720px] max-w-[92vw]"
         labelledBy="feedback-issue-review-title"
       >
-        <div className="cr-modal-surface rounded-2xl overflow-hidden">
+        <div className="cr-modal-surface overflow-hidden">
           <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-[rgb(var(--color-border))]">
             <div>
               <h3 id="feedback-issue-review-title" className="text-sm font-semibold text-[rgb(var(--color-text))]">

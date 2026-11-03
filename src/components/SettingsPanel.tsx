@@ -371,7 +371,7 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-panel-title"
-        className="cr-modal-surface mx-auto flex h-full max-w-7xl overflow-hidden rounded-xl"
+        className="cr-modal-surface mx-auto flex h-full max-w-7xl overflow-hidden"
       >
         <aside className="flex w-[19rem] shrink-0 flex-col border-r border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]">
           <div className="border-b border-[rgb(var(--color-border-subtle))] p-5">
