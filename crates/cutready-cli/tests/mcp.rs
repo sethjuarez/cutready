@@ -162,6 +162,7 @@ fn the_handshake_advertises_the_contract_version() {
     assert_eq!(
         names,
         [
+            "list_documents",
             "read_document",
             "begin_run",
             "apply_ops",
@@ -241,4 +242,127 @@ fn a_folder_without_git_is_refused() {
     let clock = clock("2026-07-01T09:30:00Z");
     assert!(Server::new(dir.path(), &clock).is_err());
     assert!(!dir.path().join(".git").exists());
+}
+
+fn initialize_as(client_id: Value) -> Value {
+    let mut message = initialize(Some(json!(CONTRACT_VERSION)));
+    message["params"]["capabilities"]["experimental"]["cutready"]["clientId"] = client_id;
+    message
+}
+
+fn begin_and_write(server: &mut Server, id: u64, path: &str) -> (Value, Value) {
+    let run = result(server.handle(&call(id, "begin_run", json!({}))));
+    let run_id = run["structuredContent"]["run_id"].clone();
+    let applied = result(server.handle(&call(
+        id + 1,
+        "apply_ops",
+        json!({
+            "run_id": run_id,
+            "path": path,
+            "expected_version": null,
+            "ops": [{ "kind": "replace_note", "content": "Hi" }],
+        }),
+    )));
+    assert_eq!(applied["isError"], false, "{applied}");
+    (run_id, applied["structuredContent"]["seq"].clone())
+}
+
+#[test]
+fn list_documents_reports_each_document_and_its_version() {
+    let dir = project();
+    write(dir.path(), "b.md", "# B");
+    write(dir.path(), "notes/a.md", "# A");
+    write(dir.path(), "broken.sk", "{");
+    write(dir.path(), ".cutready/hidden.md", "x");
+    let clock = clock("2026-07-01T09:30:00Z");
+    let mut server = Server::new(dir.path(), &clock).unwrap();
+    result(server.handle(&initialize(None)));
+    let listed = result(server.handle(&call(2, "list_documents", json!({}))));
+    let report = &listed["structuredContent"];
+    let paths: Vec<&str> = report["documents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|doc| doc["path"].as_str().unwrap())
+        .collect();
+    assert_eq!(paths, ["b.md", "broken.sk", "notes/a.md"]);
+    assert_eq!(report["ok"], false);
+    let read = result(server.handle(&call(3, "read_document", json!({ "path": "b.md" }))));
+    assert_eq!(
+        report["documents"][0]["version"],
+        read["structuredContent"]["version"]
+    );
+    assert_eq!(report["documents"][1]["ok"], false);
+}
+
+#[test]
+fn a_client_id_owns_its_runs_across_connections() {
+    let dir = project();
+    let clock = clock("2026-07-01T09:30:00Z");
+    let mut first = Server::new(dir.path(), &clock).unwrap();
+    result(first.handle(&initialize_as(json!("canvas-1"))));
+    assert_eq!(first.actor(), "mcp:canvas-1");
+    let (run_id, seq) = begin_and_write(&mut first, 2, "a.md");
+    drop(first);
+
+    let mut other = Server::new(dir.path(), &clock).unwrap();
+    result(other.handle(&initialize_as(json!("canvas-2"))));
+    let reviews = result(other.handle(&call(2, "review", json!({}))));
+    assert_eq!(reviews["structuredContent"], json!([]));
+    let refused = other
+        .handle(&call(
+            3,
+            "keep",
+            json!({ "run_id": run_id, "path": "a.md", "through_seq": seq }),
+        ))
+        .unwrap();
+    assert_eq!(refused["error"]["code"], -32602, "{refused}");
+
+    let mut again = Server::new(dir.path(), &clock).unwrap();
+    result(again.handle(&initialize_as(json!("canvas-1"))));
+    let reviews = result(again.handle(&call(2, "review", json!({}))));
+    assert_eq!(reviews["structuredContent"][0]["run_id"], run_id);
+    assert_eq!(reviews["structuredContent"][0]["actor"], "mcp:canvas-1");
+    let kept = result(again.handle(&call(
+        3,
+        "keep",
+        json!({ "run_id": run_id, "path": "a.md", "through_seq": seq }),
+    )));
+    assert_eq!(kept["isError"], false, "{kept}");
+}
+
+#[test]
+fn without_a_client_id_runs_belong_to_their_connection() {
+    let dir = project();
+    let clock = clock("2026-07-01T09:30:00Z");
+    let mut first = Server::new(dir.path(), &clock).unwrap();
+    result(first.handle(&initialize(None)));
+    assert_eq!(first.actor(), "mcp");
+    let (run_id, seq) = begin_and_write(&mut first, 2, "a.md");
+
+    let mut second = Server::new(dir.path(), &clock).unwrap();
+    result(second.handle(&initialize(None)));
+    let reviews = result(second.handle(&call(2, "review", json!({}))));
+    assert_eq!(reviews["structuredContent"], json!([]));
+    let refused = second
+        .handle(&call(
+            3,
+            "undo",
+            json!({ "run_id": run_id, "path": "a.md", "through_seq": seq }),
+        ))
+        .unwrap();
+    assert_eq!(refused["error"]["code"], -32602);
+}
+
+#[test]
+fn a_malformed_client_id_is_refused() {
+    let dir = project();
+    let clock = clock("2026-07-01T09:30:00Z");
+    for bad in [json!(null), json!(""), json!("has space"), json!(7), json!("x".repeat(65))] {
+        let mut server = Server::new(dir.path(), &clock).unwrap();
+        let response = server.handle(&initialize_as(bad.clone())).unwrap();
+        assert_eq!(response["error"]["code"], -32602, "{bad}");
+        let after = server.handle(&call(2, "begin_run", json!({}))).unwrap();
+        assert_eq!(after["error"]["code"], -32002, "{bad}: not initialized");
+    }
 }

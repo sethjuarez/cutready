@@ -114,6 +114,17 @@ impl Project {
         Ok(self.session(clock).begin_run(actor)?)
     }
 
+    /// The actor that began `run_id`.
+    pub fn run_actor(&self, run_id: &str) -> Result<String, Failure> {
+        match self.log.run(run_id) {
+            Ok(run) => Ok(run.actor),
+            Err(err) if err.kind == PortErrorKind::NotFound => {
+                Err(Failure::other(format!("No run {run_id}; begin one first")))
+            }
+            Err(err) => Err(err.into()),
+        }
+    }
+
     /// Reads a `.sk`, `.sb` or `.md` document with the version an edit of it
     /// must expect.
     pub fn read(&self, doc: &str) -> Result<DocumentSnapshot, Failure> {
