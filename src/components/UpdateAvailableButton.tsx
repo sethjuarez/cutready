@@ -62,7 +62,7 @@ export function UpdateAvailableButton() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="group relative flex h-10 w-10 items-center justify-center rounded-xl border border-[rgb(var(--color-accent))]/25 bg-[rgb(var(--color-accent))]/12 text-[rgb(var(--color-accent))] shadow-[0_0_24px_rgb(var(--color-accent)/0.18)] transition-colors hover:border-[rgb(var(--color-accent))]/45 hover:bg-[rgb(var(--color-accent))]/18"
+        className="group relative flex h-9 w-9 shrink-0 items-center justify-center rounded-control border border-[rgb(var(--color-accent))]/25 bg-[rgb(var(--color-accent))]/12 text-[rgb(var(--color-accent))] shadow-[0_0_24px_rgb(var(--color-accent)/0.18)] transition-colors hover:border-[rgb(var(--color-accent))]/45 hover:bg-[rgb(var(--color-accent))]/18"
         title={`Update available: v${update.version}`}
         aria-label={`Update available: version ${update.version}`}
       >
