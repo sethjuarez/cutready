@@ -19,6 +19,6 @@ export default defineConfig({
     globals: true,
     execArgv,
     setupFiles: ["./src/test/setup.ts"],
-    exclude: ["**/node_modules/**", "docs/**"],
+    exclude: ["**/node_modules/**", "docs/**", "extensions/**"],
   },
 });
