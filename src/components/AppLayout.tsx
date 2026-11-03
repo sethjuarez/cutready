@@ -32,8 +32,7 @@ import { commandRegistry, useCommands } from "../services/commandRegistry";
 import { invoke } from "../services/tauri";
 import { useTheme } from "../hooks/useTheme";
 import { isMac } from "../utils/platform";
-import { getThemePalette } from "../theme/appThemePalettes";
-import { applyThemeColorTokens, cacheThemePaletteForBootstrap } from "../theme/applyThemePalette";
+import { useApplyDisplaySettings } from "../hooks/useApplyDisplaySettings";
 import {
   House,
   Layers,
@@ -389,35 +388,7 @@ export function AppLayout() {
 
   // Apply display settings as CSS variables
   const { settings: displaySettings, loaded: displaySettingsLoaded } = useSettings();
-  useEffect(() => {
-    if (!displaySettingsLoaded) return;
-    const root = document.documentElement;
-    const palette = getThemePalette(displaySettings.displayThemePalette);
-    const colors = palette[resolvedTheme];
-    localStorage.setItem("cutready-theme-palette", palette.id);
-    cacheThemePaletteForBootstrap(palette);
-    applyThemeColorTokens(root, colors);
-    root.dataset.themeReady = "true";
-    root.style.setProperty("--editor-font-size", `${displaySettings.displayFontSize}px`);
-    root.style.setProperty("--chat-font-size", `${displaySettings.displayChatFontSize}px`);
-    const densityMap: Record<string, { padding: string; lineHeight: string }> = {
-      compact: { padding: "0.25rem 0.5rem", lineHeight: "1.4" },
-      comfortable: { padding: "0.5rem 0.75rem", lineHeight: "1.5" },
-      spacious: { padding: "0.75rem 1rem", lineHeight: "1.75" },
-    };
-    const density = densityMap[displaySettings.displayRowDensity] ?? densityMap.comfortable;
-    root.style.setProperty("--row-padding", density.padding);
-    root.style.setProperty("--row-line-height", density.lineHeight);
-    root.style.setProperty("--row-color-palette", displaySettings.displayRowColors);
-    root.style.setProperty("--editor-max-width", displaySettings.displayEditorWidth === "full" ? "100%" : "56rem");
-    const fontMap: Record<string, string> = {
-      system: '"Geist Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
-      sans: '"Inter", "Helvetica Neue", Helvetica, Arial, sans-serif',
-      serif: '"Lora", "Georgia", "Times New Roman", serif',
-      mono: '"Geist Mono", "Cascadia Code", "Fira Code", ui-monospace, monospace',
-    };
-    root.style.setProperty("--app-font-family", fontMap[displaySettings.displayFontFamily] ?? fontMap.system);
-  }, [displaySettings, displaySettingsLoaded, resolvedTheme]);
+  useApplyDisplaySettings(displaySettings, displaySettingsLoaded, resolvedTheme);
 
   // Redirect away from recording view if feature flag is off
   useEffect(() => {

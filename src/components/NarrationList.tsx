@@ -144,7 +144,7 @@ export function NarrationList() {
   return (
     <div className="flex h-full flex-col bg-[rgb(var(--color-surface-inset))] text-[rgb(var(--color-text))]">
       <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+        <span className="text-xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
           Narrations
         </span>
         <button
@@ -160,7 +160,7 @@ export function NarrationList() {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortBy)}
-              className="cursor-pointer rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))] outline-none transition-colors hover:text-[rgb(var(--color-text))] focus:border-[rgb(var(--color-accent))]"
+              className="cursor-pointer rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-2xs text-[rgb(var(--color-text-secondary))] outline-none transition-colors hover:text-[rgb(var(--color-text))] focus:border-[rgb(var(--color-accent))]"
             >
               <option value="type">Type</option>
               <option value="reference">Reference</option>
@@ -179,11 +179,11 @@ export function NarrationList() {
 
       <div className="flex-1 overflow-y-auto">
         {narrationAssets.length === 0 ? (
-          <div className="px-3 py-8 text-center text-[12px] text-[rgb(var(--color-text-secondary))]">
+          <div className="px-3 py-8 text-center text-xs text-[rgb(var(--color-text-secondary))]">
             <Mic2 className="mx-auto mb-2 h-5 w-5 opacity-40" />
             No narrations yet.
             <br />
-            <span className="text-[11px]">Record a row narration to create the first cut.</span>
+            <span className="text-xs">Record a row narration to create the first cut.</span>
           </div>
         ) : (
           <div className="space-y-2 p-2">
@@ -231,7 +231,7 @@ function NarrationGroupSection({
     <div>
       {showGroupHeader && (
         <div
-          className={`flex h-8 w-full items-center gap-1.5 border-b border-[rgb(var(--color-border))] px-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+          className={`flex h-8 w-full items-center gap-1.5 border-b border-[rgb(var(--color-border))] px-1 text-xs font-semibold uppercase tracking-wider transition-colors ${
             isUnlinked
               ? "text-[rgb(var(--color-warning))]"
               : "text-[rgb(var(--color-text-secondary))]"
@@ -254,7 +254,7 @@ function NarrationGroupSection({
             <button
               type="button"
               onClick={() => onDeleteUnlinked(managedUnlinkedCount)}
-              className="mr-2 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-[rgb(var(--color-error))] transition-colors hover:bg-[rgb(var(--color-error))]/10"
+              className="mr-2 rounded-md px-1.5 py-0.5 text-2xs font-semibold text-[rgb(var(--color-error))] transition-colors hover:bg-[rgb(var(--color-error))]/10"
               title="Delete all unlinked narrations"
             >
               Delete
@@ -315,10 +315,10 @@ function NarrationItem({
           <AudioLines className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[12px] font-medium text-[rgb(var(--color-text))] group-hover:text-[rgb(var(--color-accent))]" title={asset.path}>
+          <div className="truncate text-xs font-medium text-[rgb(var(--color-text))] group-hover:text-[rgb(var(--color-accent))]" title={asset.path}>
             {filename}
           </div>
-          <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] text-[rgb(var(--color-text-secondary))]">
+          <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-2xs text-[rgb(var(--color-text-secondary))]">
             <span>{formatBytes(asset.size)}</span>
             <span className="opacity-50">|</span>
             <Clock className="h-2.5 w-2.5" />

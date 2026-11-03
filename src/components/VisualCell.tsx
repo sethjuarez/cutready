@@ -34,7 +34,7 @@ const THEME = ELUCIM_THEME;
 
 /** Error fallback shown when DslRenderer crashes. */
 const ERROR_FALLBACK = (
-  <div className="flex items-center justify-center w-full h-full text-[10px] text-[rgb(var(--color-error))]">
+  <div className="flex items-center justify-center w-full h-full text-2xs text-[rgb(var(--color-error))]">
     Render error
   </div>
 );
@@ -132,7 +132,7 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
   if (hasError) {
     return (
       <div
-        className={`flex items-center justify-center text-[10px] text-[rgb(var(--color-error))] ${
+        className={`flex items-center justify-center text-2xs text-[rgb(var(--color-error))] ${
           mode === "thumbnail" ? "w-40 h-24" : "w-full h-full"
         } rounded-md border border-[rgb(var(--color-error))]/30 bg-[rgb(var(--color-error))]/5 ${className ?? ""}`}
       >
@@ -144,7 +144,7 @@ export default function VisualCell({ visualPath, mode, onClick, className, contr
   if (!visual || !dsl) {
     return (
       <div
-        className={`flex items-center justify-center text-[10px] text-[rgb(var(--color-text-secondary))] ${
+        className={`flex items-center justify-center text-2xs text-[rgb(var(--color-text-secondary))] ${
           mode === "thumbnail" ? "w-40 h-24" : "w-full h-full"
         } rounded-md bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] ${className ?? ""}`}
       >

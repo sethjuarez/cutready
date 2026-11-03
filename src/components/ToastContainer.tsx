@@ -32,7 +32,7 @@ export function ToastContainer() {
         return (
           <div
             key={t.id}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] shadow-lg text-[12px] text-[rgb(var(--color-text))]"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] shadow-lg text-xs text-[rgb(var(--color-text))]"
             style={{
               animation: "toastIn 0.2s ease-out",
               borderLeftWidth: 3,

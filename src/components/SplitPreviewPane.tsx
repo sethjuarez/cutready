@@ -125,13 +125,13 @@ export function SplitTabBar() {
                 value={tabSearch}
                 onChange={(e) => setTabSearch(e.target.value)}
                 placeholder="Find split tab..."
-                className="min-w-0 flex-1 bg-transparent text-[12px] text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]"
+                className="min-w-0 flex-1 bg-transparent text-xs text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]"
               />
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-1">
             {filteredTabs.length === 0 ? (
-              <div className="px-3 py-6 text-center text-[11px] text-[rgb(var(--color-text-secondary))]">No matching tabs.</div>
+              <div className="px-3 py-6 text-center text-xs text-[rgb(var(--color-text-secondary))]">No matching tabs.</div>
             ) : (
               filteredTabs.map((tab) => (
                 <SplitTabMenuItem
@@ -150,7 +150,7 @@ export function SplitTabBar() {
           </div>
           <div className="flex gap-1 border-t border-[rgb(var(--color-border))] p-1">
             <button
-              className="flex-1 rounded-lg px-2 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+              className="flex-1 rounded-lg px-2 py-1.5 text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
               onClick={() => {
                 if (splitActiveTabId) closeOtherSplitTabs(splitActiveTabId);
                 closeTabMenu();
@@ -159,7 +159,7 @@ export function SplitTabBar() {
               Close others
             </button>
             <button
-              className="flex-1 rounded-lg px-2 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+              className="flex-1 rounded-lg px-2 py-1.5 text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
               onClick={() => {
                 closeSplit();
                 closeTabMenu();
@@ -254,7 +254,7 @@ function SplitTab({
         e.dataTransfer.setData("application/x-cutready-tab", JSON.stringify({ tabId: tab.id, source: "split" }));
         e.dataTransfer.effectAllowed = "move";
       }}
-      className={`group relative flex items-center gap-1.5 pl-3 pr-2 h-[40px] text-[12px] cursor-pointer shrink-0 select-none transition-colors ${
+      className={`group relative flex items-center gap-1.5 pl-3 pr-2 h-[40px] text-xs cursor-pointer shrink-0 select-none transition-colors ${
         isActive
           ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
           : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
@@ -307,10 +307,10 @@ function SplitTabMenuItem({
       }`}
     >
       <button className="min-w-0 flex-1 text-left" onClick={onSelect}>
-        <div className="truncate text-[12px] font-medium text-[rgb(var(--color-text))]">{tab.title}</div>
-        <div className="mt-0.5 truncate font-mono text-[10px] text-[rgb(var(--color-text-secondary))]">{tab.path}</div>
+        <div className="truncate text-xs font-medium text-[rgb(var(--color-text))]">{tab.title}</div>
+        <div className="mt-0.5 truncate font-mono text-2xs text-[rgb(var(--color-text-secondary))]">{tab.path}</div>
       </button>
-      <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-[rgb(var(--color-text-secondary))]">
+      <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-2xs uppercase tracking-[0.08em] text-[rgb(var(--color-text-secondary))]">
         {tab.type}
       </span>
       <button
@@ -693,7 +693,7 @@ function StoryboardPreviewContent({ path }: { path: string }) {
               {item.type === "section" ? item.title : item.path}
             </span>
             {item.type === "section" && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+              <span className="text-2xs px-1.5 py-0.5 rounded bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
                 Section · {item.sketches.length} sketches
               </span>
             )}

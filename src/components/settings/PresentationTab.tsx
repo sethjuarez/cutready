@@ -114,7 +114,7 @@ function HotkeyCaptureField({
           <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>
-      <span className={`text-[10px] leading-4 ${captureError ? "text-[rgb(var(--color-error))]" : "text-[rgb(var(--color-text-secondary))]"}`}>
+      <span className={`text-2xs leading-4 ${captureError ? "text-[rgb(var(--color-error))]" : "text-[rgb(var(--color-text-secondary))]"}`}>
         {captureError || description}
       </span>
     </label>
@@ -208,7 +208,7 @@ export function PresentationTab({ settings, updateSetting }: {
           />
         </div>
 
-        <div className="rounded-lg border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] px-3 py-2 text-[11px] leading-5 text-[rgb(var(--color-text-secondary))]">
+        <div className="rounded-lg border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] px-3 py-2 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
           Click a field, press the Stream Deck hotkey combo you want to emit, or press Backspace/Delete while focused to clear it.
         </div>
       </fieldset>

@@ -189,7 +189,7 @@ export function TimelineSelector() {
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Filter branches…"
-            className="w-full px-2 py-1 rounded text-[10px] bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none focus:border-[rgb(var(--color-accent))]"
+            className="w-full px-2 py-1 rounded text-2xs bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none focus:border-[rgb(var(--color-accent))]"
           />
         </div>
       )}
@@ -201,7 +201,7 @@ export function TimelineSelector() {
             key={t.name}
             onClick={() => t.is_active ? setOpen(false) : handleSwitch(t.name)}
             aria-label={t.is_active ? `${t.label} (current branch)` : `Switch to branch ${t.label}`}
-            className={`group w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors relative ${
+            className={`group w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors relative ${
               t.is_active
                 ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))] font-medium"
                 : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/30"
@@ -216,13 +216,13 @@ export function TimelineSelector() {
               )}
             </span>
             <span className="truncate flex-1">{t.label}</span>
-            <span className="text-[9px] text-[rgb(var(--color-text-secondary))] tabular-nums ml-auto">
+            <span className="text-2xs text-[rgb(var(--color-text-secondary))] tabular-nums ml-auto">
               {t.snapshot_count} {t.snapshot_count === 1 ? "snap" : "snaps"}
             </span>
           </button>
         ))}
         {filtered.length === 0 && (
-          <div className="px-3 py-2 text-[10px] text-[rgb(var(--color-text-secondary))]">
+          <div className="px-3 py-2 text-2xs text-[rgb(var(--color-text-secondary))]">
             No branches match "{filter}"
           </div>
         )}
@@ -232,7 +232,7 @@ export function TimelineSelector() {
         <div className="border-t border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]">
           <div className="flex items-center gap-2 px-3 py-1.5">
             <Cloud className="h-2.5 w-2.5 text-[rgb(var(--color-text-secondary))]" />
-            <span className="min-w-0 flex-1 truncate text-[9px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+            <span className="min-w-0 flex-1 truncate text-2xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
               {currentRemote.name}
             </span>
             <button
@@ -251,7 +251,7 @@ export function TimelineSelector() {
           </div>
           <div className="max-h-36 overflow-y-auto pb-1">
             {remoteBranchesLoading && remoteBranches.length === 0 ? (
-              <div className="px-3 py-2 text-[10px] text-[rgb(var(--color-text-secondary))]">
+              <div className="px-3 py-2 text-2xs text-[rgb(var(--color-text-secondary))]">
                 Fetching remote branches…
               </div>
             ) : filteredRemoteBranches.length > 0 ? (
@@ -260,7 +260,7 @@ export function TimelineSelector() {
                   key={`${branch.remote}/${branch.id}`}
                   type="button"
                   onClick={() => handleRemoteBranchClick(branch.id)}
-                  className="group flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/5 hover:text-[rgb(var(--color-text))]"
+                  className="group flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/5 hover:text-[rgb(var(--color-text))]"
                   title={`Adopt ${branch.remote}/${branch.name}`}
                 >
                   <span className="w-[10px] shrink-0">
@@ -273,7 +273,7 @@ export function TimelineSelector() {
                 </button>
               ))
             ) : (
-              <div className="px-3 py-2 text-[10px] text-[rgb(var(--color-text-secondary))]/70">
+              <div className="px-3 py-2 text-2xs text-[rgb(var(--color-text-secondary))]/70">
                 {filter ? `No remote branches match "${filter}"` : "No remote-only branches"}
               </div>
             )}
@@ -294,12 +294,12 @@ export function TimelineSelector() {
                 }}
                 onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                 placeholder="Branch name…"
-                className="flex-1 px-2 py-1 rounded text-[10px] bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none focus:border-[rgb(var(--color-accent))]"
+                className="flex-1 px-2 py-1 rounded text-2xs bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none focus:border-[rgb(var(--color-accent))]"
                 autoFocus
               />
               <button
                 onClick={handleCreate}
-                className="px-2 py-1 rounded text-[10px] font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:opacity-90 transition-opacity"
+                className="px-2 py-1 rounded text-2xs font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:opacity-90 transition-opacity"
               >
                 Create
               </button>
@@ -323,7 +323,7 @@ export function TimelineSelector() {
         ) : (
           <button
             onClick={() => setShowNew(true)}
-            className="w-full flex items-center gap-2 px-3 py-2 text-[11px] text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors"
+            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors"
           >
             <Plus className="w-2.5 h-2.5" />
             New Branch
@@ -339,7 +339,7 @@ export function TimelineSelector() {
       {/* Trigger button */}
       <button
         onClick={() => setOpen(!open)}
-        className="flex h-6 min-w-0 max-w-full items-center gap-1.5 rounded-md px-1.5 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+        className="flex h-6 min-w-0 max-w-full items-center gap-1.5 rounded-md px-1.5 text-2xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
         title={`Branch: ${active?.label ?? "main"}`}
         aria-label={`Branch: ${active?.label ?? "main"}`}
         aria-expanded={open}
@@ -407,7 +407,7 @@ function BranchCreateConflictPanel({
     : `Branch "${preflight.variation}" already exists locally.`;
 
   return (
-    <div className="mt-2 rounded-lg border border-warning/25 bg-warning/5 px-2 py-2 text-[10px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
+    <div className="mt-2 rounded-lg border border-warning/25 bg-warning/5 px-2 py-2 text-2xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
       <div className="font-medium text-warning">{message}</div>
       <div className="mt-1">Choose another name, adopt the remote branch, or cancel branch creation.</div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">

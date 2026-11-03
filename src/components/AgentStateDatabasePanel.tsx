@@ -101,7 +101,7 @@ export function AgentStateDatabasePanel() {
       <div className="flex h-[38px] items-center gap-2 border-b border-[rgb(var(--color-border))] px-3">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <Database className="h-3.5 w-3.5 text-[rgb(var(--color-accent))]" />
-          <span className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
+          <span className="truncate text-xs font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
             Agent state
           </span>
         </div>
@@ -121,13 +121,13 @@ export function AgentStateDatabasePanel() {
           </span>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-[rgb(var(--color-text))]">agent-state.db</p>
-            <p className="text-[11px] text-[rgb(var(--color-text-secondary))]">
+            <p className="text-xs text-[rgb(var(--color-text-secondary))]">
               {preview ? `${preview.tables.length} tables · ${formatBytes(preview.size)}` : "Local runtime state"}
             </p>
           </div>
         </div>
         <button
-          className="mt-3 w-full rounded-lg border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))] px-2 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-3 w-full rounded-lg border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))] px-2 py-1.5 text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
           onClick={() => void compactDatabase()}
           disabled={compacting || hasActiveAgentRun}
           title={hasActiveAgentRun ? "Wait for the active agent run to finish before compacting" : "Vacuum the local agent-state database"}
@@ -182,14 +182,14 @@ function TableListItem({
         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
           <Table2 className="h-3 w-3" />
         </span>
-        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[rgb(var(--color-text))]">
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-[rgb(var(--color-text))]">
           {label}
         </span>
-        <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))]">
+        <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-2xs text-[rgb(var(--color-text-secondary))]">
           {table.row_count}
         </span>
       </div>
-      <div className="mt-1 truncate pl-7 font-mono text-[10px] text-[rgb(var(--color-text-secondary))]" title={table.name}>
+      <div className="mt-1 truncate pl-7 font-mono text-2xs text-[rgb(var(--color-text-secondary))]" title={table.name}>
         {table.name}
       </div>
     </button>
@@ -200,7 +200,7 @@ function StateMessage({ label, detail }: { label: string; detail?: string }) {
   return (
     <div className="px-3 py-6 text-center">
       <p className="text-xs font-medium text-[rgb(var(--color-text))]">{label}</p>
-      {detail && <p className="mt-1 text-[11px] leading-5 text-[rgb(var(--color-text-secondary))]">{detail}</p>}
+      {detail && <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">{detail}</p>}
     </div>
   );
 }

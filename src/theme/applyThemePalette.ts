@@ -2,6 +2,8 @@ import { deriveContentTokens } from "./appThemePalettes";
 import type { ContentTypeTokenKey, ThemeColorTokens, ThemePalette } from "./appThemePalettes";
 
 export const THEME_BOOTSTRAP_CACHE_KEY = "cutready-theme-bootstrap";
+/** Bump when palette values or token names change so index.html ignores stale first-paint caches. */
+export const THEME_BOOTSTRAP_CACHE_VERSION = 2;
 
 export const THEME_COLOR_TOKEN_MAP: Record<keyof ThemeColorTokens, string> = {
   surface: "--color-surface",
@@ -63,7 +65,7 @@ export function cacheThemePaletteForBootstrap(palette: ThemePalette) {
   localStorage.setItem(
     THEME_BOOTSTRAP_CACHE_KEY,
     JSON.stringify({
-      version: 1,
+      version: THEME_BOOTSTRAP_CACHE_VERSION,
       paletteId: palette.id,
       themes: {
         light: toCssVariables(palette.light),

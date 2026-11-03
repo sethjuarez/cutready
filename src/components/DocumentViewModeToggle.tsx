@@ -36,7 +36,7 @@ export function DocumentViewModeToggle({
                 onClick={() => onChange(mode.id)}
                 title={mode.title}
                 aria-pressed={active}
-                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
                   active
                     ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] shadow-sm"
                     : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"

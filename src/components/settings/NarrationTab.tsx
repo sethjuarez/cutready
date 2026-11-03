@@ -116,7 +116,7 @@ export function NarrationTab({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+            <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${
               permissionState === "granted"
                 ? "border-[rgb(var(--color-success))]/30 bg-[rgb(var(--color-success))]/10 text-[rgb(var(--color-success))]"
                 : permissionState === "denied"
@@ -152,7 +152,7 @@ export function NarrationTab({
             </option>
           ))}
         </select>
-        <div className="flex items-center justify-between gap-2 text-[10px] text-[rgb(var(--color-text-secondary))]">
+        <div className="flex items-center justify-between gap-2 text-2xs text-[rgb(var(--color-text-secondary))]">
           <span>
             {loading
               ? "Looking for WebView microphones..."
@@ -172,7 +172,7 @@ export function NarrationTab({
           </button>
         </div>
         {error && (
-          <p className="text-[10px] text-[rgb(var(--color-error))]">{error}</p>
+          <p className="text-2xs text-[rgb(var(--color-error))]">{error}</p>
         )}
       </label>
     </div>

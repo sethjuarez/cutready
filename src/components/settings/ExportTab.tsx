@@ -389,7 +389,7 @@ export function ExportTab({
           <label className="flex items-center justify-between gap-4 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5">
             <span className="min-w-0">
               <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Use workspace typography</span>
-              <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+              <span className="mt-0.5 block text-xs leading-4 text-[rgb(var(--color-text-secondary))]">
                 When off, new overlays use the app-level typography defaults.
               </span>
             </span>
@@ -449,11 +449,11 @@ export function ExportTab({
         <label className="flex items-center justify-between gap-4 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5">
           <span className="min-w-0">
             <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Include title card</span>
-            <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+            <span className="mt-0.5 block text-xs leading-4 text-[rgb(var(--color-text-secondary))]">
               Start the video with the sketch title and description.
             </span>
             {isWorkspace && !settings.videoExportOverrideEnabled && (
-              <span className="mt-1 block text-[10px] text-[rgb(var(--color-text-secondary))]">
+              <span className="mt-1 block text-2xs text-[rgb(var(--color-text-secondary))]">
                 App default: {settings.videoExportIncludeTitleCard ? "on" : "off"}
               </span>
             )}
@@ -482,11 +482,11 @@ export function ExportTab({
               >
                 <span className="min-w-0">
                   <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">{field.label}</span>
-                  <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+                  <span className="mt-0.5 block text-xs leading-4 text-[rgb(var(--color-text-secondary))]">
                     {field.description}
                   </span>
                   {isWorkspace && !settings.videoExportOverrideEnabled && (
-                    <span className="mt-1 block text-[10px] text-[rgb(var(--color-text-secondary))]">
+                    <span className="mt-1 block text-2xs text-[rgb(var(--color-text-secondary))]">
                       App default: {fallbackValue}s
                     </span>
                   )}
@@ -502,7 +502,7 @@ export function ExportTab({
                     disabled={fieldDisabled}
                     className={`${inputClass} min-w-0 flex-1 sm:w-24 sm:flex-none`}
                   />
-                  <span className="w-8 text-[11px] font-medium text-[rgb(var(--color-text-secondary))]">{field.unit ?? "sec"}</span>
+                  <span className="w-8 text-xs font-medium text-[rgb(var(--color-text-secondary))]">{field.unit ?? "sec"}</span>
                 </span>
               </label>
             );
@@ -526,9 +526,9 @@ export function ExportTab({
               <label key={key} className="grid gap-3 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_9rem] sm:items-center">
                 <span className="min-w-0">
                   <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">{field.label}</span>
-                  <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">{field.description}</span>
+                  <span className="mt-0.5 block text-xs leading-4 text-[rgb(var(--color-text-secondary))]">{field.description}</span>
                   {isWorkspace && !settings.videoExportOverrideEnabled && (
-                    <span className="mt-1 block text-[10px] text-[rgb(var(--color-text-secondary))]">
+                    <span className="mt-1 block text-2xs text-[rgb(var(--color-text-secondary))]">
                       App default: {fallbackValue}{field.unit ? ` ${field.unit}` : ""}
                     </span>
                   )}
@@ -544,7 +544,7 @@ export function ExportTab({
                     disabled={disabled}
                     className={`${inputClass} min-w-0 flex-1 sm:w-24 sm:flex-none`}
                   />
-                  <span className="w-8 text-[11px] font-medium text-[rgb(var(--color-text-secondary))]">{field.unit ?? ""}</span>
+                  <span className="w-8 text-xs font-medium text-[rgb(var(--color-text-secondary))]">{field.unit ?? ""}</span>
                 </span>
               </label>
             );
@@ -568,9 +568,9 @@ export function ExportTab({
               <label key={key} className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5">
                 <span className="min-w-0">
                   <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">{field.label}</span>
-                  <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">{field.description}</span>
+                  <span className="mt-0.5 block text-xs leading-4 text-[rgb(var(--color-text-secondary))]">{field.description}</span>
                   {isWorkspace && !settings.videoExportOverrideEnabled && (
-                    <span className="mt-1 block text-[10px] text-[rgb(var(--color-text-secondary))]">App default: {fallbackValue}</span>
+                    <span className="mt-1 block text-2xs text-[rgb(var(--color-text-secondary))]">App default: {fallbackValue}</span>
                   )}
                 </span>
                 <input
@@ -607,7 +607,7 @@ export function ExportTab({
         </div>
 
         {isWorkspace ? (
-          <div className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5 text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+          <div className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5 text-xs leading-4 text-[rgb(var(--color-text-secondary))]">
             Background music is an app-wide library. Choose the music and mix defaults from the app Export settings.
           </div>
         ) : (
@@ -616,7 +616,7 @@ export function ExportTab({
               <label className="grid gap-3 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_18rem] md:items-center">
                 <span className="min-w-0">
                   <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Selected music</span>
-                  <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+                  <span className="mt-0.5 block text-xs leading-4 text-[rgb(var(--color-text-secondary))]">
                     Choose the loop to repeat for the full export. None leaves narration unchanged.
                   </span>
                 </span>
@@ -648,7 +648,7 @@ export function ExportTab({
               <label className="grid gap-3 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_18rem] md:items-center">
                 <span className="min-w-0">
                   <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Track name</span>
-                  <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+                  <span className="mt-0.5 block text-xs leading-4 text-[rgb(var(--color-text-secondary))]">
                     This name appears wherever you choose background music.
                   </span>
                 </span>
@@ -671,7 +671,7 @@ export function ExportTab({
             <div className="grid gap-2 md:grid-cols-3">
               <label className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5">
                 <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Volume</span>
-                <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">Gain applied before mixing.</span>
+                <span className="mt-0.5 block text-xs leading-4 text-[rgb(var(--color-text-secondary))]">Gain applied before mixing.</span>
                 <div className="mt-3 flex items-center gap-2">
                   <input
                     type="number"
@@ -683,13 +683,13 @@ export function ExportTab({
                     disabled={backgroundMusicDisabled}
                     className={`${inputClass} min-w-0 flex-1`}
                   />
-                  <span className="text-[11px] font-medium text-[rgb(var(--color-text-secondary))]">dB</span>
+                  <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))]">dB</span>
                 </div>
               </label>
 
               <label className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5">
                 <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Fade</span>
-                <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">Fade in and out at export edges.</span>
+                <span className="mt-0.5 block text-xs leading-4 text-[rgb(var(--color-text-secondary))]">Fade in and out at export edges.</span>
                 <div className="mt-3 flex items-center gap-2">
                   <input
                     type="number"
@@ -701,14 +701,14 @@ export function ExportTab({
                     disabled={backgroundMusicDisabled}
                     className={`${inputClass} min-w-0 flex-1`}
                   />
-                  <span className="text-[11px] font-medium text-[rgb(var(--color-text-secondary))]">sec</span>
+                  <span className="text-xs font-medium text-[rgb(var(--color-text-secondary))]">sec</span>
                 </div>
               </label>
 
               <label className="flex items-center justify-between gap-3 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5">
                 <span className="min-w-0">
                   <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Duck under narration</span>
-                  <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">Automatically lowers music while narration is present.</span>
+                  <span className="mt-0.5 block text-xs leading-4 text-[rgb(var(--color-text-secondary))]">Automatically lowers music while narration is present.</span>
                 </span>
                 <input
                   type="checkbox"
@@ -724,7 +724,7 @@ export function ExportTab({
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <span className="min-w-0">
                   <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Preview mix</span>
-                  <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+                  <span className="mt-0.5 block text-xs leading-4 text-[rgb(var(--color-text-secondary))]">
                     Mixes the selected loop under the saved {settings.narrationVoiceName} voice sample, including your ducking, fade, and volume settings.
                   </span>
                 </span>
@@ -740,7 +740,7 @@ export function ExportTab({
               {backgroundMusicPreview && (
                 <div className="mt-3 grid gap-2">
                   <audio controls src={convertFileSrc(backgroundMusicPreview.path)} className="w-full" />
-                  <span className="text-[11px] text-[rgb(var(--color-text-secondary))]">
+                  <span className="text-xs text-[rgb(var(--color-text-secondary))]">
                     Voice and music preview ({formatSecondsLabel(backgroundMusicPreview.durationSeconds)}).
                   </span>
                 </div>
@@ -765,17 +765,17 @@ export function ExportTab({
               CutReady uses FFmpeg and FFprobe for sketch MP4 export. Auto-detection checks your saved path, PATH, and common install locations.
             </p>
             {ffmpegStatus?.available ? (
-              <p className="mt-2 text-[11px] leading-5 text-[rgb(var(--color-text-secondary))]">
+              <p className="mt-2 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
                 Detected {ffmpegVersion ?? "FFmpeg"}{ffmpegStatus.path ? ` at ${ffmpegStatus.path}` : ""}.
                 {ffmpegStatus.ffprobe_path ? ` FFprobe: ${ffprobeVersion ?? "detected"} at ${ffmpegStatus.ffprobe_path}.` : ""}
               </p>
             ) : (
-              <p className="mt-2 text-[11px] leading-5 text-warning">
+              <p className="mt-2 text-xs leading-5 text-warning">
                 {ffmpegStatus?.error || "FFmpeg or FFprobe was not detected. Install FFmpeg or use Locate FFmpeg to choose the executable."}
               </p>
             )}
             {(settings.ffmpegExecutablePath || settings.ffprobeExecutablePath) && (
-              <p className="mt-2 text-[11px] leading-5 text-[rgb(var(--color-text-secondary))]">
+              <p className="mt-2 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
                 Custom paths: {settings.ffmpegExecutablePath || "auto FFmpeg"}; {settings.ffprobeExecutablePath || "auto FFprobe"}.
               </p>
             )}

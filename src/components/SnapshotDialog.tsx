@@ -7,7 +7,7 @@ import { generateSnapshotName } from "../utils/snapshotName";
 import { useContributorIdentity } from "../hooks/useContributorIdentity";
 import { formatIdentity, setContributorIdentity } from "../services/identity";
 
-const noticeTextClass = "flex items-start gap-2 text-[11px] leading-relaxed text-[rgb(var(--color-text-secondary))]";
+const noticeTextClass = "flex items-start gap-2 text-xs leading-relaxed text-[rgb(var(--color-text-secondary))]";
 const noticeIconClass = "mt-0.5 h-3.5 w-3.5 shrink-0 text-[rgb(var(--color-accent))]";
 
 /**

@@ -90,7 +90,7 @@ export function ProjectImagePicker({ onSelect, onCancel }: ProjectImagePickerPro
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Filter images…"
               autoFocus
-              className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-[12px] text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:border-[rgb(var(--color-accent))]/50 transition-colors"
+              className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:border-[rgb(var(--color-accent))]/50 transition-colors"
             />
           </div>
         </div>
@@ -139,7 +139,7 @@ export function ProjectImagePicker({ onSelect, onCancel }: ProjectImagePickerPro
                           </div>
                           {/* Label */}
                           <div className="px-2 py-1.5 bg-[rgb(var(--color-surface))]">
-                            <span className="text-[10px] text-[rgb(var(--color-text-secondary))] truncate block" title={filename}>
+                            <span className="text-2xs text-[rgb(var(--color-text-secondary))] truncate block" title={filename}>
                               {filename}
                             </span>
                           </div>
@@ -165,15 +165,15 @@ export function ProjectImagePicker({ onSelect, onCancel }: ProjectImagePickerPro
                 <>
                   <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="truncate text-[12px] font-medium text-[rgb(var(--color-text))]" title={selectedFilename}>
+                      <div className="truncate text-xs font-medium text-[rgb(var(--color-text))]" title={selectedFilename}>
                         {selectedFilename}
                       </div>
-                      <div className="truncate text-[10px] text-[rgb(var(--color-text-secondary))]" title={selectedAsset.path}>
+                      <div className="truncate text-2xs text-[rgb(var(--color-text-secondary))]" title={selectedAsset.path}>
                         {selectedAsset.path}
                       </div>
                     </div>
                     {!selected && (
-                      <span className="shrink-0 rounded-full border border-[rgb(var(--color-border))] px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                      <span className="shrink-0 rounded-full border border-[rgb(var(--color-border))] px-2 py-1 text-2xs text-[rgb(var(--color-text-secondary))]">
                         Previewing first match
                       </span>
                     )}

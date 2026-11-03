@@ -173,7 +173,7 @@ function sectionBodyStyle(
 }
 
 function documentItemClass(active: boolean, tone: ContentTypeTone) {
-  return `group/item relative flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[12px] outline-none transition-colors focus-visible:bg-[rgb(var(--color-surface-alt))] ${
+  return `group/item relative flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-xs outline-none transition-colors focus-visible:bg-[rgb(var(--color-surface-alt))] ${
     active
       ? `${tone.activeBg} ${tone.text}`
       : `text-[rgb(var(--color-text))] ${tone.hoverBg}`
@@ -234,7 +234,7 @@ function VideoImportProgressDialog({
           </div>
 
           <div className="mt-5">
-            <div className="mb-2 flex items-center justify-between text-[11px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
+            <div className="mb-2 flex items-center justify-between text-xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
               <span>{isComplete ? "Wrapping up" : `Step ${current} of ${total}`}</span>
               <span>{percent}%</span>
             </div>
@@ -255,7 +255,7 @@ function VideoImportProgressDialog({
               className="mt-3 rounded-xl border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/[0.06] px-3 py-3"
               aria-live="polite"
             >
-              <div className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-accent))]">
+              <div className="mb-2 flex items-center justify-between text-2xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-accent))]">
                 <span>Analyst scratchpad</span>
                 <span className="flex items-center gap-1 text-[rgb(var(--color-text-secondary))]">
                   thinking
@@ -268,7 +268,7 @@ function VideoImportProgressDialog({
                 {videoImportAnalystActivity.map((line, index) => (
                   <div
                     key={line}
-                    className="flex items-center gap-2 text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]"
+                    className="flex items-center gap-2 text-xs leading-4 text-[rgb(var(--color-text-secondary))]"
                     style={{ opacity: 0.72 + (index * 0.07) }}
                   >
                     <span
@@ -353,7 +353,7 @@ function VideoImportPlanningContextDialog({
 
           {references.length > 0 && (
             <div className="mt-3">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
+              <p className="mb-2 text-2xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
                 Insert reference
               </p>
               <div className="flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
@@ -362,7 +362,7 @@ function VideoImportPlanningContextDialog({
                     key={`${reference.kind}:${reference.path}`}
                     type="button"
                     onClick={() => onInsertMention(reference)}
-                    className="rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 py-1 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-accent))]/50 hover:text-[rgb(var(--color-accent))]"
+                    className="rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 py-1 text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-accent))]/50 hover:text-[rgb(var(--color-accent))]"
                     title={reference.path}
                   >
                     @{mentionKey(reference.title || reference.path)}
@@ -397,9 +397,9 @@ function VideoImportPlanningContextDialog({
 function DocumentItemText({ title, meta, active, tone }: { title: string; meta?: string; active: boolean; tone: ContentTypeTone }) {
   return (
     <div className="min-w-0 flex-1 py-0.5 leading-tight">
-      <div className="truncate text-[12px] font-medium leading-4" title={title}>{title}</div>
+      <div className="truncate text-xs font-medium leading-4" title={title}>{title}</div>
       {meta && (
-        <div className={`mt-0.5 truncate text-[10px] leading-3 ${documentItemMetaClass(active, tone)}`} title={meta}>
+        <div className={`mt-0.5 truncate text-2xs leading-3 ${documentItemMetaClass(active, tone)}`} title={meta}>
           {meta}
         </div>
       )}
@@ -471,12 +471,12 @@ function SidebarSectionHeader({
     <div className="flex h-8 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-[rgb(var(--color-border))] px-3">
       <button
         onClick={onToggle}
-        className={`flex min-w-0 flex-1 items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] transition-colors ${tone.hoverText}`}
+        className={`flex min-w-0 flex-1 items-center gap-1 text-xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] transition-colors ${tone.hoverText}`}
       >
         {expanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
         <span className="truncate">{title}</span>
         {count > 0 && (
-          <span className={`ml-1 rounded-full border px-1 py-0 text-[9px] font-medium ${tone.activeBg} ${tone.text} ${tone.border}`}>
+          <span className={`ml-1 rounded-full border px-1 py-0 text-2xs font-medium ${tone.activeBg} ${tone.text} ${tone.border}`}>
             {count}
           </span>
         )}
@@ -1267,7 +1267,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const importButton = (
     <button
       onClick={handleOpenImportMenu}
-      className="inline-flex items-center gap-1 rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/80 px-2 py-1 text-[11px] font-medium text-[rgb(var(--color-text-secondary))] shadow-sm transition-colors hover:border-[rgb(var(--color-accent))]/50 hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-50"
+      className="inline-flex items-center gap-1 rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/80 px-2 py-1 text-xs font-medium text-[rgb(var(--color-text-secondary))] shadow-sm transition-colors hover:border-[rgb(var(--color-accent))]/50 hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-50"
       title="Import..."
       data-testid="explorer-import-menu"
       disabled={importing}
@@ -1296,7 +1296,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
       {/* ── Documents header (all-mode only) ──────────────────────────────── */}
       {resolvedMode === "all" && (
         <div className="flex h-8 shrink-0 items-center justify-between border-b border-[rgb(var(--color-border))] px-3">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+          <span className="text-xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
             Documents
           </span>
           <div className="flex items-center gap-1">
@@ -1333,7 +1333,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
 
           {storyboardsExpanded && isCreatingSb && (
             <div className="space-y-2 border-b border-[rgb(var(--color-border))] px-3 py-2">
-              <label className="block text-[10px] font-medium text-[rgb(var(--color-text-secondary))]" htmlFor="new-storyboard-title">
+              <label className="block text-2xs font-medium text-[rgb(var(--color-text-secondary))]" htmlFor="new-storyboard-title">
                 Storyboard name
               </label>
               <input
@@ -1353,7 +1353,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                 <button
                   type="button"
                   onClick={() => { setIsCreatingSb(false); setNewSbTitle(""); }}
-                  className="rounded-md px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+                  className="rounded-md px-2 py-1 text-2xs text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
                 >
                   Cancel
                 </button>
@@ -1361,7 +1361,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                   type="button"
                   onClick={() => void handleCreateSb()}
                   disabled={!newSbTitle.trim()}
-                  className="rounded-md bg-[rgb(var(--color-accent))] px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-accent-fg))] transition-opacity disabled:pointer-events-none disabled:opacity-50"
+                  className="rounded-md bg-[rgb(var(--color-accent))] px-2 py-1 text-2xs font-medium text-[rgb(var(--color-accent-fg))] transition-opacity disabled:pointer-events-none disabled:opacity-50"
                 >
                   Create
                 </button>
@@ -1490,7 +1490,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
 
           {sketchesExpanded && isCreatingSk && (
             <div className="space-y-2 border-b border-[rgb(var(--color-border))] px-3 py-2">
-              <label className="block text-[10px] font-medium text-[rgb(var(--color-text-secondary))]" htmlFor="new-sketch-title">
+              <label className="block text-2xs font-medium text-[rgb(var(--color-text-secondary))]" htmlFor="new-sketch-title">
                 Sketch name
               </label>
               <input
@@ -1510,7 +1510,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                 <button
                   type="button"
                   onClick={() => { setIsCreatingSk(false); setNewSkTitle(""); }}
-                  className="rounded-md px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+                  className="rounded-md px-2 py-1 text-2xs text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
                 >
                   Cancel
                 </button>
@@ -1518,7 +1518,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                   type="button"
                   onClick={() => void handleCreateSk()}
                   disabled={!newSkTitle.trim()}
-                  className="rounded-md bg-[rgb(var(--color-accent))] px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-accent-fg))] transition-opacity disabled:pointer-events-none disabled:opacity-50"
+                  className="rounded-md bg-[rgb(var(--color-accent))] px-2 py-1 text-2xs font-medium text-[rgb(var(--color-accent-fg))] transition-opacity disabled:pointer-events-none disabled:opacity-50"
                 >
                   Create
                 </button>
@@ -1647,7 +1647,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
 
           {notesExpanded && isCreatingNote && (
             <div className="space-y-2 border-b border-[rgb(var(--color-border))] px-3 py-2">
-              <label className="block text-[10px] font-medium text-[rgb(var(--color-text-secondary))]" htmlFor="new-note-title">
+              <label className="block text-2xs font-medium text-[rgb(var(--color-text-secondary))]" htmlFor="new-note-title">
                 Note name
               </label>
               <input
@@ -1667,7 +1667,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                 <button
                   type="button"
                   onClick={() => { setIsCreatingNote(false); setNewNoteTitle(""); }}
-                  className="rounded-md px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+                  className="rounded-md px-2 py-1 text-2xs text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
                 >
                   Cancel
                 </button>
@@ -1675,7 +1675,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                   type="button"
                   onClick={() => void handleCreateNote()}
                   disabled={!newNoteTitle.trim()}
-                  className="rounded-md bg-[rgb(var(--color-accent))] px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-accent-fg))] transition-opacity disabled:pointer-events-none disabled:opacity-50"
+                  className="rounded-md bg-[rgb(var(--color-accent))] px-2 py-1 text-2xs font-medium text-[rgb(var(--color-accent-fg))] transition-opacity disabled:pointer-events-none disabled:opacity-50"
                 >
                   Create
                 </button>
@@ -1692,13 +1692,13 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                 <div className="flex gap-2">
                   <button
                     onClick={() => { setNotesExpanded(true); setIsCreatingNote(true); }}
-                    className="px-3 py-1.5 text-[11px] rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))] transition-colors"
+                    className="px-3 py-1.5 text-xs rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))] transition-colors"
                   >
                     + New note
                   </button>
                   <button
                     onClick={handleOpenImportMenu}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[rgb(var(--color-border))] px-3 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-accent))] hover:text-[rgb(var(--color-text))]"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[rgb(var(--color-border))] px-3 py-1.5 text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-accent))] hover:text-[rgb(var(--color-text))]"
                     aria-haspopup="menu"
                     aria-expanded={importMenu !== null}
                   >
@@ -1892,10 +1892,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             {pendingDelete.usedBy && pendingDelete.usedBy.length > 0 && (
               <div className="mb-3 px-3 py-2 rounded-lg bg-warning/10 border border-warning/30" data-testid="delete-asset-used-by">
                 <p className="text-xs text-warning font-medium mb-1">⚠ Used in {pendingDelete.usedBy.length === 1 ? "a storyboard" : `${pendingDelete.usedBy.length} storyboards`}:</p>
-                <ul className="text-[11px] text-warning/80 list-disc list-inside">
+                <ul className="text-xs text-warning/80 list-disc list-inside">
                   {pendingDelete.usedBy.map((t) => <li key={t}>{t}</li>)}
                 </ul>
-                <p className="text-[11px] text-warning/80 mt-1">Deleting will leave broken references.</p>
+                <p className="text-xs text-warning/80 mt-1">Deleting will leave broken references.</p>
               </div>
             )}
             <div className="flex gap-2 justify-end">
@@ -1985,10 +1985,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
               <p className="text-xs text-warning font-medium mb-1">
                 ⚠ Used in {transferWarning.usedBy.length === 1 ? "a storyboard" : `${transferWarning.usedBy.length} storyboards`}:
               </p>
-              <ul className="text-[11px] text-warning/80 list-disc list-inside">
+              <ul className="text-xs text-warning/80 list-disc list-inside">
                 {transferWarning.usedBy.map((t) => <li key={t}>{t}</li>)}
               </ul>
-              <p className="text-[11px] text-warning/80 mt-1">Moving will leave broken references in this project.</p>
+              <p className="text-xs text-warning/80 mt-1">Moving will leave broken references in this project.</p>
             </div>
             <div className="flex gap-2 justify-end">
               <button

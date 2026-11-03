@@ -284,7 +284,7 @@ export function NarrationPlayback({
           />
         )}
         {duration > 0 && (
-          <span className="pointer-events-none absolute right-2 top-2 rounded-full bg-[rgb(var(--color-surface))]/85 px-2 py-0.5 text-[11px] font-medium text-[rgb(var(--color-text-secondary))]">
+          <span className="pointer-events-none absolute right-2 top-2 rounded-full bg-[rgb(var(--color-surface))]/85 px-2 py-0.5 text-xs font-medium text-[rgb(var(--color-text-secondary))]">
             {formatPlaybackTime(duration)}
           </span>
         )}

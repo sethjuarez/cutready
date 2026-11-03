@@ -61,8 +61,8 @@ describe("derived content type tokens", () => {
     }
   );
 
-  it("keeps the CutReady palette close to its original hand-picked colours", () => {
-    const palette = THEME_PALETTES.find((entry) => entry.id === "cutready")!;
+  it("keeps the CutReady Warm palette close to its original hand-picked colours", () => {
+    const palette = THEME_PALETTES.find((entry) => entry.id === "cutready-warm")!;
 
     expect(deriveContentTokens(palette.dark).sketch).toBe("170 160 255");
     // Original light values were 111 99 232 / 15 118 110 / 194 105 17; chat is the fourth derived document lane.

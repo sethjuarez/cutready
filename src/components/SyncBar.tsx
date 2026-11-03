@@ -135,7 +135,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
           <button
             onClick={() => actionFn()}
             disabled={isSyncing}
-            className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/8 px-1.5 text-[10px] font-semibold text-[rgb(var(--color-accent))] transition-colors hover:bg-[rgb(var(--color-accent))]/14 disabled:opacity-50"
+            className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/8 px-1.5 text-2xs font-semibold text-[rgb(var(--color-accent))] transition-colors hover:bg-[rgb(var(--color-accent))]/14 disabled:opacity-50"
             title={actionTitle}
             aria-label={actionTitle}
           >
@@ -147,7 +147,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
           <button
             onClick={() => getUpdatesFromBase()}
             disabled={isSyncing}
-            className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/8 px-1.5 text-[10px] font-semibold text-[rgb(var(--color-accent))] transition-colors hover:bg-[rgb(var(--color-accent))]/14 disabled:opacity-50"
+            className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/8 px-1.5 text-2xs font-semibold text-[rgb(var(--color-accent))] transition-colors hover:bg-[rgb(var(--color-accent))]/14 disabled:opacity-50"
             title={baseUpdateTitle}
             aria-label={baseUpdateTitle}
           >
@@ -158,7 +158,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
         <button
           onClick={() => fetchFromRemote()}
           disabled={isSyncing}
-          className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] disabled:opacity-40"
+          className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-2xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] disabled:opacity-40"
           title="Check for updates without changing your files"
           aria-label="Check for updates without changing your files"
         >
@@ -192,7 +192,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
                 : "bg-[rgb(var(--color-text-secondary))]"
           }`}
         />
-        <span className="text-[10px] text-[rgb(var(--color-text-secondary))] truncate flex-1">
+        <span className="text-2xs text-[rgb(var(--color-text-secondary))] truncate flex-1">
           {displayUrl}
         </span>
       </div>
@@ -201,7 +201,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
       <div className="flex items-center gap-2">
         {/* Ahead/behind badges */}
         {syncStatus && (
-          <div className="flex items-center gap-1.5 text-[10px]">
+          <div className="flex items-center gap-1.5 text-2xs">
             {isUpToDate ? (
               <span className="text-success flex items-center gap-1">
                 <Check className="w-2.5 h-2.5" />
@@ -237,7 +237,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
         <button
           onClick={() => fetchFromRemote()}
           disabled={isSyncing}
-          className="px-2 py-0.5 rounded text-[10px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/50 transition-colors disabled:opacity-40"
+          className="px-2 py-0.5 rounded text-2xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/50 transition-colors disabled:opacity-40"
           title="Check for updates without changing your files"
         >
           Check updates
@@ -248,7 +248,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
           <button
             onClick={() => actionFn()}
             disabled={isSyncing}
-            className="flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:opacity-90 transition-opacity disabled:opacity-60"
+            className="flex items-center gap-1 px-2.5 py-0.5 rounded text-2xs font-medium bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:opacity-90 transition-opacity disabled:opacity-60"
             title={actionTitle}
           >
             <ActionIcon className={`w-2.5 h-2.5 ${isSyncing ? "animate-spin" : ""}`} />
@@ -261,7 +261,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
           <button
             onClick={() => getUpdatesFromBase()}
             disabled={isSyncing}
-            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[rgb(var(--color-accent))] border border-[rgb(var(--color-accent))]/30 hover:bg-[rgb(var(--color-accent))]/10 transition-colors disabled:opacity-60"
+            className="flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-medium text-[rgb(var(--color-accent))] border border-[rgb(var(--color-accent))]/30 hover:bg-[rgb(var(--color-accent))]/10 transition-colors disabled:opacity-60"
             title={baseUpdateTitle}
             aria-label={baseUpdateTitle}
           >
@@ -274,7 +274,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
         {currentRemote?.url && prUrl && (
           <button
             onClick={() => window.open(prUrl, "_blank")}
-            className="px-2 py-0.5 rounded text-[10px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors"
+            className="px-2 py-0.5 rounded text-2xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors"
             title="Open Pull Request on GitHub"
           >
             PR
@@ -292,7 +292,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
       {syncError && syncError.includes("can't be merged") && (
         <div className="mt-1.5 flex items-center gap-1.5 px-2 py-1.5 rounded bg-warning/10 border border-warning/20">
           <AlertTriangle className="text-warning shrink-0 w-3 h-3" />
-          <span className="text-[10px] text-warning flex-1">
+          <span className="text-2xs text-warning flex-1">
             Changes conflict with remote. Take a snapshot, then try pulling again.
           </span>
         </div>
@@ -300,7 +300,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
 
       {/* General error message (non-diverge) */}
       {syncError && !syncError.includes("can't be merged") && (
-        <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-error" title={syncError}>
+        <div className="mt-1.5 flex items-center gap-1.5 text-2xs text-error" title={syncError}>
           {isContributorIdentityRequired(syncError) ? (
             <>
               <UserRound className="shrink-0 w-2.5 h-2.5" />
@@ -364,18 +364,18 @@ export function IncomingPreview({
 }) {
   const body = (
     <div className="max-h-64 overflow-y-auto py-1">
-      <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+      <div className="px-2 pb-1 text-2xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
         Incoming work
       </div>
       {commits.length === 0 ? (
-        <div className="px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
+        <div className="px-2 py-1 text-2xs text-[rgb(var(--color-text-secondary))]">
           Fetch latest to preview what collaborators changed.
         </div>
       ) : (
         commits.map((commit) => (
           <div key={commit.id} className="border-t border-[rgb(var(--color-border))]/60 px-2 py-1.5 first:border-t-0">
-            <div className="truncate text-[11px] font-medium text-[rgb(var(--color-text))]">{commit.message}</div>
-            <div className="mt-0.5 flex items-center gap-1 text-[9px] text-[rgb(var(--color-text-secondary))]">
+            <div className="truncate text-xs font-medium text-[rgb(var(--color-text))]">{commit.message}</div>
+            <div className="mt-0.5 flex items-center gap-1 text-2xs text-[rgb(var(--color-text-secondary))]">
               <span className="truncate">{commit.author}</span>
               <span>•</span>
               <span>{commit.changed_files.length} file{commit.changed_files.length === 1 ? "" : "s"}</span>

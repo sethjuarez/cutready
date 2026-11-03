@@ -1,5 +1,11 @@
+import { polishThemePalette } from "./paletteColor";
+
+export { deriveContentTokens } from "./paletteColor";
+export type { ContentTypeTokenKey } from "./paletteColor";
+
 export type ThemePaletteId =
   | "cutready"
+  | "cutready-warm"
   | "abolkog"
   | "soft"
   | "noctis"
@@ -47,235 +53,7 @@ export interface ThemePalette {
   dark: ThemeColorTokens;
 }
 
-type Rgb = [number, number, number];
-
-function tokenToRgb(token: string): Rgb {
-  const parts = token.split(/\s+/).map(Number);
-  return [parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0];
-}
-
-function rgbToToken([r, g, b]: Rgb): string {
-  return `${Math.round(r)} ${Math.round(g)} ${Math.round(b)}`;
-}
-
-function clampChannel(value: number): number {
-  return Math.max(0, Math.min(255, value));
-}
-
-function mixRgb(from: Rgb, to: Rgb, amount: number): Rgb {
-  return [
-    clampChannel(from[0] + (to[0] - from[0]) * amount),
-    clampChannel(from[1] + (to[1] - from[1]) * amount),
-    clampChannel(from[2] + (to[2] - from[2]) * amount),
-  ];
-}
-
-function linearize(channel: number): number {
-  const value = channel / 255;
-  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-}
-
-function relativeLuminance(rgb: Rgb): number {
-  const [r, g, b] = rgb.map(linearize) as Rgb;
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-function contrastRatio(a: Rgb, b: Rgb): number {
-  const [lighter, darker] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
-  return (lighter + 0.05) / (darker + 0.05);
-}
-
-function toOklab(rgb: Rgb): Rgb {
-  const [r, g, b] = rgb.map(linearize) as Rgb;
-  const l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
-  const m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
-  const s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
-  const lRoot = Math.cbrt(l);
-  const mRoot = Math.cbrt(m);
-  const sRoot = Math.cbrt(s);
-
-  return [
-    0.2104542553 * lRoot + 0.793617785 * mRoot - 0.0040720468 * sRoot,
-    1.9779984951 * lRoot - 2.428592205 * mRoot + 0.4505937099 * sRoot,
-    0.0259040371 * lRoot + 0.7827717662 * mRoot - 0.808675766 * sRoot,
-  ];
-}
-
-function oklabDistance(a: Rgb, b: Rgb): number {
-  const first = toOklab(a);
-  const second = toOklab(b);
-  return Math.hypot(
-    (first[0] - second[0]) * 100,
-    (first[1] - second[1]) * 100,
-    (first[2] - second[2]) * 100
-  );
-}
-
-function adjustToward(
-  value: Rgb,
-  target: Rgb,
-  passes: (candidate: Rgb) => boolean,
-): Rgb {
-  let best = value;
-
-  for (let step = 1; step <= 12; step += 1) {
-    const candidate = mixRgb(value, target, step / 12);
-    best = candidate;
-    if (passes(candidate)) {
-      break;
-    }
-  }
-
-  return best;
-}
-
-function ensureContrast(value: Rgb, background: Rgb, target: Rgb, minimum: number): Rgb {
-  if (contrastRatio(value, background) >= minimum) return value;
-  return adjustToward(value, target, (candidate) => contrastRatio(candidate, background) >= minimum);
-}
-
-function ensureDistance(value: Rgb, reference: Rgb, target: Rgb, minimum: number): Rgb {
-  if (oklabDistance(value, reference) >= minimum) return value;
-  return adjustToward(value, target, (candidate) => oklabDistance(candidate, reference) >= minimum);
-}
-
-function ensureHoverState(value: Rgb, accent: Rgb, surface: Rgb, text: Rgb): Rgb {
-  if (contrastRatio(value, surface) >= 4.5 && oklabDistance(value, accent) >= 6) {
-    return value;
-  }
-
-  const ink: Rgb = [24, 22, 20];
-  const paper: Rgb = [255, 255, 255];
-  const targets = [text, surface, ink, paper].sort(
-    (a, b) => oklabDistance(b, accent) - oklabDistance(a, accent)
-  );
-  let best = value;
-  let bestScore = Math.min(contrastRatio(value, surface) / 4.5, oklabDistance(value, accent) / 6);
-
-  for (const target of targets) {
-    for (let step = 1; step <= 16; step += 1) {
-      const candidate = mixRgb(value, target, step / 16);
-      const contrast = contrastRatio(candidate, surface);
-      const distance = oklabDistance(candidate, accent);
-      const score = Math.min(contrast / 4.5, distance / 6);
-
-      if (score > bestScore) {
-        best = candidate;
-        bestScore = score;
-      }
-
-      if (contrast >= 4.5 && distance >= 6) {
-        return candidate;
-      }
-    }
-  }
-
-  return best;
-}
-
-function bestAccentForeground(accent: Rgb): string {
-  const white: Rgb = [255, 255, 255];
-  const ink: Rgb = [24, 22, 20];
-  return rgbToToken(contrastRatio(white, accent) >= contrastRatio(ink, accent) ? white : ink);
-}
-
-function polishTokens(tokens: ThemeColorTokens): ThemeColorTokens {
-  const surface = tokenToRgb(tokens.surface);
-  const text = tokenToRgb(tokens.text);
-  const accentTarget = text;
-  const borderTarget = text;
-
-  const accent = ensureContrast(tokenToRgb(tokens.accent), surface, accentTarget, 4.5);
-  const accentHover = ensureHoverState(tokenToRgb(tokens.accentHover), accent, surface, text);
-  const border = ensureDistance(tokenToRgb(tokens.border), surface, borderTarget, 8);
-  const borderSubtle = ensureDistance(tokenToRgb(tokens.borderSubtle), surface, borderTarget, 5);
-  const textSecondary = ensureContrast(tokenToRgb(tokens.textSecondary), surface, text, 4.5);
-
-  return {
-    ...tokens,
-    accent: rgbToToken(accent),
-    accentHover: rgbToToken(accentHover),
-    border: rgbToToken(border),
-    borderSubtle: rgbToToken(borderSubtle),
-    textSecondary: rgbToToken(textSecondary),
-    accentFg: bestAccentForeground(accent),
-  };
-}
-
-function polishThemePalette(palette: ThemePalette): ThemePalette {
-  return {
-    ...palette,
-    light: polishTokens(palette.light),
-    dark: polishTokens(palette.dark),
-  };
-}
-
-function fromOklab([lightness, aAxis, bAxis]: Rgb): Rgb {
-  const lRoot = lightness + 0.3963377774 * aAxis + 0.2158037573 * bAxis;
-  const mRoot = lightness - 0.1055613458 * aAxis - 0.0638541728 * bAxis;
-  const sRoot = lightness - 0.0894841775 * aAxis - 1.291485548 * bAxis;
-  const l = lRoot ** 3;
-  const m = mRoot ** 3;
-  const s = sRoot ** 3;
-
-  return [
-    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
-  ].map((channel) => {
-    const encoded = channel <= 0.0031308 ? channel * 12.92 : 1.055 * channel ** (1 / 2.4) - 0.055;
-    return clampChannel(encoded * 255);
-  }) as Rgb;
-}
-
-/**
- * Rotates hue in OKLCh so perceived lightness and chroma stay fixed. Rotating in
- * HSL instead would make warm hues read far brighter than cool ones at the same
- * nominal lightness.
- */
-function rotateHue(rgb: Rgb, degrees: number, minimumChroma: number): Rgb {
-  const [lightness, aAxis, bAxis] = toOklab(rgb);
-  const chroma = Math.max(Math.hypot(aAxis, bAxis), minimumChroma);
-  const hue = Math.atan2(bAxis, aAxis) + (degrees * Math.PI) / 180;
-
-  return fromOklab([lightness, Math.cos(hue) * chroma, Math.sin(hue) * chroma]);
-}
-
-/**
- * Hue offsets from the palette accent, in OKLCh degrees. Measured from the
- * original hand-picked CutReady content colours so the default theme keeps its
- * indigo/teal/amber/rose identity. The offsets keep content types distinguishable
- * in every palette -- unlike reusing
- * `warning`/`success`, which collide with `accent` outright in some palettes.
- */
-const CONTENT_HUE_OFFSETS: Record<ContentTypeTokenKey, number> = {
-  sketch: 0,
-  storyboard: -100,
-  note: 145,
-  chat: 60,
-};
-
-/** Keeps near-greyscale accents (Ink Mono) faintly tinted rather than identical. */
-const CONTENT_MINIMUM_CHROMA = 0.06;
-
-export type ContentTypeTokenKey = "storyboard" | "sketch" | "note" | "chat";
-
-export function deriveContentTokens(
-  tokens: ThemeColorTokens
-): Record<ContentTypeTokenKey, string> {
-  const accent = tokenToRgb(tokens.accent);
-  const surface = tokenToRgb(tokens.surface);
-  const text = tokenToRgb(tokens.text);
-
-  return Object.fromEntries(
-    Object.entries(CONTENT_HUE_OFFSETS).map(([key, offset]) => {
-      const rotated = rotateHue(accent, offset, CONTENT_MINIMUM_CHROMA);
-      return [key, rgbToToken(ensureContrast(rotated, surface, text, 4.5))];
-    })
-  ) as Record<ContentTypeTokenKey, string>;
-}
-
-const cutreadyLight: ThemeColorTokens = {
+const warmLight: ThemeColorTokens = {
   surface: "251 250 248",
   surfaceAlt: "243 240 236",
   surfaceInset: "236 231 225",
@@ -298,7 +76,7 @@ const cutreadyLight: ThemeColorTokens = {
   mediaControlFg: "255 255 255",
 };
 
-const cutreadyDark: ThemeColorTokens = {
+const warmDark: ThemeColorTokens = {
   surface: "39 36 33",
   surfaceAlt: "49 45 41",
   surfaceInset: "33 31 29",
@@ -321,14 +99,69 @@ const cutreadyDark: ThemeColorTokens = {
   mediaControlFg: "255 255 255",
 };
 
+/** Direction C ("Companion") neutrals: mica canvas, light layers, violet brand. */
+const companionLight: ThemeColorTokens = {
+  surface: "251 251 251",
+  surfaceAlt: "243 243 244",
+  surfaceInset: "236 238 242",
+  surfaceToolbar: "228 230 235",
+  accent: "107 92 231",
+  accentHover: "82 67 199",
+  border: "222 223 226",
+  borderSubtle: "233 234 237",
+  text: "27 27 27",
+  textSecondary: "91 91 91",
+  secondary: "124 58 237",
+  tertiary: "219 39 119",
+  success: "16 124 16",
+  warning: "154 88 0",
+  error: "196 43 28",
+  accentFg: "255 255 255",
+  overlayScrim: "0 0 0",
+  overlayStrong: "0 0 0",
+  mediaControlBg: "0 0 0",
+  mediaControlFg: "255 255 255",
+};
+
+const companionDark: ThemeColorTokens = {
+  surface: "40 40 40",
+  surfaceAlt: "49 49 49",
+  surfaceInset: "31 31 33",
+  surfaceToolbar: "26 26 28",
+  accent: "164 154 250",
+  accentHover: "189 181 255",
+  border: "66 66 68",
+  borderSubtle: "54 54 56",
+  text: "255 255 255",
+  textSecondary: "207 207 207",
+  secondary: "167 139 250",
+  tertiary: "244 114 182",
+  success: "98 196 98",
+  warning: "242 181 74",
+  error: "255 153 164",
+  accentFg: "23 18 47",
+  overlayScrim: "0 0 0",
+  overlayStrong: "0 0 0",
+  mediaControlBg: "0 0 0",
+  mediaControlFg: "255 255 255",
+};
+
 const rawThemePalettes: ThemePalette[] = [
   {
     id: "cutready",
     name: "CutReady",
-    description: "Warm neutral surfaces with violet accents.",
+    description: "Clean neutral surfaces with violet accents.",
+    swatches: ["#1f1f21", "#313131", "#a49afa", "#eceef2"],
+    light: companionLight,
+    dark: companionDark,
+  },
+  {
+    id: "cutready-warm",
+    name: "CutReady Warm",
+    description: "The original warm neutral surfaces with violet accents.",
     swatches: ["#2b2926", "#353230", "#a49afa", "#e8e4df"],
-    light: cutreadyLight,
-    dark: cutreadyDark,
+    light: warmLight,
+    dark: warmDark,
   },
   {
     id: "abolkog",
@@ -336,7 +169,7 @@ const rawThemePalettes: ThemePalette[] = [
     description: "Cool charcoal with blue-violet highlights.",
     swatches: ["#1f2630", "#303947", "#8fb7ff", "#dbe3ee"],
     light: {
-      ...cutreadyLight,
+      ...warmLight,
       surface: "247 249 252",
       surfaceAlt: "232 237 244",
       surfaceInset: "224 230 239",
@@ -349,7 +182,7 @@ const rawThemePalettes: ThemePalette[] = [
       textSecondary: "102 113 128",
     },
     dark: {
-      ...cutreadyDark,
+      ...warmDark,
       surface: "31 38 48",
       surfaceAlt: "40 49 62",
       surfaceInset: "25 31 40",
@@ -368,7 +201,7 @@ const rawThemePalettes: ThemePalette[] = [
     description: "Quiet graphite with green and rose cues.",
     swatches: ["#242924", "#3b423b", "#42b883", "#d965c2"],
     light: {
-      ...cutreadyLight,
+      ...warmLight,
       surface: "248 249 245",
       surfaceAlt: "235 239 231",
       surfaceInset: "226 232 222",
@@ -382,7 +215,7 @@ const rawThemePalettes: ThemePalette[] = [
       tertiary: "197 83 170",
     },
     dark: {
-      ...cutreadyDark,
+      ...warmDark,
       surface: "36 41 36",
       surfaceAlt: "47 55 48",
       surfaceInset: "30 35 31",
@@ -402,7 +235,7 @@ const rawThemePalettes: ThemePalette[] = [
     description: "Deep indigo surfaces with mint accents.",
     swatches: ["#272542", "#37345a", "#63d99a", "#e67caf"],
     light: {
-      ...cutreadyLight,
+      ...warmLight,
       surface: "249 248 255",
       surfaceAlt: "236 233 250",
       surfaceInset: "228 224 244",
@@ -417,7 +250,7 @@ const rawThemePalettes: ThemePalette[] = [
       tertiary: "213 101 154",
     },
     dark: {
-      ...cutreadyDark,
+      ...warmDark,
       surface: "39 37 66",
       surfaceAlt: "51 48 86",
       surfaceInset: "32 30 55",
@@ -438,7 +271,7 @@ const rawThemePalettes: ThemePalette[] = [
     description: "Slate editor tones with blue accents.",
     swatches: ["#24292f", "#30363d", "#58a6ff", "#f0f6fc"],
     light: {
-      ...cutreadyLight,
+      ...warmLight,
       surface: "246 248 250",
       surfaceAlt: "234 238 242",
       surfaceInset: "225 230 236",
@@ -451,7 +284,7 @@ const rawThemePalettes: ThemePalette[] = [
       textSecondary: "87 96 106",
     },
     dark: {
-      ...cutreadyDark,
+      ...warmDark,
       surface: "36 41 47",
       surfaceAlt: "48 54 61",
       surfaceInset: "29 34 40",
@@ -470,7 +303,7 @@ const rawThemePalettes: ThemePalette[] = [
     description: "Blue-black surfaces with lilac accents.",
     swatches: ["#172033", "#24314a", "#b088ff", "#8bd5ca"],
     light: {
-      ...cutreadyLight,
+      ...warmLight,
       surface: "246 249 253",
       surfaceAlt: "229 236 247",
       surfaceInset: "219 228 242",
@@ -484,7 +317,7 @@ const rawThemePalettes: ThemePalette[] = [
       success: "63 159 147",
     },
     dark: {
-      ...cutreadyDark,
+      ...warmDark,
       surface: "23 32 51",
       surfaceAlt: "33 45 68",
       surfaceInset: "18 26 42",
@@ -504,7 +337,7 @@ const rawThemePalettes: ThemePalette[] = [
     description: "Earthy charcoal with orange emphasis.",
     swatches: ["#2e2b25", "#443d31", "#ff6a1a", "#a6b90f"],
     light: {
-      ...cutreadyLight,
+      ...warmLight,
       surface: "250 247 241",
       surfaceAlt: "239 232 219",
       surfaceInset: "230 220 203",
@@ -519,7 +352,7 @@ const rawThemePalettes: ThemePalette[] = [
       tertiary: "148 92 210",
     },
     dark: {
-      ...cutreadyDark,
+      ...warmDark,
       surface: "46 43 37",
       surfaceAlt: "62 55 44",
       surfaceInset: "37 34 29",
@@ -540,7 +373,7 @@ const rawThemePalettes: ThemePalette[] = [
     description: "Low-contrast editorial cyan and amber.",
     swatches: ["#002b36", "#073642", "#2aa198", "#b58900"],
     light: {
-      ...cutreadyLight,
+      ...warmLight,
       surface: "253 246 227",
       surfaceAlt: "238 232 213",
       surfaceInset: "230 223 202",
@@ -555,7 +388,7 @@ const rawThemePalettes: ThemePalette[] = [
       tertiary: "181 137 0",
     },
     dark: {
-      ...cutreadyDark,
+      ...warmDark,
       surface: "0 43 54",
       surfaceAlt: "7 54 66",
       surfaceInset: "0 34 43",
@@ -576,7 +409,7 @@ const rawThemePalettes: ThemePalette[] = [
     description: "High-contrast violet with neon accents.",
     swatches: ["#282a36", "#44475a", "#bd93f9", "#50fa7b"],
     light: {
-      ...cutreadyLight,
+      ...warmLight,
       surface: "249 247 255",
       surfaceAlt: "235 231 247",
       surfaceInset: "226 221 241",
@@ -591,7 +424,7 @@ const rawThemePalettes: ThemePalette[] = [
       tertiary: "198 68 130",
     },
     dark: {
-      ...cutreadyDark,
+      ...warmDark,
       surface: "40 42 54",
       surfaceAlt: "54 57 73",
       surfaceInset: "32 34 45",
@@ -612,7 +445,7 @@ const rawThemePalettes: ThemePalette[] = [
     description: "Arctic blue-grey with calm frost accents.",
     swatches: ["#2e3440", "#3b4252", "#88c0d0", "#a3be8c"],
     light: {
-      ...cutreadyLight,
+      ...warmLight,
       surface: "236 239 244",
       surfaceAlt: "229 233 240",
       surfaceInset: "216 222 233",
@@ -627,7 +460,7 @@ const rawThemePalettes: ThemePalette[] = [
       tertiary: "180 142 173",
     },
     dark: {
-      ...cutreadyDark,
+      ...warmDark,
       surface: "46 52 64",
       surfaceAlt: "59 66 82",
       surfaceInset: "38 43 53",
@@ -648,7 +481,7 @@ const rawThemePalettes: ThemePalette[] = [
     description: "Muted rose, pine, and gold tones.",
     swatches: ["#191724", "#26233a", "#ebbcba", "#f6c177"],
     light: {
-      ...cutreadyLight,
+      ...warmLight,
       surface: "250 244 237",
       surfaceAlt: "242 233 224",
       surfaceInset: "234 222 214",
@@ -663,7 +496,7 @@ const rawThemePalettes: ThemePalette[] = [
       tertiary: "210 129 139",
     },
     dark: {
-      ...cutreadyDark,
+      ...warmDark,
       surface: "25 23 36",
       surfaceAlt: "38 35 58",
       surfaceInset: "20 18 30",
@@ -684,7 +517,7 @@ const rawThemePalettes: ThemePalette[] = [
     description: "Forest greens with warm yellow accents.",
     swatches: ["#2d353b", "#3d484d", "#a7c080", "#dbbc7f"],
     light: {
-      ...cutreadyLight,
+      ...warmLight,
       surface: "253 245 215",
       surfaceAlt: "242 232 199",
       surfaceInset: "232 220 187",
@@ -699,7 +532,7 @@ const rawThemePalettes: ThemePalette[] = [
       tertiary: "196 101 74",
     },
     dark: {
-      ...cutreadyDark,
+      ...warmDark,
       surface: "45 53 59",
       surfaceAlt: "61 72 77",
       surfaceInset: "39 46 51",
@@ -720,7 +553,7 @@ const rawThemePalettes: ThemePalette[] = [
     description: "Warm retro browns with practical yellow accents.",
     swatches: ["#282828", "#3c3836", "#fabd2f", "#83a598"],
     light: {
-      ...cutreadyLight,
+      ...warmLight,
       surface: "251 241 199",
       surfaceAlt: "235 219 178",
       surfaceInset: "224 204 157",
@@ -738,7 +571,7 @@ const rawThemePalettes: ThemePalette[] = [
       error: "157 0 6",
     },
     dark: {
-      ...cutreadyDark,
+      ...warmDark,
       surface: "40 40 40",
       surfaceAlt: "60 56 54",
       surfaceInset: "29 32 33",
@@ -763,7 +596,7 @@ const rawThemePalettes: ThemePalette[] = [
     description: "Soft lavender surfaces with peach and teal cues.",
     swatches: ["#1e1e2e", "#313244", "#cba6f7", "#fab387"],
     light: {
-      ...cutreadyLight,
+      ...warmLight,
       surface: "239 241 245",
       surfaceAlt: "230 233 239",
       surfaceInset: "220 224 232",
@@ -781,7 +614,7 @@ const rawThemePalettes: ThemePalette[] = [
       error: "210 15 57",
     },
     dark: {
-      ...cutreadyDark,
+      ...warmDark,
       surface: "30 30 46",
       surfaceAlt: "49 50 68",
       surfaceInset: "24 24 37",
@@ -805,7 +638,7 @@ const rawThemePalettes: ThemePalette[] = [
     description: "Restrained monochrome with one crisp accent.",
     swatches: ["#111111", "#2a2a2a", "#d8d8d8", "#8f8f8f"],
     light: {
-      ...cutreadyLight,
+      ...warmLight,
       surface: "250 250 249",
       surfaceAlt: "238 238 236",
       surfaceInset: "229 229 226",
@@ -820,7 +653,7 @@ const rawThemePalettes: ThemePalette[] = [
       tertiary: "130 130 126",
     },
     dark: {
-      ...cutreadyDark,
+      ...warmDark,
       surface: "17 17 17",
       surfaceAlt: "32 32 31",
       surfaceInset: "12 12 12",

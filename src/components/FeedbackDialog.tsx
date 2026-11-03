@@ -231,7 +231,7 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
               <button
                 key={key}
                 onClick={() => setCategory(key)}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] rounded-md border transition-colors ${
+                className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border transition-colors ${
                   category === key
                     ? "bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-accent))] border-[rgb(var(--color-accent))]/30"
                     : "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text-secondary))] border-[rgb(var(--color-border))] hover:text-[rgb(var(--color-text))]"
@@ -268,18 +268,18 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2.5 py-1.5 text-[11px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-accent))]/40 hover:text-[rgb(var(--color-text))]"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2.5 py-1.5 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-accent))]/40 hover:text-[rgb(var(--color-text))]"
             >
               <Paperclip className="h-3.5 w-3.5" />
               Attach screenshots
             </button>
-            <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">
+            <span className="text-2xs text-[rgb(var(--color-text-secondary))]">
               PNG/JPEG, up to 3 files, 5 MB each
             </span>
           </div>
 
           {attachmentErrors.length > 0 && (
-            <div className="rounded-lg border border-error/20 bg-error/10 px-2.5 py-2 text-[11px] text-error">
+            <div className="rounded-lg border border-error/20 bg-error/10 px-2.5 py-2 text-xs text-error">
               {attachmentErrors.map((error) => (
                 <div key={error} className="flex items-start gap-1.5">
                   <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
@@ -300,11 +300,11 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
                     <img src={attachment.previewUrl} alt="" className="h-full w-full object-cover" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 text-[11px] font-medium text-[rgb(var(--color-text))]">
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-[rgb(var(--color-text))]">
                       <Image className="h-3 w-3 shrink-0 text-[rgb(var(--color-accent))]" />
                       <span className="truncate">{attachment.file.name}</span>
                     </div>
-                    <div className="mt-0.5 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                    <div className="mt-0.5 text-2xs text-[rgb(var(--color-text-secondary))]">
                       {attachment.file.type.replace("image/", "").toUpperCase()} · {formatFeedbackAttachmentSize(attachment.file.size)}
                     </div>
                   </div>
@@ -323,7 +323,7 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
         </div>
 
         {submitError && (
-          <div className="rounded-lg border border-error/20 bg-error/10 px-2.5 py-2 text-[11px] text-error">
+          <div className="rounded-lg border border-error/20 bg-error/10 px-2.5 py-2 text-xs text-error">
             {submitError}
           </div>
         )}
@@ -349,7 +349,7 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
                 }`}
               />
             </button>
-            <span className="text-[11px] text-[rgb(var(--color-text-secondary))] group-hover:text-[rgb(var(--color-text))] transition-colors select-none">
+            <span className="text-xs text-[rgb(var(--color-text-secondary))] group-hover:text-[rgb(var(--color-text))] transition-colors select-none">
               Include debug diagnostics
             </span>
           </label>
@@ -371,7 +371,7 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
                 }`}
               />
             </button>
-            <span className="text-[11px] text-[rgb(var(--color-text-secondary))] group-hover:text-[rgb(var(--color-text))] transition-colors select-none">
+            <span className="text-xs text-[rgb(var(--color-text-secondary))] group-hover:text-[rgb(var(--color-text))] transition-colors select-none">
               Include OS details
             </span>
           </label>
@@ -380,7 +380,7 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
           <button
             onClick={handleSubmit}
             disabled={!feedback.trim() || submitting}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-lg transition-colors ${
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
               !feedback.trim() || submitting
                 ? "text-[rgb(var(--color-text-secondary))]/30 bg-[rgb(var(--color-surface-alt))] cursor-not-allowed"
                 : copied

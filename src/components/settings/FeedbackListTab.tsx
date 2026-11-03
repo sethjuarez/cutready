@@ -482,7 +482,7 @@ export function FeedbackListTab() {
           </label>
         </div>
 
-        <div className="mt-3 grid gap-2 text-[11px] text-[rgb(var(--color-text-secondary))] sm:grid-cols-3">
+        <div className="mt-3 grid gap-2 text-xs text-[rgb(var(--color-text-secondary))] sm:grid-cols-3">
           <div className="rounded-lg bg-[rgb(var(--color-surface))] px-3 py-2">
             <span className="block uppercase tracking-wider opacity-70">Current status</span>
             <span className="mt-0.5 block text-[rgb(var(--color-text))]">
@@ -502,7 +502,7 @@ export function FeedbackListTab() {
         </div>
 
         <div className="mt-3 flex items-center justify-between gap-3">
-          <p className="text-[11px] text-[rgb(var(--color-text-secondary))]">
+          <p className="text-xs text-[rgb(var(--color-text-secondary))]">
             {auditaurSummary?.session
               ? `Session ${auditaurSummary.session.session_id.slice(0, 8)} is active.`
               : "No active diagnostics session was found."}
@@ -511,7 +511,7 @@ export function FeedbackListTab() {
             type="button"
             onClick={clearDiagnosticsLogs}
             disabled={clearingLogs}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[rgb(var(--color-border))] px-3 py-1.5 text-[11px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:border-error/40 hover:text-error disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[rgb(var(--color-border))] px-3 py-1.5 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:border-error/40 hover:text-error disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Trash2 className="h-3 w-3" />
             {clearingLogs ? "Clearing..." : "Clear old diagnostics logs"}
@@ -529,7 +529,7 @@ export function FeedbackListTab() {
           <div className="flex items-center gap-2">
             <button
               onClick={copyAll}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg font-medium transition-colors border ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium transition-colors border ${
                 copied
                   ? "bg-success/15 text-success border-success/30"
                   : "bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))] border-[rgb(var(--color-border))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-text-secondary))]/40"
@@ -549,7 +549,7 @@ export function FeedbackListTab() {
             </button>
             <button
               onClick={clearAll}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg font-medium transition-colors border bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))] border-[rgb(var(--color-border))] hover:text-error hover:border-error/40"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg font-medium transition-colors border bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))] border-[rgb(var(--color-border))] hover:text-error hover:border-error/40"
             >
               <Trash2 className="w-3 h-3" />
               Clear All
@@ -570,35 +570,35 @@ export function FeedbackListTab() {
               className="group relative px-3 py-2.5 rounded-lg bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))]"
             >
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))] border border-[rgb(var(--color-accent))]/20">
+                <span className="text-2xs font-medium px-1.5 py-0.5 rounded bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))] border border-[rgb(var(--color-accent))]/20">
                   {entry.category}
                 </span>
-                <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">
+                <span className="text-2xs text-[rgb(var(--color-text-secondary))]">
                   {entry.date.split("T")[0]}
                 </span>
               </div>
               <p className="text-xs text-[rgb(var(--color-text))] whitespace-pre-wrap">{entry.feedback}</p>
               {entry.debug_log && (
-                <div className="mt-1.5 flex items-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                <div className="mt-1.5 flex items-center gap-1 text-2xs text-[rgb(var(--color-text-secondary))]">
                   <LayoutGrid className="w-2.5 h-2.5" />
                   Debug log attached ({entry.debug_log.split("\n").length} lines)
                 </div>
               )}
               {entry.system_info && (
-                <div className="mt-1.5 flex items-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                <div className="mt-1.5 flex items-center gap-1 text-2xs text-[rgb(var(--color-text-secondary))]">
                   <Info className="w-2.5 h-2.5" />
                   OS details attached
                 </div>
               )}
               {entry.attachments && entry.attachments.length > 0 && (
                 <div className="mt-2 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/60 px-2.5 py-2">
-                  <div className="mb-1.5 flex items-center gap-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">
+                  <div className="mb-1.5 flex items-center gap-1 text-2xs font-medium text-[rgb(var(--color-text-secondary))]">
                     <Image className="h-2.5 w-2.5 text-[rgb(var(--color-accent))]" />
                     {entry.attachments.length} screenshot{entry.attachments.length === 1 ? "" : "s"} preserved for manual upload
                   </div>
                   <div className="space-y-1">
                     {entry.attachments.map((attachment) => (
-                      <div key={attachment.id} className="flex items-center justify-between gap-2 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                      <div key={attachment.id} className="flex items-center justify-between gap-2 text-2xs text-[rgb(var(--color-text-secondary))]">
                         <span className="truncate text-[rgb(var(--color-text))]">{attachment.file_name}</span>
                         <span className="shrink-0">{formatFeedbackAttachmentSize(attachment.size_bytes)}</span>
                       </div>
@@ -609,16 +609,16 @@ export function FeedbackListTab() {
               {/* Confirm delete inline */}
               {isConfirming && (
                 <div className="mt-2 flex items-center gap-2 p-2 rounded bg-error/10 border border-error/20">
-                  <span className="text-[11px] text-error flex-1">Delete this feedback?</span>
+                  <span className="text-xs text-error flex-1">Delete this feedback?</span>
                   <button
                     onClick={() => deleteSingle(realIndex)}
-                    className="px-2 py-0.5 text-[11px] rounded bg-error/20 text-error hover:bg-error/30 transition-colors"
+                    className="px-2 py-0.5 text-xs rounded bg-error/20 text-error hover:bg-error/30 transition-colors"
                   >
                     Delete
                   </button>
                   <button
                     onClick={() => setConfirmDelete(null)}
-                    className="px-2 py-0.5 text-[11px] rounded text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface))] transition-colors"
+                    className="px-2 py-0.5 text-xs rounded text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface))] transition-colors"
                   >
                     Cancel
                   </button>

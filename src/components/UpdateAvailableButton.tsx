@@ -88,7 +88,7 @@ export function UpdateAvailableButton() {
               <div className="absolute -right-16 -top-24 h-48 w-48 rounded-full bg-[rgb(var(--color-accent))]/18 blur-3xl" />
               <div className="relative flex items-start justify-between gap-4">
                 <div>
-                  <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-[rgb(var(--color-accent))]/25 bg-[rgb(var(--color-accent))]/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-accent))]">
+                  <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-[rgb(var(--color-accent))]/25 bg-[rgb(var(--color-accent))]/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-accent))]">
                     <Sparkles className="h-3 w-3" />
                     Update available
                   </div>

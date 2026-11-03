@@ -555,7 +555,7 @@ export function TerminalPanel({
     <div className="flex h-full min-h-0 flex-col">
       {toolbarHost ? createPortal(terminalTabs, toolbarHost) : terminalTabs}
 
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[rgb(var(--color-border))] px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[rgb(var(--color-border))] px-2 py-1 text-2xs text-[rgb(var(--color-text-secondary))]">
         <div className="min-w-0 truncate">
           {activeRecord?.status === "opening"
             ? "Starting terminal..."
@@ -670,7 +670,7 @@ function TerminalTabs({
         {terminals.map((terminal) => (
           <div
             key={terminal.id}
-            className={`group flex max-w-44 shrink-0 items-center gap-1 rounded-md border text-[10px] transition-colors ${
+            className={`group flex max-w-44 shrink-0 items-center gap-1 rounded-md border text-2xs transition-colors ${
               activePanel && terminal.id === activeTerminalId
                 ? "border-[rgb(var(--color-accent))]/50 bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text))]"
                 : "border-transparent text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))]"

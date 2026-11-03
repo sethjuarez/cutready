@@ -483,7 +483,7 @@ function TreeNodeRow({
           <ChevronRight className={`w-3 h-3 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} />
           <Folder className="w-3.5 h-3.5 shrink-0" />
           <span className="text-xs font-medium truncate">{node.name}</span>
-          <span className="text-[10px] text-[rgb(var(--color-text-secondary))]/50 ml-auto shrink-0">
+          <span className="text-2xs text-[rgb(var(--color-text-secondary))]/50 ml-auto shrink-0">
             {node.children.length}
           </span>
         </button>
@@ -553,7 +553,7 @@ function TreeNodeRow({
       ) : (
         <span className="text-xs truncate">{node.name}</span>
       )}
-      <span className="text-[10px] text-[rgb(var(--color-text-secondary))]/40 ml-auto shrink-0">
+      <span className="text-2xs text-[rgb(var(--color-text-secondary))]/40 ml-auto shrink-0">
         {formatSize(node.size)}
       </span>
     </button>

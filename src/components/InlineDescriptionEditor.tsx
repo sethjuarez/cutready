@@ -200,7 +200,7 @@ export function InlineDescriptionEditor({
           />
           {status !== "idle" && (
             <span
-              className={`pointer-events-none absolute right-2 top-2 rounded-full bg-[rgb(var(--color-surface))]/90 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] ${
+              className={`pointer-events-none absolute right-2 top-2 rounded-full bg-[rgb(var(--color-surface))]/90 px-2 py-0.5 text-2xs font-medium uppercase tracking-[0.14em] ${
                 status === "error"
                   ? "text-error"
                   : "text-[rgb(var(--color-text-secondary))]/65"

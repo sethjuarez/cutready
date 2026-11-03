@@ -60,7 +60,7 @@ export function MergeConflictPanel() {
               Merging <span className="text-[rgb(var(--color-accent))]">{sourceLabel}</span> into{" "}
               <span className="text-[rgb(var(--color-accent))]">{targetLabel}</span>
             </h2>
-            <p className="text-[10px] text-[rgb(var(--color-text-secondary))]">
+            <p className="text-2xs text-[rgb(var(--color-text-secondary))]">
               {resolvedCount === mergeConflicts.length
                 ? `All ${mergeConflicts.length} file${mergeConflicts.length !== 1 ? "s" : ""} resolved — ready to apply`
                 : `${resolvedCount} of ${mergeConflicts.length} file${mergeConflicts.length !== 1 ? "s" : ""} resolved`
@@ -150,11 +150,11 @@ function ConflictCard({
       <div className="flex items-center gap-2 px-3 py-2 border-b border-[rgb(var(--color-border))]/50">
         <span className={`inline-block w-1.5 h-1.5 rounded-full ${isResolved ? "bg-success" : "bg-warning"}`} />
         <span className="text-xs font-medium text-[rgb(var(--color-text))]">{conflict.path}</span>
-        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-border))]/50 text-[rgb(var(--color-text-secondary))]">
+        <span className="text-2xs px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-border))]/50 text-[rgb(var(--color-text-secondary))]">
           {typeLabel}
         </span>
         {isResolved && (
-          <span className="text-[9px] text-success font-medium ml-auto">✓ Resolved</span>
+          <span className="text-2xs text-success font-medium ml-auto">✓ Resolved</span>
         )}
       </div>
 
@@ -293,8 +293,8 @@ function WholeFileResolver({
             : "bg-[rgb(var(--color-surface))] hover:bg-[rgb(var(--color-border))]/20"
         }`}
       >
-        <div className="text-[9px] font-medium text-accent mb-1.5">{targetLabel} (current)</div>
-        <pre className="text-[10px] text-[rgb(var(--color-text))] font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
+        <div className="text-2xs font-medium text-accent mb-1.5">{targetLabel} (current)</div>
+        <pre className="text-2xs text-[rgb(var(--color-text))] font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
           {conflict.ours.substring(0, 500)}{conflict.ours.length > 500 ? "…" : ""}
         </pre>
       </button>
@@ -306,8 +306,8 @@ function WholeFileResolver({
             : "bg-[rgb(var(--color-surface))] hover:bg-[rgb(var(--color-border))]/20"
         }`}
       >
-        <div className="text-[9px] font-medium text-[rgb(var(--color-secondary))] mb-1.5">{sourceLabel} (incoming)</div>
-        <pre className="text-[10px] text-[rgb(var(--color-text))] font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
+        <div className="text-2xs font-medium text-[rgb(var(--color-secondary))] mb-1.5">{sourceLabel} (incoming)</div>
+        <pre className="text-2xs text-[rgb(var(--color-text))] font-mono whitespace-pre-wrap max-h-32 overflow-y-auto">
           {conflict.theirs.substring(0, 500)}{conflict.theirs.length > 500 ? "…" : ""}
         </pre>
       </button>

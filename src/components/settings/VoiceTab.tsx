@@ -136,7 +136,7 @@ export function VoiceTab({
             } disabled:cursor-not-allowed disabled:opacity-60`}
           >
             <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Reuse current Foundry connection</span>
-            <span className="mt-1 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+            <span className="mt-1 block text-xs leading-4 text-[rgb(var(--color-text-secondary))]">
               {activeFoundryProvider
                 ? `${activeFoundryProvider.name} (${activeFoundryProvider.resourceName || activeFoundryProvider.endpoint})`
                 : "Set up and select a Foundry or Azure OpenAI provider first."}
@@ -157,7 +157,7 @@ export function VoiceTab({
             }`}
           >
             <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Use a narration connection</span>
-            <span className="mt-1 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+            <span className="mt-1 block text-xs leading-4 text-[rgb(var(--color-text-secondary))]">
               Select or create a Foundry/Azure connection just for generated narration.
             </span>
           </button>
@@ -168,7 +168,7 @@ export function VoiceTab({
             <div className="flex flex-col gap-3 md:flex-row md:items-center">
               <label className="flex-1">
                 <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Narration connection</span>
-                <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+                <span className="mt-0.5 block text-xs leading-4 text-[rgb(var(--color-text-secondary))]">
                   Pick an existing Foundry/Azure provider. Its selected resource is used to derive the Speech endpoint.
                 </span>
                 <select
@@ -192,7 +192,7 @@ export function VoiceTab({
                 Create narration connection
               </button>
             </div>
-            <p className="mt-2 text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+            <p className="mt-2 text-xs leading-4 text-[rgb(var(--color-text-secondary))]">
               New narration connections are configured in Connections so endpoint, sign-in, and selected resource stay in one place.
             </p>
           </div>
@@ -202,7 +202,7 @@ export function VoiceTab({
           <label className="grid gap-3 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_18rem] md:items-start">
             <span className="min-w-0">
               <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Voice</span>
-              <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+              <span className="mt-0.5 block text-xs leading-4 text-[rgb(var(--color-text-secondary))]">
                 {NARRATION_VOICE_OPTIONS.find((voice) => voice.value === settings.narrationVoiceName)?.description ?? "Azure Speech voice used in generated SSML."}
               </span>
             </span>
@@ -220,7 +220,7 @@ export function VoiceTab({
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <span className="min-w-0">
                 <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Voice sample</span>
-                <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+                <span className="mt-0.5 block text-xs leading-4 text-[rgb(var(--color-text-secondary))]">
                   “{NARRATION_VOICE_SAMPLE}”
                 </span>
               </span>
@@ -240,13 +240,13 @@ export function VoiceTab({
                   type="button"
                   onClick={() => void generateVoicePreview()}
                   disabled={generatingVoicePreview}
-                  className="self-start text-[11px] font-medium text-[rgb(var(--color-accent))] transition-colors hover:text-[rgb(var(--color-accent-hover))] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="self-start text-xs font-medium text-[rgb(var(--color-accent))] transition-colors hover:text-[rgb(var(--color-accent-hover))] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Refresh saved sample
                 </button>
               </div>
             ) : (
-              <p className="mt-3 text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+              <p className="mt-3 text-xs leading-4 text-[rgb(var(--color-text-secondary))]">
                 Generate this voice once; CutReady saves it locally and reuses it until you refresh it.
               </p>
             )}
@@ -254,7 +254,7 @@ export function VoiceTab({
           <label className="grid gap-3 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_18rem] md:items-start">
             <span className="min-w-0">
               <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Speech output format</span>
-              <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+              <span className="mt-0.5 block text-xs leading-4 text-[rgb(var(--color-text-secondary))]">
                 {NARRATION_OUTPUT_FORMAT_OPTIONS.find((format) => format.value === settings.narrationSpeechOutputFormat)?.description ?? "Azure Speech audio format sent to the TTS endpoint."}
               </span>
             </span>
@@ -271,7 +271,7 @@ export function VoiceTab({
         </div>
         <label className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2.5">
           <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">Narration style direction</span>
-          <span className="mt-0.5 block text-[11px] leading-4 text-[rgb(var(--color-text-secondary))]">
+          <span className="mt-0.5 block text-xs leading-4 text-[rgb(var(--color-text-secondary))]">
             Extra instruction passed to the Narration Director when it writes SSML.
           </span>
           <textarea

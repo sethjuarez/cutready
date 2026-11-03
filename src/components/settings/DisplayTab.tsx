@@ -1,6 +1,7 @@
 import { useSettings } from "../../hooks/useSettings";
 import { inputClass } from "../../styles";
 import { TERMINAL_COLOR_SCHEMES, normalizeTerminalColorMode, normalizeTerminalCustomTheme, type TerminalCustomTheme } from "../../theme/terminalThemes";
+import { DENSITY_OPTIONS, normalizeDensity } from "../../theme/designTokens";
 
 const fontSizes = [
   { value: 13, label: "Small (13px)" },
@@ -66,7 +67,7 @@ export function DisplayTab({ settings, updateSetting }: {
               >
                 Aa
               </span>
-              <span className="text-[10px]">{f.label}</span>
+              <span className="text-2xs">{f.label}</span>
             </button>
           ))}
         </div>
@@ -178,14 +179,16 @@ export function DisplayTab({ settings, updateSetting }: {
 
       {/* Row density */}
       <fieldset className="flex flex-col gap-2">
-        <label className="text-sm font-medium">Row Density</label>
+        <label className="text-sm font-medium">Density</label>
+        <p className="text-xs text-[rgb(var(--color-text-secondary))]">Changes spacing only; text size stays the same.</p>
         <div className="flex gap-2">
-          {(["compact", "comfortable", "spacious"] as const).map((d) => (
+          {DENSITY_OPTIONS.map((d) => (
             <button
               key={d}
               onClick={() => updateSetting("displayRowDensity", d)}
+              aria-pressed={normalizeDensity(settings.displayRowDensity) === d}
               className={`px-3 py-1.5 rounded-lg text-sm capitalize transition-colors border ${
-                settings.displayRowDensity === d
+                normalizeDensity(settings.displayRowDensity) === d
                   ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] border-[rgb(var(--color-accent))]"
                   : "bg-[rgb(var(--color-surface-alt))] border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
               }`}

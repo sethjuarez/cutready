@@ -270,7 +270,7 @@ function BinaryFileView({
 function BinaryPresence({ label, present }: { label: string; present: boolean }) {
   return (
     <div className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-3">
-      <div className="text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">{label}</div>
+      <div className="text-2xs font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">{label}</div>
       <div className={present ? "mt-1 text-success" : "mt-1 text-error"}>
         {present ? "Binary file present" : "File missing"}
       </div>
@@ -296,12 +296,12 @@ function DiffToolbar({ filename, status, viewMode, onViewModeChange, showToggle,
   return (
     <div className="flex items-center gap-3 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-4 py-2">
       <div className="min-w-0">
-        <div className="font-mono text-[12px] font-medium text-[rgb(var(--color-text))]">{filename}</div>
-        <div className="text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">{contextLabel}</div>
+        <div className="font-mono text-xs font-medium text-[rgb(var(--color-text))]">{filename}</div>
+        <div className="text-2xs font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">{contextLabel}</div>
       </div>
-      <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${badge.cls}`}>{badge.label}</span>
+      <span className={`rounded px-1.5 py-0.5 text-2xs font-medium ${badge.cls}`}>{badge.label}</span>
       {additions !== undefined && additions !== 0 && (
-        <span className={`text-[10px] ${additions > 0 ? "text-success" : "text-error"}`}>
+        <span className={`text-2xs ${additions > 0 ? "text-success" : "text-error"}`}>
           {additions > 0 ? `+${additions}` : additions} lines
         </span>
       )}
@@ -342,7 +342,7 @@ function ToggleButton({ active, onClick, icon, label, border }: {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1 px-2 py-1 text-[10px] transition-colors ${
+      className={`flex items-center gap-1 px-2 py-1 text-2xs transition-colors ${
         border ? "border-l border-[rgb(var(--color-border))]" : ""
       } ${
         active
@@ -432,10 +432,10 @@ function SplitDiffView({
   }, [hunks]);
 
   return (
-    <div className="flex h-full font-mono text-[12px] leading-5">
+    <div className="flex h-full font-mono text-xs leading-5">
       {/* Left pane */}
       <div className="flex-1 flex flex-col min-w-0 border-r border-[rgb(var(--color-border))]">
-        <div className="shrink-0 px-3 py-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-inset))]">
+        <div className="shrink-0 px-3 py-1 text-2xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-inset))]">
           {isNew ? "(Missing)" : oldLabel}
         </div>
         <div
@@ -450,7 +450,7 @@ function SplitDiffView({
       </div>
       {/* Right pane */}
       <div className="flex-1 flex flex-col min-w-0">
-        <div className="shrink-0 px-3 py-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-inset))]">
+        <div className="shrink-0 px-3 py-1 text-2xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-inset))]">
           {newLabel}
         </div>
         <div
@@ -473,7 +473,7 @@ function SplitLineRow({ line, side }: { line: DiffLine | null; side: "left" | "r
   }
   if (line.text === "⋯" && line.oldNum === null) {
     return (
-      <div className="h-5 flex items-center justify-center border-y border-[rgb(var(--color-border))]/50 bg-[rgb(var(--color-surface-inset))] text-[10px] text-[rgb(var(--color-text-secondary))]/50">
+      <div className="h-5 flex items-center justify-center border-y border-[rgb(var(--color-border))]/50 bg-[rgb(var(--color-surface-inset))] text-2xs text-[rgb(var(--color-text-secondary))]/50">
         ⋯
       </div>
     );
@@ -487,7 +487,7 @@ function SplitLineRow({ line, side }: { line: DiffLine | null; side: "left" | "r
 
   return (
     <div className={`flex h-5 ${bgCls} ${hoverCls}`}>
-      <span className="inline-block w-10 shrink-0 select-none pr-2 text-right text-[10px] text-[rgb(var(--color-text-secondary))]/40 border-r border-[rgb(var(--color-border))]/20 leading-5">
+      <span className="inline-block w-10 shrink-0 select-none pr-2 text-right text-2xs text-[rgb(var(--color-text-secondary))]/40 border-r border-[rgb(var(--color-border))]/20 leading-5">
         {num ?? ""}
       </span>
       <span className="px-2 whitespace-pre text-[rgb(var(--color-text))] leading-5">
@@ -504,13 +504,13 @@ function UnifiedDiffView({ oldText, newText }: { oldText: string; newText: strin
   const hunks = useMemo(() => groupIntoHunks(diffLines), [diffLines]);
 
   return (
-    <div className="font-mono text-[12px] leading-5 min-w-fit">
+    <div className="font-mono text-xs leading-5 min-w-fit">
       {hunks.map((hunk, hi) => (
         <div key={hi}>
           {hi > 0 && (
             <div className="flex border-y border-[rgb(var(--color-border))]/50 bg-[rgb(var(--color-surface-inset))]">
               <span className="w-10 shrink-0" /><span className="w-10 shrink-0" />
-              <span className="px-2 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))]/50">⋯</span>
+              <span className="px-2 py-0.5 text-2xs text-[rgb(var(--color-text-secondary))]/50">⋯</span>
             </div>
           )}
           {hunk.map((line, li) => (
@@ -522,10 +522,10 @@ function UnifiedDiffView({ oldText, newText }: { oldText: string; newText: strin
                 "hover:bg-[rgb(var(--color-surface-alt))]"
               }`}
             >
-              <span className="inline-block w-10 shrink-0 select-none pr-2 text-right text-[10px] text-[rgb(var(--color-text-secondary))]/40 border-r border-[rgb(var(--color-border))]/20">
+              <span className="inline-block w-10 shrink-0 select-none pr-2 text-right text-2xs text-[rgb(var(--color-text-secondary))]/40 border-r border-[rgb(var(--color-border))]/20">
                 {line.oldNum ?? ""}
               </span>
-              <span className="inline-block w-10 shrink-0 select-none pr-2 text-right text-[10px] text-[rgb(var(--color-text-secondary))]/40 border-r border-[rgb(var(--color-border))]/20">
+              <span className="inline-block w-10 shrink-0 select-none pr-2 text-right text-2xs text-[rgb(var(--color-text-secondary))]/40 border-r border-[rgb(var(--color-border))]/20">
                 {line.newNum ?? ""}
               </span>
               <span className="flex-1 px-2 whitespace-pre text-[rgb(var(--color-text))]">
@@ -551,10 +551,10 @@ function UnifiedDiffView({ oldText, newText }: { oldText: string; newText: strin
 function NewFileView({ text }: { text: string }) {
   const lines = text.split("\n");
   return (
-    <div className="font-mono text-[12px] leading-5 min-w-fit">
+    <div className="font-mono text-xs leading-5 min-w-fit">
       {lines.map((line, i) => (
         <div key={i} className="flex bg-success/6 hover:bg-success/10">
-          <span className="inline-block w-10 shrink-0 select-none pr-2 text-right text-[10px] text-[rgb(var(--color-text-secondary))]/40 border-r border-[rgb(var(--color-border))]/20">
+          <span className="inline-block w-10 shrink-0 select-none pr-2 text-right text-2xs text-[rgb(var(--color-text-secondary))]/40 border-r border-[rgb(var(--color-border))]/20">
             {i + 1}
           </span>
           <span className="flex-1 px-2 whitespace-pre text-[rgb(var(--color-text))]">
@@ -569,10 +569,10 @@ function NewFileView({ text }: { text: string }) {
 function DeletedFileView({ text }: { text: string }) {
   const lines = text.split("\n");
   return (
-    <div className="font-mono text-[12px] leading-5 min-w-fit">
+    <div className="font-mono text-xs leading-5 min-w-fit">
       {lines.map((line, i) => (
         <div key={i} className="flex bg-error/6 hover:bg-error/10">
-          <span className="inline-block w-10 shrink-0 select-none pr-2 text-right text-[10px] text-[rgb(var(--color-text-secondary))]/40 border-r border-[rgb(var(--color-border))]/20">
+          <span className="inline-block w-10 shrink-0 select-none pr-2 text-right text-2xs text-[rgb(var(--color-text-secondary))]/40 border-r border-[rgb(var(--color-border))]/20">
             {i + 1}
           </span>
           <span className="flex-1 px-2 whitespace-pre text-[rgb(var(--color-text))]">
@@ -707,11 +707,11 @@ function StructuredDiff({
 
   return (
     <div className="space-y-2">
-      <div className="mb-3 text-[11px] text-[rgb(var(--color-text-secondary))]">
+      <div className="mb-3 text-xs text-[rgb(var(--color-text-secondary))]">
         {changes.length} field{changes.length !== 1 ? "s" : ""} {isNew ? "in new file" : "changed"}
       </div>
       {changes.map((change, i) => (
-        <div key={i} className={`overflow-hidden rounded-md border text-[12px] ${
+        <div key={i} className={`overflow-hidden rounded-md border text-xs ${
           change.type === "added" ? "border-success/30 bg-success/5" :
           change.type === "removed" ? "border-error/30 bg-error/5" :
           "border-warning/30 bg-warning/5"
@@ -723,7 +723,7 @@ function StructuredDiff({
               "bg-warning"
             }`} />
             <span className="font-medium text-[rgb(var(--color-text))]">{humanizePath(change.path)}</span>
-            <span className={`text-[10px] ${
+            <span className={`text-2xs ${
               change.type === "added" ? "text-success" :
               change.type === "removed" ? "text-error" :
               "text-warning"
@@ -760,8 +760,8 @@ function ReadOnlyVersionPane({
 
   return (
     <div className="bg-[rgb(var(--color-surface))] px-3 py-2">
-      <div className={`mb-1 text-[9px] font-medium uppercase tracking-wider ${labelClass}`}>{label}</div>
-      <div className="whitespace-pre-wrap break-all font-mono text-[11px] text-[rgb(var(--color-text))]">
+      <div className={`mb-1 text-2xs font-medium uppercase tracking-wider ${labelClass}`}>{label}</div>
+      <div className="whitespace-pre-wrap break-all font-mono text-xs text-[rgb(var(--color-text))]">
         {value}
       </div>
     </div>

@@ -192,7 +192,7 @@ function VisualAssetViewer({
               <div className="flex items-center gap-3">
                 <span className="text-[13px] font-medium text-[rgb(var(--color-text))]">{filename}</span>
                 {editorDirty && (
-                  <span className="text-[11px] text-[rgb(var(--color-accent))] font-medium">● Unsaved</span>
+                  <span className="text-xs text-[rgb(var(--color-accent))] font-medium">● Unsaved</span>
                 )}
               </div>
               <div className="flex items-center gap-2">
@@ -250,13 +250,13 @@ function NarrationAssetViewer({
 
   return (
     <div className="flex h-full flex-col bg-[rgb(var(--color-surface))]">
-      <div className="flex shrink-0 items-center gap-3 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-4 py-2 text-[12px]">
+      <div className="flex shrink-0 items-center gap-3 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-4 py-2 text-xs">
         <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
           <AudioLines className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate font-medium text-[rgb(var(--color-text))]" title={assetPath}>{filename}</div>
-          <div className="mt-0.5 flex min-w-0 items-center gap-2 text-[11px] text-[rgb(var(--color-text-secondary))]">
+          <div className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-[rgb(var(--color-text-secondary))]">
             {asset && <span>{formatBytes(asset.size)}</span>}
             {asset && <span className="opacity-50">|</span>}
             <span className="truncate">{asset?.mimeType ?? "Audio"}</span>
@@ -276,7 +276,7 @@ function NarrationAssetViewer({
           {src ? (
             <NarrationPlayback src={src} waveformHeight="h-40" />
           ) : (
-            <div className="rounded-lg border border-[rgb(var(--color-border))] px-3 py-2 text-[12px] text-[rgb(var(--color-text-secondary))]">
+            <div className="rounded-lg border border-[rgb(var(--color-border))] px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))]">
               Audio preview is unavailable because no project is open.
             </div>
           )}
@@ -301,7 +301,7 @@ function MetadataBar({
 
   if (inline) {
     return (
-      <div className="flex items-center gap-3 text-[12px]">
+      <div className="flex items-center gap-3 text-xs">
         <span className="font-medium text-[rgb(var(--color-text))]">{filename}</span>
         {sizeLabel && <span className="text-[rgb(var(--color-text-secondary))]">{sizeLabel}</span>}
         {refs.length > 0 && (
@@ -314,7 +314,7 @@ function MetadataBar({
   }
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shrink-0 text-[12px]">
+    <div className="flex items-center gap-3 px-4 py-2 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shrink-0 text-xs">
       <span className="font-medium text-[rgb(var(--color-text))]">{filename}</span>
       {sizeLabel && <span className="text-[rgb(var(--color-text-secondary))]">{sizeLabel}</span>}
       {refs.length > 0 && (

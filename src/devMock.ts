@@ -402,6 +402,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         diagnostics: [],
       };
     case "filtered_files":
+    case "list_chat_artifacts":
+    case "list_shelves":
       return [];
     case "list_variations":
       return [{
@@ -493,8 +495,6 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
           time_seconds: Math.floor(Date.now() / 1000),
         },
       };
-    case "list_shelves":
-      return [];
     case "apply_shelf":
       return {
         id: (args as { request?: { shelf_id?: string } })?.request?.shelf_id ?? "cutready-stash",

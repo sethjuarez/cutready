@@ -423,7 +423,7 @@ Use write_note to save the cleaned Markdown back to "${activeNotePath}". Do not 
               aria-label="Note title"
             />
           }
-          badge={<span className="rounded bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))]">.md</span>}
+          badge={<span className="rounded bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-2xs text-[rgb(var(--color-text-secondary))]">.md</span>}
           toolbar={
             <DocumentToolbar
               canRecord={false}

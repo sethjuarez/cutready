@@ -254,11 +254,11 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
               <h1 className="truncate text-sm font-semibold text-[rgb(var(--color-text))]">
                 {snapshot?.message ?? snapshotId.slice(0, 7)}
               </h1>
-              <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-accent))]">
+              <span className="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wider text-[rgb(var(--color-accent))]">
                 Snapshot Preview
               </span>
             </div>
-            <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-[rgb(var(--color-text-secondary))]">
+            <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-2 text-xs text-[rgb(var(--color-text-secondary))]">
               <span className="font-mono">{snapshotId.slice(0, 10)}</span>
               {snapshot?.author && <span>by {snapshot.author}</span>}
               {snapshot?.timestamp && <span>{formatDate(snapshot.timestamp)}</span>}
@@ -271,7 +271,7 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
               <select
                 value={projectFilter}
                 onChange={(event) => setProjectFilter(event.target.value)}
-                className="h-7 w-full rounded-md border border-transparent bg-[rgb(var(--color-surface-alt))] px-2 text-[11px] text-[rgb(var(--color-text))] outline-none transition-colors hover:border-[rgb(var(--color-border))] focus:border-[rgb(var(--color-accent))]"
+                className="h-7 w-full rounded-md border border-transparent bg-[rgb(var(--color-surface-alt))] px-2 text-xs text-[rgb(var(--color-text))] outline-none transition-colors hover:border-[rgb(var(--color-border))] focus:border-[rgb(var(--color-accent))]"
                 title="Filter preview changes by project"
               >
                 <option value="all">All Projects ({entries?.length ?? 0})</option>
@@ -280,7 +280,7 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
                 ))}
               </select>
             </label>
-            <div className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-[rgb(var(--color-surface-alt))] px-2 text-[11px]">
+            <div className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-[rgb(var(--color-surface-alt))] px-2 text-xs">
               <span className="font-medium text-[rgb(var(--color-text))]">{filteredEntries.length}</span>
               <span className="hidden text-[rgb(var(--color-text-secondary))] sm:inline">files</span>
               <span className="text-success">+{totalAdded}</span>
@@ -314,7 +314,7 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
           </div>
         </div>
         {restoreError && (
-          <div className="mt-2 rounded-lg border border-error/20 bg-error/5 px-2 py-1.5 text-[11px] text-error">
+          <div className="mt-2 rounded-lg border border-error/20 bg-error/5 px-2 py-1.5 text-xs text-error">
             {restoreError}
           </div>
         )}
@@ -428,7 +428,7 @@ function RestoreControls({
         type="button"
         onClick={() => onMenuOpenChange(!menuOpen)}
         disabled={isDirty || restoring}
-        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[rgb(var(--color-accent))] px-3 text-[11px] font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:cursor-not-allowed disabled:opacity-45"
+        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[rgb(var(--color-accent))] px-3 text-xs font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:cursor-not-allowed disabled:opacity-45"
         title={isDirty ? "Save or discard workspace changes before starting a branch from this snapshot" : "Create a branch from this preview and switch to it"}
         aria-haspopup="dialog"
         aria-expanded={menuOpen}
@@ -444,13 +444,13 @@ function RestoreControls({
           aria-label="Restore snapshot"
           className="absolute right-0 top-full z-dropdown mt-1 w-[360px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-2 shadow-xl"
         >
-          <div className="mb-2 rounded-lg bg-[rgb(var(--color-surface-alt))] px-3 py-2 text-[11px] text-[rgb(var(--color-text-secondary))]">
+          <div className="mb-2 rounded-lg bg-[rgb(var(--color-surface-alt))] px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))]">
             <GitBranch className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
             You are previewing <span className="font-medium text-[rgb(var(--color-text))]">{snapshotLabel}</span>. To write from it,
             CutReady creates branch <span className="font-medium text-[rgb(var(--color-text))]">{targetLabel}</span> and switches there. Your first edit will be dirty until you save a named snapshot.
           </div>
           <label>
-            <span className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+            <span className="mb-1 block text-2xs font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
               New branch name
             </span>
             <input
@@ -460,10 +460,10 @@ function RestoreControls({
                 onNewTimelineNameChange(event.target.value);
               }}
               placeholder="branch-name"
-              className="h-8 w-full rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 text-[12px] text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:border-[rgb(var(--color-accent))]"
+              className="h-8 w-full rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 text-xs text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:border-[rgb(var(--color-accent))]"
             />
           </label>
-          <div className="mt-2 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2 text-[10px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
+          <div className="mt-2 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2 text-2xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
             Current branch <span className="font-medium text-[rgb(var(--color-text))]">{activeTimelineLabel}</span> stays untouched. Save later asks for the snapshot name.
           </div>
           {restoreConflict && (
@@ -475,7 +475,7 @@ function RestoreControls({
             />
           )}
           {isDirty && (
-            <div className="mt-2 text-[10px] text-warning">
+            <div className="mt-2 text-2xs text-warning">
               Save or discard current workspace changes before starting from this preview.
             </div>
           )}
@@ -489,7 +489,7 @@ function RestoreControls({
               void onRestore();
             }}
             disabled={restoreDisabled}
-            className="mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-[rgb(var(--color-accent))] px-3 text-[11px] font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:pointer-events-none disabled:opacity-45"
+            className="mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-[rgb(var(--color-accent))] px-3 text-xs font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:pointer-events-none disabled:opacity-45"
             title={isDirty ? "Save or discard workspace changes before starting from this preview" : "Create a branch and switch to it"}
           >
             {restoring ? "Starting..." : confirming ? "Confirm Start Branch" : "Create Branch"}
@@ -518,7 +518,7 @@ function SnapshotBranchConflictPanel({
     : `Branch "${preflight.variation}" already exists locally.`;
 
   return (
-    <div className="mt-2 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2 text-[10px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
+    <div className="mt-2 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2 text-2xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
       <div className="font-medium text-warning">{message}</div>
       <div className="mt-1">Rename this branch, adopt the remote branch, or cancel starting from this snapshot.</div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -583,7 +583,7 @@ function SemanticGroup({
           <Icon className="h-4 w-4 text-[rgb(var(--color-accent))]" />
           {KIND_LABELS[kind]}
         </div>
-        <span className="rounded-full bg-[rgb(var(--color-accent))]/10 px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--color-accent))]">
+        <span className="rounded-full bg-[rgb(var(--color-accent))]/10 px-2 py-0.5 text-2xs font-medium text-[rgb(var(--color-accent))]">
           {entries.length}
         </span>
       </div>
@@ -610,19 +610,19 @@ function SemanticGroup({
                     <div className="truncate text-sm font-medium text-[rgb(var(--color-text))]">{displayName(entry.path)}</div>
                     <StatusBadge status={entry.status} />
                     {project && (
-                      <span className="hidden shrink-0 items-center gap-1 rounded-full border border-[rgb(var(--color-border))] px-1.5 py-0.5 text-[9px] text-[rgb(var(--color-text-secondary))] sm:inline-flex">
+                      <span className="hidden shrink-0 items-center gap-1 rounded-full border border-[rgb(var(--color-border))] px-1.5 py-0.5 text-2xs text-[rgb(var(--color-text-secondary))] sm:inline-flex">
                         <FolderOpen className="h-3 w-3" />
                         {project.name}
                       </span>
                     )}
                   </div>
-                  <div className="mt-0.5 truncate text-[11px] text-[rgb(var(--color-text-secondary))]">
+                  <div className="mt-0.5 truncate text-xs text-[rgb(var(--color-text-secondary))]">
                     {businessSummary(entry.path, kind)}
                   </div>
-                  <div className="mt-0.5 truncate font-mono text-[10px] text-[rgb(var(--color-text-secondary))]/70">{entry.path}</div>
+                  <div className="mt-0.5 truncate font-mono text-2xs text-[rgb(var(--color-text-secondary))]/70">{entry.path}</div>
                 </div>
                 <ChangeStats entry={entry} />
-                <span className="hidden shrink-0 text-[10px] font-medium text-[rgb(var(--color-accent))] opacity-0 transition-opacity group-hover:opacity-100 md:inline">
+                <span className="hidden shrink-0 text-2xs font-medium text-[rgb(var(--color-accent))] opacity-0 transition-opacity group-hover:opacity-100 md:inline">
                   Details
                 </span>
               </button>
@@ -633,15 +633,15 @@ function SemanticGroup({
                       <div className="text-xs font-medium text-[rgb(var(--color-text))]">
                         {businessSummary(entry.path, kind)}
                       </div>
-                      <div className="mt-1 text-[11px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
+                      <div className="mt-1 text-xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
                         {detailContext(detail, entry, kind)}
                       </div>
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         <StatusBadge status={entry.status} />
-                        <span className="rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-1.5 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                        <span className="rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-1.5 py-0.5 text-2xs text-[rgb(var(--color-text-secondary))]">
                           {entry.additions} additions
                         </span>
-                        <span className="rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-1.5 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                        <span className="rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-1.5 py-0.5 text-2xs text-[rgb(var(--color-text-secondary))]">
                           {entry.deletions} removals
                         </span>
                       </div>
@@ -649,7 +649,7 @@ function SemanticGroup({
                     <button
                       type="button"
                       onClick={() => onOpenFileDiff(entry)}
-                      className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 text-[11px] font-medium text-[rgb(var(--color-text))] transition-colors hover:border-[rgb(var(--color-accent))] hover:text-[rgb(var(--color-accent))]"
+                      className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 text-xs font-medium text-[rgb(var(--color-text))] transition-colors hover:border-[rgb(var(--color-accent))] hover:text-[rgb(var(--color-accent))]"
                     >
                       <FileDiff className="h-3.5 w-3.5" />
                       Open full diff
@@ -657,10 +657,10 @@ function SemanticGroup({
                   </div>
                   <div className="mt-2 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2">
                     <div className="mb-1 flex items-center justify-between gap-2">
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+                      <div className="text-2xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
                         Change summary
                       </div>
-                      <div className="break-all text-right font-mono text-[10px] text-[rgb(var(--color-text-secondary))]/80">{entry.path}</div>
+                      <div className="break-all text-right font-mono text-2xs text-[rgb(var(--color-text-secondary))]/80">{entry.path}</div>
                     </div>
                     <DetailBullets detail={detail} />
                   </div>
@@ -677,20 +677,20 @@ function SemanticGroup({
 function DetailBullets({ detail }: { detail?: FileDetailState }) {
   if (!detail || detail.status === "loading") {
     return (
-      <div className="text-[11px] text-[rgb(var(--color-text-secondary))]">
+      <div className="text-xs text-[rgb(var(--color-text-secondary))]">
         Loading file-specific preview...
       </div>
     );
   }
   if (detail.status === "error") {
     return (
-      <div className="text-[11px] text-error">
+      <div className="text-xs text-error">
         {detail.message}
       </div>
     );
   }
   return (
-    <ul className="space-y-1 text-[11px] text-[rgb(var(--color-text-secondary))]">
+    <ul className="space-y-1 text-xs text-[rgb(var(--color-text-secondary))]">
       {detail.bullets.map((bullet) => (
         <li key={bullet} className="flex gap-2">
           <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[rgb(var(--color-accent))]/70" />
@@ -949,7 +949,7 @@ function StatusBadge({ status }: { status: string }) {
       ? "bg-error/15 text-error"
       : "bg-warning/15 text-warning";
   return (
-    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider ${className}`}>
+    <span className={`shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wider ${className}`}>
       {statusLabel(status)}
     </span>
   );
@@ -957,7 +957,7 @@ function StatusBadge({ status }: { status: string }) {
 
 function ChangeStats({ entry }: { entry: DiffEntry }) {
   return (
-    <div className="flex shrink-0 items-center gap-1 text-[10px] font-medium">
+    <div className="flex shrink-0 items-center gap-1 text-2xs font-medium">
       {entry.additions > 0 && <span className="text-success">+{entry.additions}</span>}
       {entry.deletions > 0 && <span className="text-error">-{entry.deletions}</span>}
       {entry.additions === 0 && entry.deletions === 0 && (

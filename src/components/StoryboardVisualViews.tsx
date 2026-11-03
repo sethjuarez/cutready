@@ -157,7 +157,7 @@ function StoryboardActionBar({
 
 function DurationPill({ label }: { label: string }) {
   return (
-    <span className="shrink-0 rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">
+    <span className="shrink-0 rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 text-2xs font-medium text-[rgb(var(--color-text-secondary))]">
       {label}
     </span>
   );
@@ -256,7 +256,7 @@ function ContainedSketch({
         <DragHandle dragListeners={dragListeners} label="Drag to reorder sketch" />
         <div className="min-w-0 flex-1">
           {isTopLevel && (
-            <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[rgb(var(--color-text-secondary))]/60">
+            <div className="mb-1 flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.2em] text-[rgb(var(--color-text-secondary))]/60">
               <span>Sketch</span>
               <span className="h-px w-5 bg-[rgb(var(--color-border))]" />
               <span className="tracking-[0.14em]">
@@ -285,7 +285,7 @@ function ContainedSketch({
               {summary.title}
             </button>
 
-            <span className={`shrink-0 text-[10px] text-[rgb(var(--color-text-secondary))]/85 ${isTopLevel ? "hidden" : ""}`}>
+            <span className={`shrink-0 text-2xs text-[rgb(var(--color-text-secondary))]/85 ${isTopLevel ? "hidden" : ""}`}>
               {summary.row_count} {summary.row_count === 1 ? "row" : "rows"}
             </span>
 
@@ -384,7 +384,7 @@ function SectionBlock({
       <div className="flex items-start gap-3">
         <DragHandle dragListeners={dragListeners} label="Drag to reorder section" />
         <div className="min-w-0 flex-1">
-          <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[rgb(var(--color-text-secondary))]/60">
+          <div className="mb-1 flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.2em] text-[rgb(var(--color-text-secondary))]/60">
             <span>Section</span>
             <span className="h-px w-5 bg-[rgb(var(--color-border))]" />
             <span className="tracking-[0.14em]">
@@ -469,7 +469,7 @@ function SectionBlock({
             <button
               type="button"
               onClick={onAddNewSketch}
-              className="rounded-full border border-[rgb(var(--color-border-subtle))] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-accent))]/45 hover:text-[rgb(var(--color-accent))]"
+              className="rounded-full border border-[rgb(var(--color-border-subtle))] px-3 py-1 text-2xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-accent))]/45 hover:text-[rgb(var(--color-accent))]"
             >
               New sketch
             </button>
@@ -478,7 +478,7 @@ function SectionBlock({
             <button
               type="button"
               onClick={onPickExisting}
-              className="rounded-full border border-transparent px-3 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))]"
+              className="rounded-full border border-transparent px-3 py-1 text-2xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))]"
             >
               Add existing sketch
             </button>

@@ -97,14 +97,14 @@ export function MetadataEditor({ metadata, onChange, disabled = false, draftRef 
     <section className={`group/metadata text-xs ${expanded ? "rounded-xl border border-[rgb(var(--color-border))]/35 bg-[rgb(var(--color-surface-alt))]/10 p-2" : "px-1 py-0.5"}`}>
       <button
         type="button"
-        className="flex w-full min-w-0 items-center gap-1.5 rounded-md py-0.5 text-left text-[11px] text-[rgb(var(--color-text-tertiary))] transition-colors hover:text-[rgb(var(--color-text-secondary))]"
+        className="flex w-full min-w-0 items-center gap-1.5 rounded-md py-0.5 text-left text-xs text-[rgb(var(--color-text-tertiary))] transition-colors hover:text-[rgb(var(--color-text-secondary))]"
         onClick={() => setExpanded((value) => !value)}
         aria-expanded={expanded}
       >
         <ChevronRight className={`h-3 w-3 shrink-0 opacity-60 transition-transform ${expanded ? "rotate-90" : ""}`} />
         <span className="shrink-0 uppercase tracking-[0.16em]">Properties</span>
         {hasFields ? (
-          <span className="text-[10px] text-[rgb(var(--color-text-tertiary))]">
+          <span className="text-2xs text-[rgb(var(--color-text-tertiary))]">
             {entries.length} {entries.length === 1 ? "field" : "fields"}
           </span>
         ) : (
@@ -125,14 +125,14 @@ export function MetadataEditor({ metadata, onChange, disabled = false, draftRef 
               onClick={() => setExpanded(true)}
               title={`${key}: ${value}`}
             >
-              <span className="truncate text-[11px] text-[rgb(var(--color-text-tertiary))]">{key}</span>
-              <span className="truncate text-[11px] text-[rgb(var(--color-text-secondary))]">{value}</span>
+              <span className="truncate text-xs text-[rgb(var(--color-text-tertiary))]">{key}</span>
+              <span className="truncate text-xs text-[rgb(var(--color-text-secondary))]">{value}</span>
             </button>
           ))}
           {entries.length > visiblePreview.length && (
             <button
               type="button"
-              className="rounded-md px-1 py-0.5 text-[11px] text-[rgb(var(--color-text-tertiary))] hover:text-[rgb(var(--color-text-secondary))]"
+              className="rounded-md px-1 py-0.5 text-xs text-[rgb(var(--color-text-tertiary))] hover:text-[rgb(var(--color-text-secondary))]"
               onClick={() => setExpanded(true)}
             >
               {entries.length - visiblePreview.length} more
@@ -161,7 +161,7 @@ export function MetadataEditor({ metadata, onChange, disabled = false, draftRef 
             />
             <button
               type="button"
-              className="rounded-md px-2 text-[11px] text-[rgb(var(--color-text-tertiary))] opacity-0 transition-opacity hover:bg-[rgb(var(--color-surface-hover))] hover:text-[rgb(var(--color-text-secondary))] group-hover/metadata:opacity-70 disabled:opacity-50"
+              className="rounded-md px-2 text-xs text-[rgb(var(--color-text-tertiary))] opacity-0 transition-opacity hover:bg-[rgb(var(--color-surface-hover))] hover:text-[rgb(var(--color-text-secondary))] group-hover/metadata:opacity-70 disabled:opacity-50"
               disabled={disabled}
               onClick={() => updateField(key, "", "")}
             >
@@ -191,7 +191,7 @@ export function MetadataEditor({ metadata, onChange, disabled = false, draftRef 
           />
           <button
             type="button"
-            className="rounded-md px-2 py-1 text-[11px] font-medium text-[rgb(var(--color-text-tertiary))] transition-colors hover:bg-[rgb(var(--color-surface-hover))] hover:text-[rgb(var(--color-accent))] disabled:opacity-50"
+            className="rounded-md px-2 py-1 text-xs font-medium text-[rgb(var(--color-text-tertiary))] transition-colors hover:bg-[rgb(var(--color-surface-hover))] hover:text-[rgb(var(--color-accent))] disabled:opacity-50"
             disabled={disabled || !draftKey.trim() || !draftValue.trim()}
             onClick={addField}
           >
@@ -224,7 +224,7 @@ export function DurationBadge({
     <div className="inline-flex items-center gap-2 rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2.5 py-1 text-xs font-medium text-[rgb(var(--color-text-secondary))]">
       <span>Total time: {formatDurationSummary(summary, mode)}</span>
       {onModeChange && (
-        <span className="inline-flex rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-0.5 text-[10px] uppercase tracking-[0.14em]">
+        <span className="inline-flex rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-0.5 text-2xs uppercase tracking-[0.14em]">
           <button type="button" className={toggleClass("seconds")} onClick={() => onModeChange("seconds")}>
             sec
           </button>
