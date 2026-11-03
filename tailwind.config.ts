@@ -24,17 +24,19 @@ export default {
         text: {
           DEFAULT: "rgb(var(--color-text) / <alpha-value>)",
           secondary: "rgb(var(--color-text-secondary) / <alpha-value>)",
+          tertiary: "rgb(var(--color-text-tertiary) / <alpha-value>)",
         },
         secondary: "rgb(var(--color-secondary) / <alpha-value>)",
         tertiary: "rgb(var(--color-tertiary) / <alpha-value>)",
         success: "rgb(var(--color-success) / <alpha-value>)",
         warning: "rgb(var(--color-warning) / <alpha-value>)",
         error: "rgb(var(--color-error) / <alpha-value>)",
+        divider: "var(--color-divider)",
         // Neutral interaction fills, tinted from the text colour so they work on every palette.
         fill: {
-          hover: "rgb(var(--color-text) / 0.06)",
-          selected: "rgb(var(--color-text) / 0.08)",
-          pressed: "rgb(var(--color-text) / 0.04)",
+          hover: "var(--fill-hover)",
+          selected: "var(--fill-selected)",
+          pressed: "var(--fill-pressed)",
         },
         agent: {
           planner: "rgb(var(--color-agent-planner) / <alpha-value>)",

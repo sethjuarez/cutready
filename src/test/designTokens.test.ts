@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { THEME_PALETTES } from "../theme/appThemePalettes";
 import { THEME_COLOR_TOKEN_MAP } from "../theme/applyThemePalette";
-import { contrastRatio, tokenToRgb, type Rgb } from "../theme/paletteColor";
+import { contrastRatio, deriveNavMuted, tokenToRgb, type Rgb } from "../theme/paletteColor";
 import { normalizeDensity } from "../theme/designTokens";
 
 const css = readFileSync(resolve(__dirname, "../index.css"), "utf8");
@@ -62,6 +62,27 @@ describe("Direction C design tokens", () => {
       expect(ratio(t["--color-text-secondary"], composite(text, alpha, surface))).toBeGreaterThanOrEqual(4.5);
     }
   });
+
+  it.each(MODES)("index.css %s nav-muted default matches the derived CutReady value", (mode) => {
+    const palette = THEME_PALETTES.find((p) => p.id === "cutready")![mode];
+    expect(defaults[mode]["--color-nav-muted"]).toBe(deriveNavMuted(palette));
+  });
+
+  it.each(THEME_PALETTES.flatMap((p) => MODES.map((m) => [p.id, m] as const)))(
+    "%s/%s sidebar text, muted labels and count chip meet AA",
+    (id, mode) => {
+      const c = THEME_PALETTES.find((p) => p.id === id)![mode];
+      const inset = tokenToRgb(c.surfaceInset);
+      // --nav-selected and --nav-count-bg from index.css.
+      const selected = mode === "light" ? composite([129, 139, 152], 0.15, inset) : composite([101, 108, 118], 0.2, inset);
+      const chip = composite(tokenToRgb(c.accent), mode === "light" ? 0.12 : 0.1, tokenToRgb(c.surface));
+      expect(ratio(c.text, selected)).toBeGreaterThanOrEqual(4.5);
+      for (const surface of [c.surface, c.surfaceAlt, c.surfaceInset]) {
+        expect(ratio(deriveNavMuted(c), surface)).toBeGreaterThanOrEqual(4.5);
+      }
+      expect(ratio(c.text, chip)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
 
   it("type scale only grows and compact density never shrinks text", () => {
     const root = defaults.light;

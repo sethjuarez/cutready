@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import {
   DndContext,
   closestCenter,
@@ -7,15 +7,10 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Channel, invoke } from "../services/tauri";
 import type { TokenResponse } from "../types/auth";
-import { ArrowRight, AtSign, ChevronDown, ChevronRight, Copy, FileInput, FileText, Film, FolderOpen, Pencil, Plus, SquareTerminal, Trash2 } from "lucide-react";
+import { ArrowRight, AtSign, Copy, FileInput, FileText, Film, FolderOpen, Pencil, SquareTerminal } from "lucide-react";
 import {
   clearSuppressedEditorFlush,
   makeMainTabId,
@@ -25,13 +20,17 @@ import {
   type SidebarOrder,
 } from "../stores/appStore";
 import type { ProjectEntry } from "../types/project";
+import { DeleteAssetDialog, TransferConflictDialog, TransferWarningDialog, type PendingDelete, type TransferConflict, type TransferWarning } from "./docTree/ExplorerDialogs";
 import { commandErrorText, transferConflictPath } from "../services/commandErrors";
 import { documentRenamed, settleBeforeRename } from "../services/documentSaves";
-import { ChatArtifactIcon, SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
+import { SketchIcon, StoryboardIcon, NoteIcon } from "./Icons";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { useToastStore } from "../stores/toastStore";
-import { contentTypeTones, type ContentTypeTone } from "../utils/contentTypeTheme";
+import { useStoryboardMembership } from "../hooks/useStoryboardMembership";
+import { NavIcon } from "./navIcons";
+import { SortableTreeRow, TreeMiniButton, TreeRow, TreeSection, TreeSectionBody } from "./docTree/TreeRow";
+import { TreeCreateForm } from "./docTree/TreeCreateForm";
 import { useSettings } from "../hooks/useSettings";
 import { loadProviderSecrets } from "../hooks/useSecretStore";
 import {
@@ -148,45 +147,6 @@ function applySidebarOrder<T extends { path: string }>(items: T[], order: string
     const bi = indexMap.get(b.path) ?? Infinity;
     return ai - bi;
   });
-}
-
-function sectionBodyStyle(
-  mode: "storyboards" | "sketches" | "notes" | "all",
-  itemCount: number,
-  expandedCount: number,
-  active: boolean,
-  itemHeight = 34,
-): CSSProperties {
-  if (mode !== "all" || expandedCount === 1) return { flex: "1 1 0%", minHeight: 0 };
-
-  if (itemCount === 0) {
-    return { flex: "0 0 72px", minHeight: 0 };
-  }
-
-  const estimatedHeight = Math.min(240, Math.max(56, itemCount * itemHeight + 8));
-  const contentWeight = Math.min(2.4, 0.8 + Math.sqrt(itemCount) * 0.45);
-  const activeBoost = active ? 0.45 : 0;
-  return {
-    flex: `${contentWeight + activeBoost} 1 ${estimatedHeight}px`,
-    minHeight: 0,
-  };
-}
-
-function documentItemClass(active: boolean, tone: ContentTypeTone) {
-  return `group/item relative flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-xs outline-none transition-colors focus-visible:bg-[rgb(var(--color-surface-alt))] ${
-    active
-      ? `${tone.activeBg} ${tone.text}`
-      : `text-[rgb(var(--color-text))] ${tone.hoverBg}`
-  }`;
-}
-
-function documentItemMetaClass(active: boolean, tone: ContentTypeTone) {
-  return active ? tone.metaText : "text-[rgb(var(--color-text-secondary))]/80";
-}
-
-function ActiveDocumentMarker({ active, tone }: { active: boolean; tone: ContentTypeTone }) {
-  if (!active) return null;
-  return <span className={`absolute left-0 top-1 bottom-1 w-0.5 rounded-r ${tone.bg}`} />;
 }
 
 function VideoImportProgressDialog({
@@ -394,104 +354,9 @@ function VideoImportPlanningContextDialog({
   );
 }
 
-function DocumentItemText({ title, meta, active, tone }: { title: string; meta?: string; active: boolean; tone: ContentTypeTone }) {
-  return (
-    <div className="min-w-0 flex-1 py-0.5 leading-tight">
-      <div className="truncate text-xs font-medium leading-4" title={title}>{title}</div>
-      {meta && (
-        <div className={`mt-0.5 truncate text-2xs leading-3 ${documentItemMetaClass(active, tone)}`} title={meta}>
-          {meta}
-        </div>
-      )}
-    </div>
-  );
-}
 
-function chatArtifactMeta(artifact: NoteSummary): string {
-  if (typeof artifact.turn_count === "number") {
-    return `${artifact.turn_count} ${artifact.turn_count === 1 ? "turn" : "turns"}`;
-  }
-  const date = new Date(artifact.updated_at);
-  if (Number.isNaN(date.getTime())) return "Saved chat";
-  return `Saved ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
-}
-
-function deleteAssetLabel(type: "storyboard" | "sketch" | "note" | "chat-artifact"): string {
-  return type === "chat-artifact" ? "chat" : type;
-}
-
-/** Wrapper that makes a sidebar list item draggable. */
-function SortableSidebarItem({ id, children }: { id: string; children: React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
-  };
-  return (
-    <div ref={setNodeRef} style={style} {...attributes} className="group/item">
-      <div className="flex items-center">
-        {/* Drag handle */}
-        <div
-          {...listeners}
-          className="shrink-0 w-4 flex items-center justify-center cursor-grab opacity-0 group-hover/item:opacity-50 hover:!opacity-100 transition-opacity"
-          title="Drag to reorder"
-        >
-          <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" className="text-[rgb(var(--color-text-secondary))]">
-            <circle cx="2" cy="2" r="1.2" />
-            <circle cx="6" cy="2" r="1.2" />
-            <circle cx="2" cy="7" r="1.2" />
-            <circle cx="6" cy="7" r="1.2" />
-            <circle cx="2" cy="12" r="1.2" />
-            <circle cx="6" cy="12" r="1.2" />
-          </svg>
-        </div>
-        <div className="flex-1 min-w-0">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function SidebarSectionHeader({
-  title,
-  count,
-  expanded,
-  onToggle,
-  actions,
-  tone,
-}: {
-  title: string;
-  count: number;
-  expanded: boolean;
-  onToggle: () => void;
-  actions?: React.ReactNode;
-  tone: ContentTypeTone;
-}) {
-  return (
-    <div className="flex h-8 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-[rgb(var(--color-border))] px-3">
-      <button
-        onClick={onToggle}
-        className={`flex min-w-0 flex-1 items-center gap-1 text-xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] transition-colors ${tone.hoverText}`}
-      >
-        {expanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
-        <span className="truncate">{title}</span>
-        {count > 0 && (
-          <span className={`ml-1 rounded-full border px-1 py-0 text-2xs font-medium ${tone.activeBg} ${tone.text} ${tone.border}`}>
-            {count}
-          </span>
-        )}
-      </button>
-      <div className="flex shrink-0 items-center gap-1">{actions}</div>
-    </div>
-  );
-}
-
-/**
- * StoryboardList — Documents pane: Storyboards, Sketches, and Notes.
- * Pass `mode` to optionally focus a single section.
- */
-export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "notes" | "all" }) {
-  const resolvedMode = mode ?? "all";
+/** StoryboardList: the Documents tree (storyboards with their sketches, loose sketches, notes, chats). */
+export function StoryboardList() {
   const storyboards = useAppStore((s) => s.storyboards);
   const sketches = useAppStore((s) => s.sketches);
   const notes = useAppStore((s) => s.notes);
@@ -529,6 +394,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const deleteNote = useAppStore((s) => s.deleteNote);
   const deleteChatArtifact = useAppStore((s) => s.deleteChatArtifact);
   const closeStoryboard = useAppStore((s) => s.closeStoryboard);
+  const storeStoryboardPath = useAppStore((s) => s.activeStoryboardPath);
   const sidebarOrder = useAppStore((s) => s.sidebarOrder);
   const saveSidebarOrder = useAppStore((s) => s.saveSidebarOrder);
   const projects = useAppStore((s) => s.projects);
@@ -550,11 +416,9 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const [newSkTitle, setNewSkTitle] = useState("");
   const [isCreatingNote, setIsCreatingNote] = useState(false);
   const [newNoteTitle, setNewNoteTitle] = useState("");
-  const [storyboardsExpanded, setStoryboardsExpanded] = useState(true);
-  const [sketchesExpanded, setSketchesExpanded] = useState(true);
-  const [notesExpanded, setNotesExpanded] = useState(true);
-  const [chatArtifactsExpanded, setChatArtifactsExpanded] = useState(true);
-  const [pendingDelete, setPendingDelete] = useState<{ type: "storyboard" | "sketch" | "note" | "chat-artifact"; path: string; title: string; usedBy?: string[] } | null>(null);
+  const [collapsedStoryboards, setCollapsedStoryboards] = useState<Set<string>>(() => new Set());
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => new Set());
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [drmConfirm, setDrmConfirm] = useState<{ resolve: (ok: boolean) => void } | null>(null);
   const [renameConfirm, setRenameConfirm] = useState<RenameConfirmation | null>(null);
   const [importing, setImporting] = useState(false);
@@ -575,30 +439,9 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     y: number;
   } | null>(null);
 
-  const [transferWarning, setTransferWarning] = useState<{
-    action: "move" | "copy";
-    type: "sketch" | "note" | "storyboard";
-    sourcePath: string;
-    sourceTitle: string;
-    destProject: ProjectEntry;
-    usedBy: string[];
-  } | null>(null);
-
-  const [transferConflict, setTransferConflict] = useState<{
-    action: "move" | "copy";
-    type: "sketch" | "note" | "storyboard";
-    sourcePath: string;
-    sourceTitle: string;
-    destProject: ProjectEntry;
-    ext: string;
-  } | null>(null);
-  const [conflictName, setConflictName] = useState("");
-  const conflictInputRef = useRef<HTMLInputElement>(null);
+  const [transferWarning, setTransferWarning] = useState<TransferWarning | null>(null);
+  const [transferConflict, setTransferConflict] = useState<TransferConflict | null>(null);
   const { settings, updateSetting, loaded: settingsLoaded } = useSettings();
-
-  useEffect(() => {
-    if (transferConflict) requestAnimationFrame(() => conflictInputRef.current?.select());
-  }, [transferConflict]);
 
   // ── Inline rename state ──────────────────────────────────────────
   const [renamingItem, setRenamingItem] = useState<{ type: "storyboard" | "sketch" | "note" | "chat-artifact"; path: string } | null>(null);
@@ -826,8 +669,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
         const dotIdx = filename.lastIndexOf(".");
         const ext = dotIdx >= 0 ? filename.slice(dotIdx) : "";
         const stem = dotIdx >= 0 ? filename.slice(0, dotIdx) : filename;
-        setTransferConflict({ action, type, sourcePath, sourceTitle, destProject, ext });
-        setConflictName(stem);
+        setTransferConflict({ action, type, sourcePath, sourceTitle, destProject, ext, stem });
       } else {
         showToast(`Failed to ${action}: ${commandErrorText(err)}`, 4000, "error");
       }
@@ -903,16 +745,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const orderedStoryboards = applySidebarOrder(storyboards, sidebarOrder?.storyboards ?? []);
   const orderedSketches = applySidebarOrder(sketches, sidebarOrder?.sketches ?? []);
   const orderedNotes = applySidebarOrder(notes, sidebarOrder?.notes ?? []);
-  const sectionBodyClass = "min-h-0 overflow-y-auto py-1";
-  const expandedSectionCount = [storyboardsExpanded, sketchesExpanded, notesExpanded, chatArtifactsExpanded].filter(Boolean).length;
-  const storyboardsBodyStyle = sectionBodyStyle(resolvedMode, orderedStoryboards.length, expandedSectionCount, Boolean(activeStoryboardPath), 42);
-  const sketchesBodyStyle = sectionBodyStyle(resolvedMode, orderedSketches.length, expandedSectionCount, Boolean(activeSketchPath), 42);
-  const notesBodyStyle = sectionBodyStyle(resolvedMode, orderedNotes.length, expandedSectionCount, Boolean(activeNotePath), 30);
-  const chatArtifactsBodyStyle = sectionBodyStyle(resolvedMode, chatArtifacts.length, expandedSectionCount, Boolean(activeChatArtifactPath), 30);
-  const storyboardTone = contentTypeTones.storyboard;
-  const sketchTone = contentTypeTones.sketch;
-  const noteTone = contentTypeTones.note;
-  const chatArtifactTone = contentTypeTones["chat-artifact"];
+  const membership = useStoryboardMembership(orderedStoryboards);
   const videoImportReferenceOptions: VideoImportPlanningContextReference[] = [
     ...orderedStoryboards.map((storyboard: StoryboardSummary) => ({
       kind: "storyboard" as const,
@@ -1264,662 +1097,256 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
     },
   ], [handleImport]);
 
-  const importButton = (
-    <button
-      onClick={handleOpenImportMenu}
-      className="inline-flex items-center gap-1 rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/80 px-2 py-1 text-xs font-medium text-[rgb(var(--color-text-secondary))] shadow-sm transition-colors hover:border-[rgb(var(--color-accent))]/50 hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-50"
-      title="Import..."
-      data-testid="explorer-import-menu"
-      disabled={importing}
-      aria-haspopup="menu"
-      aria-expanded={importMenu !== null}
-    >
-      {importing ? (
-        <svg className="w-3 h-3 animate-spin text-[rgb(var(--color-text-secondary))]" viewBox="0 0 24 24" fill="none">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
-      ) : (
-        <>
-          <FileInput className="w-3 h-3" />
-          <span>Import</span>
-          <ChevronDown className="w-3 h-3 opacity-70" />
-        </>
-      )}
-    </button>
+  const renameInput = (label: string) => (
+    <input
+      ref={renameInputRef}
+      value={renameValue}
+      onChange={(e) => setRenameValue(e.target.value)}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") commitRename();
+        if (e.key === "Escape") cancelRename();
+      }}
+      onBlur={commitRename}
+      onClick={(e) => e.stopPropagation()}
+      aria-label={label}
+      title="Rename file. Spaces become hyphens."
+      className="rename"
+    />
   );
 
+  const openContextMenu = (type: "storyboard" | "sketch" | "note", path: string, title: string) =>
+    (e: ReactMouseEvent<HTMLDivElement>) => {
+      if (buildContextMenuItems(type, path, title).length === 0) return;
+      e.preventDefault();
+      setContextMenu({ type, path, title, x: e.clientX, y: e.clientY });
+    };
+
+  const isRenaming = (path: string) => renamingItem?.path === path;
+  const sketchByPath = new Map(orderedSketches.map((sk) => [sk.path, sk]));
+  // Every sketch is listed under Sketches, which carries its testid and actions. Storyboard
+  // leaves are shortcuts; the active sketch is highlighted in both places.
+  const selectedLeafStoryboard = activeSketchPath
+    ? (storeStoryboardPath && membership.get(storeStoryboardPath)?.includes(activeSketchPath)
+        ? storeStoryboardPath
+        : orderedStoryboards.find((sb) => membership.get(sb.path)?.includes(activeSketchPath))?.path ?? null)
+    : null;
+  const toggleStoryboard = (path: string) =>
+    setCollapsedStoryboards((current) => {
+      const next = new Set(current);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+
+  const sectionOpen = (id: string) => !collapsedSections.has(id);
+  const setSectionOpen = (id: string, open: boolean) =>
+    setCollapsedSections((current) => {
+      const next = new Set(current);
+      if (open) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const section = (id: string, label: string) => ({
+    label,
+    collapsed: !sectionOpen(id),
+    onToggle: () => setSectionOpen(id, !sectionOpen(id)),
+  });
+
   return (
-    <div
-      className="flex flex-col h-full bg-[rgb(var(--color-surface-inset))]"
-    >
-      {/* ── Toolbar under the Documents nav row (all-mode only) ────────────── */}
-      {resolvedMode === "all" && (
-        <div className="flex h-8 shrink-0 items-center justify-end border-b border-[rgb(var(--color-border))] px-2">
-          <div className="flex items-center gap-1">
-            {importButton}
-          </div>
-        </div>
+    <div className="cr-tree" role="group" aria-label="Documents">
+      <div className="cr-sec">
+      <TreeSection {...section("storyboards", "Storyboards")}>
+        <TreeMiniButton
+          label="Import..."
+          testId="explorer-import-menu"
+          disabled={importing}
+          ariaHasPopup="menu"
+          ariaExpanded={importMenu !== null}
+          onClick={handleOpenImportMenu}
+        >
+          <NavIcon name="import" size={16} className={importing ? "animate-pulse" : undefined} />
+        </TreeMiniButton>
+        <TreeMiniButton label="New storyboard" onClick={() => { setSectionOpen("storyboards", true); setIsCreatingSb(true); }} />
+      </TreeSection>
+      <TreeSectionBody open={sectionOpen("storyboards")}>
+      {isCreatingSb && (
+        <TreeCreateForm
+          id="new-storyboard-title"
+          label="Storyboard name"
+          value={newSbTitle}
+          onChange={setNewSbTitle}
+          onCreate={() => void handleCreateSb()}
+          onCancel={() => { setIsCreatingSb(false); setNewSbTitle(""); }}
+        />
       )}
-
-      {/* ── Storyboards section ────────────────────────── */}
-      {(resolvedMode === "all" || resolvedMode === "storyboards") && (
-        <>
-          <SidebarSectionHeader
-            title="Storyboards"
-            count={orderedStoryboards.length}
-            expanded={storyboardsExpanded}
-            onToggle={() => setStoryboardsExpanded(!storyboardsExpanded)}
-            tone={storyboardTone}
-            actions={
-              <>
-              {resolvedMode === "storyboards" && (
-                importButton
-              )}
-              <button
-                onClick={() => { setStoryboardsExpanded(true); setIsCreatingSb(true); }}
-                className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
-                title="New storyboard"
-                aria-label="New storyboard"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
-              </>
-            }
-          />
-
-          {storyboardsExpanded && isCreatingSb && (
-            <div className="space-y-2 border-b border-[rgb(var(--color-border))] px-3 py-2">
-              <label className="block text-2xs font-medium text-[rgb(var(--color-text-secondary))]" htmlFor="new-storyboard-title">
-                Storyboard name
-              </label>
-              <input
-                id="new-storyboard-title"
-                type="text"
-                value={newSbTitle}
-                onChange={(e) => setNewSbTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCreateSb();
-                  if (e.key === "Escape") { setIsCreatingSb(false); setNewSbTitle(""); }
-                }}
-                placeholder="Storyboard name..."
-                autoFocus
-                className="w-full px-2 py-1.5 rounded-md bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40"
-              />
-              <div className="flex items-center justify-end gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => { setIsCreatingSb(false); setNewSbTitle(""); }}
-                  className="rounded-md px-2 py-1 text-2xs text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleCreateSb()}
-                  disabled={!newSbTitle.trim()}
-                  className="rounded-md bg-[rgb(var(--color-accent))] px-2 py-1 text-2xs font-medium text-[rgb(var(--color-accent-fg))] transition-opacity disabled:pointer-events-none disabled:opacity-50"
-                >
-                  Create
-                </button>
-              </div>
-            </div>
-          )}
-
-          {storyboardsExpanded && <div className={sectionBodyClass} style={storyboardsBodyStyle}>
-            {orderedStoryboards.length === 0 && !isCreatingSb ? (
-              <button
-                onClick={() => { setStoryboardsExpanded(true); setIsCreatingSb(true); }}
-                className="w-full px-3 py-4 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
-              >
-                + New storyboard
-              </button>
-            ) : (
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd("storyboards")}>
-                <SortableContext items={orderedStoryboards.map((sb) => sb.path)} strategy={verticalListSortingStrategy}>
-                  {orderedStoryboards.map((sb) => (
-                    <SortableSidebarItem key={sb.path} id={sb.path}>
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        data-testid={`explorer-item-${sb.path}`}
-                        onClick={() => { if (!renamingItem) openStoryboard(sb.path); }}
-                        onDoubleClick={(e) => { e.stopPropagation(); startRename("storyboard", sb.path); }}
-                        onContextMenu={(e) => {
-                          const items = buildContextMenuItems("storyboard", sb.path, sb.title);
-                          if (items.length > 0) { e.preventDefault(); setContextMenu({ type: "storyboard", path: sb.path, title: sb.title, x: e.clientX, y: e.clientY }); }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "F2") { e.preventDefault(); startRename("storyboard", sb.path); }
-                          else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openStoryboard(sb.path); }
-                        }}
-                        className={documentItemClass(sb.path === activeStoryboardPath, storyboardTone)}
-                      >
-                        <ActiveDocumentMarker active={sb.path === activeStoryboardPath} tone={storyboardTone} />
-                        <StoryboardIcon className={`shrink-0 opacity-90 ${storyboardTone.text}`} />
-                        <div className="min-w-0 flex-1">
-                          {renamingItem?.path === sb.path ? (
-                            <input
-                              ref={renameInputRef}
-                              value={renameValue}
-                              onChange={(e) => setRenameValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                e.stopPropagation();
-                                if (e.key === "Enter") commitRename();
-                                if (e.key === "Escape") cancelRename();
-                              }}
-                              onBlur={commitRename}
-                              onClick={(e) => e.stopPropagation()}
-                              aria-label="Rename storyboard file"
-                              title="Rename file. Spaces become hyphens."
-                              className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
-                            />
-                          ) : (
-                            <DocumentItemText
-                              title={sb.title}
-                              meta={`${sb.sketch_count} ${sb.sketch_count === 1 ? "sketch" : "sketches"}`}
-                              active={sb.path === activeStoryboardPath}
-                              tone={storyboardTone}
-                            />
-                          )}
-                        </div>
-                        {renamingItem?.path !== sb.path && (
-                          <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/item:opacity-100">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                startRename("storyboard", sb.path);
-                              }}
-                              className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
-                              title="Rename storyboard"
-                              aria-label={`Rename ${sb.title}`}
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                requestDelete("storyboard", sb.path, sb.title);
-                              }}
-                              className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
-                              title="Delete storyboard"
-                              aria-label={`Delete ${sb.title}`}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </SortableSidebarItem>
-                  ))}
-                </SortableContext>
-              </DndContext>
-            )}
-          </div>}
-        </>
-      )}
-
-      {/* ── Sketches section──────────────────────────── */}
-      {(resolvedMode === "all" || resolvedMode === "sketches") && (
-        <>
-          <SidebarSectionHeader
-            title="Sketches"
-            count={orderedSketches.length}
-            expanded={sketchesExpanded}
-            onToggle={() => setSketchesExpanded(!sketchesExpanded)}
-            tone={sketchTone}
-            actions={
-              <>
-              {resolvedMode === "sketches" && (
-                importButton
-              )}
-              <button
-                onClick={() => { setSketchesExpanded(true); setIsCreatingSk(true); }}
-                className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
-                title="New sketch"
-                aria-label="New sketch"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
-              </>
-            }
-          />
-
-          {sketchesExpanded && isCreatingSk && (
-            <div className="space-y-2 border-b border-[rgb(var(--color-border))] px-3 py-2">
-              <label className="block text-2xs font-medium text-[rgb(var(--color-text-secondary))]" htmlFor="new-sketch-title">
-                Sketch name
-              </label>
-              <input
-                id="new-sketch-title"
-                type="text"
-                value={newSkTitle}
-                onChange={(e) => setNewSkTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCreateSk();
-                  if (e.key === "Escape") { setIsCreatingSk(false); setNewSkTitle(""); }
-                }}
-                placeholder="Sketch name..."
-                autoFocus
-                className="w-full px-2 py-1.5 rounded-md bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40"
-              />
-              <div className="flex items-center justify-end gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => { setIsCreatingSk(false); setNewSkTitle(""); }}
-                  className="rounded-md px-2 py-1 text-2xs text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleCreateSk()}
-                  disabled={!newSkTitle.trim()}
-                  className="rounded-md bg-[rgb(var(--color-accent))] px-2 py-1 text-2xs font-medium text-[rgb(var(--color-accent-fg))] transition-opacity disabled:pointer-events-none disabled:opacity-50"
-                >
-                  Create
-                </button>
-              </div>
-            </div>
-          )}
-
-          {sketchesExpanded && <div className={sectionBodyClass} style={sketchesBodyStyle}>
-            {orderedSketches.length === 0 && !isCreatingSk ? (
-              <button
-                onClick={() => { setSketchesExpanded(true); setIsCreatingSk(true); }}
-                className="w-full px-3 py-4 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition-colors"
-              >
-                + New sketch
-              </button>
-            ) : (
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd("sketches")}>
-                <SortableContext items={orderedSketches.map((sk) => sk.path)} strategy={verticalListSortingStrategy}>
-                  {orderedSketches.map((sk) => (
-                    <SortableSidebarItem key={sk.path} id={sk.path}>
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        data-testid={`explorer-item-${sk.path}`}
-                        onClick={() => { if (!renamingItem) handleOpenSketchStandalone(sk.path); }}
-                        onDoubleClick={(e) => { e.stopPropagation(); startRename("sketch", sk.path); }}
-                        onContextMenu={(e) => {
-                          const items = buildContextMenuItems("sketch", sk.path, sk.title);
-                          if (items.length > 0) { e.preventDefault(); setContextMenu({ type: "sketch", path: sk.path, title: sk.title, x: e.clientX, y: e.clientY }); }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "F2") { e.preventDefault(); startRename("sketch", sk.path); }
-                          else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) handleOpenSketchStandalone(sk.path); }
-                        }}
-                        className={documentItemClass(sk.path === activeSketchPath, sketchTone)}
-                      >
-                        <ActiveDocumentMarker active={sk.path === activeSketchPath} tone={sketchTone} />
-                        <SketchIcon className={`shrink-0 opacity-90 ${sketchTone.text}`} />
-                        <div className="min-w-0 flex-1">
-                          {renamingItem?.path === sk.path ? (
-                            <input
-                              ref={renameInputRef}
-                              value={renameValue}
-                              onChange={(e) => setRenameValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                e.stopPropagation();
-                                if (e.key === "Enter") commitRename();
-                                if (e.key === "Escape") cancelRename();
-                              }}
-                              onBlur={commitRename}
-                              onClick={(e) => e.stopPropagation()}
-                              aria-label="Rename sketch file"
-                              title="Rename file. Spaces become hyphens."
-                              className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
-                            />
-                          ) : (
-                            <DocumentItemText
-                              title={sk.title}
-                              meta={`${sk.row_count} ${sk.row_count === 1 ? "row" : "rows"}`}
-                              active={sk.path === activeSketchPath}
-                              tone={sketchTone}
-                            />
-                          )}
-                        </div>
-                        {renamingItem?.path !== sk.path && (
-                          <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/item:opacity-100">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                startRename("sketch", sk.path);
-                              }}
-                              className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
-                              title="Rename sketch"
-                              aria-label={`Rename ${sk.title}`}
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                requestDelete("sketch", sk.path, sk.title);
-                              }}
-                              className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
-                              title="Delete sketch"
-                              aria-label={`Delete ${sk.title}`}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </SortableSidebarItem>
-                  ))}
-                </SortableContext>
-              </DndContext>
-            )}
-          </div>}
-        </>
-      )}
-
-      {/* ── Notes section─────────────────────────────── */}
-      {(resolvedMode === "all" || resolvedMode === "notes") && (
-        <>
-          <SidebarSectionHeader
-            title="Notes"
-            count={orderedNotes.length}
-            expanded={notesExpanded}
-            onToggle={() => setNotesExpanded(!notesExpanded)}
-            tone={noteTone}
-            actions={
-              <>
-              {resolvedMode === "notes" && (
-                importButton
-              )}
-              <button
-                onClick={() => { setNotesExpanded(true); setIsCreatingNote(true); }}
-                className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
-                title="New note"
-                aria-label="New note"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
-              </>
-            }
-          />
-
-          {notesExpanded && isCreatingNote && (
-            <div className="space-y-2 border-b border-[rgb(var(--color-border))] px-3 py-2">
-              <label className="block text-2xs font-medium text-[rgb(var(--color-text-secondary))]" htmlFor="new-note-title">
-                Note name
-              </label>
-              <input
-                id="new-note-title"
-                type="text"
-                value={newNoteTitle}
-                onChange={(e) => setNewNoteTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCreateNote();
-                  if (e.key === "Escape") { setIsCreatingNote(false); setNewNoteTitle(""); }
-                }}
-                placeholder="Note name..."
-                autoFocus
-                className="w-full px-2 py-1.5 rounded-md bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40"
-              />
-              <div className="flex items-center justify-end gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => { setIsCreatingNote(false); setNewNoteTitle(""); }}
-                  className="rounded-md px-2 py-1 text-2xs text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleCreateNote()}
-                  disabled={!newNoteTitle.trim()}
-                  className="rounded-md bg-[rgb(var(--color-accent))] px-2 py-1 text-2xs font-medium text-[rgb(var(--color-accent-fg))] transition-opacity disabled:pointer-events-none disabled:opacity-50"
-                >
-                  Create
-                </button>
-              </div>
-            </div>
-          )}
-
-          {notesExpanded && <div className={sectionBodyClass} style={notesBodyStyle}>
-            {orderedNotes.length === 0 && !isCreatingNote ? (
-              <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-                <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-3 leading-relaxed">
-                  Import a document or create a new note
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => { setNotesExpanded(true); setIsCreatingNote(true); }}
-                    className="px-3 py-1.5 text-xs rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))] transition-colors"
-                  >
-                    + New note
-                  </button>
-                  <button
-                    onClick={handleOpenImportMenu}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-[rgb(var(--color-border))] px-3 py-1.5 text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-accent))] hover:text-[rgb(var(--color-text))]"
-                    aria-haspopup="menu"
-                    aria-expanded={importMenu !== null}
-                  >
-                    <FileInput className="w-3 h-3" />
-                    <span>Import</span>
-                    <ChevronDown className="w-3 h-3 opacity-70" />
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd("notes")}>
-                <SortableContext items={orderedNotes.map((n) => n.path)} strategy={verticalListSortingStrategy}>
-                  {orderedNotes.map((note) => (
-                    <SortableSidebarItem key={note.path} id={note.path}>
-                      <div
-                        role="button"
-                        tabIndex={0}
-                        data-testid={`explorer-item-${note.path}`}
-                        onClick={() => { if (!renamingItem) openNote(note.path); }}
-                        onDoubleClick={(e) => { e.stopPropagation(); startRename("note", note.path); }}
-                        onContextMenu={(e) => {
-                          const items = buildContextMenuItems("note", note.path, note.title);
-                          if (items.length > 0) { e.preventDefault(); setContextMenu({ type: "note", path: note.path, title: note.title, x: e.clientX, y: e.clientY }); }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "F2") { e.preventDefault(); startRename("note", note.path); }
-                          else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openNote(note.path); }
-                        }}
-                        className={documentItemClass(note.path === activeNotePath, noteTone)}
-                      >
-                        <ActiveDocumentMarker active={note.path === activeNotePath} tone={noteTone} />
-                        <NoteIcon className={`shrink-0 opacity-90 ${noteTone.text}`} />
-                        <div className="min-w-0 flex-1">
-                          {renamingItem?.path === note.path ? (
-                            <input
-                              ref={renameInputRef}
-                              value={renameValue}
-                              onChange={(e) => setRenameValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                e.stopPropagation();
-                                if (e.key === "Enter") commitRename();
-                                if (e.key === "Escape") cancelRename();
-                              }}
-                              onBlur={commitRename}
-                              onClick={(e) => e.stopPropagation()}
-                              aria-label="Rename note file"
-                              title="Rename file. Spaces become hyphens."
-                              className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
-                            />
-                          ) : (
-                            <DocumentItemText title={note.title} meta={note.path} active={note.path === activeNotePath} tone={noteTone} />
-                          )}
-                        </div>
-                        {renamingItem?.path !== note.path && (
-                          <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/item:opacity-100">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                startRename("note", note.path);
-                              }}
-                              className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
-                              title="Rename note"
-                              aria-label={`Rename ${note.title}`}
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                requestDelete("note", note.path, note.title);
-                              }}
-                              className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
-                              title="Delete note"
-                              aria-label={`Delete ${note.title}`}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </SortableSidebarItem>
-                  ))}
-                </SortableContext>
-              </DndContext>
-            )}
-          </div>}
-        </>
-      )}
-
-      {/* ── Promoted chats section─────────────────────────────── */}
-      {(resolvedMode === "all" || resolvedMode === "notes") && (
-        <>
-          <SidebarSectionHeader
-            title="Chats"
-            count={chatArtifacts.length}
-            expanded={chatArtifactsExpanded}
-            onToggle={() => setChatArtifactsExpanded(!chatArtifactsExpanded)}
-            tone={chatArtifactTone}
-          />
-
-          {chatArtifactsExpanded && <div className={sectionBodyClass} style={chatArtifactsBodyStyle}>
-            {chatArtifacts.length === 0 ? (
-              <div className="px-4 py-6 text-center text-xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
-                Promote a chat to save it here.
-              </div>
-            ) : (
-              <div className="space-y-0.5 px-1">
-                {chatArtifacts.map((artifact) => (
-                  <div
-                    key={artifact.path}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => { if (!renamingItem) openChatArtifact(artifact.path); }}
-                    onDoubleClick={(e) => { e.stopPropagation(); startRename("chat-artifact", artifact.path); }}
-                    onKeyDown={(e) => {
-                      if (e.key === "F2") { e.preventDefault(); startRename("chat-artifact", artifact.path); }
-                      else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openChatArtifact(artifact.path); }
-                    }}
-                    className={`${documentItemClass(artifact.path === activeChatArtifactPath, chatArtifactTone)} group/item`}
-                  >
-                    <ActiveDocumentMarker active={artifact.path === activeChatArtifactPath} tone={chatArtifactTone} />
-                    <ChatArtifactIcon className={`shrink-0 opacity-90 ${chatArtifactTone.text}`} />
-                    <div className="min-w-0 flex-1">
-                      {renamingItem?.path === artifact.path ? (
-                        <input
-                          ref={renameInputRef}
-                          value={renameValue}
-                          onChange={(e) => setRenameValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            e.stopPropagation();
-                            if (e.key === "Enter") commitRename();
-                            if (e.key === "Escape") cancelRename();
-                          }}
-                          onBlur={commitRename}
-                          onClick={(e) => e.stopPropagation()}
-                          aria-label="Rename chat"
-                          title="Rename file. Spaces become hyphens."
-                          className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
+      {orderedStoryboards.length === 0 && !isCreatingSb && <div className="cr-tempty">No storyboards yet</div>}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd("storyboards")}>
+        <SortableContext items={orderedStoryboards.map((sb) => sb.path)} strategy={verticalListSortingStrategy}>
+          {orderedStoryboards.map((sb) => {
+            const expanded = !collapsedStoryboards.has(sb.path);
+            const leaves = (membership.get(sb.path) ?? []).filter((path) => sketchByPath.has(path));
+            return (
+              <div key={sb.path}>
+                <SortableTreeRow
+                  id={sb.path}
+                  depth="tv"
+                  icon="clapper"
+                  label={sb.title}
+                  kind="storyboard"
+                  selected={sb.path === activeStoryboardPath}
+                  expanded={leaves.length > 0 ? expanded : undefined}
+                  onToggle={leaves.length > 0 ? () => toggleStoryboard(sb.path) : undefined}
+                  onOpen={() => openStoryboard(sb.path)}
+                  onRename={() => startRename("storyboard", sb.path)}
+                  onDelete={() => requestDelete("storyboard", sb.path, sb.title)}
+                  onContextMenu={openContextMenu("storyboard", sb.path, sb.title)}
+                  renameInput={isRenaming(sb.path) ? renameInput("Rename storyboard file") : undefined}
+                  testId={`explorer-item-${sb.path}`}
+                />
+                {expanded && leaves.length > 0 && (
+                  <div className="cr-tkids">
+                    {leaves.map((path) => {
+                      const sk = sketchByPath.get(path)!;
+                      return (
+                        <TreeRow
+                          key={path}
+                          depth="leaf"
+                          label={sk.title}
+                          icon="sketch"
+                          kind="sketch"
+                          selected={path === activeSketchPath && sb.path === selectedLeafStoryboard}
+                          onOpen={() => void handleOpenSketchStandalone(path)}
+                          onContextMenu={openContextMenu("sketch", path, sk.title)}
                         />
-                      ) : (
-                        <DocumentItemText
-                          title={artifact.title}
-                          meta={chatArtifactMeta(artifact)}
-                          active={artifact.path === activeChatArtifactPath}
-                          tone={chatArtifactTone}
-                        />
-                      )}
-                    </div>
-                    {renamingItem?.path !== artifact.path && (
-                      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover/item:opacity-100">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            startRename("chat-artifact", artifact.path);
-                          }}
-                          className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
-                          title="Rename chat"
-                          aria-label={`Rename ${artifact.title}`}
-                        >
-                          <Pencil className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            requestDelete("chat-artifact", artifact.path, artifact.title);
-                          }}
-                          className="rounded p-0.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
-                          title="Delete chat"
-                          aria-label={`Delete ${artifact.title}`}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
-                ))}
+                )}
               </div>
-            )}
-          </div>}
-        </>
-      )}
+            );
+          })}
+        </SortableContext>
+      </DndContext>
 
-      {/* Delete confirmation overlay */}
-      {pendingDelete && (
-        <div className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center">
-          <div className="cr-modal-surface p-5 max-w-sm mx-4" role="dialog" aria-modal="true" aria-labelledby="delete-asset-title" data-testid="delete-asset-dialog">
-            <p id="delete-asset-title" className="text-sm text-[rgb(var(--color-text))] mb-1 font-medium">Delete {deleteAssetLabel(pendingDelete.type)}?</p>
-            <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-2">
-              "{pendingDelete.title}" will be permanently deleted.
-            </p>
-            {pendingDelete.usedBy && pendingDelete.usedBy.length > 0 && (
-              <div className="mb-3 px-3 py-2 rounded-lg bg-warning/10 border border-warning/30" data-testid="delete-asset-used-by">
-                <p className="text-xs text-warning font-medium mb-1">⚠ Used in {pendingDelete.usedBy.length === 1 ? "a storyboard" : `${pendingDelete.usedBy.length} storyboards`}:</p>
-                <ul className="text-xs text-warning/80 list-disc list-inside">
-                  {pendingDelete.usedBy.map((t) => <li key={t}>{t}</li>)}
-                </ul>
-                <p className="text-xs text-warning/80 mt-1">Deleting will leave broken references.</p>
-              </div>
-            )}
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setPendingDelete(null)}
-                className="px-3 py-1.5 text-xs rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                data-testid="delete-asset-confirm"
-                onClick={() => {
-                  const { type, path } = pendingDelete;
-                  setPendingDelete(null);
-                  if (type === "sketch") deleteSketch(path);
-                  else if (type === "storyboard") deleteStoryboard(path);
-                  else if (type === "chat-artifact") deleteChatArtifact(path);
-                  else deleteNote(path);
-                }}
-                className="px-3 py-1.5 text-xs rounded-lg bg-error text-accent-fg hover:bg-error/80 transition-colors"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
+      </TreeSectionBody>
+      </div>
+
+      <div className="cr-sec">
+      <TreeSection {...section("sketches", "Sketches")}>
+        <TreeMiniButton label="New sketch" onClick={() => { setSectionOpen("sketches", true); setIsCreatingSk(true); }} />
+      </TreeSection>
+      <TreeSectionBody open={sectionOpen("sketches")}>
+      {isCreatingSk && (
+        <TreeCreateForm
+          id="new-sketch-title"
+          label="Sketch name"
+          value={newSkTitle}
+          onChange={setNewSkTitle}
+          onCreate={() => void handleCreateSk()}
+          onCancel={() => { setIsCreatingSk(false); setNewSkTitle(""); }}
+        />
+      )}
+      {orderedSketches.length === 0 && !isCreatingSk && <div className="cr-tempty">No sketches yet</div>}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd("sketches")}>
+        <SortableContext items={orderedSketches.map((sk) => sk.path)} strategy={verticalListSortingStrategy}>
+          {orderedSketches.map((sk) => (
+            <SortableTreeRow
+              key={sk.path}
+              id={sk.path}
+              depth="note"
+              icon="sketch"
+              label={sk.title}
+              kind="sketch"
+              selected={sk.path === activeSketchPath}
+              onOpen={() => void handleOpenSketchStandalone(sk.path)}
+              onRename={() => startRename("sketch", sk.path)}
+              onDelete={() => requestDelete("sketch", sk.path, sk.title)}
+              onContextMenu={openContextMenu("sketch", sk.path, sk.title)}
+              renameInput={isRenaming(sk.path) ? renameInput("Rename sketch file") : undefined}
+              testId={`explorer-item-${sk.path}`}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
+
+      </TreeSectionBody>
+      </div>
+
+      <div className="cr-sec">
+      <TreeSection {...section("notes", "Notes")}>
+        <TreeMiniButton label="New note" onClick={() => { setSectionOpen("notes", true); setIsCreatingNote(true); }} />
+      </TreeSection>
+      <TreeSectionBody open={sectionOpen("notes")}>
+      {isCreatingNote && (
+        <TreeCreateForm
+          id="new-note-title"
+          label="Note name"
+          value={newNoteTitle}
+          onChange={setNewNoteTitle}
+          onCreate={() => void handleCreateNote()}
+          onCancel={() => { setIsCreatingNote(false); setNewNoteTitle(""); }}
+        />
+      )}
+      {orderedNotes.length === 0 && !isCreatingNote && <div className="cr-tempty">No notes yet</div>}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd("notes")}>
+        <SortableContext items={orderedNotes.map((n) => n.path)} strategy={verticalListSortingStrategy}>
+          {orderedNotes.map((note) => (
+            <SortableTreeRow
+              key={note.path}
+              id={note.path}
+              depth="note"
+              icon="note"
+              label={note.title}
+              kind="note"
+              selected={note.path === activeNotePath}
+              onOpen={() => openNote(note.path)}
+              onRename={() => startRename("note", note.path)}
+              onDelete={() => requestDelete("note", note.path, note.title)}
+              onContextMenu={openContextMenu("note", note.path, note.title)}
+              renameInput={isRenaming(note.path) ? renameInput("Rename note file") : undefined}
+              testId={`explorer-item-${note.path}`}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
+
+      </TreeSectionBody>
+      </div>
+
+      {chatArtifacts.length > 0 && (
+        <div className="cr-sec">
+          <TreeSection {...section("chats", "Promoted chats")} />
+          <TreeSectionBody open={sectionOpen("chats")}>
+          {chatArtifacts.map((artifact) => (
+            <TreeRow
+              key={artifact.path}
+              depth="note"
+              icon="chat"
+              label={artifact.title}
+              kind="chat"
+              selected={artifact.path === activeChatArtifactPath}
+              onOpen={() => openChatArtifact(artifact.path)}
+              onRename={() => startRename("chat-artifact", artifact.path)}
+              onDelete={() => requestDelete("chat-artifact", artifact.path, artifact.title)}
+              renameInput={isRenaming(artifact.path) ? renameInput("Rename chat") : undefined}
+            />
+          ))}
+          </TreeSectionBody>
         </div>
       )}
+
+      <DeleteAssetDialog
+        pending={pendingDelete}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={({ type, path }) => {
+          setPendingDelete(null);
+          if (type === "sketch") deleteSketch(path);
+          else if (type === "storyboard") deleteStoryboard(path);
+          else if (type === "chat-artifact") deleteChatArtifact(path);
+          else deleteNote(path);
+        }}
+      />
 
       <ConfirmDialog
         open={!!drmConfirm}
@@ -1971,94 +1398,22 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
         />
       )}
 
-      {/* Transfer warning: moving a sketch used by storyboards */}
-      {transferWarning && (
-        <div className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center">
-          <div className="cr-modal-surface p-5 max-w-sm mx-4">
-            <p className="text-sm text-[rgb(var(--color-text))] mb-2 font-medium">
-              Move "{transferWarning.sourceTitle}"?
-            </p>
-            <div className="mb-3 px-3 py-2 rounded-lg bg-warning/10 border border-warning/30">
-              <p className="text-xs text-warning font-medium mb-1">
-                ⚠ Used in {transferWarning.usedBy.length === 1 ? "a storyboard" : `${transferWarning.usedBy.length} storyboards`}:
-              </p>
-              <ul className="text-xs text-warning/80 list-disc list-inside">
-                {transferWarning.usedBy.map((t) => <li key={t}>{t}</li>)}
-              </ul>
-              <p className="text-xs text-warning/80 mt-1">Moving will leave broken references in this project.</p>
-            </div>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setTransferWarning(null)}
-                className="px-3 py-1.5 text-xs rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  const { action, type, sourcePath, sourceTitle, destProject } = transferWarning;
-                  setTransferWarning(null);
-                  doTransfer(action, type, sourcePath, sourceTitle, destProject, sourcePath);
-                }}
-                className="px-3 py-1.5 text-xs rounded-lg bg-warning text-[rgb(var(--color-accent-fg))] hover:bg-warning/80 transition-colors"
-              >
-                Move anyway
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Transfer conflict: file already exists at destination */}
-      {transferConflict && (
-        <div className="cr-modal-backdrop fixed inset-0 z-modal flex items-center justify-center">
-          <div className="cr-modal-surface p-5 max-w-sm mx-4">
-            <p className="text-sm text-[rgb(var(--color-text))] mb-1 font-medium">File already exists</p>
-            <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-3">
-              A file with this name already exists in "{transferConflict.destProject.name}". Enter a new name:
-            </p>
-            <input
-              ref={conflictInputRef}
-              value={conflictName}
-              onChange={(e) => setConflictName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  const stem = conflictName.trim();
-                  if (!stem) return;
-                  const { action, type, sourcePath, sourceTitle, destProject, ext } = transferConflict;
-                  setTransferConflict(null);
-                  const dir = sourcePath.includes("/") ? sourcePath.substring(0, sourcePath.lastIndexOf("/") + 1) : "";
-                  doTransfer(action, type, sourcePath, sourceTitle, destProject, `${dir}${stem}${ext}`);
-                }
-                if (e.key === "Escape") setTransferConflict(null);
-              }}
-              placeholder="new-name"
-              className="w-full px-3 py-2 text-xs rounded-lg bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text))] focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 mb-3"
-            />
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setTransferConflict(null)}
-                className="px-3 py-1.5 text-xs rounded-lg border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  const stem = conflictName.trim();
-                  if (!stem) return;
-                  const { action, type, sourcePath, sourceTitle, destProject, ext } = transferConflict;
-                  setTransferConflict(null);
-                  const dir = sourcePath.includes("/") ? sourcePath.substring(0, sourcePath.lastIndexOf("/") + 1) : "";
-                  doTransfer(action, type, sourcePath, sourceTitle, destProject, `${dir}${stem}${ext}`);
-                }}
-                className="px-3 py-1.5 text-xs rounded-lg bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
-              >
-                {transferConflict.action === "move" ? "Move As" : "Copy As"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <TransferWarningDialog
+        warning={transferWarning}
+        onCancel={() => setTransferWarning(null)}
+        onConfirm={({ action, type, sourcePath, sourceTitle, destProject }) => {
+          setTransferWarning(null);
+          doTransfer(action, type, sourcePath, sourceTitle, destProject, sourcePath);
+        }}
+      />
+      <TransferConflictDialog
+        conflict={transferConflict}
+        onCancel={() => setTransferConflict(null)}
+        onSubmit={({ action, type, sourcePath, sourceTitle, destProject }, destRel) => {
+          setTransferConflict(null);
+          doTransfer(action, type, sourcePath, sourceTitle, destProject, destRel);
+        }}
+      />
     </div>
   );
 }

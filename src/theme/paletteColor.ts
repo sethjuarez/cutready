@@ -134,10 +134,14 @@ function bestAccentForeground(accent: Rgb): string {
 
 function polishTokens(tokens: ThemeColorTokens): ThemeColorTokens {
   const surface = tokenToRgb(tokens.surface);
+  const isLight = relativeLuminance(surface) > 0.5;
+  const inset = tokenToRgb(tokens.surfaceInset);
+  // The sidebar's selected row: --nav-selected (index.css) over the inset surface.
+  const navSelected = isLight ? mixRgb(inset, [129, 139, 152], 0.15) : mixRgb(inset, [101, 108, 118], 0.2);
   const surfaces = [tokens.surface, tokens.surfaceAlt, tokens.surfaceInset].map(tokenToRgb);
-  const extreme: Rgb = relativeLuminance(surface) > 0.5 ? [0, 0, 0] : [255, 255, 255];
+  const extreme: Rgb = isLight ? [0, 0, 0] : [255, 255, 255];
   // Body and secondary text must stay AA on every surface they sit on, not just the base surface.
-  const text = surfaces.reduce((value, background) => ensureContrast(value, background, extreme, 4.5), tokenToRgb(tokens.text));
+  const text = [...surfaces, navSelected].reduce((value, background) => ensureContrast(value, background, extreme, 4.5), tokenToRgb(tokens.text));
   const accentTarget = text;
   const borderTarget = text;
 
@@ -160,6 +164,18 @@ function polishTokens(tokens: ThemeColorTokens): ThemeColorTokens {
     textSecondary: rgbToToken(textSecondary),
     accentFg: bestAccentForeground(accent),
   };
+}
+
+/**
+ * Sidebar section headers, icons and hints. Dark uses text at 60% over the inset (Primer's muted
+ * step), raised only as far as AA on every surface requires; light uses the polished secondary.
+ */
+export function deriveNavMuted(tokens: ThemeColorTokens): string {
+  const surfaces = [tokens.surface, tokens.surfaceAlt, tokens.surfaceInset].map(tokenToRgb);
+  if (relativeLuminance(surfaces[0]) > 0.5) return tokens.textSecondary;
+  const text = tokenToRgb(tokens.text);
+  const muted = mixRgb(surfaces[2], text, 0.6);
+  return rgbToToken(surfaces.reduce((value, background) => ensureContrast(value, background, text, 4.5), muted));
 }
 
 export function polishThemePalette(palette: ThemePalette): ThemePalette {

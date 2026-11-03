@@ -1,0 +1,317 @@
+/*
+ * Left sidebar, modelled on the GitHub Copilot app (github/github-app) sidebar:
+ * top rows, collapsible sections with hover "+", nested rows with guide lines, a footer.
+ * Primer tokens map to ours: fg.default/muted/disabled -> --color-text / --nav-muted /
+ * --nav-disabled, control-transparent hover/selected -> --nav-hover / --nav-selected,
+ * border.muted -> --nav-guide, accent.muted -> --nav-count-bg (our brand, not Primer blue).
+ */
+
+.cr-nav {
+  position: relative;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  transition: width 180ms var(--motion-ease);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.cr-nav[data-resizing="true"] { transition: none; }
+.cr-nav-inner { display: flex; flex-direction: column; height: 100%; min-width: 0; }
+
+.cr-nav-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px 8px 16px;
+  --fade-top: #000;
+  --fade-bottom: #000;
+  mask-image: linear-gradient(to bottom, var(--fade-top) 0, #000 40px, #000 calc(100% - 40px), var(--fade-bottom) 100%);
+}
+.cr-nav-scroll[data-fade-top="true"] { --fade-top: transparent; }
+.cr-nav-scroll[data-fade-bottom="true"] { --fade-bottom: transparent; }
+.cr-nav-scroll::-webkit-scrollbar { width: 6px; }
+
+.cr-nav-list { display: flex; flex-direction: column; }
+
+/* Rows: 8px radius, 8px x 6px padding, 6px gap, 13/20 text, 20px icon slot. */
+.cr-nv {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: var(--tree-row-height);
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: rgb(var(--color-text));
+  white-space: nowrap;
+  text-align: left;
+  cursor: default;
+}
+.cr-nv:hover { background: var(--nav-hover); }
+.cr-nv:active:not(:disabled) { background: var(--nav-selected); }
+.cr-nv:focus-visible { outline: 2px solid rgb(var(--color-accent)); outline-offset: -1px; }
+.cr-nv:disabled { color: var(--nav-disabled); background: transparent; }
+.cr-nv:disabled .ico { color: var(--nav-disabled); }
+.cr-nv.sel { background: var(--nav-selected); }
+.cr-nv .ico {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: var(--nav-muted);
+}
+.cr-nav-list > .cr-nv.sel .ico,
+.cr-nav-list > .contents > .cr-nv.sel .ico { color: rgb(var(--color-text)); }
+.cr-nv .lbl { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Parent rows mirror section headers: a 12px chevron after the label (4px gap);
+   expanded chevrons show on hover or keyboard focus, collapsed ones always. */
+.cr-nv .tchev {
+  flex: none;
+  display: grid;
+  place-items: center;
+  /* 20px hit area around the 12px glyph; negative margins keep the glyph where it was. */
+  width: 20px;
+  height: 20px;
+  margin: -4px -4px -4px -6px;
+  transform: translateY(1px);
+  color: var(--nav-muted);
+  opacity: 0;
+}
+.cr-nv .tchev.collapsed { opacity: 1; color: var(--nav-disabled); }
+.cr-trow:hover .tchev,
+.cr-nv:focus-visible .tchev { opacity: 1; }
+.cr-nv .count {
+  flex: none;
+  margin-left: auto;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  /* Opaque so the mica tint and row fills don't stack under it. The number uses the default text
+     colour: themed accents are only guaranteed AA on the plain surface, not on an accent tint. */
+  background: linear-gradient(var(--nav-count-bg), var(--nav-count-bg)), rgb(var(--color-surface));
+  color: rgb(var(--color-text));
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  text-align: center;
+}
+
+/* List panels (Assets, Narrations, Changes) nest under their row with a bounded height. */
+.cr-nav-panel {
+  display: flex;
+  flex-direction: column;
+  height: min(420px, 50vh);
+  min-height: 200px;
+  margin: 2px 0 4px;
+  overflow: hidden;
+}
+
+/* Sections: 16px apart; header 28px, 12/16 weight 500 muted, chevron after the label. */
+.cr-sec { margin-top: 16px; }
+.cr-sec-h {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 4px 0 0;
+  border-radius: 8px;
+}
+.cr-sec-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  align-self: stretch;
+  padding: 0 0 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--nav-muted);
+  text-align: left;
+  cursor: default;
+}
+.cr-sec-toggle:focus-visible { outline: 2px solid rgb(var(--color-accent)); outline-offset: -1px; }
+.cr-sec-chev { flex: none; transform: translateY(1px); opacity: 0; color: var(--nav-muted); }
+.cr-sec-h[data-collapsed="true"] .cr-sec-chev { opacity: 1; color: var(--nav-disabled); }
+.cr-sec-h:hover .cr-sec-chev,
+.cr-sec-h:has(:focus-visible) .cr-sec-chev { opacity: 1; }
+.cr-sec-acts { display: flex; gap: 2px; opacity: 0; }
+.cr-sec-h:hover .cr-sec-acts,
+.cr-sec-h:has(:focus-visible) .cr-sec-acts,
+.cr-sec-h:has(.cr-mini[aria-expanded="true"]) .cr-sec-acts { opacity: 1; }
+
+/* Section bodies stay mounted and ease open/closed. */
+.cr-sec-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--motion-normal) cubic-bezier(0, 0, 0.2, 1);
+}
+.cr-sec-body[data-open="false"] { grid-template-rows: 0fr; }
+.cr-sec-body-in { min-height: 0; overflow: hidden; }
+.cr-sec-body[data-open="true"] > .cr-sec-body-in { overflow: clip; overflow-clip-margin: 2px; }
+.cr-mini {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--nav-muted);
+}
+.cr-mini:hover { background: var(--nav-hover); color: rgb(var(--color-text)); }
+.cr-mini:focus-visible { outline: 2px solid rgb(var(--color-accent)); outline-offset: -1px; }
+.cr-mini:disabled { pointer-events: none; opacity: 0.5; }
+
+/* Tree rows: level 0 sits on the 8px base; each level adds 20px. */
+.cr-nv.tv.leaf { padding-left: 28px; }
+.cr-trow { position: relative; }
+.cr-trow.dragging { opacity: 0.4; }
+.cr-trow:hover > .cr-nv:not(.sel) { background: var(--nav-hover); }
+
+/* Hover actions are siblings of the row control, overlaid on the row end. */
+.cr-trow > .acts {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+}
+.cr-trow:hover > .acts,
+.cr-trow:has(:focus-visible) > .acts { opacity: 1; pointer-events: auto; }
+.cr-trow > .acts button {
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--nav-muted);
+}
+.cr-trow > .acts button:hover { color: rgb(var(--color-text)); }
+.cr-trow > .acts button:focus-visible { outline: 2px solid rgb(var(--color-accent)); outline-offset: -1px; }
+/* Keep labels and chevrons clear of the action buttons while they show. */
+.cr-trow:has(> .acts):hover > .cr-nv,
+.cr-trow:has(> .acts):has(:focus-visible) > .cr-nv { padding-right: 56px; }
+.cr-nv .rename {
+  flex: 1;
+  min-width: 0;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid rgb(var(--color-accent) / 0.5);
+  border-radius: 4px;
+  background: rgb(var(--color-surface));
+  color: rgb(var(--color-text));
+  font-size: 13px;
+  outline: none;
+}
+
+/* Guide lines: each child gets an elbow from the parent's icon centre (8 + 10 = 18px);
+   a vertical line continues between siblings. Lines fade in while the sidebar is hovered. */
+.cr-tkids > .cr-trow::before,
+.cr-tkids > .cr-trow:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 17px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+.cr-tkids > .cr-trow::before {
+  top: 0;
+  height: 50%;
+  width: 10px;
+  border-left: 1px solid var(--nav-guide);
+  border-bottom: 1px solid var(--nav-guide);
+  border-bottom-left-radius: 8px;
+}
+.cr-tkids > .cr-trow:not(:last-child)::after {
+  top: 50%;
+  bottom: 0;
+  border-left: 1px solid var(--nav-guide);
+}
+.cr-nav:hover .cr-tkids > .cr-trow::before,
+.cr-nav:hover .cr-tkids > .cr-trow::after,
+.cr-nav:has(:focus-visible) .cr-tkids > .cr-trow::before,
+.cr-nav:has(:focus-visible) .cr-tkids > .cr-trow::after { opacity: 1; }
+
+/* Inline create forms and empty hints under a section header. */
+.cr-tform { padding: 4px 8px 6px; }
+.cr-tempty { padding: 6px 8px 6px 34px; font-size: 12px; line-height: 16px; color: var(--nav-muted); }
+
+/* Footer: 8px left, 12px right, 8px bottom; 28px rows 8px apart. */
+.cr-nav-foot {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 12px 8px 8px;
+}
+.cr-nav-foot .cr-nv { min-height: 28px; padding-top: 4px; padding-bottom: 4px; }
+
+/* Identity row: avatar + name on the left, chromeless Feedback and Settings icons on the right. */
+.cr-nav-me-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cr-nav-me-row .cr-me { flex: 1; min-width: 0; gap: 8px; padding-left: 4px; }
+.cr-me .ava {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--nav-avatar);
+  color: rgb(var(--color-text));
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  overflow: hidden;
+}
+.cr-me .ava img { width: 100%; height: 100%; object-fit: cover; }
+.cr-me.setup .lbl { color: var(--nav-muted); }
+.cr-nav-ibtn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--nav-muted);
+  cursor: default;
+}
+.cr-nav-ibtn:hover, .cr-nav-ibtn[aria-current="page"] { color: rgb(var(--color-text)); background: var(--nav-hover); }
+.cr-nav-ibtn:focus-visible { outline: 2px solid rgb(var(--color-accent)); outline-offset: -1px; }
+.cr-nav-me-row .cr-nav-ibtn + .cr-nav-ibtn { margin-left: -4px; }
+
+/* The global focus ring (index.css) adds a halo and a 4px radius; the sidebar's own controls use
+   the spec's 2px outline at -1 on their own shape. Filled buttons (forms, dialogs) keep the global ring. */
+.cr-nav :is(.cr-nv, .cr-sec-toggle, .cr-mini, .acts button, .cr-nav-ibtn):focus-visible {
+  outline: 2px solid rgb(var(--color-accent));
+  outline-offset: -1px;
+  box-shadow: none;
+}
+.cr-nav .cr-nv:focus-visible,
+.cr-nav .cr-sec-toggle:focus-visible { border-radius: 8px; }
+.cr-nav .cr-mini:focus-visible { border-radius: 6px; }
+.cr-nav .acts button:focus-visible,
+.cr-nav .cr-nav-ibtn:focus-visible { border-radius: 4px; }
+.cr-nav :is(.cr-mini, .acts button) { cursor: default; }

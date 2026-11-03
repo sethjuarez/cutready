@@ -13,6 +13,10 @@ interface DialogProps {
   width?: string;
   /** Optional id for aria-labelledby */
   labelledBy?: string;
+  /** Optional id for aria-describedby */
+  describedBy?: string;
+  /** "alertdialog" for confirmations that interrupt the user */
+  role?: "dialog" | "alertdialog";
   /** Backdrop opacity, default tokenized scrim */
   backdropClass?: string;
 }
@@ -28,6 +32,8 @@ export function Dialog({
   topOffset = "20vh",
   width,
   labelledBy,
+  describedBy,
+  role = "dialog",
   backdropClass = "cr-modal-backdrop",
 }: DialogProps) {
   const contentRef = useRef<HTMLDivElement>(null);
@@ -94,9 +100,10 @@ export function Dialog({
         {/* Content */}
         <div
           ref={contentRef}
-          role="dialog"
+          role={role}
           aria-modal="true"
           aria-labelledby={labelledBy}
+          aria-describedby={describedBy}
           className={`pointer-events-auto ${width ?? ""}`}
           onClick={(e) => e.stopPropagation()}
         >

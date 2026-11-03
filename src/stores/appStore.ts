@@ -27,6 +27,7 @@ import type {
 import { useVersioningStore, resetVersioningState } from "./versioningStore";
 import { useSyncStore, resetSyncState } from "./syncStore";
 import { useChatStore } from "./chatStore";
+import { clampSidebarWidth, SIDEBAR_DEFAULT_WIDTH } from "./sidebarLayout";
 import {
   beginWorkspaceGeneration,
   bumpRemoteDetectionGeneration,
@@ -550,10 +551,6 @@ function maxHeightWithRemainder(min: number, desired: number, minRemainder: numb
   return Math.max(min, Math.min(Math.max(min, desired), Math.max(min, viewportHeight() - minRemainder)));
 }
 
-function clampSidebarWidth(width: number) {
-  return clamp(width, 160, maxWidthWithRemainder(160, Math.max(400, viewportWidth() - 420), 320));
-}
-
 function clampSecondaryWidth(width: number) {
   return clamp(width, 260, maxWidthWithRemainder(260, Math.max(720, viewportWidth() - 360), 320));
 }
@@ -571,7 +568,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   loading: false,
   projectSwitching: false,
   error: null,
-  sidebarWidth: clampSidebarWidth(savedLayout.sidebarWidth ?? 240),
+  sidebarWidth: clampSidebarWidth(savedLayout.sidebarWidth ?? SIDEBAR_DEFAULT_WIDTH),
   sidebarVisible: savedLayout.sidebarVisible ?? true,
   outputVisible: savedLayout.outputVisible ?? false,
   outputActiveTab: "activity",
