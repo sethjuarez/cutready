@@ -9,11 +9,11 @@ import { activityButtonClass } from "./shellStyles";
 import { panelOwner, type NavId } from "../utils/navigation";
 
 const navItems: { id: NavId; label: string; icon: ReactNode }[] = [
-  { id: "project", label: "Documents", icon: <LayoutList className="h-[18px] w-[18px]" aria-hidden="true" /> },
-  { id: "assets", label: "Visuals", icon: <Images className="h-[18px] w-[18px]" aria-hidden="true" /> },
-  { id: "narrations", label: "Narrations", icon: <Mic2 className="h-[18px] w-[18px]" aria-hidden="true" /> },
-  { id: "changes", label: "Changes", icon: <GitCompareArrows className="h-[18px] w-[18px]" aria-hidden="true" /> },
-  { id: "chat", label: "Chat", icon: <MessageSquareMore className="h-[18px] w-[18px]" aria-hidden="true" /> },
+  { id: "project", label: "Documents", icon: <LayoutList className="h-5 w-5" aria-hidden="true" /> },
+  { id: "assets", label: "Visuals", icon: <Images className="h-5 w-5" aria-hidden="true" /> },
+  { id: "narrations", label: "Narrations", icon: <Mic2 className="h-5 w-5" aria-hidden="true" /> },
+  { id: "changes", label: "Changes", icon: <GitCompareArrows className="h-5 w-5" aria-hidden="true" /> },
+  { id: "chat", label: "Chat", icon: <MessageSquareMore className="h-5 w-5" aria-hidden="true" /> },
 ];
 
 interface SidebarProps {
@@ -78,7 +78,7 @@ export function Sidebar({
             <span
               className={
                 expanded
-                  ? "min-w-[18px] rounded-pill bg-accent px-1.5 text-center text-2xs font-semibold text-accent-fg"
+                  ? "flex h-4 min-w-4 items-center justify-center rounded-pill bg-accent px-1.5 text-2xs font-bold leading-none text-accent-fg"
                   : "absolute -right-0.5 -top-0.5 flex h-[14px] min-w-[14px] items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-bold leading-none text-accent-fg"
               }
               aria-hidden="true"
@@ -97,20 +97,24 @@ export function Sidebar({
     );
   };
 
-  const bottomButton = (id: "home" | "settings", label: string, icon: ReactNode) => (
-    <button
-      type="button"
-      onClick={() => setView(id)}
-      className={activityButtonClass(view === id)}
-      title={label}
-      aria-label={label}
-      aria-current={view === id ? "page" : undefined}
-      data-testid={`activity-${id}`}
-    >
-      {icon}
-      {!expanded && view === id && <ActiveIndicator />}
-    </button>
-  );
+  const shellButton = (id: "home" | "settings" | "feedback", label: string, icon: ReactNode, onClick: () => void) => {
+    const isActive = id !== "feedback" && view === id;
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={expanded ? navRowClass(isActive) : activityButtonClass(isActive)}
+        title={label}
+        aria-label={label}
+        aria-current={isActive ? "page" : undefined}
+        data-testid={`activity-${id}`}
+      >
+        {icon}
+        {expanded && <span className="min-w-0 flex-1 truncate text-left">{label}</span>}
+        {!expanded && isActive && <ActiveIndicator />}
+      </button>
+    );
+  };
 
   return (
     <nav
@@ -132,30 +136,19 @@ export function Sidebar({
           aria-expanded={expanded}
           data-testid="nav-toggle"
         >
-          <Menu className="h-[18px] w-[18px]" aria-hidden="true" />
+          <Menu className="h-5 w-5" aria-hidden="true" />
         </button>
       )}
 
+      {shellButton("home", "Home", <House className="h-5 w-5" aria-hidden="true" />, () => setView("home"))}
       {navItems.map(renderItem)}
 
       {!(expanded && owner && panel != null) && <div className="flex-1" />}
 
-      <div className={`flex shrink-0 ${expanded ? "flex-wrap items-center gap-0.5 border-t border-[rgb(var(--color-border-subtle))] pt-1.5" : "flex-col items-center gap-1.5"}`}>
+      <div className={`flex shrink-0 flex-col ${expanded ? "gap-0.5 pt-1.5" : "items-center gap-1.5"}`}>
         <UpdateAvailableButton />
-        {bottomButton("home", "Home", <House className="h-[18px] w-[18px]" aria-hidden="true" />)}
-        {onFeedback && (
-          <button
-            type="button"
-            onClick={onFeedback}
-            className={activityButtonClass(false)}
-            title="Send feedback"
-            aria-label="Send feedback"
-            data-testid="activity-feedback"
-          >
-            <MessageSquare className="h-[18px] w-[18px]" aria-hidden="true" />
-          </button>
-        )}
-        {bottomButton("settings", "Settings", <Settings className="h-[18px] w-[18px]" aria-hidden="true" />)}
+        {onFeedback && shellButton("feedback", "Feedback", <MessageSquare className="h-5 w-5" aria-hidden="true" />, onFeedback)}
+        {shellButton("settings", "Settings", <Settings className="h-5 w-5" aria-hidden="true" />, () => setView("settings"))}
       </div>
     </nav>
   );

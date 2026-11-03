@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useAppStore } from "../stores/appStore";
 import { open } from "../dialogs";
 import { invoke } from "../services/tauri";
-import { Plus, Download, FolderOpen, XCircle } from "lucide-react";
+import { Download, FolderOpen, Sparkles, TableProperties, XCircle } from "lucide-react";
 import { GitHubConnectionCard } from "./GitHubConnectionCard";
 import { RecentWorkspaceList } from "./RecentWorkspaceList";
 
@@ -15,14 +15,30 @@ const primaryButton =
 const subtleButton =
   "h-control rounded-control px-3 text-sm text-[rgb(var(--color-text-secondary))] transition-colors duration-fast hover:bg-fill-hover hover:text-[rgb(var(--color-text))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]";
 
+/** Tile tints per starter, from the content-type palette (accent for "blank"). */
+const tileClass = {
+  blank: "bg-[rgb(var(--color-accent))]/15 text-[rgb(var(--color-accent))]",
+  doc: "bg-[rgb(var(--color-content-storyboard))]/15 text-[rgb(var(--color-content-storyboard))]",
+  folder: "bg-[rgb(var(--color-content-note))]/15 text-[rgb(var(--color-content-note))]",
+} as const;
+
+function greeting(now = new Date()): string {
+  const hour = now.getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
 function StarterCard({
   icon,
+  tile,
   title,
   subtitle,
   active,
   onClick,
 }: {
   icon: ReactNode;
+  tile: keyof typeof tileClass;
   title: string;
   subtitle: string;
   active?: boolean;
@@ -33,14 +49,11 @@ function StarterCard({
       type="button"
       onClick={onClick}
       aria-expanded={active}
-      className={`flex items-start gap-3 rounded-card border bg-[rgb(var(--color-surface))] p-3.5 text-left shadow-layer transition-colors duration-fast ease-fluent hover:border-[rgb(var(--color-accent))] focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))] ${
+      className={`flex flex-col items-start gap-2.5 rounded-card border bg-[rgb(var(--color-surface))] p-3.5 text-left shadow-card transition-shadow duration-fast ease-fluent hover:shadow-card-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))] ${
         active ? "border-[rgb(var(--color-accent))]" : "border-[rgb(var(--color-border-subtle))]"
       }`}
     >
-      <span
-        aria-hidden="true"
-        className="grid h-9 w-9 shrink-0 place-items-center rounded-control bg-[rgb(var(--color-accent))]/15 text-[rgb(var(--color-accent))]"
-      >
+      <span aria-hidden="true" className={`grid h-9 w-9 shrink-0 place-items-center rounded-[6px] ${tileClass[tile]}`}>
         {icon}
       </span>
       <span className="min-w-0">
@@ -60,6 +73,7 @@ export function HomePanel() {
   const removeRecentProject = useAppStore((s) => s.removeRecentProject);
   const createProject = useAppStore((s) => s.createProject);
   const openProject = useAppStore((s) => s.openProject);
+  const currentRoot = useAppStore((s) => s.currentProject?.root ?? null);
 
   const [newName, setNewName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -179,17 +193,18 @@ export function HomePanel() {
   return (
     <div className="mx-auto w-full max-w-[900px] px-10 pb-20 pt-10">
       <div className="mb-1.5 inline-flex items-center gap-1.5 text-sm text-[rgb(var(--color-text-secondary))]">
-        <img src="/cutready.svg" alt="" className="h-4 w-4" draggable={false} />
-        CutReady
+        <Sparkles className="h-4 w-4 text-[rgb(var(--color-accent))]" aria-hidden="true" />
+        {greeting()}
       </div>
       <h1 className="text-[28px] font-semibold leading-9 tracking-tight">What are you demoing?</h1>
       <p className="mt-1.5 text-sm text-[rgb(var(--color-text-secondary))]">
-        Plan, record, and produce polished demo videos. Start a workspace or pick up where you left off.
+        Bring what you have. Plan it as sketches and storyboards, then let the agents help you write and polish it.
       </p>
 
-      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="mt-6 grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">
         <StarterCard
-          icon={<Plus className="h-5 w-5" />}
+          icon={<TableProperties className="h-5 w-5" />}
+          tile="blank"
           title="New workspace"
           subtitle="Start from scratch"
           active={showCreate}
@@ -197,6 +212,7 @@ export function HomePanel() {
         />
         <StarterCard
           icon={<Download className="h-5 w-5" />}
+          tile="doc"
           title="Clone workspace"
           subtitle="From a Git URL"
           active={showClone}
@@ -204,6 +220,7 @@ export function HomePanel() {
         />
         <StarterCard
           icon={<FolderOpen className="h-5 w-5" />}
+          tile="folder"
           title="Open workspace"
           subtitle="A project folder or code repo"
           onClick={handleOpen}
@@ -306,18 +323,8 @@ export function HomePanel() {
           No recent workspaces yet.
         </p>
       ) : (
-        <RecentWorkspaceList projects={recentProjects} onOpen={openProject} onRemove={removeRecentProject} />
+        <RecentWorkspaceList projects={recentProjects} currentPath={currentRoot} onOpen={openProject} onRemove={removeRecentProject} />
       )}
-
-      <p className="mt-6 text-xs text-[rgb(var(--color-text-secondary))]">
-        <kbd className="rounded-control border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 font-mono text-2xs">Ctrl</kbd>
-        {" + "}
-        <kbd className="rounded-control border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 font-mono text-2xs">Shift</kbd>
-        {" + "}
-        <kbd className="rounded-control border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 font-mono text-2xs">P</kbd>
-        {" "}
-        Command Palette
-      </p>
     </div>
   );
 }

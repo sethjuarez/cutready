@@ -31,7 +31,6 @@ import { ChatArtifactIcon, SketchIcon, StoryboardIcon, NoteIcon } from "./Icons"
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { useToastStore } from "../stores/toastStore";
-import { contentTypeTones, type ContentTypeTone } from "../utils/contentTypeTheme";
 import { useSettings } from "../hooks/useSettings";
 import { loadProviderSecrets } from "../hooks/useSecretStore";
 import {
@@ -172,21 +171,18 @@ function sectionBodyStyle(
   };
 }
 
-function documentItemClass(active: boolean, tone: ContentTypeTone) {
-  return `group/item relative flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-xs outline-none transition-colors focus-visible:bg-[rgb(var(--color-surface-alt))] ${
-    active
-      ? `${tone.activeBg} ${tone.text}`
-      : `text-[rgb(var(--color-text))] ${tone.hoverBg}`
+/** Direction C tree row: single line, 32px, selected = fill + brand bar. */
+function documentItemClass(active: boolean) {
+  return `group/item relative flex h-8 w-full cursor-pointer items-center gap-1.5 rounded-control pl-[26px] pr-2 text-left text-sm text-[rgb(var(--color-text))] outline-none transition-colors duration-fast ease-fluent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgb(var(--color-accent))] ${
+    active ? "bg-fill-selected font-medium" : "hover:bg-fill-hover"
   }`;
 }
 
-function documentItemMetaClass(active: boolean, tone: ContentTypeTone) {
-  return active ? tone.metaText : "text-[rgb(var(--color-text-secondary))]/80";
-}
+const documentIconClass = "h-4 w-4 shrink-0 text-[rgb(var(--color-text-secondary))]";
 
-function ActiveDocumentMarker({ active, tone }: { active: boolean; tone: ContentTypeTone }) {
+function ActiveDocumentMarker({ active }: { active: boolean }) {
   if (!active) return null;
-  return <span className={`absolute left-0 top-1 bottom-1 w-0.5 rounded-r ${tone.bg}`} />;
+  return <span aria-hidden="true" className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full bg-accent" />;
 }
 
 function VideoImportProgressDialog({
@@ -394,15 +390,11 @@ function VideoImportPlanningContextDialog({
   );
 }
 
-function DocumentItemText({ title, meta, active, tone }: { title: string; meta?: string; active: boolean; tone: ContentTypeTone }) {
+/** Single-line label; the detail line moved to the tooltip. */
+function DocumentItemText({ title, meta }: { title: string; meta?: string }) {
   return (
-    <div className="min-w-0 flex-1 py-0.5 leading-tight">
-      <div className="truncate text-xs font-medium leading-4" title={title}>{title}</div>
-      {meta && (
-        <div className={`mt-0.5 truncate text-2xs leading-3 ${documentItemMetaClass(active, tone)}`} title={meta}>
-          {meta}
-        </div>
-      )}
+    <div className="min-w-0 flex-1 truncate" title={meta ? `${title} · ${meta}` : title}>
+      {title}
     </div>
   );
 }
@@ -452,39 +444,38 @@ function SortableSidebarItem({ id, children }: { id: string; children: React.Rea
   );
 }
 
+/** Sentence-case tree subheader (Direction C); collapses its group. */
 function SidebarSectionHeader({
   title,
   count,
   expanded,
   onToggle,
   actions,
-  tone,
 }: {
   title: string;
   count: number;
   expanded: boolean;
   onToggle: () => void;
   actions?: React.ReactNode;
-  tone: ContentTypeTone;
 }) {
   return (
-    <div className="flex h-8 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-[rgb(var(--color-border))] px-3">
+    <div className="mt-1 flex h-7 min-w-0 shrink-0 items-center gap-1 pr-1.5">
       <button
         onClick={onToggle}
-        className={`flex min-w-0 flex-1 items-center gap-1 text-xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] transition-colors ${tone.hoverText}`}
+        aria-expanded={expanded}
+        title={`${count} ${count === 1 ? "item" : "items"}`}
+        className="flex h-full min-w-0 flex-1 items-center gap-1 rounded-control pl-7 text-xs text-[rgb(var(--color-text-secondary))] transition-colors duration-fast hover:text-[rgb(var(--color-text))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgb(var(--color-accent))]"
       >
-        {expanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
+        {expanded ? <ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" /> : <ChevronRight className="h-3 w-3 shrink-0" aria-hidden="true" />}
         <span className="truncate">{title}</span>
-        {count > 0 && (
-          <span className={`ml-1 rounded-full border px-1 py-0 text-2xs font-medium ${tone.activeBg} ${tone.text} ${tone.border}`}>
-            {count}
-          </span>
-        )}
       </button>
-      <div className="flex shrink-0 items-center gap-1">{actions}</div>
+      <div className="flex shrink-0 items-center gap-0.5">{actions}</div>
     </div>
   );
 }
+
+const miniButtonClass =
+  "grid h-6 w-6 place-items-center rounded-control text-[rgb(var(--color-text-secondary))] transition-colors duration-fast hover:bg-fill-hover hover:text-[rgb(var(--color-text))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-50";
 
 /**
  * StoryboardList — Documents pane: Storyboards, Sketches, and Notes.
@@ -909,10 +900,6 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const sketchesBodyStyle = sectionBodyStyle(resolvedMode, orderedSketches.length, expandedSectionCount, Boolean(activeSketchPath), 42);
   const notesBodyStyle = sectionBodyStyle(resolvedMode, orderedNotes.length, expandedSectionCount, Boolean(activeNotePath), 30);
   const chatArtifactsBodyStyle = sectionBodyStyle(resolvedMode, chatArtifacts.length, expandedSectionCount, Boolean(activeChatArtifactPath), 30);
-  const storyboardTone = contentTypeTones.storyboard;
-  const sketchTone = contentTypeTones.sketch;
-  const noteTone = contentTypeTones.note;
-  const chatArtifactTone = contentTypeTones["chat-artifact"];
   const videoImportReferenceOptions: VideoImportPlanningContextReference[] = [
     ...orderedStoryboards.map((storyboard: StoryboardSummary) => ({
       kind: "storyboard" as const,
@@ -1267,40 +1254,27 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
   const importButton = (
     <button
       onClick={handleOpenImportMenu}
-      className="inline-flex items-center gap-1 rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/80 px-2 py-1 text-xs font-medium text-[rgb(var(--color-text-secondary))] shadow-sm transition-colors hover:border-[rgb(var(--color-accent))]/50 hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-50"
-      title="Import..."
+      className={miniButtonClass}
+      title="Import files"
+      aria-label="Import files"
       data-testid="explorer-import-menu"
       disabled={importing}
       aria-haspopup="menu"
       aria-expanded={importMenu !== null}
     >
       {importing ? (
-        <svg className="w-3 h-3 animate-spin text-[rgb(var(--color-text-secondary))]" viewBox="0 0 24 24" fill="none">
+        <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
       ) : (
-        <>
-          <FileInput className="w-3 h-3" />
-          <span>Import</span>
-          <ChevronDown className="w-3 h-3 opacity-70" />
-        </>
+        <FileInput className="h-3.5 w-3.5" aria-hidden="true" />
       )}
     </button>
   );
 
   return (
-    <div
-      className="flex flex-col h-full bg-[rgb(var(--color-surface-inset))]"
-    >
-      {/* ── Toolbar under the Documents nav row (all-mode only) ────────────── */}
-      {resolvedMode === "all" && (
-        <div className="flex h-8 shrink-0 items-center justify-end border-b border-[rgb(var(--color-border))] px-2">
-          <div className="flex items-center gap-1">
-            {importButton}
-          </div>
-        </div>
-      )}
+    <div className="flex h-full flex-col">
 
       {/* ── Storyboards section ────────────────────────── */}
       {(resolvedMode === "all" || resolvedMode === "storyboards") && (
@@ -1310,15 +1284,12 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             count={orderedStoryboards.length}
             expanded={storyboardsExpanded}
             onToggle={() => setStoryboardsExpanded(!storyboardsExpanded)}
-            tone={storyboardTone}
             actions={
               <>
-              {resolvedMode === "storyboards" && (
-                importButton
-              )}
+              {importButton}
               <button
                 onClick={() => { setStoryboardsExpanded(true); setIsCreatingSb(true); }}
-                className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
+                className={miniButtonClass}
                 title="New storyboard"
                 aria-label="New storyboard"
               >
@@ -1393,10 +1364,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                           if (e.key === "F2") { e.preventDefault(); startRename("storyboard", sb.path); }
                           else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openStoryboard(sb.path); }
                         }}
-                        className={documentItemClass(sb.path === activeStoryboardPath, storyboardTone)}
+                        className={documentItemClass(sb.path === activeStoryboardPath)}
                       >
-                        <ActiveDocumentMarker active={sb.path === activeStoryboardPath} tone={storyboardTone} />
-                        <StoryboardIcon className={`shrink-0 opacity-90 ${storyboardTone.text}`} />
+                        <ActiveDocumentMarker active={sb.path === activeStoryboardPath} />
+                        <StoryboardIcon className={documentIconClass} />
                         <div className="min-w-0 flex-1">
                           {renamingItem?.path === sb.path ? (
                             <input
@@ -1418,8 +1389,6 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                             <DocumentItemText
                               title={sb.title}
                               meta={`${sb.sketch_count} ${sb.sketch_count === 1 ? "sketch" : "sketches"}`}
-                              active={sb.path === activeStoryboardPath}
-                              tone={storyboardTone}
                             />
                           )}
                         </div>
@@ -1467,7 +1436,6 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             count={orderedSketches.length}
             expanded={sketchesExpanded}
             onToggle={() => setSketchesExpanded(!sketchesExpanded)}
-            tone={sketchTone}
             actions={
               <>
               {resolvedMode === "sketches" && (
@@ -1475,7 +1443,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
               )}
               <button
                 onClick={() => { setSketchesExpanded(true); setIsCreatingSk(true); }}
-                className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
+                className={miniButtonClass}
                 title="New sketch"
                 aria-label="New sketch"
               >
@@ -1550,10 +1518,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                           if (e.key === "F2") { e.preventDefault(); startRename("sketch", sk.path); }
                           else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) handleOpenSketchStandalone(sk.path); }
                         }}
-                        className={documentItemClass(sk.path === activeSketchPath, sketchTone)}
+                        className={documentItemClass(sk.path === activeSketchPath)}
                       >
-                        <ActiveDocumentMarker active={sk.path === activeSketchPath} tone={sketchTone} />
-                        <SketchIcon className={`shrink-0 opacity-90 ${sketchTone.text}`} />
+                        <ActiveDocumentMarker active={sk.path === activeSketchPath} />
+                        <SketchIcon className={documentIconClass} />
                         <div className="min-w-0 flex-1">
                           {renamingItem?.path === sk.path ? (
                             <input
@@ -1575,8 +1543,6 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                             <DocumentItemText
                               title={sk.title}
                               meta={`${sk.row_count} ${sk.row_count === 1 ? "row" : "rows"}`}
-                              active={sk.path === activeSketchPath}
-                              tone={sketchTone}
                             />
                           )}
                         </div>
@@ -1624,7 +1590,6 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             count={orderedNotes.length}
             expanded={notesExpanded}
             onToggle={() => setNotesExpanded(!notesExpanded)}
-            tone={noteTone}
             actions={
               <>
               {resolvedMode === "notes" && (
@@ -1632,7 +1597,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
               )}
               <button
                 onClick={() => { setNotesExpanded(true); setIsCreatingNote(true); }}
-                className="p-1 rounded-md text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
+                className={miniButtonClass}
                 title="New note"
                 aria-label="New note"
               >
@@ -1724,10 +1689,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                           if (e.key === "F2") { e.preventDefault(); startRename("note", note.path); }
                           else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openNote(note.path); }
                         }}
-                        className={documentItemClass(note.path === activeNotePath, noteTone)}
+                        className={documentItemClass(note.path === activeNotePath)}
                       >
-                        <ActiveDocumentMarker active={note.path === activeNotePath} tone={noteTone} />
-                        <NoteIcon className={`shrink-0 opacity-90 ${noteTone.text}`} />
+                        <ActiveDocumentMarker active={note.path === activeNotePath} />
+                        <NoteIcon className={documentIconClass} />
                         <div className="min-w-0 flex-1">
                           {renamingItem?.path === note.path ? (
                             <input
@@ -1746,7 +1711,7 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                               className="w-full px-1 py-0.5 text-xs font-medium bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-accent))]/40 rounded focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 text-[rgb(var(--color-text))]"
                             />
                           ) : (
-                            <DocumentItemText title={note.title} meta={note.path} active={note.path === activeNotePath} tone={noteTone} />
+                            <DocumentItemText title={note.title} meta={note.path} />
                           )}
                         </div>
                         {renamingItem?.path !== note.path && (
@@ -1793,7 +1758,6 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
             count={chatArtifacts.length}
             expanded={chatArtifactsExpanded}
             onToggle={() => setChatArtifactsExpanded(!chatArtifactsExpanded)}
-            tone={chatArtifactTone}
           />
 
           {chatArtifactsExpanded && <div className={sectionBodyClass} style={chatArtifactsBodyStyle}>
@@ -1814,10 +1778,10 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                       if (e.key === "F2") { e.preventDefault(); startRename("chat-artifact", artifact.path); }
                       else if (e.key === "Enter" || e.key === " ") { if (!renamingItem) openChatArtifact(artifact.path); }
                     }}
-                    className={`${documentItemClass(artifact.path === activeChatArtifactPath, chatArtifactTone)} group/item`}
+                    className={`${documentItemClass(artifact.path === activeChatArtifactPath)} group/item`}
                   >
-                    <ActiveDocumentMarker active={artifact.path === activeChatArtifactPath} tone={chatArtifactTone} />
-                    <ChatArtifactIcon className={`shrink-0 opacity-90 ${chatArtifactTone.text}`} />
+                    <ActiveDocumentMarker active={artifact.path === activeChatArtifactPath} />
+                    <ChatArtifactIcon className={documentIconClass} />
                     <div className="min-w-0 flex-1">
                       {renamingItem?.path === artifact.path ? (
                         <input
@@ -1839,8 +1803,6 @@ export function StoryboardList({ mode }: { mode?: "storyboards" | "sketches" | "
                         <DocumentItemText
                           title={artifact.title}
                           meta={chatArtifactMeta(artifact)}
-                          active={artifact.path === activeChatArtifactPath}
-                          tone={chatArtifactTone}
                         />
                       )}
                     </div>

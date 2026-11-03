@@ -61,6 +61,8 @@ export default {
       },
       boxShadow: {
         layer: "var(--shadow-layer)",
+        card: "var(--shadow-card)",
+        "card-hover": "var(--shadow-card-hover)",
       },
       transitionDuration: {
         fast: "var(--motion-fast)",

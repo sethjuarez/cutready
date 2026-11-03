@@ -89,4 +89,17 @@ describe("Sidebar", () => {
     fireEvent.click(screen.getByTestId("activity-chat"));
     expect(onChatToggle).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps Home, Feedback and Settings as labelled rows", () => {
+    act(() => useAppStore.setState({ currentProject: project, view: "home" }));
+    const onFeedback = vi.fn();
+    render(<Sidebar expanded onFeedback={onFeedback} />);
+
+    const home = screen.getByTestId("activity-home");
+    expect(home).toHaveTextContent("Home");
+    expect(home).toHaveAttribute("aria-current", "page");
+    expect(screen.getByTestId("activity-settings")).toHaveTextContent("Settings");
+    fireEvent.click(screen.getByTestId("activity-feedback"));
+    expect(onFeedback).toHaveBeenCalledTimes(1);
+  });
 });

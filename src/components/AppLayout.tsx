@@ -443,16 +443,14 @@ export function AppLayout() {
         }}
       >
         <div className="flex flex-1 overflow-hidden" ref={mainRef}>
-          {/* Navigation pane (hidden on home): labelled rows with the active panel, or an icon rail */}
-          {view !== "home" && (
-            <NavPane
-              contentView={contentView}
-              showPanel={!projectSwitching}
-              onFeedback={() => setFeedbackOpen(true)}
-              onChatToggle={toggleChatSurface}
-              chatActive={chatFocusMode || showSecondaryPanel || view === "chat"}
-            />
-          )}
+          {/* Navigation pane: labelled rows with the active panel, or an icon rail */}
+          <NavPane
+            contentView={contentView}
+            showPanel={!projectSwitching}
+            onFeedback={() => setFeedbackOpen(true)}
+            onChatToggle={toggleChatSurface}
+            chatActive={chatFocusMode || showSecondaryPanel || view === "chat"}
+          />
 
           {/* Editor layer: content + output panel, raised over the base surface */}
           <div

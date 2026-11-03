@@ -51,6 +51,9 @@
   --radius-pill: 12px;
   /* Elevation for the editor layer and companion pane over the base surface. */
   --shadow-layer: 0 2px 14px rgb(40 40 80 / 0.06), 0 0 1px rgb(0 0 0 / 0.06);
+  /* Cards resting on a layer (starters, lists); hover lifts them. */
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.045);
+  --shadow-card-hover: 0 4px 12px rgb(0 0 0 / 0.07), 0 1px 2px rgb(0 0 0 / 0.05);
   /* Motion */
   --motion-fast: 120ms;
   --motion-normal: 200ms;
@@ -113,6 +116,8 @@
   --color-diff-del-bg: 74 28 32;
   --color-diff-del-fg: 255 168 176;
   --shadow-layer: 0 2px 16px rgb(0 0 0 / 0.3), 0 0 1px rgb(0 0 0 / 0.5);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.28);
+  --shadow-card-hover: 0 4px 14px rgb(0 0 0 / 0.36);
 }
 
 html[data-density="compact"] {
