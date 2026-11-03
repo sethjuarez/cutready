@@ -8,10 +8,16 @@
 //! misreads. Clients that declare none (generic MCP hosts) should check the
 //! server's version in the result.
 //!
-//! A connection only sees and touches the runs it began: `apply_ops`, `keep`
-//! and `undo` refuse other runs, and `review` lists only its own. Reviewing
-//! the app's or another client's runs is the user's job, in the app or with
+//! A connection only sees and touches its own runs: `apply_ops`, `keep` and
+//! `undo` refuse other runs, and `review` lists only its own. Reviewing the
+//! app's or another client's runs is the user's job, in the app or with
 //! `cutready-cli review/keep/undo`.
+//!
+//! A client that declares a stable `clientId` in the handshake
+//! (`capabilities.experimental.cutready.clientId`) runs as actor
+//! `mcp:<clientId>` and owns every run that actor began, so a restarted
+//! client (a reloaded canvas) can still review its earlier runs. Without one,
+//! runs are actor `mcp` and only the connection that began them owns them.
 
 use std::collections::HashSet;
 use std::io::{BufRead, Write}; // mcp framing: the JSON-RPC stream
@@ -24,13 +30,17 @@ use cutready_core::contracts::{ReviewAction, ReviewResolution, RunStarted};
 
 use crate::output::Output;
 use crate::project::{applied_edit, Failure, Project};
+use crate::validate;
 use crate::CONTRACT_VERSION;
 
 /// The MCP revision this server implements.
 pub const PROTOCOL_VERSION: &str = "2025-06-18";
 
-/// The op-log actor of runs started over MCP.
+/// The op-log actor of runs started over MCP by a client without a `clientId`.
 pub const ACTOR: &str = "mcp";
+
+/// The longest `clientId` a client may declare.
+const MAX_CLIENT_ID: usize = 64;
 
 const PARSE_ERROR: i64 = -32700;
 const INVALID_REQUEST: i64 = -32600;
@@ -49,6 +59,10 @@ pub struct Server<'c> {
     closed: bool,
     /// Runs this connection began.
     runs: HashSet<String>,
+    /// The op-log actor of this connection's runs.
+    actor: String,
+    /// The client declared a `clientId`: it owns every run its actor began.
+    stable_actor: bool,
 }
 
 impl<'c> Server<'c> {
@@ -62,7 +76,14 @@ impl<'c> Server<'c> {
             initialized: false,
             closed: false,
             runs: HashSet::new(),
+            actor: ACTOR.to_string(),
+            stable_actor: false,
         })
+    }
+
+    /// The op-log actor of this connection's runs.
+    pub fn actor(&self) -> &str {
+        &self.actor
     }
 
     /// True once the server refused the client and must stop.
@@ -147,6 +168,18 @@ impl<'c> Server<'c> {
                 ));
             }
         }
+        let client_id = params.pointer("/capabilities/experimental/cutready/clientId");
+        let actor = match client_id {
+            None => ACTOR.to_string(),
+            Some(Value::String(id)) if valid_client_id(id) => format!("{ACTOR}:{id}"),
+            Some(_) => {
+                return Err(invalid(&format!(
+                    "clientId must be 1-{MAX_CLIENT_ID} letters, digits, '.', '_' or '-'"
+                )))
+            }
+        };
+        self.stable_actor = actor != ACTOR;
+        self.actor = actor;
         self.initialized = true;
         // mcp framing: the initialize result
         Ok(json!({
@@ -173,16 +206,17 @@ impl<'c> Server<'c> {
             Err(err) => return Ok(tool_error(&err)),
         };
         let result: Result<Box<dyn Output>, Failure> = match name {
+            "list_documents" => validate::validate(&self.root, &[]).map(boxed),
             "read_document" => {
                 let path = string_arg(&args, "path")?;
                 project.read(path).map(boxed)
             }
-            "begin_run" => project.begin_run(ACTOR, self.clock).map(|run_id| {
+            "begin_run" => project.begin_run(&self.actor, self.clock).map(|run_id| {
                 self.runs.insert(run_id.clone());
                 boxed(RunStarted { run_id })
             }),
             "apply_ops" => {
-                let run_id = self.own_run(&args)?;
+                let run_id = self.own_run(&project, &args)?;
                 let path = string_arg(&args, "path")?;
                 let expected = match args.get("expected_version") {
                     Some(Value::String(version)) => Some(version.as_str()),
@@ -198,18 +232,21 @@ impl<'c> Server<'c> {
                     .and_then(Value::as_array)
                     .ok_or_else(|| invalid("ops must be an array of EditOps"))?;
                 project
-                    .apply(self.clock, ACTOR, run_id, path, expected, ops)
+                    .apply(self.clock, &self.actor, run_id, path, expected, ops)
                     .map(|applied| boxed(applied_edit(run_id, path, &applied)))
             }
             "review" => project.reviews(self.clock).map(|reviews| {
                 let own: Vec<_> = reviews
                     .into_iter()
-                    .filter(|review| self.runs.contains(&review.run_id))
+                    .filter(|review| {
+                        self.runs.contains(&review.run_id)
+                            || (self.stable_actor && review.actor == self.actor)
+                    })
                     .collect();
                 boxed(own)
             }),
             "keep" | "undo" => {
-                let run_id = self.own_run(&args)?;
+                let run_id = self.own_run(&project, &args)?;
                 let path = string_arg(&args, "path")?;
                 let through_seq = args
                     .get("through_seq")
@@ -242,16 +279,33 @@ impl<'c> Server<'c> {
 }
 
 impl Server<'_> {
-    /// The `run_id` argument, if this connection began that run.
-    fn own_run<'a>(&self, args: &'a Value) -> Result<&'a str, (i64, String, Option<Value>)> {
+    /// The `run_id` argument, if this connection began that run or, for a
+    /// client with a `clientId`, its actor did.
+    fn own_run<'a>(
+        &self,
+        project: &Project,
+        args: &'a Value,
+    ) -> Result<&'a str, (i64, String, Option<Value>)> {
         let run_id = string_arg(args, "run_id")?;
-        if !self.runs.contains(run_id) {
+        let owned = self.runs.contains(run_id)
+            || (self.stable_actor
+                && project
+                    .run_actor(run_id)
+                    .is_ok_and(|actor| actor == self.actor));
+        if !owned {
             return Err(invalid(&format!(
-                "Run {run_id} wasn't begun on this connection; call begin_run"
+                "Run {run_id} wasn't begun by this client; call begin_run"
             )));
         }
         Ok(run_id)
     }
+}
+
+fn valid_client_id(id: &str) -> bool {
+    (1..=MAX_CLIENT_ID).contains(&id.len())
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
 }
 
 type Outcome = Result<Value, (i64, String, Option<Value>)>;
@@ -298,6 +352,11 @@ fn error(id: Value, code: i64, message: &str, data: Option<Value>) -> Value {
 fn tools() -> Value {
     // mcp framing: tool schemas
     json!([
+        {
+            "name": "list_documents",
+            "description": "List the project's documents (.sk sketches, .sb storyboards, .md notes, skipping dot folders and node_modules): each one's path, whether it loads, and the version an edit of it must expect.",
+            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+        },
         {
             "name": "read_document",
             "description": "Read a project document (.sk sketch, .sb storyboard or .md note) and the version an edit of it must expect. content and version are null when the file doesn't exist.",
