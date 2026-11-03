@@ -15,7 +15,7 @@ import { ChatArtifactIcon, SketchIcon, StoryboardIcon, NoteIcon } from "./Icons"
 import { contentTypeTone } from "../utils/contentTypeTheme";
 import { usePopover } from "../hooks/usePopover";
 import { getClampedPopoverPosition } from "./TabBar";
-import { DocumentHeader } from "./DocumentHeader";
+import { DocumentHeader, documentTitleInputClass } from "./DocumentHeader";
 import { FieldAiButton } from "./FieldAiButton";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
 import { useBackgroundAgentAction } from "../hooks/useBackgroundAgentAction";
@@ -498,7 +498,7 @@ function SketchSplitEditor({ path }: { path: string }) {
               readOnly={locked}
               placeholder="Sketch title..."
               title={localTitle}
-              className={`min-w-0 w-full truncate border-none bg-transparent text-2xl font-semibold text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/40 ${localTitle && !locked ? "pr-8" : ""} ${locked ? "cursor-default" : ""}`}
+              className={documentTitleInputClass(`${localTitle && !locked ? "pr-8" : ""} ${locked ? "cursor-default" : ""}`)}
             />
             {localTitle && !locked && (
               <FieldAiButton

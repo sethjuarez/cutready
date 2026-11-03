@@ -88,7 +88,9 @@ export function DocumentToolbar({
   return (
     <div
       ref={toolbarRef}
-      className="flex max-w-full shrink-0 flex-nowrap items-center justify-end gap-1 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/80 p-1 pr-2"
+      role="group"
+      aria-label="Document commands"
+      className="flex max-w-full shrink-0 flex-nowrap items-center justify-end gap-1"
     >
       {modeActions.length > 0 && <ToolbarSegmentedGroup actions={modeActions} />}
 

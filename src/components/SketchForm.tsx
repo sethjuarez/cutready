@@ -6,7 +6,7 @@ import { recordingIpc } from "../ipc/recording";
 import type { TokenResponse } from "../types/auth";
 import { open, save } from "../dialogs";
 import { openPath } from "@tauri-apps/plugin-opener";
-import { ChevronLeft, Sparkles, Monitor, Plus, X, Folder, Check, Film, Image as ImageIcon, Mic2 } from "lucide-react";
+import { Sparkles, Monitor, Plus, X, Folder, Check, Film, Image as ImageIcon, Mic2 } from "lucide-react";
 import { registerEditorFlush, shouldSuppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import { useToastStore } from "../stores/toastStore";
@@ -17,7 +17,7 @@ import { ScriptTable } from "./ScriptTable";
 import { ProjectImage } from "./ProjectImage";
 import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
 import { PresentationShell as SketchPreview } from "./presentation/PresentationShell";
-import { DocumentHeader } from "./DocumentHeader";
+import { DocumentHeader, documentTitleInputClass, DocumentCrumbs } from "./DocumentHeader";
 import { Dialog } from "./Dialog";
 import { FieldAiButton } from "./FieldAiButton";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
@@ -39,7 +39,7 @@ import type {
 } from "../types/sketch";
 import { diffRow, type RowDiff } from "../utils/textDiff";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
-import { SketchIcon } from "./Icons";
+import { SketchIcon, StoryboardIcon } from "./Icons";
 import { DocumentViewModeToggle, type DocumentViewMode } from "./DocumentViewModeToggle";
 import { SketchBalancedView, SketchScreenView } from "./SketchVisualViews";
 import { parseDurationSeconds, summarizeSketchDuration, type DurationDisplayMode } from "../utils/documentMetadata";
@@ -2461,16 +2461,6 @@ Rules:
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="mx-auto px-6 py-8" style={{ maxWidth: "var(--editor-max-width, 56rem)" }}>
-        {/* Back button — only show when inside a storyboard */}
-        {activeStoryboard && (
-          <button
-            onClick={closeSketch}
-            className="flex items-center gap-1.5 text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors mb-6"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-            Back to storyboard
-          </button>
-        )}
 
         {/* AI updated indicator */}
         {aiUpdatedFlash && (
@@ -2482,6 +2472,14 @@ Rules:
 
         <DocumentHeader
           icon={<SketchIcon size={20} />}
+          crumbs={activeStoryboard ? (
+            <DocumentCrumbs
+              items={[
+                { label: activeStoryboard.title || "Storyboard", icon: <StoryboardIcon size={14} />, onClick: closeSketch },
+                { label: localTitle || "Untitled sketch" },
+              ]}
+            />
+          ) : undefined}
           badge={
             <DurationBadge
               summary={durationSummary}
@@ -2546,7 +2544,7 @@ Rules:
               placeholder="Sketch title..."
               aria-label="Sketch title"
               title={localTitle}
-              className={`min-w-0 w-full truncate border-none bg-transparent text-2xl font-semibold text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/40 ${localTitle && !sketchLocked ? "pr-8" : ""} ${sketchLocked ? "cursor-default" : ""}`}
+              className={documentTitleInputClass(`${localTitle && !sketchLocked ? "pr-8" : ""} ${sketchLocked ? "cursor-default" : ""}`)}
             />
             {localTitle && !sketchLocked && (
               <FieldAiButton
@@ -2573,7 +2571,7 @@ Rules:
           label="Sketch description"
           disabled={sketchLocked}
           rows={4}
-          className="my-8"
+          className="mb-6 mt-1"
           previewClassName={`prose-desc min-h-[2rem] rounded-lg border border-transparent px-3 py-2 pr-10 text-sm leading-relaxed text-[rgb(var(--color-text))] transition-colors hover:border-[rgb(var(--color-border))] ${sketchLocked ? "cursor-default" : "cursor-text"}`}
           textareaClassName="w-full resize-none text-sm bg-transparent text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/40 outline-none border border-[rgb(var(--color-border))] rounded-lg px-3 py-2 focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 transition-colors"
           onDraftChange={setLocalDesc}

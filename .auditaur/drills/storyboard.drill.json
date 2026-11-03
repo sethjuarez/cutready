@@ -53,7 +53,7 @@
       "steps": [
         { "click": { "testId": "explorer-item-tour.sb" } },
         { "click": { "role": "button", "name": "Add Existing", "exact": true } },
-        { "fill": { "label": "Search sketches" }, "value": "Falcon" },
+        { "fill": { "label": "Search sketches", "exact": true }, "value": "Falcon" },
         { "click": { "role": "button", "name": "Add Falcon Checkout" } },
         { "expectIpc": "add_sketch_to_storyboard", "status": "ok" },
         { "expect": { "role": "button", "name": "Remove Falcon Checkout from storyboard", "exact": true }, "toExist": true },

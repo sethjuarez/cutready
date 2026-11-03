@@ -12,7 +12,7 @@ import type { TokenResponse } from "../types/auth";
 import { describeWordExport, exportNoteToWord } from "../utils/exportToWord";
 import { ProjectImage } from "./ProjectImage";
 import { projectRelativeScreenshotPath } from "../utils/projectImage";
-import { DocumentHeader } from "./DocumentHeader";
+import { DocumentHeader, documentTitleInputClass } from "./DocumentHeader";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
 import { NoteIcon } from "./Icons";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
@@ -418,7 +418,7 @@ Use write_note to save the cleaned Markdown back to "${activeNotePath}". Do not 
               }}
               readOnly={activeNoteLocked}
               title={draftTitle}
-              className={`min-w-0 w-full truncate border-none bg-transparent text-2xl font-semibold text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/40 ${activeNoteLocked ? "cursor-default" : ""}`}
+              className={documentTitleInputClass(`${activeNoteLocked ? "cursor-default" : ""}`)}
               placeholder="Note title..."
               aria-label="Note title"
             />
