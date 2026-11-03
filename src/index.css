@@ -19,6 +19,29 @@
   --color-border-subtle: 233 234 237;
   --color-text: 27 27 27;
   --color-text-secondary: 91 91 91;
+  --color-nav-muted: 91 91 91;
+  --color-text-tertiary: 109 109 109;
+  /* Neutral fills and dividers (Direction C), tinted from the text colour. */
+  --fill-hover: rgb(var(--color-text) / 0.042);
+  --fill-pressed: rgb(var(--color-text) / 0.028);
+  --fill-selected: rgb(var(--color-text) / 0.058);
+  --color-divider: rgb(var(--color-text) / 0.08);
+  /* Sidebar (GitHub Copilot app / Primer neutrals, on our palette). */
+  --nav-muted: rgb(var(--color-nav-muted));
+  --nav-disabled: rgb(var(--color-text) / 0.55);
+  --nav-hover: rgb(129 139 152 / 0.1);
+  --nav-selected: rgb(129 139 152 / 0.15);
+  --nav-avatar: rgb(129 139 152 / 0.3);
+  --nav-guide: rgb(var(--color-text) / 0.12);
+  --nav-count-bg: rgb(var(--color-accent) / 0.12);
+  --nav-accent-text: rgb(var(--color-accent-hover));
+  /* Mica backdrop behind the title bar, navigation and status bar. */
+  --mica:
+    radial-gradient(1100px 640px at -4% -8%, rgb(204 196 240 / 0.62), transparent 70%),
+    radial-gradient(1000px 620px at 62% -18%, rgb(193 212 238 / 0.5), transparent 70%),
+    radial-gradient(900px 760px at 4% 108%, rgb(190 226 219 / 0.5), transparent 70%),
+    radial-gradient(900px 700px at 104% 104%, rgb(214 208 238 / 0.4), transparent 70%),
+    rgb(var(--color-surface-inset));
   --color-secondary: 124 58 237;
   --color-tertiary: 219 39 119;
   --color-success: 16 124 16;
@@ -58,6 +81,7 @@
   /* Density (spacing only). Overridden by html[data-density]. */
   --control-height: 32px;
   --nav-row-height: 36px;
+  --tree-row-height: 32px;
   --card-gap: 10px;
   --titlebar-height: 40px;
   --macos-traffic-light-space: 92px;
@@ -94,6 +118,24 @@
   --color-border-subtle: 54 54 56;
   --color-text: 255 255 255;
   --color-text-secondary: 207 207 207;
+  --color-nav-muted: 165 165 166;
+  --color-text-tertiary: 169 169 169;
+  --fill-hover: rgb(var(--color-text) / 0.055);
+  --fill-pressed: rgb(var(--color-text) / 0.04);
+  --fill-selected: rgb(var(--color-text) / 0.075);
+  --color-divider: rgb(var(--color-text) / 0.085);
+  --nav-muted: rgb(var(--color-nav-muted));
+  --nav-disabled: rgb(var(--color-text) / 0.38);
+  --nav-hover: rgb(101 108 118 / 0.2);
+  --nav-selected: rgb(101 108 118 / 0.2);
+  --nav-avatar: rgb(101 108 118 / 0.5);
+  --nav-count-bg: rgb(var(--color-accent) / 0.1);
+  --nav-accent-text: rgb(var(--color-accent));
+  --mica:
+    radial-gradient(1100px 640px at -4% -8%, rgb(104 90 170 / 0.24), transparent 70%),
+    radial-gradient(1000px 620px at 62% -18%, rgb(64 92 140 / 0.2), transparent 70%),
+    radial-gradient(900px 760px at 4% 108%, rgb(52 108 100 / 0.18), transparent 70%),
+    rgb(var(--color-surface-inset));
   --color-secondary: 167 139 250;
   --color-tertiary: 244 114 182;
   --color-success: 98 196 98;
@@ -118,6 +160,7 @@
 html[data-density="compact"] {
   --control-height: 28px;
   --nav-row-height: 30px;
+  --tree-row-height: 28px;
   --card-gap: 6px;
 }
 
@@ -282,6 +325,11 @@ body {
 #root {
   background: transparent;
   height: 100%;
+}
+
+.cr-mica {
+  background: var(--mica);
+  background-attachment: fixed;
 }
 
 .mac-window-shell {

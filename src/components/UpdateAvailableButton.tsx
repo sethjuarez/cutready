@@ -62,13 +62,12 @@ export function UpdateAvailableButton() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="group relative flex h-9 w-9 shrink-0 items-center justify-center rounded-control border border-[rgb(var(--color-accent))]/25 bg-[rgb(var(--color-accent))]/12 text-[rgb(var(--color-accent))] shadow-[0_0_24px_rgb(var(--color-accent)/0.18)] transition-colors hover:border-[rgb(var(--color-accent))]/45 hover:bg-[rgb(var(--color-accent))]/18"
+        className="cr-nv !text-[var(--nav-accent-text)]"
         title={`Update available: v${update.version}`}
         aria-label={`Update available: version ${update.version}`}
       >
-        <Download className="h-4 w-4" />
-        <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[rgb(var(--color-accent))] ring-2 ring-[rgb(var(--color-surface))]" />
-        <span className="absolute inset-0 rounded-xl border border-[rgb(var(--color-accent))]/20 opacity-0 transition-opacity group-hover:opacity-100" />
+        <span className="ico !text-[var(--nav-accent-text)]"><Download className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" /></span>
+        <span className="lbl">Update available</span>
       </button>
 
       {open && (

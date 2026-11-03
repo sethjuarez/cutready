@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore, type AppView } from "../stores/appStore";
+import { SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "../stores/sidebarLayout";
 import { useChatStore } from "../stores/chatStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import { useToastStore } from "../stores/toastStore";
@@ -9,6 +10,7 @@ import { HomePanel } from "./HomePanel";
 import { RecordingPanel } from "./RecordingPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { Sidebar } from "./Sidebar";
+import { useExitChatFocusOnNavigate } from "../hooks/useExitChatFocusOnNavigate";
 import { panelOwner } from "../utils/navigation";
 import { StoryboardPanel } from "./StoryboardPanel";
 import { CompanionPane } from "./CompanionPane";
@@ -89,6 +91,7 @@ export function AppLayout() {
   const { theme: resolvedTheme, toggle: toggleTheme } = useTheme();
   const commands = useCommands();
   const mainRef = useRef<HTMLDivElement>(null);
+  useExitChatFocusOnNavigate();
   const lastWorkspaceViewRef = useRef<AppView>("project");
 
   useEffect(() => {
@@ -424,7 +427,7 @@ export function AppLayout() {
   const companionVisible = documentView && !isMerging && showSecondaryPanel;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="cr-mica flex flex-col h-full">
       <TitleBar
         onCommandPaletteOpen={() => setCommandPaletteOpen(true)}
         sidebarVisible={sidebarVisible}
@@ -443,16 +446,15 @@ export function AppLayout() {
         }}
       >
         <div className="flex flex-1 overflow-hidden" ref={mainRef}>
-          {/* Navigation pane (hidden on home): labelled rows with the active panel, or an icon rail */}
-          {view !== "home" && (
-            <NavPane
-              contentView={contentView}
-              showPanel={!projectSwitching}
-              onFeedback={() => setFeedbackOpen(true)}
-              onChatToggle={toggleChatSurface}
-              chatActive={chatFocusMode || showSecondaryPanel || view === "chat"}
-            />
-          )}
+          {/* Navigation pane: labelled tree with the active panel, or an icon rail */}
+          <NavPane
+            contentView={contentView}
+            showPanel={!projectSwitching}
+            onFeedback={() => setFeedbackOpen(true)}
+            onProfile={openProfileSettings}
+            onChatToggle={toggleChatSurface}
+            chatActive={chatFocusMode || companionVisible || view === "chat"}
+          />
 
           {/* Editor layer: content + output panel, raised over the base surface */}
           <div
@@ -510,7 +512,7 @@ export function AppLayout() {
           style={{
             top: "var(--titlebar-height)",
             bottom: "var(--statusbar-height)",
-            left: sidebarVisible ? sidebarWidth : "3rem",
+            left: sidebarVisible ? sidebarWidth : 0,
             right: 0,
           }}
           role="dialog"
@@ -621,28 +623,53 @@ interface NavPaneProps {
   contentView: AppView;
   showPanel: boolean;
   onFeedback: () => void;
+  onProfile: () => void;
   onChatToggle: () => void;
   chatActive: boolean;
 }
 
-/** Navigation pane with resize handle. The panel under the active row switches with the view. */
+/** Dragging the sidebar narrower than this collapses it. */
+const SIDEBAR_COLLAPSE_WIDTH = 55;
+
+/** Navigation pane with resize handle. Document sections stay put; list panels nest under their row. */
 function NavPane({ contentView, showPanel, ...navProps }: NavPaneProps) {
   const sidebarVisible = useAppStore((s) => s.sidebarVisible);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const sidebarWidth = useAppStore((s) => s.sidebarWidth);
   const setSidebarWidth = useAppStore((s) => s.setSidebarWidth);
+  const hasProject = useAppStore((s) => s.currentProject !== null);
+  const [resizing, setResizing] = useState(false);
+  // Unclamped width during a drag, and the width it started from. Dragging below the collapse
+  // width collapses on release (the handle must stay mounted until then) and restores the start width.
+  const drag = useRef<{ width: number; start: number } | null>(null);
 
   const handleResize = useCallback(
-    (delta: number) => setSidebarWidth((width) => width + delta),
+    (delta: number) => {
+      setResizing(true);
+      const current = useAppStore.getState().sidebarWidth;
+      const state = drag.current ?? { width: current, start: current };
+      state.width += delta;
+      drag.current = state;
+      setSidebarWidth(state.width);
+    },
     [setSidebarWidth],
   );
+  const handleResizeEnd = useCallback(() => {
+    const state = drag.current;
+    drag.current = null;
+    setResizing(false);
+    if (state && state.width < SIDEBAR_COLLAPSE_WIDTH && useAppStore.getState().sidebarVisible) {
+      setSidebarWidth(state.start);
+      toggleSidebar();
+    }
+  }, [setSidebarWidth, toggleSidebar]);
 
   const owner = panelOwner(contentView);
-  const panel = !showPanel || owner === null ? null
+  const panel = !showPanel ? null
     : owner === "assets" ? <AssetList />
     : owner === "narrations" ? <NarrationList />
     : owner === "changes" ? <ChangesPanel />
-    : <StoryboardList />;
+    : null;
 
   return (
     <>
@@ -650,11 +677,24 @@ function NavPane({ contentView, showPanel, ...navProps }: NavPaneProps) {
         {...navProps}
         panelView={contentView}
         expanded={sidebarVisible}
-        onToggleExpanded={toggleSidebar}
+        documents={showPanel && hasProject ? <StoryboardList /> : null}
         panel={panel}
         width={sidebarWidth}
+        resizing={resizing}
       />
-      {sidebarVisible && <ResizeHandle direction="horizontal" onResize={handleResize} />}
+      {sidebarVisible && (
+        <ResizeHandle
+          direction="horizontal"
+          onResize={handleResize}
+          onResizeEnd={handleResizeEnd}
+          onStep={(delta) => setSidebarWidth((width) => width + delta)}
+          onReset={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}
+          ariaLabel="Resize sidebar"
+          value={{ now: sidebarWidth, min: SIDEBAR_MIN_WIDTH, max: SIDEBAR_MAX_WIDTH }}
+          controls="app-sidebar"
+          subtle
+        />
+      )}
     </>
   );
 }

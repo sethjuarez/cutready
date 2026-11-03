@@ -68,7 +68,6 @@
     {
       "name": "discards one file's pending edit",
       "steps": [
-        { "click": { "testId": "activity-project" } },
         { "click": { "testId": "explorer-item-plan.md" } },
         { "click": { "label": "Note content" } },
         { "press": "Control+End", "target": { "label": "Note content" } },
@@ -87,7 +86,6 @@
     {
       "name": "saves a snapshot from the keyboard",
       "steps": [
-        { "click": { "testId": "activity-project" } },
         { "click": { "testId": "explorer-item-plan.md" } },
         { "click": { "label": "Note content" } },
         { "press": "Control+End", "target": { "label": "Note content" } },
@@ -148,7 +146,6 @@
     {
       "name": "shelves unsaved work when switching branches, then restores it",
       "steps": [
-        { "click": { "testId": "activity-project" } },
         { "click": { "testId": "explorer-item-plan.md" } },
         { "click": { "label": "Note content" } },
         { "press": "Control+End", "target": { "label": "Note content" } },
@@ -185,7 +182,6 @@
         { "click": { "role": "button", "name": "Create Branch", "exact": true } },
         { "click": { "role": "button", "name": "Confirm Start Branch", "exact": true } },
         { "expect": { "role": "button", "name": "Branch: scratch" }, "toBeVisible": true, "timeoutMs": 15000 },
-        { "click": { "testId": "activity-project" } },
         { "click": { "testId": "explorer-item-plan.md" } },
         { "click": { "label": "Note content" } },
         { "press": "Control+End", "target": { "label": "Note content" } },

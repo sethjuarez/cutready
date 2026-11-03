@@ -25,7 +25,7 @@
           }
           var cache = JSON.parse(localStorage.getItem("cutready-theme-bootstrap") || "null");
           // Keep in sync with THEME_BOOTSTRAP_CACHE_VERSION in src/theme/applyThemePalette.ts.
-          if (!cache || cache.version !== 2) cache = null;
+          if (!cache || cache.version !== 3) cache = null;
           var tokens = cache && cache.themes && cache.themes[theme === "dark" ? "dark" : "light"];
           if (tokens) {
             Object.keys(tokens).forEach(function (name) {

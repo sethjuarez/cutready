@@ -53,7 +53,6 @@
     {
       "name": "resolves a conflicting edit by taking the incoming version",
       "steps": [
-        { "click": { "testId": "activity-project" } },
         { "click": { "testId": "explorer-item-plan.md" } },
         { "click": { "label": "Note content" } },
         { "press": "Control+End", "target": { "label": "Note content" } },

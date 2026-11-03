@@ -164,7 +164,7 @@ describe("AppLayout titlebar spacing", () => {
 
     act(() => useAppStore.setState({ sidebarVisible: false }));
     render(<AppLayout />);
-    expect(screen.getByTestId("chat-focus-shell")).toHaveStyle({ left: "3rem" });
+    expect(screen.getByTestId("chat-focus-shell")).toHaveStyle({ left: "0px" });
   });
 
   it("keeps chat focus mode below the native traffic light toolbar on macOS", () => {

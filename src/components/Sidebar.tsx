@@ -1,178 +1,219 @@
-import type { ReactNode } from "react";
-import { GitCompareArrows, House, Images, LayoutList, Menu, MessageSquare, MessageSquareMore, Mic2, Settings } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode, type UIEvent } from "react";
 import type { AppView } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
+import { useChatStore } from "../stores/chatStore";
 import { useVersioningStore } from "../stores/versioningStore";
-import { formatKeybinding } from "../utils/platform";
-import { UpdateAvailableButton } from "./UpdateAvailableButton";
-import { activityButtonClass } from "./shellStyles";
 import { panelOwner, type NavId } from "../utils/navigation";
+import { NavIcon, type NavIconName } from "./navIcons";
+import { UpdateAvailableButton } from "./UpdateAvailableButton";
+import { getContributorIdentity, type ResolvedIdentity } from "../services/identity";
 
-const navItems: { id: NavId; label: string; icon: ReactNode }[] = [
-  { id: "project", label: "Documents", icon: <LayoutList className="h-[18px] w-[18px]" aria-hidden="true" /> },
-  { id: "assets", label: "Visuals", icon: <Images className="h-[18px] w-[18px]" aria-hidden="true" /> },
-  { id: "narrations", label: "Narrations", icon: <Mic2 className="h-[18px] w-[18px]" aria-hidden="true" /> },
-  { id: "changes", label: "Changes", icon: <GitCompareArrows className="h-[18px] w-[18px]" aria-hidden="true" /> },
-  { id: "chat", label: "Chat", icon: <MessageSquareMore className="h-[18px] w-[18px]" aria-hidden="true" /> },
+const panelRows: { id: Exclude<NavId, "project" | "chat">; label: string; icon: NavIconName }[] = [
+  { id: "assets", label: "Assets", icon: "assets" },
+  { id: "narrations", label: "Narrations", icon: "mic" },
+  { id: "changes", label: "Changes", icon: "changes" },
 ];
 
 interface SidebarProps {
   onFeedback?: () => void;
+  /** Opens Settings at the Profile tab (identity). */
+  onProfile?: () => void;
   onChatToggle?: () => void;
   chatActive?: boolean;
-  /** Labelled nav with the active view's panel; false renders the icon rail. */
+  /** False collapses the sidebar to a zero-width track. */
   expanded?: boolean;
-  onToggleExpanded?: () => void;
-  /** Panel for the active view, shown under its nav row when expanded. */
+  /** Document sections (Storyboards, Sketches, Notes), shown while a project is open. */
+  documents?: ReactNode;
+  /** Assets, Narrations or Changes list, nested under the row that owns it. */
   panel?: ReactNode;
   /** View whose panel is shown; defaults to the current view (differs while Settings is open). */
   panelView?: AppView;
   width?: number;
+  /** Suspends the width transition while the user drags the resize handle. */
+  resizing?: boolean;
 }
 
-/** Left navigation: a labelled accordion (Direction C) that collapses to an icon rail. */
+const rowClass = (...names: (string | false | undefined)[]) => ["cr-nv", ...names].filter(Boolean).join(" ");
+
+/** Left sidebar, modelled on the GitHub Copilot app: top rows, collapsible sections, footer. */
 export function Sidebar({
   onFeedback,
+  onProfile,
   onChatToggle,
   chatActive = false,
-  expanded = false,
-  onToggleExpanded,
+  expanded = true,
+  documents,
   panel,
   panelView,
-  width,
+  width = 280,
+  resizing = false,
 }: SidebarProps) {
   const view = useAppStore((s) => s.view);
   const setView = useAppStore((s) => s.setView);
   const currentProject = useAppStore((s) => s.currentProject);
   const changedFilesCount = useVersioningStore((s) => s.changedFiles.length);
   const owner = panelOwner(panelView ?? view);
-  const toggleLabel = `${expanded ? "Collapse" : "Expand"} navigation (${formatKeybinding("Ctrl+B")})`;
+  const count = changedFilesCount > 0 ? (changedFilesCount > 99 ? "99+" : String(changedFilesCount)) : null;
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const renderItem = (item: (typeof navItems)[number]) => {
-    const isChat = item.id === "chat";
-    const isActive = isChat ? chatActive : view === item.id;
-    const isDisabled = !isChat && !currentProject;
-    const ownsPanel = expanded && !isChat && owner === item.id && panel != null;
-    const badge = item.id === "changes" && changedFilesCount > 0 ? (changedFilesCount > 99 ? "99+" : String(changedFilesCount)) : null;
-    return (
-      <div key={item.id} className={ownsPanel ? "flex min-h-0 flex-1 flex-col" : "shrink-0"}>
-        <button
-          type="button"
-          onClick={() => {
-            if (isDisabled) return;
-            if (isChat) onChatToggle?.();
-            else setView(item.id);
-          }}
-          disabled={isDisabled}
-          data-testid={`activity-${item.id}`}
-          className={expanded ? navRowClass(isActive || owner === item.id, isDisabled) : activityButtonClass(isActive, isDisabled)}
-          title={badge ? `${item.label} · ${badge} unsaved` : item.label}
-          aria-label={item.label}
-          aria-current={!isChat && isActive ? "page" : undefined}
-          aria-pressed={isChat ? isActive : undefined}
-          aria-expanded={expanded && !isChat ? ownsPanel : undefined}
-        >
-          {item.icon}
-          {expanded && <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>}
-          {badge && (
-            <span
-              className={
-                expanded
-                  ? "min-w-[18px] rounded-pill bg-accent px-1.5 text-center text-2xs font-semibold text-accent-fg"
-                  : "absolute -right-0.5 -top-0.5 flex h-[14px] min-w-[14px] items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-bold leading-none text-accent-fg"
-              }
-              aria-hidden="true"
-            >
-              {badge}
-            </span>
-          )}
-          {!expanded && isActive && <ActiveIndicator />}
-        </button>
-        {ownsPanel && (
-          <div className="mt-0.5 min-h-0 flex-1 overflow-hidden rounded-control" data-testid="nav-panel">
-            {panel}
-          </div>
-        )}
-      </div>
-    );
+  // Navigating anywhere leaves chat focus mode so its overlay never covers the destination.
+  const go = (target: AppView) => {
+    useChatStore.getState().setChatFocusMode(false);
+    setView(target);
   };
 
-  const bottomButton = (id: "home" | "settings", label: string, icon: ReactNode) => (
-    <button
-      type="button"
-      onClick={() => setView(id)}
-      className={activityButtonClass(view === id)}
-      title={label}
-      aria-label={label}
-      aria-current={view === id ? "page" : undefined}
-      data-testid={`activity-${id}`}
-    >
-      {icon}
-      {!expanded && view === id && <ActiveIndicator />}
-    </button>
-  );
+  // Identity can come from the open repository's git config, so reload it when the repository
+  // changes, and whenever Settings closes so a profile edit shows up straight away.
+  const inSettings = view === "settings";
+  const repoRoot = currentProject?.repo_root ?? null;
+  const [identity, setIdentity] = useState<ResolvedIdentity | null>(null);
+  useEffect(() => {
+    if (inSettings) return;
+    let live = true;
+    getContributorIdentity()
+      .then((next) => { if (live) setIdentity(next); })
+      .catch(() => { if (live) setIdentity(null); });
+    return () => { live = false; };
+  }, [inSettings, repoRoot]);
+  const needsSetup = !identity || identity.needs_setup;
+  const displayName = needsSetup ? "Set up identity" : identity.name;
+
+  const updateFades = (el: HTMLElement) => {
+    el.dataset.fadeTop = el.scrollTop > 0 ? "true" : "false";
+    el.dataset.fadeBottom = el.scrollTop + el.clientHeight < el.scrollHeight - 1 ? "true" : "false";
+  };
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => updateFades(el));
+    observer.observe(el);
+    if (el.firstElementChild) observer.observe(el.firstElementChild);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <nav
+      id="app-sidebar"
       aria-label="Main"
+      aria-hidden={expanded ? undefined : true}
+      inert={!expanded}
       data-testid="app-nav"
       data-expanded={expanded ? "true" : "false"}
-      className={`no-select flex h-full shrink-0 flex-col ${
-        expanded ? "gap-0.5 px-1.5 pb-2 pt-1.5" : "w-12 items-center gap-1.5 px-1.5 py-2"
-      }`}
-      style={expanded && width ? { width } : undefined}
+      data-resizing={resizing ? "true" : undefined}
+      className="cr-nav shrink-0"
+      style={{ width: expanded ? width : 0 }}
     >
-      {onToggleExpanded && (
-        <button
-          type="button"
-          onClick={onToggleExpanded}
-          className={activityButtonClass(false)}
-          title={toggleLabel}
-          aria-label={toggleLabel}
-          aria-expanded={expanded}
-          data-testid="nav-toggle"
-        >
-          <Menu className="h-[18px] w-[18px]" aria-hidden="true" />
-        </button>
-      )}
+      <div className="cr-nav-inner" style={{ width }}>
+        <div ref={scrollRef} className="cr-nav-scroll" onScroll={(e: UIEvent<HTMLDivElement>) => updateFades(e.currentTarget)}>
+          <div>
+            <div className="cr-nav-list">
+              <button
+                type="button"
+                onClick={() => go("home")}
+                className={rowClass(view === "home" && "sel")}
+                aria-current={view === "home" ? "page" : undefined}
+                data-testid="activity-home"
+              >
+                <span className="ico"><NavIcon name="home" size={16} /></span>
+                <span className="lbl">Home</span>
+              </button>
 
-      {navItems.map(renderItem)}
+              {panelRows.map((row) => {
+                const ownsPanel = expanded && owner === row.id && panel != null;
+                const rowCount = row.id === "changes" ? count : null;
+                return (
+                  <div key={row.id} className="contents">
+                    <button
+                      type="button"
+                      onClick={() => go(row.id)}
+                      disabled={!currentProject}
+                      className={rowClass(view === row.id && "sel")}
+                      title={rowCount ? `${row.label} · ${rowCount} unsaved` : undefined}
+                      aria-label={rowCount ? `${row.label}, ${rowCount} unsaved` : row.label}
+                      aria-current={view === row.id ? "page" : undefined}
+                      aria-expanded={ownsPanel}
+                      data-testid={`activity-${row.id}`}
+                    >
+                      <span className="ico"><NavIcon name={row.icon} size={16} /></span>
+                      <span className="lbl">{row.label}</span>
+                      {rowCount && <span className="count" aria-hidden="true">{rowCount}</span>}
+                    </button>
+                    {ownsPanel && (
+                      <div className="cr-nav-panel" data-testid="nav-panel">
+                        {panel}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
 
-      {!(expanded && owner && panel != null) && <div className="flex-1" />}
+              <button
+                type="button"
+                onClick={() => onChatToggle?.()}
+                className={rowClass(chatActive && "sel")}
+                aria-pressed={chatActive}
+                data-testid="activity-chat"
+              >
+                <span className="ico"><NavIcon name="sparkle" size={16} /></span>
+                <span className="lbl">Chat</span>
+              </button>
+            </div>
 
-      <div className={`flex shrink-0 ${expanded ? "flex-wrap items-center gap-0.5 border-t border-[rgb(var(--color-border-subtle))] pt-1.5" : "flex-col items-center gap-1.5"}`}>
-        <UpdateAvailableButton />
-        {bottomButton("home", "Home", <House className="h-[18px] w-[18px]" aria-hidden="true" />)}
-        {onFeedback && (
-          <button
-            type="button"
-            onClick={onFeedback}
-            className={activityButtonClass(false)}
-            title="Send feedback"
-            aria-label="Send feedback"
-            data-testid="activity-feedback"
-          >
-            <MessageSquare className="h-[18px] w-[18px]" aria-hidden="true" />
-          </button>
-        )}
-        {bottomButton("settings", "Settings", <Settings className="h-[18px] w-[18px]" aria-hidden="true" />)}
+            {documents}
+          </div>
+        </div>
+
+        <div className="cr-nav-foot">
+          <UpdateAvailableButton />
+          <div className="cr-nav-me-row">
+            <button
+              type="button"
+              onClick={() => {
+                useChatStore.getState().setChatFocusMode(false);
+                if (onProfile) onProfile();
+                else go("settings");
+              }}
+              className={rowClass("cr-me", needsSetup && "setup")}
+              title={identity && !needsSetup ? (identity.email ? `${identity.name} <${identity.email}>` : identity.name) : "Set up your name and email"}
+              aria-label={needsSetup ? "Set up identity" : `Profile: ${identity.name}`}
+              data-testid="nav-identity"
+            >
+              <span className="ava" aria-hidden="true">{needsSetup ? <NavIcon name="user" size={12} /> : initials(identity.name)}</span>
+              <span className="lbl">{displayName}</span>
+            </button>
+            {onFeedback && (
+              <button
+                type="button"
+                onClick={onFeedback}
+                className="cr-nav-ibtn"
+                aria-label="Send feedback"
+                title="Send feedback"
+                data-testid="activity-feedback"
+              >
+                <NavIcon name="feedback" size={16} />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => go("settings")}
+              className="cr-nav-ibtn"
+              aria-label="Settings"
+              title="Settings"
+              aria-current={view === "settings" ? "page" : undefined}
+              data-testid="activity-settings"
+            >
+              <NavIcon name="settings" size={16} />
+            </button>
+          </div>
+        </div>
       </div>
     </nav>
   );
 }
 
-function navRowClass(selected: boolean, disabled = false): string {
-  return [
-    "relative flex h-nav-row w-full shrink-0 items-center gap-3 rounded-control pl-3 pr-2.5 text-sm transition-colors duration-fast ease-fluent",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[rgb(var(--color-accent))]",
-    disabled
-      ? "cursor-not-allowed text-[rgb(var(--color-text-secondary))]/45"
-      : selected
-        ? "bg-fill-selected font-medium text-[rgb(var(--color-text))] before:absolute before:left-0 before:top-1/2 before:h-4 before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-accent"
-        : "text-[rgb(var(--color-text))] hover:bg-fill-hover",
-  ].join(" ");
-}
-
-function ActiveIndicator() {
-  return <span aria-hidden="true" className="absolute left-[-8px] top-1/2 h-4 w-[2px] -translate-y-1/2 bg-accent" />;
+/** Up to two initials from a display name ("Seth Juarez" -> "SJ"). */
+export function initials(name: string) {
+  const parts = name.trim().split(/[\s._-]+/).filter(Boolean);
+  const letters = parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : (parts[0] ?? "?").slice(0, 2);
+  return letters.toUpperCase();
 }

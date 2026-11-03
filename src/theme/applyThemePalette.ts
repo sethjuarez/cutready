@@ -1,9 +1,10 @@
 import { deriveContentTokens } from "./appThemePalettes";
+import { deriveNavMuted } from "./paletteColor";
 import type { ContentTypeTokenKey, ThemeColorTokens, ThemePalette } from "./appThemePalettes";
 
 export const THEME_BOOTSTRAP_CACHE_KEY = "cutready-theme-bootstrap";
 /** Bump when palette values or token names change so index.html ignores stale first-paint caches. */
-export const THEME_BOOTSTRAP_CACHE_VERSION = 2;
+export const THEME_BOOTSTRAP_CACHE_VERSION = 3;
 
 export const THEME_COLOR_TOKEN_MAP: Record<keyof ThemeColorTokens, string> = {
   surface: "--color-surface",
@@ -52,6 +53,7 @@ function toCssVariables(colors: ThemeColorTokens): Record<string, string> {
       token,
       content[key as ContentTypeTokenKey],
     ]),
+    ["--color-nav-muted", deriveNavMuted(colors)],
   ]);
 }
 
