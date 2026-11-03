@@ -21,7 +21,8 @@ export function cliBinary() {
 
 export function tempDir(prefix = "cutready-canvas-") {
     const dir = realpathSync.native(mkdtempSync(path.join(tmpdir(), prefix)));
-    return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+    // Windows keeps a just-killed child's exe locked briefly; retry EPERM/EBUSY.
+    return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }) };
 }
 
 /** A temp folder that is its own git repository, like a standalone project. */
