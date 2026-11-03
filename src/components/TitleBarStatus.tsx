@@ -82,6 +82,7 @@ export function TitleBarSyncStatus() {
       >
         <span
           aria-hidden="true"
+          data-status={dirty ? "warn" : "ok"}
           className={`h-2 w-2 shrink-0 rounded-full ${
             dirty
               ? "bg-warning shadow-[0_0_0_3px_rgb(var(--color-warning)/0.2)]"

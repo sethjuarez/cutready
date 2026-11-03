@@ -25,6 +25,7 @@
     "core:window:allow-set-ignore-cursor-events",
     "core:window:allow-set-fullscreen",
     "core:window:allow-is-maximized",
+    "core:webview:allow-set-webview-zoom",
     "shell:allow-open",
     "opener:default",
     {

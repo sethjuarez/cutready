@@ -114,6 +114,7 @@
     "get_storyboard",
     "get_storyboard_versioned",
     "get_sync_status",
+    "get_system_accessibility_display",
     "get_visual",
     "get_workspace_graph_for_variation",
     "get_workspace_settings",

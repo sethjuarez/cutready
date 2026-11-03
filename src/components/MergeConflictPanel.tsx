@@ -148,7 +148,7 @@ function ConflictCard({
     }`}>
       {/* File header */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-[rgb(var(--color-border))]/50">
-        <span className={`inline-block w-1.5 h-1.5 rounded-full ${isResolved ? "bg-success" : "bg-warning"}`} />
+        <span aria-hidden="true" data-status={isResolved ? "ok" : "warn"} className={`inline-block w-1.5 h-1.5 rounded-full ${isResolved ? "bg-success" : "bg-warning"}`} />
         <span className="text-xs font-medium text-[rgb(var(--color-text))]">{conflict.path}</span>
         <span className="text-2xs px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-border))]/50 text-[rgb(var(--color-text-secondary))]">
           {typeLabel}

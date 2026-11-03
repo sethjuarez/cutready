@@ -168,7 +168,7 @@ export function AssetList() {
             <br />
             <button
               onClick={importAsset}
-              className="mt-2 text-[rgb(var(--color-accent))] hover:underline"
+              className="show-underlines-target mt-2 text-[rgb(var(--color-accent))] hover:underline"
             >
               Import an image
             </button>

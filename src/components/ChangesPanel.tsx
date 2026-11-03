@@ -629,7 +629,7 @@ function WorkspaceModeBadge({ remote, syncError }: { remote: boolean; syncError:
       className={`flex h-5 shrink-0 items-center gap-1 rounded-full border px-1.5 text-2xs font-medium ${toneClass}`}
       title={title}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
+      <span aria-hidden="true" data-status={degraded ? "warn" : remote ? "ok" : "off"} className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
       <span className="hidden min-[250px]:inline">{label}</span>
     </span>
   );

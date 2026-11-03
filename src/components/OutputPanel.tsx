@@ -275,7 +275,7 @@ function DebugLine({ item }: { item: DebugStreamItem }) {
         {(detail || item.trace_id) && (
           <button
             onClick={() => setExpanded(!expanded)}
-            className="shrink-0 text-2xs text-[rgb(var(--color-accent))] hover:underline"
+            className="show-underlines-target shrink-0 text-2xs text-[rgb(var(--color-accent))] hover:underline"
           >
             {expanded ? "collapse" : "details"}
           </button>
@@ -513,7 +513,7 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
       {isTruncatable && !expanded && (
         <button
           onClick={() => setExpanded(true)}
-          className="shrink-0 text-2xs text-[rgb(var(--color-accent))] hover:underline"
+          className="show-underlines-target shrink-0 text-2xs text-[rgb(var(--color-accent))] hover:underline"
         >
           expand
         </button>

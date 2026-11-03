@@ -361,7 +361,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
             await versioning().loadGraphData();
             await versioning().loadTimelines();
             await versioning().checkDirty();
-            useToastStore.getState().show("Incoming saves merged.", 4000, "success");
+            useToastStore.getState().showUpdate("Incoming saves merged.", "success");
             return;
           }
           if (mergeReport.conflicts.length > 0 && mergeReport.token) {
@@ -378,7 +378,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
               syncError: null,
               syncStatus: { ahead: mergeReport.syncStatus.ahead, behind: mergeReport.syncStatus.behind },
             });
-            useToastStore.getState().show("Incoming saves need conflict resolution.", 5000, "info");
+            useToastStore.getState().showUpdate("Incoming saves need conflict resolution.", "info");
             return;
           }
           set({
@@ -405,7 +405,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
       await versioning().loadGraphData();
       await versioning().loadTimelines();
       await versioning().checkDirty();
-      useToastStore.getState().show("Incoming saves applied.", 4000, "success");
+      useToastStore.getState().showUpdate("Incoming saves applied.", "success");
     } catch (err) {
       set({ syncError: remoteSyncErrorMessage(err) });
     } finally {
@@ -431,7 +431,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
         updateError = `Save or discard local changes before getting updates from ${base}.`;
       } else if (report.canMergeCleanly && report.token) {
         await mergeDraftlineFromBase(currentRemote.name, `Bring in latest ${base}`);
-        useToastStore.getState().show(`Updates from ${base} brought in.`, 4000, "success");
+        useToastStore.getState().showUpdate(`Updates from ${base} brought in.`, "success");
       } else if (report.conflicts.length > 0 && report.token) {
         useVersioningStore.setState({
           isMerging: true,
@@ -441,7 +441,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
           draftlineMergeToken: report.token,
           draftlineMergeRemote: currentRemote.name,
         });
-        useToastStore.getState().show(`Updates from ${base} need conflict resolution.`, 5000, "info");
+        useToastStore.getState().showUpdate(`Updates from ${base} need conflict resolution.`, "info");
       } else if (report.syncStatus.behind === 0) {
         useToastStore.getState().show(`Already up to date with ${base}.`, 4000, "info");
       } else {

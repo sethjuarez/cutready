@@ -197,19 +197,19 @@ function CopilotConnect() {
       <div className="flex items-center gap-2">
         {signedIn && (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
-            <span className="h-1.5 w-1.5 rounded-full bg-success" />
+            <span aria-hidden="true" data-status="ok" className="h-1.5 w-1.5 rounded-full bg-success" />
             Signed in{status?.login ? ` as @${status.login}` : ""}
           </span>
         )}
         {needsSignIn && (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
-            <span className="h-1.5 w-1.5 rounded-full bg-warning" />
+            <span aria-hidden="true" data-status="warn" className="h-1.5 w-1.5 rounded-full bg-warning" />
             Installed — not signed in
           </span>
         )}
         {notInstalled && (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-error/10 px-2 py-0.5 text-xs font-medium text-error">
-            <span className="h-1.5 w-1.5 rounded-full bg-error" />
+            <span aria-hidden="true" data-status="error" className="h-1.5 w-1.5 rounded-full bg-error" />
             Copilot CLI not installed
           </span>
         )}
@@ -794,7 +794,7 @@ export function AgentsTab({ settings, updateSetting, models, loadingModels, canF
                   />
                   <button
                     onClick={() => setEditingId(null)}
-                    className="text-xs text-[rgb(var(--color-accent))] hover:underline self-start"
+                    className="show-underlines-target text-xs text-[rgb(var(--color-accent))] hover:underline self-start"
                   >
                     Done editing
                   </button>

@@ -112,8 +112,7 @@ pub struct RecordingInner {
 
 /// A browser that has been prepared for recording.
 ///
-/// The browser stays open across multiple recording takes.
-/// Dropped when the user disconnects.
+/// The browser stays open across recording takes and is dropped on disconnect.
 pub struct BrowserConnection {
     /// Process-unique id, used to ensure a superseded connection's terminal
     /// event cannot clear the connection that replaced it.
@@ -830,6 +829,7 @@ pub fn run() {
             commands::github::github_device_code_poll,
             commands::github::github_auth_status,
             commands::github::github_sign_out,
+            commands::accessibility::get_system_accessibility_display,
             commands::identity::get_contributor_identity,
             commands::identity::set_contributor_identity,
             commands::identity::clear_contributor_identity,

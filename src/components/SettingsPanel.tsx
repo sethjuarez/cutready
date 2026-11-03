@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { X, MessageSquare, Download, Search, MonitorCog, Palette, Bot, Brain, Mic2, MessageCircleWarning, GitBranch, DownloadCloud, FlaskConical, Keyboard, SlidersHorizontal, Plug, AudioLines, Eye, Captions, UserRound } from "lucide-react";
+import { X, MessageSquare, Download, Search, MonitorCog, Palette, Bot, Brain, Mic2, MessageCircleWarning, GitBranch, DownloadCloud, FlaskConical, Keyboard, SlidersHorizontal, Accessibility, Plug, AudioLines, Eye, Captions, UserRound } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { useSettings } from "../hooks/useSettings";
 import { invoke } from "../services/tauri";
@@ -19,6 +19,7 @@ import { RecordingTab } from "./settings/RecordingTab";
 import { RepositoryTab } from "./settings/RepositoryTab";
 import { ProfileTab } from "./settings/ProfileTab";
 import { ThemesTab } from "./settings/ThemesTab";
+import { AccessibilityTab } from "./settings/AccessibilityTab";
 import { UpdatesTab } from "./settings/UpdatesTab";
 import { VoiceTab } from "./settings/VoiceTab";
 import { ExperimentalTab } from "./settings/ExperimentalTab";
@@ -27,7 +28,7 @@ import type { AiInnerTab, AuthCodeFlowInit, ModelInfo, SettingsTab, TokenRespons
 export { CUTREADY_FEEDBACK_REPO, HarnessPicker };
 
 const REQUESTED_SETTINGS_TAB_KEY = "cutready:requested-settings-tab";
-const SETTINGS_TABS: SettingsTab[] = ["profile", "ai", "agents", "memory", "display", "themes", "presentation", "narration", "recording", "export", "feedback", "repository", "updates", "experimental"];
+const SETTINGS_TABS: SettingsTab[] = ["profile", "ai", "agents", "memory", "display", "themes", "accessibility", "presentation", "narration", "recording", "export", "feedback", "repository", "updates", "experimental"];
 
 function consumeRequestedSettingsTab(): SettingsTab | null {
   const requested = localStorage.getItem(REQUESTED_SETTINGS_TAB_KEY);
@@ -73,8 +74,8 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
   }, [currentProject, onClose, setView]);
 
   const globalTabs: SettingsTab[] = settings.featureRecording
-    ? ["profile", "display", "themes", "presentation", "narration", "recording", "export", "ai", "feedback", "updates", "experimental"]
-    : ["profile", "display", "themes", "presentation", "narration", "export", "ai", "feedback", "updates", "experimental"];
+    ? ["profile", "display", "themes", "accessibility", "presentation", "narration", "recording", "export", "ai", "feedback", "updates", "experimental"]
+    : ["profile", "display", "themes", "accessibility", "presentation", "narration", "export", "ai", "feedback", "updates", "experimental"];
   const workspaceTabs: SettingsTab[] = ["repository", "display", "themes", "export", "ai"];
   const tabs: SettingsTab[] = scope === "workspace" ? workspaceTabs : globalTabs;
 
@@ -276,6 +277,13 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
       description: "Choose the warm CutReady palette and row color system for your demo workspace.",
       icon: <Palette className="h-4 w-4" />,
       keywords: "theme palette colors appearance light dark",
+    },
+    accessibility: {
+      label: "Accessibility",
+      eyebrow: "Access and comfort",
+      description: "Zoom, contrast, notifications, screen reader announcements, and keyboard shortcuts.",
+      icon: <Accessibility className="h-4 w-4" />,
+      keywords: "accessibility a11y zoom scale pointer cursor underline links contrast color blind differentiate toast notification duration screen reader announce announcements hints keyboard shortcuts",
     },
     presentation: {
       label: "Presentation",
@@ -527,6 +535,9 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
               )}
               {activeTab === "themes" && (
                 <ThemesTab settings={settings} updateSetting={updateSetting} />
+              )}
+              {activeTab === "accessibility" && (
+                <AccessibilityTab />
               )}
               {activeTab === "presentation" && (
                 <PresentationTab settings={settings} updateSetting={updateSetting} />

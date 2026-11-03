@@ -1655,6 +1655,7 @@ dependencies = [
  "image",
  "keyring",
  "log",
+ "objc2",
  "openssl-sys",
  "pdf-extract",
  "portable-pty",

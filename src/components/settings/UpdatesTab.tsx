@@ -109,7 +109,7 @@ export function UpdatesTab() {
             href="https://github.com/sethjuarez/cutready/blob/main/CHANGELOG.md"
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1.5 text-xs text-[rgb(var(--color-accent))] hover:underline"
+            className="show-underlines-target inline-flex items-center gap-1.5 text-xs text-[rgb(var(--color-accent))] hover:underline"
           >
             <ExternalLink className="w-3 h-3" />
             View full changelog on GitHub

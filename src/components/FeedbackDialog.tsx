@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { Dialog } from "./Dialog";
+import { Switch } from "./Switch";
 import { sanitizeDiagnosticsLog } from "../utils/diagnosticsSanitizer";
 import {
   appendFeedbackAttachmentsSection,
@@ -332,45 +333,13 @@ export function FeedbackDialog({ isOpen, onClose }: FeedbackDialogProps) {
         <div className="flex items-end justify-between gap-3">
           <div className="space-y-1.5">
           <label className="flex items-center gap-1.5 cursor-pointer group">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={includeDebug}
-              onClick={() => setIncludeDebug(!includeDebug)}
-              className={`relative inline-flex h-[16px] w-[28px] shrink-0 rounded-full border transition-colors ${
-                includeDebug
-                  ? "bg-[rgb(var(--color-accent))] border-[rgb(var(--color-accent))]"
-                  : "bg-[rgb(var(--color-surface-alt))] border-[rgb(var(--color-border))]"
-              }`}
-            >
-              <span
-                className={`pointer-events-none block h-[12px] w-[12px] rounded-full bg-[rgb(var(--color-surface))] shadow-sm transition-transform mt-[1px] ${
-                  includeDebug ? "translate-x-[13px]" : "translate-x-[1px]"
-                }`}
-              />
-            </button>
+            <Switch size="sm" checked={includeDebug} onChange={setIncludeDebug} />
             <span className="text-xs text-[rgb(var(--color-text-secondary))] group-hover:text-[rgb(var(--color-text))] transition-colors select-none">
               Include debug diagnostics
             </span>
           </label>
           <label className="flex items-center gap-1.5 cursor-pointer group">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={includeSystemInfo}
-              onClick={() => setIncludeSystemInfo(!includeSystemInfo)}
-              className={`relative inline-flex h-[16px] w-[28px] shrink-0 rounded-full border transition-colors ${
-                includeSystemInfo
-                  ? "bg-[rgb(var(--color-accent))] border-[rgb(var(--color-accent))]"
-                  : "bg-[rgb(var(--color-surface-alt))] border-[rgb(var(--color-border))]"
-              }`}
-            >
-              <span
-                className={`pointer-events-none block h-[12px] w-[12px] rounded-full bg-[rgb(var(--color-surface))] shadow-sm transition-transform mt-[1px] ${
-                  includeSystemInfo ? "translate-x-[13px]" : "translate-x-[1px]"
-                }`}
-              />
-            </button>
+            <Switch size="sm" checked={includeSystemInfo} onChange={setIncludeSystemInfo} />
             <span className="text-xs text-[rgb(var(--color-text-secondary))] group-hover:text-[rgb(var(--color-text))] transition-colors select-none">
               Include OS details
             </span>

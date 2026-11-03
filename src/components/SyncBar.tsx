@@ -184,9 +184,11 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
       {/* Remote URL line */}
       <div className="flex items-center gap-1.5 mb-1.5">
         <span
+          aria-hidden="true"
+          data-status={isSyncing ? "busy" : currentRemote ? "ok" : "off"}
           className={`w-1.5 h-1.5 rounded-full shrink-0 ${
             isSyncing
-              ? "bg-warning animate-pulse"
+              ? "bg-warning text-warning animate-pulse"
               : currentRemote
                 ? "bg-success"
                 : "bg-[rgb(var(--color-text-secondary))]"
