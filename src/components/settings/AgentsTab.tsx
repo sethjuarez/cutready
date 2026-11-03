@@ -335,7 +335,7 @@ export function HarnessPicker({ value, onChange }: { value: string; onChange: (i
 
   return (
     <div data-testid="harness-picker">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] mb-1 flex items-center gap-1.5">
+      <h3 className="text-xs font-semibold text-[rgb(var(--color-text-secondary))] mb-1 flex items-center gap-1.5">
         <Bot className="w-3.5 h-3.5" /> Runtime Harness
       </h3>
       <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-3">
@@ -619,7 +619,7 @@ export function AgentsTab({ settings, updateSetting, models, loadingModels, canF
     onChange: (providerId: string) => void;
   }) => (
     <div className="flex flex-col gap-1.5">
-      <label className="text-2xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+      <label className="text-xs font-semibold text-[rgb(var(--color-text-secondary))]">
         Provider
       </label>
       <select
@@ -645,7 +645,7 @@ export function AgentsTab({ settings, updateSetting, models, loadingModels, canF
     onChange: (model: string) => void;
   }) => (
     <div className="flex flex-col gap-1.5">
-      <label className="text-2xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+      <label className="text-xs font-semibold text-[rgb(var(--color-text-secondary))]">
         Model
       </label>
       <div className="flex gap-2">
@@ -727,7 +727,7 @@ export function AgentsTab({ settings, updateSetting, models, loadingModels, canF
 
       {/* Built-in agents (read-only) */}
       <div>
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] mb-3">Built-in Agents</h3>
+        <h3 className="text-xs font-semibold text-[rgb(var(--color-text-secondary))] mb-3">Built-in Agents</h3>
         <div className="flex flex-col gap-2">
           {BUILT_IN_AGENTS.map((agent) => (
             <div key={agent.id} className="border border-[rgb(var(--color-border))] rounded-lg p-3">
@@ -759,7 +759,7 @@ export function AgentsTab({ settings, updateSetting, models, loadingModels, canF
 
       {/* Custom agents */}
       <div>
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] mb-3">Custom Agents</h3>
+        <h3 className="text-xs font-semibold text-[rgb(var(--color-text-secondary))] mb-3">Custom Agents</h3>
         {customAgents.length === 0 && (
           <p className="text-xs text-[rgb(var(--color-text-secondary))] italic mb-3">No custom agents yet.</p>
         )}
@@ -847,7 +847,7 @@ export function AgentsTab({ settings, updateSetting, models, loadingModels, canF
 
       {/* Add new agent */}
       <div className="border border-dashed border-[rgb(var(--color-border))] rounded-lg p-4 flex flex-col gap-3">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">New Agent</h4>
+        <h4 className="text-xs font-semibold text-[rgb(var(--color-text-secondary))]">New Agent</h4>
         <input
           type="text"
           value={newName}

@@ -50,7 +50,7 @@ export function UpdatesTab() {
       {/* Current version + actions */}
       <div className="flex items-center justify-between mb-6 p-4 rounded-xl bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))]">
         <div>
-          <p className="text-xs text-[rgb(var(--color-text-secondary))] uppercase tracking-wider mb-0.5">Installed</p>
+          <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-0.5">Installed</p>
           <p className="text-sm font-semibold text-[rgb(var(--color-text))]">
             {currentVersion ? `v${currentVersion}` : "…"}
           </p>
@@ -78,7 +78,7 @@ export function UpdatesTab() {
         <div className="rounded-xl border border-[rgb(var(--color-accent))]/30 bg-[rgb(var(--color-accent))]/5 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-[rgb(var(--color-accent))]/20">
             <div>
-              <p className="text-xs text-[rgb(var(--color-text-secondary))] uppercase tracking-wider mb-0.5">Update Available</p>
+              <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-0.5">Update Available</p>
               <p className="text-sm font-semibold text-[rgb(var(--color-accent))]">v{update.version}</p>
             </div>
             {installing ? (
@@ -95,7 +95,7 @@ export function UpdatesTab() {
           </div>
           {update.body && (
             <div className="px-4 py-3 max-h-[420px] overflow-y-auto">
-              <p className="text-xs text-[rgb(var(--color-text-secondary))] uppercase tracking-wider mb-2">Release Notes</p>
+              <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-2">Release Notes</p>
               <ReleaseNotesMarkdown>{update.body}</ReleaseNotesMarkdown>
             </div>
           )}

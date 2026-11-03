@@ -373,15 +373,15 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
         aria-labelledby="settings-panel-title"
         className="cr-modal-surface mx-auto flex h-full max-w-7xl overflow-hidden"
       >
-        <aside className="flex w-[19rem] shrink-0 flex-col border-r border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]">
-          <div className="border-b border-[rgb(var(--color-border-subtle))] p-5">
-            <div className="flex items-start gap-3">
+        <aside className="flex w-[17rem] shrink-0 flex-col border-r border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]">
+          <div className="border-b border-[rgb(var(--color-border-subtle))] p-4">
+            <div className="flex items-center gap-2.5">
               <img
                 src="/cutready-mark.svg"
                 alt=""
                 aria-hidden="true"
                 draggable={false}
-                className="h-11 w-11 shrink-0 drop-shadow-lg"
+                className="h-8 w-8 shrink-0"
               />
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-[rgb(var(--color-text))]">
@@ -393,27 +393,29 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
               </div>
             </div>
 
-            <div className="relative mt-5">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[rgb(var(--color-text-secondary))]" />
+            <div className="relative mt-4">
+              <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[rgb(var(--color-text-secondary))]" />
               <input
                 value={settingsFilter}
                 onChange={(event) => setSettingsFilter(event.target.value)}
                 placeholder="Search settings..."
                 data-testid="settings-search"
-                className="w-full rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] py-2 pl-9 pr-3 text-sm text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]/35"
+                aria-label="Search settings"
+                className="h-control w-full rounded-control border border-[rgb(var(--color-border))] border-b-[rgb(var(--color-text-secondary))]/80 bg-[rgb(var(--color-surface))] pl-9 pr-3 text-sm text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]/40"
               />
             </div>
 
             {currentProject && (
-              <div className="mt-4 grid grid-cols-2 gap-1 rounded-lg bg-[rgb(var(--color-surface-inset))] p-1">
+              <div className="mt-3 grid grid-cols-2 gap-1 rounded-control bg-[rgb(var(--color-surface-inset))] p-0.5" role="group" aria-label="Settings scope">
                 <button
                   type="button"
                   data-testid="settings-scope-app"
+                  aria-pressed={scope === "app"}
                   onClick={() => {
                     setScope("app");
                     setActiveTab("display");
                   }}
-                  className={`rounded-md px-3 py-2 text-xs font-medium transition-colors ${
+                  className={`rounded-control px-3 py-1.5 text-sm font-medium transition-colors duration-fast ease-fluent ${
                     scope === "app"
                       ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
                       : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
@@ -424,11 +426,12 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
                 <button
                   type="button"
                   data-testid="settings-scope-workspace"
+                  aria-pressed={scope === "workspace"}
                   onClick={() => {
                     setScope("workspace");
                     setActiveTab("repository");
                   }}
-                  className={`rounded-md px-3 py-2 text-xs font-medium transition-colors ${
+                  className={`rounded-control px-3 py-1.5 text-sm font-medium transition-colors duration-fast ease-fluent ${
                     scope === "workspace"
                       ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
                       : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
@@ -441,10 +444,10 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            <div className="mb-2 px-2 text-xs font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
+            <div className="mb-1.5 px-2 text-xs font-semibold text-[rgb(var(--color-text-secondary))]">
               {scope === "workspace" ? "Workspace" : "General"}
             </div>
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {visibleTabs.map((tab) => {
                 const meta = tabMeta[tab];
                 const active = activeTab === tab;
@@ -454,16 +457,18 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
                     type="button"
                     onClick={() => setActiveTab(tab)}
                     data-testid={`settings-tab-${tab}`}
-                    className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
+                    aria-current={active ? "page" : undefined}
+                    className={`group relative flex w-full items-center gap-3 rounded-control px-2.5 py-2 text-left transition-colors duration-fast ease-fluent ${
                       active
-                        ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
-                        : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))]"
+                        ? "bg-fill-selected text-[rgb(var(--color-text))]"
+                        : "text-[rgb(var(--color-text-secondary))] hover:bg-fill-hover hover:text-[rgb(var(--color-text))]"
                     }`}
                   >
-                    <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border transition-colors ${
+                    {active && <span aria-hidden="true" className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full bg-[rgb(var(--color-accent))]" />}
+                    <span aria-hidden="true" className={`grid h-6 w-6 shrink-0 place-items-center transition-colors ${
                       active
-                        ? "border-[rgb(var(--color-accent))]/30 bg-[rgb(var(--color-accent))]/12 text-[rgb(var(--color-accent))]"
-                        : "border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text-secondary))] group-hover:text-[rgb(var(--color-text))]"
+                        ? "text-[rgb(var(--color-accent))]"
+                        : "text-[rgb(var(--color-text-secondary))] group-hover:text-[rgb(var(--color-text))]"
                     }`}>
                       {meta.icon}
                     </span>
@@ -478,7 +483,7 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
               })}
             </div>
             {visibleTabs.length === 0 && (
-              <div className="rounded-lg border border-dashed border-[rgb(var(--color-border))] px-3 py-5 text-center text-xs text-[rgb(var(--color-text-secondary))]">
+              <div className="rounded-card border border-dashed border-[rgb(var(--color-border))] px-3 py-5 text-center text-sm text-[rgb(var(--color-text-secondary))]">
                 No settings match "{settingsFilter}".
               </div>
             )}
@@ -490,10 +495,10 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
           <div className="shrink-0 border-b border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] px-6 py-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-accent))]">
+                <div className="text-xs font-medium text-[rgb(var(--color-text-secondary))]">
                   {activeMeta.eyebrow}
                 </div>
-                <h1 id="settings-panel-title" className="mt-0.5 text-xl font-semibold tracking-tight text-[rgb(var(--color-text))]">
+                <h1 id="settings-panel-title" className="mt-0.5 text-xl font-semibold text-[rgb(var(--color-text))]">
                   {activeMeta.label}
                 </h1>
                 <p className="mt-1 max-w-3xl text-sm leading-5 text-[rgb(var(--color-text-secondary))]">
@@ -504,10 +509,10 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
                 type="button"
                 data-testid="settings-close"
                 onClick={closeSettings}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-control text-[rgb(var(--color-text-secondary))] transition-colors duration-fast ease-fluent hover:bg-fill-hover hover:text-[rgb(var(--color-text))]"
                 aria-label="Close settings"
               >
-                <X className="h-4 w-4" />
+                <X aria-hidden="true" className="h-4 w-4" />
               </button>
             </div>
           </div>
@@ -547,7 +552,8 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
                           type="button"
                           onClick={() => setActiveAiTab(tab)}
                           data-testid={`settings-ai-tab-${tab}`}
-                          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                          aria-pressed={active}
+                          className={`inline-flex h-control items-center gap-1.5 rounded-control border px-3 text-sm font-medium transition-colors duration-fast ease-fluent ${
                             active
                               ? "border-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text))]"
                               : "border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text-secondary))] hover:border-[rgb(var(--color-border-strong))] hover:text-[rgb(var(--color-text))]"
@@ -562,15 +568,15 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
                       <span
                         key={soon}
                         title="Coming soon"
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-[rgb(var(--color-border))] px-3 py-1.5 text-xs font-medium text-[rgb(var(--color-text-secondary))] opacity-60"
+                        className="inline-flex h-control items-center gap-1.5 rounded-control border border-dashed border-[rgb(var(--color-border))] px-3 text-sm font-medium text-[rgb(var(--color-text-secondary))]"
                       >
                         {soon === "transcription" ? <Captions className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                         {soon === "transcription" ? "Transcription" : "Vision"}
-                        <span className="ml-0.5 rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-2xs uppercase tracking-wide">Soon</span>
+                        <span className="ml-0.5 rounded-pill bg-[rgb(var(--color-surface-alt))] px-1.5 text-xs">Soon</span>
                       </span>
                     ))}
                   </div>
-                  <p className="text-xs text-[rgb(var(--color-text-secondary))]">
+                  <p className="text-sm text-[rgb(var(--color-text-secondary))]">
                     {aiInnerMeta[currentAiTab].description}
                   </p>
                   {currentAiTab === "connections" && (
