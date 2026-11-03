@@ -208,7 +208,7 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
         data-testid={isTitle ? "project-switcher-title-trigger" : "project-switcher-trigger"}
         className={
           isTitle
-            ? "flex h-[22px] max-w-[320px] min-w-0 items-center gap-1.5 rounded px-1.5 text-left text-sm leading-none text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+            ? "flex h-7 max-w-[320px] min-w-0 items-center gap-1.5 rounded-control px-2 text-left text-sm leading-none text-[rgb(var(--color-text-secondary))] transition-colors duration-fast ease-fluent hover:bg-fill-hover hover:text-[rgb(var(--color-text))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]"
             : "flex items-center gap-2 w-full px-3 py-1.5 text-left hover:bg-[rgb(var(--color-surface))] transition-colors"
         }
         title={isTitle ? "Switch project" : undefined}
