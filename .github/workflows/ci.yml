@@ -35,6 +35,7 @@ jobs:
               - "crates/**"
               - ".cargo/**"
               - "rust-toolchain*"
+              - "extensions/**"
               - ".github/workflows/ci.yml"
 
   frontend:
@@ -92,6 +93,9 @@ jobs:
       # any warning fails the job.
       - run: npm run check:rust
 
+      # The Copilot canvas talks to the cutready-cli binary built above.
+      - run: npm run check:canvas
+
   rust-windows:
     name: Rust (Windows)
     needs: changes
@@ -113,6 +117,12 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - run: cargo test --workspace --locked
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - run: npm run check:canvas
 
   # Lints cfg(target_os = "macos") desktop code, which Linux and Windows never compile.
   clippy-macos:
@@ -156,3 +166,9 @@ jobs:
 
       - name: Smoke the binary
         run: ./target/debug/cutready-cli --version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - run: npm run check:canvas
