@@ -277,7 +277,7 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
 
       {defaultProvider && (
         <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-3">
-          <div className="text-2xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">Chat and agents use</div>
+          <div className="text-xs font-semibold text-[rgb(var(--color-text-secondary))]">Chat and agents use</div>
           <div className="mt-1 text-sm text-[rgb(var(--color-text))]">
             {defaultProvider.name} <span className="text-[rgb(var(--color-text-secondary))]">· {defaultProvider.model || "No model selected"}</span>
           </div>

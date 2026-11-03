@@ -484,19 +484,19 @@ export function FeedbackListTab() {
 
         <div className="mt-3 grid gap-2 text-xs text-[rgb(var(--color-text-secondary))] sm:grid-cols-3">
           <div className="rounded-lg bg-[rgb(var(--color-surface))] px-3 py-2">
-            <span className="block uppercase tracking-wider opacity-70">Current status</span>
+            <span className="block">Current status</span>
             <span className="mt-0.5 block text-[rgb(var(--color-text))]">
               {diagnosticsPolicy?.enabled ? `On (${diagnosticsPolicy.source})` : "Off"}
             </span>
           </div>
           <div className="rounded-lg bg-[rgb(var(--color-surface))] px-3 py-2">
-            <span className="block uppercase tracking-wider opacity-70">Current log size</span>
+            <span className="block">Current log size</span>
             <span className="mt-0.5 block text-[rgb(var(--color-text))]">
               {formatBytes(auditaurSummary?.session?.session_size_bytes ?? auditaurSummary?.session?.database_size_bytes)}
             </span>
           </div>
           <div className="rounded-lg bg-[rgb(var(--color-surface))] px-3 py-2">
-            <span className="block uppercase tracking-wider opacity-70">Startup flag</span>
+            <span className="block">Startup flag</span>
             <span className="mt-0.5 block font-mono text-[rgb(var(--color-text))]">CUTREADY_DIAGNOSTICS=1</span>
           </div>
         </div>
