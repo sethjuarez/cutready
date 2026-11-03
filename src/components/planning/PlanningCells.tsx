@@ -52,7 +52,7 @@ export function LocalInput({
       placeholder={placeholder}
       aria-label={label}
       readOnly={readOnly}
-      className={`w-full bg-transparent text-xs py-0.5 rounded outline-none transition-colors focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 placeholder:text-[rgb(var(--color-text-secondary))]/40 ${hasActionRail ? "pl-1 pr-5" : "px-1"}`}
+      className={`w-full bg-transparent text-sm font-semibold tabular-nums py-0.5 rounded outline-none transition-colors focus:ring-1 focus:ring-[rgb(var(--color-accent))]/40 placeholder:text-[rgb(var(--color-text-secondary))]/40 ${hasActionRail ? "pl-1 pr-5" : "px-1"}`}
     />
   );
 }
@@ -60,7 +60,7 @@ export function LocalInput({
 /** Move focus to the next (or previous) editable cell in the table.
  *  Returns true if focus moved, false if there was no cell to move to. */
 export function focusAdjacentCell(from: HTMLElement, reverse = false): boolean {
-  const table = from.closest("table");
+  const table = from.closest(".script-table-wrapper");
   if (!table) return false;
   // Use data-tab-order for explicit tab sequence
   const cells = Array.from(
@@ -72,8 +72,8 @@ export function focusAdjacentCell(from: HTMLElement, reverse = false): boolean {
     const bi = parseInt(b.getAttribute("data-tab-cell") || "0", 10);
     return ai - bi;
   });
-  const td = from.closest("td");
-  const idx = cells.findIndex((el) => td?.contains(el));
+  const own = from.closest("[data-tab-cell]");
+  const idx = cells.findIndex((el) => el === own);
   if (idx === -1) return false;
   const next = cells[reverse ? idx - 1 : idx + 1];
   if (next) {
@@ -170,7 +170,7 @@ export function MarkdownCell({
           if (readOnly) return;
           if (e.key === "Tab") {
             e.preventDefault();
-            const td = (e.target as HTMLElement).closest("td");
+            const td = (e.target as HTMLElement).closest<HTMLElement>("[data-tab-cell]");
             if (td) {
               const moved = focusAdjacentCell(td, e.shiftKey);
               if (!moved && !e.shiftKey && onAddRow) onAddRow();
@@ -209,8 +209,8 @@ export function MarkdownCell({
         // Tab / Shift+Tab → move to adjacent cell
         if (e.key === "Tab") {
           e.preventDefault();
-          // Capture td before setIsEditing removes textarea from DOM
-          const td = (e.target as HTMLElement).closest("td");
+          // Capture the cell before setIsEditing removes textarea from DOM
+          const td = (e.target as HTMLElement).closest<HTMLElement>("[data-tab-cell]");
           setIsEditing(false);
           requestAnimationFrame(() => {
             if (td) {
