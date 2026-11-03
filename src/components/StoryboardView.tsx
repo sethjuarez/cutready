@@ -36,7 +36,7 @@ import { ScriptTable } from "./ScriptTable";
 import { useConfirmDialog } from "./ConfirmDialog";
 import { describeWordExport, exportStoryboardToWord, type WordOrientation } from "../utils/exportToWord";
 import { exportStoryboardToPowerPoint, type PowerPointExportContent } from "../utils/exportToPowerPoint";
-import { DocumentHeader } from "./DocumentHeader";
+import { DocumentHeader, documentTitleInputClass } from "./DocumentHeader";
 import { DocumentToolbar, documentToolbarIcons, type DocumentToolbarAction } from "./DocumentToolbar";
 import { FieldAiButton } from "./FieldAiButton";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
@@ -615,7 +615,7 @@ export function StoryboardView() {
                   if (e.key === "Enter") e.currentTarget.blur();
                 }}
                 title={activeStoryboard.title}
-                className={`min-w-0 w-full truncate border-none bg-transparent text-2xl font-semibold text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/40 ${activeStoryboard.title && !storyboardLocked ? "pr-8" : ""} ${storyboardLocked ? "cursor-default" : ""}`}
+                className={documentTitleInputClass(`${activeStoryboard.title && !storyboardLocked ? "pr-8" : ""} ${storyboardLocked ? "cursor-default" : ""}`)}
                 placeholder="Storyboard title..."
                 aria-label="Storyboard title"
               />
