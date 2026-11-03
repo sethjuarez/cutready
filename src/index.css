@@ -49,6 +49,8 @@
   --radius-control: 4px;
   --radius-card: 8px;
   --radius-pill: 12px;
+  /* Elevation for the editor layer and companion pane over the base surface. */
+  --shadow-layer: 0 2px 14px rgb(40 40 80 / 0.06), 0 0 1px rgb(0 0 0 / 0.06);
   /* Motion */
   --motion-fast: 120ms;
   --motion-normal: 200ms;
@@ -110,6 +112,7 @@
   --color-diff-ins-fg: 157 224 152;
   --color-diff-del-bg: 74 28 32;
   --color-diff-del-fg: 255 168 176;
+  --shadow-layer: 0 2px 16px rgb(0 0 0 / 0.3), 0 0 1px rgb(0 0 0 / 0.5);
 }
 
 html[data-density="compact"] {

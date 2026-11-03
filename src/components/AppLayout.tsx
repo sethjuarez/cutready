@@ -11,6 +11,7 @@ import { SettingsPanel } from "./SettingsPanel";
 import { Sidebar } from "./Sidebar";
 import { panelOwner } from "../utils/navigation";
 import { StoryboardPanel } from "./StoryboardPanel";
+import { CompanionPane } from "./CompanionPane";
 import { StoryboardList } from "./StoryboardList";
 import { AssetList } from "./AssetList";
 import { NarrationList } from "./NarrationList";
@@ -419,6 +420,8 @@ export function AppLayout() {
   }, [contentView, setView]);
   const outputPanelAvailable = contentView !== "home" && contentView !== "chat" && !projectSwitching;
   const outputPanelVisible = outputPanelAvailable && outputVisible;
+  const documentView = !projectSwitching && (contentView === "project" || contentView === "assets" || contentView === "narrations" || contentView === "changes");
+  const companionVisible = documentView && !isMerging && showSecondaryPanel;
 
   return (
     <div className="flex flex-col h-full">
@@ -451,8 +454,13 @@ export function AppLayout() {
             />
           )}
 
-          {/* Center column: content + output panel */}
-          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {/* Editor layer: content + output panel, raised over the base surface */}
+          <div
+            data-testid="editor-layer"
+            className={`flex flex-1 flex-col min-w-0 overflow-hidden border-t border-l border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] shadow-layer ${
+              companionVisible ? "rounded-t-card border-r" : "rounded-tl-card"
+            }`}
+          >
             {contentView !== "home" && !projectSwitching && <ProjectHealthBanner />}
             <AdoptFolderDialog />
             <MoveProjectFolderDialog />
@@ -460,7 +468,7 @@ export function AppLayout() {
             <div className="relative flex-1 min-h-0">
               {contentView === "home" && <div className="h-full overflow-y-auto"><HomePanel /></div>}
               {projectSwitching && <ProjectSwitchingState />}
-              {!projectSwitching && (contentView === "project" || contentView === "assets" || contentView === "narrations" || contentView === "changes") && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
+              {documentView && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
               {!projectSwitching && contentView === "recording" && displaySettings.featureRecording && <div className="h-full overflow-y-auto"><RecordingPanel /></div>}
               {contentView === "chat" && <div className="h-full overflow-hidden"><ChatPanel /></div>}
             </div>
@@ -480,6 +488,7 @@ export function AppLayout() {
             </div>
           </div>
 
+          {companionVisible && <CompanionPane />}
         </div>
       </div>
 

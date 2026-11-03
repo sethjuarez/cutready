@@ -89,6 +89,7 @@ vi.mock("../utils/platform", () => ({
 import { AppLayout } from "../components/AppLayout";
 import { useAppStore } from "../stores/appStore";
 import { useChatStore } from "../stores/chatStore";
+import { useVersioningStore } from "../stores/versioningStore";
 
 describe("AppLayout titlebar spacing", () => {
   afterEach(() => {
@@ -242,5 +243,30 @@ describe("AppLayout titlebar spacing", () => {
     expect(useAppStore.getState().showSecondaryPanel).toBe(false);
     expect(useChatStore.getState().chatFocusMode).toBe(false);
     expect(screen.queryByTestId("chat-focus-shell")).not.toBeInTheDocument();
+  });
+
+  it("docks the companion beside the editor layer only in document views", () => {
+    act(() => useAppStore.setState({ view: "project", showSecondaryPanel: true }));
+    render(<AppLayout />);
+
+    const layer = screen.getByTestId("editor-layer");
+    const companion = screen.getByTestId("secondary-chat-panel");
+    expect(layer.parentElement).toContainElement(companion);
+    expect(layer).toHaveClass("rounded-t-card", "border-r");
+
+    act(() => useAppStore.setState({ showSecondaryPanel: false }));
+    expect(screen.queryByTestId("secondary-chat-panel")).not.toBeInTheDocument();
+    expect(layer).toHaveClass("rounded-tl-card");
+    expect(layer).not.toHaveClass("border-r");
+
+    act(() => useAppStore.setState({ view: "home", showSecondaryPanel: true }));
+    expect(screen.queryByTestId("secondary-chat-panel")).not.toBeInTheDocument();
+
+    act(() => {
+      useVersioningStore.setState({ isMerging: true });
+      useAppStore.setState({ view: "project" });
+    });
+    expect(screen.queryByTestId("secondary-chat-panel")).not.toBeInTheDocument();
+    act(() => useVersioningStore.setState({ isMerging: false }));
   });
 });

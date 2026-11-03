@@ -117,7 +117,7 @@ export function Sidebar({
       aria-label="Main"
       data-testid="app-nav"
       data-expanded={expanded ? "true" : "false"}
-      className={`no-select flex h-full shrink-0 flex-col border-r border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] ${
+      className={`no-select flex h-full shrink-0 flex-col ${
         expanded ? "gap-0.5 px-1.5 pb-2 pt-1.5" : "w-12 items-center gap-1.5 px-1.5 py-2"
       }`}
       style={expanded && width ? { width } : undefined}

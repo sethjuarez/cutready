@@ -5,7 +5,6 @@ import { SketchForm } from "./SketchForm";
 import { NoteEditor } from "./NoteEditor";
 import { AssetViewer } from "./AssetViewer";
 import { DiffViewer } from "./DiffViewer";
-import { ChatPanel } from "./ChatPanel";
 import { DatabaseViewer } from "./DatabaseViewer";
 import { ChatArtifactViewer } from "./ChatArtifactViewer";
 import { ResizeHandle } from "./ResizeHandle";
@@ -19,22 +18,19 @@ import { AgentRunTab } from "./AgentRunInspector";
 /**
  * StoryboardPanel — center content area for sketch/storyboard workflow.
  *
- * TabBar + editor content + optional split pane + secondary panel (Chat).
- * The primary sidebar (StoryboardList) is now managed by AppLayout.
+ * TabBar + editor content + optional split pane. The navigation pane and the
+ * companion (chat) pane are composed by AppLayout.
  */
 export function StoryboardPanel() {
   const activeStoryboard = useAppStore((s) => s.activeStoryboard);
   const activeSketch = useAppStore((s) => s.activeSketch);
   const activeNotePath = useAppStore((s) => s.activeNotePath);
-  const showSecondaryPanel = useAppStore((s) => s.showSecondaryPanel);
   const openTabs = useAppStore((s) => s.openTabs);
   const activeTabId = useAppStore((s) => s.activeTabId);
   const splitTabs = useAppStore((s) => s.splitTabs);
   const editorReloadKey = useAppStore((s) => s.editorReloadKey);
   const editorReloadPath = useAppStore((s) => s.editorReloadPath);
   const setActiveEditorGroup = useAppStore((s) => s.setActiveEditorGroup);
-  const secondaryWidth = useAppStore((s) => s.secondaryWidth);
-  const setSecondaryWidth = useAppStore((s) => s.setSecondaryWidth);
   const hasSplit = splitTabs.length > 0;
 
   const activeTab = openTabs.find((t) => t.id === activeTabId);
@@ -56,13 +52,6 @@ export function StoryboardPanel() {
   const [splitWidth, setSplitWidth] = useState<number | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const handleSecondaryResize = useCallback(
-    (delta: number) => {
-      setSecondaryWidth((width) => width - delta);
-    },
-    [setSecondaryWidth],
-  );
-
   const handleSplitResize = useCallback(
     (delta: number) => {
       const availableWidth = panelRef.current?.clientWidth ?? window.innerWidth;
@@ -71,19 +60,6 @@ export function StoryboardPanel() {
     },
     [],
   );
-
-  const secondaryPanel = showSecondaryPanel ? (
-    <>
-      <ResizeHandle direction="horizontal" onResize={handleSecondaryResize} />
-      <div
-        data-testid="secondary-chat-panel"
-        className="shrink-0 h-full bg-[rgb(var(--color-surface-inset))] border-l border-[rgb(var(--color-border))]"
-        style={{ width: secondaryWidth }}
-      >
-        <ChatPanel />
-      </div>
-    </>
-  ) : null;
 
   return (
     <div className="flex h-full min-h-0 overflow-hidden">
@@ -152,8 +128,6 @@ export function StoryboardPanel() {
         </div>
       </div>
 
-      {/* Secondary chat panel */}
-      {secondaryPanel}
     </div>
   );
 }

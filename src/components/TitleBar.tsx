@@ -70,7 +70,7 @@ export function TitleBar({
   return (
     <div
       data-testid="titlebar"
-      className={`no-select z-chrome grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 border-b border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] ${
+      className={`no-select z-chrome grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 bg-[rgb(var(--color-surface-inset))] ${
         // macOS lets the native titlebar own traffic lights; the layout keeps a safe area for them.
         isMac ? "relative shrink-0 pr-3" : "fixed left-0 right-0 top-0 pl-3"
       }`}
