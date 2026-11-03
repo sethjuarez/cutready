@@ -29,7 +29,7 @@ export function StatusBar({ onFeedback }: StatusBarProps) {
           {currentProject ? currentProject.name : "No project open"}
         </span>
         {currentProject && changedFilesCount > 0 && (
-          <span className="rounded bg-[rgb(var(--color-accent))]/10 px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--color-accent))]">
+          <span className="rounded bg-[rgb(var(--color-accent))]/10 px-2 py-0.5 text-2xs font-medium text-[rgb(var(--color-accent))]">
             {changedFilesCount} changed
           </span>
         )}
@@ -38,7 +38,7 @@ export function StatusBar({ onFeedback }: StatusBarProps) {
         <button
           type="button"
           onClick={onFeedback}
-          className="mr-2 inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+          className="mr-2 inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
           title="Send Feedback"
           aria-label="Send feedback"
           data-testid="status-feedback"

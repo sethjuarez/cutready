@@ -17,7 +17,7 @@ export function WorkspaceChangesList() {
   const remaining = changedFiles.length - listed.length;
 
   return (
-    <ul data-testid="workspace-changes-list" className="mt-2 max-h-40 overflow-y-auto rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/55 px-2 py-1.5 font-mono text-[11px] leading-5 text-[rgb(var(--color-text))]">
+    <ul data-testid="workspace-changes-list" className="mt-2 max-h-40 overflow-y-auto rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/55 px-2 py-1.5 font-mono text-xs leading-5 text-[rgb(var(--color-text))]">
       {listed.map((file) => (
         <li key={file.path} className="truncate" title={file.path}>
           <span className="mr-1.5 text-[rgb(var(--color-text-secondary))]">{statusLetter(file.status)}</span>

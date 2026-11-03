@@ -29,10 +29,10 @@ export function SketchCard({ sketch, onOpen, onRemove }: SketchCardProps) {
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium truncate">{sketch.title}</div>
         <div className="flex items-center gap-2 mt-1">
-          <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">
+          <span className="text-2xs text-[rgb(var(--color-text-secondary))]">
             {sketch.row_count} {sketch.row_count === 1 ? "row" : "rows"}
           </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
+          <span className="text-2xs px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
             {stateLabels[sketch.state] ?? sketch.state}
           </span>
         </div>
@@ -68,7 +68,7 @@ export function SketchPickerItem({
     >
       <FileText className="w-3.5 h-3.5 text-[rgb(var(--color-text-secondary))] shrink-0" />
       <span className="text-xs truncate">{sketch.title}</span>
-      <span className="text-[10px] text-[rgb(var(--color-text-secondary))] ml-auto shrink-0">
+      <span className="text-2xs text-[rgb(var(--color-text-secondary))] ml-auto shrink-0">
         {sketch.row_count} rows
       </span>
     </button>

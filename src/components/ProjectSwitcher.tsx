@@ -227,7 +227,7 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
             )}
           </>
         ) : (
-          <span className="text-[12px] font-medium text-[rgb(var(--color-text))] truncate flex-1">
+          <span className="text-xs font-medium text-[rgb(var(--color-text))] truncate flex-1">
             {activeEntry?.name ?? currentProject?.name ?? "Select project"}
           </span>
         )}
@@ -247,16 +247,16 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
         >
           {isTitle && (
             <div className="border-b border-[rgb(var(--color-border))] px-3 py-2">
-              <div className="text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+              <div className="text-2xs font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
                 Workspace
               </div>
-              <div className="truncate text-[12px] text-[rgb(var(--color-text))]">
+              <div className="truncate text-xs text-[rgb(var(--color-text))]">
                 {workspaceName ?? "Current workspace"}
               </div>
             </div>
           )}
           <div className="flex items-center justify-between border-b border-[rgb(var(--color-border))] px-3 py-1.5">
-            <span className="text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+            <span className="text-2xs font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
               Projects
             </span>
             <button
@@ -286,13 +286,13 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
                       if (e.key === "Enter") handleRename();
                       if (e.key === "Escape") { setRenamingPath(null); setRenameValue(""); }
                     }}
-                    className="flex-1 text-[12px] px-2 py-0.5 bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-accent))] rounded text-[rgb(var(--color-text))] outline-none"
+                    className="flex-1 text-xs px-2 py-0.5 bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-accent))] rounded text-[rgb(var(--color-text))] outline-none"
                   />
                   <button
                     onClick={handleRename}
                     disabled={!renameValue.trim()}
                     aria-label="Save project name"
-                    className="text-[11px] px-1.5 py-0.5 rounded bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] disabled:opacity-40"
+                    className="text-xs px-1.5 py-0.5 rounded bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] disabled:opacity-40"
                   >
                     ✓
                   </button>
@@ -311,10 +311,10 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
                       <Trash2 className="h-3 w-3" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-medium text-[rgb(var(--color-text))]">
+                      <div className="text-xs font-medium text-[rgb(var(--color-text))]">
                         Remove {p.name}?
                       </div>
-                      <div className="mt-0.5 text-[10px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
+                      <div className="mt-0.5 text-2xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
                         Removing from the list keeps files on disk. Deleting files will show them as pending deletions in Changes.
                       </div>
                     </div>
@@ -334,7 +334,7 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
                       type="button"
                       onClick={() => handleDelete(p, isActive, false)}
                       disabled={deleting}
-                      className="flex-1 rounded-md border border-[rgb(var(--color-border))] px-2 py-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-accent))]/40 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-40"
+                      className="flex-1 rounded-md border border-[rgb(var(--color-border))] px-2 py-1 text-2xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-accent))]/40 hover:text-[rgb(var(--color-accent))] disabled:pointer-events-none disabled:opacity-40"
                     >
                       Remove from list
                     </button>
@@ -342,7 +342,7 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
                       type="button"
                       onClick={() => handleDelete(p, isActive, true)}
                       disabled={deleting}
-                      className="flex-1 rounded-md bg-error px-2 py-1 text-[10px] font-medium text-accent-fg transition-colors hover:bg-error/80 disabled:pointer-events-none disabled:opacity-40"
+                      className="flex-1 rounded-md bg-error px-2 py-1 text-2xs font-medium text-accent-fg transition-colors hover:bg-error/80 disabled:pointer-events-none disabled:opacity-40"
                     >
                       {deleting ? "Deleting..." : "Delete files"}
                     </button>
@@ -354,7 +354,7 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
             return (
               <div
                 key={p.path}
-                className={`group flex items-center gap-2 w-full px-3 py-1.5 text-left transition-colors text-[12px] ${
+                className={`group flex items-center gap-2 w-full px-3 py-1.5 text-left transition-colors text-xs ${
                   isActive
                     ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
                     : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
@@ -404,7 +404,7 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
           <div className="border-t border-[rgb(var(--color-border))]">
             {isMigrating ? (
               <div className="px-2 py-2">
-                <p className="text-[11px] text-[rgb(var(--color-text-secondary))] mb-1.5 leading-relaxed">
+                <p className="text-xs text-[rgb(var(--color-text-secondary))] mb-1.5 leading-relaxed">
                   <strong className="text-[rgb(var(--color-text))]">Reorganizing workspace.</strong>{" "}
                   Your current files will move into their own project folder.
                   Give this existing project a name:
@@ -422,12 +422,12 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
                       }
                     }}
                     placeholder="e.g. My Demo"
-                    className="flex-1 text-[12px] px-2 py-1 bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] rounded text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none focus:border-[rgb(var(--color-accent))]"
+                    className="flex-1 text-xs px-2 py-1 bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] rounded text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none focus:border-[rgb(var(--color-accent))]"
                   />
                   <button
                     onClick={handleMigrate}
                     disabled={!migrateName.trim()}
-                    className="text-[11px] px-2 py-1 rounded bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] disabled:opacity-40 hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
+                    className="text-xs px-2 py-1 rounded bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] disabled:opacity-40 hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
                   >
                     Next →
                   </button>
@@ -448,12 +448,12 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
                     }
                   }}
                   placeholder="New project name…"
-                  className="flex-1 text-[12px] px-2 py-1 bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] rounded text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none focus:border-[rgb(var(--color-accent))]"
+                  className="flex-1 text-xs px-2 py-1 bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] rounded text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))]/50 outline-none focus:border-[rgb(var(--color-accent))]"
                 />
                 <button
                   onClick={handleCreate}
                   disabled={!newName.trim()}
-                  className="text-[11px] px-2 py-1 rounded bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] disabled:opacity-40 hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
+                  className="text-xs px-2 py-1 rounded bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] disabled:opacity-40 hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
                 >
                   Add
                 </button>
@@ -461,7 +461,7 @@ export function ProjectSwitcher({ variant = "sidebar" }: ProjectSwitcherProps) {
             ) : (
               <button
                 onClick={handleNewProjectClick}
-                className="flex items-center gap-2 w-full px-3 py-1.5 text-left text-[12px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
+                className="flex items-center gap-2 w-full px-3 py-1.5 text-left text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-surface-alt))] transition-colors"
               >
                 <Plus className="w-3 h-3" />
                 New Project

@@ -171,7 +171,7 @@ export function CommandPalette({
                 <span className="text-[rgb(var(--color-text))]">{cmd.title}</span>
               </div>
               {cmd.keybinding && (
-                <kbd className="text-[11px] px-1.5 py-0.5 rounded bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] font-[inherit] shrink-0 ml-3">
+                <kbd className="text-xs px-1.5 py-0.5 rounded bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] font-[inherit] shrink-0 ml-3">
                   {cmd.keybinding}
                 </kbd>
               )}

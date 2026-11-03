@@ -199,13 +199,13 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
                 <div className="flex items-start gap-2">
                   <span className="truncate text-sm font-medium text-[rgb(var(--color-text))]">{provider.name}</span>
                   <div className="flex-1" />
-                  {selected && <span className="rounded-full bg-[rgb(var(--color-accent))]/15 px-1.5 py-0.5 text-[10px] font-medium text-[rgb(var(--color-accent))]">Editing settings</span>}
-                  {defaultProvider && <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))]">Chat & agents</span>}
+                  {selected && <span className="rounded-full bg-[rgb(var(--color-accent))]/15 px-1.5 py-0.5 text-2xs font-medium text-[rgb(var(--color-accent))]">Editing settings</span>}
+                  {defaultProvider && <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-2xs text-[rgb(var(--color-text-secondary))]">Chat & agents</span>}
                 </div>
                 <div className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]">
                   {providerLabel(provider.provider)} · {provider.model || "No model selected"}
                 </div>
-                <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-[rgb(var(--color-text-secondary))]">
+                <div className="mt-2 flex items-center justify-between gap-3 text-xs text-[rgb(var(--color-text-secondary))]">
                   <span>{authStatusLabel(provider)}</span>
                   <span>{providerDescription(provider.provider)}</span>
                 </div>
@@ -277,7 +277,7 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
 
       {defaultProvider && (
         <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-3">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">Chat and agents use</div>
+          <div className="text-2xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">Chat and agents use</div>
           <div className="mt-1 text-sm text-[rgb(var(--color-text))]">
             {defaultProvider.name} <span className="text-[rgb(var(--color-text-secondary))]">· {defaultProvider.model || "No model selected"}</span>
           </div>
@@ -347,7 +347,7 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
                 }`}
               >
                 {method.label}
-                {method.hint ? <span className="ml-1 text-[10px] opacity-70">({method.hint})</span> : null}
+                {method.hint ? <span className="ml-1 text-2xs opacity-70">({method.hint})</span> : null}
               </button>
             ))}
           </div>
@@ -598,7 +598,7 @@ export function AIProviderTab({ settings, updateSetting, isAzure, isFoundry, isA
                   }`}
                 >
                   {m.id}
-                  <span className="ml-2 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                  <span className="ml-2 text-2xs text-[rgb(var(--color-text-secondary))]">
                     {m.context_length ? `${Math.round(m.context_length / 1000)}k ctx` : "ctx ?"}
                     {m.capabilities?.vision === "true" ? " · vision" : ""}
                     {m.capabilities?.responses_api === "true" ? " · responses" : ""}

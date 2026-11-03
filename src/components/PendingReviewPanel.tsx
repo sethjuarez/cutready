@@ -64,17 +64,17 @@ export function PendingReviewPanel() {
 
   return (
     <div className="border-b border-[rgb(var(--color-border))] py-1">
-      <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
+      <div className="px-3 py-1 text-2xs font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
         Pending review
       </div>
       {reviews.map((run) => run.documents.map((doc) => {
         const key = reviewKey(run, doc);
         const busy = busyKey === key;
         return (
-          <div key={key} className="flex items-center gap-2 px-3 py-1 text-[12px]">
+          <div key={key} className="flex items-center gap-2 px-3 py-1 text-xs">
             <div className="min-w-0 flex-1">
               <div className="truncate text-[rgb(var(--color-text))]" title={doc.doc}>{doc.doc}</div>
-              <div className="truncate text-[10px] text-[rgb(var(--color-text-secondary))]">
+              <div className="truncate text-2xs text-[rgb(var(--color-text-secondary))]">
                 {run.actor} · {doc.writes} change{doc.writes === 1 ? "" : "s"}{doc.created ? " · new" : ""}
               </div>
             </div>

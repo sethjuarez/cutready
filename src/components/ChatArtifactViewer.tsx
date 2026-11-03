@@ -101,7 +101,7 @@ export function ChatArtifactViewer({ path }: ChatArtifactViewerProps) {
               <ChatArtifactIcon size={20} />
             </span>
             <div className="min-w-0 flex-1">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
+              <div className="text-2xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
                 Chat
               </div>
               <h1 className="mt-1 truncate text-2xl font-semibold text-[rgb(var(--color-text))]">
@@ -112,7 +112,7 @@ export function ChatArtifactViewer({ path }: ChatArtifactViewerProps) {
                   {artifact.summary}
                 </p>
               )}
-              <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-[rgb(var(--color-text-secondary))]">
+              <div className="mt-4 flex flex-wrap gap-2 text-xs text-[rgb(var(--color-text-secondary))]">
                 <span className="inline-flex items-center gap-1 rounded-full border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] px-2 py-1">
                   <Clock className="h-3 w-3" />
                   {formatDate(artifact.promoted_at || artifact.updated_at)}

@@ -259,7 +259,7 @@ export function ChangesPanel() {
             setProjectFilter("all");
             setShowProjectFilterMenu(false);
           }}
-          className={`group relative flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors ${
+          className={`group relative flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${
             projectFilter === "all"
               ? "bg-[rgb(var(--color-accent))]/10 font-medium text-[rgb(var(--color-accent))]"
               : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/30"
@@ -274,7 +274,7 @@ export function ChangesPanel() {
             )}
           </span>
           <span className="min-w-0 flex-1 truncate">All Projects</span>
-          <span className="shrink-0 text-[9px] text-[rgb(var(--color-text-secondary))]/70">{changedFiles.length}</span>
+          <span className="shrink-0 text-2xs text-[rgb(var(--color-text-secondary))]/70">{changedFiles.length}</span>
         </button>
         {selectableProjects.map((project) => {
           const selected = projectFilter === project.path;
@@ -286,7 +286,7 @@ export function ChangesPanel() {
                 setProjectFilter(project.path);
                 setShowProjectFilterMenu(false);
               }}
-              className={`group relative flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors ${
+              className={`group relative flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${
                 selected
                   ? "bg-[rgb(var(--color-accent))]/10 font-medium text-[rgb(var(--color-accent))]"
                   : "text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))]/30"
@@ -301,7 +301,7 @@ export function ChangesPanel() {
                 )}
               </span>
               <span className="min-w-0 flex-1 truncate">{project.name}</span>
-              <span className="shrink-0 text-[9px] text-[rgb(var(--color-text-secondary))]/70">{projectChangeCount}</span>
+              <span className="shrink-0 text-2xs text-[rgb(var(--color-text-secondary))]/70">{projectChangeCount}</span>
             </button>
           );
         })}
@@ -348,7 +348,7 @@ export function ChangesPanel() {
                 onClick={() => {
                   if (isMultiProject && selectableProjects.length > 1) setShowProjectFilterMenu((open) => !open);
                 }}
-                className="flex h-6 min-w-0 max-w-full items-center gap-1.5 rounded-md px-1.5 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+                className="flex h-6 min-w-0 max-w-full items-center gap-1.5 rounded-md px-1.5 text-2xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
                 title={isMultiProject ? "Filter visible changes by project. Save and discard still apply to the whole workspace." : "Showing changes for this project"}
               >
                 <FileEdit className="h-3 w-3 shrink-0" />
@@ -378,7 +378,7 @@ export function ChangesPanel() {
             </button>
           </div>
           {isDirty && (
-            <div className="mt-1 rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/70 px-2 py-1 text-[9px] leading-snug text-[rgb(var(--color-text-secondary))]">
+            <div className="mt-1 rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/70 px-2 py-1 text-2xs leading-snug text-[rgb(var(--color-text-secondary))]">
               {actionScopeMessage}
               {selectedProjectFilter && otherChangeCount > 0 && (
                 <span> {otherChangeCount} change{otherChangeCount === 1 ? "" : "s"} outside this filter.</span>
@@ -387,7 +387,7 @@ export function ChangesPanel() {
           )}
 
           {hasRemote && (
-            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-[9px] leading-tight text-[rgb(var(--color-text-secondary))]/60">
+            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-2xs leading-tight text-[rgb(var(--color-text-secondary))]/60">
               <SyncBar variant="compact" />
               {(ahead > 0 || behind > 0) && (
                 <div className="flex shrink-0 items-center gap-1">
@@ -399,7 +399,7 @@ export function ChangesPanel() {
                           setShowOutgoing((value) => !value);
                           setShowIncoming(false);
                         }}
-                        className="flex h-4 items-center gap-0.5 rounded-full bg-[rgb(var(--color-accent))]/10 px-1.5 text-[10px] font-semibold text-[rgb(var(--color-accent))] transition-colors hover:bg-[rgb(var(--color-accent))]/15"
+                        className="flex h-4 items-center gap-0.5 rounded-full bg-[rgb(var(--color-accent))]/10 px-1.5 text-2xs font-semibold text-[rgb(var(--color-accent))] transition-colors hover:bg-[rgb(var(--color-accent))]/15"
                         title={`${ahead} outgoing snapshot${ahead !== 1 ? "s" : ""} ready to share`}
                       >
                         <ArrowUp className="h-2.5 w-2.5" />
@@ -416,7 +416,7 @@ export function ChangesPanel() {
                           setShowIncoming((value) => !value);
                           setShowOutgoing(false);
                         }}
-                        className="flex h-4 items-center gap-0.5 rounded-full bg-warning/10 px-1.5 text-[10px] font-semibold text-warning transition-colors hover:bg-warning/15"
+                        className="flex h-4 items-center gap-0.5 rounded-full bg-warning/10 px-1.5 text-2xs font-semibold text-warning transition-colors hover:bg-warning/15"
                         title={`${behind} incoming collaborator snapshot${behind !== 1 ? "s" : ""}`}
                       >
                         <ArrowDown className="h-2.5 w-2.5" />
@@ -431,7 +431,7 @@ export function ChangesPanel() {
           )}
 
           {branchRename && (
-            <div className="mt-1.5 rounded-lg border border-[rgb(var(--color-warning))]/30 bg-[rgb(var(--color-warning))]/10 p-2 text-[10px] leading-snug text-[rgb(var(--color-text))]">
+            <div className="mt-1.5 rounded-lg border border-[rgb(var(--color-warning))]/30 bg-[rgb(var(--color-warning))]/10 p-2 text-2xs leading-snug text-[rgb(var(--color-text))]">
               <div className="flex min-w-0 items-start gap-2">
                 <GitBranch className="mt-0.5 h-3 w-3 shrink-0 text-[rgb(var(--color-warning))]" />
                 <div className="min-w-0 flex-1">
@@ -462,7 +462,7 @@ export function ChangesPanel() {
       {changesExpanded && (
         <div className={`${changesBodyClass} px-1 py-1`}>
           {filteredChangedFiles.length === 0 ? (
-            <div className="flex items-center gap-2 px-2 py-3 text-[10px] text-[rgb(var(--color-text-secondary))]">
+            <div className="flex items-center gap-2 px-2 py-3 text-2xs text-[rgb(var(--color-text-secondary))]">
               <Camera className="h-3.5 w-3.5 opacity-40" />
               <span>
                 {selectedProjectFilter
@@ -520,7 +520,7 @@ export function ChangesPanel() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Filter snapshots…"
-            className="w-full rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 py-1 text-[10px] text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:border-[rgb(var(--color-accent))]"
+            className="w-full rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 py-1 text-2xs text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:border-[rgb(var(--color-accent))]"
             autoFocus
           />
         </div>
@@ -533,9 +533,9 @@ export function ChangesPanel() {
               <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-[rgb(var(--color-accent))]/10">
                 <Clock className="h-4 w-4 text-[rgb(var(--color-accent))]" />
               </div>
-              <p className="mb-0.5 text-[11px] font-medium text-[rgb(var(--color-text))]">No snapshots yet</p>
-              <p className="max-w-[200px] text-[10px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
-                Press <kbd className="rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1 py-0.5 text-[9px] font-mono">Ctrl+S</kbd> to save a workspace snapshot.
+              <p className="mb-0.5 text-xs font-medium text-[rgb(var(--color-text))]">No snapshots yet</p>
+              <p className="max-w-[200px] text-2xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
+                Press <kbd className="rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1 py-0.5 text-2xs font-mono">Ctrl+S</kbd> to save a workspace snapshot.
               </p>
             </div>
           ) : (
@@ -550,7 +550,7 @@ export function ChangesPanel() {
                 onNodeClick={handleNodeClick}
               />
               {searchQuery && filteredNodes.length === 0 && (
-                <div className="px-4 py-4 text-center text-[10px] text-[rgb(var(--color-text-secondary))]">
+                <div className="px-4 py-4 text-center text-2xs text-[rgb(var(--color-text-secondary))]">
                   No snapshots match "{searchQuery}"
                 </div>
               )}
@@ -626,7 +626,7 @@ function WorkspaceModeBadge({ remote, syncError }: { remote: boolean; syncError:
 
   return (
     <span
-      className={`flex h-5 shrink-0 items-center gap-1 rounded-full border px-1.5 text-[9px] font-medium ${toneClass}`}
+      className={`flex h-5 shrink-0 items-center gap-1 rounded-full border px-1.5 text-2xs font-medium ${toneClass}`}
       title={title}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
@@ -642,14 +642,14 @@ function OutgoingPreview({ count, style }: { count: number; style?: CSSPropertie
       className={`${style ? "z-[var(--z-overlay)]" : "absolute left-0 top-full z-dropdown mt-1 w-64"} rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg`}
     >
       <div className="py-1">
-        <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+        <div className="px-2 pb-1 text-2xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
           Outgoing work
         </div>
         <div className="border-t border-[rgb(var(--color-border))]/60 px-2 py-1.5">
-          <div className="text-[11px] font-medium text-[rgb(var(--color-text))]">
+          <div className="text-xs font-medium text-[rgb(var(--color-text))]">
             {count} snapshot{count === 1 ? "" : "s"} ready to share
           </div>
-          <div className="mt-0.5 text-[9px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
+          <div className="mt-0.5 text-2xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
             Use Sync to publish this project's updates.
           </div>
         </div>
@@ -679,20 +679,20 @@ function SectionHeader({
     <div className="flex h-8 min-w-0 shrink-0 items-center justify-between gap-2 border-b border-[rgb(var(--color-border))] px-3">
       <button
         onClick={onToggle}
-        className="flex min-w-0 flex-1 items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
+        className="flex min-w-0 flex-1 items-center gap-1 text-xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))]"
       >
         {expanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
         <span className="shrink-0 truncate">{title}</span>
         {scope && (
           <span
-            className="min-w-0 max-w-full shrink truncate rounded-full border border-[rgb(var(--color-border))] px-1.5 py-0 text-left text-[9px] font-medium normal-case tracking-normal text-[rgb(var(--color-text-secondary))]/80"
+            className="min-w-0 max-w-full shrink truncate rounded-full border border-[rgb(var(--color-border))] px-1.5 py-0 text-left text-2xs font-medium normal-case tracking-normal text-[rgb(var(--color-text-secondary))]/80"
             title={scopeTitle}
           >
             {scope}
           </span>
         )}
         {count !== undefined && count > 0 && (
-          <span className="ml-1 shrink-0 rounded-full bg-[rgb(var(--color-accent))]/15 px-1 py-0 text-[9px] font-medium text-[rgb(var(--color-accent))]">
+          <span className="ml-1 shrink-0 rounded-full bg-[rgb(var(--color-accent))]/15 px-1 py-0 text-2xs font-medium text-[rgb(var(--color-accent))]">
             {count}
           </span>
         )}
@@ -730,7 +730,7 @@ function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; 
 
   return (
     <div className="mb-1">
-      <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+      <div className="flex items-center gap-1.5 px-3 py-1 text-2xs font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
         {icon}
         {label} ({files.length})
       </div>
@@ -755,9 +755,9 @@ function FileGroup({ label, files, icon }: { label: string; files: DiffEntry[]; 
                 title={isDatabasePath(file.path) && file.status !== "deleted" ? `View database: ${file.path}` : `View diff: ${file.path}`}
                 aria-label={isDatabasePath(file.path) && file.status !== "deleted" ? `View database: ${file.path}` : `View diff: ${file.path}`}
               >
-                <span className="truncate text-[12px] font-medium text-[rgb(var(--color-text))]">{filename}</span>
+                <span className="truncate text-xs font-medium text-[rgb(var(--color-text))]">{filename}</span>
                 {(file.additions > 0 || file.deletions > 0) && (
-                  <span className="shrink-0 flex items-center gap-1 text-[10px]">
+                  <span className="shrink-0 flex items-center gap-1 text-2xs">
                     {file.additions > 0 && <span className="text-success">+{file.additions}</span>}
                     {file.deletions > 0 && <span className="text-error">-{file.deletions}</span>}
                   </span>

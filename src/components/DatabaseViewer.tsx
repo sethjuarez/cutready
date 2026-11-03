@@ -98,10 +98,10 @@ export function DatabaseViewer({ path }: { path: string }) {
               </span>
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">{basename(preview.path)}</p>
-                <p className="text-[11px] text-[rgb(var(--color-text-secondary))]">{formatBytes(preview.size)}</p>
+                <p className="text-xs text-[rgb(var(--color-text-secondary))]">{formatBytes(preview.size)}</p>
               </div>
             </div>
-            <p className="mt-3 truncate font-mono text-[10px] text-[rgb(var(--color-text-secondary))]" title={preview.path}>
+            <p className="mt-3 truncate font-mono text-2xs text-[rgb(var(--color-text-secondary))]" title={preview.path}>
               {preview.path}
             </p>
           </div>
@@ -124,7 +124,7 @@ export function DatabaseViewer({ path }: { path: string }) {
                   >
                     <Table2 className="h-3.5 w-3.5 shrink-0" />
                     <span className="min-w-0 flex-1 truncate text-xs font-medium">{candidate.name}</span>
-                    <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                    <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-2xs text-[rgb(var(--color-text-secondary))]">
                       {candidate.row_count}
                     </span>
                   </button>
@@ -141,12 +141,12 @@ export function DatabaseViewer({ path }: { path: string }) {
             <header className="shrink-0 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-5 py-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+                  <p className="text-xs font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
                     {table.table_type}
                   </p>
                   <h2 className="mt-1 truncate text-lg font-semibold">{table.name}</h2>
                 </div>
-                <div className="flex shrink-0 items-center gap-2 text-[11px] text-[rgb(var(--color-text-secondary))]">
+                <div className="flex shrink-0 items-center gap-2 text-xs text-[rgb(var(--color-text-secondary))]">
                   <span className="rounded-full border border-[rgb(var(--color-border))] px-2 py-1">
                     {table.columns.length} columns
                   </span>
@@ -163,12 +163,12 @@ export function DatabaseViewer({ path }: { path: string }) {
                   <div className="flex items-center gap-2">
                     {column.primary_key && <KeyRound className="h-3 w-3 text-[rgb(var(--color-accent))]" />}
                     <span className="truncate font-mono text-xs font-medium">{column.name}</span>
-                    <span className="ml-auto text-[10px] uppercase text-[rgb(var(--color-text-secondary))]">
+                    <span className="ml-auto text-2xs uppercase text-[rgb(var(--color-text-secondary))]">
                       {column.data_type || "any"}
                     </span>
                   </div>
                   {column.not_null && (
-                    <p className="mt-1 text-[10px] text-[rgb(var(--color-text-secondary))]">not null</p>
+                    <p className="mt-1 text-2xs text-[rgb(var(--color-text-secondary))]">not null</p>
                   )}
                 </div>
               ))}
@@ -210,7 +210,7 @@ export function DatabaseViewer({ path }: { path: string }) {
             </div>
 
             {table.row_count > table.rows.length && (
-              <div className="shrink-0 border-t border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-inset))] px-4 py-2 text-[11px] text-[rgb(var(--color-text-secondary))]">
+              <div className="shrink-0 border-t border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-inset))] px-4 py-2 text-xs text-[rgb(var(--color-text-secondary))]">
                 Showing first {table.rows.length} rows.
               </div>
             )}

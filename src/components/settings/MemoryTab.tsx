@@ -138,11 +138,11 @@ export function MemoryTab() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-medium ${categoryBadge(m.category)}`}>
+                    <span className={`px-1.5 py-0.5 text-2xs rounded-full font-medium ${categoryBadge(m.category)}`}>
                       {m.category}
                     </span>
                     {m.tags.length > 0 && (
-                      <span className="text-[10px] text-[rgb(var(--color-text-secondary))] truncate">
+                      <span className="text-2xs text-[rgb(var(--color-text-secondary))] truncate">
                         {m.tags.join(", ")}
                       </span>
                     )}
@@ -157,14 +157,14 @@ export function MemoryTab() {
                           setEditContent(m.content);
                         }
                       }}
-                      className="px-1.5 py-0.5 text-[10px] rounded hover:bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text-secondary))]"
+                      className="px-1.5 py-0.5 text-2xs rounded hover:bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text-secondary))]"
                       aria-label={`${isEditing ? "Cancel editing" : "Edit"} memory: ${m.content}`}
                     >
                       {isEditing ? "Cancel" : "Edit"}
                     </button>
                     <button
                       onClick={() => handleDelete(idx)}
-                      className="px-1.5 py-0.5 text-[10px] rounded hover:bg-error/10 text-error"
+                      className="px-1.5 py-0.5 text-2xs rounded hover:bg-error/10 text-error"
                       aria-label={`Delete memory: ${m.content}`}
                     >
                       Delete
@@ -192,7 +192,7 @@ export function MemoryTab() {
                 ) : (
                   <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-[rgb(var(--color-text))]">{m.content}</p>
                 )}
-                <span className="text-[10px] text-[rgb(var(--color-text-secondary))]/50">
+                <span className="text-2xs text-[rgb(var(--color-text-secondary))]/50">
                   {new Date(m.created_at).toLocaleDateString()}
                 </span>
               </div>

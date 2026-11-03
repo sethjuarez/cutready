@@ -127,7 +127,7 @@ export function AssetList() {
     <div className="flex flex-col h-full bg-[rgb(var(--color-surface-inset))] text-[rgb(var(--color-text))]">
       {/* Header */}
       <div className="flex h-8 shrink-0 items-center gap-2 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3">
-        <span className="text-[11px] font-semibold text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">
+        <span className="text-xs font-semibold text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">
           Visuals
         </span>
         <button
@@ -143,7 +143,7 @@ export function AssetList() {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortBy)}
-              className="cursor-pointer rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))] outline-none transition-colors hover:text-[rgb(var(--color-text))] focus:border-[rgb(var(--color-accent))]"
+              className="cursor-pointer rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-2xs text-[rgb(var(--color-text-secondary))] outline-none transition-colors hover:text-[rgb(var(--color-text))] focus:border-[rgb(var(--color-accent))]"
             >
               <option value="type">Type</option>
               <option value="reference">Reference</option>
@@ -163,7 +163,7 @@ export function AssetList() {
       {/* Asset list */}
       <div className="flex-1 overflow-y-auto">
         {assets.length === 0 ? (
-          <div className="px-3 py-8 text-center text-[12px] text-[rgb(var(--color-text-secondary))]">
+          <div className="px-3 py-8 text-center text-xs text-[rgb(var(--color-text-secondary))]">
             No visuals yet.
             <br />
             <button
@@ -215,7 +215,7 @@ function AssetGroupSection({
     <div>
       {showGroupHeader && (
         <div
-          className={`flex h-8 w-full items-center gap-1.5 border-b border-[rgb(var(--color-border))] px-3 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+          className={`flex h-8 w-full items-center gap-1.5 border-b border-[rgb(var(--color-border))] px-3 text-xs font-semibold uppercase tracking-wider transition-colors ${
             isUnlinked
               ? "text-[rgb(var(--color-warning))]"
               : "text-[rgb(var(--color-text-secondary))]"
@@ -240,7 +240,7 @@ function AssetGroupSection({
             <button
               type="button"
               onClick={() => onDeleteUnlinked(group.items.length)}
-              className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-[rgb(var(--color-error))] transition-colors hover:bg-[rgb(var(--color-error))]/10"
+              className="rounded-md px-1.5 py-0.5 text-2xs font-semibold text-[rgb(var(--color-error))] transition-colors hover:bg-[rgb(var(--color-error))]/10"
               title="Delete all unlinked visuals"
             >
               Delete
@@ -315,7 +315,7 @@ function AssetItem({
 
       {/* Name */}
       <div className="flex-1 min-w-0">
-        <div className="text-[12px] truncate">{filename}</div>
+        <div className="text-xs truncate">{filename}</div>
       </div>
 
       {/* Delete button */}

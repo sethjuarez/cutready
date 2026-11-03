@@ -197,7 +197,7 @@ function RowChips({ row }: { row: PlanningRow }) {
       {chips.map((chip) => (
         <span
           key={chip}
-          className="rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]"
+          className="rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 text-2xs font-medium text-[rgb(var(--color-text-secondary))]"
         >
           {chip}
         </span>
@@ -388,7 +388,7 @@ function RowNarration({
             <Play className="h-3.5 w-3.5 fill-current" />
           )}
         </button>
-        <span className="hidden items-center gap-1 whitespace-nowrap text-[10px] tabular-nums text-[rgb(var(--color-text-secondary))] xl:inline-flex">
+        <span className="hidden items-center gap-1 whitespace-nowrap text-2xs tabular-nums text-[rgb(var(--color-text-secondary))] xl:inline-flex">
           <Mic2 className="h-3 w-3 shrink-0 text-[rgb(var(--color-accent))]" />
           {formatPlaybackTime(currentTime)} / {formatPlaybackTime(duration)}
         </span>
@@ -441,7 +441,7 @@ function RowNarration({
         </div>
       </div>
       {loadError && (
-        <div className="mt-1 text-[11px] text-[rgb(var(--color-error))]">
+        <div className="mt-1 text-xs text-[rgb(var(--color-error))]">
           {loadError}
         </div>
       )}
@@ -490,7 +490,7 @@ function NarrationPlaceholder({
 
   return (
     <div className="flex min-w-0 items-center justify-between gap-2 overflow-hidden rounded-lg border border-dashed border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/35 px-2 py-1.5">
-      <span className="flex min-w-0 items-center gap-1.5 truncate text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/75">
+      <span className="flex min-w-0 items-center gap-1.5 truncate text-2xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/75">
         <Mic2 className="h-3 w-3 shrink-0" />
         {hasNarrationPlan ? "Narration plan" : "No narration"}
       </span>
@@ -721,7 +721,7 @@ function VisualRowHeader({
           {rowIndex + 1}
         </span>
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">Time</span>
+          <span className="text-2xs font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">Time</span>
           <div className="min-w-[4.5rem] max-w-[8rem] flex-1">
             <EditableText
               value={row.time}
@@ -1262,7 +1262,7 @@ export function SketchScreenView({
               />
               <div className="grid gap-3 p-4 pt-3 md:grid-cols-2">
                 <div>
-                  <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
+                  <div className="mb-1 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
                     Narrative
                     {row.visual && <Sparkles className="h-3.5 w-3.5 text-[rgb(var(--color-accent))]" />}
                   </div>
@@ -1276,7 +1276,7 @@ export function SketchScreenView({
                   />
                 </div>
                 <div>
-                  <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
+                  <h3 className="mb-1 text-2xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
                     Actions
                   </h3>
                   <EditableText

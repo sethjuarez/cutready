@@ -2041,7 +2041,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                 {chatFocusMode ? "Chat - Focus mode" : "Chat"}
               </p>
               {chatFocusMode && (
-                <p className="mt-0.5 text-[10px] leading-none text-[rgb(var(--color-text-secondary))]">
+                <p className="mt-0.5 text-2xs leading-none text-[rgb(var(--color-text-secondary))]">
                   Esc exits focus mode
                 </p>
               )}
@@ -2059,7 +2059,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           <div className="flex-1" />
           <button
             disabled={loading || promotingChat || messages.length === 0}
-            className="flex h-[26px] items-center justify-center gap-1.5 rounded px-2 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-toolbar))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-[26px] items-center justify-center gap-1.5 rounded px-2 text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-toolbar))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
             onClick={promoteCurrentChat}
             title={messages.length === 0 ? "Start a chat before promoting it" : "Promote this chat into a project chat document"}
             aria-label="Promote chat"
@@ -2070,8 +2070,8 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           <button
             className={`flex h-[26px] items-center justify-center rounded transition-colors ${
               chatFocusMode
-                ? "gap-1.5 px-2 text-[11px] font-medium text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10"
-                : "gap-1.5 px-2 text-[11px] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-toolbar))] hover:text-[rgb(var(--color-text))]"
+                ? "gap-1.5 px-2 text-xs font-medium text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10"
+                : "gap-1.5 px-2 text-xs text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-toolbar))] hover:text-[rgb(var(--color-text))]"
             }`}
             onClick={() => setChatFocusMode(!chatFocusMode)}
             title={chatFocusMode ? "Exit focus mode (Esc)" : "Expand chat to focus mode"}
@@ -2115,7 +2115,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                 chatFocusMode ? "max-w-sm" : "max-w-[220px]"
               }`}
             >
-              I can help plan your demo, generate sketches, or refine your script. Use <kbd className="px-1 py-0.5 text-[10px] bg-[rgb(var(--color-surface-alt))] rounded border border-[rgb(var(--color-border))]">@</kbd> to reference project documents and websites.
+              I can help plan your demo, generate sketches, or refine your script. Use <kbd className="px-1 py-0.5 text-2xs bg-[rgb(var(--color-surface-alt))] rounded border border-[rgb(var(--color-border))]">@</kbd> to reference project documents and websites.
             </p>
             <div className="flex flex-wrap gap-1.5 justify-center max-w-[260px]">
               {(() => {
@@ -2133,7 +2133,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                 return suggestions.map((suggestion) => (
                   <button
                     key={suggestion}
-                    className="px-2.5 py-1 text-[11px] rounded-full border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors"
+                    className="px-2.5 py-1 text-xs rounded-full border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/5 transition-colors"
                     onClick={() => {
                       // Auto-add active note as reference for note-specific suggestions
                       if (activeNotePath && suggestion === "Improve this note") {
@@ -2202,7 +2202,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                 return (
                 <span
                   key={ref.path}
-                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] rounded border transition-colors ${
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded border transition-colors ${
                     ref.type === "web" && ref.webStatus === "loading"
                       ? `${c.bg} ${c.text} ${c.border} animate-pulse`
                       : ref.type === "web" && ref.webStatus === "error"
@@ -2251,10 +2251,10 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
               const ref = references.find((r) => r.path === expandedWebRef);
               if (!ref?.webContent) return null;
               return (
-                <div className="rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-[11px] text-[rgb(var(--color-text-secondary))] overflow-hidden">
+                <div className="rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-xs text-[rgb(var(--color-text-secondary))] overflow-hidden">
                   <div className="flex items-center justify-between px-2 py-1 border-b border-[rgb(var(--color-border))]">
                     <span className="truncate font-medium">{ref.path}</span>
-                    <span className="shrink-0 text-[10px] tabular-nums">{ref.webContent.length.toLocaleString()} chars</span>
+                    <span className="shrink-0 text-2xs tabular-nums">{ref.webContent.length.toLocaleString()} chars</span>
                   </div>
                   <div className="max-h-[120px] overflow-y-auto px-2 py-1.5 font-mono whitespace-pre-wrap leading-relaxed">
                     {ref.webContent}
@@ -2282,7 +2282,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                 >
                   <FileTypeIcon type={file.type} />
                   <span className="flex-1 truncate">{file.title}</span>
-                  <span className="text-[10px] text-[rgb(var(--color-text-secondary))] opacity-50">{referenceTypeLabel(file.type)}</span>
+                  <span className="text-2xs text-[rgb(var(--color-text-secondary))] opacity-50">{referenceTypeLabel(file.type)}</span>
                 </button>
               ))}
             </div>
@@ -2307,7 +2307,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           <div className="relative" ref={contextPickerRef}>
             <button
               disabled={loading}
-              className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
+              className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-xs transition-colors ${
                 showContextPicker
                   ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
                   : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))]"
@@ -2321,7 +2321,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
               <div className="absolute bottom-full left-0 mb-1 w-[240px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight: ctxMaxH }}>
                 <div className="px-2.5 pt-2 pb-1 shrink-0">
                   <input
-                    className="w-full px-2 py-1 text-[11px] bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] rounded text-[rgb(var(--color-text))] placeholder-[rgb(var(--color-text-secondary))] focus:outline-none focus:border-[rgb(var(--color-accent))]"
+                    className="w-full px-2 py-1 text-xs bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] rounded text-[rgb(var(--color-text))] placeholder-[rgb(var(--color-text-secondary))] focus:outline-none focus:border-[rgb(var(--color-accent))]"
                     placeholder="Search documents…"
                     value={contextFilter}
                     onChange={(e) => setContextFilter(e.target.value)}
@@ -2330,14 +2330,14 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   {contextPickerOptions.length === 0 ? (
-                    <div className="px-3 py-2 text-[11px] text-[rgb(var(--color-text-secondary))]">
+                    <div className="px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))]">
                       No matching documents
                     </div>
                   ) : (
                     contextPickerOptions.map((file) => (
                       <button
                         key={file.path}
-                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-[11px] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] transition-colors"
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-xs text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] transition-colors"
                         onClick={() => {
                           setReferences((prev) => [...prev, file]);
                           setShowContextPicker(false);
@@ -2346,7 +2346,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                       >
                         <FileTypeIcon type={file.type} />
                         <span className="flex-1 truncate">{file.title}</span>
-                        <span className="text-[10px] opacity-40">{referenceTypeLabel(file.type)}</span>
+                        <span className="text-2xs opacity-40">{referenceTypeLabel(file.type)}</span>
                       </button>
                     ))
                   )}
@@ -2358,7 +2358,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           {/* Agent picker */}
           <div className="relative" ref={agentPickerRef}>
             <button
-              className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
+              className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-xs transition-colors ${
                 showAgentPicker
                   ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
                   : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))]"
@@ -2375,7 +2375,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                 {BUILT_IN_AGENTS.length > 0 && (
                   <>
                     <div className="px-3 py-1.5 border-b border-[rgb(var(--color-border))] shrink-0">
-                      <span className="text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">Built-in</span>
+                      <span className="text-2xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">Built-in</span>
                     </div>
                     <div className="py-0.5">
                       {BUILT_IN_AGENTS.map((agent) => {
@@ -2383,7 +2383,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                         return (
                         <button
                           key={agent.id}
-                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors ${
+                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left transition-colors ${
                             selectedAgent.id === agent.id
                               ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text))]"
                               : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
@@ -2398,11 +2398,11 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                             <div className="flex items-center gap-1">
                               <span>{agent.name}</span>
                               {modelOverride && (
-                                <span className="text-[9px] text-[rgb(var(--color-text-secondary))] opacity-60">{modelOverride}</span>
+                                <span className="text-2xs text-[rgb(var(--color-text-secondary))] opacity-60">{modelOverride}</span>
                               )}
                             </div>
                             {agent.description && (
-                              <div className="text-[9px] text-[rgb(var(--color-text-secondary))] opacity-70 truncate">{agent.description}</div>
+                              <div className="text-2xs text-[rgb(var(--color-text-secondary))] opacity-70 truncate">{agent.description}</div>
                             )}
                           </div>
                           {selectedAgent.id === agent.id && <IconCheck size={11} />}
@@ -2415,7 +2415,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                 {(settings.aiAgents?.length ?? 0) > 0 && (
                   <>
                     <div className="px-3 py-1.5 border-t border-[rgb(var(--color-border))] shrink-0">
-                      <span className="text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">Custom</span>
+                      <span className="text-2xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">Custom</span>
                     </div>
                     <div className="py-0.5 overflow-y-auto">
                       {(settings.aiAgents || []).map((agent) => {
@@ -2423,7 +2423,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                         return (
                         <button
                           key={agent.id}
-                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-left transition-colors ${
+                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left transition-colors ${
                             selectedAgent.id === agent.id
                               ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text))]"
                               : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
@@ -2436,7 +2436,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                           <IconUser size={11} />
                           <span className="truncate">{agent.name}</span>
                           {modelOverride && (
-                            <span className="text-[9px] text-[rgb(var(--color-text-secondary))] opacity-60 truncate">{modelOverride}</span>
+                            <span className="text-2xs text-[rgb(var(--color-text-secondary))] opacity-60 truncate">{modelOverride}</span>
                           )}
                           {selectedAgent.id === agent.id && <IconCheck size={11} />}
                         </button>
@@ -2452,7 +2452,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
           {/* Model picker */}
           <div className="relative flex items-center gap-1" ref={modelPickerRef}>
             <button
-              className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-[11px] transition-colors ${
+              className={`flex items-center gap-1 px-1.5 h-[26px] rounded text-xs transition-colors ${
                 showModelPicker
                   ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
                   : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))]"
@@ -2531,13 +2531,13 @@ function UserMarkdownSegment({ text }: { text: string }) {
           const isBlock = className?.includes("language-");
           if (isBlock) {
             return (
-              <pre className="my-1.5 p-2 rounded bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] overflow-x-auto text-[10px] leading-relaxed">
+              <pre className="my-1.5 p-2 rounded bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] overflow-x-auto text-2xs leading-relaxed">
                 <code>{children}</code>
               </pre>
             );
           }
           return (
-            <code className="px-1 py-0.5 bg-[rgb(var(--color-surface-alt))] rounded text-[10px] border border-[rgb(var(--color-border))]">
+            <code className="px-1 py-0.5 bg-[rgb(var(--color-surface-alt))] rounded text-2xs border border-[rgb(var(--color-border))]">
               {children}
             </code>
           );
@@ -2552,13 +2552,13 @@ function UserMarkdownSegment({ text }: { text: string }) {
         blockquote: ({ children }) => (
           <div className="border-l-2 border-[rgb(var(--color-accent))] pl-2 my-1 text-[rgb(var(--color-text-secondary))]">{children}</div>
         ),
-        h1: ({ children }) => <div className="font-bold text-[12px] mt-2 mb-1">{children}</div>,
-        h2: ({ children }) => <div className="font-semibold text-[11px] mt-2 mb-0.5">{children}</div>,
-        h3: ({ children }) => <div className="font-semibold text-[11px] mt-2 mb-0.5">{children}</div>,
+        h1: ({ children }) => <div className="font-bold text-xs mt-2 mb-1">{children}</div>,
+        h2: ({ children }) => <div className="font-semibold text-xs mt-2 mb-0.5">{children}</div>,
+        h3: ({ children }) => <div className="font-semibold text-xs mt-2 mb-0.5">{children}</div>,
         hr: () => <div className="border-t border-[rgb(var(--color-border))] my-2" />,
         table: ({ children }) => (
           <div className="my-1.5 overflow-x-auto rounded border border-[rgb(var(--color-border))]">
-            <table className="w-full text-[10px] border-collapse">{children}</table>
+            <table className="w-full text-2xs border-collapse">{children}</table>
           </div>
         ),
         thead: ({ children }) => (
@@ -2601,7 +2601,7 @@ function UserContent({ content }: { content: string }) {
           parts.push(
             <span
               key={`${match!.index}-${i}`}
-              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[11px] font-mono align-baseline mr-0.5 ${c.bg} ${c.text} ${c.border}`}
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs font-mono align-baseline mr-0.5 ${c.bg} ${c.text} ${c.border}`}
             >
               <FileTypeIcon type={type} />
               <span className="max-w-[140px] truncate">{title}</span>
@@ -2611,7 +2611,7 @@ function UserContent({ content }: { content: string }) {
           parts.push(
             <span
               key={`${match!.index}-${i}`}
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-[11px] text-[rgb(var(--color-text-secondary))] font-mono align-baseline mr-0.5"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-text-secondary))] font-mono align-baseline mr-0.5"
             >
               <FileTypeIcon type="file" />
               <span className="max-w-[140px] truncate">{ref}</span>
@@ -2621,7 +2621,7 @@ function UserContent({ content }: { content: string }) {
       });
     } else if (match[3]) {
       parts.push(
-        <span key={match.index} className="text-[rgb(var(--color-accent))] font-mono text-[12px]">
+        <span key={match.index} className="text-[rgb(var(--color-accent))] font-mono text-xs">
           @<span className="underline decoration-[rgb(var(--color-accent))]/40">{match[3]}</span>
         </span>
       );
@@ -2659,7 +2659,7 @@ function WebRefChip({ url }: { url: string }) {
     <>
       <button
         onClick={handleExpand}
-        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-[11px] text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-surface-toolbar))] transition-colors font-mono align-baseline"
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] text-xs text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-surface-toolbar))] transition-colors font-mono align-baseline"
       >
         <Globe className="w-2.5 h-2.5 shrink-0" />
         <span className="max-w-[200px] truncate">{shortUrl}</span>
@@ -2669,10 +2669,10 @@ function WebRefChip({ url }: { url: string }) {
         <span className="block mt-1">
           <span className="block rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] overflow-hidden">
             <span className="flex items-center justify-between px-2 py-1 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-toolbar))]">
-              <span className="text-[10px] text-[rgb(var(--color-text-secondary))] font-mono truncate">{url}</span>
-              {content && <span className="shrink-0 text-[10px] text-[rgb(var(--color-text-secondary))] tabular-nums ml-2">{content.length.toLocaleString()} chars</span>}
+              <span className="text-2xs text-[rgb(var(--color-text-secondary))] font-mono truncate">{url}</span>
+              {content && <span className="shrink-0 text-2xs text-[rgb(var(--color-text-secondary))] tabular-nums ml-2">{content.length.toLocaleString()} chars</span>}
             </span>
-            <span className="block max-h-[150px] overflow-y-auto p-2 text-[11px] font-mono text-[rgb(var(--color-text-secondary))] whitespace-pre-wrap break-words leading-[1.4]">
+            <span className="block max-h-[150px] overflow-y-auto p-2 text-xs font-mono text-[rgb(var(--color-text-secondary))] whitespace-pre-wrap break-words leading-[1.4]">
               {loading ? "Loading…" : content || "No content"}
             </span>
           </span>
@@ -2712,7 +2712,7 @@ export const MessageRow = memo(function MessageRow({
           </button>
         )}
         <div className="flex max-w-[82%] flex-col items-end gap-1">
-          <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))]/80">
+          <div className="flex items-center gap-1.5 text-2xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))]/80">
             You
             <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
               <IconUser size={9} />
@@ -2724,7 +2724,7 @@ export const MessageRow = memo(function MessageRow({
             : "bg-[rgb(var(--color-accent))]/[0.07] border border-[rgb(var(--color-accent))]/30"
         }`}>
             {message.pending && (
-              <span className="inline-flex items-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))] mb-1">
+              <span className="inline-flex items-center gap-1 text-2xs text-[rgb(var(--color-text-secondary))] mb-1">
                 <Clock className="w-2.5 h-2.5" />
                 Pending
               </span>
@@ -2744,7 +2744,7 @@ export const MessageRow = memo(function MessageRow({
   if (message.role === "system" && message.content) {
     return (
       <div className="px-4 py-1">
-        <div className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/60 px-2.5 py-1 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors">
+        <div className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/60 px-2.5 py-1 text-xs text-[rgb(var(--color-text-secondary))] transition-colors">
           <Menu className="w-3 h-3 opacity-70 shrink-0" />
           <span className="font-medium truncate">{textContent(message.content)}</span>
         </div>
@@ -2767,7 +2767,7 @@ export const MessageRow = memo(function MessageRow({
           )}
           {assistantText && (
             <>
-              <div className="mb-1.5 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/85">
+              <div className="mb-1.5 flex items-center gap-2 text-2xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/85">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
                   <IconSparkles size={11} />
                 </span>
@@ -2841,27 +2841,27 @@ function RunDetailsPopover({
           className="absolute bottom-7 right-0 z-[100] block w-72 rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] p-3 text-left normal-case tracking-normal text-[rgb(var(--color-text))] shadow-xl"
         >
           <span className="mb-2 flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
               Run details
             </span>
-            <span className="rounded-full bg-[rgb(var(--color-accent))]/10 px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--color-accent))]">
+            <span className="rounded-full bg-[rgb(var(--color-accent))]/10 px-2 py-0.5 text-2xs font-medium text-[rgb(var(--color-accent))]">
               {status}
             </span>
           </span>
           <span className="grid grid-cols-[5.75rem_minmax(0,1fr)] gap-x-3 gap-y-1.5">
             {rows.map(([label, value]) => (
               <span key={label} className="contents">
-                <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))]/75">
+                <span className="text-2xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))]/75">
                   {label}
                 </span>
-                <span className="truncate font-mono text-[11px] normal-case tracking-normal text-[rgb(var(--color-text))]/90">
+                <span className="truncate font-mono text-xs normal-case tracking-normal text-[rgb(var(--color-text))]/90">
                   {value}
                 </span>
               </span>
             ))}
           </span>
           {details.run_id && (
-            <span className="mt-2 block truncate border-t border-[rgb(var(--color-border-subtle))] pt-2 font-mono text-[10px] normal-case tracking-normal text-[rgb(var(--color-text-secondary))]/70">
+            <span className="mt-2 block truncate border-t border-[rgb(var(--color-border-subtle))] pt-2 font-mono text-2xs normal-case tracking-normal text-[rgb(var(--color-text-secondary))]/70">
               {details.run_id}
             </span>
           )}
@@ -2901,7 +2901,7 @@ function ReasoningEffortPicker({
         aria-label="Set reasoning effort"
         aria-expanded={open}
         onClick={onToggle}
-        className={`flex h-[26px] items-center gap-1 rounded-full border px-2 text-[11px] transition-colors ${
+        className={`flex h-[26px] items-center gap-1 rounded-full border px-2 text-xs transition-colors ${
           open
             ? "border-[rgb(var(--color-accent))]/45 bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
             : "border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/35 text-[rgb(var(--color-text-secondary))] hover:border-[rgb(var(--color-accent))]/45 hover:text-[rgb(var(--color-text))]"
@@ -2914,7 +2914,7 @@ function ReasoningEffortPicker({
       </button>
       {open && (
         <div className="absolute bottom-full right-0 z-[100] mb-1 w-44 overflow-hidden rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] py-1 shadow-xl">
-          <div className="border-b border-[rgb(var(--color-border-subtle))] px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/80">
+          <div className="border-b border-[rgb(var(--color-border-subtle))] px-3 py-1.5 text-2xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/80">
             Reasoning
           </div>
           {options.map((option) => {
@@ -2924,7 +2924,7 @@ function ReasoningEffortPicker({
                 key={option || "default"}
                 type="button"
                 onClick={() => onChange(option)}
-                className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-[11px] transition-colors ${
+                className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs transition-colors ${
                   selected
                     ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-text))]"
                     : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
@@ -2956,17 +2956,17 @@ function WorkingNotesInline({ notes, defaultOpen = false, live = false }: { note
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
-        className="flex w-full cursor-pointer select-none items-center gap-2 px-4 py-2.5 text-left text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))]/55"
+        className="flex w-full cursor-pointer select-none items-center gap-2 px-4 py-2.5 text-left text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))]/55"
       >
         <span className="flex h-5 w-5 items-center justify-center rounded-full border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
           <Activity className="h-3 w-3" />
         </span>
         <span className="font-medium">{live ? "Working notes live" : "Working notes"}</span>
-        <span className="rounded-full border border-[rgb(var(--color-border-subtle))] px-1.5 py-0.5 text-[10px] tabular-nums text-[rgb(var(--color-text-secondary))]/80">
+        <span className="rounded-full border border-[rgb(var(--color-border-subtle))] px-1.5 py-0.5 text-2xs tabular-nums text-[rgb(var(--color-text-secondary))]/80">
           {itemCount}
         </span>
         {preview && (
-          <span className="min-w-0 flex-1 truncate text-[11px] text-[rgb(var(--color-text-secondary))]/75">
+          <span className="min-w-0 flex-1 truncate text-xs text-[rgb(var(--color-text-secondary))]/75">
             {preview}
           </span>
         )}
@@ -2975,16 +2975,16 @@ function WorkingNotesInline({ notes, defaultOpen = false, live = false }: { note
       {expanded && <div className="space-y-3 px-4 pb-4">
         {drafts.length > 0 && (
           <div className="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/45">
-            <div className="border-b border-[rgb(var(--color-border-subtle))] px-3 py-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/80">
+            <div className="border-b border-[rgb(var(--color-border-subtle))] px-3 py-2 text-2xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/80">
               Drafts before tool rounds
             </div>
             <div className="divide-y divide-[rgb(var(--color-border-subtle))]">
               {drafts.map((draft, index) => (
                 <div key={`${index}-${draft.slice(0, 24)}`} className="px-3 py-2.5">
-                  <div className="mb-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]/75">
+                  <div className="mb-1 text-2xs font-medium text-[rgb(var(--color-text-secondary))]/75">
                     Draft {index + 1}
                   </div>
-                  <div className="text-[12px] leading-[1.6] text-[rgb(var(--color-text-secondary))]">
+                  <div className="text-xs leading-[1.6] text-[rgb(var(--color-text-secondary))]">
                     <MarkdownContent content={draft} />
                   </div>
                 </div>
@@ -2994,10 +2994,10 @@ function WorkingNotesInline({ notes, defaultOpen = false, live = false }: { note
         )}
         {notes.thinking && (
           <div className="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/45">
-            <div className="border-b border-[rgb(var(--color-border-subtle))] px-3 py-2 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/80">
+            <div className="border-b border-[rgb(var(--color-border-subtle))] px-3 py-2 text-2xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/80">
               Thinking stream
             </div>
-            <pre className="max-h-56 overflow-auto whitespace-pre-wrap px-3 py-2.5 text-[11px] leading-[1.55] text-[rgb(var(--color-text-secondary))]">
+            <pre className="max-h-56 overflow-auto whitespace-pre-wrap px-3 py-2.5 text-xs leading-[1.55] text-[rgb(var(--color-text-secondary))]">
               {notes.thinking}
             </pre>
           </div>
@@ -3017,16 +3017,16 @@ function ToolActivityTimeline({ activity }: { activity: ChatToolActivity[] }) {
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
-        className="flex w-full cursor-pointer select-none items-center gap-2 px-4 py-2.5 text-left text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))]/55"
+        className="flex w-full cursor-pointer select-none items-center gap-2 px-4 py-2.5 text-left text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))]/55"
       >
         <span className="flex h-5 w-5 items-center justify-center rounded-full border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
           <Wrench className="h-3 w-3" />
         </span>
         <span className="font-medium">Used tools</span>
-        <span className="rounded-full border border-[rgb(var(--color-border-subtle))] px-1.5 py-0.5 text-[10px] tabular-nums text-[rgb(var(--color-text-secondary))]/80">
+        <span className="rounded-full border border-[rgb(var(--color-border-subtle))] px-1.5 py-0.5 text-2xs tabular-nums text-[rgb(var(--color-text-secondary))]/80">
           {activity.length}
         </span>
-        <span className="min-w-0 flex-1 truncate text-[10px] text-[rgb(var(--color-text-secondary))]/75">
+        <span className="min-w-0 flex-1 truncate text-2xs text-[rgb(var(--color-text-secondary))]/75">
           {activity.map((item) => formatToolName(item.name)).join(" · ")}
         </span>
         <ChevronDown className={`ml-auto h-3 w-3 transition-transform ${expanded ? "rotate-180" : ""}`} />
@@ -3035,10 +3035,10 @@ function ToolActivityTimeline({ activity }: { activity: ChatToolActivity[] }) {
         <div className="space-y-2 px-4 pb-4">
           {activity.map((item) => (
             <div key={item.id} className="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/45">
-              <div className="flex items-center gap-2 border-b border-[rgb(var(--color-border-subtle))] px-3 py-2 text-[10px] font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))]/80">
+              <div className="flex items-center gap-2 border-b border-[rgb(var(--color-border-subtle))] px-3 py-2 text-2xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))]/80">
                 <span className="truncate">{formatToolName(item.name)}</span>
                 {item.result !== undefined && (
-                  <span className="ml-auto rounded-full border border-[rgb(var(--color-border-subtle))] px-1.5 py-0.5 text-[9px] normal-case tracking-normal">
+                  <span className="ml-auto rounded-full border border-[rgb(var(--color-border-subtle))] px-1.5 py-0.5 text-2xs normal-case tracking-normal">
                     completed
                   </span>
                 )}
@@ -3059,8 +3059,8 @@ function ToolJsonBlock({ label, value }: { label: string; value: string }) {
   const formatted = formatMaybeJson(value);
   return (
     <div>
-      <div className="mb-1 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]/75">{label}</div>
-      <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/70 p-2.5 text-[10px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
+      <div className="mb-1 text-2xs font-medium text-[rgb(var(--color-text-secondary))]/75">{label}</div>
+      <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/70 p-2.5 text-2xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
         {formatted}
       </pre>
     </div>
@@ -3162,7 +3162,7 @@ function MarkdownParagraph({ children }: { children: ReactNode }) {
 
   return (
     <div className={`my-3 rounded-xl border px-3 py-2.5 ${tone[kind]}`}>
-      <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] opacity-75">{title}</div>
+      <div className="mb-1 text-2xs font-semibold uppercase tracking-[0.14em] opacity-75">{title}</div>
       <div className="leading-[1.65]">{stripCalloutPrefix(children)}</div>
     </div>
   );
@@ -3206,17 +3206,17 @@ const MarkdownContent = memo(function MarkdownContent({ content, projectRoot }: 
           </div>
         ),
         h4: ({ children }) => (
-          <div className="mt-3 mb-1 text-[12px] font-semibold uppercase leading-snug tracking-[0.12em] text-[rgb(var(--color-accent))] first:mt-0">
+          <div className="mt-3 mb-1 text-xs font-semibold uppercase leading-snug tracking-[0.12em] text-[rgb(var(--color-accent))] first:mt-0">
             {children}
           </div>
         ),
         h5: ({ children }) => (
-          <div className="mt-2.5 mb-1 inline-flex rounded-full border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/70 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))] first:mt-0">
+          <div className="mt-2.5 mb-1 inline-flex rounded-full border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/70 px-2 py-0.5 text-xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))] first:mt-0">
             {children}
           </div>
         ),
         h6: ({ children }) => (
-          <div className="mt-2 mb-0.5 text-[11px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/80 first:mt-0">
+          <div className="mt-2 mb-0.5 text-xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/80 first:mt-0">
             {children}
           </div>
         ),
@@ -3238,13 +3238,13 @@ const MarkdownContent = memo(function MarkdownContent({ content, projectRoot }: 
           if (fileType) {
             const c = typeColors(fileType);
             return (
-              <code className={`rounded-md border px-1.5 py-0.5 text-[11px] ${c.bg} ${c.text} ${c.border}`}>
+              <code className={`rounded-md border px-1.5 py-0.5 text-xs ${c.bg} ${c.text} ${c.border}`}>
                 {children}
               </code>
             );
           }
           return (
-            <code className="rounded-md border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[11px]">
+            <code className="rounded-md border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-xs">
               {children}
             </code>
           );
@@ -3277,7 +3277,7 @@ const MarkdownContent = memo(function MarkdownContent({ content, projectRoot }: 
         },
         table: ({ children }) => (
           <div className="my-3 max-w-full overflow-x-auto rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] shadow-sm">
-            <table className="w-full border-separate border-spacing-0 text-[12px]">{children}</table>
+            <table className="w-full border-separate border-spacing-0 text-xs">{children}</table>
           </div>
         ),
         thead: ({ children }) => (
@@ -3290,7 +3290,7 @@ const MarkdownContent = memo(function MarkdownContent({ content, projectRoot }: 
           <tr className="transition-colors hover:bg-[rgb(var(--color-accent))]/[0.04]">{children}</tr>
         ),
         th: ({ children }) => (
-          <th className="border-b border-r border-[rgb(var(--color-border-subtle))] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-[0.12em] last:border-r-0">{children}</th>
+          <th className="border-b border-r border-[rgb(var(--color-border-subtle))] px-3 py-2 text-left text-2xs font-semibold uppercase tracking-[0.12em] last:border-r-0">{children}</th>
         ),
         td: ({ children }) => (
           <td className="border-b border-r border-[rgb(var(--color-border-subtle))] px-3 py-2.5 align-top last:border-r-0">{children}</td>
@@ -3395,16 +3395,16 @@ function ModelPickerDropdown({
   return (
     <div className="absolute bottom-full left-0 mb-1 w-[200px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight }}>
       <div className="px-3 py-2 border-b border-[rgb(var(--color-border))] shrink-0">
-        <span className="text-[10px] font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">Model</span>
+        <span className="text-2xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">Model</span>
       </div>
       <div className="flex-1 overflow-y-auto py-1">
         {loadingModels ? (
-          <div className="px-3 py-2 text-[11px] text-[rgb(var(--color-text-secondary))] italic">Loading…</div>
+          <div className="px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))] italic">Loading…</div>
         ) : (
           models.map((model) => (
             <button
               key={model}
-              className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors ${
+              className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${
                 model === currentModel
                   ? "text-[rgb(var(--color-accent))] bg-[rgb(var(--color-accent))]/5"
                   : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
@@ -3479,32 +3479,32 @@ function ChatErrorCard({ error, onRetry, onDismiss }: { error: string; onRetry: 
     <div className="mx-3 rounded-lg border border-error/20 bg-error/5 overflow-hidden">
       <div className="px-3 py-2.5">
         <div className="text-xs font-medium text-error mb-0.5">{title}</div>
-        <div className="text-[11px] text-[rgb(var(--color-text-secondary))] leading-relaxed">{suggestion}</div>
+        <div className="text-xs text-[rgb(var(--color-text-secondary))] leading-relaxed">{suggestion}</div>
       </div>
       <div className="flex items-center gap-2 px-3 pb-2">
         <button
           onClick={onRetry}
-          className="text-[11px] font-medium text-[rgb(var(--color-accent))] hover:underline"
+          className="text-xs font-medium text-[rgb(var(--color-accent))] hover:underline"
         >
           Try again
         </button>
         <button
           onClick={() => setShowRaw(!showRaw)}
-          className="text-[11px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
+          className="text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
         >
           {showRaw ? "Hide details" : "Show details"}
         </button>
         <div className="flex-1" />
         <button
           onClick={onDismiss}
-          className="text-[11px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
+          className="text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
         >
           Dismiss
         </button>
       </div>
       {showRaw && (
         <div className="px-3 pb-2.5">
-          <div className="text-[10px] font-mono text-error/80 bg-error/5 rounded px-2 py-1.5 max-h-[100px] overflow-y-auto break-all leading-relaxed">
+          <div className="text-2xs font-mono text-error/80 bg-error/5 rounded px-2 py-1.5 max-h-[100px] overflow-y-auto break-all leading-relaxed">
             {error}
           </div>
         </div>

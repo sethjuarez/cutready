@@ -80,7 +80,7 @@ function CommandCopyRow({
   const copied = copiedKey === copyKey;
   return (
     <div className="flex items-center gap-1.5">
-      <code className="min-w-0 flex-1 truncate rounded-md bg-[rgb(var(--color-surface))] px-2 py-1 font-mono text-[11px] text-[rgb(var(--color-text))]">
+      <code className="min-w-0 flex-1 truncate rounded-md bg-[rgb(var(--color-surface))] px-2 py-1 font-mono text-xs text-[rgb(var(--color-text))]">
         {command}
       </code>
       <button
@@ -162,7 +162,7 @@ function CopilotConnect() {
       data-testid="copilot-recheck"
       onClick={recheck}
       disabled={phase === "loading" || isSigningIn}
-      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:opacity-50"
+      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:opacity-50"
     >
       <RefreshCw className={`h-3 w-3 ${phase === "loading" ? "animate-spin" : ""}`} /> Recheck
     </button>
@@ -173,7 +173,7 @@ function CopilotConnect() {
       <div
         data-testid="copilot-connect"
         data-state="loading"
-        className="flex items-center gap-1.5 text-[11px] text-[rgb(var(--color-text-secondary))]"
+        className="flex items-center gap-1.5 text-xs text-[rgb(var(--color-text-secondary))]"
       >
         <RefreshCw className="h-3 w-3 animate-spin" /> Checking GitHub Copilot…
       </div>
@@ -196,25 +196,25 @@ function CopilotConnect() {
       {/* Status chip */}
       <div className="flex items-center gap-2">
         {signedIn && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
             <span className="h-1.5 w-1.5 rounded-full bg-success" />
             Signed in{status?.login ? ` as @${status.login}` : ""}
           </span>
         )}
         {needsSignIn && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-2 py-0.5 text-[11px] font-medium text-warning">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
             <span className="h-1.5 w-1.5 rounded-full bg-warning" />
             Installed — not signed in
           </span>
         )}
         {notInstalled && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-error/10 px-2 py-0.5 text-[11px] font-medium text-error">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-error/10 px-2 py-0.5 text-xs font-medium text-error">
             <span className="h-1.5 w-1.5 rounded-full bg-error" />
             Copilot CLI not installed
           </span>
         )}
         {status?.cliVersion && signedIn && (
-          <span className="text-[10px] font-mono text-[rgb(var(--color-text-secondary))]">
+          <span className="text-2xs font-mono text-[rgb(var(--color-text-secondary))]">
             CLI {status.cliVersion}
           </span>
         )}
@@ -222,7 +222,7 @@ function CopilotConnect() {
 
       {/* Signed in: reassure that no chat provider is needed. */}
       {signedIn && (
-        <p className="flex items-start gap-1.5 text-[11px] leading-snug text-[rgb(var(--color-text-secondary))]">
+        <p className="flex items-start gap-1.5 text-xs leading-snug text-[rgb(var(--color-text-secondary))]">
           <CheckCircle className="mt-0.5 h-3 w-3 shrink-0 text-success" />
           <span>
             GitHub Copilot brings its own model for agent turns, so you don&apos;t need to configure a
@@ -234,7 +234,7 @@ function CopilotConnect() {
       {/* Not signed in: one-click browser sign-in + a terminal fallback. */}
       {needsSignIn && (
         <div className="flex flex-col gap-2">
-          <p className="text-[11px] leading-snug text-[rgb(var(--color-text-secondary))]">
+          <p className="text-xs leading-snug text-[rgb(var(--color-text-secondary))]">
             Sign in with your GitHub account to use Copilot for agent turns. This opens your browser
             to finish authorizing.
           </p>
@@ -244,7 +244,7 @@ function CopilotConnect() {
               data-testid="copilot-sign-in"
               onClick={signIn}
               disabled={isSigningIn}
-              className="inline-flex items-center gap-1.5 rounded-md bg-[rgb(var(--color-accent))] px-2.5 py-1 text-[11px] font-medium text-[rgb(var(--color-accent-fg))] transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-md bg-[rgb(var(--color-accent))] px-2.5 py-1 text-xs font-medium text-[rgb(var(--color-accent-fg))] transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               {isSigningIn ? (
                 <RefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -256,7 +256,7 @@ function CopilotConnect() {
             {RecheckButton}
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">
+            <span className="text-2xs text-[rgb(var(--color-text-secondary))]">
               Or run this in a terminal, then Recheck:
             </span>
             <CommandCopyRow
@@ -273,7 +273,7 @@ function CopilotConnect() {
       {/* Not installed: concise install guidance + docs link. */}
       {notInstalled && (
         <div className="flex flex-col gap-2">
-          <p className="text-[11px] leading-snug text-[rgb(var(--color-text-secondary))]">
+          <p className="text-xs leading-snug text-[rgb(var(--color-text-secondary))]">
             Install the GitHub Copilot CLI, then Recheck:
           </p>
           <CommandCopyRow
@@ -289,7 +289,7 @@ function CopilotConnect() {
               onClick={() => {
                 void shellOpen(COPILOT_CLI_DOCS_URL);
               }}
-              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-[rgb(var(--color-accent))] transition-colors hover:bg-[rgb(var(--color-accent))]/10"
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-[rgb(var(--color-accent))] transition-colors hover:bg-[rgb(var(--color-accent))]/10"
             >
               <ExternalLink className="h-3 w-3" /> Installation guide
             </button>
@@ -302,11 +302,11 @@ function CopilotConnect() {
       {signedIn && <div className="flex items-center">{RecheckButton}</div>}
 
       {status?.message && (needsSignIn || notInstalled) && (
-        <p className="text-[10px] leading-snug text-[rgb(var(--color-text-secondary))]">
+        <p className="text-2xs leading-snug text-[rgb(var(--color-text-secondary))]">
           {status.message}
         </p>
       )}
-      {error && <p className="text-[11px] leading-snug text-error">{error}</p>}
+      {error && <p className="text-xs leading-snug text-error">{error}</p>}
     </div>
   );
 }
@@ -357,15 +357,15 @@ export function HarnessPicker({ value, onChange }: { value: string; onChange: (i
             <>
               <div className="flex items-center gap-2 mb-1.5">
                 <span className="text-sm font-medium">{harness.display_name}</span>
-                <span className="text-[10px] font-mono text-[rgb(var(--color-text-secondary))]">{harness.id}</span>
+                <span className="text-2xs font-mono text-[rgb(var(--color-text-secondary))]">{harness.id}</span>
                 {selected && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))] font-medium flex items-center gap-1">
+                  <span className="text-2xs px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))] font-medium flex items-center gap-1">
                     <Check className="w-3 h-3" /> Active
                   </span>
                 )}
                 {!harness.available && (
                   <span
-                    className="text-[10px] px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-text-secondary))]/10 text-[rgb(var(--color-text-secondary))] font-medium flex items-center gap-1"
+                    className="text-2xs px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-text-secondary))]/10 text-[rgb(var(--color-text-secondary))] font-medium flex items-center gap-1"
                     title="This harness is wired but can't run here right now (its runtime or CLI isn't available on this system)."
                   >
                     <FlaskConical className="w-3 h-3" /> Unavailable
@@ -374,7 +374,7 @@ export function HarnessPicker({ value, onChange }: { value: string; onChange: (i
                 {isExperimental && (
                   <span
                     data-testid={`harness-experimental-${harness.id}`}
-                    className="text-[10px] px-1.5 py-0.5 rounded-full bg-warning/15 text-warning font-medium flex items-center gap-1"
+                    className="text-2xs px-1.5 py-0.5 rounded-full bg-warning/15 text-warning font-medium flex items-center gap-1"
                     title="Experimental: this harness is wired and runnable but still maturing — its full capability set isn't proven end-to-end yet."
                   >
                     <FlaskConical className="w-3 h-3" /> Experimental
@@ -387,7 +387,7 @@ export function HarnessPicker({ value, onChange }: { value: string; onChange: (i
                   return (
                     <span
                       key={key}
-                      className={`text-[10px] px-1.5 py-0.5 rounded ${
+                      className={`text-2xs px-1.5 py-0.5 rounded ${
                         on
                           ? "bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]"
                           : "bg-[rgb(var(--color-text-secondary))]/8 text-[rgb(var(--color-text-secondary))] line-through"
@@ -399,7 +399,7 @@ export function HarnessPicker({ value, onChange }: { value: string; onChange: (i
                 })}
               </div>
               {selected && harness.contract && harness.contract.provider !== "requires" && (
-                <p className="text-[11px] leading-snug text-[rgb(var(--color-text-secondary))] mt-2 flex items-start gap-1.5">
+                <p className="text-xs leading-snug text-[rgb(var(--color-text-secondary))] mt-2 flex items-start gap-1.5">
                   <Info className="w-3 h-3 mt-0.5 shrink-0" />
                   <span>
                     {harness.contract.provider === "provides"
@@ -412,7 +412,7 @@ export function HarnessPicker({ value, onChange }: { value: string; onChange: (i
               {selected && isExperimental && (
                 <p
                   data-testid={`harness-experimental-note-${harness.id}`}
-                  className="text-[11px] leading-snug text-warning mt-2 flex items-start gap-1.5"
+                  className="text-xs leading-snug text-warning mt-2 flex items-start gap-1.5"
                 >
                   <FlaskConical className="w-3 h-3 mt-0.5 shrink-0" />
                   <span>
@@ -619,7 +619,7 @@ export function AgentsTab({ settings, updateSetting, models, loadingModels, canF
     onChange: (providerId: string) => void;
   }) => (
     <div className="flex flex-col gap-1.5">
-      <label className="text-[10px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+      <label className="text-2xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
         Provider
       </label>
       <select
@@ -645,7 +645,7 @@ export function AgentsTab({ settings, updateSetting, models, loadingModels, canF
     onChange: (model: string) => void;
   }) => (
     <div className="flex flex-col gap-1.5">
-      <label className="text-[10px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+      <label className="text-2xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
         Model
       </label>
       <div className="flex gap-2">
@@ -664,14 +664,14 @@ export function AgentsTab({ settings, updateSetting, models, loadingModels, canF
             type="button"
             onClick={fetchModels}
             disabled={loadingModels || !canFetchModels}
-            className="px-2.5 py-1.5 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-[11px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] disabled:opacity-40 transition-colors"
+            className="px-2.5 py-1.5 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] disabled:opacity-40 transition-colors"
           >
             {loadingModels ? "Loading..." : "Fetch"}
           </button>
         )}
       </div>
       {value && models.length === 0 && (
-        <p className="text-[10px] text-[rgb(var(--color-text-secondary))]">
+        <p className="text-2xs text-[rgb(var(--color-text-secondary))]">
           Saved override: <span className="font-medium">{value}</span>
         </p>
       )}
@@ -734,7 +734,7 @@ export function AgentsTab({ settings, updateSetting, models, loadingModels, canF
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-sm font-medium">{agent.name}</span>
                 {settings.aiSelectedAgent === agent.id && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))] font-medium">Active</span>
+                  <span className="text-2xs px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))] font-medium">Active</span>
                 )}
               </div>
               <p className="text-xs text-[rgb(var(--color-text-secondary))] line-clamp-2">
@@ -804,18 +804,18 @@ export function AgentsTab({ settings, updateSetting, models, loadingModels, canF
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm font-medium">{agent.name}</span>
                     {settings.aiSelectedAgent === agent.id && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))] font-medium">Active</span>
+                      <span className="text-2xs px-1.5 py-0.5 rounded-full bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))] font-medium">Active</span>
                     )}
                     <div className="flex-1" />
                     <button
                       onClick={() => setEditingId(agent.id)}
-                      className="text-[11px] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
+                      className="text-xs text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] transition-colors"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => deleteAgent(agent.id)}
-                      className="text-[11px] text-error hover:text-error transition-colors"
+                      className="text-xs text-error hover:text-error transition-colors"
                     >
                       Delete
                     </button>

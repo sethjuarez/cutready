@@ -180,7 +180,7 @@ function AuditaurDebugView({
         )}
       </div>
 
-      <aside className="w-52 shrink-0 overflow-y-auto border-l border-[rgb(var(--color-border))] p-2 font-sans text-[11px]">
+      <aside className="w-52 shrink-0 overflow-y-auto border-l border-[rgb(var(--color-border))] p-2 font-sans text-xs">
         <div className="font-medium text-[rgb(var(--color-text))]">{summary.session.service_name}</div>
         <div className="mt-0.5 text-[rgb(var(--color-text-secondary))]">
           PID {summary.session.pid ?? "unknown"} · {summary.session.session_id.slice(0, 8)}
@@ -191,7 +191,7 @@ function AuditaurDebugView({
           </div>
         )}
         <div
-          className="mt-0.5 truncate font-mono text-[10px] text-[rgb(var(--color-text-secondary))]"
+          className="mt-0.5 truncate font-mono text-2xs text-[rgb(var(--color-text-secondary))]"
           title={summary.session.database_path}
         >
           {summary.session.database_path}
@@ -275,19 +275,19 @@ function DebugLine({ item }: { item: DebugStreamItem }) {
         {(detail || item.trace_id) && (
           <button
             onClick={() => setExpanded(!expanded)}
-            className="shrink-0 text-[10px] text-[rgb(var(--color-accent))] hover:underline"
+            className="shrink-0 text-2xs text-[rgb(var(--color-accent))] hover:underline"
           >
             {expanded ? "collapse" : "details"}
           </button>
         )}
       </div>
       {expanded && item.trace_id && (
-        <div className="mt-0.5 truncate pl-[4.5rem] text-[10px] text-[rgb(var(--color-text-secondary))]">
+        <div className="mt-0.5 truncate pl-[4.5rem] text-2xs text-[rgb(var(--color-text-secondary))]">
           trace {item.trace_id}
         </div>
       )}
       {expanded && detail && (
-        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-[rgb(var(--color-surface-inset))] p-2 text-[10px] text-[rgb(var(--color-text-secondary))]">
+        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded bg-[rgb(var(--color-surface-inset))] p-2 text-2xs text-[rgb(var(--color-text-secondary))]">
           {detail}
         </pre>
       )}
@@ -404,7 +404,7 @@ export function OutputPanel({ onCollapse }: OutputPanelProps) {
             {!(terminalActivated && currentProject) && (
               <button
                 type="button"
-                className="ml-1 flex items-center gap-1 rounded-md border border-transparent px-2 py-1 text-[11px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-border))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+                className="ml-1 flex items-center gap-1 rounded-md border border-transparent px-2 py-1 text-xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-border))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
                 title="New terminal"
                 onClick={() => {
                   setTerminalActivated(true);
@@ -513,7 +513,7 @@ function ActivityRow({ entry }: { entry: ActivityEntry }) {
       {isTruncatable && !expanded && (
         <button
           onClick={() => setExpanded(true)}
-          className="shrink-0 text-[10px] text-[rgb(var(--color-accent))] hover:underline"
+          className="shrink-0 text-2xs text-[rgb(var(--color-accent))] hover:underline"
         >
           expand
         </button>
@@ -534,7 +534,7 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1 px-3 py-2 text-[11px] font-medium transition-colors border-b-2 -mb-px ${
+      className={`flex items-center gap-1 px-3 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
         active
           ? "border-[rgb(var(--color-accent))] text-[rgb(var(--color-text))]"
           : "border-transparent text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-text-secondary))]/30"

@@ -15,7 +15,7 @@ const generalShortcuts = [
 
 function Kbd({ children }: { children: string }) {
   return (
-    <kbd className="px-1.5 py-0.5 rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-[10px] font-mono text-[rgb(var(--color-text-secondary))]">
+    <kbd className="px-1.5 py-0.5 rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-2xs font-mono text-[rgb(var(--color-text-secondary))]">
       {children}
     </kbd>
   );
@@ -27,7 +27,7 @@ function KeybindingBadge({ keybinding }: { keybinding: string }) {
     <span className="flex items-center gap-0.5">
       {parts.map((part, i) => (
         <span key={i} className="flex items-center gap-0.5">
-          {i > 0 && <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">+</span>}
+          {i > 0 && <span className="text-2xs text-[rgb(var(--color-text-secondary))]">+</span>}
           <Kbd>{part}</Kbd>
         </span>
       ))}
@@ -68,7 +68,7 @@ export function KeyboardShortcutsDialog({ open, onClose }: KeyboardShortcutsDial
         <div className="px-5 py-3 space-y-4">
           {[...groups.entries()].map(([category, shortcuts]) => (
             <section key={category}>
-              <h3 className="text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))] mb-1.5">
+              <h3 className="text-2xs font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))] mb-1.5">
                 {category}
               </h3>
               <div className="space-y-0.5">
@@ -84,7 +84,7 @@ export function KeyboardShortcutsDialog({ open, onClose }: KeyboardShortcutsDial
 
           {/* General section */}
           <section>
-            <h3 className="text-[10px] font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))] mb-1.5">
+            <h3 className="text-2xs font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))] mb-1.5">
               General
             </h3>
             <div className="space-y-0.5">

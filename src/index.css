@@ -4,31 +4,59 @@
 
 :root {
   color-scheme: light;
-  --color-surface: 251 250 248;
-  --color-surface-alt: 243 240 236;
-  --color-surface-inset: 236 231 225;
-  --color-surface-toolbar: 228 222 214;
-  --color-accent: 111 99 232;
-  --color-accent-hover: 91 79 209;
+  --color-surface: 251 251 251;
+  --color-surface-alt: 243 243 244;
+  --color-surface-inset: 236 238 242;
+  --color-surface-toolbar: 228 230 235;
+  --color-accent: 107 92 231;
+  --color-accent-hover: 82 67 199;
   /* Fallbacks only: derived per palette from the accent at runtime. */
   --color-content-storyboard: 15 118 110;
-  --color-content-sketch: 111 99 232;
+  --color-content-sketch: 107 92 231;
   --color-content-note: 194 105 17;
   --color-content-chat: 182 60 143;
-  --color-border: 222 216 207;
-  --color-border-subtle: 235 229 222;
-  --color-text: 44 41 37;
-  --color-text-secondary: 112 106 98;
+  --color-border: 222 223 226;
+  --color-border-subtle: 233 234 237;
+  --color-text: 27 27 27;
+  --color-text-secondary: 91 91 91;
   --color-secondary: 124 58 237;
   --color-tertiary: 219 39 119;
-  --color-success: 22 163 74;
-  --color-warning: 217 119 6;
-  --color-error: 220 38 38;
+  --color-success: 16 124 16;
+  --color-warning: 154 88 0;
+  --color-error: 196 43 28;
   --color-accent-fg: 255 255 255;
   --color-overlay-scrim: 0 0 0;
   --color-overlay-strong: 0 0 0;
   --color-media-control-bg: 0 0 0;
   --color-media-control-fg: 255 255 255;
+  /* Direction C semantic tokens (palette-independent). Keep in sync with src/theme/designTokens.ts. */
+  --color-agent-planner: 15 108 189;
+  --color-agent-writer: 16 124 16;
+  --color-agent-editor: 154 63 181;
+  --color-agent-designer: 196 80 14;
+  --color-diff-ins-bg: 220 242 216;
+  --color-diff-ins-fg: 10 90 10;
+  --color-diff-del-bg: 253 229 231;
+  --color-diff-del-fg: 164 38 44;
+  /* Type scale: density changes spacing, never these sizes. */
+  --text-2xs: 11px;
+  --text-2xs-lh: 16px;
+  --text-xs: 12.5px;
+  --text-xs-lh: 18px;
+  --text-sm: 14px;
+  --text-sm-lh: 20px;
+  /* Radii: controls, cards/layers, pills/chips. */
+  --radius-control: 4px;
+  --radius-card: 8px;
+  --radius-pill: 12px;
+  /* Motion */
+  --motion-fast: 120ms;
+  --motion-normal: 200ms;
+  --motion-ease: cubic-bezier(0.1, 0.9, 0.2, 1);
+  /* Density (spacing only). Overridden by html[data-density]. */
+  --control-height: 32px;
+  --nav-row-height: 36px;
+  --card-gap: 10px;
   --titlebar-height: 46px;
   --macos-traffic-light-space: 92px;
   --statusbar-height: 28px;
@@ -50,30 +78,44 @@
 
 .dark {
   color-scheme: dark;
-  --color-surface: 39 36 33;
-  --color-surface-alt: 49 45 41;
-  --color-surface-inset: 33 31 29;
-  --color-surface-toolbar: 27 25 23;
-  --color-accent: 170 160 255;
-  --color-accent-hover: 145 133 246;
+  --color-surface: 40 40 40;
+  --color-surface-alt: 49 49 49;
+  --color-surface-inset: 31 31 33;
+  --color-surface-toolbar: 26 26 28;
+  --color-accent: 164 154 250;
+  --color-accent-hover: 189 181 255;
   --color-content-storyboard: 94 234 212;
-  --color-content-sketch: 170 160 255;
+  --color-content-sketch: 164 154 250;
   --color-content-note: 251 191 36;
   --color-content-chat: 236 138 190;
-  --color-border: 73 67 61;
-  --color-border-subtle: 58 53 47;
-  --color-text: 238 233 226;
-  --color-text-secondary: 180 172 162;
+  --color-border: 66 66 68;
+  --color-border-subtle: 54 54 56;
+  --color-text: 255 255 255;
+  --color-text-secondary: 207 207 207;
   --color-secondary: 167 139 250;
   --color-tertiary: 244 114 182;
-  --color-success: 52 211 153;
-  --color-warning: 251 191 36;
-  --color-error: 248 113 113;
-  --color-accent-fg: 255 255 255;
+  --color-success: 98 196 98;
+  --color-warning: 242 181 74;
+  --color-error: 255 153 164;
+  --color-accent-fg: 24 22 20;
   --color-overlay-scrim: 0 0 0;
   --color-overlay-strong: 0 0 0;
   --color-media-control-bg: 0 0 0;
   --color-media-control-fg: 255 255 255;
+  --color-agent-planner: 88 169 242;
+  --color-agent-writer: 98 196 98;
+  --color-agent-editor: 207 140 240;
+  --color-agent-designer: 245 154 92;
+  --color-diff-ins-bg: 23 61 25;
+  --color-diff-ins-fg: 157 224 152;
+  --color-diff-del-bg: 74 28 32;
+  --color-diff-del-fg: 255 168 176;
+}
+
+html[data-density="compact"] {
+  --control-height: 28px;
+  --nav-row-height: 30px;
+  --card-gap: 6px;
 }
 
 select,
@@ -114,10 +156,31 @@ select option {
 /* Smooth theme transitions */
 html {
   transition:
-    background-color 0.2s ease,
-    color 0.2s ease;
+    background-color var(--motion-normal) ease,
+    color var(--motion-normal) ease;
   background: transparent;
   height: 100%;
+}
+
+/* Reduced motion: drop decorative transitions/animations; keep spinners as state feedback. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    --motion-fast: 0ms;
+    --motion-normal: 0ms;
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+    transition-delay: 0ms !important;
+  }
+  *:not(.animate-spin),
+  *::before,
+  *::after {
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 body {

@@ -335,7 +335,7 @@ export function HomePanel() {
                     <XCircle className="w-4 h-4 text-[rgb(var(--color-error))] shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-[rgb(var(--color-error))] mb-2">Authentication required</p>
-                      <p className="text-[11px] text-[rgb(var(--color-text-secondary))]">
+                      <p className="text-xs text-[rgb(var(--color-text-secondary))]">
                         Connect GitHub in CutReady, then try cloning again.
                       </p>
                     </div>
@@ -357,11 +357,11 @@ export function HomePanel() {
           {/* Keyboard shortcut hint */}
           <div className="pt-2 text-center lg:text-left">
             <span className="text-xs text-[rgb(var(--color-text-secondary))] opacity-60">
-              <kbd className="px-1.5 py-0.5 rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-[10px] font-mono">Ctrl</kbd>
+              <kbd className="px-1.5 py-0.5 rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-2xs font-mono">Ctrl</kbd>
               {" + "}
-              <kbd className="px-1.5 py-0.5 rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-[10px] font-mono">Shift</kbd>
+              <kbd className="px-1.5 py-0.5 rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-2xs font-mono">Shift</kbd>
               {" + "}
-              <kbd className="px-1.5 py-0.5 rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-[10px] font-mono">P</kbd>
+              <kbd className="px-1.5 py-0.5 rounded border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] text-2xs font-mono">P</kbd>
               {" "}
               Command Palette
             </span>
@@ -413,7 +413,7 @@ export function HomePanel() {
                         </div>
                       </button>
                       <div className="flex items-center gap-1 ml-1 shrink-0">
-                        <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">
+                        <span className="text-2xs text-[rgb(var(--color-text-secondary))]">
                           {formatRelativeDate(p.last_opened)}
                         </span>
                         <button

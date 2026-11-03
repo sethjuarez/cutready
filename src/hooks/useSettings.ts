@@ -116,7 +116,7 @@ export interface GlobalSettings {
   displayFontSize: number;
   /** Chat panel text size in px (13–18, default 14). */
   displayChatFontSize: number;
-  /** Row density: "compact" | "comfortable" | "spacious" (default "comfortable"). */
+  /** Density: "compact" | "comfortable" (default); legacy "spacious" reads as comfortable. */
   displayRowDensity: string;
   /** Row color palette: "neutral" | "pastel" | "vivid" (default "vivid"). */
   displayRowColors: string;

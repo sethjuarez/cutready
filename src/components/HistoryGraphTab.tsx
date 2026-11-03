@@ -243,7 +243,7 @@ export function HistoryGraphTab() {
       <div className="flex h-full flex-col items-center justify-center text-[rgb(var(--color-text-secondary))]">
         <ArrowLeftRight className="mb-3 h-12 w-12 opacity-30" />
         <p className="text-xs">No snapshots yet</p>
-        <p className="mt-1 text-[10px] opacity-60">
+        <p className="mt-1 text-2xs opacity-60">
           Save your first snapshot to see the history graph
         </p>
       </div>
@@ -261,7 +261,7 @@ export function HistoryGraphTab() {
             <div className="truncate text-sm font-semibold text-[rgb(var(--color-text))]">
               {workspaceName} workspace history graph
             </div>
-            <div className="history-graph-subtitle truncate text-[10px] text-[rgb(var(--color-text-secondary))]">
+            <div className="history-graph-subtitle truncate text-2xs text-[rgb(var(--color-text-secondary))]">
               {snapshotCount} visible snapshot{snapshotCount !== 1 ? "s" : ""}{" "}
               across {timelines.length} branch
               {timelines.length !== 1 ? "es" : ""}
@@ -286,7 +286,7 @@ export function HistoryGraphTab() {
                 onClick={() => setGraphFiltersOpen((open) => !open)}
                 aria-expanded={graphFiltersOpen}
                 aria-label="Choose which graph layers are visible"
-                className="inline-flex h-6 items-center gap-1.5 rounded-md px-1.5 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+                className="inline-flex h-6 items-center gap-1.5 rounded-md px-1.5 text-2xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
                 title="Choose which graph layers are visible"
               >
                 <GitBranch className="h-3 w-3" />
@@ -295,7 +295,7 @@ export function HistoryGraphTab() {
               </button>
               {graphFiltersOpen && (
                 <div className="absolute right-0 top-8 z-40 w-64 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-2 text-xs shadow-xl shadow-black/10">
-                  <div className="mb-1 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
+                  <div className="mb-1 px-2 py-1 text-2xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
                     Graph layers
                   </div>
                   <GraphLayerCheckbox
@@ -329,12 +329,12 @@ export function HistoryGraphTab() {
               )}
             </div>
             {authorOptions.length > 0 && (
-              <label className="history-graph-author-control relative flex h-6 min-w-0 max-w-[180px] items-center gap-1.5 rounded-md px-1.5 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]">
+              <label className="history-graph-author-control relative flex h-6 min-w-0 max-w-[180px] items-center gap-1.5 rounded-md px-1.5 text-2xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]">
                 <Users className="h-3 w-3 shrink-0" />
                 <select
                   value={authorFilter}
                   onChange={(event) => setAuthorFilter(event.target.value)}
-                  className="min-w-0 flex-1 appearance-none truncate bg-transparent pr-3 text-[10px] text-inherit outline-none"
+                  className="min-w-0 flex-1 appearance-none truncate bg-transparent pr-3 text-2xs text-inherit outline-none"
                   title="Highlight snapshots by author"
                 >
                   <option value="all">Everyone</option>
@@ -355,7 +355,7 @@ export function HistoryGraphTab() {
                   Math.max(0.7, +(value - 0.1).toFixed(2)),
                 )
               }
-              className="inline-flex h-6 items-center gap-1.5 rounded-md px-1.5 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+              className="inline-flex h-6 items-center gap-1.5 rounded-md px-1.5 text-2xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
               title="Zoom out"
             >
               <ZoomOut className="h-3 w-3" />
@@ -363,7 +363,7 @@ export function HistoryGraphTab() {
             <button
               type="button"
               onClick={() => setGraphZoom(1)}
-              className="inline-flex h-6 min-w-10 items-center justify-center rounded-md px-1.5 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+              className="inline-flex h-6 min-w-10 items-center justify-center rounded-md px-1.5 text-2xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
               title="Reset zoom"
             >
               {Math.round(graphZoom * 100)}%
@@ -375,7 +375,7 @@ export function HistoryGraphTab() {
                   Math.min(1.6, +(value + 0.1).toFixed(2)),
                 )
               }
-              className="inline-flex h-6 items-center gap-1.5 rounded-md px-1.5 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+              className="inline-flex h-6 items-center gap-1.5 rounded-md px-1.5 text-2xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
               title="Zoom in"
             >
               <ZoomIn className="h-3 w-3" />
@@ -384,7 +384,7 @@ export function HistoryGraphTab() {
               <button
                 type="button"
                 onClick={() => setGraphZoom(1)}
-                className="inline-flex h-6 items-center gap-1.5 rounded-md px-1.5 text-[10px] font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+                className="inline-flex h-6 items-center gap-1.5 rounded-md px-1.5 text-2xs font-medium text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
                 title="Reset zoom"
               >
                 <RotateCcw className="h-3 w-3" />
@@ -426,7 +426,7 @@ export function HistoryGraphTab() {
           )}
         </div>
         {currentRemote && (
-          <div className="hidden rounded-lg border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))] px-2 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] md:block">
+          <div className="hidden rounded-lg border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))] px-2 py-1 text-2xs text-[rgb(var(--color-text-secondary))] md:block">
             Remote: {currentRemote.name}
             {syncStatus
               ? ` - ahead ${syncStatus.ahead} / behind ${syncStatus.behind}`
@@ -438,7 +438,7 @@ export function HistoryGraphTab() {
       <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-auto">
         <div className="px-4 py-4">
           {authorFilter !== "all" && (
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] px-3 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] shadow-sm">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] px-3 py-1.5 text-xs text-[rgb(var(--color-text-secondary))] shadow-sm">
               <Users className="h-3.5 w-3.5 text-[rgb(var(--color-accent))]" />
               Highlighting{" "}
               <span className="font-medium text-[rgb(var(--color-text))]">
@@ -461,7 +461,7 @@ export function HistoryGraphTab() {
             highlightedIds={authorHighlightedIds}
             onNodeClick={handleNodeClick}
           />
-          <p className="mt-3 text-[11px] text-[rgb(var(--color-text-secondary))]">
+          <p className="mt-3 text-xs text-[rgb(var(--color-text-secondary))]">
             The graph starts on the first-parent timeline. Use View to reveal
             merged, remote, and recovery history.
           </p>
@@ -544,10 +544,10 @@ function GraphLayerCheckbox({
         className="mt-0.5 h-3.5 w-3.5 accent-[rgb(var(--color-accent))]"
       />
       <span className="min-w-0">
-        <span className="block text-[11px] font-medium text-[rgb(var(--color-text))]">
+        <span className="block text-xs font-medium text-[rgb(var(--color-text))]">
           {label}
         </span>
-        <span className="block text-[10px] leading-snug text-[rgb(var(--color-text-secondary))]">
+        <span className="block text-2xs leading-snug text-[rgb(var(--color-text-secondary))]">
           {description}
         </span>
       </span>

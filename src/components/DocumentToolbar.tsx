@@ -200,7 +200,7 @@ function ToolbarOverflowMenu({ groups }: { groups: ToolbarOverflowGroup[] }) {
         >
           {groups.map((group, groupIndex) => (
             <div key={group.id} className={groupIndex > 0 ? "border-t border-[rgb(var(--color-border))]" : undefined}>
-              <div className="flex items-center gap-2 px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+              <div className="flex items-center gap-2 px-3 pb-1 pt-2 text-2xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
                 <span className="flex h-4 w-4 items-center justify-center">{group.icon}</span>
                 {group.label}
               </div>

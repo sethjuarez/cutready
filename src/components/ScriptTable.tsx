@@ -704,7 +704,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
         <div className="flex justify-end px-1 pb-1.5">
           <button
             onClick={onReShowHighlights}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium rounded-md border transition-colors
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border transition-colors
               bg-[rgb(var(--color-accent))]/8 text-[rgb(var(--color-accent))] border-[rgb(var(--color-accent))]/20
               hover:bg-[rgb(var(--color-accent))]/15 hover:border-[rgb(var(--color-accent))]/30"
           >
@@ -915,7 +915,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   </div>
                   <div>
                     <div className="text-sm font-semibold text-[rgb(var(--color-text))]">Motion spots</div>
-                    <div className="text-[11px] text-[rgb(var(--color-text-secondary))]">Row {lightboxImage.rowIndex + 1}</div>
+                    <div className="text-xs text-[rgb(var(--color-text-secondary))]">Row {lightboxImage.rowIndex + 1}</div>
                   </div>
                 </div>
                 <p className="mt-3 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
@@ -942,7 +942,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                 </div>
                 <div className="mt-3 space-y-2 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/45 p-3">
                   <div>
-                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">Narrative</div>
+                    <div className="mb-1 text-2xs font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">Narrative</div>
                     <div className="max-h-24 overflow-y-auto text-xs leading-5 text-[rgb(var(--color-text))]">
                       {rows[lightboxImage.rowIndex]?.narrative ? (
                         <SafeMarkdown placeholder="No narrative yet." remarkPlugins={[remarkGfm, remarkBreaks]}>
@@ -954,7 +954,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                     </div>
                   </div>
                   <div className="border-t border-[rgb(var(--color-border))] pt-2">
-                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">Actions</div>
+                    <div className="mb-1 text-2xs font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">Actions</div>
                     <div className="max-h-24 overflow-y-auto text-xs leading-5 text-[rgb(var(--color-text))]">
                       {rows[lightboxImage.rowIndex]?.demo_actions ? (
                         <SafeMarkdown placeholder="No actions yet." remarkPlugins={[remarkGfm, remarkBreaks]}>
@@ -976,7 +976,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                           <div className="text-xs font-semibold text-[rgb(var(--color-text))]">
                             {index === 0 ? "Primary" : index === 1 ? "Secondary" : "Tertiary"} point
                           </div>
-                          <div className="mt-0.5 font-mono text-[10px] text-[rgb(var(--color-text-secondary))]">
+                          <div className="mt-0.5 font-mono text-2xs text-[rgb(var(--color-text-secondary))]">
                             x {point.x.toFixed(3)} · y {point.y.toFixed(3)}
                           </div>
                         </div>
@@ -1003,8 +1003,8 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                 )}
                 <div className="mt-4 border-t border-[rgb(var(--color-border))] pt-4">
                   <div className="mb-2 flex items-center justify-between">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">Typing overlays</div>
-                    <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">{(rows[lightboxImage.rowIndex]?.typing_spots ?? []).length}</span>
+                    <div className="text-2xs font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">Typing overlays</div>
+                    <span className="text-2xs text-[rgb(var(--color-text-secondary))]">{(rows[lightboxImage.rowIndex]?.typing_spots ?? []).length}</span>
                   </div>
                   <div className="space-y-1">
                     {(rows[lightboxImage.rowIndex]?.typing_spots ?? []).map((spot, index) => (
@@ -1016,7 +1016,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                       >
                         <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: spot.text_color ?? "#ffffff" }} />
                         <span className="min-w-0 flex-1 truncate text-xs font-medium text-[rgb(var(--color-text))]">{spot.text || `Typing layer ${index + 1}`}</span>
-                        <span className="font-mono text-[10px] text-[rgb(var(--color-text-secondary))]">{Math.round((spot.font_scale ?? typingOverlayDefaults.fontScale) * 100)}%</span>
+                        <span className="font-mono text-2xs text-[rgb(var(--color-text-secondary))]">{Math.round((spot.font_scale ?? typingOverlayDefaults.fontScale) * 100)}%</span>
                       </button>
                     ))}
                   </div>
@@ -1049,11 +1049,11 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                           aria-label={`Typing text ${index + 1}`}
                         />
                         <div className="mt-2 grid grid-cols-2 gap-2">
-                          <label className="text-[10px] text-[rgb(var(--color-text-secondary))]">Start (ms)<input type="number" min="0" value={spot.start_offset_ms ?? 0} onChange={(event) => updateTypingSpot(index, { start_offset_ms: Number(event.target.value) || 0 })} readOnly={readOnly} className="mt-1 w-full rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-1.5 py-1 text-xs text-[rgb(var(--color-text))]" /></label>
-                          <label className="text-[10px] text-[rgb(var(--color-text-secondary))]">Chars/sec<input type="number" min="1" max="80" value={spot.characters_per_second ?? 18} onChange={(event) => updateTypingSpot(index, { characters_per_second: Number(event.target.value) || 18 })} readOnly={readOnly} className="mt-1 w-full rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-1.5 py-1 text-xs text-[rgb(var(--color-text))]" /></label>
+                          <label className="text-2xs text-[rgb(var(--color-text-secondary))]">Start (ms)<input type="number" min="0" value={spot.start_offset_ms ?? 0} onChange={(event) => updateTypingSpot(index, { start_offset_ms: Number(event.target.value) || 0 })} readOnly={readOnly} className="mt-1 w-full rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-1.5 py-1 text-xs text-[rgb(var(--color-text))]" /></label>
+                          <label className="text-2xs text-[rgb(var(--color-text-secondary))]">Chars/sec<input type="number" min="1" max="80" value={spot.characters_per_second ?? 18} onChange={(event) => updateTypingSpot(index, { characters_per_second: Number(event.target.value) || 18 })} readOnly={readOnly} className="mt-1 w-full rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-1.5 py-1 text-xs text-[rgb(var(--color-text))]" /></label>
                         </div>
                         <div className="mt-2">
-                          <div className="mb-1.5 text-[10px] text-[rgb(var(--color-text-secondary))]">Text color</div>
+                          <div className="mb-1.5 text-2xs text-[rgb(var(--color-text-secondary))]">Text color</div>
                           <div className="flex items-center gap-1">
                             {TYPING_COLOR_PRESETS.map((color) => (
                               <button key={color} type="button" disabled={readOnly} onClick={() => updateTypingSpot(index, { text_color: color })} className={`h-5 w-5 rounded-full border-2 transition-transform hover:scale-110 disabled:cursor-not-allowed ${spot.text_color === color ? "border-[rgb(var(--color-accent))] ring-2 ring-[rgb(var(--color-accent))]/25" : "border-[rgb(var(--color-border))]"}`} style={{ backgroundColor: color }} aria-label={`Set typing text color to ${color}`} />
@@ -1068,20 +1068,20 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                                 const value = event.target.value.trim();
                                 if (/^#[0-9a-fA-F]{6}$/.test(value)) updateTypingSpot(index, { text_color: value });
                               }}
-                              className="ml-auto w-16 rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-1.5 py-1 font-mono text-[10px] text-[rgb(var(--color-text))] outline-none focus:border-[rgb(var(--color-accent))]"
+                              className="ml-auto w-16 rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-1.5 py-1 font-mono text-2xs text-[rgb(var(--color-text))] outline-none focus:border-[rgb(var(--color-accent))]"
                               aria-label={`Typing text color ${index + 1}`}
                             />
                           </div>
                         </div>
                         <div className="mt-2 grid grid-cols-2 gap-2">
-                          <label className="min-w-0 text-[10px] text-[rgb(var(--color-text-secondary))]">Font
+                          <label className="min-w-0 text-2xs text-[rgb(var(--color-text-secondary))]">Font
                             <select value={spot.font_family ?? typingOverlayDefaults.fontFamily} onChange={(event) => updateTypingSpot(index, { font_family: event.target.value as TypingSpot["font_family"] })} disabled={readOnly} className="mt-1 w-full rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-1.5 py-1 text-xs text-[rgb(var(--color-text))]">
                               <option value="sans">Sans</option>
                               <option value="serif">Serif</option>
                               <option value="mono">Mono</option>
                             </select>
                           </label>
-                          <label className="min-w-0 text-[10px] text-[rgb(var(--color-text-secondary))]">Size <span className="font-mono">{Math.round((spot.font_scale ?? typingOverlayDefaults.fontScale) * 100)}%</span>
+                          <label className="min-w-0 text-2xs text-[rgb(var(--color-text-secondary))]">Size <span className="font-mono">{Math.round((spot.font_scale ?? typingOverlayDefaults.fontScale) * 100)}%</span>
                             <input type="range" min="0.4" max="1.8" step="0.1" value={spot.font_scale ?? typingOverlayDefaults.fontScale} onChange={(event) => updateTypingSpot(index, { font_scale: Number(event.target.value) })} disabled={readOnly} className="mt-1 block w-full accent-[rgb(var(--color-accent))]" aria-label={`Typing font size ${index + 1}`} />
                           </label>
                         </div>
@@ -1148,7 +1148,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                     <button
                       onClick={() => setLightboxMode("preview")}
                       aria-pressed={lightboxMode === "preview"}
-                      className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors ${
+                      className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
                         lightboxMode === "preview"
                           ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))]"
                           : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
@@ -1159,7 +1159,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                     <button
                       onClick={() => setLightboxMode("edit")}
                       aria-pressed={lightboxMode === "edit"}
-                      className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors ${
+                      className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
                         lightboxMode === "edit"
                           ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))]"
                           : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
@@ -1170,7 +1170,7 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
                   </div>
                 )}
                 {editorDirty && (
-                  <span className="text-[11px] text-[rgb(var(--color-accent))] font-medium">● Unsaved</span>
+                  <span className="text-xs text-[rgb(var(--color-accent))] font-medium">● Unsaved</span>
                 )}
               </div>
               <div className="flex items-center gap-2">
@@ -1271,11 +1271,11 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
 
       {/* Undo toast */}
       {undoToast && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-dropdown flex items-center gap-2 px-3 py-2 rounded-lg bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] shadow-lg text-[12px] text-[rgb(var(--color-text))]">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-dropdown flex items-center gap-2 px-3 py-2 rounded-lg bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] shadow-lg text-xs text-[rgb(var(--color-text))]">
           <span>{undoToast}</span>
           <button
             onClick={() => { popUndo(); setUndoToast(null); }}
-            className="px-2 py-0.5 rounded text-[11px] font-medium text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
+            className="px-2 py-0.5 rounded text-xs font-medium text-[rgb(var(--color-accent))] hover:bg-[rgb(var(--color-accent))]/10 transition-colors"
           >
             Undo
           </button>
@@ -1556,7 +1556,7 @@ function SortableRow({
                 />
               )}
               {motionPointCount > 0 && (
-                <div className="absolute bottom-1 left-1 z-10 inline-flex items-center gap-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.58)] px-1.5 py-0.5 text-[10px] font-medium text-[rgb(var(--color-media-control-fg))] backdrop-blur">
+                <div className="absolute bottom-1 left-1 z-10 inline-flex items-center gap-1 rounded-full bg-[rgb(var(--color-media-control-bg)/0.58)] px-1.5 py-0.5 text-2xs font-medium text-[rgb(var(--color-media-control-fg))] backdrop-blur">
                   <Crosshair className="h-3 w-3" />
                   {motionPointCount}
                 </div>
@@ -1664,7 +1664,7 @@ function SortableRow({
           ) : (
             <div className="relative flex h-24 w-full items-center justify-center rounded-md border border-dashed border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/45">
               {!readOnly && !mediaLocked ? (
-                <div className="flex flex-col items-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                <div className="flex flex-col items-center gap-1 text-2xs text-[rgb(var(--color-text-secondary))]">
                   <MediaAddPopover
                     idx={idx}
                     variant="placeholder"
@@ -1682,7 +1682,7 @@ function SortableRow({
                   <span>Screenshot</span>
                 </div>
               ) : (
-                <span className="flex flex-col items-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                <span className="flex flex-col items-center gap-1 text-2xs text-[rgb(var(--color-text-secondary))]">
                   <ImageIcon className="h-4 w-4 opacity-60" />
                   {mediaLocked ? "Visual locked" : "Screenshot"}
                 </span>
@@ -1717,18 +1717,18 @@ function SortableRow({
                       recordDisabled={narrationRecordingRow !== null && !isRecordingNarration}
                     />
                   ) : (
-                    <div className="text-[11px] text-[rgb(var(--color-text-secondary))]">Narration file unavailable.</div>
+                    <div className="text-xs text-[rgb(var(--color-text-secondary))]">Narration file unavailable.</div>
                   )}
                 </div>
                 {narrationStale && (
-                  <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide text-[rgb(var(--color-warning))]" title="Narration is stale">
+                  <span className="inline-flex items-center gap-1 text-2xs uppercase tracking-wide text-[rgb(var(--color-warning))]" title="Narration is stale">
                     <AlertTriangle className="h-3 w-3" />
                     Stale
                   </span>
                 )}
               </div>
               {row.narration_plan && (
-                <details className="mt-1.5 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                <details className="mt-1.5 text-2xs text-[rgb(var(--color-text-secondary))]">
                   <summary className="cursor-pointer select-none hover:text-[rgb(var(--color-text))]">
                     SSML plan · {row.narration_plan.voice}
                     {row.narration_plan.baseline_style ? ` · ${row.narration_plan.baseline_style}` : ""}
@@ -1754,7 +1754,7 @@ function SortableRow({
               </>
             ) : (
               !readOnly && !mediaLocked ? (
-                <div className="flex min-h-12 flex-col items-center justify-center gap-1 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                <div className="flex min-h-12 flex-col items-center justify-center gap-1 text-2xs text-[rgb(var(--color-text-secondary))]">
                   <MediaAddPopover
                     idx={idx}
                     variant="placeholder"
@@ -1768,7 +1768,7 @@ function SortableRow({
                   <span>Narration</span>
                 </div>
               ) : (
-                <div className="flex h-8 items-center justify-center gap-1.5 text-[11px] text-[rgb(var(--color-text-secondary))]">
+                <div className="flex h-8 items-center justify-center gap-1.5 text-xs text-[rgb(var(--color-text-secondary))]">
                   <Mic className="h-3.5 w-3.5 opacity-60" />
                   No narration
                 </div>
@@ -2282,7 +2282,7 @@ function NarrationPlayer({
         onEnded={() => setPlaying(false)}
       />
       {loadError && (
-        <div className="text-[11px] text-[rgb(var(--color-error))]">
+        <div className="text-xs text-[rgb(var(--color-error))]">
           {loadError}
         </div>
       )}
@@ -2314,7 +2314,7 @@ function NarrationPlayer({
               <Play className="h-3.5 w-3.5 fill-current" />
             )}
           </button>
-        <span className="min-w-0 flex-1 truncate text-[11px] text-[rgb(var(--color-text-secondary))]">
+        <span className="min-w-0 flex-1 truncate text-xs text-[rgb(var(--color-text-secondary))]">
           {formatPlaybackTime(currentTime)} / {formatPlaybackTime(duration)}
         </span>
         {onRemove && (

@@ -102,21 +102,21 @@ export function SemanticConflictResolver({
         <div className="flex flex-wrap items-center gap-2">
           <div className="mr-auto">
             <div className="text-xs font-semibold text-[rgb(var(--color-text))]">{typeLabel}</div>
-            <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
+            <div className="text-2xs text-[rgb(var(--color-text-secondary))]">
               {resolvedCount} of {fields.length} document field{fields.length === 1 ? "" : "s"} chosen
             </div>
           </div>
           <button
             type="button"
             onClick={() => chooseAll("ours")}
-            className="rounded-lg border border-[rgb(var(--color-border))]/70 px-2.5 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+            className="rounded-lg border border-[rgb(var(--color-border))]/70 px-2.5 py-1 text-2xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
           >
             Use all current
           </button>
           <button
             type="button"
             onClick={() => chooseAll("theirs")}
-            className="rounded-lg border border-[rgb(var(--color-border))]/70 px-2.5 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+            className="rounded-lg border border-[rgb(var(--color-border))]/70 px-2.5 py-1 text-2xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
           >
             Use all incoming
           </button>
@@ -133,7 +133,7 @@ export function SemanticConflictResolver({
               }
               setFullEdit((open) => !open);
             }}
-            className="rounded-lg bg-[rgb(var(--color-accent))] px-2.5 py-1 text-[10px] font-medium text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))]"
+            className="rounded-lg bg-[rgb(var(--color-accent))] px-2.5 py-1 text-2xs font-medium text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))]"
           >
             Edit full result
           </button>
@@ -147,12 +147,12 @@ export function SemanticConflictResolver({
               onResolve(event.target.value);
             }}
             spellCheck={false}
-            className="mt-3 h-56 w-full resize-y rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] p-3 font-mono text-[11px] text-[rgb(var(--color-text))] outline-none focus:border-[rgb(var(--color-accent))]"
+            className="mt-3 h-56 w-full resize-y rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] p-3 font-mono text-xs text-[rgb(var(--color-text))] outline-none focus:border-[rgb(var(--color-accent))]"
           />
         )}
 
         {!allChosen && !fullEdit && (
-          <p className="mt-2 text-[10px] italic text-[rgb(var(--color-text-secondary))]">
+          <p className="mt-2 text-2xs italic text-[rgb(var(--color-text-secondary))]">
             Choose current, incoming, or customize each field. Custom choices can combine both sides before applying.
           </p>
         )}
@@ -161,7 +161,7 @@ export function SemanticConflictResolver({
       {!fullEdit && Object.entries(grouped).map(([group, groupFields]) => (
         <div key={group} className="rounded-xl border border-[rgb(var(--color-border))]/60 bg-[rgb(var(--color-surface))]">
           <div className="border-b border-[rgb(var(--color-border))]/50 px-3 py-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-[rgb(var(--color-text-secondary))]">{group}</div>
+            <div className="text-2xs font-semibold uppercase tracking-wide text-[rgb(var(--color-text-secondary))]">{group}</div>
           </div>
           <div className="divide-y divide-[rgb(var(--color-border))]/40">
             {groupFields.map((field) => (
@@ -205,7 +205,7 @@ function SemanticFieldRow({
       <div className="mb-2 flex items-center gap-2">
         <div className="mr-auto">
           <div className="text-xs font-medium text-[rgb(var(--color-text))]">{field.label}</div>
-          <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">{changeSummary(field)}</div>
+          <div className="text-2xs text-[rgb(var(--color-text-secondary))]">{changeSummary(field)}</div>
         </div>
         <ChoiceButton active={resolution?.choice === "ours"} onClick={() => onResolve({ choice: "ours" })}>
           Current
@@ -219,8 +219,8 @@ function SemanticFieldRow({
       </div>
       {field.ancestor !== undefined && !valuesEqual(field.ancestor, field.ours) && !valuesEqual(field.ancestor, field.theirs) && (
         <div className="mb-2 rounded-lg border border-[rgb(var(--color-border))]/50 bg-[rgb(var(--color-surface-alt))]/70 px-2.5 py-2">
-          <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-[rgb(var(--color-text-secondary))]">Before both changes</div>
-          <div className="whitespace-pre-wrap text-[11px] leading-relaxed text-[rgb(var(--color-text-secondary))]">{formatDisplayValue(field.ancestor)}</div>
+          <div className="mb-1 text-2xs font-semibold uppercase tracking-wide text-[rgb(var(--color-text-secondary))]">Before both changes</div>
+          <div className="whitespace-pre-wrap text-xs leading-relaxed text-[rgb(var(--color-text-secondary))]">{formatDisplayValue(field.ancestor)}</div>
         </div>
       )}
       <div className="grid gap-2 lg:grid-cols-2">
@@ -300,21 +300,21 @@ function MarkdownTextConflictResolver({
         <div className="flex flex-wrap items-center gap-2">
           <div className="mr-auto">
             <div className="text-xs font-semibold text-[rgb(var(--color-text))]">Markdown-aware resolution</div>
-            <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">
+            <div className="text-2xs text-[rgb(var(--color-text-secondary))]">
               {resolvedCount} of {conflict.text_conflicts.length} changed region{conflict.text_conflicts.length === 1 ? "" : "s"} chosen
             </div>
           </div>
           <button
             type="button"
             onClick={() => chooseAll("ours")}
-            className="rounded-lg border border-[rgb(var(--color-border))]/70 px-2.5 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+            className="rounded-lg border border-[rgb(var(--color-border))]/70 px-2.5 py-1 text-2xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
           >
             Use all current
           </button>
           <button
             type="button"
             onClick={() => chooseAll("theirs")}
-            className="rounded-lg border border-[rgb(var(--color-border))]/70 px-2.5 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+            className="rounded-lg border border-[rgb(var(--color-border))]/70 px-2.5 py-1 text-2xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
           >
             Use all incoming
           </button>
@@ -331,13 +331,13 @@ function MarkdownTextConflictResolver({
               }
               setFullEdit((open) => !open);
             }}
-            className="rounded-lg bg-[rgb(var(--color-accent))] px-2.5 py-1 text-[10px] font-medium text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))]"
+            className="rounded-lg bg-[rgb(var(--color-accent))] px-2.5 py-1 text-2xs font-medium text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))]"
           >
             Edit full result
           </button>
         </div>
         {!allChosen && !fullEdit && (
-          <p className="mt-2 text-[10px] italic text-[rgb(var(--color-text-secondary))]">
+          <p className="mt-2 text-2xs italic text-[rgb(var(--color-text-secondary))]">
             Resolve each Markdown region independently, or customize the final wording where both sides need to be combined.
           </p>
         )}
@@ -349,7 +349,7 @@ function MarkdownTextConflictResolver({
               onResolve(event.target.value);
             }}
             spellCheck
-            className="mt-3 h-56 w-full resize-y rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] p-3 font-mono text-[11px] text-[rgb(var(--color-text))] outline-none focus:border-[rgb(var(--color-accent))]"
+            className="mt-3 h-56 w-full resize-y rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] p-3 font-mono text-xs text-[rgb(var(--color-text))] outline-none focus:border-[rgb(var(--color-accent))]"
           />
         )}
       </div>
@@ -392,7 +392,7 @@ function MarkdownRegionRow({
       <div className="mb-2 flex items-center gap-2">
         <div className="mr-auto">
           <div className="text-xs font-medium text-[rgb(var(--color-text))]">Changed region {index + 1}</div>
-          <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">Starts near line {region.start_line + 1}</div>
+          <div className="text-2xs text-[rgb(var(--color-text-secondary))]">Starts near line {region.start_line + 1}</div>
         </div>
         <ChoiceButton active={resolution?.choice === "ours"} onClick={() => onResolve({ choice: "ours" })}>
           Current
@@ -406,7 +406,7 @@ function MarkdownRegionRow({
       </div>
       {region.ancestor_lines.length > 0 && (
         <div className="mb-2 rounded-lg border border-[rgb(var(--color-border))]/50 bg-[rgb(var(--color-surface-alt))]/70 px-2.5 py-2">
-          <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-[rgb(var(--color-text-secondary))]">Before both changes</div>
+          <div className="mb-1 text-2xs font-semibold uppercase tracking-wide text-[rgb(var(--color-text-secondary))]">Before both changes</div>
           <MarkdownLines lines={region.ancestor_lines} tone="muted" />
         </div>
       )}
@@ -479,12 +479,12 @@ function MarkdownLines({
       : "bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))]";
 
   return (
-    <div className="space-y-1 font-mono text-[11px] leading-relaxed">
+    <div className="space-y-1 font-mono text-xs leading-relaxed">
       {lines.length === 0 ? (
         <div className="italic text-[rgb(var(--color-text-secondary))]">(empty)</div>
       ) : lines.map((line, index) => (
         <div key={`${index}-${line}`} className="grid grid-cols-[1.5rem_1fr] gap-2">
-          <span className={`rounded px-1 text-center text-[9px] ${markerClass}`}>
+          <span className={`rounded px-1 text-center text-2xs ${markerClass}`}>
             {tone === "muted" ? "=" : "+"}
           </span>
           <span className="whitespace-pre-wrap text-[rgb(var(--color-text))]">
@@ -501,7 +501,7 @@ function ChoiceButton({ active, onClick, children }: { active: boolean; onClick:
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
+      className={`rounded-full px-2.5 py-1 text-2xs font-medium transition-colors ${
         active
           ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))]"
           : "bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
@@ -562,14 +562,14 @@ function SketchDocumentPreview({
     <PreviewShell label={label} active={active}>
       <div className="rounded-lg border border-[rgb(var(--color-border))]/60 bg-[rgb(var(--color-surface))] shadow-sm">
         <div className="border-b border-[rgb(var(--color-border))]/50 px-3 py-2">
-          <div className="text-[9px] font-semibold uppercase tracking-wide text-[rgb(var(--color-text-secondary))]">
+          <div className="text-2xs font-semibold uppercase tracking-wide text-[rgb(var(--color-text-secondary))]">
             {documentLabel}
           </div>
           <div className="mt-0.5 text-xs font-semibold text-[rgb(var(--color-text))]">{field.label}</div>
         </div>
         <div className="p-3">
           {field.path === "description" ? (
-            <div className="rounded-md border-l-2 border-[rgb(var(--color-accent))]/70 bg-[rgb(var(--color-surface-alt))] px-3 py-2 text-[11px] leading-relaxed text-[rgb(var(--color-text))]">
+            <div className="rounded-md border-l-2 border-[rgb(var(--color-accent))]/70 bg-[rgb(var(--color-surface-alt))] px-3 py-2 text-xs leading-relaxed text-[rgb(var(--color-text))]">
               <HighlightedValue value={value} compareTo={field.ancestor} />
             </div>
           ) : (
@@ -603,16 +603,16 @@ function SketchRowPreview({
     <PreviewShell label={label} active={active}>
       <div className="overflow-hidden rounded-lg border border-[rgb(var(--color-border))]/60 bg-[rgb(var(--color-surface))] shadow-sm">
         <div className="flex items-center gap-2 border-b border-[rgb(var(--color-border))]/50 px-3 py-2">
-          <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 text-[9px] font-semibold text-[rgb(var(--color-text-secondary))]">
+          <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 text-2xs font-semibold text-[rgb(var(--color-text-secondary))]">
             Row {rowNumber}
           </span>
           <span className="text-xs font-semibold text-[rgb(var(--color-text))]">{columnLabel}</span>
         </div>
-        <div className="grid grid-cols-[4.5rem_1fr] border-b border-[rgb(var(--color-border))]/40 text-[9px] font-semibold uppercase tracking-wide text-[rgb(var(--color-text-secondary))]">
+        <div className="grid grid-cols-[4.5rem_1fr] border-b border-[rgb(var(--color-border))]/40 text-2xs font-semibold uppercase tracking-wide text-[rgb(var(--color-text-secondary))]">
           <div className="border-r border-[rgb(var(--color-border))]/40 px-2 py-1.5">Time</div>
           <div className="px-2 py-1.5">{columnLabel}</div>
         </div>
-        <div className="grid grid-cols-[4.5rem_1fr] text-[11px] text-[rgb(var(--color-text))]">
+        <div className="grid grid-cols-[4.5rem_1fr] text-xs text-[rgb(var(--color-text))]">
           <div className="border-r border-[rgb(var(--color-border))]/40 bg-[rgb(var(--color-surface-alt))] px-2 py-2 text-[rgb(var(--color-text-secondary))]">
             Row {rowNumber}
           </div>
@@ -646,7 +646,7 @@ function SketchRowSequencePreview({
     <PreviewShell label={label} active={active}>
       <div className="overflow-hidden rounded-lg border border-[rgb(var(--color-border))]/60 bg-[rgb(var(--color-surface))] shadow-sm">
         <div className="flex items-center gap-2 border-b border-[rgb(var(--color-border))]/50 px-3 py-2">
-          <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 text-[9px] font-semibold text-[rgb(var(--color-text-secondary))]">
+          <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 text-2xs font-semibold text-[rgb(var(--color-text-secondary))]">
             {rows.length} row{rows.length === 1 ? "" : "s"}
           </span>
           <span className="text-xs font-semibold text-[rgb(var(--color-text))]">Planning table sequence</span>
@@ -661,7 +661,7 @@ function SketchRowSequencePreview({
             />
           ))}
           {missingAncestorRows.map((row, index) => (
-            <div key={`deleted-${rowFingerprint(row)}-${index}`} className="grid grid-cols-[4rem_1fr] bg-[rgb(var(--color-error))]/6 text-[11px] opacity-80">
+            <div key={`deleted-${rowFingerprint(row)}-${index}`} className="grid grid-cols-[4rem_1fr] bg-[rgb(var(--color-error))]/6 text-xs opacity-80">
               <div className="border-r border-[rgb(var(--color-border))]/40 px-2 py-2 text-[rgb(var(--color-error))]">Deleted</div>
               <div className="px-2 py-2 text-[rgb(var(--color-text-secondary))] line-through">
                 {rowLabel(row)}
@@ -697,7 +697,7 @@ function SketchSequenceRow({
       : "text-[rgb(var(--color-accent))]";
 
   return (
-    <div className="grid grid-cols-[4rem_1fr] text-[11px]">
+    <div className="grid grid-cols-[4rem_1fr] text-xs">
       <div className={`border-r border-[rgb(var(--color-border))]/40 px-2 py-2 font-medium ${markerClass}`}>
         {marker}
       </div>
@@ -727,10 +727,10 @@ function StoryboardPreview({
   return (
     <PreviewShell label={label} active={active}>
       <div className="rounded-lg border border-[rgb(var(--color-border))]/60 bg-[rgb(var(--color-surface))] p-3 shadow-sm">
-        <div className="mb-2 text-[9px] font-semibold uppercase tracking-wide text-[rgb(var(--color-text-secondary))]">
+        <div className="mb-2 text-2xs font-semibold uppercase tracking-wide text-[rgb(var(--color-text-secondary))]">
           Storyboard · {field.label}
         </div>
-        <div className="rounded-md bg-[rgb(var(--color-surface-alt))] p-2 text-[11px] text-[rgb(var(--color-text))]">
+        <div className="rounded-md bg-[rgb(var(--color-surface-alt))] p-2 text-xs text-[rgb(var(--color-text))]">
           <HighlightedValue value={value} compareTo={field.ancestor} />
         </div>
       </div>
@@ -759,7 +759,7 @@ function StoryboardStructurePreview({
     <PreviewShell label={label} active={active}>
       <div className="overflow-hidden rounded-lg border border-[rgb(var(--color-border))]/60 bg-[rgb(var(--color-surface))] shadow-sm">
         <div className="flex items-center gap-2 border-b border-[rgb(var(--color-border))]/50 px-3 py-2">
-          <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 text-[9px] font-semibold text-[rgb(var(--color-text-secondary))]">
+          <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 text-2xs font-semibold text-[rgb(var(--color-text-secondary))]">
             {items.length} item{items.length === 1 ? "" : "s"}
           </span>
           <span className="text-xs font-semibold text-[rgb(var(--color-text))]">Storyboard order</span>
@@ -774,7 +774,7 @@ function StoryboardStructurePreview({
             />
           ))}
           {missingAncestorItems.map((item, index) => (
-            <div key={`deleted-${item.fingerprint}-${index}`} className="grid grid-cols-[4rem_1fr] bg-[rgb(var(--color-error))]/6 text-[11px] opacity-80">
+            <div key={`deleted-${item.fingerprint}-${index}`} className="grid grid-cols-[4rem_1fr] bg-[rgb(var(--color-error))]/6 text-xs opacity-80">
               <div className="border-r border-[rgb(var(--color-border))]/40 px-2 py-2 text-[rgb(var(--color-error))]">Deleted</div>
               <div className="px-2 py-2 text-[rgb(var(--color-text-secondary))] line-through">{item.title}</div>
             </div>
@@ -815,13 +815,13 @@ function StoryboardStructureItem({
       : "text-[rgb(var(--color-accent))]";
 
   return (
-    <div className="grid grid-cols-[4rem_1fr] text-[11px]">
+    <div className="grid grid-cols-[4rem_1fr] text-xs">
       <div className={`border-r border-[rgb(var(--color-border))]/40 px-2 py-2 font-medium ${markerClass}`}>
         {marker}
       </div>
       <div className="space-y-1 px-2 py-2">
         <div className="flex items-center gap-2">
-          <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-px text-[9px] uppercase tracking-wide text-[rgb(var(--color-text-secondary))]">
+          <span className="rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-px text-2xs uppercase tracking-wide text-[rgb(var(--color-text-secondary))]">
             {item.type}
           </span>
           <span className="font-medium text-[rgb(var(--color-text))]">{item.title}</span>
@@ -832,7 +832,7 @@ function StoryboardStructureItem({
         {item.sketches.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {item.sketches.map((path) => (
-              <span key={path} className="rounded-full border border-[rgb(var(--color-border))]/50 px-1.5 py-px text-[10px] text-[rgb(var(--color-text-secondary))]">
+              <span key={path} className="rounded-full border border-[rgb(var(--color-border))]/50 px-1.5 py-px text-2xs text-[rgb(var(--color-text-secondary))]">
                 {path}
               </span>
             ))}
@@ -846,7 +846,7 @@ function StoryboardStructureItem({
 function PreviewPanel({ label, value, active }: { label: string; value: unknown; active: boolean }) {
   return (
     <PreviewShell label={label} active={active}>
-      <div className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-[11px] leading-relaxed text-[rgb(var(--color-text))]">
+      <div className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-relaxed text-[rgb(var(--color-text))]">
         <HighlightedValue value={value} compareTo={undefined} />
       </div>
     </PreviewShell>
@@ -856,7 +856,7 @@ function PreviewPanel({ label, value, active }: { label: string; value: unknown;
 function PreviewShell({ label, active, children }: { label: string; active: boolean; children: ReactNode }) {
   return (
     <div className={`rounded-lg border p-2 ${active ? "border-[rgb(var(--color-accent))]/60 bg-[rgb(var(--color-accent))]/10" : "border-[rgb(var(--color-border))]/60 bg-[rgb(var(--color-surface-alt))]"}`}>
-      <div className="mb-1 text-[9px] font-semibold uppercase tracking-wide text-[rgb(var(--color-text-secondary))]">{label}</div>
+      <div className="mb-1 text-2xs font-semibold uppercase tracking-wide text-[rgb(var(--color-text-secondary))]">{label}</div>
       {children}
     </div>
   );
@@ -929,12 +929,12 @@ function FullContentComposer({
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <div className="mr-auto">
             <div className="text-xs font-semibold text-[rgb(var(--color-text))]">{title}</div>
-            <div className="text-[10px] text-[rgb(var(--color-text-secondary))]">Edit the combined result directly, then apply the merge.</div>
+            <div className="text-2xs text-[rgb(var(--color-text-secondary))]">Edit the combined result directly, then apply the merge.</div>
           </div>
-          <button type="button" onClick={() => setResolvedContent(conflict.ours)} className="rounded-lg border border-[rgb(var(--color-border))]/70 px-2.5 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]">
+          <button type="button" onClick={() => setResolvedContent(conflict.ours)} className="rounded-lg border border-[rgb(var(--color-border))]/70 px-2.5 py-1 text-2xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]">
             Start current
           </button>
-          <button type="button" onClick={() => setResolvedContent(conflict.theirs)} className="rounded-lg border border-[rgb(var(--color-border))]/70 px-2.5 py-1 text-[10px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]">
+          <button type="button" onClick={() => setResolvedContent(conflict.theirs)} className="rounded-lg border border-[rgb(var(--color-border))]/70 px-2.5 py-1 text-2xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]">
             Start incoming
           </button>
         </div>
@@ -942,7 +942,7 @@ function FullContentComposer({
           value={content}
           onChange={(event) => setResolvedContent(event.target.value)}
           spellCheck={conflict.file_type === "note"}
-          className="h-64 w-full resize-y rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] p-3 font-mono text-[11px] text-[rgb(var(--color-text))] outline-none focus:border-[rgb(var(--color-accent))]"
+          className="h-64 w-full resize-y rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] p-3 font-mono text-xs text-[rgb(var(--color-text))] outline-none focus:border-[rgb(var(--color-accent))]"
         />
       </div>
       <div className="grid gap-2 lg:grid-cols-2">

@@ -16,7 +16,7 @@ export function ExperimentalTab({ settings, updateSetting }: {
         <label className="flex items-center justify-between gap-3 rounded-lg bg-[rgb(var(--color-surface))] px-3 py-2">
           <span>
             <span className="block text-xs text-[rgb(var(--color-text))]">Recording</span>
-            <span className="block text-[11px] text-[rgb(var(--color-text-secondary))]">Screen, camera, and audio capture for demo recordings</span>
+            <span className="block text-xs text-[rgb(var(--color-text-secondary))]">Screen, camera, and audio capture for demo recordings</span>
           </span>
           <input
             type="checkbox"

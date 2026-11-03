@@ -590,7 +590,7 @@ export function StoryboardView() {
                         <Monitor className="h-3.5 w-3.5" />
                         <span>{m.name || `Monitor ${m.id}`}</span>
                         {m.is_primary && (
-                          <span className="ml-auto text-[10px] font-medium text-[rgb(var(--color-accent))]">Primary</span>
+                          <span className="ml-auto text-2xs font-medium text-[rgb(var(--color-accent))]">Primary</span>
                         )}
                       </button>
                     ))}
@@ -688,7 +688,7 @@ export function StoryboardView() {
                   disabled={!canExpandOutline}
                   title="Expand one outline level"
                   aria-label="Expand one outline level"
-                  className="rounded-md px-2.5 py-1 text-[11px] font-semibold text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))] disabled:cursor-default disabled:opacity-35 disabled:hover:text-[rgb(var(--color-text-secondary))]"
+                  className="rounded-md px-2.5 py-1 text-xs font-semibold text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))] disabled:cursor-default disabled:opacity-35 disabled:hover:text-[rgb(var(--color-text-secondary))]"
                 >
                   Expand
                 </button>
@@ -698,7 +698,7 @@ export function StoryboardView() {
                   disabled={!canCollapseOutline}
                   title="Collapse one outline level"
                   aria-label="Collapse one outline level"
-                  className="rounded-md px-2.5 py-1 text-[11px] font-semibold text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))] disabled:cursor-default disabled:opacity-35 disabled:hover:text-[rgb(var(--color-text-secondary))]"
+                  className="rounded-md px-2.5 py-1 text-xs font-semibold text-[rgb(var(--color-text-secondary))] transition-colors hover:text-[rgb(var(--color-text))] disabled:cursor-default disabled:opacity-35 disabled:hover:text-[rgb(var(--color-text-secondary))]"
                 >
                   Collapse
                 </button>
@@ -926,7 +926,7 @@ function SortableStoryboardItem({ id, disabled, children }: { id: number; disabl
 
 function StoryboardDurationPill({ label }: { label: string }) {
   return (
-    <span className="shrink-0 rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--color-text-secondary))]">
+    <span className="shrink-0 rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 text-2xs font-medium text-[rgb(var(--color-text-secondary))]">
       {label}
     </span>
   );
@@ -982,7 +982,7 @@ function ExpandableSketchCard({
 
         <div className="min-w-0 flex-1">
           {isTopLevel && (
-            <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[rgb(var(--color-text-secondary))]/60">
+            <div className="mb-1 flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.2em] text-[rgb(var(--color-text-secondary))]/60">
               <span>Sketch</span>
               <span className="h-px w-5 bg-[rgb(var(--color-border))]" />
               <span className="tracking-[0.14em]">
@@ -1009,7 +1009,7 @@ function ExpandableSketchCard({
               {sketch.title}
             </button>
 
-            <span className={`shrink-0 text-[10px] text-[rgb(var(--color-text-secondary))]/85 ${isTopLevel ? "hidden" : ""}`}>
+            <span className={`shrink-0 text-2xs text-[rgb(var(--color-text-secondary))]/85 ${isTopLevel ? "hidden" : ""}`}>
               {sketch.row_count} {sketch.row_count === 1 ? "row" : "rows"}
             </span>
 
@@ -1172,7 +1172,7 @@ function StoryboardSectionBlock({
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[rgb(var(--color-text-secondary))]/60">
+          <div className="mb-1 flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.2em] text-[rgb(var(--color-text-secondary))]/60">
             <span>Section</span>
             <span className="h-px w-5 bg-[rgb(var(--color-border))]" />
             <span className="tracking-[0.14em]">
@@ -1320,13 +1320,13 @@ function StoryboardSectionBlock({
         <div className="mt-2 flex gap-2 pl-6">
           <button
             onClick={onAddNewSketch}
-            className="rounded-full border border-[rgb(var(--color-border-subtle))] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] hover:border-[rgb(var(--color-accent))]/45 hover:text-[rgb(var(--color-accent))] transition-colors"
+            className="rounded-full border border-[rgb(var(--color-border-subtle))] px-3 py-1 text-2xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] hover:border-[rgb(var(--color-accent))]/45 hover:text-[rgb(var(--color-accent))] transition-colors"
           >
             New sketch
           </button>
           <button
             onClick={onPickExisting}
-            className="rounded-full border border-transparent px-3 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+            className="rounded-full border border-transparent px-3 py-1 text-2xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
           >
             Add existing sketch
           </button>
@@ -1413,21 +1413,21 @@ function AddItemButton({
       <div className="relative left-1/2 flex -translate-x-1/2 gap-1 rounded-full border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/95 px-1 py-0.5 opacity-0 shadow-sm backdrop-blur-sm transition-opacity hover:opacity-100 focus-within:opacity-100 group-hover/story-item:opacity-100">
         <button
           onClick={() => onAddNew(target)}
-          className="rounded-full px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+          className="rounded-full px-2.5 py-1 text-2xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
           title="New sketch"
         >
           + Sketch
         </button>
         <button
           onClick={() => setPickerTarget(isOpen ? null : target)}
-          className="rounded-full px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+          className="rounded-full px-2.5 py-1 text-2xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
           title="Add existing sketch"
         >
           + Existing
         </button>
         <button
           onClick={() => onAddSection(position)}
-          className="rounded-full px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+          className="rounded-full px-2.5 py-1 text-2xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
           title="Add section"
         >
           + Section

@@ -30,6 +30,48 @@ export default {
         success: "rgb(var(--color-success) / <alpha-value>)",
         warning: "rgb(var(--color-warning) / <alpha-value>)",
         error: "rgb(var(--color-error) / <alpha-value>)",
+        // Neutral interaction fills, tinted from the text colour so they work on every palette.
+        fill: {
+          hover: "rgb(var(--color-text) / 0.06)",
+          selected: "rgb(var(--color-text) / 0.08)",
+          pressed: "rgb(var(--color-text) / 0.04)",
+        },
+        agent: {
+          planner: "rgb(var(--color-agent-planner) / <alpha-value>)",
+          writer: "rgb(var(--color-agent-writer) / <alpha-value>)",
+          editor: "rgb(var(--color-agent-editor) / <alpha-value>)",
+          designer: "rgb(var(--color-agent-designer) / <alpha-value>)",
+        },
+        diff: {
+          "ins-bg": "rgb(var(--color-diff-ins-bg) / <alpha-value>)",
+          "ins-fg": "rgb(var(--color-diff-ins-fg) / <alpha-value>)",
+          "del-bg": "rgb(var(--color-diff-del-bg) / <alpha-value>)",
+          "del-fg": "rgb(var(--color-diff-del-fg) / <alpha-value>)",
+        },
+      },
+      fontSize: {
+        "2xs": ["var(--text-2xs)", { lineHeight: "var(--text-2xs-lh)" }],
+        xs: ["var(--text-xs)", { lineHeight: "var(--text-xs-lh)" }],
+        sm: ["var(--text-sm)", { lineHeight: "var(--text-sm-lh)" }],
+      },
+      borderRadius: {
+        control: "var(--radius-control)",
+        card: "var(--radius-card)",
+        pill: "var(--radius-pill)",
+      },
+      transitionDuration: {
+        fast: "var(--motion-fast)",
+        normal: "var(--motion-normal)",
+      },
+      transitionTimingFunction: {
+        fluent: "var(--motion-ease)",
+      },
+      height: {
+        control: "var(--control-height)",
+        "nav-row": "var(--nav-row-height)",
+      },
+      gap: {
+        card: "var(--card-gap)",
       },
       fontFamily: {
         sans: ['"Geist Sans"', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'system-ui', 'sans-serif'],

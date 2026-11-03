@@ -91,13 +91,13 @@ export function TitleBar({
         {/* Center: Command palette */}
         <div className="flex-1 flex items-center justify-center min-w-0 px-4">
           <button
-            className="flex h-7 w-full max-w-[420px] cursor-pointer items-center gap-2 rounded-md border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/75 px-3 text-[12px] text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-border))] hover:bg-[rgb(var(--color-surface-alt))]"
+            className="flex h-7 w-full max-w-[420px] cursor-pointer items-center gap-2 rounded-md border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/75 px-3 text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-border))] hover:bg-[rgb(var(--color-surface-alt))]"
             onClick={onCommandPaletteOpen}
             title={`Command Palette (${formatKeybinding("Ctrl+Shift+P")})`}
           >
             <Search className="w-3.5 h-3.5" />
             <span className="flex-1 text-left truncate">Search commands…</span>
-            <kbd className="rounded border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/80 px-1.5 py-px font-[inherit] text-[10px] text-[rgb(var(--color-text-secondary))]">
+            <kbd className="rounded border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/80 px-1.5 py-px font-[inherit] text-2xs text-[rgb(var(--color-text-secondary))]">
               {formatKeybinding("Ctrl+Shift+P")}
             </kbd>
           </button>
@@ -168,13 +168,13 @@ export function TitleBar({
       {/* Center: Command center */}
       <div className="flex-1 flex items-center justify-center min-w-0 px-4">
         <button
-          className="flex h-7 w-full max-w-[420px] cursor-pointer items-center gap-2 rounded-md border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/75 px-3 text-[12px] text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-border))] hover:bg-[rgb(var(--color-surface-alt))]"
+          className="flex h-7 w-full max-w-[420px] cursor-pointer items-center gap-2 rounded-md border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/75 px-3 text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:border-[rgb(var(--color-border))] hover:bg-[rgb(var(--color-surface-alt))]"
           onClick={onCommandPaletteOpen}
           title={`Command Palette (${formatKeybinding("Ctrl+Shift+P")})`}
         >
           <Search className="w-3.5 h-3.5" />
           <span className="flex-1 text-left truncate">Search commands…</span>
-          <kbd className="rounded border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/80 px-1.5 py-px font-[inherit] text-[10px] text-[rgb(var(--color-text-secondary))]">
+          <kbd className="rounded border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/80 px-1.5 py-px font-[inherit] text-2xs text-[rgb(var(--color-text-secondary))]">
             {formatKeybinding("Ctrl+Shift+P")}
           </kbd>
         </button>

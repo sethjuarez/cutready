@@ -62,10 +62,10 @@ function ThemePaletteCard({
       <div className="flex items-center gap-2 bg-[rgb(var(--color-surface-alt))] px-3 py-2">
         <div className="min-w-0">
           <div className="truncate text-sm font-medium text-[rgb(var(--color-text))]">{palette.name}</div>
-          <div className="truncate text-[10px] text-[rgb(var(--color-text-secondary))]">{palette.description}</div>
+          <div className="truncate text-2xs text-[rgb(var(--color-text-secondary))]">{palette.description}</div>
         </div>
         {selected && (
-          <span className="ml-auto rounded-full bg-[rgb(var(--color-accent))]/10 px-2 py-0.5 text-[10px] font-medium text-[rgb(var(--color-accent))]">
+          <span className="ml-auto rounded-full bg-[rgb(var(--color-accent))]/10 px-2 py-0.5 text-2xs font-medium text-[rgb(var(--color-accent))]">
             Active
           </span>
         )}

@@ -188,13 +188,13 @@ export function TabBar() {
                 value={tabSearch}
                 onChange={(e) => setTabSearch(e.target.value)}
                 placeholder="Find open tab..."
-                className="min-w-0 flex-1 bg-transparent text-[12px] text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]"
+                className="min-w-0 flex-1 bg-transparent text-xs text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]"
               />
             </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-1">
             {filteredTabs.length === 0 ? (
-              <div className="px-3 py-6 text-center text-[11px] text-[rgb(var(--color-text-secondary))]">No matching tabs.</div>
+              <div className="px-3 py-6 text-center text-xs text-[rgb(var(--color-text-secondary))]">No matching tabs.</div>
             ) : (
               filteredTabs.map((tab) => (
                 <TabMenuItem
@@ -212,7 +212,7 @@ export function TabBar() {
           </div>
           <div className="flex gap-1 border-t border-[rgb(var(--color-border))] p-1">
             <button
-              className="flex-1 rounded-lg px-2 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+              className="flex-1 rounded-lg px-2 py-1.5 text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
               onClick={() => {
                 if (activeTabId) closeOtherTabs(activeTabId);
                 closeTabMenu();
@@ -221,7 +221,7 @@ export function TabBar() {
               Close others
             </button>
             <button
-              className="flex-1 rounded-lg px-2 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
+              className="flex-1 rounded-lg px-2 py-1.5 text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
               onClick={() => {
                 closeAllTabs();
                 closeTabMenu();
@@ -243,7 +243,7 @@ export function TabBar() {
         >
           {canSplit && (
             <button
-              className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+              className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
               onClick={() => { moveTabToSplit(contextTabIdRef.current); closeContextMenu(); }}
             >
               <LayoutGrid className="w-3.5 h-3.5" />
@@ -252,7 +252,7 @@ export function TabBar() {
           )}
           <button
             disabled={!copyablePath}
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed transition-colors"
             onClick={() => { void copyTabPath(contextTab); closeContextMenu(); }}
             title={copyablePath ? `Copy ${copyablePath}` : "Tab is not file-backed"}
           >
@@ -261,28 +261,28 @@ export function TabBar() {
           </button>
           <div className="my-1 border-t border-[rgb(var(--color-border-subtle))]" />
           <button
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+            className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
             onClick={() => { closeTab(contextTabIdRef.current); closeContextMenu(); }}
           >
             <X className="w-3.5 h-3.5" />
             Close Tab
           </button>
           <button
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+            className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
             onClick={() => { closeOtherTabs(contextTabIdRef.current); closeContextMenu(); }}
           >
             <X className="w-3.5 h-3.5" />
             Close Others
           </button>
           <button
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+            className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
             onClick={() => { closeTabsToRight(contextTabIdRef.current); closeContextMenu(); }}
           >
             <X className="w-3.5 h-3.5" />
             Close to the Right
           </button>
           <button
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+            className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
             onClick={() => { closeTabsToLeft(contextTabIdRef.current); closeContextMenu(); }}
           >
             <X className="w-3.5 h-3.5" />
@@ -290,7 +290,7 @@ export function TabBar() {
           </button>
           <div className="my-1 border-t border-[rgb(var(--color-border-subtle))]" />
           <button
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-[12px] text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+            className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
             onClick={() => { closeAllTabs(); closeContextMenu(); }}
           >
             <X className="w-3.5 h-3.5" />
@@ -349,8 +349,8 @@ function TabMenuItem({
       }`}
     >
       <button className="min-w-0 flex-1 text-left" onClick={onSelect}>
-        <div className="truncate text-[12px] font-medium text-[rgb(var(--color-text))]">{tab.title}</div>
-        <div className="mt-0.5 truncate font-mono text-[10px] text-[rgb(var(--color-text-secondary))]">{getTabDisplayMeta(tab)}</div>
+        <div className="truncate text-xs font-medium text-[rgb(var(--color-text))]">{tab.title}</div>
+        <div className="mt-0.5 truncate font-mono text-2xs text-[rgb(var(--color-text-secondary))]">{getTabDisplayMeta(tab)}</div>
       </button>
       <span
         className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
@@ -452,7 +452,7 @@ function Tab({
         e.dataTransfer.setData("application/x-cutready-tab", JSON.stringify({ tabId: tab.id, source: "main" }));
         e.dataTransfer.effectAllowed = "move";
       }}
-      className={`group relative mb-[-1px] flex h-[37px] shrink-0 cursor-pointer select-none items-center gap-1.5 border border-transparent pl-3 pr-2 text-[12px] transition-colors ${
+      className={`group relative mb-[-1px] flex h-[37px] shrink-0 cursor-pointer select-none items-center gap-1.5 border border-transparent pl-3 pr-2 text-xs transition-colors ${
         isActive
           ? "border-[rgb(var(--color-border-subtle))] border-b-[rgb(var(--color-surface))] bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
           : isSplit

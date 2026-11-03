@@ -441,7 +441,7 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
+            <div className="mb-2 px-2 text-xs font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
               {scope === "workspace" ? "Workspace" : "General"}
             </div>
             <div className="space-y-1">
@@ -469,7 +469,7 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
                     </span>
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium">{meta.label}</span>
-                      <span className="block truncate text-[11px] text-[rgb(var(--color-text-secondary))]">
+                      <span className="block truncate text-xs text-[rgb(var(--color-text-secondary))]">
                         {meta.eyebrow}
                       </span>
                     </span>
@@ -490,7 +490,7 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
           <div className="shrink-0 border-b border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] px-6 py-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-accent))]">
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-accent))]">
                   {activeMeta.eyebrow}
                 </div>
                 <h1 id="settings-panel-title" className="mt-0.5 text-xl font-semibold tracking-tight text-[rgb(var(--color-text))]">
@@ -566,7 +566,7 @@ export function SettingsPanel({ onClose }: { onClose?: () => void }) {
                       >
                         {soon === "transcription" ? <Captions className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                         {soon === "transcription" ? "Transcription" : "Vision"}
-                        <span className="ml-0.5 rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-[9px] uppercase tracking-wide">Soon</span>
+                        <span className="ml-0.5 rounded-full bg-[rgb(var(--color-surface-alt))] px-1.5 py-0.5 text-2xs uppercase tracking-wide">Soon</span>
                       </span>
                     ))}
                   </div>

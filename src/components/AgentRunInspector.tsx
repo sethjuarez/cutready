@@ -252,7 +252,7 @@ export function AgentRunInspector() {
       <div className="flex h-[38px] items-center gap-2 border-b border-[rgb(var(--color-border))] px-3">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <Bot className="h-3.5 w-3.5 text-[rgb(var(--color-accent))]" />
-          <span className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
+          <span className="truncate text-xs font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
             Agent runs
           </span>
         </div>
@@ -267,7 +267,7 @@ export function AgentRunInspector() {
 
       <div className="flex items-center gap-1 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-inset))] px-2 py-1.5">
         <button
-          className="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
           onClick={() => void pruneRuns()}
           disabled={maintenanceBusy || loadingRuns}
           title="Keep the 25 most recent completed runs; imported transcripts are preserved"
@@ -276,7 +276,7 @@ export function AgentRunInspector() {
           Prune old
         </button>
         <button
-          className="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
           onClick={() => void compactDatabase()}
           disabled={maintenanceBusy || hasRunningRun}
           title={hasRunningRun ? "Wait for the active agent run to finish before compacting" : "Vacuum the local agent-state database"}
@@ -285,7 +285,7 @@ export function AgentRunInspector() {
           Compact
         </button>
         <button
-          className="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[11px] text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface))] hover:text-[rgb(var(--color-text))] disabled:cursor-not-allowed disabled:opacity-50"
           onClick={() => void clearSavedContext()}
           disabled={maintenanceBusy || hasRunningRun}
           title={hasRunningRun ? "Wait for the active agent run to finish before forgetting saved context" : "Forget web references saved for future project chats"}
@@ -390,12 +390,12 @@ function RunListItem({
             <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${status.bg} ${status.text}`}>
               {statusIcon(run.status)}
             </span>
-            <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-[rgb(var(--color-text))]">
+            <span className="min-w-0 flex-1 truncate text-xs font-medium text-[rgb(var(--color-text))]">
               {run.model || "Unknown model"}
             </span>
-            <span className="text-[10px] text-[rgb(var(--color-text-secondary))]">{formatRelative(run.started_at)}</span>
+            <span className="text-2xs text-[rgb(var(--color-text-secondary))]">{formatRelative(run.started_at)}</span>
           </div>
-          <div className="mt-1 flex items-center gap-1.5 pl-7 text-[10px] text-[rgb(var(--color-text-secondary))]">
+          <div className="mt-1 flex items-center gap-1.5 pl-7 text-2xs text-[rgb(var(--color-text-secondary))]">
             <span className={`rounded-full px-1.5 py-0.5 font-medium ${status.bg} ${status.text}`}>
               {agentRunStatusLabel(run.status)}
             </span>
@@ -403,7 +403,7 @@ function RunListItem({
             <span className="opacity-50">·</span>
             <span className="font-mono">{shortId(run.run_id)}</span>
           </div>
-          <div className="mt-1 truncate pl-7 text-[11px] leading-5 text-[rgb(var(--color-text-secondary))]" title={preview}>
+          <div className="mt-1 truncate pl-7 text-xs leading-5 text-[rgb(var(--color-text-secondary))]" title={preview}>
             {preview}
           </div>
         </button>
@@ -455,21 +455,21 @@ function RunDetail({ detail }: { detail: AgentRunDetail }) {
       <section className="rounded-2xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
+            <div className="mb-1 flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
               <Bot className="h-3.5 w-3.5 text-[rgb(var(--color-accent))]" />
               Conversation state
             </div>
             <h2 className="truncate text-[18px] font-semibold tracking-[-0.02em] text-[rgb(var(--color-text))]">
               {run.model}
             </h2>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[rgb(var(--color-text-secondary))]">
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[rgb(var(--color-text-secondary))]">
               <StatusPill status={run.status} />
               <span>{agentRunProviderLabel(run.provider)}</span>
               <span className="opacity-50">·</span>
               <span className="font-mono">{run.run_id}</span>
             </div>
           </div>
-          <div className="grid min-w-[16rem] grid-cols-2 gap-2 text-[11px]">
+          <div className="grid min-w-[16rem] grid-cols-2 gap-2 text-xs">
             <Fact label="Started" value={formatDateTime(run.started_at)} />
             <Fact label="Completed" value={run.completed_at ? formatDateTime(run.completed_at) : "Still running"} />
           </div>
@@ -512,14 +512,14 @@ function TimelineCard({ events }: { events: AgentTrajectoryEventRecord[] }) {
             </span>
             <div className="min-w-0 flex-1 rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/50 px-3 py-2">
               <div className="flex items-center gap-2">
-                <span className="truncate text-[12px] font-medium text-[rgb(var(--color-text))]">
+                <span className="truncate text-xs font-medium text-[rgb(var(--color-text))]">
                   {eventSummary(event)}
                 </span>
-                <span className="ml-auto shrink-0 text-[10px] text-[rgb(var(--color-text-secondary))]">
+                <span className="ml-auto shrink-0 text-2xs text-[rgb(var(--color-text-secondary))]">
                   {formatRelative(event.created_at)}
                 </span>
               </div>
-              <div className="mt-1 flex flex-wrap gap-1.5 text-[10px] text-[rgb(var(--color-text-secondary))]">
+              <div className="mt-1 flex flex-wrap gap-1.5 text-2xs text-[rgb(var(--color-text-secondary))]">
                 <span className="rounded-full bg-[rgb(var(--color-surface))] px-1.5 py-0.5 font-mono">
                   {agentRunEventLabel(event.event_type)}
                 </span>
@@ -546,12 +546,12 @@ function ResourcesCard({ resources }: { resources: AgentTouchedResourceRecord[] 
         {resources.map((resource) => (
           <div key={resource.id} className="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/45 px-3 py-2">
             <div className="flex items-center gap-2">
-              <span className="truncate font-mono text-[11px] text-[rgb(var(--color-text))]">{resource.resource_id}</span>
-              <span className="ml-auto rounded-full bg-[rgb(var(--color-surface))] px-1.5 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))]">
+              <span className="truncate font-mono text-xs text-[rgb(var(--color-text))]">{resource.resource_id}</span>
+              <span className="ml-auto rounded-full bg-[rgb(var(--color-surface))] px-1.5 py-0.5 text-2xs text-[rgb(var(--color-text-secondary))]">
                 {resource.operation}
               </span>
             </div>
-            <div className="mt-1 text-[10px] text-[rgb(var(--color-text-secondary))]">{resource.kind} · {formatDateTime(resource.created_at)}</div>
+            <div className="mt-1 text-2xs text-[rgb(var(--color-text-secondary))]">{resource.kind} · {formatDateTime(resource.created_at)}</div>
           </div>
         ))}
       </div>
@@ -573,12 +573,12 @@ function VerificationCard({ results }: { results: AgentVerificationResultRecord[
           return (
             <div key={result.id} className="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/45 px-3 py-2">
               <div className="flex items-start gap-2">
-                <span className={`mt-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${tone}`}>
+                <span className={`mt-0.5 rounded-full px-1.5 py-0.5 text-2xs font-medium ${tone}`}>
                   {result.status}
                 </span>
-                <span className="min-w-0 flex-1 text-[11px] font-medium text-[rgb(var(--color-text))]">{result.criterion}</span>
+                <span className="min-w-0 flex-1 text-xs font-medium text-[rgb(var(--color-text))]">{result.criterion}</span>
               </div>
-              <div className="mt-1 text-[10px] text-[rgb(var(--color-text-secondary))]">{summaryFromJson(result.result) || formatDateTime(result.created_at)}</div>
+              <div className="mt-1 text-2xs text-[rgb(var(--color-text-secondary))]">{summaryFromJson(result.result) || formatDateTime(result.created_at)}</div>
             </div>
           );
         })}
@@ -605,21 +605,21 @@ function CheckpointCard({
         {checkpoints.map((checkpoint) => (
           <div key={`checkpoint-${checkpoint.id}`} className="rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/45 px-3 py-2">
             <div className="flex items-center gap-2">
-              <span className="font-mono text-[11px] text-[rgb(var(--color-text))]">{checkpoint.id}</span>
-              <span className="ml-auto text-[10px] text-[rgb(var(--color-text-secondary))]">{formatRelative(checkpoint.created_at)}</span>
+              <span className="font-mono text-xs text-[rgb(var(--color-text))]">{checkpoint.id}</span>
+              <span className="ml-auto text-2xs text-[rgb(var(--color-text-secondary))]">{formatRelative(checkpoint.created_at)}</span>
             </div>
-            <div className="mt-1 text-[10px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
+            <div className="mt-1 text-2xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
               {summaryFromJson(checkpoint.checkpoint) || "Checkpoint saved"}
             </div>
           </div>
         ))}
         {resumeContexts.map((context) => (
           <div key={`resume-${context.id}`} className="rounded-xl border border-[rgb(var(--color-accent))]/20 bg-[rgb(var(--color-accent))]/[0.06] px-3 py-2">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[rgb(var(--color-accent))]">
+            <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--color-accent))]">
               Resume context
             </div>
-            <div className="mt-1 text-[11px] text-[rgb(var(--color-text))]">Checkpoint {context.checkpoint_id}</div>
-            <div className="mt-1 text-[10px] leading-relaxed text-[rgb(var(--color-text-secondary))]">
+            <div className="mt-1 text-xs text-[rgb(var(--color-text))]">Checkpoint {context.checkpoint_id}</div>
+            <div className="mt-1 text-2xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
               {summaryFromJson(context.context) || formatDateTime(context.created_at)}
             </div>
           </div>
@@ -648,12 +648,12 @@ function InspectorCard({
         <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
           {icon}
         </span>
-        <h3 className="text-[12px] font-semibold text-[rgb(var(--color-text))]">{title}</h3>
-        <span className="ml-auto rounded-full bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 text-[10px] text-[rgb(var(--color-text-secondary))]">
+        <h3 className="text-xs font-semibold text-[rgb(var(--color-text))]">{title}</h3>
+        <span className="ml-auto rounded-full bg-[rgb(var(--color-surface-alt))] px-2 py-0.5 text-2xs text-[rgb(var(--color-text-secondary))]">
           {count}
         </span>
       </div>
-      {count === 0 ? <p className="px-1 py-4 text-center text-[11px] text-[rgb(var(--color-text-secondary))]">{empty}</p> : children}
+      {count === 0 ? <p className="px-1 py-4 text-center text-xs text-[rgb(var(--color-text-secondary))]">{empty}</p> : children}
     </section>
   );
 }
@@ -661,7 +661,7 @@ function InspectorCard({
 function MiniCount({ label, value }: { label: string; value: number }) {
   return (
     <span className="rounded-md bg-[rgb(var(--color-surface-alt))] px-1.5 py-1 text-center">
-      <span className="block text-[11px] font-semibold text-[rgb(var(--color-text))]">{value}</span>
+      <span className="block text-xs font-semibold text-[rgb(var(--color-text))]">{value}</span>
       <span className="block text-[8px] uppercase tracking-[0.1em] text-[rgb(var(--color-text-secondary))]">{label}</span>
     </span>
   );
@@ -670,23 +670,23 @@ function MiniCount({ label, value }: { label: string; value: number }) {
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/55 px-3 py-2">
-      <div className="text-[9px] font-semibold uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))]">{label}</div>
-      <div className="mt-1 truncate text-[11px] text-[rgb(var(--color-text))]" title={value}>{value}</div>
+      <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))]">{label}</div>
+      <div className="mt-1 truncate text-xs text-[rgb(var(--color-text))]" title={value}>{value}</div>
     </div>
   );
 }
 
 function StatusPill({ status }: { status: string }) {
   const tone = statusTone(status);
-  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${tone.bg} ${tone.text}`}>{agentRunStatusLabel(status)}</span>;
+  return <span className={`rounded-full px-2 py-0.5 text-2xs font-medium ${tone.bg} ${tone.text}`}>{agentRunStatusLabel(status)}</span>;
 }
 
 function StateMessage({ label, detail }: { label: string; detail?: string }) {
   return (
     <div className="flex h-full min-h-[12rem] flex-col items-center justify-center gap-2 px-6 text-center">
       <CircleDashed className="h-6 w-6 text-[rgb(var(--color-text-secondary))]/60" />
-      <div className="text-[12px] font-medium text-[rgb(var(--color-text))]">{label}</div>
-      {detail && <div className="max-w-sm text-[11px] leading-relaxed text-[rgb(var(--color-text-secondary))]">{detail}</div>}
+      <div className="text-xs font-medium text-[rgb(var(--color-text))]">{label}</div>
+      {detail && <div className="max-w-sm text-xs leading-relaxed text-[rgb(var(--color-text-secondary))]">{detail}</div>}
     </div>
   );
 }
