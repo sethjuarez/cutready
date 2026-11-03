@@ -21,12 +21,12 @@ export function DocumentViewModeToggle({
 }) {
   return (
     <div
-      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/45 px-3 py-2"
+      className="flex flex-wrap items-center justify-between gap-3 border-b border-[rgb(var(--color-border-subtle))] pb-2"
       role="group"
       aria-label={label}
     >
       <div className="flex min-w-0 items-center gap-2">
-        <div className="flex rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/70 p-0.5">
+        <div className="flex rounded-control bg-[rgb(var(--color-surface-alt))] p-0.5">
           {VIEW_MODES.map((mode) => {
             const active = mode.id === value;
             return (
@@ -36,9 +36,9 @@ export function DocumentViewModeToggle({
                 onClick={() => onChange(mode.id)}
                 title={mode.title}
                 aria-pressed={active}
-                className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
+                className={`rounded-control px-2.5 py-1 text-sm font-medium transition-colors duration-fast ease-fluent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))] ${
                   active
-                    ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] shadow-sm"
+                    ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
                     : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
                 }`}
               >
@@ -49,7 +49,7 @@ export function DocumentViewModeToggle({
         </div>
       </div>
       {actions && (
-        <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/70 p-0.5">
+        <div className="flex shrink-0 items-center gap-0.5">
           {actions}
         </div>
       )}

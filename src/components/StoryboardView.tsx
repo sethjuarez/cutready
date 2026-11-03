@@ -578,7 +578,7 @@ export function StoryboardView() {
                 <>
                   <div className="fixed inset-0 z-dropdown" onClick={() => setShowMonitorPicker(false)} />
                   <div className="absolute right-0 top-full z-modal mt-2 min-w-[200px] rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] py-1 shadow-lg">
-                    <div className="border-b border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
+                    <div className="border-b border-[rgb(var(--color-border))] px-3 py-2 text-xs font-medium text-[rgb(var(--color-text-secondary))]">
                       Present on
                     </div>
                     {availableMonitors.map((m) => (
@@ -961,7 +961,7 @@ function ExpandableSketchCard({
   const sketchDurationLabel = fullSketch ? formatDurationSummary(summarizeSketchDuration(fullSketch.rows), durationDisplayMode) : null;
 
   return (
-    <div className={`group/sketch ${isTopLevel ? "rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/25 px-3 py-2.5" : "rounded-lg bg-[rgb(var(--color-surface))]/25 px-3 py-1.5"}`}>
+    <div className={`group/sketch ${isTopLevel ? "rounded-card border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] px-4 py-3" : "rounded-control border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))] px-3 py-1.5"}`}>
       <div className={`flex items-start gap-3 ${isTopLevel ? "" : "py-1"}`}>
         {!locked && dragListeners && (
           <div
@@ -982,10 +982,10 @@ function ExpandableSketchCard({
 
         <div className="min-w-0 flex-1">
           {isTopLevel && (
-            <div className="mb-1 flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.2em] text-[rgb(var(--color-text-secondary))]/60">
+            <div className="mb-1 flex items-center gap-2 text-xs font-medium text-[rgb(var(--color-text-secondary))]">
               <span>Sketch</span>
-              <span className="h-px w-5 bg-[rgb(var(--color-border))]" />
-              <span className="tracking-[0.14em]">
+              <span aria-hidden="true">·</span>
+              <span>
                 {sketch.row_count} {sketch.row_count === 1 ? "row" : "rows"}
               </span>
             </div>
@@ -1152,7 +1152,7 @@ function StoryboardSectionBlock({
   const titleWidthCh = Math.min(34, Math.max(14, (draftTitle || "Section title").length + 1));
 
   return (
-    <section className="group/section rounded-xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/25 px-3 py-2.5">
+    <section className="group/section rounded-card border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] px-4 py-3">
       <div>
         <div className="flex items-start gap-3">
         {!locked && (
@@ -1172,10 +1172,10 @@ function StoryboardSectionBlock({
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <div className="mb-1 flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.2em] text-[rgb(var(--color-text-secondary))]/60">
+          <div className="mb-1 flex items-center gap-2 text-xs font-medium text-[rgb(var(--color-text-secondary))]">
             <span>Section</span>
-            <span className="h-px w-5 bg-[rgb(var(--color-border))]" />
-            <span className="tracking-[0.14em]">
+            <span aria-hidden="true">·</span>
+            <span>
               {sketchCount} {sketchCount === 1 ? "sketch" : "sketches"}
             </span>
           </div>
@@ -1285,7 +1285,7 @@ function StoryboardSectionBlock({
       {!collapsed && (
       <div className="mt-2 space-y-1.5 pl-6">
         {item.sketches.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/35 px-4 py-4 text-center text-xs text-[rgb(var(--color-text-secondary))]">
+          <p className="rounded-card border border-dashed border-[rgb(var(--color-border-subtle))] px-4 py-4 text-center text-xs text-[rgb(var(--color-text-secondary))]">
             No sketches in this section yet.
           </p>
         ) : (
@@ -1320,13 +1320,13 @@ function StoryboardSectionBlock({
         <div className="mt-2 flex gap-2 pl-6">
           <button
             onClick={onAddNewSketch}
-            className="rounded-full border border-[rgb(var(--color-border-subtle))] px-3 py-1 text-2xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] hover:border-[rgb(var(--color-accent))]/45 hover:text-[rgb(var(--color-accent))] transition-colors"
+            className="rounded-control border border-[rgb(var(--color-border-subtle))] px-3 py-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))] text-[rgb(var(--color-text-secondary))] hover:border-[rgb(var(--color-accent))]/45 hover:text-[rgb(var(--color-accent))] transition-colors"
           >
             New sketch
           </button>
           <button
             onClick={onPickExisting}
-            className="rounded-full border border-transparent px-3 py-1 text-2xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+            className="rounded-control border border-transparent px-3 py-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
           >
             Add existing sketch
           </button>
@@ -1360,20 +1360,20 @@ function EmptyState({
         <div className="flex gap-3">
           <button
             onClick={onAddNew}
-            className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-xl bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-control bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))] transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             New Sketch
           </button>
           <button
             onClick={onPickExisting}
-            className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-xl border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))]/40 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-control border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))]/40 transition-colors"
           >
             Add Existing
           </button>
           <button
             onClick={onAddSection}
-            className="flex items-center gap-2 px-4 py-2.5 text-xs font-medium rounded-xl border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))]/40 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-control border border-[rgb(var(--color-border))] text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:border-[rgb(var(--color-accent))]/40 transition-colors"
           >
             Section
           </button>
@@ -1413,21 +1413,21 @@ function AddItemButton({
       <div className="relative left-1/2 flex -translate-x-1/2 gap-1 rounded-full border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))]/95 px-1 py-0.5 opacity-0 shadow-sm backdrop-blur-sm transition-opacity hover:opacity-100 focus-within:opacity-100 group-hover/story-item:opacity-100">
         <button
           onClick={() => onAddNew(target)}
-          className="rounded-full px-2.5 py-1 text-2xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+          className="rounded-full px-2.5 py-1 text-xs font-medium text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors duration-fast ease-fluent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]"
           title="New sketch"
         >
           + Sketch
         </button>
         <button
           onClick={() => setPickerTarget(isOpen ? null : target)}
-          className="rounded-full px-2.5 py-1 text-2xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+          className="rounded-full px-2.5 py-1 text-xs font-medium text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors duration-fast ease-fluent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]"
           title="Add existing sketch"
         >
           + Existing
         </button>
         <button
           onClick={() => onAddSection(position)}
-          className="rounded-full px-2.5 py-1 text-2xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors"
+          className="rounded-full px-2.5 py-1 text-xs font-medium text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] transition-colors duration-fast ease-fluent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]"
           title="Add section"
         >
           + Section
@@ -1463,7 +1463,7 @@ function SketchPicker({
   onClose: () => void;
 }) {
   return (
-    <div className="w-64 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg overflow-hidden">
+    <div className="w-64 rounded-card border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg overflow-hidden">
       <div className="p-2 border-b border-[rgb(var(--color-border))]">
         <input
           type="text"
