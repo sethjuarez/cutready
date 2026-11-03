@@ -94,15 +94,15 @@ export function MetadataEditor({ metadata, onChange, disabled = false, draftRef 
   const visiblePreview = entries.slice(0, 3);
 
   return (
-    <section className={`group/metadata text-xs ${expanded ? "rounded-xl border border-[rgb(var(--color-border))]/35 bg-[rgb(var(--color-surface-alt))]/10 p-2" : "px-1 py-0.5"}`}>
+    <section className={`group/metadata text-xs ${expanded ? "rounded-card border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] p-2" : "px-1 py-0.5"}`}>
       <button
         type="button"
-        className="flex w-full min-w-0 items-center gap-1.5 rounded-md py-0.5 text-left text-xs text-[rgb(var(--color-text-tertiary))] transition-colors hover:text-[rgb(var(--color-text-secondary))]"
+        className="flex w-full min-w-0 items-center gap-1.5 rounded-md py-0.5 text-left text-sm text-[rgb(var(--color-text-tertiary))] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))] hover:text-[rgb(var(--color-text-secondary))]"
         onClick={() => setExpanded((value) => !value)}
         aria-expanded={expanded}
       >
         <ChevronRight className={`h-3 w-3 shrink-0 opacity-60 transition-transform ${expanded ? "rotate-90" : ""}`} />
-        <span className="shrink-0 uppercase tracking-[0.16em]">Properties</span>
+        <span className="shrink-0 font-medium text-[rgb(var(--color-text-secondary))]">Properties</span>
         {hasFields ? (
           <span className="text-2xs text-[rgb(var(--color-text-tertiary))]">
             {entries.length} {entries.length === 1 ? "field" : "fields"}
@@ -214,7 +214,7 @@ export function DurationBadge({
   onModeChange?: (mode: DurationDisplayMode) => void;
 }) {
   const toggleClass = (value: DurationDisplayMode) =>
-    `rounded-full px-1.5 py-0.5 transition-colors ${
+    `rounded-full px-1.5 py-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))] ${
       mode === value
         ? "bg-[rgb(var(--color-accent))] text-[rgb(var(--color-accent-fg))]"
         : "text-[rgb(var(--color-text-tertiary))] hover:text-[rgb(var(--color-text))]"
@@ -224,7 +224,7 @@ export function DurationBadge({
     <div className="inline-flex items-center gap-2 rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2.5 py-1 text-xs font-medium text-[rgb(var(--color-text-secondary))]">
       <span>Total time: {formatDurationSummary(summary, mode)}</span>
       {onModeChange && (
-        <span className="inline-flex rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-0.5 text-2xs uppercase tracking-[0.14em]">
+        <span className="inline-flex rounded-full border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-0.5 text-xs">
           <button type="button" className={toggleClass("seconds")} onClick={() => onModeChange("seconds")}>
             sec
           </button>
