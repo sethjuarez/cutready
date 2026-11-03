@@ -26,7 +26,7 @@
     "src-tauri/src/engine/recording_native_camera_windows.rs": 892,
     "src-tauri/src/engine/recording.rs": 3808,
     "src-tauri/src/engine/video_import.rs": 2037,
-    "src-tauri/src/lib.rs": 917,
+    "src-tauri/src/lib.rs": 886,
     "src/components/AgentRunInspector.tsx": 831,
     "src/components/ChatPanel.tsx": 3556,
     "src/components/NarrationRecordingDialog.tsx": 933,

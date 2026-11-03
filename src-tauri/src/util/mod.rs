@@ -1,4 +1,5 @@
 pub mod audio;
+pub mod deep_link;
 pub mod ffmpeg;
 pub mod keyboard_hook;
 pub mod screenshot;

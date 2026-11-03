@@ -50,3 +50,6 @@ skills-lock.json
 
 # Auditaur local runtime session
 .auditaur/session.json
+
+# cutready-cli sidecar staged by release.yml
+src-tauri/binaries/

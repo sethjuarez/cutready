@@ -89,22 +89,27 @@ jobs:
         include:
           - key: linux-x64
             platform: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
             args: ''
             rust_targets: ''
           - key: windows-x64
             platform: windows-latest
+            target: x86_64-pc-windows-msvc
             args: ''
             rust_targets: ''
           - key: windows-arm64
             platform: windows-latest
+            target: aarch64-pc-windows-msvc
             args: '--target aarch64-pc-windows-msvc'
             rust_targets: 'aarch64-pc-windows-msvc'
           - key: macos-silicon
             platform: macos-latest
+            target: aarch64-apple-darwin
             args: '--target aarch64-apple-darwin'
             rust_targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
           - key: macos-intel
             platform: macos-latest
+            target: x86_64-apple-darwin
             args: '--target x86_64-apple-darwin'
             rust_targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
 
@@ -146,6 +151,18 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # The app bundles cutready-cli as a Tauri sidecar (externalBin). Tauri
+      # signs it with the app on macOS and notarizes them together.
+      - name: Build cutready-cli sidecar
+        shell: bash
+        run: |
+          cargo build --release --locked -p cutready-cli --target ${{ matrix.target }}
+          ext=""
+          if [ "${{ runner.os }}" = "Windows" ]; then ext=".exe"; fi
+          mkdir -p src-tauri/binaries
+          cp "target/${{ matrix.target }}/release/cutready-cli${ext}" "src-tauri/binaries/cutready-cli-${{ matrix.target }}${ext}"
+          ls -l src-tauri/binaries
+
       - uses: tauri-apps/tauri-action@v0
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -157,7 +174,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           CUTREADY_GITHUB_OAUTH_CLIENT_ID: ${{ secrets.CUTREADY_GITHUB_OAUTH_CLIENT_ID }}
         with:
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} --config src-tauri/tauri.sidecar.conf.json
           retryAttempts: 3
 
       - name: Upload build artifacts

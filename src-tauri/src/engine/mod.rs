@@ -2,6 +2,7 @@ pub mod agent;
 pub mod agent_state;
 pub mod animation;
 pub mod automation;
+pub mod cli_registration;
 pub mod diagnostics_sanitizer;
 #[cfg(test)]
 mod document_goldens;
