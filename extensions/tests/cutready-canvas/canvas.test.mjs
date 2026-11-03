@@ -33,10 +33,22 @@ function http(url, { method = "GET", headers = {}, body } = {}) {
     });
 }
 
-/** Collects server-sent events until `predicate` matches one. */
-function nextEvent(url, predicate) {
-    return new Promise((resolve, reject) => {
+/**
+ * Subscribes to the panel's server-sent events. Resolves once `hello` arrives,
+ * which the server writes before it registers the subscriber, so events
+ * emitted after that are never missed. `until(predicate)` resolves with every
+ * event so far once one matches, and closes the stream.
+ */
+function listen(url) {
+    return new Promise((ready, reject) => {
         const events = [];
+        let waiting;
+        const check = () => {
+            if (waiting && events.some(waiting.predicate)) {
+                req.destroy();
+                waiting.resolve(events);
+            }
+        };
         const req = request(url, (res) => {
             let buffer = "";
             res.setEncoding("utf8");
@@ -49,10 +61,16 @@ function nextEvent(url, predicate) {
                     const name = block.match(/^event: (.*)$/m)?.[1];
                     const data = JSON.parse(block.match(/^data: (.*)$/m)?.[1] ?? "null");
                     events.push({ name, data });
-                    if (predicate({ name, data })) {
-                        req.destroy();
-                        resolve(events);
+                    if (name === "hello") {
+                        ready({
+                            until: (predicate) =>
+                                new Promise((resolve) => {
+                                    waiting = { predicate, resolve };
+                                    check();
+                                }),
+                        });
                     }
+                    check();
                 }
             });
         });
@@ -148,13 +166,13 @@ describe("the canvas against the real cutready-cli", () => {
         const sketch = await invoke("read_document", { path: "intro.sk" });
         assert.equal(sketch.kind, "sketch");
         assert.equal(sketch.content.title, "Intro");
-        const heard = nextEvent(`${origin}/events?token=${token}`, (e) => e.name === "changed");
+        const stream = await listen(`${origin}/events?token=${token}`);
         const applied = await invoke("apply_ops", {
             path: "intro.sk",
             expected_version: sketch.version,
             ops: [{ kind: "set_title", title: "Welcome" }],
         });
-        const events = await heard;
+        const events = await stream.until((e) => e.name === "changed");
         assert.equal(events[0].name, "hello");
         assert.deepEqual(events.at(-1).data, { path: "intro.sk", by: "agent" });
 
@@ -190,9 +208,9 @@ describe("the canvas against the real cutready-cli", () => {
     });
 
     test("open_document focuses the panel", async () => {
-        const heard = nextEvent(`${origin}/events?token=${token}`, (e) => e.name === "focus");
+        const stream = await listen(`${origin}/events?token=${token}`);
         await invoke("open_document", { path: "notes/plan.md" });
-        const events = await heard;
+        const events = await stream.until((e) => e.name === "focus");
         assert.deepEqual(events.at(-1).data, { path: "notes/plan.md" });
     });
 
