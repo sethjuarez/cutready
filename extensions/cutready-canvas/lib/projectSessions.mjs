@@ -144,4 +144,12 @@ export class ProjectSessions {
         for (const session of this.#sessions.values()) session.close();
         this.#sessions.clear();
     }
+
+    /** Stops the session for `root` (a canonical project root) and forgets it. */
+    release(root) {
+        const session = this.#sessions.get(root);
+        if (!session) return;
+        session.close();
+        this.#sessions.delete(root);
+    }
 }
