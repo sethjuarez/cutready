@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DecisionDialog } from "./DecisionDialog";
 import { useAppStore } from "../stores/appStore";
+import { useChangeSummaryStore } from "../stores/changeSummaryStore";
 import { useVersioningStore } from "../stores/versioningStore";
 
 type CloseReason = "dirty" | "merge";
@@ -86,16 +87,16 @@ export function AppCloseGuard() {
   return (
     <DecisionDialog
       open
-      title="Quit with unsaved snapshot?"
-      message="Your edits are saved on disk, but they are not captured in a snapshot yet. Save a snapshot before quitting if you want a restorable checkpoint."
+      title="Quit without saving a version?"
+      message="Your edits are on disk, but they aren't in a version yet. Save a version before quitting if you want one to come back to."
       actions={[
         { id: "cancel", label: "Keep working", onSelect: () => setCloseReason(null) },
         {
           id: "save",
-          label: "Save snapshot first",
+          label: "Save version first",
           variant: "primary",
           onSelect: () => {
-            useVersioningStore.setState({ snapshotPromptOpen: true });
+            useChangeSummaryStore.getState().openForSave();
             setCloseReason(null);
           },
         },

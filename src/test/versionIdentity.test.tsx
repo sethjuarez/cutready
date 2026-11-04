@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const mockInvoke = vi.hoisted(() => vi.fn());
@@ -9,119 +9,68 @@ vi.mock("@tauri-apps/api/core", () => ({
   Channel: class {},
 }));
 
-import { SnapshotDialog } from "../components/SnapshotDialog";
+vi.mock("../services/versionOperation", () => ({
+  isSaveBlocked: () => false,
+  runVersionOperation: (_operation: string, action: (summary: unknown) => Promise<unknown>) =>
+    action({ documents: [{ path: "intro.sk" }], totals: {} }),
+}));
+
+import { VersionForm } from "../components/versioning/VersionForm";
 import { useVersioningStore } from "../stores/versioningStore";
 
-const originalSaveVersion = useVersioningStore.getState().saveVersion;
-const originalLoadGraphData = useVersioningStore.getState().loadGraphData;
-const originalLoadTimelines = useVersioningStore.getState().loadTimelines;
+const original = useVersioningStore.getState();
 
-describe("snapshot save naming flow", () => {
+const resolved = (name: string, email: string) => ({
+  name,
+  email,
+  name_source: "profile",
+  email_source: "profile",
+  profile: { name, email },
+  needs_setup: false,
+});
+
+describe("Version form identity", () => {
   afterEach(() => {
-    vi.restoreAllMocks();
     mockInvoke.mockReset();
-    act(() => {
-      useVersioningStore.setState({
-        snapshotPromptOpen: false,
-        pendingNavAfterSave: null,
-        pendingActionAfterSave: null,
-        isRewound: false,
-        saving: false,
-        saveVersion: originalSaveVersion,
-        loadGraphData: originalLoadGraphData,
-        loadTimelines: originalLoadTimelines,
-      });
-    });
+    act(() => useVersioningStore.setState(original, true));
   });
 
-  it("quickSave opens the naming prompt instead of creating an auto-named snapshot", async () => {
-    await useVersioningStore.getState().quickSave();
-
-    expect(useVersioningStore.getState().snapshotPromptOpen).toBe(true);
-    expect(mockInvoke).not.toHaveBeenCalled();
-  });
-
-  it("canceling the snapshot dialog does not save", async () => {
-    const saveVersion = vi.fn();
-    act(() => {
-      useVersioningStore.setState({
-        snapshotPromptOpen: true,
-        saveVersion,
-      });
-    });
-
-    render(<SnapshotDialog />);
-    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
-
-    expect(saveVersion).not.toHaveBeenCalled();
-    expect(useVersioningStore.getState().snapshotPromptOpen).toBe(false);
-  });
-
-  it("shows who the snapshot will be saved as", async () => {
-    mockInvoke.mockImplementation(async (cmd: string) => cmd === "get_contributor_identity"
-      ? {
-          name: "Ada Lovelace",
-          email: "ada@example.com",
-          name_source: "git_config",
-          email_source: "git_config",
-          profile: null,
-          needs_setup: false,
-        }
-      : undefined);
-    act(() => {
-      useVersioningStore.setState({ snapshotPromptOpen: true, saveVersion: vi.fn() });
-    });
-
-    render(<SnapshotDialog />);
-
-    expect(await screen.findByTestId("snapshot-identity")).toHaveTextContent("Ada Lovelace <ada@example.com>");
-    expect(screen.queryByLabelText("Your email")).toBeNull();
-  });
-
-  it("asks for a name and email before the first attributed snapshot", async () => {
+  it("asks who is saving inline before the first version", async () => {
     const calls: string[] = [];
     mockInvoke.mockImplementation(async (cmd: string, args?: { name: string; email: string }) => {
       calls.push(cmd);
       if (cmd === "get_contributor_identity") {
         return { name: "ada", email: null, name_source: "system", email_source: null, profile: null, needs_setup: true };
       }
-      if (cmd === "set_contributor_identity") {
-        return {
-          name: args!.name,
-          email: args!.email,
-          name_source: "profile",
-          email_source: "profile",
-          profile: { name: args!.name, email: args!.email },
-          needs_setup: false,
-        };
-      }
+      if (cmd === "set_contributor_identity") return resolved(args!.name, args!.email);
       return undefined;
     });
     const saveVersion = vi.fn(async () => { calls.push("saveVersion"); });
-    act(() => {
-      useVersioningStore.setState({
-        snapshotPromptOpen: true,
-        saveVersion,
-        loadGraphData: vi.fn(async () => {}),
-        loadTimelines: vi.fn(async () => {}),
-      });
-    });
+    act(() => useVersioningStore.setState({ saveVersion }));
 
-    render(<SnapshotDialog />);
+    render(<VersionForm />);
 
-    const nameInput = await screen.findByLabelText("Your name");
-    expect(nameInput).toHaveValue("ada");
-    const save = screen.getByRole("button", { name: "Save Snapshot" });
-    expect(save).toBeDisabled();
+    const author = await screen.findByLabelText("Your name");
+    await waitFor(() => expect(author).toHaveValue("ada"));
+    await userEvent.type(screen.getByTestId("version-name-input"), "First pass");
+    await userEvent.click(screen.getByTestId("version-save"));
+    expect(saveVersion).not.toHaveBeenCalled();
 
-    await userEvent.clear(nameInput);
-    await userEvent.type(nameInput, "Ada Lovelace");
+    await userEvent.clear(author);
+    await userEvent.type(author, "Ada Lovelace");
     await userEvent.type(screen.getByLabelText("Your email"), "ada@example.com");
-    await userEvent.click(save);
+    await userEvent.click(screen.getByTestId("version-save"));
 
     expect(mockInvoke).toHaveBeenCalledWith("set_contributor_identity", { name: "Ada Lovelace", email: "ada@example.com" });
     expect(calls.indexOf("set_contributor_identity")).toBeLessThan(calls.indexOf("saveVersion"));
-    expect(useVersioningStore.getState().snapshotPromptOpen).toBe(false);
+    expect(saveVersion).toHaveBeenCalledWith("First pass");
+  });
+
+  it("doesn't ask once an identity is known", async () => {
+    mockInvoke.mockImplementation(async (cmd: string) => cmd === "get_contributor_identity" ? resolved("Ada", "ada@example.com") : undefined);
+    render(<VersionForm />);
+    await act(async () => undefined);
+    expect(screen.queryByTestId("version-identity")).toBeNull();
   });
 
   it("keeps Save disabled until the identity resolves", async () => {
@@ -129,30 +78,10 @@ describe("snapshot save naming flow", () => {
     mockInvoke.mockImplementation((cmd: string) => cmd === "get_contributor_identity"
       ? new Promise((resolve) => { resolveIdentity = resolve; })
       : Promise.resolve(undefined));
-    const saveVersion = vi.fn();
-    act(() => {
-      useVersioningStore.setState({ snapshotPromptOpen: true, saveVersion });
-    });
-
-    render(<SnapshotDialog />);
-
-    const save = screen.getByRole("button", { name: "Save Snapshot" });
-    expect(save).toBeDisabled();
-    await userEvent.click(save);
-    expect(saveVersion).not.toHaveBeenCalled();
-
-    await act(async () => {
-      resolveIdentity({
-        name: "Ada Lovelace",
-        email: "ada@example.com",
-        name_source: "git_config",
-        email_source: "git_config",
-        profile: null,
-        needs_setup: false,
-      });
-    });
-    expect(await screen.findByTestId("snapshot-identity")).toBeInTheDocument();
-    expect(save).toBeEnabled();
+    render(<VersionForm />);
+    expect(screen.getByTestId("version-save")).toBeDisabled();
+    await act(async () => resolveIdentity(resolved("Ada", "ada@example.com")));
+    expect(screen.getByTestId("version-save")).toBeEnabled();
   });
 
   it("blocks saving when the identity cannot be loaded", async () => {
@@ -161,14 +90,10 @@ describe("snapshot save naming flow", () => {
       return undefined;
     });
     const saveVersion = vi.fn();
-    act(() => {
-      useVersioningStore.setState({ snapshotPromptOpen: true, saveVersion });
-    });
-
-    render(<SnapshotDialog />);
-
-    expect(await screen.findByTestId("snapshot-identity-error")).toHaveTextContent("store unavailable");
-    expect(screen.getByRole("button", { name: "Save Snapshot" })).toBeDisabled();
+    act(() => useVersioningStore.setState({ saveVersion }));
+    render(<VersionForm />);
+    expect(await screen.findByTestId("version-identity-error")).toBeInTheDocument();
+    expect(screen.getByTestId("version-save")).toBeDisabled();
     expect(saveVersion).not.toHaveBeenCalled();
   });
 });

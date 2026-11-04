@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 import { MAX_VERSION_NAME, normalizeVersionName, versionMessage, versionNameError } from "../../domain/versioning";
 import { useContributorIdentity } from "../../hooks/useContributorIdentity";
+import { setContributorIdentity } from "../../services/identity";
 import { isSaveBlocked, runVersionOperation } from "../../services/versionOperation";
 import { isSuggestConfigured, suggestVersion } from "../../services/versionSuggest";
 import { useChangeSummaryStore } from "../../stores/changeSummaryStore";
 import { useVersioningStore } from "../../stores/versioningStore";
 import { useVersionSuggest, type SuggestFields, type VersionSuggestDeps } from "./useVersionSuggest";
+import { VersionIdentityFields, type IdentityDraft } from "./VersionIdentityFields";
 
 const suggestDeps: VersionSuggestDeps = {
   isConfigured: () => isSuggestConfigured(),
@@ -33,6 +35,11 @@ export interface VersionFormProps {
   showComment?: boolean;
   /** Focus the name whenever this changes. */
   focusRequest?: number;
+  /** Shown before the buttons, e.g. "Set aside & continue" in the pre-action dialog. */
+  extraAction?: ReactNode;
+  /** Something else is running (e.g. set aside); saving waits. */
+  disabled?: boolean;
+  onBusyChange?: (busy: boolean) => void;
 }
 
 /** Name (required, ≤72) and optional comment, with ✨ Suggest. Enter in Name saves. */
@@ -43,41 +50,51 @@ export function VersionForm({
   onCancel,
   showComment = true,
   focusRequest,
+  extraAction,
+  disabled = false,
+  onBusyChange,
 }: VersionFormProps) {
   const saveVersion = useVersioningStore((s) => s.saveVersion);
-  const promptSnapshot = useVersioningStore((s) => s.promptSnapshot);
   const saving = useVersioningStore((s) => s.saving);
   const [fields, setFields] = useState<SuggestFields>({ name: "", comment: "" });
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
+  // Synchronous single-flight: state updates land too late to stop a double submit.
+  const inFlight = useRef(false);
   const nameId = useId();
   const errorId = useId();
-  const { identity, error: identityError, loading: identityLoading } = useContributorIdentity(true);
+  const { identity, setIdentity, error: identityError, loading: identityLoading } = useContributorIdentity(true);
+  const [author, setAuthor] = useState<IdentityDraft>({ name: "", email: "" });
   const suggest = useVersionSuggest(fields, setFields, suggestDeps);
 
   useEffect(() => {
     nameRef.current?.focus();
   }, [focusRequest]);
 
+  // Start from whatever name the system knows, e.g. the OS account.
+  const suggestedAuthor = identity?.needs_setup ? identity.name ?? "" : "";
+  useEffect(() => {
+    if (suggestedAuthor) setAuthor((draft) => (draft.name ? draft : { ...draft, name: suggestedAuthor }));
+  }, [suggestedAuthor]);
+
   const nameError = versionNameError(fields.name);
-  const needsIdentity = !!identityError || !!identity?.needs_setup;
-  const canSave = !nameError && !busy && !saving && !identityLoading;
+  const needsIdentity = !!identity?.needs_setup;
+  const authorMissing = needsIdentity && (!author.name.trim() || !author.email.trim());
+  const canSave = !nameError && !busy && !saving && !disabled && !identityLoading && !identityError && !authorMissing;
 
   const submit = useCallback(async () => {
     setTouched(true);
-    if (!canSave) return;
-    if (needsIdentity) {
-      // The full dialog asks who is saving first.
-      void promptSnapshot();
-      return;
-    }
+    if (!canSave || inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
+    onBusyChange?.(true);
     setError(null);
     try {
+      if (needsIdentity) setIdentity(await setContributorIdentity(author.name.trim(), author.email.trim()));
       const saved = await runVersionOperation("Save version", async (summary) => {
-        if (summary.documents.length === 0) return false;
+        if (summary.documents.length === 0 && !useVersioningStore.getState().isDirty) return false;
         await saveVersion(versionMessage(fields.name, fields.comment));
         return true;
       });
@@ -94,9 +111,11 @@ export function VersionForm({
       // The chip shows "Couldn't save – Retry" when edits couldn't be written.
       if (!isSaveBlocked(err)) setError(err instanceof Error ? err.message : String(err));
     } finally {
+      inFlight.current = false;
       setBusy(false);
+      onBusyChange?.(false);
     }
-  }, [afterSave, canSave, fields.comment, fields.name, needsIdentity, onDone, promptSnapshot, saveVersion]);
+  }, [afterSave, author, canSave, fields.comment, fields.name, needsIdentity, onBusyChange, onDone, saveVersion, setIdentity]);
 
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape" && suggest.cancel()) {
@@ -175,16 +194,20 @@ export function VersionForm({
       {(showNameError || error) && (
         <p id={errorId} className="text-2xs text-error" role="alert">{error ?? nameError}</p>
       )}
-      {needsIdentity && !identityLoading && (
-        <p className="text-2xs text-[rgb(var(--color-text-secondary))]">CutReady will ask who is saving first.</p>
+      {needsIdentity && <VersionIdentityFields draft={author} onChange={setAuthor} />}
+      {identityError && (
+        <p className="text-2xs text-error" role="alert" data-testid="version-identity-error">
+          Couldn't load who is saving. Check Settings › Profile, then try again.
+        </p>
       )}
-      <div className="flex items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {extraAction}
         {onCancel && (
-          <button type="button" onClick={onCancel} className="h-7 rounded-control px-2 text-xs text-[rgb(var(--color-text-secondary))] hover:bg-fill-hover">
+          <button type="button" onClick={onCancel} disabled={busy} className="h-7 rounded-control px-2 text-xs text-[rgb(var(--color-text-secondary))] hover:bg-fill-hover">
             Cancel
           </button>
         )}
-        <button type="submit" disabled={busy || saving || identityLoading} className={primaryClass} data-testid="version-save">
+        <button type="submit" disabled={busy || saving || disabled || identityLoading || !!identityError} className={primaryClass} data-testid="version-save">
           {(busy || saving) && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
           {submitLabel}
         </button>

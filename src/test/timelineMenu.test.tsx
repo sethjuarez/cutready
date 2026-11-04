@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../services/tauri", () => ({
-  invoke: vi.fn(),
+  invoke: vi.fn(() => Promise.resolve(undefined)),
   listen: vi.fn(),
   once: vi.fn(),
   emit: vi.fn(),
@@ -20,7 +20,9 @@ vi.mock("../services/versionOperation", () => ({
   },
 }));
 
+import { PreActionHost } from "../components/versioning/PreActionDialog";
 import { TimelineMenu } from "../components/versioning/TimelineMenu";
+import { usePreActionStore } from "../stores/preActionStore";
 import { useSyncStore } from "../stores/syncStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import type { TimelineInfo } from "../types/sketch";
@@ -32,6 +34,7 @@ const timeline = (name: string, active = false): TimelineInfo =>
 function setup(isDirty: boolean) {
   const switchTimeline = vi.fn(() => Promise.resolve());
   const stashChanges = vi.fn(() => Promise.resolve(true));
+  const saveVersion = vi.fn(() => Promise.resolve());
   act(() => {
     useSyncStore.setState({ currentRemote: null });
     useVersioningStore.setState({
@@ -42,17 +45,21 @@ function setup(isDirty: boolean) {
       startedBranchFromSnapshot: null,
       switchTimeline,
       stashChanges,
+      saveVersion,
     });
   });
-  render(<TimelineMenu />);
+  render(<><TimelineMenu /><PreActionHost /></>);
   fireEvent.click(screen.getByTestId("titlebar-variation"));
-  return { switchTimeline, stashChanges };
+  return { switchTimeline, stashChanges, saveVersion };
 }
 
 afterEach(() => {
   settled = Promise.resolve();
   cleanup();
-  act(() => useVersioningStore.setState(original, true));
+  act(() => {
+    useVersioningStore.setState(original, true);
+    usePreActionStore.setState({ pending: null });
+  });
 });
 
 describe("TimelineMenu", () => {
@@ -70,19 +77,42 @@ describe("TimelineMenu", () => {
     expect(switchTimeline).not.toHaveBeenCalled();
     expect(screen.getByText("Save your changes first?")).toBeInTheDocument();
 
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Set aside & switch" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Set aside & continue" })));
     expect(stashChanges).toHaveBeenCalledTimes(1);
     expect(switchTimeline).toHaveBeenCalledWith("alt");
   });
 
   it("saves a version first and switches after it", async () => {
-    const { switchTimeline } = setup(true);
+    const { switchTimeline, saveVersion } = setup(true);
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Switch to timeline alt" })));
+    expect(screen.queryByText(/discard/i)).toBeNull();
+    fireEvent.change(screen.getByTestId("version-name-input"), { target: { value: "Before alt" } });
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save version & continue" })));
-    expect(switchTimeline).not.toHaveBeenCalled();
-    expect(useVersioningStore.getState().snapshotPromptOpen).toBe(true);
-    await act(async () => { await useVersioningStore.getState().pendingActionAfterSave?.(); });
+    expect(saveVersion).toHaveBeenCalledWith("Before alt");
     expect(switchTimeline).toHaveBeenCalledWith("alt");
+    expect(screen.queryByTestId("pre-action-dialog")).toBeNull();
+  });
+
+  it("keeps the version and offers to try again when the switch fails", async () => {
+    const { switchTimeline, saveVersion } = setup(true);
+    switchTimeline.mockRejectedValueOnce(new Error("Timeline is locked"));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Switch to timeline alt" })));
+    fireEvent.change(screen.getByTestId("version-name-input"), { target: { value: "Before alt" } });
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Save version & continue" })));
+    expect(saveVersion).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("alert")).toHaveTextContent("Your changes are safe. Timeline is locked");
+    await act(async () => fireEvent.click(screen.getByTestId("pre-action-retry")));
+    expect(saveVersion).toHaveBeenCalledTimes(1);
+    expect(switchTimeline).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId("pre-action-dialog")).toBeNull();
+  });
+
+  it("hides Set aside while another set-aside shelf is waiting", async () => {
+    setup(true);
+    act(() => useVersioningStore.setState({ hasStash: true }));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Switch to timeline alt" })));
+    expect(screen.getByTestId("pre-action-dialog")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Set aside & continue" })).toBeNull();
   });
 
   it("doesn't switch until open edits are written", async () => {

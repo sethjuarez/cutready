@@ -3,7 +3,8 @@ import { createPortal } from "react-dom";
 import { ArrowDown, ChevronDown, Cloud, GitBranch, GitMerge, History, RefreshCw } from "lucide-react";
 import { filterRemoteTimelines, filterTimelines } from "../../domain/versioning";
 import { openHistoryTab } from "../../hooks/useVersioningLifecycle";
-import { isSaveBlocked, runVersionOperation } from "../../services/versionOperation";
+import { startGetUpdates } from "../../services/preAction";
+import { isSaveBlocked } from "../../services/versionOperation";
 import { useAppStore } from "../../stores/appStore";
 import { useSyncStore } from "../../stores/syncStore";
 import { useVersioningStore } from "../../stores/versioningStore";
@@ -17,12 +18,6 @@ import { useTimelineSwitch } from "./useTimelineSwitch";
 const chipClass =
   "inline-flex h-7 min-w-0 items-center gap-1.5 rounded-control px-2 text-xs text-[rgb(var(--color-text-secondary))] transition-colors duration-fast ease-fluent hover:bg-fill-hover hover:text-[rgb(var(--color-text))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]";
 const sectionLabelClass = "flex items-center gap-1.5 px-2 pb-0.5 pt-1.5 text-2xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]";
-
-function guarded(operation: string, action: () => Promise<void>) {
-  void runVersionOperation(operation, () => action()).catch((err) => {
-    if (!isSaveBlocked(err)) console.error(`${operation} failed:`, err);
-  });
-}
 
 /** The timeline chip and its dropdown: switch, create, adopt, rename, delete, updates, history. */
 export function TimelineMenu() {
@@ -181,13 +176,13 @@ export function TimelineMenu() {
       <div className="border-t border-[rgb(var(--color-border-subtle))] p-1">
         <NewTimelineForm onCreated={() => close()} onAdopt={adopt} />
         {behind > 0 && (
-          <button type="button" disabled={isSyncing} onClick={() => { close(); guarded("Get updates", useSyncStore.getState().pullFromRemote); }} className={`${menuRowClass} text-[rgb(var(--color-text))] disabled:opacity-50`}>
+          <button type="button" disabled={isSyncing} onClick={() => { close(); startGetUpdates(useSyncStore.getState().pullFromRemote); }} className={`${menuRowClass} text-[rgb(var(--color-text))] disabled:opacity-50`}>
             <ArrowDown className="h-3 w-3 shrink-0" aria-hidden="true" />
             Get updates ({behind})
           </button>
         )}
         {baseBehind > 0 && baseStatus && (
-          <button type="button" disabled={isSyncing} onClick={() => { close(); guarded("Get updates", useSyncStore.getState().getUpdatesFromBase); }} className={`${menuRowClass} text-[rgb(var(--color-text))] disabled:opacity-50`}>
+          <button type="button" disabled={isSyncing} onClick={() => { close(); startGetUpdates(useSyncStore.getState().getUpdatesFromBase); }} className={`${menuRowClass} text-[rgb(var(--color-text))] disabled:opacity-50`}>
             <GitMerge className="h-3 w-3 shrink-0" aria-hidden="true" />
             Get updates from {baseStatus.base} ({baseBehind})
           </button>

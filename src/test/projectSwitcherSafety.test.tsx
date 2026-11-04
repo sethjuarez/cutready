@@ -57,7 +57,6 @@ describe("ProjectSwitcher safety gates", () => {
         discardChanges: originalDiscardChanges,
         isDirty: false,
         isMerging: false,
-        snapshotPromptOpen: false,
       });
     });
   });
@@ -89,7 +88,6 @@ describe("ProjectSwitcher safety gates", () => {
 
     expect(mockSwitchProject).toHaveBeenCalledWith("beta");
     expect(screen.queryByText("Save changes before continuing?")).not.toBeInTheDocument();
-    expect(useVersioningStore.getState().snapshotPromptOpen).toBe(false);
   });
 
   it("switches away from the active project before deleting it", async () => {

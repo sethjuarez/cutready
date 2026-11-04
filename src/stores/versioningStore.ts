@@ -61,20 +61,13 @@ export interface VersioningState {
   timelines: TimelineInfo[];
   /** Full graph data for SVG rendering. */
   graphNodes: GraphNode[];
-  /** Whether the snapshot name prompt should be shown (triggered by Ctrl+S). */
-  snapshotPromptOpen: boolean;
-  /** After saving a snapshot, navigate to this commit ID (used by nav-save flow). */
-  pendingNavAfterSave: string | null;
-  /** After saving a snapshot, switch to this branch. */
-  /** Runs after the Save version dialog saves (e.g. the switch or adopt it was opened for). */
-  pendingActionAfterSave: (() => Promise<void>) | null;
   /** Branch created from a historical snapshot that has not recorded its first new save yet. */
   startedBranchFromSnapshot: { branchName: string; snapshotId: string } | null;
   /** Whether there are unsaved changes since the last snapshot. */
   isDirty: boolean;
   /** List of changed files since last snapshot (for Changes panel). */
   changedFiles: DiffEntry[];
-  /** Whether a quickSave is in progress. */
+  /** Whether a version save is in progress. */
   saving: boolean;
   /** Whether a stash (temporarily saved work) exists. */
   hasStash: boolean;
@@ -164,10 +157,6 @@ export interface VersioningActions {
   promoteTimeline: (name: string) => Promise<void>;
   /** Load full graph data for SVG rendering. */
   loadGraphData: () => Promise<void>;
-  /** Open the named snapshot flow for legacy quick-save callers. */
-  quickSave: () => Promise<void>;
-  /** Open snapshot name prompt (and ensure panel is visible). */
-  promptSnapshot: () => Promise<void>;
   /** Compare HEAD against the working directory. */
   diffWorkingTree: () => Promise<DiffEntry[]>;
   /** Check for large files before pushing. Returns list of (path, size). */
@@ -193,9 +182,6 @@ export function resetVersioningState(): Omit<VersioningState, "saving"> {
     versions: [],
     timelines: [],
     graphNodes: [],
-    snapshotPromptOpen: false,
-    pendingNavAfterSave: null,
-    pendingActionAfterSave: null,
     startedBranchFromSnapshot: null,
     isDirty: false,
     changedFiles: [],
@@ -619,14 +605,6 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
     } catch (err) {
       console.error("Failed to load graph data:", err);
     }
-  },
-
-  quickSave: async () => {
-    await get().promptSnapshot();
-  },
-
-  promptSnapshot: async () => {
-    set({ snapshotPromptOpen: true });
   },
 
   diffWorkingTree: async () => {

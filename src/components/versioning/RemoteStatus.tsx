@@ -3,19 +3,13 @@ import { AlertTriangle, ArrowDown, GitMerge, RefreshCw, X } from "lucide-react";
 import { classifySyncError } from "../../domain/versioning";
 import { isDraftlineGuidanceMessage } from "../../services/draftlineErrors";
 import { isContributorIdentityRequired } from "../../services/identity";
-import { isSaveBlocked, runVersionOperation } from "../../services/versionOperation";
+import { startGetUpdates } from "../../services/preAction";
 import { useAppStore } from "../../stores/appStore";
 import { useSyncStore } from "../../stores/syncStore";
 import { IncomingPreview } from "./IncomingPreview";
 
 const linkButtonClass =
   "inline-flex h-6 items-center gap-1 rounded-control px-1.5 text-2xs font-medium text-[rgb(var(--color-accent))] hover:bg-fill-hover disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]";
-
-function incoming(operation: string, action: () => Promise<void>) {
-  void runVersionOperation(operation, () => action()).catch((err) => {
-    if (!isSaveBlocked(err)) console.error(`${operation} failed:`, err);
-  });
-}
 
 /** Where work is shared, what's waiting to come in, and any sync problem (never hidden). */
 export function RemoteStatus() {
@@ -77,7 +71,7 @@ export function RemoteStatus() {
           >
             {behind} incoming version{behind === 1 ? "" : "s"} from collaborators
           </button>
-          <button type="button" onClick={() => incoming("Get updates", pullFromRemote)} disabled={isSyncing} className={linkButtonClass}>
+          <button type="button" onClick={() => startGetUpdates(pullFromRemote)} disabled={isSyncing} className={linkButtonClass}>
             <ArrowDown className="h-3 w-3" aria-hidden="true" />
             Get updates
           </button>
@@ -91,7 +85,7 @@ export function RemoteStatus() {
           </span>
           <button
             type="button"
-            onClick={() => incoming("Get updates", getUpdatesFromBase)}
+            onClick={() => startGetUpdates(getUpdatesFromBase)}
             disabled={isSyncing}
             className={linkButtonClass}
             title={`Get updates from ${baseStatus.base}`}

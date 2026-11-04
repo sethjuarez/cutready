@@ -19,7 +19,10 @@ export function ChangesPopover({ anchorRef }: { anchorRef: RefObject<HTMLElement
   const setOpen = useChangeSummaryStore((s) => s.setPopoverOpen);
   const nameFocusRequest = useChangeSummaryStore((s) => s.nameFocusRequest);
   const changedFiles = useVersioningStore((s) => s.changedFiles);
-  const hasChanges = useChangeSummaryStore((s) => (s.summary?.documents.length ?? 0) > 0);
+  const hasDocuments = useChangeSummaryStore((s) => (s.summary?.documents.length ?? 0) > 0);
+  // Draftline can be dirty with files the summary doesn't classify; those still need a version.
+  const isDirty = useVersioningStore((s) => s.isDirty);
+  const hasChanges = hasDocuments || isDirty;
   const style = useAnchoredPopover(open, anchorRef, POPOVER_WIDTH, "right");
   const panelRef = useRef<HTMLDivElement>(null);
 

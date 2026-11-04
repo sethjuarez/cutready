@@ -22,7 +22,7 @@ import { ResizeHandle } from "./ResizeHandle";
 import { OutputPanel } from "./OutputPanel";
 import { CommandPalette } from "./CommandPalette";
 import { TitleBar } from "./TitleBar";
-import { SnapshotDialog } from "./SnapshotDialog";
+import { PreActionHost } from "./versioning/PreActionDialog";
 import { SendForReviewDialog } from "./SendForReviewDialog";
 import { AiApplyGateDialog } from "./AiApplyGateDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
@@ -540,7 +540,7 @@ export function AppLayout() {
         onExecute={handleExecuteCommand}
         recentCommands={recentCommands}
       />
-      <SnapshotDialog />
+      <PreActionHost />
       <SendForReviewDialog />
       <AiApplyGateDialog />
       <KeyboardShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
