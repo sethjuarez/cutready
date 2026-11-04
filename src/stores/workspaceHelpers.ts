@@ -342,7 +342,6 @@ export async function rewriteWorkspaceFiles(
     });
     globalThis.setTimeout(() => clearSuppressedEditorFlushes(suppressedPaths), 100);
     await useVersioningStore.getState().checkDirty();
-    useSyncStore.setState({ syncError: null });
     return true;
   } catch (err) {
     clearSuppressedEditorFlushes(suppressedPaths);

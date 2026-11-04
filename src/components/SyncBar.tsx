@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useState } from "react";
 import { useAppStore } from "../stores/appStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import { useSyncStore } from "../stores/syncStore";
@@ -6,6 +6,9 @@ import { useSettings } from "../hooks/useSettings";
 import { Check, ArrowUp, ArrowDown, AlertTriangle, GitMerge, Globe, RefreshCw, UserRound } from "lucide-react";
 import { isContributorIdentityRequired } from "../services/identity";
 import { isDraftlineGuidanceMessage } from "../services/draftlineErrors";
+import { IncomingPreview } from "./versioning/IncomingPreview";
+
+export { IncomingPreview };
 
 /**
  * SyncBar — shown at the top of the Snapshots panel when a remote is configured.
@@ -18,7 +21,6 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
   const incomingCommits = useSyncStore((s) => s.incomingCommits);
   const isSyncing = useSyncStore((s) => s.isSyncing);
   const syncError = useSyncStore((s) => s.syncError);
-  const detectRemote = useSyncStore((s) => s.detectRemote);
   const fetchFromRemote = useSyncStore((s) => s.fetchFromRemote);
   const pushToRemote = useSyncStore((s) => s.pushToRemote);
   const pullFromRemote = useSyncStore((s) => s.pullFromRemote);
@@ -31,42 +33,7 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
   const timelines = useVersioningStore((s) => s.timelines);
   const activeTimeline = timelines.find((t) => t.is_active);
 
-  // Detect remote on mount (if the user configured one in settings or one exists in git)
-  useEffect(() => {
-    detectRemote();
-  }, [detectRemote]);
-
-  // Periodic fetch every 5 minutes when remote is configured — pauses when app is hidden
-  useEffect(() => {
-    if (!currentRemote) return;
-
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-
-    const start = () => {
-      if (!intervalId) {
-        intervalId = setInterval(() => { fetchFromRemote({ notifyAuthRequired: false }); }, 5 * 60 * 1000);
-      }
-    };
-    const stop = () => {
-      if (intervalId) { clearInterval(intervalId); intervalId = null; }
-    };
-
-    const onVisibility = () => {
-      if (document.hidden) {
-        stop();
-      } else {
-        fetchFromRemote({ notifyAuthRequired: false }); // catch up immediately on return
-        start();
-      }
-    };
-
-    start();
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      stop();
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [currentRemote, fetchFromRemote]);
+  // Remote detection and the periodic check live in useRemoteSync (AppLayout).
 
   // Hidden for solo users
   if (!currentRemote && !settings.repoRemoteUrl) return null;
@@ -342,72 +309,6 @@ export function SyncBar({ variant = "full" }: { variant?: "full" | "compact" }) 
           >✕</button>
         </div>
       )}
-    </div>
-  );
-}
-
-export function IncomingPreview({
-  commits,
-  inline = false,
-  align = "right",
-  style,
-}: {
-  commits: Array<{
-    id: string;
-    message: string;
-    author: string;
-    timestamp: string;
-    changed_files: Array<{ path: string }>;
-    projects: string[];
-  }>;
-  inline?: boolean;
-  align?: "left" | "right";
-  style?: CSSProperties;
-}) {
-  const body = (
-    <div className="max-h-64 overflow-y-auto py-1">
-      <div className="px-2 pb-1 text-2xs font-semibold uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
-        Incoming work
-      </div>
-      {commits.length === 0 ? (
-        <div className="px-2 py-1 text-2xs text-[rgb(var(--color-text-secondary))]">
-          Fetch latest to preview what collaborators changed.
-        </div>
-      ) : (
-        commits.map((commit) => (
-          <div key={commit.id} className="border-t border-[rgb(var(--color-border))]/60 px-2 py-1.5 first:border-t-0">
-            <div className="truncate text-xs font-medium text-[rgb(var(--color-text))]">{commit.message}</div>
-            <div className="mt-0.5 flex items-center gap-1 text-2xs text-[rgb(var(--color-text-secondary))]">
-              <span className="truncate">{commit.author}</span>
-              <span>•</span>
-              <span>{commit.changed_files.length} file{commit.changed_files.length === 1 ? "" : "s"}</span>
-              {commit.projects.length > 0 && (
-                <>
-                  <span>•</span>
-                  <span className="truncate">{commit.projects.slice(0, 2).join(", ")}</span>
-                </>
-              )}
-            </div>
-          </div>
-        ))
-      )}
-    </div>
-  );
-
-  if (inline) {
-    return (
-      <div className="rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]">
-        {body}
-      </div>
-    );
-  }
-
-  return (
-    <div
-      style={style}
-      className={`${style ? "z-[var(--z-overlay)]" : `absolute top-full z-dropdown mt-1 w-72 ${align === "left" ? "left-0" : "right-0"}`} max-w-[calc(100vw-2rem)] rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] shadow-lg`}
-    >
-      {body}
     </div>
   );
 }

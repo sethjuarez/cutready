@@ -3,6 +3,8 @@ import { useAppStore, type AppView } from "../stores/appStore";
 import { SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "../stores/sidebarLayout";
 import { useChatStore } from "../stores/chatStore";
 import { useVersioningStore } from "../stores/versioningStore";
+import { useChangeSummaryStore } from "../stores/changeSummaryStore";
+import { useVersioningLifecycle, openHistoryTab } from "../hooks/useVersioningLifecycle";
 import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
 import { useContributorIdentity } from "../hooks/useContributorIdentity";
@@ -51,6 +53,7 @@ import {
   Download,
   Terminal,
   Bookmark,
+  History,
   AlertCircle,
   UserRound,
   X,
@@ -246,13 +249,23 @@ export function AppLayout() {
       },
       {
         id: "snapshot.quickSave",
-        title: "Save Snapshot",
-        category: "Snapshot",
+        title: "Save Version",
+        category: "Versions",
         keybinding: "Ctrl+S",
         icon: <Bookmark className="w-4 h-4" />,
         handler: () => {
           const { currentProject } = useAppStore.getState();
-          if (currentProject) useVersioningStore.getState().promptSnapshot();
+          if (currentProject) useChangeSummaryStore.getState().openForSave();
+        },
+      },
+      {
+        id: "versions.openHistory",
+        title: "Open History",
+        category: "Versions",
+        keybinding: "Ctrl+Shift+H",
+        icon: <History className="w-4 h-4" />,
+        handler: () => {
+          if (useAppStore.getState().currentProject) openHistoryTab();
         },
       },
       {
@@ -366,12 +379,14 @@ export function AppLayout() {
         e.preventDefault();
         toggleOutput();
       }
+      if (mod && e.shiftKey && (e.key === "H" || e.key === "h")) {
+        e.preventDefault();
+        if (useAppStore.getState().currentProject) openHistoryTab();
+        return;
+      }
       if (mod && (e.key === "S" || e.key === "s")) {
         e.preventDefault();
-        const { currentProject } = useAppStore.getState();
-        if (currentProject) {
-          useVersioningStore.getState().promptSnapshot();
-        }
+        if (useAppStore.getState().currentProject) useChangeSummaryStore.getState().openForSave();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -388,6 +403,7 @@ export function AppLayout() {
   ]);
 
   useApplyAccessibility();
+  useVersioningLifecycle();
 
   // Apply display settings as CSS variables
   const { settings: displaySettings, loaded: displaySettingsLoaded } = useSettings();

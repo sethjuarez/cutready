@@ -98,6 +98,35 @@ describe("runVersionOperation boundary", () => {
     await slow;
     expect(h.failure()?.operation).toBe("Switch");
   });
+
+  it("counts busy only for non-quiet operations and balances on failure", async () => {
+    const onBusy = vi.fn();
+    const h = harness({ onBusy });
+    await h.run("Review changes", async () => 1, { quiet: true });
+    expect(onBusy).not.toHaveBeenCalled();
+    await h.run("Save version", async () => { throw new Error("boom"); }).catch(() => undefined);
+    expect(onBusy.mock.calls).toEqual([[1], [-1]]);
+  });
+
+  it("publishes only the newest summary load", async () => {
+    const older = { documents: [{ path: "old.sk" }], totals: {} } as unknown as ChangeSummary;
+    const newer = { documents: [{ path: "new.sk" }], totals: {} } as unknown as ChangeSummary;
+    let releaseOlder!: (s: ChangeSummary) => void;
+    let calls = 0;
+    const h = harness({
+      loadSummary: vi.fn(() => {
+        calls += 1;
+        return calls === 1 ? new Promise<ChangeSummary>((r) => { releaseOlder = r; }) : Promise.resolve(newer);
+      }),
+    });
+    const first = h.run("Review changes", async () => 1, { quiet: true });
+    await vi.waitFor(() => expect(calls).toBe(1));
+    await h.run("Review changes", async () => 2, { quiet: true });
+    releaseOlder(older);
+    await first;
+    expect(h.deps.onSummary).toHaveBeenCalledTimes(1);
+    expect(h.deps.onSummary).toHaveBeenCalledWith(newer);
+  });
 });
 
 describe("diffEntryToInput", () => {

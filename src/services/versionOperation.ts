@@ -24,9 +24,20 @@ export interface VersionOperationDeps {
   loadSummary: () => Promise<ChangeSummary>;
   onSummary: (summary: ChangeSummary) => void;
   onSaveFailure: (failure: SaveFailure | null) => void;
+  /** Counts in-flight, non-quiet operations for the chip's Saving… state. */
+  onBusy?: (delta: 1 | -1) => void;
 }
 
-export type VersionOperation = <T>(operation: string, action: (summary: ChangeSummary) => Promise<T>) => Promise<T>;
+export interface VersionOperationOptions {
+  /** Read-only refresh (opening the popover): don't show Saving…. */
+  quiet?: boolean;
+}
+
+export type VersionOperation = <T>(
+  operation: string,
+  action: (summary: ChangeSummary) => Promise<T>,
+  options?: VersionOperationOptions,
+) => Promise<T>;
 
 /**
  * The operation boundary every Save version, Send, switch, restore and
@@ -34,30 +45,40 @@ export type VersionOperation = <T>(operation: string, action: (summary: ChangeSu
  * summary, then act on that summary. If the save fails the action doesn't
  * run, and the failure (with a retry) is published for the status chip.
  * Summary and action errors propagate unchanged; they are not save failures.
+ * Only the most recently started summary load is published, so an older
+ * load resolving late can't overwrite a newer one.
  */
 export function createVersionOperation(deps: VersionOperationDeps): VersionOperation {
   let attempt = 0;
-  const run: VersionOperation = async (operation, action) => {
+  let summaryLoad = 0;
+  const run: VersionOperation = async (operation, action, options) => {
     const current = ++attempt;
+    const busy = !options?.quiet;
+    if (busy) deps.onBusy?.(1);
     try {
-      await deps.settle();
-    } catch (error) {
-      if (current === attempt) {
-        let retrying: Promise<void> | null = null;
-        deps.onSaveFailure({
-          operation,
-          message: "Couldn't save",
-          // Single-flight, so a double click can't run Send or Save version twice.
-          retry: () => (retrying ??= run(operation, action).then(() => undefined).finally(() => { retrying = null; })),
-        });
+      try {
+        await deps.settle();
+      } catch (error) {
+        if (current === attempt) {
+          let retrying: Promise<void> | null = null;
+          deps.onSaveFailure({
+            operation,
+            message: "Couldn't save",
+            // Single-flight, so a double click can't run Send or Save version twice.
+            retry: () => (retrying ??= run(operation, action, options).then(() => undefined).finally(() => { retrying = null; })),
+          });
+        }
+        throw new SaveBlockedError(operation, error);
       }
-      throw new SaveBlockedError(operation, error);
+      // A newer operation owns the chip now; don't clear its failure.
+      if (current === attempt) deps.onSaveFailure(null);
+      const load = ++summaryLoad;
+      const summary = await deps.loadSummary();
+      if (load === summaryLoad) deps.onSummary(summary);
+      return await action(summary);
+    } finally {
+      if (busy) deps.onBusy?.(-1);
     }
-    // A newer operation owns the chip now; don't clear its failure.
-    if (current === attempt) deps.onSaveFailure(null);
-    const summary = await deps.loadSummary();
-    deps.onSummary(summary);
-    return action(summary);
   };
   return run;
 }
@@ -67,4 +88,5 @@ export const runVersionOperation: VersionOperation = createVersionOperation({
   loadSummary: loadWorkspaceChangeSummary,
   onSummary: (summary) => useChangeSummaryStore.getState().setSummary(summary),
   onSaveFailure: (failure) => useChangeSummaryStore.getState().setSaveFailure(failure),
+  onBusy: (delta) => useChangeSummaryStore.getState().adjustBusy(delta),
 });

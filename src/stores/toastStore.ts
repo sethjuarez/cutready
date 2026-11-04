@@ -3,11 +3,10 @@ import { useAccessibilityStore } from "./accessibilityStore";
 
 export type ToastType = "success" | "error" | "warning" | "info";
 
-/** Optional link rendered on a toast (opened in the system browser). */
-export interface ToastLink {
-  label: string;
-  url: string;
-}
+/** Optional link (opened in the system browser) or in-app action rendered on a toast. */
+export type ToastLink =
+  | { label: string; url: string; onSelect?: never }
+  | { label: string; onSelect: () => void; url?: never };
 
 export interface Toast {
   id: number;
