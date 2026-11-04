@@ -25,7 +25,7 @@ function MergeNameForm({ pending, onAnswer }: { pending: PendingMergeName; onAns
 
   return (
     <form
-      className="space-y-3 p-4"
+      className="cr-modal-surface space-y-3 p-4"
       onSubmit={(event) => {
         event.preventDefault();
         if (!error) onAnswer(versionMessage(draft.name, draft.comment));
