@@ -58,7 +58,7 @@ export const ASSET_MARKER = "// asset write";
 /** Functions whose raw filesystem writes are asset writes (images, visuals, copies), by file. */
 export const ASSET_WRITERS = new Map([
   ["commands/sketch.rs", ["write_visual_doc"]],
-  ["commands/note.rs", ["save_pasted_image", "delete_project_image", "delete_orphaned_images", "import_image"]],
+  ["commands/note.rs", ["save_pasted_image", "delete_project_image", "import_image"]],
   ["engine/agent/tools.rs", ["copy_optional_project_asset", "copy_project_file", "exec_write_note"]],
   ["engine/project.rs", ["delete_note"]],
 ]);

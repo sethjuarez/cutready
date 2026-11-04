@@ -946,13 +946,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     }
     case "list_project_narration_assets":
       return [
-        {
-          path: ".cutready/narration/mock-row-1.webm",
-          size: 12345,
-          mimeType: "audio/webm",
-          modifiedAt: Date.now(),
-          referencedBy: ["sketches/demo-introduction.sk"],
-        },
+        { path: ".cutready/narration/mock-row-1.webm", size: 12345, mimeType: "audio/webm", modifiedAt: Date.now(), referencedBy: ["sketches/demo-introduction.sk"] },
+        { path: ".cutready/narration/row-2-old-take.webm", size: 9800, mimeType: "audio/webm", modifiedAt: Date.now() - 86_400_000, referencedBy: [] },
       ];
     case "open_in_terminal":
       console.log("[devMock] open_in_terminal", args);
@@ -1125,7 +1120,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       ];
     case "delete_project_image":
     case "delete_orphaned_images":
-      return null;
+    case "delete_orphaned_narration_assets":
+      return 0;
     case "get_visual":
       // Return a sample elucim DSL document for visual thumbnails
       return {

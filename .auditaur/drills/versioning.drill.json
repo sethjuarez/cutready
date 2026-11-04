@@ -26,7 +26,7 @@
         { "press": "Control+End", "target": { "label": "Note content" } },
         { "type": { "label": "Note content" }, "value": " Venue." },
         { "expectIpc": "update_note", "status": "ok" },
-        { "click": { "testId": "activity-changes" } },
+        { "click": { "testId": "titlebar-sync-status" } },
         { "expect": { "role": "button", "name": "View diff: plan.md" }, "toBeVisible": true, "timeoutMs": 15000 },
         { "expect": { "role": "button", "name": "Save snapshot", "exact": true }, "toBeVisible": true },
         { "expectNoErrors": true }
@@ -40,7 +40,7 @@
         { "press": "Control+End", "target": { "label": "Note content" } },
         { "type": { "label": "Note content" }, "value": " Venue." },
         { "expectIpc": "update_note", "status": "ok" },
-        { "click": { "testId": "activity-changes" } },
+        { "click": { "testId": "titlebar-sync-status" } },
         { "click": { "role": "button", "name": "View diff: plan.md" } },
         { "expect": { "text": "plan.md (diff)" }, "toBeVisible": true },
         { "expect": { "text": "Venue." }, "toBeVisible": true },
@@ -55,7 +55,7 @@
         { "press": "Control+End", "target": { "label": "Note content" } },
         { "type": { "label": "Note content" }, "value": " Venue." },
         { "expectIpc": "update_note", "status": "ok" },
-        { "click": { "testId": "activity-changes" } },
+        { "click": { "testId": "titlebar-sync-status" } },
         { "click": { "role": "button", "name": "Save snapshot", "exact": true } },
         { "fill": "#snapshot-name-input", "value": "Venue noted" },
         { "click": { "role": "button", "name": "Save Snapshot", "exact": true } },
@@ -73,7 +73,7 @@
         { "press": "Control+End", "target": { "label": "Note content" } },
         { "type": { "label": "Note content" }, "value": " Scratch idea." },
         { "name": "the scratch edit is on disk", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Scratch idea."] },
-        { "click": { "testId": "activity-changes" } },
+        { "click": { "testId": "titlebar-sync-status" } },
         { "click": { "role": "button", "name": "Discard changes to plan.md" }, "timeoutMs": 15000 },
         { "click": { "role": "button", "name": "Discard file", "exact": true } },
         { "expectIpc": "selected_discard", "status": "ok" },
@@ -102,7 +102,7 @@
     {
       "name": "previews an earlier snapshot",
       "steps": [
-        { "click": { "testId": "activity-changes" } },
+        { "click": { "testId": "titlebar-sync-status" } },
         { "click": { "role": "button", "name": "Preview snapshot: Agenda drafted" }, "timeoutMs": 15000 },
         { "expect": { "text": "Snapshot: Agenda drafted" }, "toBeVisible": true },
         { "expect": { "role": "button", "name": "Start Branch from Here" }, "toBeVisible": true },
@@ -113,7 +113,7 @@
     {
       "name": "starts a branch from the earlier snapshot",
       "steps": [
-        { "name": "preview the earlier snapshot", "click": { "testId": "activity-changes" } },
+        { "name": "preview the earlier snapshot", "click": { "testId": "titlebar-sync-status" } },
         { "click": { "role": "button", "name": "Preview snapshot: Agenda drafted" }, "timeoutMs": 15000 },
         { "expect": { "text": "Snapshot: Agenda drafted" }, "toBeVisible": true },
         { "click": { "role": "button", "name": "Start Branch from Here" } },
@@ -129,12 +129,12 @@
     {
       "name": "switches back to the main branch",
       "steps": [
-        { "name": "be on another branch", "click": { "testId": "activity-changes" } },
+        { "name": "be on another branch", "click": { "testId": "titlebar-sync-status" } },
         { "click": { "role": "button", "name": "Branch: main" }, "timeoutMs": 15000 },
         { "click": { "role": "button", "name": "Switch to branch alt-intro" } },
         { "expect": { "role": "button", "name": "Branch: alt-intro" }, "toBeVisible": true, "timeoutMs": 15000 },
         { "name": "the workspace has alt-intro's content", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "lacks:Pricing."] },
-        { "click": { "testId": "activity-changes" } },
+        { "click": { "testId": "titlebar-sync-status" } },
         { "click": { "role": "button", "name": "Branch: alt-intro" }, "timeoutMs": 15000 },
         { "click": { "role": "button", "name": "Switch to branch main" } },
         { "expectIpc": "switch_variation", "status": "ok", "timeoutMs": 15000 },
@@ -151,7 +151,7 @@
         { "press": "Control+End", "target": { "label": "Note content" } },
         { "type": { "label": "Note content" }, "value": " Shelved thought." },
         { "name": "the unsaved edit is on disk", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Shelved thought."] },
-        { "click": { "testId": "activity-changes" } },
+        { "click": { "testId": "titlebar-sync-status" } },
         { "click": { "role": "button", "name": "Branch: main" } },
         { "click": { "role": "button", "name": "Switch to branch alt-intro" } },
         { "click": { "role": "button", "name": "Shelve and continue", "exact": true } },
@@ -174,7 +174,7 @@
     {
       "name": "deletes an abandoned branch that has no new snapshots",
       "steps": [
-        { "click": { "testId": "activity-changes" } },
+        { "click": { "testId": "titlebar-sync-status" } },
         { "click": { "role": "button", "name": "Preview snapshot: Agenda drafted" }, "timeoutMs": 15000 },
         { "expect": { "text": "Snapshot: Agenda drafted" }, "toBeVisible": true },
         { "click": { "role": "button", "name": "Start Branch from Here" } },
@@ -187,7 +187,7 @@
         { "press": "Control+End", "target": { "label": "Note content" } },
         { "type": { "label": "Note content" }, "value": " Throwaway." },
         { "name": "the unsaved edit is on disk", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Throwaway."] },
-        { "click": { "testId": "activity-changes" } },
+        { "click": { "testId": "titlebar-sync-status" } },
         { "click": { "role": "button", "name": "Branch: scratch" } },
         { "click": { "role": "button", "name": "Switch to branch main" } },
         { "click": { "role": "button", "name": "Discard and continue", "exact": true } },
