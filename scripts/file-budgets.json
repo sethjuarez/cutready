@@ -16,13 +16,13 @@
     "src-tauri/src/commands/draftline.rs": 2207,
     "src-tauri/src/commands/feedback.rs": 1240,
     "src-tauri/src/commands/project.rs": 1297,
-    "src-tauri/src/commands/recording.rs": 1008,
+    "src-tauri/src/commands/recording.rs": 816,
     "src-tauri/src/commands/screenshot.rs": 916,
     "src-tauri/src/engine/agent_state.rs": 3557,
     "src-tauri/src/engine/agent/tools.rs": 7357,
     "src-tauri/src/engine/export.rs": 3553,
     "src-tauri/src/engine/memory.rs": 1091,
-    "src-tauri/src/engine/project.rs": 4954,
+    "src-tauri/src/engine/project.rs": 4911,
     "src-tauri/src/engine/recording_native_camera_windows.rs": 892,
     "src-tauri/src/engine/recording.rs": 3808,
     "src-tauri/src/engine/video_import.rs": 2037,
@@ -39,11 +39,11 @@
     "src/components/SketchVisualViews.tsx": 1304,
     "src/components/SnapshotGraph.tsx": 938,
     "src/components/SnapshotPreviewTab.tsx": 1079,
-    "src/components/StoryboardList.tsx": 1419,
+    "src/components/StoryboardList.tsx": 1375,
     "src/components/StoryboardView.tsx": 1542,
-    "src/devMock.ts": 1419,
+    "src/devMock.ts": 1415,
     "src/hooks/useSettings.ts": 999,
     "src/services/draftlineVersioning.ts": 879,
-    "src/stores/appStore.ts": 1931
+    "src/stores/appStore.ts": 1923
   }
 }

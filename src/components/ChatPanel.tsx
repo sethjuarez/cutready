@@ -1965,7 +1965,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     <div className="flex flex-col h-full">
       {/* Top toolbar — session controls */}
       <div
-        className={`h-9 border-b border-[rgb(var(--color-border))] shrink-0 ${
+        className={`h-9 border-b border-[rgb(var(--color-border-subtle))] shrink-0 ${
           chatFocusMode ? "px-4" : "px-2"
         }`}
       >

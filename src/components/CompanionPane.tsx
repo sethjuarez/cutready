@@ -15,11 +15,11 @@ export function CompanionPane() {
 
   return (
     <>
-      <ResizeHandle direction="horizontal" onResize={handleResize} />
+      <ResizeHandle direction="horizontal" subtle onResize={handleResize} />
       <aside
         aria-label="Companion"
         data-testid="secondary-chat-panel"
-        className="ml-1.5 h-full shrink-0 overflow-hidden rounded-tl-card border-l border-t border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-inset))] shadow-layer"
+        className="mb-[var(--card-gap)] ml-[var(--card-gap)] mr-[var(--card-gap)] shrink-0 overflow-hidden rounded-card border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-inset))] shadow-layer"
         style={{ width: secondaryWidth }}
       >
         <ChatPanel />

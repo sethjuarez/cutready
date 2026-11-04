@@ -4,7 +4,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const platform = vi.hoisted(() => ({ isMac: false }));
 
 vi.mock("../components/TitleBar", () => ({
-  TitleBar: () => <div data-testid="titlebar" />,
+  TitleBar: ({ onToggleChat }: { onToggleChat?: () => void }) => (
+    <div data-testid="titlebar">
+      <button type="button" data-testid="activity-chat" onClick={onToggleChat}>
+        Chat
+      </button>
+    </div>
+  ),
 }));
 vi.mock("../components/HomePanel", () => ({
   HomePanel: () => <div />,
@@ -16,20 +22,13 @@ vi.mock("../components/SettingsPanel", () => ({
   SettingsPanel: () => <div />,
 }));
 vi.mock("../components/Sidebar", () => ({
-  Sidebar: ({ onChatToggle }: { onChatToggle?: () => void }) => (
-    <button type="button" data-testid="activity-chat" onClick={onChatToggle}>
-      Chat
-    </button>
-  ),
+  Sidebar: () => <nav />,
 }));
 vi.mock("../components/StoryboardPanel", () => ({
   StoryboardPanel: () => <div />,
 }));
 vi.mock("../components/StoryboardList", () => ({
   StoryboardList: () => <div />,
-}));
-vi.mock("../components/AssetList", () => ({
-  AssetList: () => <div />,
 }));
 vi.mock("../components/OutputPanel", () => ({
   OutputPanel: () => <div data-testid="output-panel" />,
@@ -252,12 +251,13 @@ describe("AppLayout titlebar spacing", () => {
     const layer = screen.getByTestId("editor-layer");
     const companion = screen.getByTestId("secondary-chat-panel");
     expect(layer.parentElement).toContainElement(companion);
-    expect(layer).toHaveClass("rounded-t-card", "border-r");
+    expect(layer).toHaveClass("rounded-card", "border", "mb-[var(--card-gap)]");
+    expect(layer).not.toHaveClass("mr-[var(--card-gap)]");
+    expect(companion).toHaveClass("rounded-card", "border", "mb-[var(--card-gap)]", "mr-[var(--card-gap)]");
 
     act(() => useAppStore.setState({ showSecondaryPanel: false }));
     expect(screen.queryByTestId("secondary-chat-panel")).not.toBeInTheDocument();
-    expect(layer).toHaveClass("rounded-tl-card");
-    expect(layer).not.toHaveClass("border-r");
+    expect(layer).toHaveClass("rounded-card", "mr-[var(--card-gap)]");
 
     act(() => useAppStore.setState({ view: "home", showSecondaryPanel: true }));
     expect(screen.queryByTestId("secondary-chat-panel")).not.toBeInTheDocument();
