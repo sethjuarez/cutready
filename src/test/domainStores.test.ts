@@ -39,7 +39,7 @@ function dirtyDomainStores() {
     graphNodes: [{ id: "n1" }] as never,
     snapshotPromptOpen: true,
     pendingNavAfterSave: "abc" as never,
-    pendingTimelineAfterSave: "feature" as never,
+    pendingActionAfterSave: (async () => undefined) as never,
     startedBranchFromSnapshot: startedBranch,
     isDirty: true,
     changedFiles: [{ path: "intro.sk", status: "modified", additions: 1, deletions: 0 }],

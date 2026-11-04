@@ -65,7 +65,7 @@ function isDatabasePath(path: string): boolean {
 }
 
 /** The panels / views available in the app. */
-export type AppView = "home" | "project" | "assets" | "narrations" | "recording" | "settings" | "chat" | "changes";
+export type AppView = "home" | "project" | "assets" | "narrations" | "recording" | "settings" | "chat";
 
 /** Output panel tabs. */
 export type OutputTab = "activity" | "debug" | "terminal";

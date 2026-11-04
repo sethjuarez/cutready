@@ -13,7 +13,7 @@ import { RecordingPanel } from "./RecordingPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { Sidebar } from "./Sidebar";
 import { useExitChatFocusOnNavigate } from "../hooks/useExitChatFocusOnNavigate";
-import { isMediaView, panelOwner } from "../utils/navigation";
+import { isMediaView } from "../utils/navigation";
 import { StoryboardPanel } from "./StoryboardPanel";
 import { CompanionPane } from "./CompanionPane";
 import { StoryboardList } from "./StoryboardList";
@@ -28,7 +28,6 @@ import { AiApplyGateDialog } from "./AiApplyGateDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { MergeConflictPanel } from "./MergeConflictPanel";
 import { ChatPanel } from "./ChatPanel";
-import { ChangesPanel } from "./ChangesPanel";
 import { FeedbackDialog } from "./FeedbackDialog";
 import { ProjectHealthBanner } from "./ProjectHealthBanner";
 import { AdoptFolderDialog } from "./AdoptFolderDialog";
@@ -104,7 +103,7 @@ export function AppLayout() {
   }, [view]);
 
   useEffect(() => {
-    if (view === "project" || view === "assets" || view === "narrations" || view === "changes") {
+    if (view === "project" || view === "assets" || view === "narrations") {
       lastWorkspaceViewRef.current = view;
     }
   }, [view]);
@@ -436,7 +435,7 @@ export function AppLayout() {
   }, [contentView, setView]);
   const outputPanelAvailable = contentView !== "home" && contentView !== "chat" && !projectSwitching;
   const outputPanelVisible = outputPanelAvailable && outputVisible;
-  const documentView = !projectSwitching && (contentView === "project" || contentView === "assets" || contentView === "narrations" || contentView === "changes");
+  const documentView = !projectSwitching && (contentView === "project" || contentView === "assets" || contentView === "narrations");
   const companionVisible = documentView && !isMerging && showSecondaryPanel;
 
   return (
@@ -673,8 +672,6 @@ function NavPane({ contentView, showPanel, ...navProps }: NavPaneProps) {
     }
   }, [setSidebarWidth, toggleSidebar]);
 
-  const panel = showPanel && panelOwner(contentView) === "changes" ? <ChangesPanel /> : null;
-
   return (
     <>
       <Sidebar
@@ -682,7 +679,6 @@ function NavPane({ contentView, showPanel, ...navProps }: NavPaneProps) {
         panelView={contentView}
         expanded={sidebarVisible}
         documents={showPanel && hasProject ? <StoryboardList /> : null}
-        panel={panel}
         width={sidebarWidth}
         resizing={resizing}
       />

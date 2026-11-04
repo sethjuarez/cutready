@@ -22,7 +22,6 @@ describe("leaving the Media library for a document", () => {
     const covering: AppView[] = ["assets", "narrations", "home", "settings", "chat"];
     for (const view of covering) expect(hidesEditor(view), view).toBe(true);
     expect(hidesEditor("project")).toBe(false);
-    expect(hidesEditor("changes")).toBe(false);
   });
 
   it.each<AppView>(["assets", "narrations"])("opening a tab from %s shows the editor", (view) => {
@@ -47,11 +46,5 @@ describe("leaving the Media library for a document", () => {
     useAppStore.setState({ view: "assets", openStoryboard: vi.fn(async () => {}) });
     useAppStore.getState().setActiveTab(id);
     expect(useAppStore.getState().view).toBe("project");
-  });
-
-  it("keeps the Changes view when a tab opens there", () => {
-    useAppStore.setState({ view: "changes", openTabs: [], activeTabId: null });
-    useAppStore.getState().openTab({ type: "storyboard", path: "a.sb", title: "A" });
-    expect(useAppStore.getState().view).toBe("changes");
   });
 });

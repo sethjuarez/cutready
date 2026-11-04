@@ -10,7 +10,7 @@ describe("UnsavedWorkspaceDialog", () => {
     useVersioningStore.setState({ changedFiles: [], refreshChangedFiles: originalRefresh, hasStash: false });
   });
 
-  function renderDialog(onShelveAndContinue?: () => void) {
+  function renderDialog(onSetAside?: () => void) {
     useVersioningStore.setState({
       changedFiles: [
         { path: "intro.sk", status: "modified", additions: 1, deletions: 0 },
@@ -23,14 +23,13 @@ describe("UnsavedWorkspaceDialog", () => {
         open
         targetLabel="feature"
         onSaveFirst={vi.fn()}
-        onDiscardAndContinue={vi.fn()}
-        onShelveAndContinue={onShelveAndContinue}
+        onSetAside={onSetAside}
         onCancel={vi.fn()}
       />,
     );
   }
 
-  it("lists the files that would be discarded", () => {
+  it("lists the unsaved files", () => {
     renderDialog();
     const list = screen.getByTestId("workspace-changes-list");
     expect(list).toHaveTextContent("intro.sk");
@@ -38,16 +37,22 @@ describe("UnsavedWorkspaceDialog", () => {
     expect(useVersioningStore.getState().refreshChangedFiles).toHaveBeenCalled();
   });
 
-  it("offers Shelve only when a handler is given", () => {
+  it("offers Set aside only when a handler is given", () => {
     const onShelve = vi.fn();
     renderDialog(onShelve);
-    fireEvent.click(screen.getByText("Shelve and continue"));
+    fireEvent.click(screen.getByText("Set aside & switch"));
     expect(onShelve).toHaveBeenCalledOnce();
   });
 
-  it("hides Shelve when no handler is given", () => {
+  it("never offers to discard", () => {
+    renderDialog(vi.fn());
+    expect(screen.queryByText(/discard/i)).toBeNull();
+    expect(screen.getByText("Save version & continue")).toBeInTheDocument();
+  });
+
+  it("hides Set aside when no handler is given", () => {
     renderDialog();
-    expect(screen.queryByText("Shelve and continue")).toBeNull();
+    expect(screen.queryByText("Set aside & switch")).toBeNull();
   });
 });
 

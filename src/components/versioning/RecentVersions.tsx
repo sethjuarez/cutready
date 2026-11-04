@@ -40,6 +40,7 @@ export function RecentVersions({ onNavigate }: { onNavigate: () => void }) {
                 }}
                 className="flex w-full min-w-0 items-baseline gap-2 rounded-control px-1.5 py-1 text-left hover:bg-fill-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]"
                 title={`Preview “${node.message}”`}
+                aria-label={`Preview version: ${node.message.split(/\r?\n/, 1)[0]}`}
               >
                 <span className="min-w-0 flex-1 truncate text-xs text-[rgb(var(--color-text))]">{node.message.split(/\r?\n/, 1)[0]}</span>
                 <span className="shrink-0 text-2xs text-[rgb(var(--color-text-secondary))]">{formatRelativeDate(node.timestamp)}</span>

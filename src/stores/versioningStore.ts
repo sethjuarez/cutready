@@ -66,7 +66,8 @@ export interface VersioningState {
   /** After saving a snapshot, navigate to this commit ID (used by nav-save flow). */
   pendingNavAfterSave: string | null;
   /** After saving a snapshot, switch to this branch. */
-  pendingTimelineAfterSave: string | null;
+  /** Runs after the Save version dialog saves (e.g. the switch or adopt it was opened for). */
+  pendingActionAfterSave: (() => Promise<void>) | null;
   /** Branch created from a historical snapshot that has not recorded its first new save yet. */
   startedBranchFromSnapshot: { branchName: string; snapshotId: string } | null;
   /** Whether there are unsaved changes since the last snapshot. */
@@ -155,6 +156,8 @@ export interface VersioningActions {
   switchTimeline: (name: string) => Promise<void>;
   /** Rename the legacy master variation (or a branch the remote renamed) to the new base name. */
   renameLegacyMasterTimeline: () => Promise<void>;
+  /** Rename a timeline; false when it failed (already reported). */
+  renameTimeline: (from: string, to: string) => Promise<boolean>;
   /** Delete a non-active timeline. */
   deleteTimeline: (name: string) => Promise<void>;
   /** Promote a fork timeline to become the new main. */
@@ -192,7 +195,7 @@ export function resetVersioningState(): Omit<VersioningState, "saving"> {
     graphNodes: [],
     snapshotPromptOpen: false,
     pendingNavAfterSave: null,
-    pendingTimelineAfterSave: null,
+    pendingActionAfterSave: null,
     startedBranchFromSnapshot: null,
     isDirty: false,
     changedFiles: [],
@@ -564,18 +567,23 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
       return;
     }
 
+    if (await get().renameTimeline(from, to)) useSyncStore.setState({ baseRename: null, syncError: null });
+  },
+
+  renameTimeline: async (from, to) => {
     try {
       const preflight = await preflightDraftlineRenameVariation(from, to);
       await renameDraftlineVariation(from, to, preflight.token);
-      useSyncStore.setState({ baseRename: null, syncError: null });
       await get().loadTimelines();
       await get().loadVersions();
       await get().loadGraphData();
       await get().checkDirty();
       useToastStore.getState().show(`Renamed branch ${from} to ${to}. Publish again to share it.`, 5000, "success");
+      return true;
     } catch (err) {
       console.error("Failed to rename Draftline branch:", err);
       useToastStore.getState().show(`Rename failed: ${errorMessage(err)}`, 5000, "error");
+      return false;
     }
   },
 

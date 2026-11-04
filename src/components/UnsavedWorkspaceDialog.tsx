@@ -6,38 +6,32 @@ interface UnsavedWorkspaceDialogProps {
   open: boolean;
   targetLabel: string;
   onSaveFirst: () => void | Promise<void>;
-  onDiscardAndContinue: () => void | Promise<void>;
   /** Shelve the changes so they can be restored later; omitted when a shelf already exists. */
-  onShelveAndContinue?: () => void | Promise<void>;
+  onSetAside?: () => void | Promise<void>;
   onCancel: () => void;
 }
 
+/** Shown before switching timelines with unsaved changes. Nothing is lost without a choice. */
 export function UnsavedWorkspaceDialog({
   open,
   targetLabel,
   onSaveFirst,
-  onDiscardAndContinue,
-  onShelveAndContinue,
+  onSetAside,
   onCancel,
 }: UnsavedWorkspaceDialogProps) {
-  const actions: DecisionDialogAction[] = [
-    { id: "cancel", label: "Cancel", onSelect: onCancel },
-    { id: "discard", label: "Discard and continue", variant: "danger", onSelect: onDiscardAndContinue },
-  ];
-  if (onShelveAndContinue) {
-    actions.push({ id: "shelve", label: "Shelve and continue", onSelect: onShelveAndContinue });
-  }
-  actions.push({ id: "save", label: "Save snapshot first", variant: "primary", onSelect: onSaveFirst });
+  const actions: DecisionDialogAction[] = [{ id: "cancel", label: "Cancel", onSelect: onCancel }];
+  if (onSetAside) actions.push({ id: "set-aside", label: "Set aside & switch", onSelect: onSetAside });
+  actions.push({ id: "save", label: "Save version & continue", variant: "primary", onSelect: onSaveFirst });
 
   return (
     <DecisionDialog
       open={open}
-      title="Save changes before continuing?"
+      title="Save your changes first?"
       message={(
         <>
-          You have workspace changes that are not in a snapshot. Before switching to{" "}
-          <span className="font-medium text-[rgb(var(--color-text))]">{targetLabel}</span>, save a snapshot,
-          shelve the changes to restore later, or discard them.
+          You have unsaved changes. Before switching to{" "}
+          <span className="font-medium text-[rgb(var(--color-text))]">{targetLabel}</span>, save them as a version
+          {onSetAside ? ", or set them aside to restore later" : ""}.
           <WorkspaceChangesList />
         </>
       )}
@@ -46,4 +40,3 @@ export function UnsavedWorkspaceDialog({
     />
   );
 }
-

@@ -16,8 +16,6 @@ interface SidebarProps {
   expanded?: boolean;
   /** Document sections (Storyboards, Sketches, Notes), shown while a project is open. */
   documents?: ReactNode;
-  /** The Changes list, shown above the documents. */
-  panel?: ReactNode;
   /** View whose panel is shown; defaults to the current view (differs while Settings is open). */
   panelView?: AppView;
   width?: number;
@@ -33,7 +31,6 @@ export function Sidebar({
   onProfile,
   expanded = true,
   documents,
-  panel,
   panelView,
   width = 280,
   resizing = false,
@@ -109,20 +106,6 @@ export function Sidebar({
                 <span className="lbl">Home</span>
               </button>
             </div>
-
-            {expanded && owner === "changes" && panel != null && (
-              <div className="cr-sec cr-sec-first" data-testid="nav-changes">
-                <div className="cr-sec-h">
-                  <span className="cr-sec-title">Changes</span>
-                  <span className="cr-sec-acts cr-sec-acts-on">
-                    <button type="button" className="cr-mini" title="Close changes" aria-label="Close changes" onClick={() => go("project")}>
-                      <NavIcon name="close" size={16} />
-                    </button>
-                  </span>
-                </div>
-                <div className="cr-nav-panel" data-testid="nav-panel">{panel}</div>
-              </div>
-            )}
 
             {documents}
 

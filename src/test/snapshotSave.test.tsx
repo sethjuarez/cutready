@@ -24,7 +24,7 @@ describe("snapshot save naming flow", () => {
       useVersioningStore.setState({
         snapshotPromptOpen: false,
         pendingNavAfterSave: null,
-        pendingTimelineAfterSave: null,
+        pendingActionAfterSave: null,
         isRewound: false,
         saving: false,
         saveVersion: originalSaveVersion,

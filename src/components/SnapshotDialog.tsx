@@ -22,8 +22,7 @@ export function SnapshotDialog() {
   const loadTimelines = useVersioningStore((s) => s.loadTimelines);
   const navigateToSnapshot = useVersioningStore((s) => s.navigateToSnapshot);
   const pendingNavAfterSave = useVersioningStore((s) => s.pendingNavAfterSave);
-  const pendingTimelineAfterSave = useVersioningStore((s) => s.pendingTimelineAfterSave);
-  const switchTimeline = useVersioningStore((s) => s.switchTimeline);
+  const pendingActionAfterSave = useVersioningStore((s) => s.pendingActionAfterSave);
   const isMultiProject = useAppStore((s) => s.isMultiProject);
 
   const [label, setLabel] = useState("");
@@ -54,7 +53,7 @@ export function SnapshotDialog() {
     useVersioningStore.setState({
       snapshotPromptOpen: false,
       pendingNavAfterSave: null,
-      pendingTimelineAfterSave: null,
+      pendingActionAfterSave: null,
     });
     setLabel("");
     setForkLabel("");
@@ -89,8 +88,8 @@ export function SnapshotDialog() {
         await loadGraphData();
         await loadTimelines();
       }
-      if (pendingTimelineAfterSave) {
-        await switchTimeline(pendingTimelineAfterSave);
+      if (pendingActionAfterSave) {
+        await pendingActionAfterSave();
       }
       close();
     } catch (err) {
@@ -99,7 +98,7 @@ export function SnapshotDialog() {
       useToastStore.getState().show(`Snapshot failed: ${errorMessage(err)}`, 5000, "error");
       setSaving(false);
     }
-  }, [label, forkLabel, isRewound, identityReady, needsIdentity, authorName, authorEmail, setIdentity, saveVersion, loadGraphData, loadTimelines, pendingNavAfterSave, pendingTimelineAfterSave, navigateToSnapshot, switchTimeline, close]);
+  }, [label, forkLabel, isRewound, identityReady, needsIdentity, authorName, authorEmail, setIdentity, saveVersion, loadGraphData, loadTimelines, pendingNavAfterSave, pendingActionAfterSave, navigateToSnapshot, close]);
 
   if (!snapshotPromptOpen) return null;
 

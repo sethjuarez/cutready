@@ -20,7 +20,7 @@ vi.mock("../services/versionOperation", () => ({
   isSaveBlocked: () => false,
 }));
 
-import { TitleBarVariationChip } from "../components/TitleBarStatus";
+import { TimelineMenu } from "../components/versioning/TimelineMenu";
 import { StatusChip } from "../components/versioning/StatusChip";
 import { SendSection } from "../components/versioning/SendSection";
 import { WindowControls } from "../components/WindowControls";
@@ -153,9 +153,9 @@ describe("SendSection", () => {
     expect(sendForReview).toHaveBeenCalledWith("Tighten intro", undefined);
   });
 });
-describe("TitleBarVariationChip", () => {
+describe("TimelineMenu", () => {
   it("renders nothing without an active variation", () => {
-    const { container } = render(<TitleBarVariationChip />);
+    const { container } = render(<TimelineMenu />);
     expect(container).toBeEmptyDOMElement();
   });
 
@@ -168,7 +168,7 @@ describe("TitleBarVariationChip", () => {
         ],
       }),
     );
-    render(<TitleBarVariationChip />);
+    render(<TimelineMenu />);
     expect(screen.getByTestId("titlebar-variation")).toHaveTextContent("Alt take");
   });
 });

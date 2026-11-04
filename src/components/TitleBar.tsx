@@ -5,7 +5,7 @@ import { PanelBottom, PanelLeft, Search, Sparkles } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { isMac, formatKeybinding } from "../utils/platform";
 import { ProjectSwitcher } from "./ProjectSwitcher";
-import { TitleBarVariationChip } from "./TitleBarStatus";
+import { TimelineMenu } from "./versioning/TimelineMenu";
 import { StatusChip } from "./versioning/StatusChip";
 import { WindowControls } from "./WindowControls";
 
@@ -100,7 +100,7 @@ export function TitleBar({
           <>
             <span aria-hidden="true" className="h-4 w-px shrink-0 bg-[rgb(var(--color-border))] max-[1100px]:hidden" />
             <ProjectSwitcher variant="title" />
-            <TitleBarVariationChip />
+            <TimelineMenu />
           </>
         )}
       </div>

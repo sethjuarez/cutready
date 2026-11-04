@@ -21,13 +21,10 @@ import type { GraphNode } from "../types/sketch";
 import { useAppStore } from "../stores/appStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import { useSyncStore } from "../stores/syncStore";
-import { useConfirmDialog } from "./ConfirmDialog";
 import {
   FullHistoryGraph,
   type HistoryGraphNodeType,
 } from "./FullHistoryGraph";
-import { TimelineSelector } from "./TimelineSelector";
-import { UnsavedWorkspaceDialog } from "./UnsavedWorkspaceDialog";
 import { firstParentTimelineNodes } from "../utils/timelineNodes";
 
 export function HistoryGraphTab() {
@@ -38,20 +35,11 @@ export function HistoryGraphTab() {
   const checkDirty = useVersioningStore((s) => s.checkDirty);
   const checkRewound = useVersioningStore((s) => s.checkRewound);
   const navigateToSnapshot = useVersioningStore((s) => s.navigateToSnapshot);
-  const switchTimeline = useVersioningStore((s) => s.switchTimeline);
-  const discardChanges = useVersioningStore((s) => s.discardChanges);
-  const stashChanges = useVersioningStore((s) => s.stashChanges);
-  const hasStash = useVersioningStore((s) => s.hasStash);
-  const deleteTimeline = useVersioningStore((s) => s.deleteTimeline);
   const currentRemote = useSyncStore((s) => s.currentRemote);
   const syncStatus = useSyncStore((s) => s.syncStatus);
   const currentProject = useAppStore((s) => s.currentProject);
-  const startedBranchFromSnapshot = useVersioningStore(
-    (s) => s.startedBranchFromSnapshot,
-  );
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [pendingSwitch, setPendingSwitch] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [authorFilter, setAuthorFilter] = useState("all");
   const [graphZoom, setGraphZoom] = useState(1);
@@ -59,7 +47,6 @@ export function HistoryGraphTab() {
   const [showSideAncestry, setShowSideAncestry] = useState(false);
   const [showRemoteOnly, setShowRemoteOnly] = useState(false);
   const [showRecoveryRefs, setShowRecoveryRefs] = useState(false);
-  const { confirm, confirmationDialog } = useConfirmDialog();
 
   useEffect(() => {
     loadGraphData();
@@ -69,16 +56,9 @@ export function HistoryGraphTab() {
   }, [checkDirty, checkRewound, loadGraphData, loadTimelines]);
 
   const activeTimeline = timelines.find((timeline) => timeline.is_active);
-  const head = graphNodes.find((node) => node.is_head);
   const workspaceName = currentProject
     ? getPathBasename(currentProject.repo_root)
     : "workspace";
-  const emptyStartedBranch =
-    startedBranchFromSnapshot &&
-    activeTimeline?.name === startedBranchFromSnapshot.branchName &&
-    head?.id === startedBranchFromSnapshot.snapshotId
-      ? startedBranchFromSnapshot
-      : null;
 
   const fullAncestryNodes = useMemo(() => {
     if (!activeTimeline) return graphNodes;
@@ -277,9 +257,6 @@ export function HistoryGraphTab() {
 
         <div className="history-graph-toolbar-wrap flex shrink-0 items-center justify-end">
           <div className="history-graph-toolbar flex max-w-full items-center justify-end gap-1 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))]/80 p-1">
-            <div className="history-graph-timeline-control min-w-0 max-w-44">
-              <TimelineSelector />
-            </div>
             <div className="relative">
               <button
                 type="button"
@@ -468,49 +445,6 @@ export function HistoryGraphTab() {
         </div>
       </div>
 
-      <UnsavedWorkspaceDialog
-        open={!!pendingSwitch}
-        targetLabel={
-          timelines.find((timeline) => timeline.name === pendingSwitch)
-            ?.label ??
-          pendingSwitch ??
-          "that branch"
-        }
-        onCancel={() => setPendingSwitch(null)}
-        onSaveFirst={() => {
-          if (!pendingSwitch) return;
-          useVersioningStore.setState({
-            pendingTimelineAfterSave: pendingSwitch,
-            snapshotPromptOpen: true,
-          });
-          setPendingSwitch(null);
-        }}
-        onShelveAndContinue={hasStash ? undefined : async () => {
-          if (!pendingSwitch) return;
-          const target = pendingSwitch;
-          setPendingSwitch(null);
-          if (await stashChanges()) await switchTimeline(target);
-        }}
-        onDiscardAndContinue={async () => {
-          if (!pendingSwitch) return;
-          const target = pendingSwitch;
-          const branchToDelete = emptyStartedBranch;
-          setPendingSwitch(null);
-          await discardChanges();
-          await switchTimeline(target);
-          if (branchToDelete) {
-            const shouldDelete = await confirm({
-              title: "Delete the empty branch too?",
-              message: `You discarded the unsaved work on ${branchToDelete.branchName}. This branch has no new saved snapshots beyond where it started. Delete it as well?`,
-              confirmLabel: "Delete branch",
-              cancelLabel: "Keep branch",
-              variant: "warning",
-            });
-            if (shouldDelete) await deleteTimeline(branchToDelete.branchName);
-          }
-        }}
-      />
-      {confirmationDialog}
     </div>
   );
 }
