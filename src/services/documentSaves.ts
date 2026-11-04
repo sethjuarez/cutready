@@ -19,6 +19,7 @@ import {
   closeDocumentScope,
   documentEntries,
   documentEntry,
+  documentEntryPaths,
   isClean,
   isEntryCurrent,
   moveDocumentEntry,
@@ -551,6 +552,25 @@ export async function beginProjectChange(timeoutMs = SETTLE_TIMEOUT_MS): Promise
  */
 export async function settleBeforeRename(timeoutMs = SETTLE_TIMEOUT_MS): Promise<void> {
   await settleDocumentSaves(timeoutMs);
+}
+
+/** A document's latest edits failed to save, so a versioning action would miss them. */
+export class DocumentsUnsavedError extends Error {
+  constructor(readonly paths: string[]) {
+    super(`CutReady couldn't save ${paths.length === 1 ? "a document" : `${paths.length} documents`}.`);
+    this.name = "DocumentsUnsavedError";
+  }
+}
+
+/**
+ * Before a versioning action (save version, send, switch, restore): writes
+ * out editor edits and waits for queued saves. Throws if they don't settle,
+ * or if any requested save failed and no later save has landed since.
+ */
+export async function settleDocumentWrites(timeoutMs = SETTLE_TIMEOUT_MS): Promise<void> {
+  await settleDocumentSaves(timeoutMs);
+  const unsaved = documentEntryPaths().filter(([, entry]) => !isClean(entry)).map(([path]) => path);
+  if (unsaved.length > 0) throw new DocumentsUnsavedError(unsaved);
 }
 
 /** After a rename: saves of `from` stop, and saves of `to` continue from its synced text. */

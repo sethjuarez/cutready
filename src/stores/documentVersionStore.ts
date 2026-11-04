@@ -95,6 +95,11 @@ export function documentEntries(): DocumentVersionEntry[] {
   return Array.from(entries.values());
 }
 
+/** Every entry of the current project, with its relative path. */
+export function documentEntryPaths(): [string, DocumentVersionEntry][] {
+  return Array.from(entries.entries());
+}
+
 /**
  * Stops saves and loads of the current project's documents until `release`,
  * or for good once another project replaces it.
