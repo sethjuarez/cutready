@@ -26,7 +26,8 @@ import {
   type WorkspaceGraphNode,
   type WorkspaceGraphRef,
 } from "@draftline/client";
-import { invoke, listen } from "./tauri";
+import { invoke as rawInvoke, listen } from "./tauri";
+import { gateWorkspaceWrites } from "./workspaceWriteGate";
 import { DraftlineVariationCreateConflictError, variationCreatePreflightFromError } from "./draftlineVariationConflict";
 import type { BaseStatus, ConflictFile, DiffEntry, GraphNode, IncomingCommit, RemoteBranchInfo, RemoteInfo, SyncStatus, TimelineInfo, VersionEntry } from "../types/sketch";
 
@@ -86,6 +87,7 @@ let draftlineWorkspacePath: string | null = null;
 let cachedFacade: DraftlineHostFacade | null = null;
 let cachedFacadePath: string | null = null;
 
+const invoke = gateWorkspaceWrites(rawInvoke);
 export const draftlineClient = createDraftlineClient({ invoke, listen });
 
 export function setDraftlineWorkspacePath(path: string | null) {
@@ -552,9 +554,7 @@ export async function clearDraftlineStaleLock(): Promise<void> {
 
 /** Downloads content for files still holding a Git LFS pointer. True when anything was written. */
 export async function retryDraftlineContentDownload(): Promise<boolean> {
-  return invoke<boolean>("retry_content_download", {
-    request: { workspace_path: requireWorkspacePath() },
-  });
+  return invoke<boolean>("retry_content_download", { request: { workspace_path: requireWorkspacePath() } });
 }
 
 export async function discardDraftlineChanges(): Promise<void> {
@@ -605,9 +605,7 @@ export interface MoveProjectFolderResult {
 
 /** Moves the project folder to `to` (relative to the repository) as one save. */
 export async function moveDraftlineProjectFolder(to: string): Promise<MoveProjectFolderResult> {
-  return invoke<MoveProjectFolderResult>("move_project_folder", {
-    request: { workspace_path: requireWorkspacePath(), to },
-  });
+  return invoke<MoveProjectFolderResult>("move_project_folder", { request: { workspace_path: requireWorkspacePath(), to } });
 }
 
 export async function saveDraftlineVersion(label: string): Promise<string> {

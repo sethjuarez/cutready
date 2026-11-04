@@ -43,7 +43,7 @@
     "src/components/StoryboardView.tsx": 1542,
     "src/devMock.ts": 1408,
     "src/hooks/useSettings.ts": 999,
-    "src/services/draftlineVersioning.ts": 816,
+    "src/services/draftlineVersioning.ts": 814,
     "src/stores/appStore.ts": 1923
   }
 }

@@ -41,7 +41,7 @@
   "src/hooks/useGlobalHotkeys.ts": 2,
   "src/hooks/useSettings.ts": 4,
   "src/services/agentChat.ts": 1,
-  "src/services/draftlineVersioning.ts": 10,
+  "src/services/draftlineVersioning.ts": 0,
   "src/services/githubSetup.ts": 4,
   "src/services/identity.ts": 3,
   "src/services/narrationVoicePreview.ts": 2,
