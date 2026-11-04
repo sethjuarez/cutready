@@ -12,20 +12,22 @@ interface TitleBarProps {
   onCommandPaletteOpen?: () => void;
   sidebarVisible?: boolean;
   outputVisible?: boolean;
-  secondaryVisible?: boolean;
+  /** Chat is showing: side companion, focus mode or the chat view. */
+  chatActive?: boolean;
   onToggleSidebar?: () => void;
   onToggleOutput?: () => void;
-  onToggleSecondary?: () => void;
+  /** Cycles chat: side companion, then focus mode, then closed. Always leaves focus mode first. */
+  onToggleChat?: () => void;
 }
 
 export function TitleBar({
   onCommandPaletteOpen,
   sidebarVisible = true,
   outputVisible = false,
-  secondaryVisible = false,
+  chatActive = false,
   onToggleSidebar,
   onToggleOutput,
-  onToggleSecondary,
+  onToggleChat,
 }: TitleBarProps) {
   const appWindow = (() => {
     try { return getCurrentWindow(); } catch { return null; }
@@ -139,11 +141,11 @@ export function TitleBar({
             <PanelBottom className="h-4 w-4" aria-hidden="true" />
           </PanelToggle>
           <PanelToggle
-            label="Companion"
-            shortcut="Ctrl+Shift+B"
-            pressed={secondaryVisible}
-            onClick={onToggleSecondary}
-            testId="titlebar-companion-toggle"
+            label="Chat"
+            shortcut="Ctrl+Shift+C"
+            pressed={chatActive}
+            onClick={onToggleChat}
+            testId="activity-chat"
           >
             <Sparkles className="h-4 w-4" aria-hidden="true" />
           </PanelToggle>

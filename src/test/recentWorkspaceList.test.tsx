@@ -28,15 +28,18 @@ describe("RecentWorkspaceList", () => {
   it("opens and removes workspaces by their folder name", () => {
     const onOpen = vi.fn();
     const onRemove = vi.fn();
-    render(<RecentWorkspaceList projects={projects} onOpen={onOpen} onRemove={onRemove} />);
+    render(<RecentWorkspaceList projects={projects} onOpen={onOpen} onRemove={onRemove} currentPath="C:/work/partner-pitch/" currentBranch="cutready/draft" />);
 
     expect(screen.getByRole("list", { name: "Recent workspaces" })).toBeInTheDocument();
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getAllByText("Open now")).toHaveLength(1);
+    expect(screen.getByText("cutready/draft")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Open partner-pitch workspace" }));
     expect(onOpen).toHaveBeenCalledWith("C:\\work\\partner-pitch");
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove launch from recent" }));
+    fireEvent.click(screen.getByRole("button", { name: "More actions for launch" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Remove from recent/ }));
     expect(onRemove).toHaveBeenCalledWith("/home/me/launch");
     expect(onOpen).toHaveBeenCalledTimes(1);
   });

@@ -62,8 +62,8 @@ export async function copyTabPath(
 
 /**
  * TabBar — horizontal row of open document tabs.
- * Active tab has a raised look with accent bottom border and primary background.
- * Inactive tabs are visually recessed with muted colors.
+ * Tabs are rounded pills with no dividers; the active tab gets the content surface fill and a
+ * short type-coloured bottom indicator. The open-tabs overflow button sits inside the strip.
  */
 export function TabBar() {
   const openTabs = useAppStore((s) => s.openTabs);
@@ -108,8 +108,8 @@ export function TabBar() {
 
   return (
     <div
-      className={`no-select flex items-stretch bg-[rgb(var(--color-surface-inset))] shrink-0 border-b border-[rgb(var(--color-border-subtle))] px-1 pt-1 ${
-        isDragOver ? "border-b-[2px] border-b-[rgb(var(--color-accent))]" : ""
+      className={`no-select flex h-9 shrink-0 items-center gap-1 border-b bg-[rgb(var(--color-surface-inset))] px-1.5 ${
+        isDragOver ? "border-b-[rgb(var(--color-accent))]" : "border-b-[rgb(var(--color-border-subtle))]"
       }`}
       onMouseDown={() => setActiveEditorGroup("main")}
       onDragOver={(e) => {
@@ -140,7 +140,7 @@ export function TabBar() {
         } catch { /* ignore malformed data */ }
       }}
     >
-      <div className="flex min-w-0 flex-1 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+      <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
         {openTabs.map((tab) => (
           <Tab
             key={tab.id}
@@ -159,19 +159,18 @@ export function TabBar() {
 
       {/* Tab navigator */}
       {openTabs.length > 0 && (
-        <div className="relative z-sticky flex shrink-0 items-center self-stretch border-l border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-inset))] shadow-[-12px_0_18px_-18px_rgb(var(--color-text))]">
-          <button
-            className="flex h-full w-8 items-center justify-center text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
-            title="Show open tabs"
-            onClick={(e) => {
-              setTabSearch("");
-              const rect = e.currentTarget.getBoundingClientRect();
-              openTabMenu(getClampedPopoverPosition({ x: rect.right - 280, y: rect.bottom + 4 }, 280));
-            }}
-          >
-            <MoreHorizontal className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        <button
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[rgb(var(--color-accent))]"
+          title="Show open tabs"
+          aria-label="Show open tabs"
+          onClick={(e) => {
+            setTabSearch("");
+            const rect = e.currentTarget.getBoundingClientRect();
+            openTabMenu(getClampedPopoverPosition({ x: rect.right - 280, y: rect.bottom + 4 }, 280));
+          }}
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
       )}
 
       {tabMenu && createPortal(
@@ -452,35 +451,30 @@ function Tab({
         e.dataTransfer.setData("application/x-cutready-tab", JSON.stringify({ tabId: tab.id, source: "main" }));
         e.dataTransfer.effectAllowed = "move";
       }}
-      className={`group relative mb-[-1px] flex h-[37px] shrink-0 cursor-pointer select-none items-center gap-1.5 border border-transparent pl-3 pr-2 text-xs transition-colors ${
+      className={`group relative flex h-7 shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md pl-2.5 pr-1.5 text-xs transition-colors ${
         isActive
-          ? "border-[rgb(var(--color-border-subtle))] border-b-[rgb(var(--color-surface))] bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
+          ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
           : isSplit
             ? "bg-[rgb(var(--color-surface-alt))]/70 text-[rgb(var(--color-text))]"
-            : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))]/65 hover:text-[rgb(var(--color-text))]"
+            : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
       }`}
       onClick={onSelect}
       onContextMenu={onContextMenu}
       title={getTabTooltip(tab, typeLabel)}
     >
-      {/* Active tab: colored bar on top — dimmed when group is not focused */}
+      {/* Active tab: short type-coloured indicator along the bottom, dimmed when the group is not focused */}
       {isActive && (
-        <span className={`absolute left-0 right-0 top-0 h-[2px] ${typeClasses.bar} ${isGroupFocused ? "" : "opacity-40"}`} />
+        <span className={`absolute bottom-0 left-2 right-2 h-[2px] rounded-full ${typeClasses.bar} ${isGroupFocused ? "" : "opacity-40"}`} />
       )}
-      {/* Split tab: dotted bar on top */}
       {isSplit && !isActive && (
-        <span className={`absolute left-0 right-0 top-0 h-[2px] ${typeClasses.bar} opacity-50`} />
+        <span className={`absolute bottom-0 left-2 right-2 h-[2px] rounded-full ${typeClasses.bar} opacity-50`} />
       )}
 
       {/* Hover tint for inactive tabs — type-colored wash */}
       {!isActive && !isSplit && (
-        <span className={`absolute inset-0 opacity-0 group-hover:opacity-[0.06] transition-opacity pointer-events-none ${typeClasses.tint}`} />
+        <span className={`pointer-events-none absolute inset-0 rounded-md opacity-0 transition-opacity group-hover:opacity-[0.06] ${typeClasses.tint}`} />
       )}
 
-      {/* Separator between tabs */}
-      <span className={`absolute bottom-[8px] right-[-1px] top-[8px] w-px ${
-        isActive ? "bg-transparent" : "bg-[rgb(var(--color-border))]"
-      }`} />
 
       {/* Type icon */}
       <span className={`shrink-0 transition-colors ${

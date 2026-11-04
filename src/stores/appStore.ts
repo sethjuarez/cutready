@@ -28,6 +28,7 @@ import { useVersioningStore, resetVersioningState } from "./versioningStore";
 import { useSyncStore, resetSyncState } from "./syncStore";
 import { useChatStore } from "./chatStore";
 import { clampSidebarWidth, SIDEBAR_DEFAULT_WIDTH } from "./sidebarLayout";
+import { hidesEditor } from "../utils/navigation";
 import {
   beginWorkspaceGeneration,
   bumpRemoteDetectionGeneration,
@@ -390,10 +391,10 @@ export interface AppStoreState {
   importAsset: () => Promise<void>;
   /** Delete an asset file. */
   deleteAsset: (path: string) => Promise<void>;
-  /** Delete unreferenced screenshot and visual files. */
-  deleteUnlinkedAssets: () => Promise<number>;
-  /** Delete unreferenced narration/audio files. */
-  deleteUnlinkedNarrationAssets: () => Promise<number>;
+  /** Delete exactly these screenshot and visual files, each re-checked as still unreferenced. */
+  deleteUnlinkedAssets: (paths: string[]) => Promise<number>;
+  /** Delete exactly these narration files, each re-checked as still unreferenced. */
+  deleteUnlinkedNarrationAssets: (paths: string[]) => Promise<number>;
 
   /** Add entries to activity log. */
   addActivityEntries: (entries: ActivityEntry[]) => void;
@@ -658,10 +659,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
       const newTab: EditorTab = { ...tab, id };
       set({ openTabs: [...openTabs, newTab], activeTabId: id });
     }
-    // Navigate away from non-editor views (settings, home) to show the tab
-    if (view === "settings" || view === "home" || view === "chat") {
-      set({ view: "project" });
-    }
+    if (hidesEditor(view)) set({ view: "project" });
     get()._persistTabs();
   },
   closeTab: (tabId) => {
@@ -755,7 +753,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     const { openTabs } = get();
     const tab = openTabs.find((t) => t.id === tabId);
     if (!tab) return;
-    set({ activeTabId: tabId, ...loadingDocumentStateForTab(tab) });
+    set({ activeTabId: tabId, ...loadingDocumentStateForTab(tab), ...(hidesEditor(get().view) ? { view: "project" as const } : {}) });
     if (tab.type === "sketch") {
       get().openSketch(tab.path);
     } else if (tab.type === "storyboard") {
@@ -1774,9 +1772,9 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   openAsset: (path, _assetType) => {
     const filename = path.split("/").pop() ?? path;
     get().openTab({ type: "asset", path, title: filename });
-    // Navigate to assets view if not already there
-    if (get().view !== "assets" && get().view !== "project") {
-      set({ view: "assets" });
+    // Asset tabs show in the document view (the Media view is a library, not a tab host)
+    if (get().view !== "project") {
+      set({ view: "project" });
     }
   },
 
@@ -1821,14 +1819,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
-  deleteUnlinkedAssets: async () => {
+  deleteUnlinkedAssets: async (paths) => {
     try {
-      const candidatePaths = get().assets
-        .filter((asset) => asset.referencedBy.length === 0)
-        .map((asset) => asset.path);
-      const deleted = await invoke<number>("delete_orphaned_images");
+      const deleted = await invoke<number>("delete_orphaned_images", { paths });
       const { openTabs, activeTabId } = get();
-      const filtered = openTabs.filter((tab) => tab.type !== "asset" || !candidatePaths.includes(tab.path));
+      const filtered = openTabs.filter((tab) => tab.type !== "asset" || !paths.includes(tab.path));
       set({
         openTabs: filtered,
         activeTabId: filtered.some((tab) => tab.id === activeTabId)
@@ -1843,14 +1838,11 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     }
   },
 
-  deleteUnlinkedNarrationAssets: async () => {
+  deleteUnlinkedNarrationAssets: async (paths) => {
     try {
-      const candidatePaths = get().narrationAssets
-        .filter((asset) => asset.referencedBy.length === 0 && asset.path.startsWith(".cutready/narration/"))
-        .map((asset) => asset.path);
-      const deleted = await invoke<number>("delete_orphaned_narration_assets");
+      const deleted = await invoke<number>("delete_orphaned_narration_assets", { paths });
       const { openTabs, activeTabId } = get();
-      const filtered = openTabs.filter((tab) => tab.type !== "asset" || !candidatePaths.includes(tab.path));
+      const filtered = openTabs.filter((tab) => tab.type !== "asset" || !paths.includes(tab.path));
       set({
         openTabs: filtered,
         activeTabId: filtered.some((tab) => tab.id === activeTabId)

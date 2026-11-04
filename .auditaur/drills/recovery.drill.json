@@ -21,7 +21,7 @@
       "name": "finishing an interrupted discard restores the last save",
       "steps": [
         { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 45000 },
-        { "click": { "testId": "activity-changes" } },
+        { "click": { "testId": "titlebar-sync-status" } },
         { "click": { "role": "button", "name": "Save snapshot", "exact": true } },
         { "fill": "#snapshot-name-input", "value": "Plan baseline" },
         { "click": { "role": "button", "name": "Save Snapshot", "exact": true } },

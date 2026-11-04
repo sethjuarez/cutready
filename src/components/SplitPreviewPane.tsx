@@ -54,8 +54,8 @@ export function SplitTabBar() {
 
   return (
     <div
-      className={`no-select flex items-stretch bg-[rgb(var(--color-surface-alt))] border-b border-[rgb(var(--color-border))] border-l shrink-0 ${
-        isDragOver ? "border-b-[2px] border-b-[rgb(var(--color-accent))]" : ""
+      className={`no-select flex h-9 shrink-0 items-center gap-1 border-b border-l border-l-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-inset))] px-1.5 ${
+        isDragOver ? "border-b-[rgb(var(--color-accent))]" : "border-b-[rgb(var(--color-border-subtle))]"
       }`}
       onMouseDown={() => setActiveEditorGroup("split")}
       onDragOver={(e) => {
@@ -85,7 +85,7 @@ export function SplitTabBar() {
         } catch { /* ignore */ }
       }}
     >
-      <div className="flex min-w-0 flex-1 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+      <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
         {splitTabs.map((tab) => (
           <SplitTab
             key={tab.id}
@@ -98,19 +98,18 @@ export function SplitTabBar() {
         ))}
         <div className="min-w-6 flex-1" />
       </div>
-      <div className="relative z-sticky self-stretch flex shrink-0 items-center border-l border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] shadow-[-12px_0_18px_-18px_rgb(var(--color-text))]">
-        <button
-          className="flex items-center justify-center w-8 h-full text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface))] transition-colors"
-          title="Show split tabs"
-          onClick={(e) => {
-            setTabSearch("");
-            const rect = e.currentTarget.getBoundingClientRect();
-            openTabMenu(getClampedPopoverPosition({ x: rect.right - 280, y: rect.bottom + 4 }, 280));
-          }}
-        >
-          <MoreHorizontal className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      <button
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[rgb(var(--color-accent))]"
+        title="Show split tabs"
+        aria-label="Show split tabs"
+        onClick={(e) => {
+          setTabSearch("");
+          const rect = e.currentTarget.getBoundingClientRect();
+          openTabMenu(getClampedPopoverPosition({ x: rect.right - 280, y: rect.bottom + 4 }, 280));
+        }}
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </button>
       {tabMenu && createPortal(
         <div
           ref={tabMenuRef}
@@ -254,16 +253,16 @@ function SplitTab({
         e.dataTransfer.setData("application/x-cutready-tab", JSON.stringify({ tabId: tab.id, source: "split" }));
         e.dataTransfer.effectAllowed = "move";
       }}
-      className={`group relative flex items-center gap-1.5 pl-3 pr-2 h-[40px] text-xs cursor-pointer shrink-0 select-none transition-colors ${
+      className={`group relative flex h-7 shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md pl-2.5 pr-1.5 text-xs transition-colors ${
         isActive
-          ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]"
-          : "text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
+          ? "bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] shadow-sm"
+          : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
       }`}
       onClick={onSelect}
       title={`${tab.type}: ${tab.path}`}
     >
       {isActive && (
-        <span className={`absolute top-0 left-0 right-0 h-[2px] ${typeClasses.bar} ${isGroupFocused ? "" : "opacity-40"}`} />
+        <span className={`absolute bottom-0 left-2 right-2 h-[2px] rounded-full ${typeClasses.bar} ${isGroupFocused ? "" : "opacity-40"}`} />
       )}
       <span className={`shrink-0 ${isActive ? typeClasses.icon : "opacity-60"}`}>
         <TabIcon size={13} />

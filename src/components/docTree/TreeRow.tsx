@@ -4,16 +4,12 @@ import { CSS } from "@dnd-kit/utilities";
 import { useChatStore } from "../../stores/chatStore";
 import { NavIcon, type NavIconName } from "../navIcons";
 
-export type TreeDepth = "tv" | "note" | "leaf";
-
 export interface TreeRowProps {
-  depth: TreeDepth;
   label: string;
-  icon?: NavIconName;
+  icon: NavIconName;
   selected: boolean;
-  /** Storyboard rows: chevron state and toggle. */
-  expanded?: boolean;
-  onToggle?: () => void;
+  /** Muted trailing text, e.g. "in 2 storyboards"; hidden while the row actions show. */
+  meta?: string;
   onOpen: () => void;
   /** Noun used in action titles, e.g. "storyboard". */
   kind: string;
@@ -34,14 +30,12 @@ export interface SortableBinding {
   isDragging: boolean;
 }
 
-/** A sidebar tree row: 32px, 13px text, a 20px icon slot, indented 20px per level; selected rows get a fill. */
+/** A flat sidebar document row: 32px, 13px text, a 20px icon slot; the selected row gets a fill. */
 export function TreeRow({
-  depth,
   label,
   icon,
   selected,
-  expanded,
-  onToggle,
+  meta,
   onOpen,
   kind,
   onRename,
@@ -65,12 +59,8 @@ export function TreeRow({
     } else if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       open();
-    } else if (onToggle && ((event.key === "ArrowRight" && !expanded) || (event.key === "ArrowLeft" && expanded))) {
-      event.preventDefault();
-      onToggle();
     }
   };
-  const classes = ["cr-nv", "tv", depth === "tv" ? "" : depth, selected ? "sel" : ""].filter(Boolean).join(" ");
 
   // The row control and its actions are siblings, so the action buttons are not nested in a button.
   // Reordering is pointer-only, so dnd-kit's keyboard-sortable ARIA attributes are not applied.
@@ -88,8 +78,7 @@ export function TreeRow({
         title={label}
         data-testid={testId}
         aria-current={selected ? "page" : undefined}
-        aria-expanded={onToggle ? expanded : undefined}
-        className={classes}
+        className={selected ? "cr-nv sel" : "cr-nv"}
         onClick={() => {
           if (!renaming) open();
         }}
@@ -100,21 +89,9 @@ export function TreeRow({
         }}
         onKeyDown={handleKeyDown}
       >
-        <span className="ico">{icon && <NavIcon name={icon} size={16} />}</span>
+        <span className="ico"><NavIcon name={icon} size={16} /></span>
         {renaming ? renameInput : <span className="lbl">{label}</span>}
-        {onToggle && !renaming && (
-          <span
-            className={`tchev${expanded ? "" : " collapsed"}`}
-            aria-hidden="true"
-            onClick={(event) => {
-              event.stopPropagation();
-              onToggle();
-            }}
-            onDoubleClick={(event) => event.stopPropagation()}
-          >
-            <NavIcon name={expanded ? "chevD" : "chevR"} size={12} />
-          </span>
-        )}
+        {meta && !renaming && <span className="meta">{meta}</span>}
       </div>
       {!renaming && (onRename || onDelete) && (
         <span className="acts">
@@ -150,7 +127,7 @@ export function TreeRow({
   );
 }
 
-/** A tree row that can be dragged to reorder within its SortableContext. */
+/** A row that can be dragged to reorder within its SortableContext. */
 export function SortableTreeRow(props: Omit<TreeRowProps, "sortable"> & { id: string }) {
   const { id, ...rest } = props;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });

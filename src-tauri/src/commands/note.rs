@@ -280,26 +280,17 @@ pub async fn delete_project_image(
     Ok(())
 }
 
-/// Delete all orphaned images and visuals (re-verified server-side).
-/// Returns the count of deleted assets.
+/// Delete orphaned images and visuals (re-verified server-side).
+/// Only the listed `paths` are deleted, so the files removed are exactly the
+/// ones the user confirmed. Returns the count of deleted assets.
 #[auditaur_command(skip_all, err)]
-pub async fn delete_orphaned_images(state: State<'_, AppState>) -> Result<u32, String> {
+pub async fn delete_orphaned_images(
+    paths: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<u32, String> {
     let root = project_root(&state)?;
     let _write_guard = crate::engine::write_lock::lock(&root)?;
-    let refs = project::list_images_with_refs(&root).map_err(|e| e.to_string())?;
-    let mut deleted = 0u32;
-    for asset in &refs {
-        if asset.referenced_by.is_empty() {
-            let abs = root.join(&asset.path);
-            if abs.exists() {
-                // asset write: image cleanup, not a document
-                std::fs::remove_file(&abs)
-                    .map_err(|e| format!("Failed to delete {}: {e}", asset.path))?;
-                deleted += 1;
-            }
-        }
-    }
-    Ok(deleted)
+    crate::engine::media_cleanup::delete_unused_images(&root, &paths)
 }
 
 /// Import an external image file into the project's screenshots directory.

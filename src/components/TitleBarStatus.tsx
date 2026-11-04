@@ -58,6 +58,7 @@ export function TitleBarVariationChip() {
 export function TitleBarSyncStatus() {
   const changedCount = useVersioningStore((s) => s.changedFiles.length);
   const setView = useAppStore((s) => s.setView);
+  const inChanges = useAppStore((s) => s.view === "changes");
   const isHybrid = useAppStore((s) => s.currentProject?.hybrid === true);
   const currentRemote = useSyncStore((s) => s.currentRemote);
   const syncStatus = useSyncStore((s) => s.syncStatus);
@@ -78,6 +79,7 @@ export function TitleBarSyncStatus() {
         onClick={() => setView("changes")}
         title={`${label}. Open changes`}
         aria-label={`${label}. Open changes`}
+        aria-current={inChanges ? "page" : undefined}
         data-testid="titlebar-sync-status"
       >
         <span

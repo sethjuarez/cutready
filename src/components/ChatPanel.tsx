@@ -13,7 +13,7 @@ import { useChatStore } from "../stores/chatStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import { useAiApplyGateStore } from "../stores/aiApplyGateStore";
 import { useToastStore } from "../stores/toastStore";
-import { loadProviderSecrets } from "../hooks/useSecretStore";
+import { modelSelectionUpdate, useModelList } from "../hooks/useModelList";
 import { getContributorIdentity } from "../services/identity";
 import { promoteChatArtifact } from "../contracts/chatPromotion";
 import { useSettings, type AgentPreset, type AiReasoningEffort } from "../hooks/useSettings";
@@ -23,12 +23,9 @@ import {
   buildProviderConfig,
   isAiProviderConfigured,
   isProviderInputConfigured,
-  providerById,
-  providerToConfigInput,
   supportedReasoningEfforts,
   supportsAgentReasoningEffort,
   normalizeReasoningEffort,
-  filterAgentCompatibleModels,
 } from "../utils/providerConfig";
 import {
   buildEffectiveProviderInput as buildEffectiveProviderInputShared,
@@ -1965,7 +1962,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
     <div className="flex flex-col h-full">
       {/* Top toolbar — session controls */}
       <div
-        className={`h-9 border-b border-[rgb(var(--color-border))] shrink-0 ${
+        className={`h-9 border-b border-[rgb(var(--color-border-subtle))] shrink-0 ${
           chatFocusMode ? "px-4" : "px-2"
         }`}
       >
@@ -2603,11 +2600,6 @@ function ReasoningEffortPicker({
   );
 }
 
-// ── Model list cache (module-level, survives re-renders) ─────────
-
-const modelCache: { key: string; models: string[]; ts: number } = { key: "", models: [], ts: 0 };
-const MODEL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
 // ── Model Picker Dropdown ────────────────────────────────────────
 
 function ModelPickerDropdown({
@@ -2622,55 +2614,7 @@ function ModelPickerDropdown({
   maxHeight: number;
 }) {
   const { settings, updateSetting } = useSettings();
-  const [models, setModels] = useState<string[]>(modelCache.models);
-  const [loadingModels, setLoadingModels] = useState(false);
-  const provider = providerId ? providerById(settings, providerId) : null;
-
-  useEffect(() => {
-    let cancelled = false;
-    const cacheKey = provider
-      ? `${provider.id}|${provider.provider}|${provider.endpoint}|${provider.authMode}`
-      : `${settings.aiProvider}|${settings.aiEndpoint}|${settings.aiAuthMode}`;
-
-    // Use cache if key matches and not expired
-    if (modelCache.key === cacheKey && modelCache.models.length > 0 && Date.now() - modelCache.ts < MODEL_CACHE_TTL) {
-      setModels(modelCache.models);
-      return;
-    }
-
-    async function load() {
-      setLoadingModels(true);
-      try {
-        const secrets = provider && provider.id !== settings.aiActiveProviderId
-          ? await loadProviderSecrets(provider.id)
-          : { apiKey: settings.aiApiKey, accessToken: settings.aiAccessToken };
-        const providerInput = provider
-          ? providerToConfigInput(provider, settings, {
-              apiKey: secrets.apiKey,
-              accessToken: secrets.accessToken,
-            })
-          : activeProviderInput(settings);
-        const config = buildProviderConfig(
-          providerInput,
-          settings.aiAgentExecutionEngine || "prompty",
-        );
-        const result = await invoke<{ id: string; name: string; owned_by?: string; capabilities?: Record<string, string>; context_length?: number }[]>("list_models", { config });
-        if (!cancelled) {
-          const ids = filterAgentCompatibleModels(result, config.provider).map((m) => m.id || m.name);
-          modelCache.key = cacheKey;
-          modelCache.models = ids;
-          modelCache.ts = Date.now();
-          setModels(ids);
-        }
-      } catch {
-        if (!cancelled && currentModel) setModels([currentModel]);
-      } finally {
-        if (!cancelled) setLoadingModels(false);
-      }
-    }
-    load();
-    return () => { cancelled = true; };
-  }, [settings, currentModel, provider]);
+  const { models, loading: loadingModels } = useModelList(settings, providerId, currentModel);
 
   return (
     <div className="absolute bottom-full left-0 mb-1 w-[200px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight }}>
@@ -2690,13 +2634,8 @@ function ModelPickerDropdown({
                   : "text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
               }`}
               onClick={() => {
-                if (provider?.id && settings.aiProviders?.some((candidate) => candidate.id === provider.id)) {
-                  updateSetting("aiProviders", settings.aiProviders.map((candidate) =>
-                    candidate.id === provider.id ? { ...candidate, model } : candidate,
-                  ));
-                } else {
-                  updateSetting("aiModel", model);
-                }
+                const update = modelSelectionUpdate(settings, providerId, model);
+                updateSetting(update.key, update.value);
                 onClose();
               }}
             >

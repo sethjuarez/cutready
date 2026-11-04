@@ -11,12 +11,11 @@ import { RecordingPanel } from "./RecordingPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { Sidebar } from "./Sidebar";
 import { useExitChatFocusOnNavigate } from "../hooks/useExitChatFocusOnNavigate";
-import { panelOwner } from "../utils/navigation";
+import { isMediaView, panelOwner } from "../utils/navigation";
 import { StoryboardPanel } from "./StoryboardPanel";
 import { CompanionPane } from "./CompanionPane";
 import { StoryboardList } from "./StoryboardList";
-import { AssetList } from "./AssetList";
-import { NarrationList } from "./NarrationList";
+import { MediaView } from "./media/MediaView";
 import { ResizeHandle } from "./ResizeHandle";
 import { OutputPanel } from "./OutputPanel";
 import { CommandPalette } from "./CommandPalette";
@@ -43,7 +42,6 @@ import {
   House,
   Layers,
   Clapperboard,
-  Mic2,
   Settings,
   Search,
   Columns2,
@@ -234,17 +232,10 @@ export function AppLayout() {
       },
       {
         id: "nav.assets",
-        title: "Go to Visuals",
+        title: "Go to Media",
         category: "Navigate",
         icon: <Clapperboard className="w-4 h-4" />,
         handler: () => setView("assets"),
-      },
-      {
-        id: "nav.narrations",
-        title: "Go to Narrations",
-        category: "Navigate",
-        icon: <Mic2 className="w-4 h-4" />,
-        handler: () => setView("narrations"),
       },
       {
         id: "nav.settings",
@@ -438,10 +429,10 @@ export function AppLayout() {
         onCommandPaletteOpen={() => setCommandPaletteOpen(true)}
         sidebarVisible={sidebarVisible}
         outputVisible={outputVisible}
-        secondaryVisible={showSecondaryPanel}
+        chatActive={chatFocusMode || companionVisible || view === "chat"}
         onToggleSidebar={toggleSidebar}
         onToggleOutput={toggleOutput}
-        onToggleSecondary={toggleSecondaryPanel}
+        onToggleChat={toggleChatSurface}
       />
       <div
         data-testid="app-content-shell"
@@ -458,16 +449,14 @@ export function AppLayout() {
             showPanel={!projectSwitching}
             onFeedback={() => setFeedbackOpen(true)}
             onProfile={openProfileSettings}
-            onChatToggle={toggleChatSurface}
-            chatActive={chatFocusMode || companionVisible || view === "chat"}
           />
 
           {/* Editor layer: content + output panel, raised over the base surface */}
           <div
             data-testid="editor-layer"
-            className={`flex flex-1 flex-col min-w-0 overflow-hidden border-t border-l border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] shadow-layer ${
-              companionVisible ? "rounded-t-card border-r" : "rounded-tl-card"
-            }`}
+            className={`mb-[var(--card-gap)] flex flex-1 flex-col min-w-0 overflow-hidden rounded-card border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] shadow-layer ${
+              companionVisible ? "" : "mr-[var(--card-gap)]"
+            } ${sidebarVisible ? "" : "ml-[var(--card-gap)]"}`}
           >
             {contentView !== "home" && !projectSwitching && <ProjectHealthBanner />}
             <AdoptFolderDialog />
@@ -476,7 +465,7 @@ export function AppLayout() {
             <div className="relative flex-1 min-h-0">
               {contentView === "home" && <div className="h-full overflow-y-auto"><HomePanel /></div>}
               {projectSwitching && <ProjectSwitchingState />}
-              {documentView && (isMerging ? <MergeConflictPanel /> : <StoryboardPanel />)}
+              {documentView && (isMerging ? <MergeConflictPanel /> : isMediaView(contentView) ? <MediaView /> : <StoryboardPanel />)}
               {!projectSwitching && contentView === "recording" && displaySettings.featureRecording && <div className="h-full overflow-y-auto"><RecordingPanel /></div>}
               {contentView === "chat" && <div className="h-full overflow-hidden"><ChatPanel /></div>}
             </div>
@@ -630,8 +619,6 @@ interface NavPaneProps {
   showPanel: boolean;
   onFeedback: () => void;
   onProfile: () => void;
-  onChatToggle: () => void;
-  chatActive: boolean;
 }
 
 /** Dragging the sidebar narrower than this collapses it. */
@@ -670,12 +657,7 @@ function NavPane({ contentView, showPanel, ...navProps }: NavPaneProps) {
     }
   }, [setSidebarWidth, toggleSidebar]);
 
-  const owner = panelOwner(contentView);
-  const panel = !showPanel ? null
-    : owner === "assets" ? <AssetList />
-    : owner === "narrations" ? <NarrationList />
-    : owner === "changes" ? <ChangesPanel />
-    : null;
+  const panel = showPanel && panelOwner(contentView) === "changes" ? <ChangesPanel /> : null;
 
   return (
     <>

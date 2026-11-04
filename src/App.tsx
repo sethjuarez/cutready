@@ -13,7 +13,6 @@ import { AppCloseGuard } from "./components/AppCloseGuard";
 import { RecordingEventsHost } from "./components/RecordingEventsHost";
 import { invoke } from "./services/tauri";
 import { listenEvent } from "./ipc/events";
-import { commandRegistry } from "./services/commandRegistry";
 import { onWorkspaceSnapshotDeferred } from "./services/identity";
 import { refreshOpenDocuments, watchOpenDocuments } from "./services/documentSaves";
 import { isMac } from "./utils/platform";
@@ -172,7 +171,7 @@ function App() {
         <div className={`h-full bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))]${isMac ? " mac-window-shell" : ""}`}>
           <AppLayout />
           <AppCloseGuard />
-          <StatusBar onFeedback={() => commandRegistry.execute("view.sendFeedback")} />
+          <StatusBar />
           <ToastContainer />
           <ChatAnnouncer />
         </div>

@@ -73,23 +73,6 @@
 .cr-nav-list > .cr-nv.sel .ico,
 .cr-nav-list > .contents > .cr-nv.sel .ico { color: rgb(var(--color-text)); }
 .cr-nv .lbl { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-/* Parent rows mirror section headers: a 12px chevron after the label (4px gap);
-   expanded chevrons show on hover or keyboard focus, collapsed ones always. */
-.cr-nv .tchev {
-  flex: none;
-  display: grid;
-  place-items: center;
-  /* 20px hit area around the 12px glyph; negative margins keep the glyph where it was. */
-  width: 20px;
-  height: 20px;
-  margin: -4px -4px -4px -6px;
-  transform: translateY(1px);
-  color: var(--nav-muted);
-  opacity: 0;
-}
-.cr-nv .tchev.collapsed { opacity: 1; color: var(--nav-disabled); }
-.cr-trow:hover .tchev,
-.cr-nv:focus-visible .tchev { opacity: 1; }
 .cr-nv .count {
   flex: none;
   margin-left: auto;
@@ -106,7 +89,7 @@
   text-align: center;
 }
 
-/* List panels (Assets, Narrations, Changes) nest under their row with a bounded height. */
+/* The Changes list nests in the sidebar with a bounded height. */
 .cr-nav-panel {
   display: flex;
   flex-direction: column;
@@ -157,11 +140,12 @@
 /* Section bodies stay mounted and ease open/closed. */
 .cr-sec-body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 1fr;
   transition: grid-template-rows var(--motion-normal) cubic-bezier(0, 0, 0.2, 1);
 }
 .cr-sec-body[data-open="false"] { grid-template-rows: 0fr; }
-.cr-sec-body-in { min-height: 0; overflow: hidden; }
+.cr-sec-body-in { min-width: 0; min-height: 0; overflow: hidden; }
 .cr-sec-body[data-open="true"] > .cr-sec-body-in { overflow: clip; overflow-clip-margin: 2px; }
 .cr-mini {
   width: 24px;
@@ -178,8 +162,6 @@
 .cr-mini:focus-visible { outline: 2px solid rgb(var(--color-accent)); outline-offset: -1px; }
 .cr-mini:disabled { pointer-events: none; opacity: 0.5; }
 
-/* Tree rows: level 0 sits on the 8px base; each level adds 20px. */
-.cr-nv.tv.leaf { padding-left: 28px; }
 .cr-trow { position: relative; }
 .cr-trow.dragging { opacity: 0.4; }
 .cr-trow:hover > .cr-nv:not(.sel) { background: var(--nav-hover); }
@@ -208,7 +190,7 @@
 }
 .cr-trow > .acts button:hover { color: rgb(var(--color-text)); }
 .cr-trow > .acts button:focus-visible { outline: 2px solid rgb(var(--color-accent)); outline-offset: -1px; }
-/* Keep labels and chevrons clear of the action buttons while they show. */
+/* Keep labels clear of the action buttons while they show. */
 .cr-trow:has(> .acts):hover > .cr-nv,
 .cr-trow:has(> .acts):has(:focus-visible) > .cr-nv { padding-right: 56px; }
 .cr-nv .rename {
@@ -223,35 +205,6 @@
   font-size: 13px;
   outline: none;
 }
-
-/* Guide lines: each child gets an elbow from the parent's icon centre (8 + 10 = 18px);
-   a vertical line continues between siblings. Lines fade in while the sidebar is hovered. */
-.cr-tkids > .cr-trow::before,
-.cr-tkids > .cr-trow:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  left: 17px;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 200ms ease;
-}
-.cr-tkids > .cr-trow::before {
-  top: 0;
-  height: 50%;
-  width: 10px;
-  border-left: 1px solid var(--nav-guide);
-  border-bottom: 1px solid var(--nav-guide);
-  border-bottom-left-radius: 8px;
-}
-.cr-tkids > .cr-trow:not(:last-child)::after {
-  top: 50%;
-  bottom: 0;
-  border-left: 1px solid var(--nav-guide);
-}
-.cr-nav:hover .cr-tkids > .cr-trow::before,
-.cr-nav:hover .cr-tkids > .cr-trow::after,
-.cr-nav:has(:focus-visible) .cr-tkids > .cr-trow::before,
-.cr-nav:has(:focus-visible) .cr-tkids > .cr-trow::after { opacity: 1; }
 
 /* Inline create forms and empty hints under a section header. */
 .cr-tform { padding: 4px 8px 6px; }
@@ -315,3 +268,15 @@
 .cr-nav .acts button:focus-visible,
 .cr-nav .cr-nav-ibtn:focus-visible { border-radius: 4px; }
 .cr-nav :is(.cr-mini, .acts button) { cursor: default; }
+
+/* Places sit above a hairline; document sections follow it a little closer than 16px. */
+.cr-nav-div { height: 1px; margin: 12px 8px 0; background: var(--nav-guide); }
+.cr-nav-div + .cr-sec,
+.cr-nav-div + .cr-tree > .cr-sec:first-child { margin-top: 8px; }
+.cr-sec-title { flex: 1; padding-left: 8px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--nav-muted); }
+.cr-sec-acts.cr-sec-acts-on { opacity: 1; }
+
+/* Muted trailing text ("in 2 storyboards"); gives way to the hover actions. */
+.cr-nv .meta { flex: none; margin-left: auto; padding-left: 8px; font-size: 12px; line-height: 16px; color: var(--nav-muted); }
+.cr-trow:has(> .acts):hover .meta,
+.cr-trow:has(> .acts):has(:focus-visible) .meta { display: none; }

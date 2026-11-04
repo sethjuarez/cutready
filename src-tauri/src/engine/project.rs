@@ -2119,62 +2119,17 @@ fn write_lock_manifest(project_root: &Path, manifest: &LockManifest) -> Result<(
     std::fs::write(path, data).map_err(|e| ProjectError::Io(e.to_string()))
 }
 
-/// Delete a note file and clean up any images that become orphaned.
-///
-/// Parses the note's markdown for `![...](path)` image references in
-/// `.cutready/screenshots/`. If no other note references the same image,
-/// the image file is deleted to prevent orphaned files accumulating.
+/// Delete a note file. Images it referenced are kept: one no longer referenced
+/// anywhere shows up as Unused in the Media library, where the user removes it
+/// explicitly. Media is never deleted as a side effect of deleting a document.
 pub fn delete_note(path: &Path, project_root: &Path) -> Result<(), ProjectError> {
     if !path.exists() {
         return Ok(());
     }
     let rel = relative_project_path(path, project_root)?;
     ensure_note_unlocked(project_root, &rel)?;
-
-    // Read the note to find image references before deleting
-    let content = std::fs::read_to_string(path).unwrap_or_default();
-    let images_in_note = extract_screenshot_refs(&content);
-
-    // Delete the note file
     document_writer::delete(project_root, path)?;
     let _ = set_note_lock(project_root, &rel, false);
-
-    // If the note had no screenshot references, we're done
-    if images_in_note.is_empty() {
-        return Ok(());
-    }
-
-    // Scan all remaining notes for image references
-    let mut all_referenced = std::collections::HashSet::new();
-    let _ = scan_files_recursive(project_root, project_root, "md", &mut |_rel, abs| {
-        if abs != path {
-            if let Ok(other_content) = std::fs::read_to_string(abs) {
-                for img in extract_screenshot_refs(&other_content) {
-                    all_referenced.insert(img);
-                }
-            }
-        }
-    });
-    // Also check sketch files for screenshot references
-    let _ = scan_files_recursive(project_root, project_root, "sk", &mut |_rel, abs| {
-        if let Ok(other_content) = std::fs::read_to_string(abs) {
-            for img in extract_sketch_screenshot_refs(&other_content) {
-                all_referenced.insert(img);
-            }
-        }
-    });
-
-    // Delete images only referenced by the deleted note
-    for img_path in &images_in_note {
-        if !all_referenced.contains(img_path) {
-            let abs_img = project_root.join(img_path);
-            if abs_img.exists() {
-                // asset write: orphaned image cleanup
-                let _ = std::fs::remove_file(&abs_img);
-            }
-        }
-    }
-
     Ok(())
 }
 
@@ -4190,7 +4145,7 @@ mod tests {
     // ── delete_note with image cleanup tests ──────────────────
 
     #[test]
-    fn delete_note_removes_orphaned_images() {
+    fn delete_note_keeps_unreferenced_images_for_media_cleanup() {
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
 
@@ -4206,7 +4161,9 @@ mod tests {
 
         delete_note(&note, root).unwrap();
         assert!(!note.exists(), "note should be deleted");
-        assert!(!img.exists(), "orphaned image should be deleted");
+        assert!(img.exists(), "media is never deleted as a side effect");
+        let listed = list_images_with_refs(root).unwrap();
+        assert!(listed[0].referenced_by.is_empty(), "now shows as unused");
     }
 
     #[test]
