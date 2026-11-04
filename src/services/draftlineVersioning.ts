@@ -100,7 +100,7 @@ let draftlineWorkspacePath: string | null = null;
 let cachedFacade: DraftlineHostFacade | null = null;
 let cachedFacadePath: string | null = null;
 
-const draftlineClient = createDraftlineClient({ invoke, listen });
+export const draftlineClient = createDraftlineClient({ invoke, listen });
 
 export function setDraftlineWorkspacePath(path: string | null) {
   draftlineWorkspacePath = path;
@@ -108,7 +108,7 @@ export function setDraftlineWorkspacePath(path: string | null) {
   cachedFacadePath = null;
 }
 
-function facade(): DraftlineHostFacade {
+export function facade(): DraftlineHostFacade {
   if (!draftlineWorkspacePath) {
     throw new Error("No Draftline workspace is currently open");
   }
@@ -130,7 +130,7 @@ function facade(): DraftlineHostFacade {
  * snapshot. Re-reading the mutable global after an await lets a concurrent
  * workspace switch retarget the operation (see issue #263).
  */
-function requireWorkspacePath(): string {
+export function requireWorkspacePath(): string {
   if (!draftlineWorkspacePath) {
     throw new Error("No Draftline workspace is currently open");
   }
