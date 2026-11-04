@@ -44,6 +44,7 @@ const CUTREADY_INCLUDED_PATHS: &[&str] = &[
 const CUTREADY_LARGE_FILE_THRESHOLD_BYTES: u64 = 50 * 1024 * 1024;
 
 pub mod naming;
+mod restore;
 pub use naming::{namespaced_variation_name, CUTREADY_VARIATION_NAMESPACE};
 
 /// CutReady-facing facade over a Draftline workspace.
@@ -327,14 +328,6 @@ impl CutReadyDraftlineAdapter {
         policy: SwitchPolicy,
     ) -> DraftlineResult<Variation> {
         self.workspace.switch_variation(variation, policy)
-    }
-
-    pub fn restore_version_as_new_save(
-        &self,
-        version: &VersionId,
-        label: &str,
-    ) -> DraftlineResult<Version> {
-        self.workspace.restore_version_as_new_save(version, label)
     }
 
     pub fn diff_versions(&self, from: &VersionId, to: &VersionId) -> DraftlineResult<VersionDiff> {
@@ -1211,60 +1204,6 @@ mod tests {
             .collect();
 
         assert!(!names.iter().any(|name| name == "delete-me"));
-    }
-
-    #[test]
-    fn restore_version_as_new_save_requires_clean_workspace() {
-        let temp = tempfile::tempdir().unwrap();
-        let root = temp.path();
-        write(root.join("intro.sk"), r#"{"title":"One"}"#);
-
-        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
-        let first = adapter.save_version("First").unwrap();
-        write(root.join("intro.sk"), r#"{"title":"Two"}"#);
-        adapter.save_version("Second").unwrap();
-
-        write(root.join("planning.md"), "# unsaved\n");
-        let error = adapter
-            .restore_version_as_new_save(first.id(), "Restore first")
-            .unwrap_err();
-        assert!(matches!(
-            error,
-            draftline::DraftlineError::PreflightFailed(_)
-        ));
-        assert_eq!(read(root.join("planning.md")), "# unsaved\n");
-    }
-
-    #[test]
-    fn restore_version_as_new_save_restores_tracked_content_without_runtime_state() {
-        let temp = tempfile::tempdir().unwrap();
-        let root = temp.path();
-        write(root.join("intro.sk"), r#"{"title":"One"}"#);
-        write(root.join(".cutready/ui-state.json"), r#"{"panel":"one"}"#);
-
-        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
-        let first = adapter.save_version("First").unwrap();
-        write(root.join("intro.sk"), r#"{"title":"Two"}"#);
-        write(root.join(".cutready/ui-state.json"), r#"{"panel":"two"}"#);
-        adapter.save_version("Second").unwrap();
-
-        let restored = adapter
-            .restore_version_as_new_save(first.id(), "Restore first")
-            .unwrap();
-
-        assert_eq!(read(root.join("intro.sk")), r#"{"title":"One"}"#);
-        assert_eq!(
-            read(root.join(".cutready/ui-state.json")),
-            r#"{"panel":"two"}"#
-        );
-        let restored_preview = adapter
-            .preview_version_file(restored.id(), "intro.sk")
-            .unwrap()
-            .unwrap();
-        assert!(restored_preview
-            .content
-            .as_deref()
-            .is_some_and(|content| content.contains("\"One\"")));
     }
 
     #[test]

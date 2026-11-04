@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AudioLines,
   Camera,
@@ -6,7 +6,6 @@ import {
   FileDiff,
   FileText,
   FolderOpen,
-  GitBranch,
   Image,
   NotebookPen,
   RotateCcw,
@@ -14,6 +13,11 @@ import {
   SquarePen,
 } from "lucide-react";
 import { snapshotDiffTabPath } from "./DiffViewer";
+import { RestoreVersionDialog, type RestoreTarget } from "./versioning/RestoreVersionDialog";
+import { RestoreDocumentButton } from "./versioning/RestoreDocumentButton";
+import { StartBranchControls } from "./versioning/StartBranchControls";
+import { requestPreAction } from "../services/preAction";
+import { isSaveBlocked } from "../services/versionOperation";
 import {
   previewDraftlineVersion,
   previewDraftlineVersionFile,
@@ -73,7 +77,6 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
   const isMultiProject = useAppStore((s) => s.isMultiProject);
   const graphNodes = useVersioningStore((s) => s.graphNodes);
   const timelines = useVersioningStore((s) => s.timelines);
-  const isDirty = useVersioningStore((s) => s.isDirty);
   const changedFiles = useVersioningStore((s) => s.changedFiles);
   const startTimelineFromSnapshot = useVersioningStore((s) => s.startTimelineFromSnapshot);
   const checkoutRemoteTimeline = useSyncStore((s) => s.checkoutRemoteTimeline);
@@ -87,6 +90,7 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
   const [restoreConflict, setRestoreConflict] = useState<DraftlineVariationCreatePreflight | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [restoreMenuOpen, setRestoreMenuOpen] = useState(false);
+  const [restoreTarget, setRestoreTarget] = useState<RestoreTarget | null>(null);
   const [expandedPath, setExpandedPath] = useState<string | null>(null);
   const [fileDetails, setFileDetails] = useState<Record<string, FileDetailState>>({});
   const snapshot = graphNodes.find((node) => node.id === snapshotId);
@@ -150,7 +154,8 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
 
   const totalAdded = filteredEntries.reduce((sum, entry) => sum + entry.additions, 0);
   const totalRemoved = filteredEntries.reduce((sum, entry) => sum + entry.deletions, 0);
-  const restoreDisabled = restoring || isDirty || !newTimelineName.trim();
+  const restoreDisabled = restoring || !newTimelineName.trim();
+  const versionName = snapshot?.message ?? snapshotId.slice(0, 7);
 
   const handleRestore = useCallback(async () => {
     if (restoreDisabled) return;
@@ -164,19 +169,27 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
         setRestoreError(`Branch "${name}" already exists. Choose a different branch name.`);
         return;
       }
-      await startTimelineFromSnapshot(snapshotId, name);
-      setRestoreConflict(null);
-      setEntries(await previewDraftlineVersion(snapshotId));
-      setExpandedPath(null);
-      setFileDetails({});
-      setRestoreMenuOpen(false);
+      await requestPreAction({
+        operation: "Start branch",
+        target: `starting branch “${name}”`,
+        run: async () => {
+          try {
+            await startTimelineFromSnapshot(snapshotId, name);
+          } catch (err) {
+            if (!isDraftlineVariationCreateConflictError(err)) throw err;
+            setRestoreConflict(err.preflight);
+            setRestoreMenuOpen(true);
+            return;
+          }
+          setRestoreConflict(null);
+          setEntries(await previewDraftlineVersion(snapshotId));
+          setExpandedPath(null);
+          setFileDetails({});
+          setRestoreMenuOpen(false);
+        },
+      });
     } catch (err) {
-      if (isDraftlineVariationCreateConflictError(err)) {
-        setRestoreConflict(err.preflight);
-        setRestoreMenuOpen(true);
-        return;
-      }
-      setRestoreError(`Restore failed: ${errorMessage(err)}`);
+      if (!isSaveBlocked(err)) setRestoreError(`Couldn't start the branch: ${errorMessage(err)}`);
     } finally {
       setRestoring(false);
     }
@@ -286,9 +299,18 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
               <span className="text-success">+{totalAdded}</span>
               <span className="text-error">-{totalRemoved}</span>
             </div>
-            <RestoreControls
+            <button
+              type="button"
+              onClick={() => setRestoreTarget({ versionId: snapshotId, versionName, scope: { kind: "project" } })}
+              className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 text-xs font-medium text-[rgb(var(--color-text))] transition-colors hover:border-[rgb(var(--color-accent))] hover:text-[rgb(var(--color-accent))]"
+              title="Bring the whole project back to this version, saved as a new version"
+              data-testid="restore-version"
+            >
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+              Restore this version
+            </button>
+            <StartBranchControls
               activeTimelineLabel={activeTimeline?.label ?? "current branch"}
-              isDirty={isDirty}
               menuOpen={restoreMenuOpen}
               newTimelineName={newTimelineName}
               onMenuOpenChange={setRestoreMenuOpen}
@@ -309,7 +331,7 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
               restoreConflict={restoreConflict}
               restoreDisabled={restoreDisabled}
               restoring={restoring}
-              snapshotLabel={snapshot?.message ?? snapshotId.slice(0, 7)}
+              snapshotLabel={versionName}
             />
           </div>
         </div>
@@ -356,198 +378,20 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
                   projects={projects}
                   currentProject={currentProject}
                   snapshotId={snapshotId}
+                  onRestoreFile={(entry) => setRestoreTarget({
+                    versionId: snapshotId,
+                    versionName,
+                    scope: { kind: "documents", paths: [entry.path] },
+                    labels: [displayName(entry.path)],
+                    removes: entry.status === "added",
+                  })}
                 />
               )
             ))}
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function RestoreControls({
-  activeTimelineLabel,
-  isDirty,
-  menuOpen,
-  newTimelineName,
-  onMenuOpenChange,
-  onNewTimelineNameChange,
-  onAdoptConflict,
-  onCancelConflict,
-  onRestore,
-  onUseConflictSuggestion,
-  restoreConflict,
-  restoreDisabled,
-  restoring,
-  snapshotLabel,
-}: {
-  activeTimelineLabel: string;
-  isDirty: boolean;
-  menuOpen: boolean;
-  newTimelineName: string;
-  onMenuOpenChange: (open: boolean) => void;
-  onNewTimelineNameChange: (value: string) => void;
-  onAdoptConflict: () => void;
-  onCancelConflict: () => void;
-  onRestore: () => void;
-  onUseConflictSuggestion: (name: string) => void;
-  restoreConflict: DraftlineVariationCreatePreflight | null;
-  restoreDisabled: boolean;
-  restoring: boolean;
-  snapshotLabel: string;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [confirming, setConfirming] = useState(false);
-  const targetLabel = newTimelineName.trim() || "new branch";
-
-  useEffect(() => {
-    if (!menuOpen) {
-      setConfirming(false);
-      return;
-    }
-    const onPointerDown = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
-        onMenuOpenChange(false);
-      }
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onMenuOpenChange(false);
-    };
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [menuOpen, onMenuOpenChange]);
-
-  return (
-    <div ref={ref} className="relative shrink-0">
-      <button
-        type="button"
-        onClick={() => onMenuOpenChange(!menuOpen)}
-        disabled={isDirty || restoring}
-        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[rgb(var(--color-accent))] px-3 text-xs font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:cursor-not-allowed disabled:opacity-45"
-        title={isDirty ? "Save or discard workspace changes before starting a branch from this snapshot" : "Create a branch from this preview and switch to it"}
-        aria-haspopup="dialog"
-        aria-expanded={menuOpen}
-      >
-        <RotateCcw className="h-3.5 w-3.5" />
-        {restoring ? "Starting..." : "Start Branch from Here"}
-        <ChevronDown className={`h-3 w-3 transition-transform ${menuOpen ? "rotate-180" : ""}`} />
-      </button>
-
-      {menuOpen && (
-        <div
-          role="dialog"
-          aria-label="Restore snapshot"
-          className="absolute right-0 top-full z-dropdown mt-1 w-[360px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] p-2 shadow-xl"
-        >
-          <div className="mb-2 rounded-lg bg-[rgb(var(--color-surface-alt))] px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))]">
-            <GitBranch className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
-            You are previewing <span className="font-medium text-[rgb(var(--color-text))]">{snapshotLabel}</span>. To write from it,
-            CutReady creates branch <span className="font-medium text-[rgb(var(--color-text))]">{targetLabel}</span> and switches there. Your first edit will be dirty until you save a named snapshot.
-          </div>
-          <label>
-            <span className="mb-1 block text-2xs font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
-              New branch name
-            </span>
-            <input
-              value={newTimelineName}
-              onChange={(event) => {
-                setConfirming(false);
-                onNewTimelineNameChange(event.target.value);
-              }}
-              placeholder="branch-name"
-              className="h-8 w-full rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 text-xs text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:border-[rgb(var(--color-accent))]"
-            />
-          </label>
-          <div className="mt-2 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2 text-2xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
-            Current branch <span className="font-medium text-[rgb(var(--color-text))]">{activeTimelineLabel}</span> stays untouched. Save later asks for the snapshot name.
-          </div>
-          {restoreConflict && (
-            <SnapshotBranchConflictPanel
-              preflight={restoreConflict}
-              onUseSuggestion={onUseConflictSuggestion}
-              onAdopt={onAdoptConflict}
-              onCancel={onCancelConflict}
-            />
-          )}
-          {isDirty && (
-            <div className="mt-2 text-2xs text-warning">
-              Save or discard current workspace changes before starting from this preview.
-            </div>
-          )}
-          <button
-            onClick={() => {
-              if (!confirming) {
-                setConfirming(true);
-                return;
-              }
-              onMenuOpenChange(false);
-              void onRestore();
-            }}
-            disabled={restoreDisabled}
-            className="mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-[rgb(var(--color-accent))] px-3 text-xs font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:pointer-events-none disabled:opacity-45"
-            title={isDirty ? "Save or discard workspace changes before starting from this preview" : "Create a branch and switch to it"}
-          >
-            {restoring ? "Starting..." : confirming ? "Confirm Start Branch" : "Create Branch"}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SnapshotBranchConflictPanel({
-  preflight,
-  onUseSuggestion,
-  onAdopt,
-  onCancel,
-}: {
-  preflight: DraftlineVariationCreatePreflight;
-  onUseSuggestion: (name: string) => void;
-  onAdopt: () => void;
-  onCancel: () => void;
-}) {
-  const remote = preflight.remote ?? "remote";
-  const canAdopt = preflight.remote_collision || preflight.remote_only_collision;
-  const message = canAdopt
-    ? `${remote}/${preflight.variation} already exists${preflight.existing_remote_head?.label ? ` at "${preflight.existing_remote_head.label}"` : ""}.`
-    : `Branch "${preflight.variation}" already exists locally.`;
-
-  return (
-    <div className="mt-2 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2 text-2xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
-      <div className="font-medium text-warning">{message}</div>
-      <div className="mt-1">Rename this branch, adopt the remote branch, or cancel starting from this snapshot.</div>
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        {preflight.suggested_alternative && (
-          <button
-            type="button"
-            onClick={() => onUseSuggestion(preflight.suggested_alternative!)}
-            className="rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-2 py-1 font-medium text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-alt))]"
-          >
-            Use {preflight.suggested_alternative}
-          </button>
-        )}
-        {canAdopt && (
-          <button
-            type="button"
-            onClick={onAdopt}
-            className="rounded-md bg-[rgb(var(--color-accent))] px-2 py-1 font-medium text-[rgb(var(--color-accent-fg))] hover:bg-[rgb(var(--color-accent-hover))]"
-          >
-            Adopt and switch
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-md px-2 py-1 font-medium text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]"
-        >
-          Cancel
-        </button>
-      </div>
+      <RestoreVersionDialog target={restoreTarget} onClose={() => setRestoreTarget(null)} />
     </div>
   );
 }
@@ -563,6 +407,7 @@ function SemanticGroup({
   projects,
   currentProject,
   snapshotId,
+  onRestoreFile,
 }: {
   kind: ChangeKind;
   entries: DiffEntry[];
@@ -574,6 +419,7 @@ function SemanticGroup({
   projects: ProjectEntry[];
   currentProject: ProjectView | null;
   snapshotId: string;
+  onRestoreFile: (entry: DiffEntry) => void;
 }) {
   const Icon = KIND_ICONS[kind];
   return (
@@ -646,6 +492,8 @@ function SemanticGroup({
                         </span>
                       </div>
                     </div>
+                    <div className="flex flex-wrap gap-1.5">
+                    <RestoreDocumentButton removes={entry.status === "added"} onClick={() => onRestoreFile(entry)} />
                     <button
                       type="button"
                       onClick={() => onOpenFileDiff(entry)}
@@ -654,6 +502,7 @@ function SemanticGroup({
                       <FileDiff className="h-3.5 w-3.5" />
                       Open full diff
                     </button>
+                    </div>
                   </div>
                   <div className="mt-2 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 py-2">
                     <div className="mb-1 flex items-center justify-between gap-2">

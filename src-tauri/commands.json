@@ -207,6 +207,8 @@
     "repair_recovery",
     "repair_workspace_manifest",
     "resolve_deep_link",
+    "restore_version_as_new_save",
+    "restore_version_paths_as_new_save",
     "retry_content_download",
     "rollback_recovery",
     "save",
@@ -272,7 +274,6 @@
     "get_workspace_graph_compare_summary": "Removed in arch v3 unit 2: no frontend caller; superseded by get_workspace_graph_for_variation and preview_version_file.",
     "diff_workspace_file": "Removed in arch v3 unit 2: no frontend caller; superseded by get_workspace_graph_for_variation and preview_version_file.",
     "preview_version": "Removed in arch v3 unit 2: no frontend caller; superseded by get_workspace_graph_for_variation and preview_version_file.",
-    "restore_version_as_new_save": "Removed in arch v3 unit 2: restore-as-new-save UI was unreachable; restore starts a new variation from the save instead.",
     "restore_version_as_new_save_to_variation": "Removed in arch v3 unit 2: restore-as-new-save UI was unreachable; restore starts a new variation from the save instead."
   }
 }

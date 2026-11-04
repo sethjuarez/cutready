@@ -304,6 +304,8 @@ export function tabExistsInLoadedProject(tab: EditorTab, state: AppStoreState): 
 export async function rewriteWorkspaceFiles(
   operation: () => Promise<void>,
   failureLabel: string,
+  /** Rethrow instead of toasting, for callers that show the error themselves. */
+  options: { rethrow?: boolean } = {},
 ): Promise<boolean> {
   const app = useAppStore.getState;
   const set = useAppStore.setState;
@@ -346,8 +348,9 @@ export async function rewriteWorkspaceFiles(
   } catch (err) {
     clearSuppressedEditorFlushes(suppressedPaths);
     console.error(`${failureLabel}:`, err);
-    useToastStore.getState().show(`${failureLabel}: ${errorMessage(err)}`, 5000, "error");
+    if (!options.rethrow) useToastStore.getState().show(`${failureLabel}: ${errorMessage(err)}`, 5000, "error");
     await useVersioningStore.getState().checkDirty();
+    if (options.rethrow) throw err;
     return false;
   }
 }

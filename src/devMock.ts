@@ -475,39 +475,27 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "resolve_deep_link":
       return null;
     case "save":
-      return {
-        id: "fff456fff456fff456fff456fff456fff456fff4",
-        label: (args as { request?: { label?: string } })?.request?.label ?? "Saved draft",
-        author: { name: "You", email: "dev@example.com" },
-        saved_by: { name: "You", email: "dev@example.com" },
-        time_seconds: Math.floor(Date.now() / 1000),
-      };
+      return mockSavedVersion("fff456fff456fff456fff456fff456fff456fff4", (args as { request?: { label?: string } })?.request?.label ?? "Saved draft");
     case "selected_discard":
       return { files: [], diff: null };
     case "selected_shelve":
       return {
         id: (args as { request?: { name?: string } })?.request?.name ?? "cutready-stash",
-        version: {
-          id: "shelf456shelf456shelf456shelf456shelf456",
-          label: "Shelved changes",
-          author: { name: "You", email: "dev@example.com" },
-          saved_by: { name: "You", email: "dev@example.com" },
-          time_seconds: Math.floor(Date.now() / 1000),
-        },
+        version: mockSavedVersion("shelf456shelf456shelf456shelf456shelf456", "Shelved changes"),
       };
     case "apply_shelf":
       return {
         id: (args as { request?: { shelf_id?: string } })?.request?.shelf_id ?? "cutready-stash",
-        version: {
-          id: "shelf456shelf456shelf456shelf456shelf456",
-          label: "Shelved changes",
-          author: { name: "You", email: "dev@example.com" },
-          saved_by: { name: "You", email: "dev@example.com" },
-          time_seconds: Math.floor(Date.now() / 1000),
-        },
+        version: mockSavedVersion("shelf456shelf456shelf456shelf456shelf456", "Shelved changes"),
       };
     case "delete_shelf":
       return null;
+    case "restore_version_as_new_save":
+    case "restore_version_paths_as_new_save":
+      return {
+        version: mockSavedVersion("restore789restore789restore789restore789", (args as { request?: { label?: string } })?.request?.label ?? "Restore version"),
+        postconditions: [],
+      };
     case "preflight_create_variation_from_version": {
       const request = (args as { request?: { version_id?: string; name?: string; remote?: string | null } })?.request;
       const name = request?.name ?? "variation";
@@ -1355,6 +1343,11 @@ function mockDocumentResult(cmd: string, args?: Record<string, unknown>): unknow
  * Install mocks on the window so Tauri API modules pick them up.
  * Must be called BEFORE any Tauri imports are evaluated.
  */
+function mockSavedVersion(id: string, label: string) {
+  const you = { name: "You", email: "dev@example.com" };
+  return { id, label, author: you, saved_by: you, time_seconds: Math.floor(Date.now() / 1000) };
+}
+
 export function installDevMocks() {
   if (typeof window === "undefined") return;
 

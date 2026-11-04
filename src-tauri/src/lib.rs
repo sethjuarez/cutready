@@ -110,9 +110,7 @@ pub struct RecordingInner {
     pub session: Option<models::session::RecordedSession>,
 }
 
-/// A browser that has been prepared for recording.
-///
-/// The browser stays open across recording takes and is dropped on disconnect.
+/// A browser prepared for recording; it stays open across takes and is dropped on disconnect.
 pub struct BrowserConnection {
     /// Process-unique id, used to ensure a superseded connection's terminal
     /// event cannot clear the connection that replaced it.
@@ -683,6 +681,8 @@ pub fn run() {
             commands::draftline::apply_shelf,
             commands::draftline::delete_shelf,
             commands::version_saves::selected_save,
+            commands::version_saves::restore_version_as_new_save,
+            commands::version_saves::restore_version_paths_as_new_save,
             commands::draftline::selected_shelve,
             commands::draftline::selected_discard,
             commands::draftline::list_remotes,
