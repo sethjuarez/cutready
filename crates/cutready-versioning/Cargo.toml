@@ -10,7 +10,7 @@ name = "cutready_versioning"
 
 [dependencies]
 cutready-core = { path = "../cutready-core" }
-draftline = "0.10.2"
+draftline = "0.11.0"
 git2 = { version = "0.21", default-features = false }
 serde = { version = "1", features = ["derive"] }
 

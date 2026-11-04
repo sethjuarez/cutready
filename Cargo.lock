@@ -2183,9 +2183,9 @@ dependencies = [
 
 [[package]]
 name = "draftline"
-version = "0.10.2"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1bcc44caf3ba206e8a0bbc6ea16d8fb2f185f914dc8fd083b647b282382e9560"
+checksum = "66941c3ec2d4a4ce3ed8aff64642b6d7158f1cea50ad1b3af9755420a8992503"
 dependencies = [
  "git2",
  "serde",
@@ -3751,7 +3751,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -3771,7 +3771,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.61.2",
+ "windows-core 0.62.2",
 ]
 
 [[package]]
@@ -6432,7 +6432,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -6471,7 +6471,7 @@ dependencies = [
  "cfg_aliases 0.2.2",
  "libc",
  "once_cell",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "tracing",
  "windows-sys 0.61.2",
 ]
