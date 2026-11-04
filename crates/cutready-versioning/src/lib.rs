@@ -57,6 +57,21 @@ pub fn namespaced_variation_name(hybrid: bool, name: &str) -> String {
     format!("{CUTREADY_VARIATION_NAMESPACE}{trimmed}")
 }
 
+/// Longest version name a person can save. Mirrors `MAX_VERSION_NAME` in the frontend.
+pub const MAX_VERSION_NAME: usize = 72;
+
+/// The trimmed name to save, or why a user-entered version name is invalid.
+pub fn validate_version_name(name: &str) -> Result<String, String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("Name the version".into());
+    }
+    if trimmed.chars().count() > MAX_VERSION_NAME {
+        return Err(format!("Keep it to {MAX_VERSION_NAME} characters or fewer"));
+    }
+    Ok(trimmed.to_string())
+}
+
 /// CutReady-facing facade over a Draftline workspace.
 pub struct CutReadyDraftlineAdapter {
     workspace: Workspace,
@@ -781,6 +796,19 @@ fn covered(scope: &[PathBuf], path: &Path) -> bool {
 mod tests {
     use super::*;
     use cutready_core::testing::MemoryLock;
+
+    #[test]
+    fn version_names_are_required_and_at_most_72_characters() {
+        assert_eq!(
+            validate_version_name("  Tighten intro  "),
+            Ok("Tighten intro".into())
+        );
+        assert!(validate_version_name("   ").is_err());
+        assert!(validate_version_name(&"x".repeat(MAX_VERSION_NAME)).is_ok());
+        assert!(validate_version_name(&"x".repeat(MAX_VERSION_NAME + 1)).is_err());
+        // Counts characters, not bytes.
+        assert!(validate_version_name(&"🎬".repeat(MAX_VERSION_NAME)).is_ok());
+    }
 
     fn write(path: impl AsRef<Path>, contents: &str) {
         if let Some(parent) = path.as_ref().parent() {

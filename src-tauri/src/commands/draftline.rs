@@ -282,6 +282,17 @@ fn context_error(message: String) -> contract::TauriCommandError {
     }
 }
 
+/// User-entered version names are required and at most 72 characters.
+fn version_name(label: &str) -> Result<String, contract::TauriCommandError> {
+    cutready_versioning::validate_version_name(label).map_err(|message| {
+        contract::TauriCommandError {
+            code: "invalid_version_name".into(),
+            message,
+            details: None,
+        }
+    })
+}
+
 #[auditaur_command(skip_all)]
 pub async fn open_workspace(
     request: contract::WorkspaceRequest,
@@ -507,6 +518,7 @@ pub async fn switch_variation(
         // Draftline's SaveFirst commits under git config, so save with the acting
         // user's profile here. A clean workspace saves nothing and needs no author.
         DraftlineSwitchPolicyInput::SaveFirst { label } => {
+            let label = cutready_versioning::validate_version_name(&label)?;
             let preflight = adapter
                 .preflight_switch_variation(&request.variation_id)
                 .map_err(|error| error.to_string())?;
@@ -612,9 +624,10 @@ pub async fn preview_workspace_file(
 
 #[auditaur_command(skip_all)]
 pub async fn save(
-    request: contract::SaveRequest,
+    mut request: contract::SaveRequest,
     app: AppHandle,
 ) -> contract::TauriCommandResult<contract::SaveResult> {
+    request.label = version_name(&request.label)?;
     let _guard = write_lock::lock(&request.workspace_path).map_err(context_error)?;
     let mut context = context_for_commit(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::save_with_context(&mut context, request))
@@ -819,9 +832,10 @@ pub async fn delete_shelf(
 
 #[auditaur_command(skip_all)]
 pub async fn selected_save(
-    request: contract::SelectedSaveRequest,
+    mut request: contract::SelectedSaveRequest,
     app: AppHandle,
 ) -> contract::TauriCommandResult<contract::SelectedSaveResult> {
+    request.label = version_name(&request.label)?;
     let _guard = write_lock::lock(&request.workspace_path).map_err(context_error)?;
     let mut context = context_for_commit(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::selected_save_with_context(&mut context, request))
