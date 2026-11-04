@@ -40,7 +40,8 @@ export function MergeConflictPanel() {
         path: c.path,
         content: resolutions[c.path],
       }));
-      await applyMergeResolution(fileResolutions);
+      // Null: naming the merge was cancelled, so the panel stays open.
+      if (await applyMergeResolution(fileResolutions) === null) setApplying(false);
     } catch (err) {
       console.error("Failed to apply merge:", err);
       setApplying(false);

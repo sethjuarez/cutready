@@ -23,6 +23,7 @@ import { baseRenamedBranches, mergeNeedsDeveloperMessage } from "../services/dra
 import { useToastStore } from "./toastStore";
 import { useAppStore } from "./appStore";
 import { useVersioningStore } from "./versioningStore";
+import { activeTimelineLabel, askMergeName } from "../services/mergeName";
 import {
   SYNC_IN_PROGRESS_MESSAGE,
   buildShareUrl,
@@ -352,7 +353,9 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
         if (state === "needsMerge" && preflight.dirtyFiles.length === 0) {
           const mergeReport = await preflightDraftlineMergeIncoming(currentRemote.name);
           if (mergeReport.canMergeCleanly && mergeReport.token) {
-            await mergeDraftlineIncoming(currentRemote.name, "Merge incoming saves");
+            const message = await askMergeName(activeTimelineLabel(versioning().timelines) ?? currentRemote.name);
+            if (!message) return;
+            await mergeDraftlineIncoming(currentRemote.name, message);
             await app().loadSketches();
             await app().loadStoryboards();
             await app().loadNotes();
@@ -431,8 +434,11 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
       if (report.dirtyFiles.length > 0) {
         updateError = `Save or discard local changes before getting updates from ${base}.`;
       } else if (report.canMergeCleanly && report.token) {
-        await mergeDraftlineFromBase(currentRemote.name, `Bring in latest ${base}`);
-        useToastStore.getState().showUpdate(`Updates from ${base} brought in.`, "success");
+        const message = await askMergeName(base);
+        if (message) {
+          await mergeDraftlineFromBase(currentRemote.name, message);
+          useToastStore.getState().showUpdate(`Updates from ${base} brought in.`, "success");
+        }
       } else if (report.conflicts.length > 0 && report.token) {
         useVersioningStore.setState({
           isMerging: true,

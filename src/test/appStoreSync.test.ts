@@ -34,8 +34,10 @@ import { useVersioningStore } from "../stores/versioningStore";
 import { useSyncStore } from "../stores/syncStore";
 import { GIT_INDEX_LOCKED_MESSAGE, SEND_OUTSIDE_NAMESPACE_MESSAGE } from "../services/draftlineErrors";
 import { useToastStore } from "../stores/toastStore";
+import { useMergeNameStore } from "../stores/mergeNameStore";
 describe("appStore remote sync status", () => {
   afterEach(() => {
+  useMergeNameStore.setState({ pending: null });
     mockFetchDraftlineRemote.mockReset();
     mockGetGitHubAuthStatus.mockReset();
     mockGetDraftlineSyncStatus.mockReset();
@@ -697,15 +699,40 @@ describe("appStore remote sync status", () => {
       });
       const spies = stubRefresh();
 
-      await useSyncStore.getState().getUpdatesFromBase();
+      const update = useSyncStore.getState().getUpdatesFromBase();
+      await vi.waitFor(() => expect(useMergeNameStore.getState().pending).not.toBeNull());
+      expect(useMergeNameStore.getState().pending).toMatchObject({ source: "main", defaultName: "Merge updates from main" });
+      expect(mockMergeDraftlineFromBase).not.toHaveBeenCalled();
+      useMergeNameStore.getState().answer("Merge updates from main\n\nPicked up the new intro");
+      await update;
 
       expect(mockPreflightDraftlineMergeBase).toHaveBeenCalledWith("origin");
-      expect(mockMergeDraftlineFromBase).toHaveBeenCalledWith("origin", "Bring in latest main");
+      expect(mockMergeDraftlineFromBase).toHaveBeenCalledWith("origin", "Merge updates from main\n\nPicked up the new intro");
       expect(useToastStore.getState().toasts).toEqual([
         expect.objectContaining({ message: "Updates from main brought in.", type: "success" }),
       ]);
       for (const spy of Object.values(spies)) expect(spy).toHaveBeenCalled();
       expect(useSyncStore.getState().baseStatus).toEqual({ ahead: 2, behind: 0, base: "main" });
+      expect(useSyncStore.getState().syncError).toBeNull();
+      expect(useSyncStore.getState().isSyncing).toBe(false);
+    });
+
+    it("doesn't merge from base when naming the merge is cancelled", async () => {
+      mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+      mockGetDraftlineSyncStatus.mockResolvedValue({ ahead: 1, behind: 0 });
+      mockGetDraftlineBaseStatus.mockResolvedValue({ ahead: 1, behind: 2, base: "main" });
+      mockPreflightDraftlineMergeBase.mockResolvedValueOnce(cleanReport);
+      useAppStore.setState({ currentProject: hybridProject });
+      useSyncStore.setState({ currentRemote: remote, baseStatus: { ahead: 1, behind: 2, base: "main" } });
+      stubRefresh();
+
+      const update = useSyncStore.getState().getUpdatesFromBase();
+      await vi.waitFor(() => expect(useMergeNameStore.getState().pending).not.toBeNull());
+      useMergeNameStore.getState().answer(null);
+      await update;
+
+      expect(mockMergeDraftlineFromBase).not.toHaveBeenCalled();
+      expect(useToastStore.getState().toasts).toEqual([]);
       expect(useSyncStore.getState().syncError).toBeNull();
       expect(useSyncStore.getState().isSyncing).toBe(false);
     });

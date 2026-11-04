@@ -15,6 +15,7 @@ import { getGitHubAuthStatus } from "../services/githubSetup";
 import { draftlinePathVariants } from "../utils/draftlinePaths";
 import type { ProjectView } from "../types/project";
 import type { RemoteInfo } from "../types/sketch";
+import { useMergeNameStore } from "./mergeNameStore";
 import { useToastStore } from "./toastStore";
 import { useAppStore, type AppStoreState, type EditorTab } from "./appStore";
 import { useVersioningStore } from "./versioningStore";
@@ -34,6 +35,8 @@ let remoteDetectionGeneration = 0;
 
 export function beginWorkspaceGeneration(path: string | null): void {
   workspaceGeneration += 1;
+  // A merge being named belongs to the old workspace.
+  useMergeNameStore.getState().answer(null);
   setDraftlineWorkspacePath(path);
 }
 

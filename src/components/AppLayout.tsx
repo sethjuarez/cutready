@@ -22,6 +22,7 @@ import { ResizeHandle } from "./ResizeHandle";
 import { OutputPanel } from "./OutputPanel";
 import { CommandPalette } from "./CommandPalette";
 import { TitleBar } from "./TitleBar";
+import { MergeNameHost } from "./versioning/MergeNameDialog";
 import { PreActionHost } from "./versioning/PreActionDialog";
 import { SendForReviewDialog } from "./SendForReviewDialog";
 import { AiApplyGateDialog } from "./AiApplyGateDialog";
@@ -541,6 +542,7 @@ export function AppLayout() {
         recentCommands={recentCommands}
       />
       <PreActionHost />
+      <MergeNameHost />
       <SendForReviewDialog />
       <AiApplyGateDialog />
       <KeyboardShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />

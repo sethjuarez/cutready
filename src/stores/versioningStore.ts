@@ -35,6 +35,7 @@ import {
 import { useToastStore } from "./toastStore";
 import { useAppStore } from "./appStore";
 import { useSyncStore } from "./syncStore";
+import { activeTimelineLabel, askMergeName } from "../services/mergeName";
 import {
   clearActiveDocumentState,
   currentWorkspaceGeneration,
@@ -164,7 +165,8 @@ export interface VersioningActions {
   /** Merge source timeline into target timeline. */
   mergeTimelines: (source: string, target: string) => Promise<MergeResult>;
   /** Apply user-provided conflict resolutions and create merge commit. */
-  applyMergeResolution: (resolutions: FileResolution[]) => Promise<string>;
+  /** Resolves to the merge commit, or null when the user cancels naming it. */
+  applyMergeResolution: (resolutions: FileResolution[]) => Promise<string | null>;
   /** Cancel an in-progress merge. */
   cancelMerge: () => void;
 }
@@ -643,9 +645,11 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
 
     // Base merges carry the base branch name as the token source.
     const base = (draftlineMergeToken as { source?: string | null }).source ?? null;
+    const message = await askMergeName(base ?? activeTimelineLabel(get().timelines) ?? draftlineMergeRemote);
+    if (!message) return null;
     const commitId = await mergeDraftlineIncomingWithResolutions(
       draftlineMergeToken,
-      base ? `Bring in latest ${base}` : "Resolve incoming saves",
+      message,
       resolutions.map((resolution) => ({
         path: resolution.path,
         field_path: null,
