@@ -27,6 +27,7 @@ import {
   type WorkspaceGraphRef,
 } from "@draftline/client";
 import { invoke, listen } from "./tauri";
+import { DraftlineVariationCreateConflictError, variationCreatePreflightFromError } from "./draftlineVariationConflict";
 import type { BaseStatus, ConflictFile, DiffEntry, GraphNode, IncomingCommit, RemoteBranchInfo, RemoteInfo, SyncStatus, TimelineInfo, VersionEntry } from "../types/sketch";
 
 export type DraftlineMergeIncomingToken = MergeIncomingToken;
@@ -38,22 +39,7 @@ export type DraftlineSwitchVariationPreflight = PreflightReport;
 export type DraftlineSwitchVariationResult = SwitchVariationResult;
 export type DraftlineVariationCreatePreflight = VariationCreatePreflight;
 export type DraftlineVariationCreateToken = VariationCreateToken;
-
-export class DraftlineVariationCreateConflictError extends Error {
-  readonly preflight: VariationCreatePreflight;
-
-  constructor(preflight: VariationCreatePreflight) {
-    super(variationCreateConflictMessage(preflight));
-    this.name = "DraftlineVariationCreateConflictError";
-    this.preflight = preflight;
-  }
-}
-
-export function isDraftlineVariationCreateConflictError(
-  error: unknown,
-): error is DraftlineVariationCreateConflictError {
-  return error instanceof DraftlineVariationCreateConflictError;
-}
+export { DraftlineVariationCreateConflictError, isDraftlineVariationCreateConflictError } from "./draftlineVariationConflict";
 
 export interface DraftlineMergeIncomingReport {
   syncStatus: {
@@ -166,6 +152,7 @@ export async function listDraftlineGraphNodes(): Promise<GraphNode[]> {
     return {
       id: node.version.id,
       message: node.version.label,
+      comment: node.version.comment ?? undefined,
       timestamp: new Date(node.version.time_seconds * 1000).toISOString(),
       timeline,
       parents: node.parent_version_ids,
@@ -694,6 +681,7 @@ function versionToEntry(version: Version): VersionEntry {
   return {
     id: version.id,
     message: version.label,
+    comment: version.comment ?? undefined,
     timestamp: new Date(version.time_seconds * 1000).toISOString(),
     summary: version.label,
   };
@@ -720,57 +708,6 @@ function remoteVariationToBranchInfo(variation: RemoteVariation): RemoteBranchIn
       ? new Date(variation.head_version.time_seconds * 1000).toISOString()
       : undefined,
   };
-}
-
-function variationCreateConflictMessage(preflight: VariationCreatePreflight): string {
-  if (preflight.remote_collision || preflight.remote_only_collision) {
-    const remote = preflight.remote ?? "remote";
-    const head = preflight.existing_remote_head?.label
-      ? ` Remote head: ${preflight.existing_remote_head.label}.`
-      : "";
-    const suggestion = preflight.suggested_alternative
-      ? ` Suggested name: ${preflight.suggested_alternative}.`
-      : "";
-    return `Branch "${preflight.variation}" already exists on ${remote}.${head}${suggestion}`;
-  }
-  if (preflight.local_collision) {
-    return `Branch "${preflight.variation}" already exists locally.`;
-  }
-  return `Branch "${preflight.variation}" cannot be created.`;
-}
-
-function variationCreatePreflightFromError(error: unknown): VariationCreatePreflight | null {
-  const value = typeof error === "string" ? parseJsonObject(error) : error;
-  if (!value || typeof value !== "object") return null;
-  const record = value as Record<string, unknown>;
-  const preflight = record.preflight ?? record.report;
-  if (isVariationCreatePreflight(preflight)) return preflight;
-  if (
-    (record.kind === "variation_create_preflight_failed" || record.code === "variation_create_preflight_failed")
-    && isVariationCreatePreflight(record.preflight)
-  ) {
-    return record.preflight;
-  }
-  return null;
-}
-
-function parseJsonObject(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
-}
-
-function isVariationCreatePreflight(value: unknown): value is VariationCreatePreflight {
-  if (!value || typeof value !== "object") return false;
-  const record = value as Record<string, unknown>;
-  return typeof record.from_version === "string"
-    && typeof record.variation === "string"
-    && typeof record.can_create === "boolean"
-    && typeof record.local_collision === "boolean"
-    && typeof record.remote_collision === "boolean"
-    && typeof record.remote_only_collision === "boolean";
 }
 
 function versionDiffToDiffEntries(diff: VersionDiff): DiffEntry[] {

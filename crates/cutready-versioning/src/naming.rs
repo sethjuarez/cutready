@@ -30,9 +30,23 @@ pub fn validate_version_name(name: &str) -> Result<String, String> {
     Ok(trimmed.to_string())
 }
 
-/// [`validate_version_name`] as the command envelope, with the `invalid_version_name` code.
-pub fn version_name_for_command(name: &str) -> Result<String, TauriCommandError> {
-    validate_version_name(name).map_err(|message| TauriCommandError {
+/// A version message is the name on its first line, optionally followed by a
+/// blank line and a comment (Draftline reads the commit body as the comment).
+/// Validates the name and returns `"Name"` or `"Name\n\nComment"`.
+pub fn validate_version_message(message: &str) -> Result<String, String> {
+    let (first, rest) = message.split_once('\n').unwrap_or((message, ""));
+    let name = validate_version_name(first)?;
+    let comment = rest.trim();
+    Ok(if comment.is_empty() {
+        name
+    } else {
+        format!("{name}\n\n{comment}")
+    })
+}
+
+/// [`validate_version_message`] as the command envelope, with the `invalid_version_name` code.
+pub fn version_name_for_command(message: &str) -> Result<String, TauriCommandError> {
+    validate_version_message(message).map_err(|message| TauriCommandError {
         code: "invalid_version_name".into(),
         message,
         details: None,
@@ -54,6 +68,26 @@ mod tests {
         assert!(validate_version_name(&"x".repeat(MAX_VERSION_NAME + 1)).is_err());
         // Counts characters, not bytes.
         assert!(validate_version_name(&"🎬".repeat(MAX_VERSION_NAME)).is_ok());
+    }
+
+    #[test]
+    fn messages_keep_a_comment_after_the_name() {
+        assert_eq!(
+            validate_version_message("Intro\n\n  Tightened it.  "),
+            Ok("Intro\n\nTightened it.".into())
+        );
+        assert_eq!(
+            validate_version_message("Intro\r\n\r\nWhy\r\n"),
+            Ok("Intro\n\nWhy".into())
+        );
+        assert_eq!(
+            validate_version_message(" Intro \n\n  "),
+            Ok("Intro".into())
+        );
+        // Only the first line counts towards the name limit.
+        let long_comment = format!("Intro\n\n{}", "x".repeat(500));
+        assert!(validate_version_message(&long_comment).is_ok());
+        assert!(validate_version_message("\n\nOnly a comment").is_err());
     }
 
     #[test]

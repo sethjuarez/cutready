@@ -507,7 +507,7 @@ pub async fn switch_variation(
         // Draftline's SaveFirst commits under git config, so save with the acting
         // user's profile here. A clean workspace saves nothing and needs no author.
         DraftlineSwitchPolicyInput::SaveFirst { label } => {
-            let label = cutready_versioning::naming::validate_version_name(&label)?;
+            let label = cutready_versioning::naming::validate_version_message(&label)?;
             let preflight = adapter
                 .preflight_switch_variation(&request.variation_id)
                 .map_err(|error| error.to_string())?;

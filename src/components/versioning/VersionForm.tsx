@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Loader2, Sparkles } from "lucide-react";
-import { MAX_VERSION_NAME, normalizeVersionName, versionNameError } from "../../domain/versioning";
+import { MAX_VERSION_NAME, normalizeVersionName, versionMessage, versionNameError } from "../../domain/versioning";
 import { useContributorIdentity } from "../../hooks/useContributorIdentity";
 import { isSaveBlocked, runVersionOperation } from "../../services/versionOperation";
 import { isSuggestConfigured, suggestVersion } from "../../services/versionSuggest";
@@ -29,7 +29,7 @@ export interface VersionFormProps {
   afterSave?: (version: { name: string; comment: string }) => Promise<void>;
   onDone?: () => void;
   onCancel?: () => void;
-  /** Shows the Comment field. Off until Draftline stores version comments. */
+  /** Shows the optional Comment field, saved as the version's commit body. */
   showComment?: boolean;
   /** Focus the name whenever this changes. */
   focusRequest?: number;
@@ -41,7 +41,7 @@ export function VersionForm({
   afterSave,
   onDone,
   onCancel,
-  showComment = false,
+  showComment = true,
   focusRequest,
 }: VersionFormProps) {
   const saveVersion = useVersioningStore((s) => s.saveVersion);
@@ -78,7 +78,7 @@ export function VersionForm({
     try {
       const saved = await runVersionOperation("Save version", async (summary) => {
         if (summary.documents.length === 0) return false;
-        await saveVersion(normalizeVersionName(fields.name));
+        await saveVersion(versionMessage(fields.name, fields.comment));
         return true;
       });
       if (!saved) {

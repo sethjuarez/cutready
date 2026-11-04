@@ -14,6 +14,13 @@ export function normalizeVersionName(name: string): string {
   return name.trim();
 }
 
+/** The saved message: the name, then a blank line and the comment when there is one. */
+export function versionMessage(name: string, comment = ""): string {
+  const trimmedComment = comment.trim();
+  const trimmedName = normalizeVersionName(name);
+  return trimmedComment ? `${trimmedName}\n\n${trimmedComment}` : trimmedName;
+}
+
 /** Trims and shortens text to a valid version name (used for suggestions). */
 export function clampVersionName(name: string): string {
   const firstLine = name.split(/\r?\n/, 1)[0].trim();

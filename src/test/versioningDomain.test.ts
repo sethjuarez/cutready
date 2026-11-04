@@ -14,6 +14,7 @@ import {
   parseSuggestion,
   sendGate,
   sendGateLabel,
+  versionMessage,
   versionNameError,
 } from "../domain/versioning";
 
@@ -24,6 +25,12 @@ describe("version names", () => {
     expect(versionNameError("x".repeat(MAX_VERSION_NAME + 1))).toMatch(/72/);
     expect(versionNameError(`  ${"x".repeat(MAX_VERSION_NAME)}  `)).toBeNull();
     expect(normalizeVersionName(`  ${"x".repeat(MAX_VERSION_NAME)}  `)).toHaveLength(MAX_VERSION_NAME);
+  });
+
+  it("saves a comment as the message body under the name", () => {
+    expect(versionMessage("  Tighten intro ", "  Cut the second demo.\n")).toBe("Tighten intro\n\nCut the second demo.");
+    expect(versionMessage("Tighten intro", "   ")).toBe("Tighten intro");
+    expect(versionMessage("Tighten intro")).toBe("Tighten intro");
   });
 
   it("counts code points, not UTF-16 units", () => {

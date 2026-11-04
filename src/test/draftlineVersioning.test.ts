@@ -152,6 +152,15 @@ describe("draftlineVersioning", () => {
     });
   });
 
+  it("carries a version's comment alongside its name", async () => {
+    mockInvoke.mockResolvedValueOnce(diagnostics({
+      versions: [{ ...version("abc", "Tighten intro", 1_700_000_000), comment: "Cut the second demo." } as ReturnType<typeof version>],
+    }));
+
+    const [entry] = await listDraftlineVersions();
+    expect(entry).toMatchObject({ message: "Tighten intro", comment: "Cut the second demo." });
+  });
+
   it("maps Draftline change kinds onto existing diff entries", async () => {
     mockInvoke
       .mockResolvedValueOnce(diagnostics({

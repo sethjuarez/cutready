@@ -39,10 +39,15 @@ export function RecentVersions({ onNavigate }: { onNavigate: () => void }) {
                   void openSnapshotPreview(node.id);
                 }}
                 className="flex w-full min-w-0 items-baseline gap-2 rounded-control px-1.5 py-1 text-left hover:bg-fill-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]"
-                title={`Preview “${node.message}”`}
+                title={node.comment ? `Preview “${node.message.split(/\r?\n/, 1)[0]}”\n\n${node.comment}` : `Preview “${node.message}”`}
                 aria-label={`Preview version: ${node.message.split(/\r?\n/, 1)[0]}`}
               >
-                <span className="min-w-0 flex-1 truncate text-xs text-[rgb(var(--color-text))]">{node.message.split(/\r?\n/, 1)[0]}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs text-[rgb(var(--color-text))]">{node.message.split(/\r?\n/, 1)[0]}</span>
+                  {node.comment && (
+                    <span className="block truncate text-2xs text-[rgb(var(--color-text-secondary))]" data-testid="recent-version-comment">{node.comment}</span>
+                  )}
+                </span>
                 <span className="shrink-0 text-2xs text-[rgb(var(--color-text-secondary))]">{formatRelativeDate(node.timestamp)}</span>
               </button>
             </li>

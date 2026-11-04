@@ -320,7 +320,7 @@ describe("appStore remote sync status", () => {
 
     await useSyncStore.getState().pushToRemote();
 
-    expect(useSyncStore.getState().sendForReviewPrompt).toEqual({ defaultTitle: "Tighten intro narration" });
+    expect(useSyncStore.getState().sendForReviewPrompt).toEqual({ defaultTitle: "Tighten intro narration", defaultBody: "" });
     expect(mockPublishDraftlineChanges).not.toHaveBeenCalled();
     expect(mockSendForReview).not.toHaveBeenCalled();
     expect(checkLargeFiles).not.toHaveBeenCalled();
@@ -471,7 +471,7 @@ describe("appStore remote sync status", () => {
     await useSyncStore.getState().publishTimeline();
 
     expect(mockPublishDraftlineChanges).not.toHaveBeenCalled();
-    expect(useSyncStore.getState().sendForReviewPrompt).toEqual({ defaultTitle: "Tighten intro narration" });
+    expect(useSyncStore.getState().sendForReviewPrompt).toEqual({ defaultTitle: "Tighten intro narration", defaultBody: "" });
   });
 
   it("routes a hybrid shareChanges through the Send for review prompt without a branch link", async () => {
@@ -490,7 +490,7 @@ describe("appStore remote sync status", () => {
     await useSyncStore.getState().shareChanges();
 
     expect(mockPublishDraftlineChanges).not.toHaveBeenCalled();
-    expect(useSyncStore.getState().sendForReviewPrompt).toEqual({ defaultTitle: "Tighten intro narration" });
+    expect(useSyncStore.getState().sendForReviewPrompt).toEqual({ defaultTitle: "Tighten intro narration", defaultBody: "" });
     expect(useSyncStore.getState().shareUrl).toBeNull();
   });
 

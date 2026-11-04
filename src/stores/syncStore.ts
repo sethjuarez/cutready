@@ -65,7 +65,7 @@ export interface SyncState {
   /** Share/PR URL for the latest successful share operation. */
   shareUrl: string | null;
   /** Hybrid projects: pending "Send for review" prompt (pull request title). */
-  sendForReviewPrompt: { defaultTitle: string } | null;
+  sendForReviewPrompt: { defaultTitle: string; defaultBody?: string } | null;
 }
 
 export interface SyncActions {
@@ -214,6 +214,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
       set({
         sendForReviewPrompt: {
           defaultTitle: versioning().versions[0]?.message?.trim() || `Update ${project.name}`,
+          defaultBody: versioning().versions[0]?.comment ?? "",
         },
       });
       return;

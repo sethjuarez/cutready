@@ -6,6 +6,7 @@ import { PromptDialog } from "./PromptDialog";
 import { generateSnapshotName } from "../utils/snapshotName";
 import { useContributorIdentity } from "../hooks/useContributorIdentity";
 import { formatIdentity, setContributorIdentity } from "../services/identity";
+import { versionMessage } from "../domain/versioning";
 
 const noticeTextClass = "flex items-start gap-2 text-xs leading-relaxed text-[rgb(var(--color-text-secondary))]";
 const noticeIconClass = "mt-0.5 h-3.5 w-3.5 shrink-0 text-[rgb(var(--color-accent))]";
@@ -27,6 +28,7 @@ export function SnapshotDialog() {
 
   const [label, setLabel] = useState("");
   const [forkLabel, setForkLabel] = useState("");
+  const [comment, setComment] = useState("");
   const [saving, setSaving] = useState(false);
   const { identity, setIdentity, error: identityError, loading: identityLoading } = useContributorIdentity(snapshotPromptOpen);
   const [authorNameDraft, setAuthorName] = useState<string | null>(null);
@@ -57,6 +59,7 @@ export function SnapshotDialog() {
     });
     setLabel("");
     setForkLabel("");
+    setComment("");
     setAuthorName(null);
     setAuthorEmail("");
     setSaving(false);
@@ -79,7 +82,7 @@ export function SnapshotDialog() {
       }
     }
     try {
-      await saveVersion(name, isRewound ? forkLabel.trim() : undefined);
+      await saveVersion(versionMessage(name, comment), isRewound ? forkLabel.trim() : undefined);
       await loadGraphData();
       await loadTimelines();
       // If we were saving before navigating to another snapshot, navigate now
@@ -98,7 +101,7 @@ export function SnapshotDialog() {
       useToastStore.getState().show(`Snapshot failed: ${errorMessage(err)}`, 5000, "error");
       setSaving(false);
     }
-  }, [label, forkLabel, isRewound, identityReady, needsIdentity, authorName, authorEmail, setIdentity, saveVersion, loadGraphData, loadTimelines, pendingNavAfterSave, pendingActionAfterSave, navigateToSnapshot, close]);
+  }, [label, comment, forkLabel, isRewound, identityReady, needsIdentity, authorName, authorEmail, setIdentity, saveVersion, loadGraphData, loadTimelines, pendingNavAfterSave, pendingActionAfterSave, navigateToSnapshot, close]);
 
   if (!snapshotPromptOpen) return null;
 
@@ -159,6 +162,13 @@ export function SnapshotDialog() {
           value: label,
           onChange: setLabel,
           placeholder: "e.g. Added intro sketch, refined transitions...",
+        },
+        {
+          id: "snapshot-comment-input",
+          label: "Comment (optional)",
+          value: comment,
+          onChange: setComment,
+          placeholder: "Why, or what to look at",
         },
         ...(willFork ? [{
           id: "snapshot-fork-label-input",

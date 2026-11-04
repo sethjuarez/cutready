@@ -111,6 +111,8 @@ export interface StoryboardSummary {
 export interface VersionEntry {
   id: string;
   message: string;
+  /** Optional comment saved under the name (the commit body). */
+  comment?: string;
   timestamp: string;
   summary: string;
 }
@@ -128,6 +130,8 @@ export interface TimelineInfo {
 export interface GraphNode {
   id: string;
   message: string;
+  /** Optional comment saved under the name (the commit body). */
+  comment?: string;
   timestamp: string;
   timeline: string;
   parents: string[];

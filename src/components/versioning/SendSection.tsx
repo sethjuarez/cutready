@@ -10,7 +10,7 @@ import { firstParentTimelineNodes } from "../../utils/timelineNodes";
 import { VersionForm } from "./VersionForm";
 
 /** Send, gated: "Up to date" when there's nothing new, and a version first when there are unsaved changes. */
-export function SendSection({ showComment = false }: { showComment?: boolean }) {
+export function SendSection({ showComment = true }: { showComment?: boolean }) {
   const currentRemote = useSyncStore((s) => s.currentRemote);
   const syncStatus = useSyncStore((s) => s.syncStatus);
   const isSyncing = useSyncStore((s) => s.isSyncing);
@@ -88,5 +88,5 @@ export function SendSection({ showComment = false }: { showComment?: boolean }) 
 
 function latestVersion(): { name: string; comment: string } {
   const [head] = firstParentTimelineNodes(useVersioningStore.getState().graphNodes);
-  return { name: head?.message.split(/\r?\n/, 1)[0] || "CutReady changes", comment: "" };
+  return { name: head?.message.split(/\r?\n/, 1)[0] || "CutReady changes", comment: head?.comment ?? "" };
 }
