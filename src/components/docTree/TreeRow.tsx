@@ -3,6 +3,13 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useChatStore } from "../../stores/chatStore";
 import { NavIcon, type NavIconName } from "../navIcons";
+import { contentTypeTone } from "../../utils/contentTypeTheme";
+
+/** The content-type tone for a row kind (promoted chats use the chat tone), or undefined to stay neutral. */
+export function treeRowTone(kind: string): string | undefined {
+  const type = kind === "chat" ? "chat-artifact" : kind;
+  return contentTypeTone(type) ? type : undefined;
+}
 
 export interface TreeRowProps {
   label: string;
@@ -89,7 +96,7 @@ export function TreeRow({
         }}
         onKeyDown={handleKeyDown}
       >
-        <span className="ico"><NavIcon name={icon} size={16} /></span>
+        <span className="ico" data-tone={treeRowTone(kind)}><NavIcon name={icon} size={16} /></span>
         {renaming ? renameInput : <span className="lbl">{label}</span>}
         {meta && !renaming && <span className="meta">{meta}</span>}
       </div>

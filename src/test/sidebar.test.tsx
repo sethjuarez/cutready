@@ -14,7 +14,7 @@ vi.mock("../components/UpdateAvailableButton", () => ({ UpdateAvailableButton: (
 
 import { initials, Sidebar } from "../components/Sidebar";
 import { invoke } from "../services/tauri";
-import { TreeRow } from "../components/docTree/TreeRow";
+import { TreeRow, treeRowTone } from "../components/docTree/TreeRow";
 import { useExitChatFocusOnNavigate } from "../hooks/useExitChatFocusOnNavigate";
 import { useAppStore } from "../stores/appStore";
 import { useChatStore } from "../stores/chatStore";
@@ -218,5 +218,13 @@ describe("navigating while chat focus is on", () => {
 
     act(() => useAppStore.setState({ view: "home" }));
     expect(useChatStore.getState().chatFocusMode).toBe(false);
+  });
+  it("tints document row icons by content type and leaves the label alone", () => {
+    expect(["storyboard", "sketch", "note", "chat", "media", "history"].map(treeRowTone))
+      .toEqual(["storyboard", "sketch", "note", "chat-artifact", undefined, undefined]);
+    render(<TreeRow label="Intro" icon="sketch" kind="sketch" selected onOpen={() => {}} testId="tinted" />);
+    const row = screen.getByTestId("tinted");
+    expect(row.querySelector(".ico")).toHaveAttribute("data-tone", "sketch");
+    expect(row.querySelector(".lbl")).not.toHaveAttribute("data-tone");
   });
 });

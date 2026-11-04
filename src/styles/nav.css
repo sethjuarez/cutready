@@ -70,8 +70,14 @@
   height: 20px;
   color: var(--nav-muted);
 }
-.cr-nav-list > .cr-nv.sel .ico,
-.cr-nav-list > .contents > .cr-nv.sel .ico { color: rgb(var(--color-text)); }
+/* Document rows tint only their icon by content type; the label keeps the text color. */
+.cr-nv .ico[data-tone="storyboard"] { color: rgb(var(--color-content-storyboard)); }
+.cr-nv .ico[data-tone="sketch"] { color: rgb(var(--color-content-sketch)); }
+.cr-nv .ico[data-tone="note"] { color: rgb(var(--color-content-note)); }
+.cr-nv .ico[data-tone="chat-artifact"] { color: rgb(var(--color-content-chat)); }
+.cr-nv:disabled .ico[data-tone] { color: var(--nav-disabled); }
+.cr-nav-list > .cr-nv.sel .ico:not([data-tone]),
+.cr-nav-list > .contents > .cr-nv.sel .ico:not([data-tone]) { color: rgb(var(--color-text)); }
 .cr-nv .lbl { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .cr-nv .count {
   flex: none;
