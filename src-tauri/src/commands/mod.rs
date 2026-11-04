@@ -30,6 +30,7 @@ pub mod sketch;
 #[allow(clippy::result_large_err)]
 pub mod storyboard;
 pub mod terminal;
+pub mod version_saves;
 pub mod video_import;
 
 /// The typed error envelope commands return (ADR 0003): `command_failed` with

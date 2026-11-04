@@ -43,34 +43,8 @@ const CUTREADY_INCLUDED_PATHS: &[&str] = &[
 ];
 const CUTREADY_LARGE_FILE_THRESHOLD_BYTES: u64 = 50 * 1024 * 1024;
 
-/// Branch namespace CutReady owns inside a developer's code repository. Only
-/// applied to hybrid projects so standalone projects keep their existing variations.
-pub const CUTREADY_VARIATION_NAMESPACE: &str = "cutready/";
-
-/// Prefix a user-supplied variation name with CutReady's namespace when the
-/// project is hybrid and the name isn't already namespaced.
-pub fn namespaced_variation_name(hybrid: bool, name: &str) -> String {
-    let trimmed = name.trim();
-    if !hybrid || trimmed.starts_with(CUTREADY_VARIATION_NAMESPACE) {
-        return name.to_string();
-    }
-    format!("{CUTREADY_VARIATION_NAMESPACE}{trimmed}")
-}
-
-/// Longest version name a person can save. Mirrors `MAX_VERSION_NAME` in the frontend.
-pub const MAX_VERSION_NAME: usize = 72;
-
-/// The trimmed name to save, or why a user-entered version name is invalid.
-pub fn validate_version_name(name: &str) -> Result<String, String> {
-    let trimmed = name.trim();
-    if trimmed.is_empty() {
-        return Err("Name the version".into());
-    }
-    if trimmed.chars().count() > MAX_VERSION_NAME {
-        return Err(format!("Keep it to {MAX_VERSION_NAME} characters or fewer"));
-    }
-    Ok(trimmed.to_string())
-}
+pub mod naming;
+pub use naming::{namespaced_variation_name, CUTREADY_VARIATION_NAMESPACE};
 
 /// CutReady-facing facade over a Draftline workspace.
 pub struct CutReadyDraftlineAdapter {
@@ -796,19 +770,6 @@ fn covered(scope: &[PathBuf], path: &Path) -> bool {
 mod tests {
     use super::*;
     use cutready_core::testing::MemoryLock;
-
-    #[test]
-    fn version_names_are_required_and_at_most_72_characters() {
-        assert_eq!(
-            validate_version_name("  Tighten intro  "),
-            Ok("Tighten intro".into())
-        );
-        assert!(validate_version_name("   ").is_err());
-        assert!(validate_version_name(&"x".repeat(MAX_VERSION_NAME)).is_ok());
-        assert!(validate_version_name(&"x".repeat(MAX_VERSION_NAME + 1)).is_err());
-        // Counts characters, not bytes.
-        assert!(validate_version_name(&"🎬".repeat(MAX_VERSION_NAME)).is_ok());
-    }
 
     fn write(path: impl AsRef<Path>, contents: &str) {
         if let Some(parent) = path.as_ref().parent() {

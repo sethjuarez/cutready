@@ -264,7 +264,7 @@ fn context_for_workspace(
 }
 
 /// Context for commands that record a new version under the acting contributor.
-fn context_for_commit(
+pub(super) fn context_for_commit(
     workspace_path: &Path,
     app: AppHandle,
 ) -> contract::TauriCommandResult<contract::DraftlineCommandContext<'static>> {
@@ -274,23 +274,12 @@ fn context_for_commit(
         .map_err(context_error)
 }
 
-fn context_error(message: String) -> contract::TauriCommandError {
+pub(super) fn context_error(message: String) -> contract::TauriCommandError {
     contract::TauriCommandError {
         code: "cutready_context_error".into(),
         message,
         details: None,
     }
-}
-
-/// User-entered version names are required and at most 72 characters.
-fn version_name(label: &str) -> Result<String, contract::TauriCommandError> {
-    cutready_versioning::validate_version_name(label).map_err(|message| {
-        contract::TauriCommandError {
-            code: "invalid_version_name".into(),
-            message,
-            details: None,
-        }
-    })
 }
 
 #[auditaur_command(skip_all)]
@@ -518,7 +507,7 @@ pub async fn switch_variation(
         // Draftline's SaveFirst commits under git config, so save with the acting
         // user's profile here. A clean workspace saves nothing and needs no author.
         DraftlineSwitchPolicyInput::SaveFirst { label } => {
-            let label = cutready_versioning::validate_version_name(&label)?;
+            let label = cutready_versioning::naming::validate_version_name(&label)?;
             let preflight = adapter
                 .preflight_switch_variation(&request.variation_id)
                 .map_err(|error| error.to_string())?;
@@ -620,17 +609,6 @@ pub async fn preview_workspace_file(
     contract::into_tauri_result(contract::preview_workspace_file_with_context(
         &context, request,
     ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn save(
-    mut request: contract::SaveRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<contract::SaveResult> {
-    request.label = version_name(&request.label)?;
-    let _guard = write_lock::lock(&request.workspace_path).map_err(context_error)?;
-    let mut context = context_for_commit(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::save_with_context(&mut context, request))
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -828,17 +806,6 @@ pub async fn delete_shelf(
     let _guard = write_lock::lock(&request.workspace_path).map_err(context_error)?;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::delete_shelf_with_context(&mut context, request))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn selected_save(
-    mut request: contract::SelectedSaveRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<contract::SelectedSaveResult> {
-    request.label = version_name(&request.label)?;
-    let _guard = write_lock::lock(&request.workspace_path).map_err(context_error)?;
-    let mut context = context_for_commit(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::selected_save_with_context(&mut context, request))
 }
 
 #[auditaur_command(skip_all)]
