@@ -44,7 +44,7 @@
         { "click": { "testId": "titlebar-sync-status" } },
         { "click": { "testId": "changes-summary-toggle" }, "timeoutMs": 15000 },
         { "click": { "role": "button", "name": "View diff: plan.md" } },
-        { "expect": { "text": "plan.md (diff)" }, "toBeVisible": true },
+        { "expect": { "text": "plan (diff)" }, "toBeVisible": true },
         { "expect": { "text": "Venue." }, "toBeVisible": true },
         { "expectNoErrors": true }
       ]
@@ -93,9 +93,9 @@
         { "type": { "label": "Note content" }, "value": " Timeline." },
         { "name": "the timeline edit is on disk", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Timeline."] },
         { "press": "ControlOrMeta+s" },
-        { "fill": "#snapshot-name-input", "value": "Timeline added" },
-        { "click": { "role": "button", "name": "Save Snapshot", "exact": true } },
-        { "expect": "#snapshot-name-input", "toHaveCount": 0, "timeoutMs": 30000 },
+        { "fill": { "testId": "version-name-input" }, "value": "Timeline added", "timeoutMs": 15000 },
+        { "click": { "testId": "version-save" } },
+        { "expect": { "testId": "version-name-input" }, "toHaveCount": 0, "timeoutMs": 30000 },
         { "name": "the snapshot is the latest commit", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["log", "-1", "--format=%s"], "stdout": "Timeline added" },
         { "expectNoErrors": true }
       ]
@@ -152,7 +152,7 @@
         { "name": "the unsaved edit is on disk", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Shelved thought."] },
         { "click": { "testId": "titlebar-variation" } },
         { "click": { "role": "button", "name": "Switch to timeline alt-intro" } },
-        { "click": { "role": "button", "name": "Set aside & switch", "exact": true } },
+        { "click": { "testId": "pre-action-set-aside" }, "timeoutMs": 15000 },
         { "expectIpc": "selected_shelve", "status": "ok", "timeoutMs": 15000 },
         { "expectIpc": "switch_variation", "status": "ok", "timeoutMs": 15000 },
         { "name": "the shelved edit left the workspace", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "lacks:Shelved thought."] },
@@ -187,7 +187,7 @@
         { "name": "the unsaved edit is on disk", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Throwaway."] },
         { "click": { "testId": "titlebar-variation" } },
         { "click": { "role": "button", "name": "Switch to timeline main" } },
-        { "click": { "role": "button", "name": "Set aside & switch", "exact": true } },
+        { "click": { "testId": "pre-action-set-aside" }, "timeoutMs": 15000 },
         { "expect": { "text": "Delete the empty timeline too?" }, "toBeVisible": true, "timeoutMs": 15000 },
         { "click": { "role": "button", "name": "Delete timeline", "exact": true } },
         { "expectIpc": "delete_variation", "status": "ok", "timeoutMs": 15000 },

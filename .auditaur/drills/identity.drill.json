@@ -50,7 +50,7 @@
       ]
     },
     {
-      "name": "snapshot dialog saves as the profile",
+      "name": "saving a version uses the profile",
       "steps": [
         { "name": "save a profile first", "click": { "testId": "activity-settings" } },
         { "expect": { "testId": "settings-tab-profile" }, "toBeVisible": true },
@@ -61,10 +61,10 @@
         { "expect": { "testId": "profile-current" }, "toContainText": "Drill Profile <profile@drill.test>" },
         { "click": { "testId": "settings-close" } },
         { "press": "ControlOrMeta+s" },
-        { "expect": { "testId": "snapshot-identity" }, "toContainText": "Saving as Drill Profile <profile@drill.test>", "timeoutMs": 15000 },
-        { "expect": "#snapshot-author-email-input", "toHaveCount": 0 },
-        { "click": { "role": "button", "name": "Save Snapshot" } },
-        { "expect": { "testId": "snapshot-identity" }, "toHaveCount": 0, "timeoutMs": 30000 },
+        { "fill": { "testId": "version-name-input" }, "value": "Profile save", "timeoutMs": 15000 },
+        { "expect": { "testId": "version-identity" }, "toHaveCount": 0 },
+        { "click": { "testId": "version-save" } },
+        { "expect": { "testId": "version-name-input" }, "toHaveCount": 0, "timeoutMs": 30000 },
         { "name": "snapshot is authored by the profile", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["log", "-1", "--format=%an <%ae>"], "stdout": "Drill Profile <profile@drill.test>" },
         { "expectNoTelemetry": { "pattern": "Drill Env|env@drill\\.test|Drill Profile|profile@drill\\.test" }, "name": "identity stays out of telemetry (history IPC results redact author and saved_by)" },
         { "expectIpc": { "pattern": "^(get|set|clear)_contributor_identity$" }, "not": true, "name": "identity commands are sensitive (no IPC spans)" }
