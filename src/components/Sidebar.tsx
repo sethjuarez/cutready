@@ -2,29 +2,21 @@ import { useEffect, useRef, useState, type ReactNode, type UIEvent } from "react
 import type { AppView } from "../stores/appStore";
 import { useAppStore } from "../stores/appStore";
 import { useChatStore } from "../stores/chatStore";
-import { useVersioningStore } from "../stores/versioningStore";
-import { panelOwner, type NavId } from "../utils/navigation";
-import { NavIcon, type NavIconName } from "./navIcons";
+import { panelOwner } from "../utils/navigation";
+import { useMediaLibraryLoader, useUnusedMediaCount } from "../hooks/useMediaLibrary";
+import { NavIcon } from "./navIcons";
 import { UpdateAvailableButton } from "./UpdateAvailableButton";
 import { getContributorIdentity, type ResolvedIdentity } from "../services/identity";
-
-const panelRows: { id: Exclude<NavId, "project" | "chat">; label: string; icon: NavIconName }[] = [
-  { id: "assets", label: "Assets", icon: "assets" },
-  { id: "narrations", label: "Narrations", icon: "mic" },
-  { id: "changes", label: "Changes", icon: "changes" },
-];
 
 interface SidebarProps {
   onFeedback?: () => void;
   /** Opens Settings at the Profile tab (identity). */
   onProfile?: () => void;
-  onChatToggle?: () => void;
-  chatActive?: boolean;
   /** False collapses the sidebar to a zero-width track. */
   expanded?: boolean;
   /** Document sections (Storyboards, Sketches, Notes), shown while a project is open. */
   documents?: ReactNode;
-  /** Assets, Narrations or Changes list, nested under the row that owns it. */
+  /** The Changes list, shown above the documents. */
   panel?: ReactNode;
   /** View whose panel is shown; defaults to the current view (differs while Settings is open). */
   panelView?: AppView;
@@ -35,12 +27,10 @@ interface SidebarProps {
 
 const rowClass = (...names: (string | false | undefined)[]) => ["cr-nv", ...names].filter(Boolean).join(" ");
 
-/** Left sidebar, modelled on the GitHub Copilot app: top rows, collapsible sections, footer. */
+/** Left sidebar: Home, the authored documents, then the Library, over an identity footer. */
 export function Sidebar({
   onFeedback,
   onProfile,
-  onChatToggle,
-  chatActive = false,
   expanded = true,
   documents,
   panel,
@@ -51,10 +41,11 @@ export function Sidebar({
   const view = useAppStore((s) => s.view);
   const setView = useAppStore((s) => s.setView);
   const currentProject = useAppStore((s) => s.currentProject);
-  const changedFilesCount = useVersioningStore((s) => s.changedFiles.length);
   const owner = panelOwner(panelView ?? view);
-  const count = changedFilesCount > 0 ? (changedFilesCount > 99 ? "99+" : String(changedFilesCount)) : null;
   const scrollRef = useRef<HTMLDivElement>(null);
+  useMediaLibraryLoader();
+  const unusedMedia = useUnusedMediaCount();
+  const mediaSelected = owner === "media";
 
   // Navigating anywhere leaves chat focus mode so its overlay never covers the destination.
   const go = (target: AppView) => {
@@ -117,49 +108,51 @@ export function Sidebar({
                 <span className="ico"><NavIcon name="home" size={16} /></span>
                 <span className="lbl">Home</span>
               </button>
-
-              {panelRows.map((row) => {
-                const ownsPanel = expanded && owner === row.id && panel != null;
-                const rowCount = row.id === "changes" ? count : null;
-                return (
-                  <div key={row.id} className="contents">
-                    <button
-                      type="button"
-                      onClick={() => go(row.id)}
-                      disabled={!currentProject}
-                      className={rowClass(view === row.id && "sel")}
-                      title={rowCount ? `${row.label} · ${rowCount} unsaved` : undefined}
-                      aria-label={rowCount ? `${row.label}, ${rowCount} unsaved` : row.label}
-                      aria-current={view === row.id ? "page" : undefined}
-                      aria-expanded={ownsPanel}
-                      data-testid={`activity-${row.id}`}
-                    >
-                      <span className="ico"><NavIcon name={row.icon} size={16} /></span>
-                      <span className="lbl">{row.label}</span>
-                      {rowCount && <span className="count" aria-hidden="true">{rowCount}</span>}
-                    </button>
-                    {ownsPanel && (
-                      <div className="cr-nav-panel" data-testid="nav-panel">
-                        {panel}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              <button
-                type="button"
-                onClick={() => onChatToggle?.()}
-                className={rowClass(chatActive && "sel")}
-                aria-pressed={chatActive}
-                data-testid="activity-chat"
-              >
-                <span className="ico"><NavIcon name="sparkle" size={16} /></span>
-                <span className="lbl">Chat</span>
-              </button>
             </div>
 
+            {expanded && owner === "changes" && panel != null && (
+              <div className="cr-sec cr-sec-first" data-testid="nav-changes">
+                <div className="cr-sec-h">
+                  <span className="cr-sec-title">Changes</span>
+                  <span className="cr-sec-acts cr-sec-acts-on">
+                    <button type="button" className="cr-mini" title="Close changes" aria-label="Close changes" onClick={() => go("project")}>
+                      <NavIcon name="close" size={16} />
+                    </button>
+                  </span>
+                </div>
+                <div className="cr-nav-panel" data-testid="nav-panel">{panel}</div>
+              </div>
+            )}
+
             {documents}
+
+            {currentProject && (
+              <>
+                <div className="cr-nav-div" role="separator" />
+                <div className="cr-sec cr-sec-first" role="group" aria-labelledby="nav-library-label" data-testid="nav-library">
+                  <div className="cr-sec-h">
+                    <span id="nav-library-label" className="cr-sec-title">Library</span>
+                  </div>
+                  <div className="cr-nav-list">
+                    <button
+                      type="button"
+                      onClick={() => go("assets")}
+                      className={rowClass(mediaSelected && "sel")}
+                      aria-current={mediaSelected ? "page" : undefined}
+                      data-testid="activity-media"
+                    >
+                      <span className="ico"><NavIcon name="assets" size={16} /></span>
+                      <span className="lbl">Media</span>
+                      {unusedMedia > 0 && (
+                        <span className="count" title={`${unusedMedia} unused`} aria-label={`${unusedMedia} unused`} data-testid="media-unused-count">
+                          {unusedMedia}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
 

@@ -42,6 +42,7 @@ import {
 } from "../utils/providerConfig";
 import { Dialog } from "./Dialog";
 import type { NoteSummary, SketchSummary, StoryboardSummary } from "../types/sketch";
+import { sketchUsage, usageLabel } from "../utils/navigation";
 
 interface VideoImportProgress {
   phase: string;
@@ -394,7 +395,6 @@ export function StoryboardList() {
   const deleteNote = useAppStore((s) => s.deleteNote);
   const deleteChatArtifact = useAppStore((s) => s.deleteChatArtifact);
   const closeStoryboard = useAppStore((s) => s.closeStoryboard);
-  const storeStoryboardPath = useAppStore((s) => s.activeStoryboardPath);
   const sidebarOrder = useAppStore((s) => s.sidebarOrder);
   const saveSidebarOrder = useAppStore((s) => s.saveSidebarOrder);
   const projects = useAppStore((s) => s.projects);
@@ -416,7 +416,6 @@ export function StoryboardList() {
   const [newSkTitle, setNewSkTitle] = useState("");
   const [isCreatingNote, setIsCreatingNote] = useState(false);
   const [newNoteTitle, setNewNoteTitle] = useState("");
-  const [collapsedStoryboards, setCollapsedStoryboards] = useState<Set<string>>(() => new Set());
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => new Set());
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [drmConfirm, setDrmConfirm] = useState<{ resolve: (ok: boolean) => void } | null>(null);
@@ -1123,21 +1122,7 @@ export function StoryboardList() {
     };
 
   const isRenaming = (path: string) => renamingItem?.path === path;
-  const sketchByPath = new Map(orderedSketches.map((sk) => [sk.path, sk]));
-  // Every sketch is listed under Sketches, which carries its testid and actions. Storyboard
-  // leaves are shortcuts; the active sketch is highlighted in both places.
-  const selectedLeafStoryboard = activeSketchPath
-    ? (storeStoryboardPath && membership.get(storeStoryboardPath)?.includes(activeSketchPath)
-        ? storeStoryboardPath
-        : orderedStoryboards.find((sb) => membership.get(sb.path)?.includes(activeSketchPath))?.path ?? null)
-    : null;
-  const toggleStoryboard = (path: string) =>
-    setCollapsedStoryboards((current) => {
-      const next = new Set(current);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      return next;
-    });
+  const usage = sketchUsage(membership);
 
   const sectionOpen = (id: string) => !collapsedSections.has(id);
   const setSectionOpen = (id: string, open: boolean) =>
@@ -1183,49 +1168,22 @@ export function StoryboardList() {
       {orderedStoryboards.length === 0 && !isCreatingSb && <div className="cr-tempty">No storyboards yet</div>}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd("storyboards")}>
         <SortableContext items={orderedStoryboards.map((sb) => sb.path)} strategy={verticalListSortingStrategy}>
-          {orderedStoryboards.map((sb) => {
-            const expanded = !collapsedStoryboards.has(sb.path);
-            const leaves = (membership.get(sb.path) ?? []).filter((path) => sketchByPath.has(path));
-            return (
-              <div key={sb.path}>
-                <SortableTreeRow
-                  id={sb.path}
-                  depth="tv"
-                  icon="clapper"
-                  label={sb.title}
-                  kind="storyboard"
-                  selected={sb.path === activeStoryboardPath}
-                  expanded={leaves.length > 0 ? expanded : undefined}
-                  onToggle={leaves.length > 0 ? () => toggleStoryboard(sb.path) : undefined}
-                  onOpen={() => openStoryboard(sb.path)}
-                  onRename={() => startRename("storyboard", sb.path)}
-                  onDelete={() => requestDelete("storyboard", sb.path, sb.title)}
-                  onContextMenu={openContextMenu("storyboard", sb.path, sb.title)}
-                  renameInput={isRenaming(sb.path) ? renameInput("Rename storyboard file") : undefined}
-                  testId={`explorer-item-${sb.path}`}
-                />
-                {expanded && leaves.length > 0 && (
-                  <div className="cr-tkids">
-                    {leaves.map((path) => {
-                      const sk = sketchByPath.get(path)!;
-                      return (
-                        <TreeRow
-                          key={path}
-                          depth="leaf"
-                          label={sk.title}
-                          icon="sketch"
-                          kind="sketch"
-                          selected={path === activeSketchPath && sb.path === selectedLeafStoryboard}
-                          onOpen={() => void handleOpenSketchStandalone(path)}
-                          onContextMenu={openContextMenu("sketch", path, sk.title)}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {orderedStoryboards.map((sb) => (
+            <SortableTreeRow
+              key={sb.path}
+              id={sb.path}
+              icon="clapper"
+              label={sb.title}
+              kind="storyboard"
+              selected={sb.path === activeStoryboardPath}
+              onOpen={() => openStoryboard(sb.path)}
+              onRename={() => startRename("storyboard", sb.path)}
+              onDelete={() => requestDelete("storyboard", sb.path, sb.title)}
+              onContextMenu={openContextMenu("storyboard", sb.path, sb.title)}
+              renameInput={isRenaming(sb.path) ? renameInput("Rename storyboard file") : undefined}
+              testId={`explorer-item-${sb.path}`}
+            />
+          ))}
         </SortableContext>
       </DndContext>
 
@@ -1254,11 +1212,11 @@ export function StoryboardList() {
             <SortableTreeRow
               key={sk.path}
               id={sk.path}
-              depth="note"
               icon="sketch"
               label={sk.title}
               kind="sketch"
               selected={sk.path === activeSketchPath}
+              meta={usageLabel(usage.get(sk.path) ?? 0)}
               onOpen={() => void handleOpenSketchStandalone(sk.path)}
               onRename={() => startRename("sketch", sk.path)}
               onDelete={() => requestDelete("sketch", sk.path, sk.title)}
@@ -1295,7 +1253,6 @@ export function StoryboardList() {
             <SortableTreeRow
               key={note.path}
               id={note.path}
-              depth="note"
               icon="note"
               label={note.title}
               kind="note"
@@ -1321,7 +1278,6 @@ export function StoryboardList() {
           {chatArtifacts.map((artifact) => (
             <TreeRow
               key={artifact.path}
-              depth="note"
               icon="chat"
               label={artifact.title}
               kind="chat"

@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../services/tauri", () => ({
@@ -64,19 +64,21 @@ describe("Documents tree", () => {
     expect(screen.getAllByRole("button", { name: "Rename Falcon Checkout" })).toHaveLength(1);
   });
 
-  it("nests storyboard sketches as leaves and highlights the active sketch in both places", () => {
+  it("keeps the sidebar flat: no nested sketch rows under storyboards", () => {
     render(<StoryboardList />);
-    const current = screen.getAllByRole("button", { name: /Falcon Checkout/ }).filter((row) => row.getAttribute("aria-current") === "page");
-    expect(current).toHaveLength(2);
-    expect(current.some((row) => row.classList.contains("leaf"))).toBe(true);
-    expect(screen.getByTestId("explorer-item-checkout.sk")).toHaveAttribute("aria-current", "page");
+    expect(screen.getAllByTitle("Falcon Checkout")).toEqual([screen.getByTestId("explorer-item-checkout.sk")]);
+    expect(screen.getByTestId("explorer-item-tour.sb")).not.toHaveAttribute("aria-expanded");
   });
 
-  it("opens a sketch from its storyboard leaf", () => {
+  it("highlights exactly one row, the active document", () => {
     render(<StoryboardList />);
-    const tree = screen.getByRole("group", { name: "Documents" });
-    const leaf = within(tree).getAllByTitle("Aurora Onboarding").find((row) => row.classList.contains("leaf"))!;
-    fireEvent.click(leaf);
+    const current = screen.getAllByRole("button").filter((row) => row.getAttribute("aria-current") === "page");
+    expect(current).toEqual([screen.getByTestId("explorer-item-checkout.sk")]);
+  });
+
+  it("opens a sketch from the Sketches section", () => {
+    render(<StoryboardList />);
+    fireEvent.click(screen.getByTestId("explorer-item-intro.sk"));
     expect(openSketch).toHaveBeenCalledWith("intro.sk");
   });
 
