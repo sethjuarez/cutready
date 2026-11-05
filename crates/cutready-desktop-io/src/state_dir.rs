@@ -62,11 +62,18 @@ pub fn hybrid_git_root(root: &Path) -> Option<PathBuf> {
     Some(work_tree.to_path_buf())
 }
 
+/// Whether `path` is a real git directory, not just a folder named `.git`.
+/// A stray `.git` holding only CutReady state (an old bug wrote one into
+/// hybrid project folders) has no `HEAD`, so it must not count as a repository.
+pub fn is_git_dir(path: &Path) -> bool {
+    path.join("HEAD").is_file() && (path.join("objects").is_dir() || path.join("commondir").is_file())
+}
+
 /// For a CutReady folder without its own `.git` directory, find the enclosing
 /// repository's git dir (per-worktree for linked worktrees) and the folder's path
 /// relative to the work tree. `None` keeps the standalone `<root>/.git` layout.
 pub fn enclosing_git_dir(repo_root: &Path) -> Option<(PathBuf, PathBuf)> {
-    if repo_root.join(".git").is_dir() {
+    if is_git_dir(&repo_root.join(".git")) {
         return None;
     }
     let repo = git2::Repository::discover(repo_root).ok()?;

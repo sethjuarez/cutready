@@ -136,12 +136,9 @@ impl AgentHarness for PromptyHarness {
         let host = self.host.clone();
 
         #[cfg(debug_assertions)]
-        prompty::tracing::PromptyTracer::register(
-            repo_root
-                .join(".git")
-                .join("cutready")
-                .join("prompty-traces"),
-        );
+        if let Some(dir) = host.trace_dir(&repo_root, &project_root) {
+            prompty::tracing::PromptyTracer::register(dir);
+        }
 
         // Translate the CutReady-owned tool contract and provider config into a
         // Prompty model. This is the boundary where `prompty::*` types begin.

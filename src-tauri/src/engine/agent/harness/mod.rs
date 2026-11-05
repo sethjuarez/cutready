@@ -95,6 +95,18 @@ fn execute_in_run(
 /// dependency.
 pub(crate) struct AppPromptyHost;
 
+/// Prompty traces live in the project's local state dir, inside whichever git
+/// dir holds the project. Never `<repo_root>/.git`: in a hybrid project that
+/// would create a nested `.git` that hides the folder from the enclosing repo.
+/// `None` when no repository holds the project yet.
+fn prompty_trace_dir(
+    repo_root: &std::path::Path,
+    project_root: &std::path::Path,
+) -> Option<std::path::PathBuf> {
+    crate::engine::project::folder_git_location(repo_root)?;
+    Some(crate::engine::project::git_state_dir(repo_root, project_root).join("prompty-traces"))
+}
+
 impl harness_prompty::PromptyHost for AppPromptyHost {
     fn all_tools(
         &self,
@@ -143,6 +155,14 @@ impl harness_prompty::PromptyHost for AppPromptyHost {
             content_type: reference.content_type,
         })
         .collect()
+    }
+
+    fn trace_dir(
+        &self,
+        repo_root: &std::path::Path,
+        project_root: &std::path::Path,
+    ) -> Option<std::path::PathBuf> {
+        prompty_trace_dir(repo_root, project_root)
     }
 }
 
@@ -351,6 +371,24 @@ mod tests {
 
     fn registry() -> HarnessRegistry {
         HarnessRegistry::new(prompty::PromptySteering::new())
+    }
+
+    #[test]
+    fn prompty_traces_never_create_a_git_dir_in_a_hybrid_folder() {
+        let tmp = tempfile::tempdir().unwrap();
+        let code = tmp.path().join("code");
+        git2::Repository::init(&code).unwrap();
+        let folder = code.join("cutready");
+        std::fs::create_dir_all(&folder).unwrap();
+        let git_dir = std::fs::canonicalize(code.join(".git")).unwrap();
+
+        let dir = prompty_trace_dir(&folder, &folder.join("alaska")).unwrap();
+        assert!(dir.starts_with(&git_dir), "{}", dir.display());
+        assert!(!folder.join(".git").exists());
+
+        let loose = tmp.path().join("loose");
+        std::fs::create_dir_all(&loose).unwrap();
+        assert_eq!(prompty_trace_dir(&loose, &loose), None);
     }
 
     #[test]
