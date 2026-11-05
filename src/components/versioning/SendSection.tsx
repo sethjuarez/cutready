@@ -58,7 +58,7 @@ export function SendSection({ showComment = true }: { showComment?: boolean }) {
   return (
     <div className="border-t border-[rgb(var(--color-border-subtle))] px-3 py-2">
       {confirmingSave ? (
-        <div>
+        <div data-testid="send-save-first">
           <p className="text-xs text-[rgb(var(--color-text))]">Save these changes as a version before sending.</p>
           <VersionForm
             submitLabel={sendGateLabel({ kind: "save-first", toSend: gate.toSend, enabled: true }, sendLabel)}
