@@ -1,24 +1,42 @@
 // Typed wrappers for workspace folder helpers used by the home screen, and for importing files.
 import { Channel, invoke } from "../services/tauri";
 import type { buildProviderConfig } from "../utils/providerConfig";
+import type { ClonedRepository, CloneProgressEvent, InitProjectInRepositoryResult } from "@draftline/client";
 
 export const workspaceIpc = {
   /** The parent folder last used to create, clone or open a workspace, if any. */
   lastParentFolder: () => invoke<string | null>("get_last_parent_folder"),
   /** Clones `url` into `dest`; resolves to the folder Draftline opened (the managed folder in a hybrid repo). */
   cloneFromUrl: (url: string, dest: string) => invoke<string>("clone_from_url", { url, dest }),
-  /** Clones without claiming the repo; `managedFolder` is set when the repo already has a `.draftline` marker. */
-  cloneRepositoryForProject: (url: string, dest: string) =>
-    invoke<ClonedRepository>("clone_repository_for_project", { url, dest }),
-  /** The path of a new folder `name` inside `root`; rejects with `file_exists` if it is taken. */
-  reserveProjectFolder: (root: string, name: string) =>
-    invoke<string>("reserve_project_folder", { root, name }),
+  /** Clones without claiming the repo; `project_path` is set when the repo already has a project. */
+  cloneRepositoryForProject: (request: CloneRequest, onProgress: (event: CloneProgressEvent) => void) => {
+    const channel = new Channel<CloneProgressEvent>();
+    channel.onmessage = onProgress;
+    return invoke<ClonedRepositoryResult>("clone_repository_for_project", {
+      url: request.url,
+      dest: request.dest,
+      branch: request.branch ?? null,
+      blobless: request.blobless,
+      onProgress: channel,
+    });
+  },
+  /** Creates CutReady folder `name` inside `parent` and records it in `.draftline`; commits nothing. */
+  createProjectInRepository: (parent: string, name: string, baseBranch: string | null = null) =>
+    invoke<InitProjectInRepositoryResult>("init_project_in_repository_for_project", { parent, name, baseBranch }),
 };
 
-export interface ClonedRepository {
-  root: string;
-  managedFolder: string | null;
+export interface CloneRequest {
+  url: string;
+  dest: string;
+  branch?: string | null;
+  /** Skip old file contents; servers that can't do this send everything. */
+  blobless: boolean;
 }
+
+export type ClonedRepositoryResult = ClonedRepository & {
+  /** True when the checkout skipped old file contents. */
+  is_partial_clone: boolean;
+};
 
 export type ImportConflict = "overwrite" | "rename";
 

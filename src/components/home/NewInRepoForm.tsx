@@ -3,12 +3,20 @@ import { useState } from "react";
 import { FolderOpen } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useToastStore } from "../../stores/toastStore";
-import { workspaceIpc, type ClonedRepository } from "../../ipc/workspace";
-import { cloneErrorView, repoNameFromUrl, startProjectInRepository, type CloneErrorView } from "../../services/repoClone";
+import type { CloneProgressEvent } from "@draftline/client";
+import { workspaceIpc, type ClonedRepositoryResult } from "../../ipc/workspace";
+import {
+  cloneErrorView,
+  repoNameFromUrl,
+  projectFolderName,
+  RepoProjectError,
+  startProjectInRepository,
+  type CloneErrorView,
+} from "../../services/repoClone";
+import { CloneProgressBar } from "./CloneProgressBar";
 import {
   CloneErrorNotice,
   fieldClass,
-  folderSlug,
   formCard,
   joinPath,
   primaryButton,
@@ -32,42 +40,57 @@ export function NewInRepoForm({ chooseFolder, onClose }: { chooseFolder: ChooseF
   const [source, setSource] = useState("");
   const [parent, setParent] = useState<string | null>(null);
   const [name, setName] = useState("cutready");
+  const [blobless, setBlobless] = useState(false);
   const [busy, setBusy] = useState<"cloning" | "creating" | null>(null);
+  const [progress, setProgress] = useState<CloneProgressEvent | null>(null);
   const [error, setError] = useState<CloneErrorView | null>(null);
   // Kept after a clone so a taken folder name can be changed without downloading again.
-  const [cloned, setCloned] = useState<{ key: string; repository: ClonedRepository } | null>(null);
+  const [cloned, setCloned] = useState<{ key: string; repository: ClonedRepositoryResult; created?: string } | null>(null);
 
   const trimmed = source.trim();
-  const slug = folderSlug(name);
+  const slug = projectFolderName(name);
   const dest = parent && trimmed ? joinPath(parent, repoNameFromUrl(trimmed)) : null;
-  const cloneKey = `${trimmed}\n${dest}`;
+  const cloneKey = `${trimmed}\n${dest}\n${blobless}`;
+  // Set once the CutReady folder exists; a retry only reopens it.
+  const created = cloned?.key === cloneKey ? cloned.created : undefined;
 
   const pickParent = async () => {
     const picked = await chooseFolder("Choose where to download the repository");
     if (picked) setParent(picked);
   };
 
+  const download = async (url: string, to: string): Promise<ClonedRepositoryResult> => {
+    setBusy("cloning");
+    setProgress(null);
+    const repository = await workspaceIpc.cloneRepositoryForProject({ url, dest: to, blobless }, setProgress);
+    setCloned({ key: cloneKey, repository });
+    if (blobless && !repository.is_partial_clone) {
+      useToastStore.getState().show("CutReady downloaded a full clone instead, so older versions are available.", 6000, "info");
+    }
+    return repository;
+  };
+
   const start = async () => {
     if (!dest || !slug || busy) return;
     setError(null);
     try {
-      let repository = cloned?.key === cloneKey ? cloned.repository : null;
-      if (!repository) {
-        setBusy("cloning");
-        repository = await workspaceIpc.cloneRepositoryForProject(trimmed, dest);
-        setCloned({ key: cloneKey, repository });
-      }
+      const repository = cloned?.key === cloneKey ? cloned.repository : await download(trimmed, dest);
       setBusy("creating");
       const result = await startProjectInRepository(
         {
-          reserveFolder: workspaceIpc.reserveProjectFolder,
-          createProject: (folder) => confirmOpened(folder, useAppStore.getState().createProject),
+          initProject: async (root, folderName) => {
+            const { workspace_path } = await workspaceIpc.createProjectInRepository(root, folderName);
+            // A retry after a failed open reopens this folder instead of creating another.
+            setCloned({ key: cloneKey, repository: { ...repository, project_path: workspace_path }, created: workspace_path });
+            return workspace_path;
+          },
           openProject: (folder) => confirmOpened(folder, useAppStore.getState().openProject),
+          openCreated: (folder) => confirmOpened(folder, useAppStore.getState().createProject),
         },
         repository,
-        slug,
+        name.trim(),
       );
-      if (result.kind === "opened-existing") {
+      if (result.kind === "opened-existing" && result.folder !== created) {
         useToastStore.getState().show(
           `This repository already has a CutReady project, so it opened ${result.folder}.`,
           6000,
@@ -77,7 +100,7 @@ export function NewInRepoForm({ chooseFolder, onClose }: { chooseFolder: ChooseF
       onClose();
     } catch (err) {
       console.error("New in existing repo failed:", err);
-      setError(cloneErrorView(err));
+      setError(err instanceof RepoProjectError ? cloneErrorView(err.error, err.phase) : cloneErrorView(err));
     } finally {
       setBusy(null);
     }
@@ -102,8 +125,24 @@ export function NewInRepoForm({ chooseFolder, onClose }: { chooseFolder: ChooseF
         className={`${fieldClass} w-full`}
       />
       <p className="mt-1.5 text-xs text-[rgb(var(--color-text-secondary))]">
-        Downloads the whole repository, including its history.
+        {blobless
+          ? "Downloads the current files and the list of versions, but not the contents of older file versions."
+          : "Downloads the whole repository, including its history."}
       </p>
+      <label className="mt-2 flex items-start gap-2 text-xs">
+        <input
+          type="checkbox"
+          checked={blobless}
+          onChange={(e) => setBlobless(e.target.checked)}
+          className="mt-0.5"
+        />
+        <span>
+          Skip old file versions (faster download)
+          <span className="block text-[rgb(var(--color-text-secondary))]">
+            Older versions may not preview or compare.
+          </span>
+        </span>
+      </label>
 
       <div className="mt-3 text-sm font-medium" id="home-repo-parent-label">Download to</div>
       <div className="mt-2 flex items-center gap-2">
@@ -128,9 +167,14 @@ export function NewInRepoForm({ chooseFolder, onClose }: { chooseFolder: ChooseF
         value={name}
         onChange={(e) => setName(e.target.value)}
         onKeyDown={onKeyDown}
+        disabled={created !== undefined}
         className={`${fieldClass} w-full`}
       />
-      {slug && (
+      {created ? (
+        <div className="mt-2 text-xs text-[rgb(var(--color-text-secondary))]">
+          Created: <span className="font-mono text-[rgb(var(--color-text))]">{created}</span>
+        </div>
+      ) : slug && (
         <div className="mt-2 text-xs text-[rgb(var(--color-text-secondary))]">
           CutReady folder: <span className="font-mono text-[rgb(var(--color-text))]">{dest ? joinPath(dest, slug) : slug}</span>
         </div>
@@ -139,9 +183,10 @@ export function NewInRepoForm({ chooseFolder, onClose }: { chooseFolder: ChooseF
       <div className="mt-4 flex justify-end gap-2">
         <button onClick={onClose} className={subtleButton}>Cancel</button>
         <button onClick={() => void start()} disabled={!dest || !slug || busy !== null} className={primaryButton}>
-          {busy === "cloning" ? "Downloading…" : busy === "creating" ? "Creating…" : cloned?.key === cloneKey ? "Create workspace" : "Download & create"}
+          {busy === "cloning" ? "Downloading…" : busy === "creating" ? "Creating…" : created ? "Retry opening" : cloned?.key === cloneKey ? "Create workspace" : "Download & create"}
         </button>
       </div>
+      {busy === "cloning" && <CloneProgressBar progress={progress} />}
       <CloneErrorNotice error={error} />
     </div>
   );

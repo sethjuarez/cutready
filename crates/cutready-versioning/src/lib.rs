@@ -45,7 +45,7 @@ const CUTREADY_LARGE_FILE_THRESHOLD_BYTES: u64 = 50 * 1024 * 1024;
 
 pub mod naming;
 mod remote_credentials;
-pub mod repo_clone;
+pub mod repository;
 mod restore;
 mod sync;
 pub use naming::{namespaced_variation_name, CUTREADY_VARIATION_NAMESPACE};

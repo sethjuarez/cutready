@@ -704,7 +704,7 @@ pub fn run() {
             commands::draftline::merge_incoming_with_resolutions,
             commands::repo_clone::clone_from_url,
             commands::repo_clone::clone_repository_for_project,
-            commands::repo_clone::reserve_project_folder,
+            commands::repo_clone::init_project_in_repository_for_project,
             commands::interaction::detect_browser_profiles,
             commands::interaction::check_browsers_running,
             commands::interaction::prepare_browser,

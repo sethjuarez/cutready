@@ -1,22 +1,24 @@
 //! Commands that download a repository to start or open a CutReady project.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use cutready_contracts::model::{CmdErrorCode, CmdErrorDetails};
+use draftline::tauri_contract as contract;
+use draftline::{ClonedRepository, DraftlineError};
+use serde::Serialize;
+use tauri::ipc::Channel;
 use tauri_plugin_auditaur::auditaur_command;
 
-use crate::commands::draftline::reject_remote_url_credentials;
+use crate::commands::draftline::{reject_remote_url_credentials, resolve_remote_credential};
 use crate::commands::github::github_credential_token;
 use crate::commands::CmdError;
-use crate::engine::draftline_adapter::repo_clone::{
-    clone_repository, ClonedRepository, RepoCloneError,
-};
+use crate::engine::draftline_adapter::repository::{is_partial_clone, remote_failure};
 use crate::engine::draftline_adapter::{
-    cutready_remote_options, is_github_remote_url, CutReadyDraftlineAdapter,
+    cutready_content_policy, cutready_remote_options, is_github_remote_url,
+    CutReadyDraftlineAdapter, CUTREADY_VARIATION_NAMESPACE,
 };
 
 /// The GitHub token to offer `url`'s remote, when it is a GitHub remote.
-fn github_token_for(url: &str) -> Option<String> {
+pub(crate) fn github_token_for(url: &str) -> Option<String> {
     let credential = is_github_remote_url(url)
         .then(github_credential_token)
         .flatten()?;
@@ -56,84 +58,124 @@ fn opened_folder(adapter: &CutReadyDraftlineAdapter) -> String {
         .into_owned()
 }
 
+/// A finished clone, and whether Git skipped old file contents.
+#[derive(Debug, Serialize)]
+pub struct ClonedRepositoryResult {
+    #[serde(flatten)]
+    pub repository: ClonedRepository,
+    pub is_partial_clone: bool,
+}
+
 /// Downloads `url` into `dest` without starting a project, so the caller can
-/// create a CutReady folder inside it. Reports the folder an existing
-/// `.draftline` marker manages, which the caller should open instead.
-#[auditaur_command(skip_all, err)]
+/// create a CutReady folder inside it. `project_path` is set when the
+/// repository already has a project, which the caller should open instead.
+#[auditaur_command(skip_all)]
 pub async fn clone_repository_for_project(
     url: String,
     dest: String,
-) -> Result<ClonedRepository, CmdError> {
-    reject_remote_url_credentials(&url)?;
-    let token = github_token_for(&url);
+    branch: Option<String>,
+    blobless: bool,
+    on_progress: Channel<contract::CloneProgressEvent>,
+) -> contract::TauriCommandResult<ClonedRepositoryResult> {
+    reject_remote_url_credentials(&url).map_err(|message| failed("invalid_remote_url", message))?;
     let dest = PathBuf::from(dest);
-    tauri::async_runtime::spawn_blocking(move || clone_repository(&url, &dest, token))
-        .await
-        .map_err(|error| CmdError::failed(error.to_string()))?
-        .map_err(clone_error)
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut context = repository_context()?.with_clone_progress_sink(move |event| {
+            let _ = on_progress.send(event);
+        });
+        let repository = contract::clone_repository_with_context(
+            &mut context,
+            contract::CloneRepositoryRequest {
+                remote_url: url,
+                workspace_path: dest.clone(),
+                branch: branch.filter(|branch| !branch.trim().is_empty()),
+                progress_id: None,
+                blobless,
+            },
+        )
+        .map_err(|error| repository_error(error, &dest))?;
+        let is_partial_clone = repository
+            .inspection
+            .root
+            .as_deref()
+            .is_some_and(is_partial_clone);
+        Ok(ClonedRepositoryResult {
+            repository,
+            is_partial_clone,
+        })
+    })
+    .await
+    .map_err(|error| failed("failed", error.to_string()))?
 }
 
-fn clone_error(error: RepoCloneError) -> CmdError {
-    let path = match &error {
-        RepoCloneError::DestinationNotEmpty(path) => Some(display(path)),
+/// Creates the CutReady folder `name` inside `parent` (a folder in a Git
+/// checkout) and records it in the repository's `.draftline` marker. Nothing
+/// is committed. Open the returned `workspace_path`.
+#[auditaur_command(skip_all)]
+pub async fn init_project_in_repository_for_project(
+    parent: String,
+    name: String,
+    base_branch: Option<String>,
+) -> contract::TauriCommandResult<contract::InitProjectInRepositoryResult> {
+    let parent = PathBuf::from(parent);
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut context = repository_context()?;
+        contract::init_project_in_repository_with_context(
+            &mut context,
+            contract::InitProjectInRepositoryRequest {
+                parent_path: parent.clone(),
+                name,
+                base_branch: base_branch.filter(|branch| !branch.trim().is_empty()),
+                commit_template: None,
+            },
+        )
+        .map_err(|error| repository_error(error, &parent))
+    })
+    .await
+    .map_err(|error| failed("failed", error.to_string()))?
+}
+
+/// Policy and credentials for working with a repository CutReady doesn't
+/// manage yet. Variations stay under `cutready/`, as in every hybrid project.
+fn repository_context(
+) -> contract::TauriCommandResult<contract::DraftlineCommandContext<'static>> {
+    let policy = cutready_content_policy().map_err(|error| failed("failed", error.to_string()))?;
+    contract::DraftlineCommandContext::new()
+        .with_content_policy(policy)
+        .with_credentials(resolve_remote_credential)
+        .with_variation_namespace(CUTREADY_VARIATION_NAMESPACE)
+        .map_err(contract::TauriCommandError::from)
+}
+
+/// Draftline's error, with a code the UI can explain for failed sign-ins and
+/// unreachable remotes, and the folder for `folder_not_empty`.
+fn repository_error(error: DraftlineError, folder: &std::path::Path) -> contract::TauriCommandError {
+    let failure = remote_failure(&error);
+    let folder_not_empty = match &error {
+        DraftlineError::FolderNotEmpty(path) => Some(path.clone()),
         _ => None,
     };
-    CmdError {
-        code: CmdErrorCode::Other(error.code().to_string()),
-        message: error.to_string(),
-        details: path.map(|path| CmdErrorDetails {
-            path: Some(path),
-            ..Default::default()
-        }),
+    let mut command_error = contract::TauriCommandError::from(error);
+    if let Some(failure) = failure {
+        command_error.code = failure.code().to_string();
     }
-}
-
-fn display(path: &Path) -> String {
-    path.to_string_lossy().into_owned()
-}
-
-/// The path of a new CutReady folder `name` directly inside the checkout at
-/// `root`. Refuses with `file_exists` when it is already there, so a new
-/// project never takes over a folder of code.
-#[auditaur_command(skip_all, err)]
-pub fn reserve_project_folder(root: String, name: String) -> Result<String, CmdError> {
-    reserve_folder(Path::new(&root), &name)
-}
-
-fn reserve_folder(root: &Path, name: &str) -> Result<String, CmdError> {
-    let folder = new_folder_path(root, name)?;
-    if folder.exists() {
-        return Err(CmdError::file_exists(&display(&folder)));
+    if let Some(path) = folder_not_empty {
+        let path = if path.as_os_str().is_empty() {
+            folder.to_path_buf()
+        } else {
+            path
+        };
+        command_error.details = Some(serde_json::json!({ "path": path }));
     }
-    Ok(display(&folder))
+    command_error
 }
 
-fn new_folder_path(root: &Path, name: &str) -> Result<PathBuf, CmdError> {
-    let name = name.trim();
-    if !is_plain_folder_name(name) {
-        return Err(CmdError::failed(format!(
-            "\"{name}\" can't be used as a folder name"
-        )));
+fn failed(code: &str, message: impl Into<String>) -> contract::TauriCommandError {
+    contract::TauriCommandError {
+        code: code.to_string(),
+        message: message.into(),
+        details: None,
     }
-    Ok(root.join(name))
-}
-
-/// A single folder name that works on every OS and isn't one CutReady or Git owns.
-fn is_plain_folder_name(name: &str) -> bool {
-    const RESERVED: [&str; 5] = [".", "..", ".git", ".cutready", ".draftline"];
-    let lower = name.to_ascii_lowercase();
-    let stem = lower.split('.').next().unwrap_or_default();
-    let windows_device = matches!(stem, "con" | "prn" | "aux" | "nul")
-        || ((stem.starts_with("com") || stem.starts_with("lpt"))
-            && stem.len() == 4
-            && stem.as_bytes()[3].is_ascii_digit()
-            && stem.as_bytes()[3] != b'0');
-    !name.is_empty()
-        && !RESERVED.contains(&lower.as_str())
-        && !windows_device
-        && !name.ends_with(['.', ' '])
-        && !name.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|'])
-        && !name.chars().any(char::is_control)
 }
 
 #[cfg(test)]
@@ -141,37 +183,59 @@ mod tests {
     use super::*;
 
     #[test]
-    fn clone_errors_keep_their_codes() {
-        let error = clone_error(RepoCloneError::DestinationNotEmpty(PathBuf::from("x")));
-        assert_eq!(
-            error.code,
-            CmdErrorCode::Other("destination_not_empty".into())
+    fn repository_errors_keep_codes_ui_can_explain() {
+        let folder = std::path::Path::new("dest");
+        let busy = repository_error(DraftlineError::FolderNotEmpty("dest/demo".into()), folder);
+        assert_eq!(busy.code, "folder_not_empty");
+        assert_eq!(busy.details.unwrap()["path"], "dest/demo");
+
+        let auth = repository_error(
+            DraftlineError::Git(git2::Error::new(
+                git2::ErrorCode::Auth,
+                git2::ErrorClass::Http,
+                "denied",
+            )),
+            folder,
         );
-        assert_eq!(error.details.unwrap().path.as_deref(), Some("x"));
-        let auth = clone_error(RepoCloneError::AuthFailed("denied".into()));
-        assert_eq!(auth.code, CmdErrorCode::Other("auth_failed".into()));
+        assert_eq!(auth.code, "auth_failed");
         assert!(auth.message.contains("denied"));
+
+        let missing = repository_error(
+            DraftlineError::NotARepository("dest".into()),
+            folder,
+        );
+        assert_eq!(missing.code, "not_a_repository");
     }
 
     #[test]
-    fn reserved_folders_must_be_new_plain_names() {
+    fn init_creates_a_hybrid_project_folder_inside_a_checkout() {
         let temp = tempfile::tempdir().unwrap();
-        let root = temp.path();
-        let path = reserve_folder(root, "demo").unwrap();
-        assert_eq!(PathBuf::from(path), temp.path().join("demo"));
+        git2::Repository::init(temp.path()).unwrap();
+        let mut context = repository_context().unwrap();
+        let result = contract::init_project_in_repository_with_context(
+            &mut context,
+            contract::InitProjectInRepositoryRequest {
+                parent_path: temp.path().to_path_buf(),
+                name: "Launch Demo".into(),
+                base_branch: Some("main".into()),
+                commit_template: None,
+            },
+        )
+        .unwrap();
+        assert!(result.workspace_path.ends_with("launch-demo"));
+        assert!(result.workspace_path.is_dir());
+        assert!(temp.path().join(".draftline").is_file());
+        assert_eq!(result.settings.base_branch.as_deref(), Some("main"));
 
-        std::fs::create_dir(temp.path().join("src")).unwrap();
-        let taken = reserve_folder(root, "src").unwrap_err();
-        assert_eq!(taken.code, CmdErrorCode::FileExists);
-
-        for bad in [
-            "", "..", ".git", "a/b", "a\\b", "c:", "demo.", "CON", "nul.txt", "com1", "LPT9.md",
-            "a?b",
-        ] {
-            assert!(reserve_folder(root, bad).is_err(), "{bad}");
-        }
-        for good in ["console", "com0", "my.demo", "lpt"] {
-            assert!(reserve_folder(root, good).is_ok(), "{good}");
-        }
+        let again = contract::init_project_in_repository_with_context(
+            &mut repository_context().unwrap(),
+            contract::InitProjectInRepositoryRequest {
+                parent_path: temp.path().to_path_buf(),
+                name: "Other".into(),
+                base_branch: None,
+                commit_template: None,
+            },
+        );
+        assert!(again.is_err());
     }
 }

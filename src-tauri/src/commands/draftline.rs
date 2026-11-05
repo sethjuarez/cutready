@@ -120,7 +120,7 @@ fn commit_profile_for(
     Ok(contributor_profile_for(author))
 }
 
-fn resolve_remote_credential(
+pub(crate) fn resolve_remote_credential(
     request: RemoteCredentialRequest<'_>,
 ) -> draftline::Result<RemoteCredential> {
     if request.allows_username_password && is_github_remote_url(request.url) {

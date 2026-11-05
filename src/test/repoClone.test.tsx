@@ -3,14 +3,15 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const ipc = vi.hoisted(() => ({
   cloneRepositoryForProject: vi.fn(),
-  reserveProjectFolder: vi.fn(),
+  createProjectInRepository: vi.fn(),
   cloneFromUrl: vi.fn(),
   lastParentFolder: vi.fn(),
 }));
 vi.mock("../ipc/workspace", () => ({ workspaceIpc: ipc }));
 
-import { cloneErrorView, repoNameFromUrl, startProjectInRepository } from "../services/repoClone";
+import { cloneErrorView, projectFolderName, repoNameFromUrl, startProjectInRepository } from "../services/repoClone";
 import { NewInRepoForm } from "../components/home/NewInRepoForm";
+import { CloneProgressBar, formatBytes, stagePercent } from "../components/home/CloneProgressBar";
 import { CloneWorkspaceForm } from "../components/home/NewWorkspaceForms";
 import { AdoptFolderDialog } from "../components/AdoptFolderDialog";
 import { useAppStore } from "../stores/appStore";
@@ -18,6 +19,21 @@ import { useToastStore } from "../stores/toastStore";
 import type { ProjectView } from "../types/project";
 
 const project = (root: string): ProjectView => ({ root, name: "demo", repo_root: root, hybrid: true });
+
+const repo = (root: string, project_path: string | null = null, is_partial_clone = false) => ({
+  location_kind: "local" as const,
+  is_repository: true,
+  root,
+  project: null,
+  current_branch: "main",
+  default_branch: "main",
+  branches: ["main"],
+  remotes: [],
+  lfs: { used: false, available: true },
+  target_folder: null,
+  project_path,
+  is_partial_clone,
+});
 
 describe("repoClone service", () => {
   it("names the clone after the repository", () => {
@@ -29,49 +45,75 @@ describe("repoClone service", () => {
     expect(repoNameFromUrl("C:\\code\\.")).toBe("repository");
   });
 
+  it("previews the folder Draftline will create", () => {
+    expect(projectFolderName("  Launch Demo! ")).toBe("launch-demo");
+    expect(projectFolderName("CON")).toBe("con-project");
+    expect(projectFolderName("é")).toBe("");
+    expect(projectFolderName(`${"a".repeat(63)} b`)).toBe("a".repeat(63));
+  });
+
   it("explains failures by code", () => {
     expect(cloneErrorView({ code: "auth_failed", message: "denied" }).kind).toBe("auth");
+    expect(cloneErrorView({ code: "github_unauthorized", message: "x" }).kind).toBe("auth");
     expect(cloneErrorView("remote said 401").kind).toBe("auth");
     expect(cloneErrorView({ code: "network_failed", message: "x" }).message).toMatch(/Couldn't reach/);
-    expect(cloneErrorView({ code: "destination_not_empty", message: "x", details: { path: "C:\\a" } }).message)
+    expect(cloneErrorView({ code: "remote_operation_timed_out", message: "x" }).message).toMatch(/stopped answering/);
+    expect(cloneErrorView({ code: "variation_not_found", message: "x" }).message).toMatch(/branch doesn't exist/);
+    expect(cloneErrorView({ code: "folder_not_empty", message: "x", details: { path: "C:\\a" } }).message)
       .toBe('"C:\\a" already has files in it. Choose another location.');
-    expect(cloneErrorView({ code: "file_exists", message: "x", details: { path: "/r/src" } }).message)
+    expect(cloneErrorView({ code: "folder_not_empty", message: "x", details: { path: "/r/src" } }, "create").message)
       .toMatch(/^"\/r\/src" already exists in the repository/);
-    expect(cloneErrorView({ code: "invalid_marker", message: "x" }).message).toMatch(/\.draftline/);
+    expect(cloneErrorView({ code: "folder_is_elsewhere", message: "x" }).message).toMatch(/already has a CutReady project/);
+    expect(cloneErrorView({ code: "invalid_folder_marker", message: "x" }).message).toMatch(/\.draftline/);
+    expect(cloneErrorView({ code: "newer_folder_marker", message: "x" }).message).toMatch(/newer CutReady/);
+    expect(cloneErrorView({ code: "git_filter_failed", message: "x" }).message).toMatch(/Git LFS/);
     expect(cloneErrorView({ code: "clone_failed", message: "git-lfs filter failed" }).message).toMatch(/Git LFS/);
     expect(cloneErrorView({ code: "clone_failed", message: "boom" })).toEqual({ kind: "generic", message: "boom" });
   });
 
-  it("opens the folder a marked repository already manages", async () => {
-    const deps = { reserveFolder: vi.fn(), createProject: vi.fn(), openProject: vi.fn() };
-    const result = await startProjectInRepository(deps, { root: "/r", managedFolder: "/r/talk" }, "cutready");
+  const deps = () => ({ initProject: vi.fn(), openProject: vi.fn(), openCreated: vi.fn() });
+
+  it("opens the project a repository already has", async () => {
+    const d = deps();
+    const result = await startProjectInRepository(d, repo("/r", "/r/talk"), "cutready");
     expect(result).toEqual({ kind: "opened-existing", folder: "/r/talk" });
-    expect(deps.openProject).toHaveBeenCalledWith("/r/talk");
-    expect(deps.reserveFolder).not.toHaveBeenCalled();
+    expect(d.openProject).toHaveBeenCalledWith("/r/talk");
+    expect(d.initProject).not.toHaveBeenCalled();
   });
 
-  it("creates a new folder in an unmarked repository", async () => {
-    const deps = {
-      reserveFolder: vi.fn().mockResolvedValue("/r/cutready"),
-      createProject: vi.fn().mockResolvedValue(undefined),
-      openProject: vi.fn(),
-    };
-    const result = await startProjectInRepository(deps, { root: "/r", managedFolder: null }, "cutready");
-    expect(deps.reserveFolder).toHaveBeenCalledWith("/r", "cutready");
-    expect(deps.createProject).toHaveBeenCalledWith("/r/cutready");
-    expect(result).toEqual({ kind: "created", folder: "/r/cutready" });
+  it("creates the project folder in a repository without one and opens the folder Draftline made", async () => {
+    const d = deps();
+    d.initProject.mockResolvedValue("/r/launch-demo");
+    const result = await startProjectInRepository(d, repo("/r"), "Launch Demo");
+    expect(d.initProject).toHaveBeenCalledWith("/r", "Launch Demo");
+    expect(d.openCreated).toHaveBeenCalledWith("/r/launch-demo");
+    expect(result).toEqual({ kind: "created", folder: "/r/launch-demo" });
   });
 
-  it("never creates a project over a folder that already exists", async () => {
-    const deps = {
-      reserveFolder: vi.fn().mockRejectedValue({ code: "file_exists", message: "taken" }),
-      createProject: vi.fn(),
-      openProject: vi.fn(),
-    };
-    await expect(startProjectInRepository(deps, { root: "/r", managedFolder: null }, "src")).rejects.toMatchObject({
-      code: "file_exists",
+  it("marks a failed init as a create-step error and opens nothing", async () => {
+    const d = deps();
+    d.initProject.mockRejectedValue({ code: "folder_not_empty", message: "taken" });
+    await expect(startProjectInRepository(d, repo("/r"), "src")).rejects.toMatchObject({
+      phase: "create",
+      error: { code: "folder_not_empty" },
     });
-    expect(deps.createProject).not.toHaveBeenCalled();
+    expect(d.openCreated).not.toHaveBeenCalled();
+  });
+});
+
+describe("CloneProgressBar", () => {
+  const event = (stage: "receiving" | "resolving" | "checking_out", completed: number, total: number, received_bytes = 0) =>
+    ({ progress_id: "p", workspace_path: "/w", stage, completed, total, received_bytes });
+
+  it("shows the stage, percent and bytes", () => {
+    render(<CloneProgressBar progress={event("receiving", 25, 100, 3 * 1024 * 1024)} />);
+    expect(screen.getByText("Downloading… · 3.0 MB")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "25");
+  });
+
+  it("has no percent while the size is unknown", () => {
+    expect(stagePercent(event("resolving", 4, 0))).toBeNull();
+    expect(formatBytes(512)).toBe("512 B");
   });
 });
 
@@ -90,60 +132,92 @@ describe("New in existing repo form", () => {
   });
   afterEach(() => useToastStore.setState({ toasts: [] }));
 
-  async function fillAndStart(name = "talk") {
+  async function fillAndStart(name = "talk", { blobless = false } = {}) {
     render(<NewInRepoForm chooseFolder={chooseFolder} onClose={onClose} />);
     fireEvent.change(screen.getByLabelText("Repository"), { target: { value: "https://github.com/org/app.git" } });
     fireEvent.click(screen.getByRole("button", { name: "Download to" }));
     await screen.findByText("/work/app");
     fireEvent.change(screen.getByLabelText("Workspace name"), { target: { value: name } });
+    if (blobless) fireEvent.click(screen.getByRole("checkbox", { name: /Skip old file versions/ }));
     fireEvent.click(screen.getByRole("button", { name: "Download & create" }));
   }
 
+  const inited = (workspace_path: string) => ({ workspace_path, settings: {}, diagnostics: {} });
+
   it("clones the repository and creates the CutReady folder in it", async () => {
-    ipc.cloneRepositoryForProject.mockResolvedValue({ root: "/work/app", managedFolder: null });
-    ipc.reserveProjectFolder.mockResolvedValue("/work/app/talk");
+    ipc.cloneRepositoryForProject.mockResolvedValue(repo("/work/app"));
+    ipc.createProjectInRepository.mockResolvedValue(inited("/work/app/talk"));
     await fillAndStart();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(ipc.cloneRepositoryForProject).toHaveBeenCalledWith("https://github.com/org/app.git", "/work/app");
+    expect(ipc.cloneRepositoryForProject).toHaveBeenCalledWith(
+      { url: "https://github.com/org/app.git", dest: "/work/app", blobless: false },
+      expect.any(Function),
+    );
+    expect(ipc.createProjectInRepository).toHaveBeenCalledWith("/work/app", "talk");
     expect(createProject).toHaveBeenCalledWith("/work/app/talk");
   });
 
+  it("shows download progress while cloning", async () => {
+    let finish: (value: unknown) => void = () => {};
+    ipc.cloneRepositoryForProject.mockImplementation((_req, onProgress) => {
+      onProgress({ progress_id: "p", workspace_path: "/work/app", stage: "receiving", completed: 1, total: 2, received_bytes: 0 });
+      return new Promise((resolve) => (finish = resolve));
+    });
+    await fillAndStart();
+    expect(await screen.findByRole("progressbar")).toHaveAttribute("aria-valuenow", "50");
+    finish(repo("/work/app", "/work/app/demo"));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("asks for a blobless clone and says when the server sent everything anyway", async () => {
+    ipc.cloneRepositoryForProject.mockResolvedValue(repo("/work/app", "/work/app/demo", false));
+    await fillAndStart("talk", { blobless: true });
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(ipc.cloneRepositoryForProject.mock.calls[0][0]).toMatchObject({ blobless: true });
+    expect(useToastStore.getState().toasts.map((t) => t.message).join(" ")).toMatch(/full clone instead/);
+  });
+
   it("opens the existing project in a marked repository and says so", async () => {
-    ipc.cloneRepositoryForProject.mockResolvedValue({ root: "/work/app", managedFolder: "/work/app/demo" });
+    ipc.cloneRepositoryForProject.mockResolvedValue(repo("/work/app", "/work/app/demo"));
     await fillAndStart();
     await waitFor(() => expect(openProject).toHaveBeenCalledWith("/work/app/demo"));
-    expect(createProject).not.toHaveBeenCalled();
+    expect(ipc.createProjectInRepository).not.toHaveBeenCalled();
     expect(useToastStore.getState().toasts[0]?.message).toMatch(/already has a CutReady project/);
   });
 
   it("asks for another name without downloading again when the folder exists", async () => {
-    ipc.cloneRepositoryForProject.mockResolvedValue({ root: "/work/app", managedFolder: null });
-    ipc.reserveProjectFolder
-      .mockRejectedValueOnce({ code: "file_exists", message: "taken", details: { path: "/work/app/src" } })
-      .mockResolvedValueOnce("/work/app/talk");
+    ipc.cloneRepositoryForProject.mockResolvedValue(repo("/work/app"));
+    ipc.createProjectInRepository
+      .mockRejectedValueOnce({ code: "folder_not_empty", message: "taken", details: { path: "/work/app/src" } })
+      .mockResolvedValueOnce(inited("/work/app/talk"));
     await fillAndStart("src");
-    expect(await screen.findByRole("alert")).toHaveTextContent('"/work/app/src" already exists');
+    expect(await screen.findByRole("alert")).toHaveTextContent('"/work/app/src" already exists in the repository');
     fireEvent.change(screen.getByLabelText("Workspace name"), { target: { value: "talk" } });
     fireEvent.click(screen.getByRole("button", { name: "Create workspace" }));
     await waitFor(() => expect(createProject).toHaveBeenCalledWith("/work/app/talk"));
     expect(ipc.cloneRepositoryForProject).toHaveBeenCalledTimes(1);
   });
 
+  it("reopens the folder it made, instead of making another, when opening failed", async () => {
+    ipc.cloneRepositoryForProject.mockResolvedValue(repo("/work/app"));
+    ipc.createProjectInRepository.mockResolvedValue(inited("/work/app/talk"));
+    createProject.mockImplementationOnce(async () => useAppStore.setState({ error: "disk full" }));
+    await fillAndStart();
+    expect(await screen.findByRole("alert")).toHaveTextContent("disk full");
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Workspace name")).toBeDisabled();
+    useAppStore.setState({ error: null });
+    fireEvent.click(screen.getByRole("button", { name: "Retry opening" }));
+    await waitFor(() => expect(openProject).toHaveBeenCalledWith("/work/app/talk"));
+    expect(ipc.createProjectInRepository).toHaveBeenCalledTimes(1);
+  });
+
   it("doesn't report success when the project didn't open", async () => {
-    ipc.cloneRepositoryForProject.mockResolvedValue({ root: "/work/app", managedFolder: "/work/app/demo" });
+    ipc.cloneRepositoryForProject.mockResolvedValue(repo("/work/app", "/work/app/demo"));
     useAppStore.setState({ currentProject: project("/elsewhere") });
     openProject.mockResolvedValue(undefined);
     await fillAndStart();
     expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't open /work/app/demo");
-    expect(onClose).not.toHaveBeenCalled();
-  });
-
-  it("shows the store's error when creating the project fails", async () => {
-    ipc.cloneRepositoryForProject.mockResolvedValue({ root: "/work/app", managedFolder: null });
-    ipc.reserveProjectFolder.mockResolvedValue("/work/app/talk");
-    createProject.mockImplementation(async () => useAppStore.setState({ error: "disk full" }));
-    await fillAndStart();
-    expect(await screen.findByRole("alert")).toHaveTextContent("disk full");
     expect(onClose).not.toHaveBeenCalled();
   });
 
@@ -154,7 +228,6 @@ describe("New in existing repo form", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 });
-
 describe("Clone form", () => {
   it("opens the folder the clone reports, such as a hybrid repo's CutReady folder", async () => {
     const openProject = vi.fn();
