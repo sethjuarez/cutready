@@ -26,8 +26,8 @@ import {
   type WorkspaceGraphNode,
   type WorkspaceGraphRef,
 } from "@draftline/client";
-import { invoke as rawInvoke, listen } from "./tauri";
-import { gateWorkspaceWrites } from "./workspaceWriteGate";
+import { invoke, listen } from "./tauri";
+import { draftlineIpc } from "../ipc/draftline";
 import { DraftlineVariationCreateConflictError, variationCreatePreflightFromError } from "./draftlineVariationConflict";
 import { incomingVersions, type IncomingVersion } from "../domain/versioning/mergeSuggest";
 import type { BaseStatus, ConflictFile, DiffEntry, GraphNode, IncomingCommit, RemoteBranchInfo, RemoteInfo, SyncStatus, TimelineInfo, VersionEntry } from "../types/sketch";
@@ -90,7 +90,6 @@ let draftlineWorkspacePath: string | null = null;
 let cachedFacade: DraftlineHostFacade | null = null;
 let cachedFacadePath: string | null = null;
 
-const invoke = gateWorkspaceWrites(rawInvoke);
 export const draftlineClient = createDraftlineClient({ invoke, listen });
 
 export function setDraftlineWorkspacePath(path: string | null) {
@@ -279,9 +278,7 @@ export async function deleteDraftlineVariation(variation: string): Promise<void>
   if (!draftlineWorkspacePath) {
     throw new Error("No Draftline workspace is currently open");
   }
-  await invoke("delete_variation", {
-    request: { workspace_path: draftlineWorkspacePath, variation },
-  });
+  await draftlineIpc.deleteVariation(draftlineWorkspacePath, variation);
 }
 
 export async function preflightDraftlineRenameVariation(
@@ -291,13 +288,7 @@ export async function preflightDraftlineRenameVariation(
   if (!draftlineWorkspacePath) {
     throw new Error("No Draftline workspace is currently open");
   }
-  return invoke<VariationRenamePreflight>("preflight_rename_variation", {
-    request: {
-      workspace_path: draftlineWorkspacePath,
-      source_variation_id: sourceVariationId,
-      target_variation_id: targetVariationId,
-    },
-  });
+  return draftlineIpc.preflightRenameVariation(draftlineWorkspacePath, sourceVariationId, targetVariationId);
 }
 
 export async function renameDraftlineVariation(
@@ -308,14 +299,7 @@ export async function renameDraftlineVariation(
   if (!draftlineWorkspacePath) {
     throw new Error("No Draftline workspace is currently open");
   }
-  return invoke<RenameVariationResult>("rename_variation", {
-    request: {
-      workspace_path: draftlineWorkspacePath,
-      source_variation_id: sourceVariationId,
-      target_variation_id: targetVariationId,
-      token,
-    },
-  });
+  return draftlineIpc.renameVariation(draftlineWorkspacePath, sourceVariationId, targetVariationId, token);
 }
 
 export async function preflightDraftlineSwitchVariation(variation: string): Promise<PreflightReport> {
@@ -335,9 +319,7 @@ export async function addDraftlineRemote(name: string, url: string): Promise<Rem
   if (!draftlineWorkspacePath) {
     throw new Error("No Draftline workspace is currently open");
   }
-  const remote = await invoke<{ name: string; url: string }>("add_remote", {
-    request: { workspace_path: draftlineWorkspacePath, name, url },
-  });
+  const remote = await draftlineIpc.addRemote(draftlineWorkspacePath, name, url);
   return { name: remote.name, url: remote.url };
 }
 
@@ -379,14 +361,12 @@ export interface DraftlineSendForReviewOptions {
 export async function sendForReview(
   options: DraftlineSendForReviewOptions,
 ): Promise<DraftlineSendResult> {
-  return invoke<DraftlineSendResult>("send_for_review", {
-    request: {
-      workspace_path: requireWorkspacePath(),
-      remote: options.remote,
-      title: options.title,
-      body: options.body?.trim() ? options.body : null,
-      base: options.base?.trim() ? options.base : null,
-    },
+  return draftlineIpc.sendForReview({
+    workspace_path: requireWorkspacePath(),
+    remote: options.remote,
+    title: options.title,
+    body: options.body?.trim() ? options.body : null,
+    base: options.base?.trim() ? options.base : null,
   });
 }
 
@@ -435,9 +415,7 @@ export async function mergeDraftlineIncomingWithResolutions(
 }
 
 async function readDraftlineSyncStatus(remote: string): Promise<DraftlineSyncStatusDto> {
-  return invoke<DraftlineSyncStatusDto>("get_sync_status", {
-    request: { workspace_path: requireWorkspacePath(), remote },
-  });
+  return draftlineIpc.syncStatus(requireWorkspacePath(), remote);
 }
 
 export async function getDraftlineSyncStatus(remote: string): Promise<SyncStatus> {
@@ -453,9 +431,7 @@ export async function getDraftlineSyncStatus(remote: string): Promise<SyncStatus
  * with the remote base (e.g. `main`) as of the last fetch. `null` otherwise.
  */
 export async function getDraftlineBaseStatus(remote: string): Promise<BaseStatus | null> {
-  const status = await invoke<DraftlineSyncStatusDto | null>("get_base_status", {
-    request: { workspace_path: requireWorkspacePath(), remote },
-  });
+  const status = await draftlineIpc.getBaseStatus(requireWorkspacePath(), remote);
   if (!status) return null;
   return { base: status.variation, ahead: status.ahead, behind: status.behind };
 }
@@ -559,7 +535,7 @@ export async function clearDraftlineStaleLock(): Promise<void> {
 
 /** Downloads content for files still holding a Git LFS pointer. True when anything was written. */
 export async function retryDraftlineContentDownload(): Promise<boolean> {
-  return invoke<boolean>("retry_content_download", { request: { workspace_path: requireWorkspacePath() } });
+  return draftlineIpc.retryContentDownload(requireWorkspacePath());
 }
 
 export async function discardDraftlineChanges(): Promise<void> {
@@ -610,7 +586,7 @@ export interface MoveProjectFolderResult {
 
 /** Moves the project folder to `to` (relative to the repository) as one save. */
 export async function moveDraftlineProjectFolder(to: string): Promise<MoveProjectFolderResult> {
-  return invoke<MoveProjectFolderResult>("move_project_folder", { request: { workspace_path: requireWorkspacePath(), to } });
+  return draftlineIpc.moveProjectFolder(requireWorkspacePath(), to);
 }
 
 export async function saveDraftlineVersion(label: string): Promise<string> {

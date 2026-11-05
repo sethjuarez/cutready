@@ -1,10 +1,8 @@
-import { workspaceWritesIdle } from "./workspaceWriteGate";
-
 /**
  * Coalesces bursts of workspace events into one refresh pass plus at most one
- * trailing pass, and holds each pass until no workspace write is in flight.
+ * trailing pass.
  */
-export function createCoalescedRefresh(refresh: () => Promise<void>, waitForWrites = workspaceWritesIdle) {
+export function createCoalescedRefresh(refresh: () => Promise<void>) {
   let disposed = false;
   let refreshing = false;
   let rerun = false;
@@ -18,7 +16,6 @@ export function createCoalescedRefresh(refresh: () => Promise<void>, waitForWrit
     try {
       do {
         rerun = false;
-        await waitForWrites();
         if (!disposed) await refresh();
       } while (rerun && !disposed);
     } finally {
