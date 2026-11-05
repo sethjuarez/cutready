@@ -4,6 +4,9 @@
     {
       "file": "identity.json",
       "clear": true
+    },
+    {
+      "file": "recent-projects.json"
     }
   ],
   "hybrid": {
@@ -28,5 +31,13 @@
       "path": "plan.md",
       "body": "# Launch plan\n\nDraft agenda.\n"
     }
-  ]
+  ],
+  "scratch": {
+    "notes": [
+      {
+        "path": "README.md",
+        "body": "Download destination for drills.\n"
+      }
+    ]
+  }
 }

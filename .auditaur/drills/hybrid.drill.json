@@ -1,7 +1,7 @@
 {
   "$schema": "https://auditaur.dev/schemas/drill.schema.json",
   "serial": true,
-  "description": "A hybrid project: a CutReady folder (cutready/) inside a developer's code repo, checked out on a cutready/ branch, with main shared through a local bare remote. Covers folder-scoped saves, namespaced timelines, getting updates from main with merge naming, and history.",
+  "description": "A hybrid project: a CutReady folder (cutready/) inside a developer's code repo, checked out on a cutready/ branch, with main shared through a local bare remote. Covers folder-scoped saves, namespaced timelines, getting updates from main with merge naming, and history. Downloading it from its remote: New in existing repo starts a folder (or opens the one the marker names), and Clone opens the marked folder.",
   "tags": ["@versioning", "@hybrid", "@local"],
   "env": { "GIT_AUTHOR_NAME": "Drill Author", "GIT_AUTHOR_EMAIL": "author@drill.test" },
   "setup": [
@@ -152,6 +152,67 @@
         { "click": { "testId": "history-entry-menu", "nth": 0 } },
         { "click": { "role": "menuitem", "name": "Compare with previous" } },
         { "expect": { "testId": "compare-tab" }, "toContainText": "Hybrid agenda.", "timeoutMs": 15000 },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "starts a CutReady folder in a repository downloaded from its remote",
+      "steps": [
+        { "press": "Control+Shift+P" },
+        { "fill": { "role": "combobox", "name": "Search commands" }, "value": "Go to Home" },
+        { "press": "Enter", "target": { "role": "combobox", "name": "Search commands" } },
+        { "click": { "role": "button", "name": "New", "exact": true } },
+        { "click": { "role": "menuitem", "name": "New in existing repo…" } },
+        { "fill": { "label": "Repository" }, "value": "${CUTREADY_REMOTE_URL}" },
+        { "dialog": "open", "respond": "${CUTREADY_SCRATCH}", "expectOptions": { "directory": true, "multiple": false, "title": "Choose where to download the repository" } },
+        { "click": { "role": "button", "name": "Download to" } },
+        { "fill": { "label": "Workspace name" }, "value": "talk" },
+        { "click": { "role": "button", "name": "Download & create" } },
+        { "expectIpc": "clone_repository_for_project", "status": "ok", "timeoutMs": 30000 },
+        { "expectIpc": "reserve_project_folder", "status": "ok", "timeoutMs": 15000 },
+        { "expect": { "testId": "explorer-import-menu" }, "toBeVisible": true, "timeoutMs": 30000 },
+        { "name": "the new folder sits beside the repo's code, with no claim on the root", "run": "node", "cwd": "${CUTREADY_SCRATCH}", "args": ["-e", "const fs = require('fs'), p = require('path'); const d = fs.readdirSync('.').filter((n) => n.endsWith('-remote')); if (d.length !== 1) { console.error('expected one download, found ' + fs.readdirSync('.').join(', ')); process.exit(1); } const repo = d[0]; if (!fs.existsSync(p.join(repo, 'talk')) || !fs.existsSync(p.join(repo, 'src/app.js')) || !fs.existsSync(p.join(repo, '.git'))) { console.error('missing talk/, src/app.js or .git'); process.exit(1); } const m = p.join(repo, '.draftline'); if (fs.existsSync(m) && JSON.parse(fs.readFileSync(m, 'utf8')).folder !== 'talk') { console.error('root marker claims ' + fs.readFileSync(m, 'utf8')); process.exit(1); }"] },
+        { "name": "the new folder is the open workspace", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "app-data:recent-projects.json", "/-remote[\\\\/]talk$/.test(doc.recent_projects[0].path)"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "opens the CutReady folder a downloaded repository already has",
+      "steps": [
+        { "name": "main already names a CutReady folder", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "collaborator-save", ".draftline", "{ \"format\": 1, \"folder\": \"cutready\" }\n", "Add CutReady marker"] },
+        { "press": "Control+Shift+P" },
+        { "fill": { "role": "combobox", "name": "Search commands" }, "value": "Go to Home" },
+        { "press": "Enter", "target": { "role": "combobox", "name": "Search commands" } },
+        { "click": { "role": "button", "name": "New", "exact": true } },
+        { "click": { "role": "menuitem", "name": "New in existing repo…" } },
+        { "fill": { "label": "Repository" }, "value": "${CUTREADY_REMOTE_URL}" },
+        { "dialog": "open", "respond": "${CUTREADY_SCRATCH}", "expectOptions": { "directory": true, "multiple": false, "title": "Choose where to download the repository" } },
+        { "click": { "role": "button", "name": "Download to" } },
+        { "fill": { "label": "Workspace name" }, "value": "talk" },
+        { "click": { "role": "button", "name": "Download & create" } },
+        { "expectIpc": "clone_repository_for_project", "status": "ok", "timeoutMs": 30000 },
+        { "expect": { "text": "This repository already has a CutReady project" }, "toBeVisible": true, "timeoutMs": 30000 },
+        { "expectIpc": "reserve_project_folder", "not": true },
+        { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 30000 },
+        { "name": "no second folder was made", "run": "node", "cwd": "${CUTREADY_SCRATCH}", "args": ["-e", "const fs = require('fs'), p = require('path'); const d = fs.readdirSync('.').filter((n) => n.endsWith('-remote')); if (d.length !== 1) { console.error('expected one download, found ' + fs.readdirSync('.').join(', ')); process.exit(1); } const repo = d[0]; if (fs.existsSync(p.join(repo, 'talk'))) { console.error('unexpected talk/'); process.exit(1); }"] },
+        { "name": "the repository's CutReady folder is the open workspace", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "app-data:recent-projects.json", "/-remote[\\\\/]cutready$/.test(doc.recent_projects[0].path)"] },
+        { "expectNoErrors": true }
+      ]
+    },
+    {
+      "name": "Clone opens a hybrid repository's CutReady folder, not its root",
+      "steps": [
+        { "name": "main already names a CutReady folder", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "collaborator-save", ".draftline", "{ \"format\": 1, \"folder\": \"cutready\" }\n", "Add CutReady marker"] },
+        { "press": "Control+Shift+P" },
+        { "fill": { "role": "combobox", "name": "Search commands" }, "value": "Go to Home" },
+        { "press": "Enter", "target": { "role": "combobox", "name": "Search commands" } },
+        { "click": { "role": "button", "name": "Clone", "exact": true } },
+        { "fill": { "placeholder": "https://github.com/org/repo.git" }, "value": "${CUTREADY_REMOTE_URL}" },
+        { "dialog": "open", "respond": "${CUTREADY_SCRATCH}" },
+        { "click": { "role": "button", "name": "Choose Folder & Clone" } },
+        { "expectIpc": "clone_from_url", "status": "ok", "timeoutMs": 30000 },
+        { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 30000 },
+        { "name": "the CutReady folder is the open workspace", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "app-data:recent-projects.json", "/-remote[\\\\/]cutready$/.test(doc.recent_projects[0].path)"] },
         { "expectNoErrors": true }
       ]
     }
