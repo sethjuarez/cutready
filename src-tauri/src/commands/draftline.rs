@@ -20,7 +20,7 @@ use crate::engine::draftline_adapter::{
     contributor_profile_for, cutready_content_policy, is_github_remote_url,
     namespaced_variation_name, CutReadyDraftlineAdapter, CUTREADY_VARIATION_NAMESPACE,
 };
-use crate::engine::github_pull_requests::GitHubPullRequestProvider;
+use crate::engine::github_provider::github_provider_for;
 use crate::engine::write_lock;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -951,7 +951,7 @@ pub async fn send_for_review(
                     .then(github_credential_token)
                     .flatten()
                     .map(|credential| credential.token);
-                GitHubPullRequestProvider::for_remote_url(remote_url, token)
+                github_provider_for(remote_url, token)
                     .map(|provider| Box::new(provider) as Box<dyn PullRequestProvider>)
             },
             &mut options,

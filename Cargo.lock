@@ -2188,6 +2188,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14e8ed4cb5884660c90c15ee81a46ec7eceface5177142b41e2b8e32e7ca9ccf"
 dependencies = [
  "git2",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
