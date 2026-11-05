@@ -38,7 +38,6 @@
     "src/components/SketchForm.tsx": 2933,
     "src/components/SketchVisualViews.tsx": 1304,
     "src/components/SnapshotPreviewTab.tsx": 928,
-    "src/components/StoryboardList.tsx": 1373,
     "src/components/StoryboardView.tsx": 1542,
     "src/devMock.ts": 1408,
     "src/hooks/useSettings.ts": 999,

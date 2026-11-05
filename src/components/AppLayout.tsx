@@ -24,6 +24,7 @@ import { CommandPalette } from "./CommandPalette";
 import { TitleBar } from "./TitleBar";
 import { MergeNameHost } from "./versioning/MergeNameDialog";
 import { PreActionHost } from "./versioning/PreActionDialog";
+import { ProjectImport } from "./import/ProjectImport";
 import { SendForReviewDialog } from "./SendForReviewDialog";
 import { AiApplyGateDialog } from "./AiApplyGateDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
@@ -543,6 +544,7 @@ export function AppLayout() {
       />
       <PreActionHost />
       <MergeNameHost />
+      <ProjectImport />
       <SendForReviewDialog />
       <AiApplyGateDialog />
       <KeyboardShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />

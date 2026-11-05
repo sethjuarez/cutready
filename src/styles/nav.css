@@ -184,6 +184,7 @@
   pointer-events: none;
 }
 .cr-trow:hover > .acts,
+.cr-trow[data-menu-open] > .acts,
 .cr-trow:has(:focus-visible) > .acts { opacity: 1; pointer-events: auto; }
 .cr-trow > .acts button {
   display: grid;
@@ -286,3 +287,18 @@
 .cr-nv .meta { flex: none; margin-left: auto; padding-left: 8px; font-size: 12px; line-height: 16px; color: var(--nav-muted); }
 .cr-trow:has(> .acts):hover .meta,
 .cr-trow:has(> .acts):has(:focus-visible) .meta { display: none; }
+
+/* Shown while files are dragged over the sidebar. */
+.cr-nav-drop {
+  position: absolute;
+  inset: 6px;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  border: 2px dashed rgb(var(--color-accent));
+  border-radius: 8px;
+  background: rgb(var(--color-surface) / 0.92);
+  color: rgb(var(--color-text));
+  font-weight: 500;
+  pointer-events: none;
+}
