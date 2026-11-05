@@ -104,6 +104,7 @@ describe("repoClone service", () => {
   it("explains failures by code", () => {
     expect(cloneErrorView({ code: "auth_failed", message: "denied" }).kind).toBe("auth");
     expect(cloneErrorView({ code: "github_unauthorized", message: "x" }).kind).toBe("auth");
+    expect(cloneErrorView({ code: "github_no_push_access", message: "x" }).message).toMatch(/write access, or use your own copy/);
     expect(cloneErrorView("remote said 401").kind).toBe("auth");
     expect(cloneErrorView({ code: "network_failed", message: "x" }).message).toMatch(/Couldn't reach/);
     expect(cloneErrorView({ code: "remote_operation_timed_out", message: "x" }).message).toMatch(/stopped answering/);
