@@ -48,11 +48,14 @@ export function NewInRepoForm({ chooseFolder, onClose }: { chooseFolder: ChooseF
   // Kept after a clone so a taken folder name can be changed without downloading again.
   const [cloned, setCloned] = useState<{ key: string; repository: ClonedRepositoryResult; created?: string } | null>(null);
 
-  const [target, setTarget] = useState<string | null>(null);
+  const [picked, setPicked] = useState<{ location: string; target: string } | null>(null);
 
   const trimmed = source.trim();
   const preflight = useRepoPreflight(trimmed);
   const targets = preflight.result?.targets ?? [];
+  // A choice made for one repository doesn't carry over to another.
+  const target = picked?.location === trimmed ? picked.target : null;
+  const setTarget = (value: string) => setPicked({ location: trimmed, target: value });
   // Where the new project sends its saves; null keeps the repository's default.
   const sendTo = target && targets.includes(target) ? target : targets[0] ?? null;
   const slug = projectFolderName(name);

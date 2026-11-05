@@ -82,6 +82,13 @@ describe("repoPreflight", () => {
     expect(notices.map((n) => n.tone)).toEqual(["warning", "warning"]);
     expect(notices[1].message).toMatch(/contoso\/app.*fork/);
   });
+
+  it("warns when GitHub access couldn't be checked", () => {
+    const unauthorized = repoPreflight(inspection({ github_error: { code: "github_unauthorized", message: "401" } as never }));
+    expect(unauthorized.notices).toEqual([{ tone: "warning", message: expect.stringMatching(/couldn't check.*Connect GitHub/) }]);
+    const missing = repoPreflight(inspection({ github_error: { code: "github_repository_not_found", message: "404" } as never }));
+    expect(missing.notices[0].message).toMatch(/couldn't find that repository/);
+  });
 });
 
 describe("repoClone service", () => {

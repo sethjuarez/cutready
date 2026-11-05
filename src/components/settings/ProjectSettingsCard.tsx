@@ -10,6 +10,7 @@ const blankToNull = (value: string) => (value.trim() ? value.trim() : null);
 export function ProjectSettingsCard() {
   const root = useAppStore((s) => (s.currentProject?.hybrid ? s.currentProject.root : null));
   const settings = useProjectSettings();
+  const loaded = useProjectSettingsStore((s) => s.loaded && s.root === root);
   const save = useProjectSettingsStore((s) => s.save);
   const [sendTo, setSendTo] = useState("");
   const [template, setTemplate] = useState("");
@@ -29,18 +30,19 @@ export function ProjectSettingsCard() {
   const onSave = async () => {
     setSaving(true);
     setStatus(null);
+    const stillHere = () => useAppStore.getState().currentProject?.root === root;
     try {
       await save(root, blankToNull(sendTo), blankToNull(template));
-      setStatus({ tone: "success", text: "Saved for everyone on this project." });
+      if (stillHere()) setStatus({ tone: "success", text: "Saved for everyone on this project." });
     } catch (error) {
-      setStatus({ tone: "error", text: errorMessage(error) });
+      if (stillHere()) setStatus({ tone: "error", text: errorMessage(error) });
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <fieldset className="flex flex-col gap-3" data-testid="project-settings-card">
+    <fieldset className="flex flex-col gap-3" data-testid="project-settings-card" disabled={!loaded} aria-busy={!loaded}>
       <legend className="text-sm font-medium text-[rgb(var(--color-text))]">Project</legend>
       <p className="text-xs text-[rgb(var(--color-text-secondary))]">
         These are saved with the project, so everyone who opens it uses them.

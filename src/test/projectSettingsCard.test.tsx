@@ -46,7 +46,8 @@ describe("ProjectSettingsCard", () => {
 
   it("blocks a template without {subject}", async () => {
     render(<ProjectSettingsCard />);
-    const template = await screen.findByLabelText("Save label template");
+    await waitFor(() => expect(screen.getByLabelText("Send saves to")).toHaveValue("main"));
+    const template = screen.getByLabelText("Save label template");
     fireEvent.change(template, { target: { value: "docs: " } });
     expect(template).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByText(/exactly once/)).toBeInTheDocument();
@@ -60,5 +61,31 @@ describe("ProjectSettingsCard", () => {
     fireEvent.change(screen.getByLabelText("Send saves to"), { target: { value: "release" } });
     fireEvent.click(screen.getByRole("button", { name: "Save project settings" }));
     expect(await screen.findByRole("status")).toHaveTextContent(/Git is busy/);
+  });
+
+  it("can't be edited until the recorded settings load", async () => {
+    let resolve!: (value: unknown) => void;
+    ipc.readProjectSettings.mockReturnValue(new Promise((r) => { resolve = r; }));
+    render(<ProjectSettingsCard />);
+    expect(screen.getByLabelText("Save label template")).toBeDisabled();
+    resolve({ id: "p1", base_branch: "dev", commit_template: null });
+    await waitFor(() => expect(screen.getByLabelText("Save label template")).toBeEnabled());
+    expect(screen.getByLabelText("Send saves to")).toHaveValue("dev");
+  });
+
+  it("keeps only the latest load when the project switches back and forth", async () => {
+    const other = "D:\\other\\cutready";
+    const pending: Record<string, Array<(value: unknown) => void>> = {};
+    ipc.readProjectSettings.mockImplementation((r: string) => new Promise((res) => { (pending[r] ??= []).push(res); }));
+    const store = useProjectSettingsStore.getState();
+    const first = store.load(root);
+    const second = store.load(other);
+    const third = store.load(root);
+    pending[root][1]({ id: "p1", base_branch: "new", commit_template: null });
+    await third;
+    pending[root][0]({ id: "p1", base_branch: "stale", commit_template: null });
+    pending[other][0]({ id: "p2", base_branch: "other", commit_template: null });
+    await Promise.all([first, second]);
+    expect(useProjectSettingsStore.getState()).toMatchObject({ root, loaded: true, settings: { base_branch: "new" } });
   });
 });

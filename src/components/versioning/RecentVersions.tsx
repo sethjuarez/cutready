@@ -3,10 +3,13 @@ import { formatRelativeDate } from "../../utils/relativeDate";
 import { openHistoryTab } from "../../hooks/useVersioningLifecycle";
 import { useVersioningStore } from "../../stores/versioningStore";
 import { plainVersion } from "../../domain/versioning/teamUpdates";
+import { stripLabelTemplate } from "../../domain/versioning/labelTemplate";
+import { useProjectSettings } from "../../stores/projectSettingsStore";
 
 /** The last three versions, each opening a preview, plus "Open history". */
 export function RecentVersions({ onNavigate }: { onNavigate: () => void }) {
   const graphNodes = useVersioningStore((s) => s.graphNodes);
+  const template = useProjectSettings()?.commit_template;
   const openSnapshotPreview = useVersioningStore((s) => s.openSnapshotPreview);
   const recent = firstParentTimelineNodes(graphNodes).slice(0, 3);
 
@@ -31,7 +34,7 @@ export function RecentVersions({ onNavigate }: { onNavigate: () => void }) {
       ) : (
         <ul aria-label="Recent versions">
           {recent.map((node) => {
-            const { name, comment } = plainVersion(node.message, node.comment, node.parents.length > 1);
+            const { name, comment } = plainVersion(stripLabelTemplate(node.message, template), node.comment, node.parents.length > 1);
             return (
               <li key={node.id}>
                 <button

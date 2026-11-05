@@ -1,5 +1,6 @@
 // What "New in existing repo" says about a repository before downloading it.
 import type { RepositoryInspection } from "@draftline/client";
+import { cloneErrorView } from "./repoClone";
 
 export interface RepoNotice {
   tone: "info" | "warning";
@@ -28,6 +29,12 @@ export function repoPreflight(inspection: RepositoryInspection): RepoPreflight {
     });
   }
   const github = inspection.github;
+  if (inspection.github_error) {
+    notices.push({
+      tone: "warning",
+      message: `CutReady couldn't check your GitHub access: ${cloneErrorView(inspection.github_error).message}`,
+    });
+  }
   if (github && !github.can_push) {
     const name = `${github.repository.owner}/${github.repository.repo}`;
     notices.push({
