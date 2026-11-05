@@ -1,0 +1,154 @@
+{
+  "prefix": "cutready-history-drill-",
+  "appStores": [
+    {
+      "file": "identity.json",
+      "clear": true
+    }
+  ],
+  "history": [
+    {
+      "save": "Outline drafted",
+      "files": [
+        {
+          "path": "tour.sk",
+          "json": {
+            "title": "Product tour",
+            "description": "",
+            "rows": [
+              {
+                "id": "r1",
+                "time": "0:10",
+                "narrative": "Open the app.",
+                "demo_actions": "",
+                "screenshot": null
+              },
+              {
+                "id": "r2",
+                "time": "0:10",
+                "narrative": "Show the dashboard.",
+                "demo_actions": "",
+                "screenshot": null
+              }
+            ],
+            "state": "draft",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+          }
+        },
+        {
+          "path": "keynote.sb",
+          "json": {
+            "title": "Keynote",
+            "description": "",
+            "locked": false,
+            "items": [
+              {
+                "type": "section",
+                "title": "Intro",
+                "sketches": [
+                  "tour.sk"
+                ]
+              }
+            ],
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+          }
+        },
+        {
+          "path": "screenshots/hero.png",
+          "base64": "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGO4o6GBFTEMLQkAe3tLAfuiUfAAAAAASUVORK5CYII="
+        }
+      ],
+      "notes": [
+        {
+          "path": "plan.md",
+          "body": "# Plan\n\nKeep it short.\n\nEnd on pricing.\n"
+        }
+      ]
+    },
+    {
+      "save": "Script polished\n\nTightened the narration for the keynote.",
+      "files": [
+        {
+          "path": "tour.sk",
+          "json": {
+            "title": "Product tour",
+            "description": "",
+            "rows": [
+              {
+                "id": "r1",
+                "time": "0:10",
+                "narrative": "Open the app in one click.",
+                "demo_actions": "",
+                "screenshot": null
+              },
+              {
+                "id": "r3",
+                "time": "0:10",
+                "narrative": "Wrap up with pricing.",
+                "demo_actions": "",
+                "screenshot": null
+              }
+            ],
+            "state": "draft",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+          }
+        },
+        {
+          "path": "close.sk",
+          "json": {
+            "title": "Closing",
+            "description": "",
+            "rows": [
+              {
+                "id": "c1",
+                "time": "0:10",
+                "narrative": "Thank the audience.",
+                "demo_actions": "",
+                "screenshot": null
+              }
+            ],
+            "state": "draft",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+          }
+        },
+        {
+          "path": "keynote.sb",
+          "json": {
+            "title": "Keynote",
+            "description": "",
+            "locked": false,
+            "items": [
+              {
+                "type": "section",
+                "title": "Intro",
+                "sketches": [
+                  "tour.sk"
+                ]
+              },
+              {
+                "type": "sketch_ref",
+                "path": "close.sk"
+              }
+            ],
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+          }
+        },
+        {
+          "path": "screenshots/hero.png",
+          "base64": "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGPQiLqDFTEMLQkAA8ZXgV21/8cAAAAASUVORK5CYII="
+        }
+      ],
+      "notes": [
+        {
+          "path": "plan.md",
+          "body": "# Plan\n\nKeep it short.\n\nEnd on the pricing slide.\n"
+        }
+      ]
+    }
+  ]
+}
