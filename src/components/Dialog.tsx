@@ -73,6 +73,19 @@ export function Dialog({
     return () => window.removeEventListener("keydown", handler);
   }, [isOpen, onClose, stackId]);
 
+  // Move focus into the dialog on open unless a control already took it
+  // (autoFocus), and hand it back to the opener on close.
+  useEffect(() => {
+    if (!isOpen) return;
+    const el = contentRef.current;
+    if (!el) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (!el.contains(document.activeElement)) (el.querySelector<HTMLElement>(FOCUSABLE) ?? el).focus();
+    return () => {
+      if (opener?.isConnected && (!document.activeElement || document.activeElement === document.body || el.contains(document.activeElement))) opener.focus();
+    };
+  }, [isOpen]);
+
   // Focus trap: Tab / Shift+Tab cycle within the dialog
   useEffect(() => {
     if (!isOpen) return;

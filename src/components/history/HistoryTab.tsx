@@ -7,6 +7,7 @@ import { useVersioningStore } from "../../stores/versioningStore";
 import { ErrorBoundary } from "../ErrorBoundary";
 import { HistoryTimeline } from "./HistoryTimeline";
 import { useHistoryGraph } from "./useHistoryGraph";
+import { useHistoryEntryMenu } from "./useHistoryEntryMenu";
 import { usePathHistory } from "./usePathHistory";
 
 const HistoryGraphView = lazy(() => import("./HistoryGraphView"));
@@ -49,6 +50,7 @@ export function HistoryTab() {
   }, [document, pathHistory.history, graph, hasRemote]);
   const visible = useMemo(() => searchTimeline(timeline, query), [timeline, query]);
   const preview = (id: string) => void openSnapshotPreview(id);
+  const entryMenu = useHistoryEntryMenu(document, timeline, preview);
 
   let body: React.ReactNode;
   if (error) body = <Message tone="error">Couldn't load history: {error}</Message>;
@@ -68,7 +70,7 @@ export function HistoryTab() {
       ? <div className="flex-1 overflow-y-auto"><HistoryTimeline entries={[]} onPreview={preview} path={document.path} />{empty}</div>
       : empty;
   } else if (visible.length === 0 && query.trim()) body = <Message>No versions match “{query}”.</Message>;
-  else body = <div className="flex-1 overflow-y-auto"><HistoryTimeline entries={visible} onPreview={preview} showUnsaved={!query.trim()} path={document?.path ?? null} /></div>;
+  else body = <div className="flex-1 overflow-y-auto"><HistoryTimeline entries={visible} onPreview={preview} onMenu={entryMenu.openMenu} showUnsaved={!query.trim()} path={document?.path ?? null} /></div>;
 
   return (
     <section className="flex min-h-0 flex-1 flex-col" aria-labelledby="history-tab-title" data-testid="history-tab">
@@ -123,6 +125,7 @@ export function HistoryTab() {
         </div>
       </header>
       {body}
+      {entryMenu.element}
     </section>
   );
 }

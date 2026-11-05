@@ -1,4 +1,4 @@
-import type { PathHistory, WorkspaceGraph, WorkspaceGraphNode } from "@draftline/client";
+import type { ChangeKind, PathHistory, WorkspaceGraph, WorkspaceGraphNode } from "@draftline/client";
 
 /** One version in the History tab's timeline. */
 export interface TimelineEntry {
@@ -14,6 +14,8 @@ export interface TimelineEntry {
   isCurrent: boolean;
   /** Whether a remote can reach this version; null when no remote is connected. */
   sent: boolean | null;
+  /** In a per-document timeline, how this version changed the document. */
+  pathChange?: ChangeKind;
 }
 
 export function firstLine(text: string | null | undefined): string | null {
@@ -69,10 +71,13 @@ export function buildTimeline(graph: WorkspaceGraph, remote: boolean): TimelineE
  */
 export function pathTimeline(history: PathHistory, graph: WorkspaceGraph | null, remote: boolean): TimelineEntry[] {
   const nodes = new Map(graph?.nodes.map((node) => [node.version.id, node]) ?? []);
-  return history.entries.map(({ entry }) => {
+  const paths = new Set(history.paths);
+  return history.entries.map(({ entry, files }) => {
+    const pathChange = files.find((file) => paths.has(file.path))?.kind;
     const node = nodes.get(entry.version.id);
-    if (node) return toEntry(node, remote);
+    if (node) return { ...toEntry(node, remote), pathChange };
     return {
+      pathChange,
       id: entry.version.id,
       name: entry.version.label,
       comment: firstLine(entry.version.comment),

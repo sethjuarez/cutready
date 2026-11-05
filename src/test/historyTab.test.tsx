@@ -16,6 +16,7 @@ vi.mock("../components/history/HistoryGraphView", () => ({
   default: ({ view }: { view: string }) => <div data-testid="graph-view">{view}</div>,
 }));
 
+import { useToastStore } from "../stores/toastStore";
 import { HistoryTab } from "../components/history/HistoryTab";
 import { useChangeSummaryStore } from "../stores/changeSummaryStore";
 import { useSyncStore } from "../stores/syncStore";
@@ -52,6 +53,49 @@ describe("HistoryTab", () => {
     useSyncStore.setState({ currentRemote: null } as never);
     useHistoryFilterStore.setState({ document: null });
     loadPathHistory.mockReset();
+  });
+
+  it("opens an entry's actions menu to copy its ID and restore the document", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    loadPathHistory.mockResolvedValue({
+      paths: ["intro.md"], has_more: false, next_cursor: null,
+      entries: [{ entry: { version: { id: "a", label: "First draft", author: { name: "Ada" }, time_seconds: Date.now() / 1000 }, parent_ids: [], is_head: false }, files: [{ path: "intro.md", kind: "Added" }] }],
+    });
+    useHistoryFilterStore.setState({ document: { path: "intro.md", title: "Intro" } });
+    render(<HistoryTab />);
+    fireEvent.click(await screen.findByRole("button", { name: "Actions for First draft" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Copy ID/ }));
+    expect(writeText).toHaveBeenCalledWith("a");
+    fireEvent.click(screen.getByRole("button", { name: "Actions for First draft" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Restore Intro/ }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.getByRole("dialog").textContent).toContain("Intro");
+  });
+
+  it("moves focus into the restore dialog and anchors keyboard menus to the row", async () => {
+    loadPathHistory.mockResolvedValue({
+      paths: ["intro.md"], has_more: false, next_cursor: null,
+      entries: [{ entry: { version: { id: "a", label: "First draft", author: { name: "Ada" }, time_seconds: Date.now() / 1000 }, parent_ids: [], is_head: false }, files: [{ path: "intro.md", kind: "Deleted" }] }],
+    });
+    useHistoryFilterStore.setState({ document: { path: "intro.md", title: "Intro" } });
+    render(<HistoryTab />);
+    const row = (await screen.findByText("First draft")).closest("li")!;
+    fireEvent.contextMenu(row, { clientX: 0, clientY: 0 });
+    const menu = screen.getByRole("menu");
+    expect(menu.style.left).not.toBe("0px");
+    fireEvent.click(screen.getByRole("menuitem", { name: /Restore Intro/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.contains(document.activeElement)).toBe(true);
+  });
+
+  it("reports a failed copy when the clipboard isn't available", async () => {
+    Object.assign(navigator, { clipboard: undefined });
+    const show = vi.spyOn(useToastStore.getState(), "show");
+    render(<HistoryTab />);
+    fireEvent.click(await screen.findByRole("button", { name: /Actions for Act 2 demos/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Copy ID/ }));
+    expect(show).toHaveBeenCalledWith("Couldn't copy the version ID", 4000, "error");
   });
 
   it("filters the timeline to one document and clears back to the project", async () => {

@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { CloudOff, CloudUpload } from "lucide-react";
+import { CloudOff, CloudUpload, MoreHorizontal } from "lucide-react";
 import type { TimelineEntry } from "../../domain/history/timeline";
 import { formatRelativeDate } from "../../utils/relativeDate";
 import { ChangeChips } from "../versioning/ChangeChips";
@@ -21,11 +21,30 @@ function SentMarker({ sent }: { sent: boolean | null }) {
   );
 }
 
-function TimelineEntryRow({ entry, onPreview, path }: { entry: TimelineEntry; onPreview: (id: string) => void; path: string | null }) {
+export type OpenEntryMenu = (entry: TimelineEntry, x: number, y: number) => void;
+
+function TimelineEntryRow({ entry, onPreview, onMenu, path }: {
+  entry: TimelineEntry;
+  onPreview: (id: string) => void;
+  onMenu?: OpenEntryMenu;
+  path: string | null;
+}) {
   const ref = useRef<HTMLLIElement>(null);
   const chips = useVersionChips(ref, entry.id, entry.parentId, path);
   return (
-    <li ref={ref} className="relative pl-6" data-testid="history-entry" data-version-id={entry.id}>
+    <li
+      ref={ref}
+      className="group relative pl-6"
+      data-testid="history-entry"
+      data-version-id={entry.id}
+      onContextMenu={onMenu && ((event) => {
+        event.preventDefault();
+        // The context-menu key and Shift+F10 report (0, 0); anchor to the row instead.
+        const rect = event.currentTarget.getBoundingClientRect();
+        const fromKeyboard = event.clientX === 0 && event.clientY === 0;
+        onMenu(entry, fromKeyboard ? rect.left + 8 : event.clientX, fromKeyboard ? rect.top + 24 : event.clientY);
+      })}
+    >
       <span
         aria-hidden
         className={`absolute left-[5px] top-3 h-2.5 w-2.5 rounded-full border-2 ${
@@ -37,7 +56,7 @@ function TimelineEntryRow({ entry, onPreview, path }: { entry: TimelineEntry; on
       <button
         type="button"
         onClick={() => onPreview(entry.id)}
-        className="block w-full min-w-0 rounded-control px-2 py-1.5 text-left hover:bg-fill-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]"
+        className="block w-full min-w-0 rounded-control py-1.5 pl-2 pr-10 text-left hover:bg-fill-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]"
         aria-current={entry.isCurrent ? "true" : undefined}
       >
         <span className="sr-only">{entry.isCurrent ? "Current version, preview: " : "Preview version: "}</span>
@@ -58,14 +77,30 @@ function TimelineEntryRow({ entry, onPreview, path }: { entry: TimelineEntry; on
           </span>
         )}
       </button>
+      {onMenu && (
+        <button
+          type="button"
+          aria-label={`Actions for ${entry.name}`}
+          title="Actions"
+          data-testid="history-entry-menu"
+          onClick={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect();
+            onMenu(entry, rect.left, rect.bottom + 4);
+          }}
+          className="absolute right-1 top-1 grid h-7 w-7 place-items-center rounded-control text-[rgb(var(--color-text-secondary))] opacity-0 hover:bg-fill-hover hover:text-[rgb(var(--color-text))] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))] group-hover:opacity-100 group-focus-within:opacity-100"
+        >
+          <MoreHorizontal className="h-4 w-4" aria-hidden />
+        </button>
+      )}
     </li>
   );
 }
 
 /** Vertical list of the current timeline's versions, newest first. */
-export function HistoryTimeline({ entries, onPreview, showUnsaved = true, path = null }: {
+export function HistoryTimeline({ entries, onPreview, onMenu, showUnsaved = true, path = null }: {
   entries: TimelineEntry[];
   onPreview: (id: string) => void;
+  onMenu?: OpenEntryMenu;
   /** Draftline path the timeline is filtered to, so chips only count that document. */
   path?: string | null;
   /** Hidden while searching, since unsaved work has no name or comment to match. */
@@ -74,7 +109,7 @@ export function HistoryTimeline({ entries, onPreview, showUnsaved = true, path =
   return (
     <ol aria-label="Versions" className="relative mx-auto max-w-3xl space-y-1 px-4 py-4 before:absolute before:bottom-4 before:left-[25px] before:top-4 before:w-px before:bg-[rgb(var(--color-border-subtle))]">
       {showUnsaved && <UnsavedEntry path={path} />}
-      {entries.map((entry) => <TimelineEntryRow key={entry.id} entry={entry} onPreview={onPreview} path={path} />)}
+      {entries.map((entry) => <TimelineEntryRow key={entry.id} entry={entry} onPreview={onPreview} onMenu={onMenu} path={path} />)}
     </ol>
   );
 }
