@@ -45,6 +45,7 @@ const CUTREADY_LARGE_FILE_THRESHOLD_BYTES: u64 = 50 * 1024 * 1024;
 
 pub mod naming;
 mod restore;
+mod sync;
 pub use naming::{namespaced_variation_name, CUTREADY_VARIATION_NAMESPACE};
 
 /// CutReady-facing facade over a Draftline workspace.
@@ -352,10 +353,6 @@ impl CutReadyDraftlineAdapter {
         options: &mut RemoteOptions<'_>,
     ) -> DraftlineResult<()> {
         self.workspace.fetch_remote_with_options(remote, options)
-    }
-
-    pub fn sync_status(&self, remote: &str) -> DraftlineResult<SyncStatus> {
-        self.workspace.sync_status(remote)
     }
 
     /// Compare the current branch with the remote base branch (e.g. `main`)
@@ -764,7 +761,7 @@ mod tests {
     use super::*;
     use cutready_core::testing::MemoryLock;
 
-    fn write(path: impl AsRef<Path>, contents: &str) {
+    pub(crate) fn write(path: impl AsRef<Path>, contents: &str) {
         if let Some(parent) = path.as_ref().parent() {
             std::fs::create_dir_all(parent).unwrap();
         }
@@ -805,7 +802,7 @@ mod tests {
         run_git(root, &["init", "--initial-branch=main"]);
     }
 
-    fn configure_identity(root: &Path, name: &str, email: &str) {
+    pub(crate) fn configure_identity(root: &Path, name: &str, email: &str) {
         run_git(root, &["config", "user.name", name]);
         run_git(root, &["config", "user.email", email]);
     }
@@ -815,7 +812,7 @@ mod tests {
         run_git(root, &["commit", "-m", message]);
     }
 
-    fn init_bare_main_remote(path: &Path) {
+    pub(crate) fn init_bare_main_remote(path: &Path) {
         let parent = path.parent().unwrap_or_else(|| Path::new("."));
         std::fs::create_dir_all(parent).unwrap();
         let name = path.file_name().unwrap().to_string_lossy().to_string();
