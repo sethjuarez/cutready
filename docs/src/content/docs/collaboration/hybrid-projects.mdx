@@ -50,7 +50,9 @@ CutReady treats a project as **hybrid** when:
 
 Local runtime state (chat history, agent runs) is stored in the enclosing
 repo's git dir at `<gitdir>/cutready/<folder path>/`, so it never shows up as a
-change in the repository.
+change in the repository. Opening the project also lists its runtime files
+(`.cutready/locks.json`, `.cutready/settings.json`, agent state, recordings)
+in the repository's `info/exclude`, so they never appear as untracked files.
 
 A repository holds **one** CutReady project. A committed `.draftline` file at
 the repository root names its folder. Opening another folder in the same
@@ -103,9 +105,10 @@ connection in **Settings** → **Repository**.
 
 ## Get Updates
 
-When your `cutready/*` branch is behind the base branch, the timeline menu in
-the title bar shows **Get updates from \<base\>**. This brings in the latest base, including
-developer commits.
+When the base branch has moved on, the changes popover says **N updates to the
+shared project** and the timeline menu offers **Get the shared project's
+updates**. This brings in the latest base, including developer commits. The
+UI never names the base branch.
 
 | Conflict location | What happens |
 | --- | --- |
