@@ -1,30 +1,13 @@
-//! Collaboration status for the current timeline, with "to send" counting
-//! only versions the remote doesn't already have.
+//! Collaboration status for the current timeline. Draftline (0.12+) counts
+//! "to send" as versions no remote branch contains; the tests pin that.
 
-use draftline::{Result as DraftlineResult, SyncState, SyncStatus};
+use draftline::{Result as DraftlineResult, SyncStatus};
 
 use crate::CutReadyDraftlineAdapter;
 
 impl CutReadyDraftlineAdapter {
-    /// Draftline's status, except that a timeline the remote doesn't have yet
-    /// counts only versions missing from every one of the remote's branches.
-    /// Draftline counts the whole history there, so a new timeline branched
-    /// from `main` would report all of `main`'s already-sent versions.
     pub fn sync_status(&self, remote: &str) -> DraftlineResult<SyncStatus> {
-        let mut status = self.workspace.sync_status(remote)?;
-        if status.state == SyncState::NoRemoteVersion {
-            status.ahead = self.unsent_version_count(remote)?;
-        }
-        Ok(status)
-    }
-
-    /// Versions reachable from HEAD that no `refs/remotes/<remote>/*` contains.
-    fn unsent_version_count(&self, remote: &str) -> DraftlineResult<usize> {
-        let repo = git2::Repository::open(self.root())?;
-        let mut walk = repo.revwalk()?;
-        walk.push_head()?;
-        walk.hide_glob(&format!("refs/remotes/{remote}/*"))?;
-        Ok(walk.count())
+        self.workspace.sync_status(remote)
     }
 }
 
