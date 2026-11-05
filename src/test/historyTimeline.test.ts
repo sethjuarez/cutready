@@ -157,6 +157,20 @@ describe("buildTimeline", () => {
     const g = graph([node("a", ["b"], { is_head: true }), node("b", ["a"])], "missing");
     expect(buildTimeline(g, false).map((e) => e.id)).toEqual(["a", "b"]);
   });
+
+  it("shows labels without the project's label template", () => {
+    const version = (id: string, label: string) => ({ id, label, author: { name: "Ada" }, saved_by: { name: "Ada" }, time_seconds: 1 });
+    const g = graph([
+      node("m", ["b", "x"], { is_current: true, version: version("m", "docs(demo): chore(sync): bring in team updates (#24)") }),
+      node("b", ["a"], { version: version("b", "docs(demo): Outline") }),
+      node("a", [], { version: version("a", "Typed before the template") }),
+    ], "m");
+    expect(buildTimeline(g, false, "docs(demo): {subject}").map((e) => e.name))
+      .toEqual(["Brought in team updates", "Outline", "Typed before the template"]);
+    expect(buildTimeline(g, false).map((e) => e.name)[1]).toBe("docs(demo): Outline");
+    const history = { paths: ["a.md"], entries: [{ entry: { version: version("b", "docs(demo): Outline"), parent_ids: [], is_head: true }, files: [] }], has_more: false, next_cursor: null } as never;
+    expect(pathTimeline(history, null, false, "docs(demo): {subject}")[0].name).toBe("Outline");
+  });
 });
 
 describe("save time after bringing in team updates", () => {

@@ -1,6 +1,7 @@
 import type { ChangeKind, PathHistory, WorkspaceGraph, WorkspaceGraphNode } from "@draftline/client";
 import { isTeamUpdatesName, plainVersion } from "../versioning/teamUpdates";
 import { savedAtSeconds } from "../versioning/saveTime";
+import { stripLabelTemplate } from "../versioning/labelTemplate";
 
 /** One version in the History tab's timeline. */
 export interface TimelineEntry {
@@ -42,10 +43,10 @@ function plainNames(entry: TimelineEntry, rawComment: string | null | undefined)
   };
 }
 
-function toEntry(node: WorkspaceGraphNode, remote: boolean): TimelineEntry {
+function toEntry(node: WorkspaceGraphNode, remote: boolean, template: string | null): TimelineEntry {
   return plainNames({
     id: node.version.id,
-    name: node.version.label,
+    name: stripLabelTemplate(node.version.label, template),
     comment: firstLine(node.version.comment),
     author: node.version.author.name,
     timeSeconds: savedAtSeconds(node.version),
@@ -69,9 +70,10 @@ export function searchTimeline(entries: TimelineEntry[], query: string): Timelin
 /**
  * The current timeline's versions, newest first: a first-parent walk from the
  * current version, skipping versions that don't touch this project's folder.
- * `remote` says whether a remote is connected, which decides the sent marker.
+ * `remote` says whether a remote is connected, which decides the sent marker;
+ * `template` is the project's label template, shown without its wrapping.
  */
-export function buildTimeline(graph: WorkspaceGraph, remote: boolean): TimelineEntry[] {
+export function buildTimeline(graph: WorkspaceGraph, remote: boolean, template: string | null = null): TimelineEntry[] {
   const byId = new Map(graph.nodes.map((node) => [node.version.id, node]));
   const start = (graph.current_version ? byId.get(graph.current_version) : undefined)
     ?? graph.nodes.find((node) => node.is_current || node.is_head);
@@ -79,7 +81,7 @@ export function buildTimeline(graph: WorkspaceGraph, remote: boolean): TimelineE
   const seen = new Set<string>();
   for (let node = start; node && !seen.has(node.version.id); node = byId.get(node.parent_version_ids[0] ?? "")) {
     seen.add(node.version.id);
-    if (node.touches_folder && node.kind === "normal") entries.push(toEntry(node, remote));
+    if (node.touches_folder && node.kind === "normal") entries.push(toEntry(node, remote, template));
   }
   return entries;
 }
@@ -88,17 +90,22 @@ export function buildTimeline(graph: WorkspaceGraph, remote: boolean): TimelineE
  * Versions that changed the selected document, newest first, as Draftline's
  * per-path history reports them. The graph supplies the current and sent markers.
  */
-export function pathTimeline(history: PathHistory, graph: WorkspaceGraph | null, remote: boolean): TimelineEntry[] {
+export function pathTimeline(
+  history: PathHistory,
+  graph: WorkspaceGraph | null,
+  remote: boolean,
+  template: string | null = null,
+): TimelineEntry[] {
   const nodes = new Map(graph?.nodes.map((node) => [node.version.id, node]) ?? []);
   const paths = new Set(history.paths);
   return history.entries.map(({ entry, files }) => {
     const pathChange = files.find((file) => paths.has(file.path))?.kind;
     const node = nodes.get(entry.version.id);
-    if (node) return { ...toEntry(node, remote), pathChange };
+    if (node) return { ...toEntry(node, remote, template), pathChange };
     return plainNames({
       pathChange,
       id: entry.version.id,
-      name: entry.version.label,
+      name: stripLabelTemplate(entry.version.label, template),
       comment: firstLine(entry.version.comment),
       author: entry.version.author.name,
       timeSeconds: savedAtSeconds(entry.version),
