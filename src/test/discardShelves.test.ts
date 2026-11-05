@@ -45,15 +45,23 @@ describe("shelveForDiscard", () => {
 describe("undoDiscardShelf", () => {
   it("applies and deletes the shelf", async () => {
     f.shelves.mockResolvedValue([shelf("s1")]);
-    expect(await undoDiscardShelf("s1")).toBe("restored");
+    expect(await undoDiscardShelf("s1")).toEqual({ kind: "restored" });
     expect(f.applyShelf).toHaveBeenCalledWith("s1");
     expect(deleteShelf).toHaveBeenCalledWith({ workspace_path: "C:/proj", shelf_id: "s1" });
   });
 
-  it("keeps the shelf when Draftline refuses the apply", async () => {
+  it("rethrows hazard refusals so their own message shows, keeping the shelf", async () => {
     f.shelves.mockResolvedValue([shelf("s1")]);
-    f.applyShelf.mockRejectedValueOnce({ code: "preflight_failed", message: "dirty" });
-    expect(await undoDiscardShelf("s1")).toBe("conflict");
+    const hazard = { code: "preflight_failed", message: "lfs" };
+    f.applyShelf.mockRejectedValueOnce(hazard);
+    await expect(undoDiscardShelf("s1")).rejects.toBe(hazard);
+    expect(deleteShelf).not.toHaveBeenCalled();
+  });
+
+  it("names the unsaved files that overlap the shelf", async () => {
+    f.shelves.mockResolvedValue([shelf("s1")]);
+    f.applyShelf.mockRejectedValueOnce({ code: "shelf_overlaps_unsaved_changes", message: "overlap", details: { shelf: "s1", paths: ["a.sk"] } });
+    expect(await undoDiscardShelf("s1")).toEqual({ kind: "conflict", paths: ["a.sk"] });
     expect(deleteShelf).not.toHaveBeenCalled();
   });
 
@@ -61,14 +69,14 @@ describe("undoDiscardShelf", () => {
     f.shelves.mockResolvedValue([shelf("s1")]);
     f.applyShelf.mockRejectedValueOnce(new Error("boom"));
     await expect(undoDiscardShelf("s1")).rejects.toThrow("boom");
-    expect(await undoDiscardShelf("gone")).toBe("missing");
+    expect(await undoDiscardShelf("gone")).toEqual({ kind: "missing" });
   });
 
   it("still reports restored when only the shelf cleanup fails", async () => {
     f.shelves.mockResolvedValue([shelf("s1")]);
     deleteShelf.mockRejectedValueOnce(new Error("locked"));
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(await undoDiscardShelf("s1")).toBe("restored");
+    expect(await undoDiscardShelf("s1")).toEqual({ kind: "restored" });
     warn.mockRestore();
   });
 });

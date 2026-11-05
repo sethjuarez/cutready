@@ -7,6 +7,7 @@ pub mod automation;
 pub mod diagnostics;
 pub mod draftline;
 pub mod draftline_merge;
+pub mod draftline_shelf;
 pub mod export;
 pub mod feedback;
 pub mod github;

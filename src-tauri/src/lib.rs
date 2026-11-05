@@ -699,6 +699,7 @@ pub fn run() {
             commands::draftline::apply_incoming,
             commands::draftline::preflight_merge_incoming,
             commands::draftline_merge::merge_incoming_with_token,
+            commands::draftline_shelf::preflight_apply_shelf,
             commands::draftline::merge_incoming_with_resolutions,
             commands::draftline::clone_from_url,
             commands::interaction::detect_browser_profiles,
@@ -845,8 +846,7 @@ pub fn run() {
                     // Archive any pending chat summary before the window closes,
                     // under the project it originated in (not the currently active
                     // one, which may have changed since the summary was captured).
-                    let app = window.app_handle();
-                    if let Some(state) = app.try_state::<AppState>() {
+                    if let Some(state) = window.app_handle().try_state::<AppState>() {
                         // A poisoned lock still holds the summary; archive it anyway.
                         let summary = state
                             .last_chat_summary

@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const preflightApplyShelf = vi.fn();
 const f = {
   changes: vi.fn(),
   selectedShelve: vi.fn(),
@@ -12,7 +13,7 @@ vi.mock("../services/draftlineVersioning", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../services/draftlineVersioning")>()),
   facade: () => f,
   requireWorkspacePath: () => "C:/proj",
-  draftlineClient: { deleteShelf: vi.fn() },
+  draftlineClient: { deleteShelf: vi.fn(), preflightApplyShelf: (...args: unknown[]) => preflightApplyShelf(...args) },
 }));
 
 const {
@@ -27,6 +28,9 @@ const {
 const { listSetAsideShelves, setAsideChanges } = await import("../services/setAsideShelves");
 const { SetAsideBanner } = await import("../components/versioning/SetAsideBanner");
 const { useVersioningStore } = await import("../stores/versioningStore");
+const { useToastStore } = await import("../stores/toastStore");
+const { useAppStore } = await import("../stores/appStore");
+const { describeShelfPaths, shelfRestoreBlocker } = await import("../services/shelves");
 
 const shelf = (id: string, seconds = 0) => ({ id, version: { time_seconds: seconds } });
 /** Draftline's shelf-name rules (validate_variation_name) plus git's ref rules it relies on. */
@@ -151,15 +155,39 @@ describe("popStash", () => {
   const original = useVersioningStore.getState();
   afterEach(() => act(() => useVersioningStore.setState(original, true)));
 
-  it("refuses over unsaved work before touching editors or the shelf", async () => {
-    const checkDirty = vi.fn(async () => useVersioningStore.setState({ isDirty: true }));
-    useVersioningStore.setState({ checkDirty });
-    f.shelves.mockClear();
+  it("lists the unsaved files that overlap the shelf and keeps it", async () => {
+    const show = vi.spyOn(useToastStore.getState(), "show");
+    f.shelves.mockResolvedValue([shelf("cutready-setaside-1-a-A")]);
     f.applyShelf.mockClear();
+    preflightApplyShelf.mockResolvedValueOnce({ overlapping_files: [{ path: "intro.sk" }, { path: "notes/plan.md" }] });
+    const openTabs = [{ id: "t", type: "note", path: "notes/plan.md", title: "plan" }];
+    useAppStore.setState({ openTabs } as never);
+    useVersioningStore.setState({ isDirty: true, checkStash: vi.fn(async () => {}) });
     await useVersioningStore.getState().popStash("cutready-setaside-1-a-A");
-    expect(checkDirty).toHaveBeenCalled();
-    expect(f.shelves).not.toHaveBeenCalled();
+    expect(preflightApplyShelf).toHaveBeenCalledWith({ workspace_path: "C:/proj", shelf_id: "cutready-setaside-1-a-A" });
     expect(f.applyShelf).not.toHaveBeenCalled();
+    expect(useAppStore.getState().openTabs).toBe(openTabs);
+    expect(show).toHaveBeenCalledWith(
+      "Couldn't restore: you have unsaved changes in intro.sk and notes/plan.md. Save or set them aside first.",
+      6000,
+      "warning",
+    );
     expect(useVersioningStore.getState().setAsideBusy).toBe(false);
+    show.mockRestore();
+  });
+});
+
+describe("shelfRestoreBlocker", () => {
+  it("leaves hazards to the apply when the preflight itself fails", async () => {
+    f.shelves.mockResolvedValue([shelf("s1")]);
+    preflightApplyShelf.mockRejectedValueOnce({ code: "preflight_failed", message: "lfs" });
+    expect(await shelfRestoreBlocker("s1")).toBeNull();
+  });
+});
+
+describe("describeShelfPaths", () => {
+  it("names up to three files, then counts the rest", () => {
+    expect(describeShelfPaths(["a.sk"])).toBe("a.sk");
+    expect(describeShelfPaths(["x/a.sk", "b.md", "c.sb", "d.md", "e.md"])).toBe("x/a.sk, b.md, c.sb and 2 more");
   });
 });

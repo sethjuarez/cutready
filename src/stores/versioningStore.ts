@@ -35,6 +35,7 @@ import { useSyncStore } from "./syncStore";
 import { activeTimelineLabel, askMergeName } from "../services/mergeName";
 import { isStaleMergeTokenError, MERGE_UPDATES_CHANGED_MESSAGE } from "../services/draftlineErrors";
 import { deleteSetAsideShelf, listSetAsideShelves, restoreSetAsideShelf, setAsideChanges } from "../services/setAsideShelves";
+import { shelfConflictText, shelfRestoreBlocker } from "../services/shelves";
 import { DEFAULT_SET_ASIDE_NAME, type IncomingVersion, type SetAsideShelf } from "../domain/versioning";
 import {
   clearActiveDocumentState,
@@ -307,20 +308,19 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
     set({ setAsideBusy: true });
     const toast = useToastStore.getState();
     try {
-      // Draftline refuses to restore over any unsaved work; check first so editors and tabs stay put.
+      // Draftline refuses only when unsaved files overlap the shelf; check before editors close.
       await flushEditorWrites();
-      await get().checkDirty();
-      if (get().isDirty) {
-        toast.show("Save or set aside your current changes first, then restore these.", 6000, "warning");
-        return;
+      const blocked = await shelfRestoreBlocker(shelfId);
+      let outcome: Awaited<ReturnType<typeof restoreSetAsideShelf>> = blocked ?? { kind: "missing" };
+      if (!blocked) {
+        await rewriteWorkspaceFiles(async () => {
+          outcome = await restoreSetAsideShelf(shelfId);
+        }, "Restore failed");
       }
-      let outcome = "missing" as Awaited<ReturnType<typeof restoreSetAsideShelf>>;
-      await rewriteWorkspaceFiles(async () => {
-        outcome = await restoreSetAsideShelf(shelfId);
-      }, "Restore failed");
       await get().checkStash();
-      if (outcome === "restored") toast.show("Set-aside changes restored.", 3000, "success");
-      else if (outcome === "conflict") toast.show("Save or set aside your current changes first, then restore these.", 6000, "warning");
+      const result = outcome as Awaited<ReturnType<typeof restoreSetAsideShelf>>;
+      if (result.kind === "restored") toast.show("Set-aside changes restored.", 3000, "success");
+      else if (result.kind === "conflict") toast.show(`Couldn't restore: ${shelfConflictText(result.paths)}. Save or set them aside first.`, 6000, "warning");
     } finally {
       set({ setAsideBusy: false });
     }

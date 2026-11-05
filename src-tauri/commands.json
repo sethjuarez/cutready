@@ -178,6 +178,7 @@
     "open_recording_take_folder",
     "open_workspace",
     "preflight_apply_incoming",
+    "preflight_apply_shelf",
     "preflight_create_variation_from_version",
     "preflight_merge_base",
     "preflight_merge_incoming",

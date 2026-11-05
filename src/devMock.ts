@@ -489,7 +489,10 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         version: mockSavedVersion("shelf456shelf456shelf456shelf456shelf456", "Shelved changes"),
       };
     case "delete_shelf":
+    case "clone_from_url":
       return null;
+    case "preflight_apply_shelf":
+      return { overlapping_files: [], dirty_files: [] };
     case "restore_version_as_new_save":
     case "restore_version_paths_as_new_save":
       return {
@@ -1131,6 +1134,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         url: (args as { request?: { url?: string } })?.request?.url ?? "https://github.com/example/cutready-demo.git",
       };
     case "list_remotes":
+    case "check_large_files":
       return [];
     case "list_remote_variations":
       return [
@@ -1228,10 +1232,6 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         can_merge_cleanly: false,
         changed_workspace: false,
       };
-    case "check_large_files":
-      return [];
-    case "clone_from_url":
-      return null;
     default:
       // Handle tauri-plugin-store commands
       if (cmd.startsWith("plugin:store|")) {

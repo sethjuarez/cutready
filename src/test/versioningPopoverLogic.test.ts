@@ -86,7 +86,8 @@ describe("discardWithUndo", () => {
     const notes: { message: string; type: string; undo?: () => void }[] = [];
     const deps: DiscardDeps = {
       shelve: vi.fn(() => Promise.resolve("shelf-1")),
-      undo: vi.fn(() => Promise.resolve("restored" as const)),
+      undo: vi.fn(() => Promise.resolve({ kind: "restored" as const })),
+      blocker: vi.fn(() => Promise.resolve(null)),
       rewriteAll: vi.fn(async (op) => { await op(); return true; }),
       rewriteFile: vi.fn(async (path, op) => op(`repo/${path}`)),
       notify: (message, type, undo) => { notes.push({ message, type, undo }); },
@@ -117,6 +118,16 @@ describe("discardWithUndo", () => {
     expect(notes).toHaveLength(1);
   });
 
+  it("reports a blocked Undo without rewriting files", async () => {
+    const { deps, notes } = fakeDeps({ blocker: vi.fn(() => Promise.resolve({ kind: "conflict" as const, paths: ["a.sk"] })) });
+    await discardWithUndo(deps, 1);
+    notes[0].undo?.();
+    await vi.waitFor(() => expect(notes[1]?.type).toBe("warning"));
+    expect(notes[1].message).toContain("unsaved changes in a.sk");
+    expect(deps.rewriteAll).toHaveBeenCalledTimes(1);
+    expect(deps.undo).not.toHaveBeenCalled();
+  });
+
   it("shelves only the one file by its repository path", async () => {
     const { deps, notes } = fakeDeps();
     await discardWithUndo(deps, 1, "plan.md");
@@ -136,9 +147,9 @@ describe("discardWithUndo", () => {
     expect(notes).toEqual([]);
   });
 
-  it("keeps the shelf when Undo would overwrite newer edits", () => {
-    expect(undoMessage("conflict")).toEqual({
-      text: "Couldn't undo: you've edited since. The discarded changes are kept for 7 days.",
+  it("keeps the shelf and names the files when Undo would overwrite newer edits", () => {
+    expect(undoMessage({ kind: "conflict", paths: ["cutready/intro.sk", "plan.md"] })).toEqual({
+      text: "Couldn't undo: you have unsaved changes in cutready/intro.sk and plan.md. The discarded changes are kept for 7 days.",
       type: "warning",
     });
   });

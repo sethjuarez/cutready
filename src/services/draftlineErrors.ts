@@ -15,6 +15,9 @@ export const DraftlineErrorCode = {
   LocalStateChanged: "local_state_changed",
   RemoteRace: "remote_race",
   PreflightFailed: "preflight_failed",
+  ShelfOverlapsUnsavedChanges: "shelf_overlaps_unsaved_changes",
+  NothingToMerge: "nothing_to_merge",
+  InvalidMergeToken: "invalid_merge_token",
   SendBaseNotOnRemote: "send_base_not_on_remote",
   FolderIsElsewhere: "folder_is_elsewhere",
   FolderMissing: "folder_missing",
@@ -244,13 +247,20 @@ function sendBaseFromMessage(error: unknown): string | null {
   return /no branch `([^`]+)`/.exec(message)?.[1] ?? null;
 }
 
-/** Errors where Draftline refused before changing anything, so retrying is safe. */
 /** Draftline refused a merge token because the project or remote moved after it was issued. */
 export function isStaleMergeTokenError(error: unknown): boolean {
   const code = draftlineErrorCode(error);
   return code === DraftlineErrorCode.LocalStateChanged || code === DraftlineErrorCode.RemoteRace;
 }
 
+/** Unsaved files a shelf apply refused to overwrite, or null for any other error. */
+export function shelfOverlapPaths(error: unknown): string[] | null {
+  if (draftlineErrorCode(error) !== DraftlineErrorCode.ShelfOverlapsUnsavedChanges) return null;
+  const paths = draftlineErrorDetails(error)?.paths;
+  return Array.isArray(paths) ? paths.filter((path): path is string => typeof path === "string") : [];
+}
+
+/** Errors where Draftline refused before changing anything, so retrying is safe. */
 export function isRetryableDraftlineError(error: unknown): boolean {
   const code = draftlineErrorCode(error);
   return code === DraftlineErrorCode.GitIndexLocked || code === DraftlineErrorCode.LocalStateChanged;

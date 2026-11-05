@@ -256,7 +256,7 @@ pub async fn clone_from_url(url: String, dest: String) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
-fn context_for_workspace(
+pub(super) fn context_for_workspace(
     workspace_path: &Path,
     app: AppHandle,
 ) -> contract::TauriCommandResult<contract::DraftlineCommandContext<'static>> {

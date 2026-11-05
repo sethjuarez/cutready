@@ -2,6 +2,7 @@ import { useToastStore } from "../stores/toastStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import { rewriteWorkspaceFiles } from "../stores/workspaceHelpers";
 import { shelveForDiscard, undoDiscardShelf, type UndoDiscardOutcome } from "./discardShelves";
+import { shelfConflictText, shelfRestoreBlocker } from "./shelves";
 import { runVersionOperation } from "./versionOperation";
 
 const UNDO_TOAST_MS = 10_000;
@@ -9,6 +10,8 @@ const UNDO_TOAST_MS = 10_000;
 export interface DiscardDeps {
   shelve: (paths?: string[]) => Promise<string | null>;
   undo: (shelfId: string) => Promise<UndoDiscardOutcome>;
+  /** Why Undo can't apply right now (checked before editors close), or null. */
+  blocker: (shelfId: string) => Promise<UndoDiscardOutcome | null>;
   /** Runs a whole-workspace rewrite with editors closed; false when it failed (already reported). */
   rewriteAll: (operation: () => Promise<void>, failureLabel: string) => Promise<boolean>;
   /** Rewrites one file with its editors suppressed; rethrows. Receives the repository-relative path. */
@@ -22,9 +25,9 @@ const plural = (count: number) => `${count} change${count === 1 ? "" : "s"}`;
 
 /** What Undo says for each outcome. Conflicts keep the shelf so nothing is overwritten. */
 export function undoMessage(outcome: UndoDiscardOutcome): { text: string; type: "success" | "warning" } {
-  switch (outcome) {
+  switch (outcome.kind) {
     case "restored": return { text: "Discarded changes restored.", type: "success" };
-    case "conflict": return { text: "Couldn't undo: you've edited since. The discarded changes are kept for 7 days.", type: "warning" };
+    case "conflict": return { text: `Couldn't undo: ${shelfConflictText(outcome.paths)}. The discarded changes are kept for 7 days.`, type: "warning" };
     case "missing": return { text: "Those discarded changes are no longer available.", type: "warning" };
   }
 }
@@ -55,13 +58,20 @@ export async function discardWithUndo(deps: DiscardDeps, count: number, path?: s
   const id: string = shelfId;
   deps.notify(`Discarded ${plural(count)}`, "info", () => {
     void (async () => {
-      let outcome: UndoDiscardOutcome = "missing";
+      let outcome: UndoDiscardOutcome = { kind: "missing" };
       let ok: boolean;
       try {
-        // Newer edits reach disk first, so Draftline sees them and reports a conflict.
-        ok = await deps.guard("Undo discard", () => deps.rewriteAll(async () => {
-          outcome = await deps.undo(id);
-        }, "Undo failed"));
+        // Newer edits reach disk first, so the check sees them; a blocked Undo leaves editors open.
+        ok = await deps.guard("Undo discard", async () => {
+          const blocked = await deps.blocker(id);
+          if (blocked) {
+            outcome = blocked;
+            return true;
+          }
+          return deps.rewriteAll(async () => {
+            outcome = await deps.undo(id);
+          }, "Undo failed");
+        });
       } catch {
         return; // The status chip shows "Couldn't save – Retry".
       }
@@ -76,6 +86,7 @@ export async function discardWithUndo(deps: DiscardDeps, count: number, path?: s
 const appDeps: DiscardDeps = {
   shelve: (paths) => shelveForDiscard(paths),
   undo: undoDiscardShelf,
+  blocker: shelfRestoreBlocker,
   rewriteAll: rewriteWorkspaceFiles,
   rewriteFile: (path, operation) =>
     useVersioningStore.getState().replaceFileOnDisk(path, ({ repoPath }) => operation(repoPath)),
