@@ -72,6 +72,8 @@ const server = createServer(async (req, res) => {
   log({
     path,
     suggest,
+    // Bounded, so drills can check what a suggestion was asked to describe.
+    prompt: suggest ? userText.slice(0, 2000) : undefined,
     model: request.model,
     stream: Boolean(request.stream),
     tools: (request.tools ?? []).map((tool) => tool.function?.name ?? tool.name),
