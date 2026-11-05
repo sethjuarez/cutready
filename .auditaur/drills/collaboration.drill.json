@@ -33,7 +33,7 @@
         { "click": { "testId": "titlebar-send" }, "timeoutMs": 15000 },
         { "expect": { "testId": "titlebar-send" }, "toContainText": "Up to date", "timeoutMs": 30000 },
         { "name": "the save reached the remote", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-remote", "Agenda drafted"] },
-        { "expectNoErrors": true, "ignore": ["file changed before we could read it", "code=NotFound (-3)", "error reading file for hashing"], "name": "no errors besides Draftline reads racing the fixture reset" }
+        { "expectNoErrors": true }
       ]
     },
     {
@@ -46,7 +46,7 @@
         { "name": "the collaborator's edit is in the project", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Collaborator agenda."] },
         { "name": "their save is in local history", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["log", "-1", "--format=%s"], "stdout": "Collaborator agenda" },
         { "name": "and keeps its author", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["log", "-1", "--format=%an"], "stdout": "Drill Collaborator" },
-        { "expectNoErrors": true, "ignore": ["file changed before we could read it", "code=NotFound (-3)", "error reading file for hashing"], "name": "no errors besides Draftline reads racing the fixture reset" }
+        { "expectNoErrors": true }
       ]
     },
     {
@@ -73,7 +73,7 @@
         { "name": "the incoming wording won", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Remote wording."] },
         { "name": "the local wording is gone", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "lacks:Local wording."] },
         { "name": "history has both parents", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["rev-parse", "--verify", "--quiet", "HEAD^2"] },
-        { "expectNoErrors": true, "ignore": ["file changed before we could read it", "code=NotFound (-3)", "error reading file for hashing"], "name": "no errors besides Draftline reads racing the fixture reset" }
+        { "expectNoErrors": true }
       ]
     },
     {
@@ -109,7 +109,7 @@
         { "name": "the collaborator's edit is in the project", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Collaborator agenda."] },
         { "name": "the local edit is kept", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "agenda.md", "Local item."] },
         { "name": "history has both parents", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["rev-parse", "--verify", "--quiet", "HEAD^2"] },
-        { "expectNoErrors": true, "ignore": ["file changed before we could read it", "code=NotFound (-3)", "error reading file for hashing"], "name": "no errors besides Draftline reads racing the fixture reset" }
+        { "expectNoErrors": true }
       ]
     },
     {
@@ -124,7 +124,7 @@
         { "expect": { "role": "button", "name": "Timeline pricing-review. Switch or manage timelines" }, "toBeVisible": true, "timeoutMs": 15000 },
         { "name": "the adopted branch is checked out", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["branch", "--show-current"], "stdout": "pricing-review" },
         { "name": "with the collaborator's edit", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Pricing review."] },
-        { "expectNoErrors": true, "ignore": ["file changed before we could read it", "code=NotFound (-3)", "error reading file for hashing"], "name": "no errors besides Draftline reads racing the fixture reset" }
+        { "expectNoErrors": true }
       ]
     }
   ]
