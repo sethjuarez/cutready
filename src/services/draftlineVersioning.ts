@@ -32,6 +32,7 @@ import { invoke, listen } from "./tauri";
 import { draftlineIpc } from "../ipc/draftline";
 import { DraftlineVariationCreateConflictError, variationCreatePreflightFromError } from "./draftlineVariationConflict";
 import { incomingVersions, type IncomingVersion } from "../domain/versioning/mergeSuggest";
+import { savedAtSeconds } from "../domain/versioning/saveTime";
 import type { BaseStatus, ConflictFile, DiffEntry, GraphNode, IncomingCommit, RemoteBranchInfo, RemoteInfo, SyncStatus, TimelineInfo, VersionEntry } from "../types/sketch";
 
 export type DraftlineMergeIncomingToken = MergeIncomingToken;
@@ -159,7 +160,7 @@ export async function listDraftlineGraphNodes(): Promise<GraphNode[]> {
       id: node.version.id,
       message: node.version.label,
       comment: node.version.comment ?? undefined,
-      timestamp: new Date(node.version.time_seconds * 1000).toISOString(),
+      timestamp: new Date(savedAtSeconds(node.version) * 1000).toISOString(),
       timeline,
       parents: node.parent_version_ids,
       lane: laneByVariation.get(timeline) ?? node.layout.lane,
@@ -462,7 +463,7 @@ export async function listDraftlineIncomingCommits(remote: string): Promise<Inco
     id: version.id,
     message: version.label,
     author: version.author.name,
-    timestamp: new Date(version.time_seconds * 1000).toISOString(),
+    timestamp: new Date(savedAtSeconds(version) * 1000).toISOString(),
     changed_files: [],
     projects: [status.variation],
   }));
@@ -645,7 +646,7 @@ function versionToEntry(version: Version): VersionEntry {
     id: version.id,
     message: version.label,
     comment: version.comment ?? undefined,
-    timestamp: new Date(version.time_seconds * 1000).toISOString(),
+    timestamp: new Date(savedAtSeconds(version) * 1000).toISOString(),
     summary: version.label,
   };
 }
@@ -668,7 +669,7 @@ function remoteVariationToBranchInfo(variation: RemoteVariation): RemoteBranchIn
     head_message: variation.head_version?.label,
     head_author: variation.head_version?.author.name,
     head_timestamp: variation.head_version
-      ? new Date(variation.head_version.time_seconds * 1000).toISOString()
+      ? new Date(savedAtSeconds(variation.head_version) * 1000).toISOString()
       : undefined,
   };
 }

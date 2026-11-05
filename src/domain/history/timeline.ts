@@ -1,5 +1,6 @@
 import type { ChangeKind, PathHistory, WorkspaceGraph, WorkspaceGraphNode } from "@draftline/client";
 import { isTeamUpdatesName, plainVersion } from "../versioning/teamUpdates";
+import { savedAtSeconds } from "../versioning/saveTime";
 
 /** One version in the History tab's timeline. */
 export interface TimelineEntry {
@@ -47,7 +48,7 @@ function toEntry(node: WorkspaceGraphNode, remote: boolean): TimelineEntry {
     name: node.version.label,
     comment: firstLine(node.version.comment),
     author: node.version.author.name,
-    timeSeconds: node.version.time_seconds,
+    timeSeconds: savedAtSeconds(node.version),
     parentId: node.parent_version_ids[0] ?? null,
     isMerge: node.is_merge,
     isCurrent: node.is_current || node.is_head,
@@ -100,7 +101,7 @@ export function pathTimeline(history: PathHistory, graph: WorkspaceGraph | null,
       name: entry.version.label,
       comment: firstLine(entry.version.comment),
       author: entry.version.author.name,
-      timeSeconds: entry.version.time_seconds,
+      timeSeconds: savedAtSeconds(entry.version),
       parentId: entry.parent_ids[0] ?? null,
       isMerge: entry.parent_ids.length > 1,
       isCurrent: graph?.current_version === entry.version.id || entry.is_head,

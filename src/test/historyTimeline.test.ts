@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { WorkspaceGraph, WorkspaceGraphNode, WorkspaceGraphRef } from "@draftline/client";
 import { buildTimeline, firstLine, pathTimeline, searchTimeline } from "../domain/history/timeline";
 import { mergeGraphPages } from "../services/versionHistory";
+import { savedAtSeconds } from "../domain/versioning/saveTime";
 
 function node(id: string, parents: string[], extra: Partial<WorkspaceGraphNode> = {}): WorkspaceGraphNode {
   return {
@@ -155,5 +156,22 @@ describe("buildTimeline", () => {
   it("falls back to the head node and stops on cycles", () => {
     const g = graph([node("a", ["b"], { is_head: true }), node("b", ["a"])], "missing");
     expect(buildTimeline(g, false).map((e) => e.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("save time after bringing in team updates", () => {
+  // Replaying an unsent save sets its recorded time to now; the author time keeps when it was made.
+  const rebased = { id: "r", label: "Outline", author: { name: "Ada" }, saved_by: { name: "Ada" }, time_seconds: 9_000, author_time_seconds: 1_000 };
+
+  it("shows a replayed save at its original time in History", () => {
+    const g = graph([node("r", [], { version: rebased } as never)], "r");
+    expect(buildTimeline(g, false)[0].timeSeconds).toBe(1_000);
+    const history = { paths: ["a.md"], entries: [{ entry: { version: rebased, parent_ids: [], is_head: true }, files: [] }], has_more: false, next_cursor: null } as never;
+    expect(pathTimeline(history, null, false)[0].timeSeconds).toBe(1_000);
+  });
+
+  it("falls back to the recorded time when there's no author time", () => {
+    expect(savedAtSeconds({ time_seconds: 9_000 })).toBe(9_000);
+    expect(savedAtSeconds({ time_seconds: 9_000, author_time_seconds: null })).toBe(9_000);
   });
 });
