@@ -2,6 +2,7 @@
 // F6). Project/editor state stays in appStore and remote collaboration lives in
 // syncStore; both are read with getState() inside actions only.
 import { create } from "zustand";
+import type { MergeConflictResolution } from "@draftline/client";
 import {
   createDraftlineVariation,
   deleteDraftlineVariation,
@@ -33,6 +34,7 @@ import { useToastStore } from "./toastStore";
 import { useAppStore } from "./appStore";
 import { useSyncStore } from "./syncStore";
 import { activeTimelineLabel, askMergeName } from "../services/mergeName";
+import { mergeVariation, runVariationMerge, variationMergeErrorMessage } from "../services/variationMerge";
 import { isStaleMergeTokenError, MERGE_UPDATES_CHANGED_MESSAGE } from "../services/draftlineErrors";
 import { deleteSetAsideShelf, listSetAsideShelves, restoreSetAsideShelf, setAsideChanges } from "../services/setAsideShelves";
 import { shelfConflictText, shelfRestoreBlocker } from "../services/shelves";
@@ -53,7 +55,6 @@ import type {
   GraphNode,
   DiffEntry,
   ConflictFile,
-  MergeResult,
   FileResolution,
 } from "../types/sketch";
 
@@ -170,8 +171,8 @@ export interface VersioningActions {
   diffWorkingTree: () => Promise<DiffEntry[]>;
   /** Check for large files before pushing. Returns list of (path, size). */
   checkLargeFiles: () => Promise<Array<[string, number]>>;
-  /** Merge source timeline into target timeline. */
-  mergeTimelines: (source: string, target: string) => Promise<MergeResult>;
+  /** Merge another local timeline into the current one, after the user names the merge. */
+  mergeTimelines: (source: TimelineInfo) => Promise<void>;
   /** Apply user-provided conflict resolutions and create merge commit. */
   /** Resolves to the merge commit, or null when the user cancels naming it. */
   applyMergeResolution: (resolutions: FileResolution[]) => Promise<string | null>;
@@ -670,33 +671,54 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
 
   // ── Merge actions ─────────────────────────────────────────
 
-  mergeTimelines: async (source, target) => {
-    console.warn("Draftline variation merge is not available yet:", source, target);
-    useToastStore.getState().show("Draftline does not support merging variations yet.", 5000, "info");
-    return { status: "conflicts", conflicts: [] };
+  mergeTimelines: async (source) => {
+    const target = activeTimelineLabel(get().timelines) ?? "this timeline";
+    const label = source.label || source.name;
+    const outcome = await runVariationMerge({ id: source.name, label }, target);
+    const toast = useToastStore.getState();
+    if (outcome.kind === "failed") {
+      toast.show(outcome.message, 6000, "error");
+      // A refused merge often means a timeline moved; show its current state.
+      await get().loadTimelines();
+    }
+    if (outcome.kind === "merged") {
+      await reloadAfterMerge();
+      toast.showUpdate(`Merged ${label} into ${target}.`, "success");
+    }
+    if (outcome.kind !== "conflicts") return;
+    const { conflicts, token, incoming } = outcome.report;
+    set({ isMerging: true, mergeSource: label, mergeTarget: target, mergeConflicts: conflicts, draftlineMergeToken: token, draftlineMergeRemote: null, draftlineMergeIncoming: incoming });
+    toast.showUpdate(`Merging ${label} needs conflict resolution.`, "info");
   },
 
   applyMergeResolution: async (resolutions) => {
-    const { draftlineMergeToken, draftlineMergeRemote, draftlineMergeIncoming } = get();
-    if (!draftlineMergeToken || !draftlineMergeRemote) throw new Error("No Draftline merge in progress");
+    const { draftlineMergeToken, draftlineMergeRemote, draftlineMergeIncoming, mergeSource, mergeTarget } = get();
+    // Timeline merges are local: their token names no remote.
+    const local = draftlineMergeToken?.local === true;
+    if (!draftlineMergeToken || (!draftlineMergeRemote && !local)) throw new Error("No Draftline merge in progress");
 
     // Base merges carry the base branch name as the token source.
-    const base = (draftlineMergeToken as { source?: string | null }).source ?? null;
-    const message = await askMergeName(base ?? activeTimelineLabel(get().timelines) ?? draftlineMergeRemote, draftlineMergeIncoming);
+    const base = local ? null : draftlineMergeToken.source ?? null;
+    const source = local ? mergeSource ?? draftlineMergeToken.source ?? "" : base ?? activeTimelineLabel(get().timelines) ?? draftlineMergeRemote ?? "";
+    const message = await askMergeName(source, draftlineMergeIncoming);
     if (!message) return null;
+    const dto = resolutions.map((resolution): MergeConflictResolution => ({
+      path: resolution.path,
+      field_path: null,
+      choice: { kind: "use_content", content: resolution.content },
+    }));
     let commitId: string;
     try {
-      commitId = await mergeDraftlineIncomingWithResolutions(
-        draftlineMergeToken,
-        message,
-        resolutions.map((resolution) => ({
-          path: resolution.path,
-          field_path: null,
-          choice: { kind: "use_content", content: resolution.content },
-        })),
-        draftlineMergeRemote,
-      );
+      commitId = local
+        ? await mergeVariation(draftlineMergeToken, message, dto)
+        : await mergeDraftlineIncomingWithResolutions(draftlineMergeToken, message, dto, draftlineMergeRemote ?? undefined);
     } catch (err) {
+      if (local) {
+        get().cancelMerge();
+        useToastStore.getState().show(variationMergeErrorMessage(err, source, mergeTarget ?? "this timeline"), 6000, "error");
+        await get().loadTimelines();
+        return null;
+      }
       if (!isStaleMergeTokenError(err)) throw err;
       // The token can't be reused; nothing was merged, so end the merge and ask for a fresh start.
       get().cancelMerge();
@@ -720,16 +742,9 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
       draftlineMergeRemote: null,
       draftlineMergeIncoming: [],
     });
-    await app().loadSketches();
-    await app().loadStoryboards();
-    await app().loadNotes();
-    await sync().refreshSyncStatus();
-    await sync().refreshIncomingCommits();
-    await get().loadVersions();
-    await get().loadGraphData();
-    await get().loadTimelines();
-    await get().checkDirty();
-    useToastStore.getState().showUpdate(base ? `Updates from ${base} brought in.` : "Incoming saves merged.", "success");
+    await reloadAfterMerge();
+    const done = local ? `Merged ${source} into ${mergeTarget ?? "this timeline"}.` : base ? `Updates from ${base} brought in.` : "Incoming saves merged.";
+    useToastStore.getState().showUpdate(done, "success");
     return commitId;
   },
 
@@ -745,3 +760,19 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
     });
   },
 }));
+
+/** Reload documents, history and status after a merge wrote a new version. */
+async function reloadAfterMerge(): Promise<void> {
+  const app = useAppStore.getState();
+  await app.loadSketches();
+  await app.loadStoryboards();
+  await app.loadNotes();
+  const sync = useSyncStore.getState();
+  await sync.refreshSyncStatus();
+  await sync.refreshIncomingCommits();
+  const versioning = useVersioningStore.getState();
+  await versioning.loadVersions();
+  await versioning.loadGraphData();
+  await versioning.loadTimelines();
+  await versioning.checkDirty();
+}

@@ -731,13 +731,11 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "get_memory_context":
       return "";
     case "archive_chat_session":
-      return null;
     case "update_chat_summary":
       return null;
     case "list_memories":
       return [];
     case "delete_memory":
-      return null;
     case "update_memory":
       return null;
     case "clear_memories":
@@ -1179,6 +1177,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return { applied_count: 0 };
     case "merge_incoming_with_token":
     case "merge_incoming_with_resolutions":
+    case "merge_variation_with_resolutions":
       return {
         version: {
           id: "mock-merged-version",
@@ -1216,6 +1215,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return null;
     case "preflight_merge_base":
     case "preflight_merge_incoming":
+    case "preflight_merge_variation":
       return {
         sync_status: {
           remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",

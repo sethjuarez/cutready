@@ -1146,7 +1146,7 @@ pub async fn merge_incoming_with_resolutions(
 /// Whole-file `.sk` resolutions go through the sketch codec so merged sketches
 /// get row ids and never carry duplicates. Unparseable content passes through
 /// unchanged, as before.
-fn canonicalize_sketch_resolutions(
+pub(super) fn canonicalize_sketch_resolutions(
     resolutions: &mut [draftline::MergeConflictResolution],
 ) -> Result<(), contract::TauriCommandError> {
     use cutready_core::document::{self, DocumentError};

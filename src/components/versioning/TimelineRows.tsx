@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Pencil, Trash2 } from "lucide-react";
+import { Check, GitMerge, Pencil, Trash2 } from "lucide-react";
 import { timelineNameProblem } from "../../domain/versioning";
 import type { TimelineInfo } from "../../types/sketch";
 
@@ -16,10 +16,14 @@ interface TimelineRowsProps {
   onSwitch: (timeline: TimelineInfo) => void;
   onRename: (timeline: TimelineInfo, to: string) => Promise<boolean>;
   onDelete: (timeline: TimelineInfo) => void;
+  /** Merge this timeline into the current one. */
+  onMerge: (timeline: TimelineInfo) => void;
 }
 
-/** Local timelines: switch on click; rename and delete on hover. */
-export function TimelineRows({ timelines, all, onSwitch, onRename, onDelete }: TimelineRowsProps) {
+/** Local timelines: switch on click; merge, rename and delete on hover. */
+export function TimelineRows({ timelines, all, onSwitch, onRename, onDelete, onMerge }: TimelineRowsProps) {
+  const current = all.find((timeline) => timeline.is_active);
+  const currentLabel = current ? current.label || current.name : "the current timeline";
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const problem = renaming ? timelineNameProblem(draft, all, renaming) : null;
@@ -75,6 +79,17 @@ export function TimelineRows({ timelines, all, onSwitch, onRename, onDelete }: T
                 {timeline.snapshot_count} {timeline.snapshot_count === 1 ? "version" : "versions"}
               </span>
             </button>
+            {!timeline.is_active && (
+              <button
+                type="button"
+                className={iconButtonClass}
+                onClick={() => onMerge(timeline)}
+                aria-label={`Merge ${label} into ${currentLabel}`}
+                title={`Merge into ${currentLabel}`}
+              >
+                <GitMerge className="h-3 w-3" aria-hidden="true" />
+              </button>
+            )}
             <button
               type="button"
               className={iconButtonClass}

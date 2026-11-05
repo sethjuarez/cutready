@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { ArrowDown, ChevronDown, Cloud, GitBranch, GitMerge, History, RefreshCw } from "lucide-react";
 import { filterRemoteTimelines, filterTimelines } from "../../domain/versioning";
 import { openHistoryTab } from "../../hooks/useVersioningLifecycle";
-import { startGetUpdates } from "../../services/preAction";
+import { requestPreAction, startGetUpdates } from "../../services/preAction";
 import { isSaveBlocked } from "../../services/versionOperation";
 import { useAppStore } from "../../stores/appStore";
 import { useSyncStore } from "../../stores/syncStore";
@@ -25,6 +25,7 @@ export function TimelineMenu() {
   const switchTimeline = useVersioningStore((s) => s.switchTimeline);
   const renameTimeline = useVersioningStore((s) => s.renameTimeline);
   const deleteTimeline = useVersioningStore((s) => s.deleteTimeline);
+  const mergeTimelines = useVersioningStore((s) => s.mergeTimelines);
   const currentRemote = useSyncStore((s) => s.currentRemote);
   const remoteBranches = useSyncStore((s) => s.remoteBranches);
   const remoteLoading = useSyncStore((s) => s.remoteBranchesLoading);
@@ -76,6 +77,11 @@ export function TimelineMenu() {
     close();
     if (timeline.is_active) return;
     run(() => request(timeline.label || timeline.name, () => switchTimeline(timeline.name)));
+  };
+  const merge = (timeline: TimelineInfo) => {
+    close();
+    const label = timeline.label || timeline.name;
+    run(() => requestPreAction({ operation: `Merge ${label}`, target: `merging ${label}`, run: () => mergeTimelines(timeline) }));
   };
   const adopt = (branch: string) => {
     close();
@@ -136,7 +142,7 @@ export function TimelineMenu() {
         />
       </div>
       <div className="max-h-72 overflow-y-auto px-1">
-        <TimelineRows timelines={local} all={timelines} onSwitch={switchTo} onRename={(t, to) => renameTimeline(t.name, to)} onDelete={(t) => run(() => remove(t))} />
+        <TimelineRows timelines={local} all={timelines} onSwitch={switchTo} onRename={(t, to) => renameTimeline(t.name, to)} onDelete={(t) => run(() => remove(t))} onMerge={merge} />
         {local.length === 0 && <p className="px-2 py-1.5 text-2xs text-[rgb(var(--color-text-secondary))]">No timelines match "{filter}"</p>}
         {currentRemote && (
           <div className="border-t border-[rgb(var(--color-border-subtle))] pb-1">

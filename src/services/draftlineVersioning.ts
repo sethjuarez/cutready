@@ -746,7 +746,7 @@ function applyIncomingReportToDto(report: ApplyIncomingReport): DraftlineApplyIn
   };
 }
 
-function mergeIncomingReportToDto(report: MergeIncomingReport): DraftlineMergeIncomingReport {
+export function mergeIncomingReportToDto(report: MergeIncomingReport): DraftlineMergeIncomingReport {
   const viewModel = createMergeConflictViewModel(report);
   return {
     syncStatus: {

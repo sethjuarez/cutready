@@ -699,6 +699,8 @@ pub fn run() {
             commands::draftline::apply_incoming,
             commands::draftline::preflight_merge_incoming,
             commands::draftline_merge::merge_incoming_with_token,
+            commands::draftline_merge::preflight_merge_variation,
+            commands::draftline_merge::merge_variation_with_resolutions,
             commands::draftline_shelf::preflight_apply_shelf,
             commands::draftline::merge_incoming_with_resolutions,
             commands::draftline::clone_from_url,
@@ -840,43 +842,41 @@ pub fn run() {
             commands::terminal::terminal_resize,
             commands::terminal::terminal_close,
         ])
-        .on_window_event(|window, event| {
-            match event {
-                tauri::WindowEvent::CloseRequested { .. } if window.label() == "main" => {
-                    // Archive any pending chat summary before the window closes,
-                    // under the project it originated in (not the currently active
-                    // one, which may have changed since the summary was captured).
-                    if let Some(state) = window.app_handle().try_state::<AppState>() {
-                        // A poisoned lock still holds the summary; archive it anyway.
-                        let summary = state
-                            .last_chat_summary
-                            .lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner)
-                            .take();
-                        if let Some(pending) = summary {
-                            let _ = crate::engine::memory::archive_session(
-                                &pending.repo_root,
-                                &pending.root,
-                                &pending.summary,
-                                &pending.session_id,
-                            );
-                        }
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { .. } if window.label() == "main" => {
+                // Archive any pending chat summary before the window closes,
+                // under the project it originated in (not the currently active
+                // one, which may have changed since the summary was captured).
+                if let Some(state) = window.app_handle().try_state::<AppState>() {
+                    // A poisoned lock still holds the summary; archive it anyway.
+                    let summary = state
+                        .last_chat_summary
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .take();
+                    if let Some(pending) = summary {
+                        let _ = crate::engine::memory::archive_session(
+                            &pending.repo_root,
+                            &pending.root,
+                            &pending.summary,
+                            &pending.session_id,
+                        );
                     }
                 }
-                tauri::WindowEvent::Destroyed if window.label() == "main" => {
-                    // Close preview and capture windows when main window closes
-                    let app = window.app_handle();
-                    if let Some(terminals) = app.try_state::<commands::terminal::TerminalState>() {
-                        terminals.close_all();
-                    }
-                    for label in &["preview", "capture"] {
-                        if let Some(w) = app.get_webview_window(label) {
-                            let _ = w.destroy();
-                        }
-                    }
-                }
-                _ => {}
             }
+            tauri::WindowEvent::Destroyed if window.label() == "main" => {
+                // Close preview and capture windows when main window closes
+                let app = window.app_handle();
+                if let Some(terminals) = app.try_state::<commands::terminal::TerminalState>() {
+                    terminals.close_all();
+                }
+                for label in &["preview", "capture"] {
+                    if let Some(w) = app.get_webview_window(label) {
+                        let _ = w.destroy();
+                    }
+                }
+            }
+            _ => {}
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
