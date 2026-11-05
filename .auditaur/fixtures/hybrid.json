@@ -1,0 +1,32 @@
+{
+  "prefix": "cutready-hybrid-drill-",
+  "appStores": [
+    {
+      "file": "identity.json",
+      "clear": true
+    }
+  ],
+  "hybrid": {
+    "folder": "cutready",
+    "checkout": "cutready/draft",
+    "code": [
+      {
+        "path": "src/app.js",
+        "body": "console.log('app');\n"
+      },
+      {
+        "path": "README.md",
+        "body": "# Contoso app\n"
+      }
+    ]
+  },
+  "remote": {
+    "seedSave": "Initial code"
+  },
+  "notes": [
+    {
+      "path": "plan.md",
+      "body": "# Launch plan\n\nDraft agenda.\n"
+    }
+  ]
+}
