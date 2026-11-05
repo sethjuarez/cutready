@@ -79,7 +79,7 @@ contoso-app/                    # Developer's code repo (owned by git, not Draft
 | LLM | **Microsoft Foundry** | Chat Completions + Responses API, multi-agent system |
 | Visuals | **Elucim DSL** (`@elucim/dsl`) | SVG-based framing visuals with semantic color tokens |
 | Word export | **Quilldown** (Rust) | Markdown → .docx for sketches/storyboards/notes; images validated via `safe_resolve` |
-| History graph | **d3.js** | Git branch/commit visualization |
+| History graph | **@draftline/react** | Version graph in the History tab (lazy-loaded) |
 | Timeline export | **FCPXML 1.9** | Multi-track, markers, DaVinci Resolve 17+ compatible |
 | Docs site | **Astro Starlight** | Published at `https://cutready.io` |
 | Versioning | **release-please** | Conventional Commits → automated semver + CHANGELOG |
@@ -130,7 +130,7 @@ cutready/
 | TabBar | Multi-tab editor with reorderable tabs (dnd-kit) |
 | SketchForm / ScriptTable | Sketch editing with 4-column planning table (inline markdown) |
 | ChatPanel | AI chat with multi-agent selection, tool call display, markdown rendering |
-| SnapshotGraph / HistoryGraphTab | Git history visualization (d3.js) |
+| HistoryTab | Version history: Timeline (filterable per document) and Graph views, entry actions |
 | VisualCell | Elucim DSL visual renderer with semantic color token support |
 | CommandPalette | VS Code-style command palette (Ctrl+Shift+P) |
 | ScreenCaptureOverlay / CaptureWindow | Screen region/monitor capture |
@@ -173,7 +173,7 @@ cutready/
 - Screen capture (region selection or full monitor)
 - Git-backed version history with snapshots, branching, merging
 - Git remote collaboration (push/pull/fetch via GitHub)
-- D3.js history graph visualization
+- History tab with a version timeline, per-document filter and Draftline graph
 - Document import (.docx, .pdf, .pptx)
 - Word export with orientation picker and visual rasterization
 - Auto-updater with update banner
