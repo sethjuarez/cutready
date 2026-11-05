@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, GitBranch, RotateCcw } from "lucide-react";
 import type { DraftlineVariationCreatePreflight } from "../../services/draftlineVersioning";
 
-/** "Start Branch from Here": names a new branch from a previewed version and switches to it. */
+/** "Start timeline from here": names a new timeline from a previewed version and switches to it. */
 export function StartBranchControls({
   activeTimelineLabel,
   menuOpen,
@@ -34,7 +34,7 @@ export function StartBranchControls({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [confirming, setConfirming] = useState(false);
-  const targetLabel = newTimelineName.trim() || "new branch";
+  const targetLabel = newTimelineName.trim() || "new timeline";
 
   useEffect(() => {
     if (!menuOpen) {
@@ -64,12 +64,12 @@ export function StartBranchControls({
         onClick={() => onMenuOpenChange(!menuOpen)}
         disabled={restoring}
         className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[rgb(var(--color-accent))] px-3 text-xs font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:cursor-not-allowed disabled:opacity-45"
-        title="Create a branch from this preview and switch to it"
+        title="Start a new timeline from this preview and switch to it"
         aria-haspopup="dialog"
         aria-expanded={menuOpen}
       >
         <RotateCcw className="h-3.5 w-3.5" />
-        {restoring ? "Starting..." : "Start Branch from Here"}
+        {restoring ? "Starting..." : "Start timeline from here"}
         <ChevronDown className={`h-3 w-3 transition-transform ${menuOpen ? "rotate-180" : ""}`} />
       </button>
 
@@ -82,11 +82,11 @@ export function StartBranchControls({
           <div className="mb-2 rounded-lg bg-[rgb(var(--color-surface-alt))] px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))]">
             <GitBranch className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
             You are previewing <span className="font-medium text-[rgb(var(--color-text))]">{snapshotLabel}</span>. To write from it,
-            CutReady creates branch <span className="font-medium text-[rgb(var(--color-text))]">{targetLabel}</span> and switches there. Your first edit will be dirty until you save a named snapshot.
+            CutReady starts the timeline <span className="font-medium text-[rgb(var(--color-text))]">{targetLabel}</span> and switches there. Your edits stay unsaved until you save a version.
           </div>
           <label>
             <span className="mb-1 block text-2xs font-medium uppercase tracking-wider text-[rgb(var(--color-text-secondary))]">
-              New branch name
+              New timeline name
             </span>
             <input
               value={newTimelineName}
@@ -94,12 +94,12 @@ export function StartBranchControls({
                 setConfirming(false);
                 onNewTimelineNameChange(event.target.value);
               }}
-              placeholder="branch-name"
+              placeholder="timeline-name"
               className="h-8 w-full rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-2 text-xs text-[rgb(var(--color-text))] outline-none placeholder:text-[rgb(var(--color-text-secondary))]/50 focus:border-[rgb(var(--color-accent))]"
             />
           </label>
           <div className="mt-2 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2 text-2xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
-            Current branch <span className="font-medium text-[rgb(var(--color-text))]">{activeTimelineLabel}</span> stays untouched. Save later asks for the snapshot name.
+            Current timeline <span className="font-medium text-[rgb(var(--color-text))]">{activeTimelineLabel}</span> stays untouched. Save asks for a version name later.
           </div>
           {restoreConflict && (
             <SnapshotBranchConflictPanel
@@ -120,9 +120,9 @@ export function StartBranchControls({
             }}
             disabled={restoreDisabled}
             className="mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-[rgb(var(--color-accent))] px-3 text-xs font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))] disabled:pointer-events-none disabled:opacity-45"
-            title="Create a branch and switch to it"
+            title="Start the timeline and switch to it"
           >
-            {restoring ? "Starting..." : confirming ? "Confirm Start Branch" : "Create Branch"}
+            {restoring ? "Starting..." : confirming ? "Confirm new timeline" : "Start timeline"}
           </button>
         </div>
       )}
@@ -141,16 +141,15 @@ function SnapshotBranchConflictPanel({
   onAdopt: () => void;
   onCancel: () => void;
 }) {
-  const remote = preflight.remote ?? "remote";
   const canAdopt = preflight.remote_collision || preflight.remote_only_collision;
   const message = canAdopt
-    ? `${remote}/${preflight.variation} already exists${preflight.existing_remote_head?.label ? ` at "${preflight.existing_remote_head.label}"` : ""}.`
-    : `Branch "${preflight.variation}" already exists locally.`;
+    ? `A shared timeline "${preflight.variation}" already exists${preflight.existing_remote_head?.label ? ` at "${preflight.existing_remote_head.label}"` : ""}.`
+    : `A timeline "${preflight.variation}" already exists.`;
 
   return (
     <div className="mt-2 rounded-lg border border-warning/25 bg-warning/5 px-3 py-2 text-2xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
       <div className="font-medium text-warning">{message}</div>
-      <div className="mt-1">Rename this branch, adopt the remote branch, or cancel starting from this snapshot.</div>
+      <div className="mt-1">Pick another name, switch to the shared timeline, or cancel.</div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         {preflight.suggested_alternative && (
           <button

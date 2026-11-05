@@ -50,7 +50,7 @@ export function MergeConflictPanel() {
       if (await applyMergeResolution(fileResolutions) === null) setApplying(false);
     } catch (err) {
       console.error("Failed to apply merge:", err);
-      useToastStore.getState().show(friendlyDraftlineErrorMessage(err) ?? "Couldn't apply the merge.", 6000, "error");
+      useToastStore.getState().show(friendlyDraftlineErrorMessage(err) ?? "Couldn't apply your choices.", 6000, "error");
       setApplying(false);
     }
   }, [allResolved, mergeConflicts, resolutions, applyMergeResolution]);

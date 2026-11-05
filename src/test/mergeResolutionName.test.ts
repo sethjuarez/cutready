@@ -50,7 +50,7 @@ describe("applyMergeResolution for team updates", () => {
     startConflictMerge(source);
     await expect(useVersioningStore.getState().applyMergeResolution([{ path: "intro.sk", content: "{}" }])).resolves.toBe("merge123");
     expect(useMergeNameStore.getState().pending).toBeNull();
-    expect(merge.mock.calls[0][1]).toBe("Brought in team updates\n\n- #24 lead queue (Dana)");
+    expect(merge.mock.calls[0][1]).toBe("Bring in team updates\n\n- #24 lead queue (Dana)");
     expect(useVersioningStore.getState().isMerging).toBe(false);
     expect(useToastStore.getState().toasts.map((toast) => toast.message)).toContain("Got 1 team update.");
   });

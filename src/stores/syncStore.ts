@@ -480,7 +480,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
     if (!currentRemote) return;
     if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
     if (isDirty) {
-      const reason = "Save or discard local changes before adopting a remote branch.";
+      const reason = "Save or discard your changes before switching to the shared timeline.";
       useToastStore.getState().show(reason, 5000, "error");
       throw new Error(reason);
     }
@@ -492,7 +492,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
       await get().loadRemoteBranches();
       await get().refreshSyncStatus();
       await versioning().loadGraphData();
-      useToastStore.getState().show(`Adopted ${currentRemote.name}/${branch}.`, 4000, "success");
+      useToastStore.getState().show(syncCopy.switchedToShared(branch), 4000, "success");
     } catch (err) {
       set({ syncError: errorMessage(err) });
       throw err;

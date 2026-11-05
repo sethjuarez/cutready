@@ -9,6 +9,8 @@ export const syncCopy = {
   upToDate: "Up to date",
   sending: "Sending…",
   checking: "Checking…",
+  /** Check, Get updates and Send share one busy flag, so the pill stays neutral. */
+  syncing: "Syncing…",
   notConnected: "Not connected",
   connected: "Connected",
   getUpdates: "Get updates",
@@ -26,6 +28,18 @@ export const syncCopy = {
     `You and ${teammates(authors)} changed the same thing. Choose what to keep.`,
   couldNotSend: "Couldn't check what still needs sending. Nothing was sent — try Send again.",
   moreTeamUpdates: "The team sent more updates while yours were coming in. Nothing was sent — try Send again.",
+  needsAttention: "Sync needs attention",
+  /** The one-line status pill: problems first, then what's coming in, then what's waiting to go out. */
+  status: ({ error = false, ahead = 0, behind = 0 }: { error?: boolean; ahead?: number; behind?: number }) =>
+    error ? syncCopy.needsAttention
+      : behind > 0 ? syncCopy.teamHasUpdates(behind)
+        : ahead > 0 ? syncCopy.savesWaiting(ahead)
+          : syncCopy.upToDate,
+  getSharedUpdates: "Get the shared project's updates",
+  sharedTimelines: "Shared timelines",
+  findingSharedTimelines: "Looking for shared timelines…",
+  noSharedTimelines: (filter?: string) => (filter ? `No shared timelines match "${filter}"` : "No other shared timelines"),
+  switchedToShared: (name: string) => `Switched to the shared timeline "${name}".`,
   sharedUpdates: (count: number) => `${plural(count, "update")} to the shared project`,
   sharedUpdatesNeedDeveloper:
     "The team's updates touch code outside this project. Ask a developer to bring them in.",
