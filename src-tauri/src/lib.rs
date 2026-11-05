@@ -468,7 +468,6 @@ pub fn run() {
                     let _ = app.emit("deep-link-received", arg.clone());
                 }
             }
-            // Focus the main window
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_focus();
             }
@@ -703,7 +702,9 @@ pub fn run() {
             commands::draftline_merge::merge_variation_with_resolutions,
             commands::draftline_shelf::preflight_apply_shelf,
             commands::draftline::merge_incoming_with_resolutions,
-            commands::draftline::clone_from_url,
+            commands::repo_clone::clone_from_url,
+            commands::repo_clone::clone_repository_for_project,
+            commands::repo_clone::reserve_project_folder,
             commands::interaction::detect_browser_profiles,
             commands::interaction::check_browsers_running,
             commands::interaction::prepare_browser,
@@ -865,7 +866,6 @@ pub fn run() {
                 }
             }
             tauri::WindowEvent::Destroyed if window.label() == "main" => {
-                // Close preview and capture windows when main window closes
                 let app = window.app_handle();
                 if let Some(terminals) = app.try_state::<commands::terminal::TerminalState>() {
                     terminals.close_all();

@@ -17,9 +17,8 @@ use tauri_plugin_auditaur::auditaur_command;
 
 use crate::commands::github::github_credential_token;
 use crate::engine::draftline_adapter::{
-    contributor_profile_for, cutready_content_policy, cutready_remote_options,
-    is_github_remote_url, namespaced_variation_name, CutReadyDraftlineAdapter,
-    CUTREADY_VARIATION_NAMESPACE,
+    contributor_profile_for, cutready_content_policy, is_github_remote_url,
+    namespaced_variation_name, CutReadyDraftlineAdapter, CUTREADY_VARIATION_NAMESPACE,
 };
 use crate::engine::github_pull_requests::GitHubPullRequestProvider;
 use crate::engine::write_lock;
@@ -222,7 +221,7 @@ fn remote_endpoint_to_dto(remote: RemoteEndpoint) -> DraftlineRemoteEndpointDto 
     }
 }
 
-fn reject_remote_url_credentials(url: &str) -> Result<(), String> {
+pub(crate) fn reject_remote_url_credentials(url: &str) -> Result<(), String> {
     let Ok(parsed) = reqwest::Url::parse(url) else {
         return Ok(());
     };
@@ -235,25 +234,6 @@ fn reject_remote_url_credentials(url: &str) -> Result<(), String> {
     }
 
     Ok(())
-}
-
-#[auditaur_command(skip_all, err)]
-pub async fn clone_from_url(url: String, dest: String) -> Result<(), String> {
-    reject_remote_url_credentials(&url)?;
-    let dest_path = PathBuf::from(&dest);
-    let credential = is_github_remote_url(&url)
-        .then(github_credential_token)
-        .flatten();
-    if let Some(credential) = credential.as_ref() {
-        tracing::debug!(
-            source = credential.source,
-            "Using GitHub token credential for Draftline clone"
-        );
-    }
-    let mut options = cutready_remote_options(credential.map(|credential| credential.token));
-    CutReadyDraftlineAdapter::clone_project_with_options(&url, &dest_path, &mut options)
-        .map(|_| ())
-        .map_err(|error| error.to_string())
 }
 
 pub(super) fn context_for_workspace(

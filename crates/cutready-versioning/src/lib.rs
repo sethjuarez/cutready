@@ -12,10 +12,10 @@ use draftline::{
     ApplyIncomingReport, ApplyIncomingResult, ChangeSet, ContentPolicy, Contributor,
     ContributorProfile, FolderFix, FolderState, HistoryEntry, MergeConflictResolution,
     MergeIncomingReport, MergeIncomingResult, MergeIncomingToken, PreflightReport, PreviewFile,
-    PublishResult, PullRequestProvider, RemoteCredential, RemoteEndpoint, RemoteOptions,
-    Result as DraftlineResult, SendPreflight, SendRequest, SendResult, Shelf, SwitchPolicy,
-    SyncStatus, Variation, VariationId, VariationMetadata, VariationSummary, Version, VersionDiff,
-    VersionId, VersionPreview, Workspace, WorkspaceSummary,
+    PublishResult, PullRequestProvider, RemoteEndpoint, RemoteOptions, Result as DraftlineResult,
+    SendPreflight, SendRequest, SendResult, Shelf, SwitchPolicy, SyncStatus, Variation,
+    VariationId, VariationMetadata, VariationSummary, Version, VersionDiff, VersionId,
+    VersionPreview, Workspace, WorkspaceSummary,
 };
 
 use serde::Serialize;
@@ -44,9 +44,12 @@ const CUTREADY_INCLUDED_PATHS: &[&str] = &[
 const CUTREADY_LARGE_FILE_THRESHOLD_BYTES: u64 = 50 * 1024 * 1024;
 
 pub mod naming;
+mod remote_credentials;
+pub mod repo_clone;
 mod restore;
 mod sync;
 pub use naming::{namespaced_variation_name, CUTREADY_VARIATION_NAMESPACE};
+pub use remote_credentials::{cutready_remote_options, is_github_remote_url};
 
 /// CutReady-facing facade over a Draftline workspace.
 pub struct CutReadyDraftlineAdapter {
@@ -487,34 +490,6 @@ pub fn cutready_variation_metadata(label: Option<&str>, slug: Option<&str>) -> V
         metadata = metadata.with_slug(slug);
     }
     metadata
-}
-
-pub fn cutready_remote_options(github_token: Option<String>) -> RemoteOptions<'static> {
-    RemoteOptions::new().with_credentials(move |request| {
-        if let Some(token) = github_token.as_ref() {
-            if request.allows_username_password && is_github_remote_url(request.url) {
-                return Ok(RemoteCredential::UsernamePassword {
-                    username: "x-access-token".to_string(),
-                    password: token.clone(),
-                });
-            }
-        }
-
-        if request.allows_ssh_key {
-            return Ok(RemoteCredential::SshAgent {
-                username: request.username_from_url.unwrap_or("git").to_string(),
-            });
-        }
-
-        Ok(RemoteCredential::Default)
-    })
-}
-
-pub fn is_github_remote_url(url: &str) -> bool {
-    let normalized = url.trim().to_ascii_lowercase();
-    normalized.starts_with("https://github.com/")
-        || normalized.starts_with("ssh://git@github.com/")
-        || normalized.starts_with("git@github.com:")
 }
 
 /// Read a project's git remote URLs without opening a Draftline workspace,
