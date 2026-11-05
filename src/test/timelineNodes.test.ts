@@ -30,4 +30,10 @@ describe("firstParentTimelineNodes", () => {
       "base",
     ]);
   });
+
+  it("without a head flag, starts from a tip even when an older save shows a later time", () => {
+    // A replayed save keeps its original (earlier) time; its parent came in from the team later.
+    const graph = [node("mine", 5, false, ["theirs"]), node("theirs", 0, false, ["base"]), node("base", 9)];
+    expect(firstParentTimelineNodes(graph).map((n) => n.id)).toEqual(["mine", "theirs", "base"]);
+  });
 });

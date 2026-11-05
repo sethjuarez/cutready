@@ -6,7 +6,10 @@ function newestFirst(nodes: GraphNode[]): GraphNode[] {
 
 export function firstParentTimelineNodes(nodes: GraphNode[]): GraphNode[] {
   const byId = new Map(nodes.map((node) => [node.id, node]));
-  const head = nodes.find((node) => node.is_head) ?? newestFirst(nodes)[0];
+  // Without a head flag, use a tip: save times can repeat or skew after team updates are brought in.
+  const parentIds = new Set(nodes.flatMap((node) => node.parents));
+  const tips = nodes.filter((node) => !parentIds.has(node.id));
+  const head = nodes.find((node) => node.is_head) ?? newestFirst(tips.length > 0 ? tips : nodes)[0];
   const timeline: GraphNode[] = [];
   const seen = new Set<string>();
   let current: GraphNode | undefined = head;
