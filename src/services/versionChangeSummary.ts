@@ -15,12 +15,13 @@ const CACHE_LIMIT = 200;
 /** Versions never change, so a summary between two of them can be reused for the session. */
 const cache = new Map<string, Promise<ChangeSummary>>();
 
-async function compute(fromId: string, toId: string): Promise<ChangeSummary> {
+async function compute(fromId: string, toId: string, path: string | null): Promise<ChangeSummary> {
   const f = facade();
   const diff = await f.diffVersions(fromId, toId);
+  const files = path ? diff.files.filter((file) => file.path === path) : diff.files;
   const read = async (version: string, path: string) => (await f.previewVersionFile(version, path)) ?? null;
   return loadChangeSummary(
-    diff.files.map((file) => ({ path: file.path, status: STATUS[file.kind] ?? "modified", isBinary: file.is_binary })),
+    files.map((file) => ({ path: file.path, status: STATUS[file.kind] ?? "modified", isBinary: file.is_binary })),
     async (file) => {
       // Draftline doesn't report a rename's old path, so only same-path edits get structured detail.
       if (file.isBinary || (file.status === "renamed" && !file.previousPath)) return null;
@@ -34,18 +35,21 @@ async function compute(fromId: string, toId: string): Promise<ChangeSummary> {
   );
 }
 
-/** Document-aware summary of what changed between two versions. Failed loads aren't cached. */
-export function loadVersionChangeSummary(fromId: string, toId: string): Promise<ChangeSummary> {
+/**
+ * Document-aware summary of what changed between two versions, limited to one
+ * Draftline path when `path` is given. Failed loads aren't cached.
+ */
+export function loadVersionChangeSummary(fromId: string, toId: string, path: string | null = null): Promise<ChangeSummary> {
   let workspace: string;
   try {
     workspace = requireWorkspacePath();
   } catch (error) {
     return Promise.reject(error);
   }
-  const key = `${workspace}\u0000${fromId}..${toId}`;
+  const key = `${workspace}\u0000${fromId}..${toId}\u0000${path ?? ""}`;
   const hit = cache.get(key);
   if (hit) return hit;
-  const promise = compute(fromId, toId);
+  const promise = compute(fromId, toId, path);
   cache.set(key, promise);
   promise.catch(() => cache.delete(key));
   if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value as string);

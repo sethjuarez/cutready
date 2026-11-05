@@ -135,8 +135,7 @@ impl Drop for BrowserConnection {
 pub struct AppState {
     /// The currently open repository (if any).
     pub current_repo: Mutex<Option<RepoView>>,
-    /// The active project within the repo. In single-project mode, root == repo root.
-    /// All existing `project_root()` callers read from this field — no changes needed.
+    /// The active project within the repo (`project_root()` reads it). In single-project mode, root == repo root.
     pub current_project: Mutex<Option<ProjectView>>,
     /// The prepared browser connection (if any).
     /// Uses `tokio::sync::Mutex` because it's held across await points.
@@ -670,11 +669,12 @@ pub fn run() {
             commands::draftline::add_remote,
             commands::draftline::list_support_refs,
             commands::draftline::get_changes,
-            commands::draftline::get_workspace_graph_for_variation,
-            commands::draftline::diff_versions,
-            commands::draftline::diff_version_to_workspace,
-            commands::draftline::preview_version_file,
-            commands::draftline::preview_workspace_file,
+            commands::draftline_history::get_workspace_graph_for_variation,
+            commands::draftline_history::get_path_history,
+            commands::draftline_history::diff_versions,
+            commands::draftline_history::diff_version_to_workspace,
+            commands::draftline_history::preview_version_file,
+            commands::draftline_history::preview_workspace_file,
             commands::version_saves::save,
             commands::draftline::move_project_folder,
             commands::draftline::list_shelves,

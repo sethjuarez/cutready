@@ -117,6 +117,7 @@
     "get_system_accessibility_display",
     "get_visual",
     "get_workspace_graph_for_variation",
+    "get_path_history",
     "get_workspace_settings",
     "get_workspace_state",
     "github_auth_status",

@@ -21,9 +21,9 @@ function SentMarker({ sent }: { sent: boolean | null }) {
   );
 }
 
-function TimelineEntryRow({ entry, onPreview }: { entry: TimelineEntry; onPreview: (id: string) => void }) {
+function TimelineEntryRow({ entry, onPreview, path }: { entry: TimelineEntry; onPreview: (id: string) => void; path: string | null }) {
   const ref = useRef<HTMLLIElement>(null);
-  const chips = useVersionChips(ref, entry.id, entry.parentId);
+  const chips = useVersionChips(ref, entry.id, entry.parentId, path);
   return (
     <li ref={ref} className="relative pl-6" data-testid="history-entry" data-version-id={entry.id}>
       <span
@@ -63,16 +63,18 @@ function TimelineEntryRow({ entry, onPreview }: { entry: TimelineEntry; onPrevie
 }
 
 /** Vertical list of the current timeline's versions, newest first. */
-export function HistoryTimeline({ entries, onPreview, showUnsaved = true }: {
+export function HistoryTimeline({ entries, onPreview, showUnsaved = true, path = null }: {
   entries: TimelineEntry[];
   onPreview: (id: string) => void;
+  /** Draftline path the timeline is filtered to, so chips only count that document. */
+  path?: string | null;
   /** Hidden while searching, since unsaved work has no name or comment to match. */
   showUnsaved?: boolean;
 }) {
   return (
     <ol aria-label="Versions" className="relative mx-auto max-w-3xl space-y-1 px-4 py-4 before:absolute before:bottom-4 before:left-[25px] before:top-4 before:w-px before:bg-[rgb(var(--color-border-subtle))]">
-      {showUnsaved && <UnsavedEntry />}
-      {entries.map((entry) => <TimelineEntryRow key={entry.id} entry={entry} onPreview={onPreview} />)}
+      {showUnsaved && <UnsavedEntry path={path} />}
+      {entries.map((entry) => <TimelineEntryRow key={entry.id} entry={entry} onPreview={onPreview} path={path} />)}
     </ol>
   );
 }

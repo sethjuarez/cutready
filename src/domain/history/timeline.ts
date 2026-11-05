@@ -1,4 +1,4 @@
-import type { WorkspaceGraph, WorkspaceGraphNode } from "@draftline/client";
+import type { PathHistory, WorkspaceGraph, WorkspaceGraphNode } from "@draftline/client";
 
 /** One version in the History tab's timeline. */
 export interface TimelineEntry {
@@ -61,4 +61,27 @@ export function buildTimeline(graph: WorkspaceGraph, remote: boolean): TimelineE
     if (node.touches_folder && node.kind === "normal") entries.push(toEntry(node, remote));
   }
   return entries;
+}
+
+/**
+ * Versions that changed the selected document, newest first, as Draftline's
+ * per-path history reports them. The graph supplies the current and sent markers.
+ */
+export function pathTimeline(history: PathHistory, graph: WorkspaceGraph | null, remote: boolean): TimelineEntry[] {
+  const nodes = new Map(graph?.nodes.map((node) => [node.version.id, node]) ?? []);
+  return history.entries.map(({ entry }) => {
+    const node = nodes.get(entry.version.id);
+    if (node) return toEntry(node, remote);
+    return {
+      id: entry.version.id,
+      name: entry.version.label,
+      comment: firstLine(entry.version.comment),
+      author: entry.version.author.name,
+      timeSeconds: entry.version.time_seconds,
+      parentId: entry.parent_ids[0] ?? null,
+      isMerge: entry.parent_ids.length > 1,
+      isCurrent: graph?.current_version === entry.version.id || entry.is_head,
+      sent: null,
+    };
+  });
 }

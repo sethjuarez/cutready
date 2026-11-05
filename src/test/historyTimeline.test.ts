@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WorkspaceGraph, WorkspaceGraphNode, WorkspaceGraphRef } from "@draftline/client";
-import { buildTimeline, firstLine, searchTimeline } from "../domain/history/timeline";
+import { buildTimeline, firstLine, pathTimeline, searchTimeline } from "../domain/history/timeline";
 import { mergeGraphPages } from "../services/versionHistory";
 
 function node(id: string, parents: string[], extra: Partial<WorkspaceGraphNode> = {}): WorkspaceGraphNode {
@@ -40,6 +40,27 @@ function graph(nodes: WorkspaceGraphNode[], current: string, refs: Partial<Works
     has_more: false,
   };
 }
+
+describe("pathTimeline", () => {
+  const entry = (id: string, parents: string[]) => ({
+    entry: { version: { id, label: `Path ${id}`, comment: "Why\nmore", author: { name: "Bo" }, time_seconds: 50 }, parent_ids: parents, is_head: false },
+    files: [],
+  });
+  const history = { paths: ["a.md"], entries: [entry("2", ["1"]), entry("9", ["8", "7"])], has_more: false, next_cursor: null } as never;
+
+  it("uses graph nodes when they're loaded, so sent markers stay accurate", () => {
+    const g = graph([node("2", ["1"], { reachable_from_remote_variation: true } as never)], "2");
+    const [first, second] = pathTimeline(history, g, true);
+    expect(first).toMatchObject({ id: "2", name: "Version 2", sent: true });
+    expect(second).toMatchObject({ id: "9", name: "Path 9", sent: null, isMerge: true, parentId: "8", author: "Bo" });
+  });
+
+  it("builds entries from the path history alone when there's no graph", () => {
+    const entries = pathTimeline(history, null, false);
+    expect(entries.map((e) => e.id)).toEqual(["2", "9"]);
+    expect(entries[0]).toMatchObject({ name: "Path 2", comment: "Why", isMerge: false });
+  });
+});
 
 describe("mergeGraphPages", () => {
   it("appends new nodes and refs and takes paging state from the later page", () => {

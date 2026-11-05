@@ -3,7 +3,11 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { WorkspaceGraph } from "@draftline/client";
 
 const loadHistoryGraph = vi.fn();
-vi.mock("../services/versionHistory", () => ({ loadHistoryGraph: () => loadHistoryGraph() }));
+const loadPathHistory = vi.fn();
+vi.mock("../services/versionHistory", () => ({
+  loadHistoryGraph: () => loadHistoryGraph(),
+  loadPathHistory: (path: string) => loadPathHistory(path),
+}));
 const loadVersionChangeSummary = vi.fn();
 vi.mock("../services/versionChangeSummary", () => ({ loadVersionChangeSummary: (...args: unknown[]) => loadVersionChangeSummary(...args) }));
 const loadWorkspaceChangeSummary = vi.fn();
@@ -16,6 +20,7 @@ import { HistoryTab } from "../components/history/HistoryTab";
 import { useChangeSummaryStore } from "../stores/changeSummaryStore";
 import { useSyncStore } from "../stores/syncStore";
 import { useVersioningStore } from "../stores/versioningStore";
+import { useHistoryFilterStore } from "../stores/historyFilterStore";
 import { summarizeChanges } from "../domain/changes";
 
 function version(id: string, label: string, parents: string[], comment?: string) {
@@ -45,6 +50,46 @@ describe("HistoryTab", () => {
     loadWorkspaceChangeSummary.mockReset().mockResolvedValue(summarizeChanges([{ path: "intro.sk", status: "modified" }]));
     useVersioningStore.setState({ isDirty: false } as never);
     useSyncStore.setState({ currentRemote: null } as never);
+    useHistoryFilterStore.setState({ document: null });
+    loadPathHistory.mockReset();
+  });
+
+  it("filters the timeline to one document and clears back to the project", async () => {
+    loadPathHistory.mockResolvedValue({
+      paths: ["intro.md"], has_more: false, next_cursor: null,
+      entries: [{ entry: { version: { id: "a", label: "First draft", author: { name: "Ada" }, time_seconds: Date.now() / 1000 }, parent_ids: [], is_head: false }, files: [] }],
+    });
+    useHistoryFilterStore.setState({ document: { path: "intro.md", title: "Intro" } });
+    render(<HistoryTab />);
+    await screen.findByText("First draft");
+    expect(loadPathHistory).toHaveBeenCalledWith("intro.md");
+    expect(screen.queryByText("Act 2 demos")).toBeNull();
+    expect(screen.getByTestId("history-document-filter").textContent).toContain("Intro");
+    fireEvent.click(screen.getByRole("button", { name: /whole project/ }));
+    expect(await screen.findByText("Act 2 demos")).toBeTruthy();
+    expect(screen.queryByTestId("history-document-filter")).toBeNull();
+  });
+
+  it("says a filtered document has no versions even while other documents are unsaved", async () => {
+    loadPathHistory.mockResolvedValue({ paths: ["intro.md"], has_more: false, next_cursor: null, entries: [] });
+    useVersioningStore.setState({ isDirty: true } as never);
+    useHistoryFilterStore.setState({ document: { path: "intro.md", title: "Intro" } });
+    render(<HistoryTab />);
+    expect(await screen.findByText("No saved versions changed Intro yet.")).toBeTruthy();
+  });
+
+  it("scopes chips and the unsaved entry to the filtered document", async () => {
+    loadPathHistory.mockResolvedValue({
+      paths: ["intro.md"], has_more: false, next_cursor: null,
+      entries: [{ entry: { version: { id: "b", label: "Act 2 demos", author: { name: "Ada" }, time_seconds: Date.now() / 1000 }, parent_ids: ["a"], is_head: false }, files: [] }],
+    });
+    useVersioningStore.setState({ isDirty: true } as never);
+    useHistoryFilterStore.setState({ document: { path: "intro.md", title: "Intro" } });
+    render(<HistoryTab />);
+    await screen.findByTestId("history-entry-chips");
+    expect(loadVersionChangeSummary).toHaveBeenCalledWith("a", "b", "intro.md");
+    // The workspace's unsaved work only touches intro.sk, so the filtered timeline hides it.
+    expect(screen.queryByTestId("history-unsaved-entry")).toBeNull();
   });
 
   it("shows change chips against the first parent, skipping the root version", async () => {
@@ -53,7 +98,7 @@ describe("HistoryTab", () => {
     expect(chips).toHaveLength(1);
     expect(chips[0].textContent).toBe("Documents: 1 added");
     expect(loadVersionChangeSummary).toHaveBeenCalledTimes(1);
-    expect(loadVersionChangeSummary).toHaveBeenCalledWith("a", "b");
+    expect(loadVersionChangeSummary).toHaveBeenCalledWith("a", "b", null);
   });
 
   it("marks versions sent or not sent only when a remote is connected", async () => {

@@ -7,9 +7,9 @@ use draftline::tauri_contract as contract;
 use draftline::VersionId;
 use draftline::{
     ApplyIncomingReport, ChangeSet, ContributorProfile, MergeIncomingReport, OutgoingFileKind,
-    PreflightReport, PreviewFile, PullRequestProvider, RemoteCredential, RemoteCredentialRequest,
+    PreflightReport, PullRequestProvider, RemoteCredential, RemoteCredentialRequest,
     RemoteEndpoint, RemoteOptions, SendRequest, SendResult, Shelf, Variation, VariationId,
-    VariationRenamePreflight, VariationSummary, VersionDiff,
+    VariationRenamePreflight, VariationSummary,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
@@ -556,59 +556,6 @@ pub async fn get_changes(
 ) -> contract::TauriCommandResult<ChangeSet> {
     let context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::get_changes_with_context(&context, request))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn get_workspace_graph_for_variation(
-    request: contract::WorkspaceGraphVariationRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<draftline::WorkspaceGraph> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::get_workspace_graph_for_variation_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn diff_versions(
-    request: contract::DiffVersionsRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<VersionDiff> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::diff_versions_with_context(&context, request))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn diff_version_to_workspace(
-    request: contract::VersionRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<VersionDiff> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::diff_version_to_workspace_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn preview_version_file(
-    request: contract::PreviewVersionFileRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<Option<PreviewFile>> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::preview_version_file_with_context(
-        &context, request,
-    ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn preview_workspace_file(
-    request: contract::CurrentFileRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<Option<draftline::CurrentFilePreview>> {
-    let context = context_for_workspace(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::preview_workspace_file_with_context(
-        &context, request,
-    ))
 }
 
 #[derive(Debug, Clone, Deserialize)]

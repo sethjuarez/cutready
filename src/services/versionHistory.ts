@@ -1,4 +1,4 @@
-import type { WorkspaceGraph } from "@draftline/client";
+import type { PathHistory, WorkspaceGraph } from "@draftline/client";
 import { facade } from "./draftlineVersioning";
 
 const PAGE_SIZE = 250;
@@ -36,4 +36,16 @@ export function mergeGraphPages(first: WorkspaceGraph, next: WorkspaceGraph): Wo
     next_cursor: next.next_cursor,
     was_pruned: first.was_pruned || next.was_pruned,
   };
+}
+
+/** Versions on the current timeline that changed `path` (a Draftline path), with every page loaded. */
+export async function loadPathHistory(path: string): Promise<PathHistory> {
+  const f = facade();
+  const load = (cursor?: number | null) => f.pathHistory([path], { limit: PAGE_SIZE, cursor });
+  let history = await load();
+  for (let page = 1; history.has_more && history.next_cursor != null && page < MAX_PAGES; page += 1) {
+    const next = await load(history.next_cursor);
+    history = { ...next, entries: [...history.entries, ...next.entries] };
+  }
+  return history;
 }

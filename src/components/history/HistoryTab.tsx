@@ -1,11 +1,13 @@
 import { lazy, Suspense, useMemo, useState } from "react";
-import { GitFork, History, ListTree, Search } from "lucide-react";
-import { buildTimeline, searchTimeline } from "../../domain/history/timeline";
+import { FileText, GitFork, History, ListTree, Search, X } from "lucide-react";
+import { buildTimeline, pathTimeline, searchTimeline } from "../../domain/history/timeline";
+import { useHistoryFilterStore } from "../../stores/historyFilterStore";
 import { useSyncStore } from "../../stores/syncStore";
 import { useVersioningStore } from "../../stores/versioningStore";
 import { ErrorBoundary } from "../ErrorBoundary";
 import { HistoryTimeline } from "./HistoryTimeline";
 import { useHistoryGraph } from "./useHistoryGraph";
+import { usePathHistory } from "./usePathHistory";
 
 const HistoryGraphView = lazy(() => import("./HistoryGraphView"));
 
@@ -28,21 +30,30 @@ function Message({ children, tone = "muted" }: { children: React.ReactNode; tone
 
 /** The History document tab: the current timeline's versions as a list, or Draftline's graph. */
 export function HistoryTab() {
-  const { graph, loading, error } = useHistoryGraph();
+  const { graph, loading: graphLoading, error: graphError } = useHistoryGraph();
+  const document = useHistoryFilterStore((s) => s.document);
+  const setDocument = useHistoryFilterStore((s) => s.setDocument);
+  const pathHistory = usePathHistory(document?.path ?? null);
   const openSnapshotPreview = useVersioningStore((s) => s.openSnapshotPreview);
   const hasRemote = useSyncStore((s) => !!s.currentRemote);
   const isDirty = useVersioningStore((s) => s.isDirty);
   const [view, setView] = useState<HistoryView>("timeline");
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState("");
-  const timeline = useMemo(() => (graph ? buildTimeline(graph, hasRemote) : []), [graph, hasRemote]);
+  const filtered = view === "timeline" && !!document;
+  const loading = filtered ? pathHistory.loading : graphLoading;
+  const error = filtered ? pathHistory.error : graphError;
+  const timeline = useMemo(() => {
+    if (document) return pathHistory.history ? pathTimeline(pathHistory.history, graph, hasRemote) : [];
+    return graph ? buildTimeline(graph, hasRemote) : [];
+  }, [document, pathHistory.history, graph, hasRemote]);
   const visible = useMemo(() => searchTimeline(timeline, query), [timeline, query]);
   const preview = (id: string) => void openSnapshotPreview(id);
 
   let body: React.ReactNode;
   if (error) body = <Message tone="error">Couldn't load history: {error}</Message>;
-  else if (!graph) body = <Message>{loading ? "Loading history…" : "No versions yet."}</Message>;
-  else if (view === "graph") {
+  else if (filtered ? !pathHistory.history : !graph) body = <Message>{loading ? "Loading history…" : "No versions yet."}</Message>;
+  else if (view === "graph" && graph) {
     body = (
       <ErrorBoundary fallback={<Message tone="error">The graph failed to render.</Message>}>
         <Suspense fallback={<Message>Loading graph…</Message>}>
@@ -50,9 +61,14 @@ export function HistoryTab() {
         </Suspense>
       </ErrorBoundary>
     );
-  } else if (timeline.length === 0 && !isDirty) body = <Message>No versions yet.</Message>;
-  else if (visible.length === 0 && query.trim()) body = <Message>No versions match “{query}”.</Message>;
-  else body = <div className="flex-1 overflow-y-auto"><HistoryTimeline entries={visible} onPreview={preview} showUnsaved={!query.trim()} /></div>;
+  } else if (timeline.length === 0 && (!isDirty || document)) {
+    const empty = <Message>{document ? `No saved versions changed ${document.title} yet.` : "No versions yet."}</Message>;
+    // A filtered document may still have unsaved work; UnsavedEntry hides itself when it doesn't.
+    body = document && isDirty
+      ? <div className="flex-1 overflow-y-auto"><HistoryTimeline entries={[]} onPreview={preview} path={document.path} />{empty}</div>
+      : empty;
+  } else if (visible.length === 0 && query.trim()) body = <Message>No versions match “{query}”.</Message>;
+  else body = <div className="flex-1 overflow-y-auto"><HistoryTimeline entries={visible} onPreview={preview} showUnsaved={!query.trim()} path={document?.path ?? null} /></div>;
 
   return (
     <section className="flex min-h-0 flex-1 flex-col" aria-labelledby="history-tab-title" data-testid="history-tab">
@@ -69,6 +85,22 @@ export function HistoryTab() {
             <GitFork className="h-3.5 w-3.5" aria-hidden /> Graph
           </button>
         </div>
+        {document && (
+          <span className="inline-flex h-7 min-w-0 items-center gap-1.5 rounded-full bg-[rgb(var(--color-surface-alt))] pl-2.5 pr-1 text-xs text-[rgb(var(--color-text))]" data-testid="history-document-filter">
+            <FileText className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--color-text-secondary))]" aria-hidden />
+            <span className="max-w-[16rem] truncate" title={document.path}>{document.title}</span>
+            {view === "graph" && <span className="text-[rgb(var(--color-text-secondary))]">· Timeline only</span>}
+            <button
+              type="button"
+              onClick={() => setDocument(null)}
+              aria-label={`Show history for the whole project instead of ${document.title}`}
+              title="Show the whole project"
+              className="grid h-5 w-5 place-items-center rounded-full text-[rgb(var(--color-text-secondary))] hover:bg-fill-hover hover:text-[rgb(var(--color-text))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]"
+            >
+              <X className="h-3 w-3" aria-hidden />
+            </button>
+          </span>
+        )}
         <div className="ml-auto flex items-center gap-2">
           {view === "timeline" ? (
             <label className="relative">
