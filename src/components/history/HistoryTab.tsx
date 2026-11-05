@@ -5,6 +5,7 @@ import { useHistoryFilterStore } from "../../stores/historyFilterStore";
 import { useSyncStore } from "../../stores/syncStore";
 import { useVersioningStore } from "../../stores/versioningStore";
 import { ErrorBoundary } from "../ErrorBoundary";
+import { openCompareTab } from "../compare/openCompareTab";
 import { HistoryTimeline } from "./HistoryTimeline";
 import { useHistoryGraph } from "./useHistoryGraph";
 import { useHistoryEntryMenu } from "./useHistoryEntryMenu";
@@ -50,7 +51,8 @@ export function HistoryTab() {
   }, [document, pathHistory.history, graph, hasRemote]);
   const visible = useMemo(() => searchTimeline(timeline, query), [timeline, query]);
   const preview = (id: string) => void openSnapshotPreview(id);
-  const entryMenu = useHistoryEntryMenu(document, timeline, preview);
+  const entryMenu = useHistoryEntryMenu(document, timeline, preview, (target) =>
+    openCompareTab(target.path ? { ...target, aliases: pathHistory.history?.paths ?? [] } : target));
 
   let body: React.ReactNode;
   if (error) body = <Message tone="error">Couldn't load history: {error}</Message>;

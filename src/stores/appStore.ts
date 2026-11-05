@@ -89,7 +89,7 @@ export interface SidebarOrder {
 /** An open tab in the editor area. */
 export interface EditorTab {
   id: string;
-  type: "sketch" | "storyboard" | "note" | "chat-artifact" | "history" | "snapshot-preview" | "asset" | "diff" | "agent-run" | "database";
+  type: "sketch" | "storyboard" | "note" | "chat-artifact" | "history" | "snapshot-preview" | "asset" | "diff" | "compare" | "agent-run" | "database";
   path: string;
   title: string;
 }
@@ -819,7 +819,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     if (!tab) return;
     if (openTabs.length < 2) return;
     // Guard: only splittable types
-    if (tab.type === "history" || tab.type === "snapshot-preview" || tab.type === "asset" || tab.type === "agent-run" || tab.type === "diff" || tab.type === "database") return;
+    if (tab.type === "history" || tab.type === "snapshot-preview" || tab.type === "asset" || tab.type === "agent-run" || tab.type === "diff" || tab.type === "compare" || tab.type === "database") return;
 
     // Remove from main
     const newOpenTabs = openTabs.filter((t) => t.id !== tabId);

@@ -97,7 +97,7 @@ export function TabBar() {
   if (openTabs.length === 0) return null;
 
   const contextTab = openTabs.find((t) => t.id === contextTabIdRef.current);
-  const canSplit = contextTab && openTabs.length > 1 && contextTab.type !== "history" && contextTab.type !== "snapshot-preview" && contextTab.type !== "asset" && contextTab.type !== "agent-run" && contextTab.type !== "diff" && contextTab.type !== "database";
+  const canSplit = contextTab && openTabs.length > 1 && contextTab.type !== "history" && contextTab.type !== "snapshot-preview" && contextTab.type !== "asset" && contextTab.type !== "agent-run" && contextTab.type !== "diff" && contextTab.type !== "compare" && contextTab.type !== "database";
   const copyablePath = getTabCopyPath(contextTab);
   const isAlreadyInSplit = contextTab
     ? splitTabs.some((st) => st.path === contextTab.path && st.type === contextTab.type)
@@ -321,7 +321,7 @@ function TabMenuItem({
     : tab.type === "storyboard" ? "Storyboard"
     : tab.type === "history" ? "History"
     : tab.type === "snapshot-preview" ? "Snapshot Preview"
-    : tab.type === "diff" ? "Diff"
+    : tab.type === "diff" ? "Diff" : tab.type === "compare" ? "Compare"
     : tab.type === "agent-run" ? "Agent Run"
     : tab.type === "database" ? "Database"
     : tab.type === "chat-artifact" ? "Chat"
@@ -333,7 +333,7 @@ function TabMenuItem({
     : tab.type === "storyboard" ? StoryboardIcon
     : tab.type === "history" ? HistoryIcon
     : tab.type === "snapshot-preview" ? DiffIcon
-    : tab.type === "diff" ? DiffIcon
+    : tab.type === "diff" || tab.type === "compare" ? DiffIcon
     : tab.type === "agent-run" ? AgentRunIcon
     : tab.type === "database" ? DatabaseIcon
     : tab.type === "chat-artifact" ? ChatArtifactIcon
@@ -406,7 +406,7 @@ function Tab({
     : tab.type === "storyboard" ? "Storyboard"
     : tab.type === "history" ? "History"
     : tab.type === "snapshot-preview" ? "Snapshot Preview"
-    : tab.type === "diff" ? "Diff"
+    : tab.type === "diff" ? "Diff" : tab.type === "compare" ? "Compare"
     : tab.type === "agent-run" ? "Agent Run"
     : tab.type === "database" ? "Database"
     : tab.type === "chat-artifact" ? "Chat"
@@ -425,7 +425,7 @@ function Tab({
   const typeClasses =
     documentTone
       ? { bar: documentTone.bg, icon: documentTone.text, tint: documentTone.bg }
-      : tab.type === "diff" || isVisual || isNarration
+      : tab.type === "diff" || tab.type === "compare" || isVisual || isNarration
         ? { bar: "bg-warning", icon: "text-warning", tint: "bg-warning" }
         : accentTypeClasses;
 
@@ -434,7 +434,7 @@ function Tab({
     : tab.type === "storyboard" ? StoryboardIcon
     : tab.type === "history" ? HistoryIcon
     : tab.type === "snapshot-preview" ? DiffIcon
-    : tab.type === "diff" ? DiffIcon
+    : tab.type === "diff" || tab.type === "compare" ? DiffIcon
     : tab.type === "agent-run" ? AgentRunIcon
     : tab.type === "database" ? DatabaseIcon
     : tab.type === "chat-artifact" ? ChatArtifactIcon

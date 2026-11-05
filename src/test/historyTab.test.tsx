@@ -23,6 +23,8 @@ import { useSyncStore } from "../stores/syncStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import { useHistoryFilterStore } from "../stores/historyFilterStore";
 import { summarizeChanges } from "../domain/changes";
+import { parseCompareTabPath } from "../domain/compare/compareTarget";
+import { useAppStore } from "../stores/appStore";
 
 function version(id: string, label: string, parents: string[], comment?: string) {
   return {
@@ -53,6 +55,20 @@ describe("HistoryTab", () => {
     useSyncStore.setState({ currentRemote: null } as never);
     useHistoryFilterStore.setState({ document: null });
     loadPathHistory.mockReset();
+  });
+
+  it("opens a Compare tab from an entry's menu", async () => {
+    useAppStore.setState({ openTabs: [], activeTabId: null } as never);
+    render(<HistoryTab />);
+    fireEvent.click(await screen.findByRole("button", { name: "Actions for Act 2 demos" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Compare with previous/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Act 2 demos" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Compare with now/ }));
+    const targets = useAppStore.getState().openTabs.map((tab) => parseCompareTabPath(tab.path));
+    expect(targets).toEqual([
+      { from: "a", to: "b", fromLabel: "First draft", toLabel: "Act 2 demos", path: null, documentTitle: null },
+      { from: "b", to: "workspace", fromLabel: "Act 2 demos", toLabel: "Now", path: null, documentTitle: null },
+    ]);
   });
 
   it("opens an entry's actions menu to copy its ID and restore the document", async () => {

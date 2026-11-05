@@ -5,6 +5,8 @@ import { SketchForm } from "./SketchForm";
 import { NoteEditor } from "./NoteEditor";
 import { AssetViewer } from "./AssetViewer";
 import { DiffViewer } from "./DiffViewer";
+import { CompareTab } from "./compare/CompareTab";
+import { parseCompareTabPath } from "../domain/compare/compareTarget";
 import { DatabaseViewer } from "./DatabaseViewer";
 import { ChatArtifactViewer } from "./ChatArtifactViewer";
 import { ResizeHandle } from "./ResizeHandle";
@@ -38,6 +40,7 @@ export function StoryboardPanel() {
   const isSnapshotPreviewTab = activeTab?.type === "snapshot-preview";
   const isAssetTab = activeTab?.type === "asset";
   const isDiffTab = activeTab?.type === "diff";
+  const compareTarget = activeTab?.type === "compare" ? parseCompareTabPath(activeTab.path) : null;
   const isAgentRunTab = activeTab?.type === "agent-run";
   const isDatabaseTab = activeTab?.type === "database";
   const isChatArtifactTab = activeTab?.type === "chat-artifact";
@@ -93,6 +96,10 @@ export function StoryboardPanel() {
               </ErrorBoundary>
             ) : isSnapshotPreviewTab && activeTab ? (
               <SnapshotPreviewTab snapshotId={snapshotIdFromTabPath(activeTab.path)} />
+            ) : compareTarget ? (
+              <ErrorBoundary key={activeTab?.path} fallback={<div className="flex-1 flex items-center justify-center text-sm text-error">Compare failed to render</div>}>
+                <CompareTab target={compareTarget} />
+              </ErrorBoundary>
             ) : isDiffTab && activeTab ? (
               <DiffViewer filePath={activeTab.path} />
             ) : isAgentRunTab && activeTab ? (
