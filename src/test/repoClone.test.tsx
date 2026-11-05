@@ -6,6 +6,7 @@ const ipc = vi.hoisted(() => ({
   createProjectInRepository: vi.fn(),
   cloneFromUrl: vi.fn(),
   lastParentFolder: vi.fn(),
+  inspectRepositoryForProject: vi.fn(),
 }));
 vi.mock("../ipc/workspace", () => ({ workspaceIpc: ipc }));
 
@@ -17,6 +18,8 @@ import { AdoptFolderDialog } from "../components/AdoptFolderDialog";
 import { useAppStore } from "../stores/appStore";
 import { useToastStore } from "../stores/toastStore";
 import type { ProjectView } from "../types/project";
+import type { RepositoryInspection } from "@draftline/client";
+import { repoPreflight } from "../services/repoPreflight";
 
 const project = (root: string): ProjectView => ({ root, name: "demo", repo_root: root, hybrid: true });
 
@@ -33,6 +36,52 @@ const repo = (root: string, project_path: string | null = null, is_partial_clone
   target_folder: null,
   project_path,
   is_partial_clone,
+});
+
+const inspection = (overrides: Partial<RepositoryInspection> = {}): RepositoryInspection => ({
+  location_kind: "remote",
+  is_repository: true,
+  root: null,
+  project: null,
+  current_branch: null,
+  default_branch: "main",
+  branches: ["main"],
+  remotes: [],
+  lfs: { used: null, available: true },
+  target_folder: null,
+  github: null,
+  ...overrides,
+});
+
+describe("repoPreflight", () => {
+  it("says nothing and offers no choice for a plain one-branch repository", () => {
+    expect(repoPreflight(inspection())).toEqual({ notices: [], targets: [] });
+  });
+
+  it("offers the default first and leaves out CutReady's own variations", () => {
+    const { targets } = repoPreflight(inspection({ branches: ["cutready/demo", "dev", "main"], default_branch: "main" }));
+    expect(targets).toEqual(["main", "dev"]);
+  });
+
+  it("defaults to where an existing project already sends", () => {
+    const project = { folder: "talk", id: "p1", base_branch: "dev", commit_template: null, in_marker: true };
+    const result = repoPreflight(inspection({ project, branches: ["dev", "main"] }));
+    expect(result.targets[0]).toBe("dev");
+    expect(result.notices[0]).toMatchObject({ tone: "info", message: expect.stringContaining('"talk"') });
+  });
+
+  it("warns about missing Git LFS and an account that can't send", () => {
+    const github = {
+      repository: { owner: "contoso", repo: "app" },
+      default_branch: "main",
+      can_push: false,
+      private: false,
+      fork_parent: null,
+    };
+    const { notices } = repoPreflight(inspection({ lfs: { used: true, available: false }, github }));
+    expect(notices.map((n) => n.tone)).toEqual(["warning", "warning"]);
+    expect(notices[1].message).toMatch(/contoso\/app.*fork/);
+  });
 });
 
 describe("repoClone service", () => {
@@ -126,6 +175,7 @@ describe("New in existing repo form", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     chooseFolder.mockResolvedValue("/work");
+    ipc.inspectRepositoryForProject.mockResolvedValue(inspection());
     createProject.mockImplementation(async (path: string) => useAppStore.setState({ currentProject: project(path) }));
     openProject.mockImplementation(async (path: string) => useAppStore.setState({ currentProject: project(path) }));
     useAppStore.setState({ createProject, openProject, currentProject: null, error: null, adoptionPrompt: null });
@@ -153,8 +203,26 @@ describe("New in existing repo form", () => {
       { url: "https://github.com/org/app.git", dest: "/work/app", blobless: false },
       expect.any(Function),
     );
-    expect(ipc.createProjectInRepository).toHaveBeenCalledWith("/work/app", "talk");
+    expect(ipc.createProjectInRepository).toHaveBeenCalledWith("/work/app", "talk", null);
     expect(createProject).toHaveBeenCalledWith("/work/app/talk");
+  });
+
+  it("checks the repository first and records where the project sends its saves", async () => {
+    ipc.inspectRepositoryForProject.mockResolvedValue(inspection({ branches: ["dev", "main"], lfs: { used: true, available: false } }));
+    ipc.cloneRepositoryForProject.mockResolvedValue(repo("/work/app"));
+    ipc.createProjectInRepository.mockResolvedValue(inited("/work/app/talk"));
+    render(<NewInRepoForm chooseFolder={chooseFolder} onClose={onClose} />);
+    fireEvent.change(screen.getByLabelText("Repository"), { target: { value: "https://github.com/org/app.git" } });
+    const sendTo = await screen.findByLabelText("Send saves to", undefined, { timeout: 3000 });
+    expect(ipc.inspectRepositoryForProject).toHaveBeenCalledWith("https://github.com/org/app.git");
+    expect(screen.getByText(/uses Git LFS/)).toBeTruthy();
+    fireEvent.change(sendTo, { target: { value: "dev" } });
+    fireEvent.click(screen.getByRole("button", { name: "Download to" }));
+    await screen.findByText("/work/app");
+    fireEvent.change(screen.getByLabelText("Workspace name"), { target: { value: "talk" } });
+    fireEvent.click(screen.getByRole("button", { name: "Download & create" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(ipc.createProjectInRepository).toHaveBeenCalledWith("/work/app", "talk", "dev");
   });
 
   it("shows download progress while cloning", async () => {

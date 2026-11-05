@@ -23,6 +23,7 @@ pub mod note;
 // CmdError is serialized straight across IPC, so its size never sits on a hot path.
 #[allow(clippy::result_large_err)]
 pub mod project;
+pub mod project_settings;
 pub mod recording;
 // CmdError is serialized straight across IPC, so its size never sits on a hot path.
 #[allow(clippy::result_large_err)]
