@@ -4,12 +4,19 @@ import type { WorkspaceGraph } from "@draftline/client";
 
 const loadHistoryGraph = vi.fn();
 vi.mock("../services/versionHistory", () => ({ loadHistoryGraph: () => loadHistoryGraph() }));
+const loadVersionChangeSummary = vi.fn();
+vi.mock("../services/versionChangeSummary", () => ({ loadVersionChangeSummary: (...args: unknown[]) => loadVersionChangeSummary(...args) }));
+const loadWorkspaceChangeSummary = vi.fn();
+vi.mock("../services/workspaceChangeSummary", () => ({ loadWorkspaceChangeSummary: () => loadWorkspaceChangeSummary() }));
 vi.mock("../components/history/HistoryGraphView", () => ({
   default: ({ view }: { view: string }) => <div data-testid="graph-view">{view}</div>,
 }));
 
 import { HistoryTab } from "../components/history/HistoryTab";
+import { useChangeSummaryStore } from "../stores/changeSummaryStore";
+import { useSyncStore } from "../stores/syncStore";
 import { useVersioningStore } from "../stores/versioningStore";
+import { summarizeChanges } from "../domain/changes";
 
 function version(id: string, label: string, parents: string[], comment?: string) {
   return {
@@ -21,6 +28,7 @@ function version(id: string, label: string, parents: string[], comment?: string)
     is_current: id === "b",
     is_merge: false,
     kind: "normal",
+    reachable_from_remote_variation: id === "a",
   };
 }
 
@@ -33,6 +41,44 @@ const graph = {
 describe("HistoryTab", () => {
   beforeEach(() => {
     loadHistoryGraph.mockReset().mockResolvedValue(graph);
+    loadVersionChangeSummary.mockReset().mockResolvedValue(summarizeChanges([{ path: "intro.md", status: "added" }]));
+    loadWorkspaceChangeSummary.mockReset().mockResolvedValue(summarizeChanges([{ path: "intro.sk", status: "modified" }]));
+    useVersioningStore.setState({ isDirty: false } as never);
+    useSyncStore.setState({ currentRemote: null } as never);
+  });
+
+  it("shows change chips against the first parent, skipping the root version", async () => {
+    render(<HistoryTab />);
+    const chips = await screen.findAllByTestId("history-entry-chips");
+    expect(chips).toHaveLength(1);
+    expect(chips[0].textContent).toBe("Documents: 1 added");
+    expect(loadVersionChangeSummary).toHaveBeenCalledTimes(1);
+    expect(loadVersionChangeSummary).toHaveBeenCalledWith("a", "b");
+  });
+
+  it("marks versions sent or not sent only when a remote is connected", async () => {
+    const { unmount } = render(<HistoryTab />);
+    await screen.findByText("First draft");
+    expect(screen.queryByText("Sent")).toBeNull();
+    unmount();
+    useSyncStore.setState({ currentRemote: { name: "origin", url: "x" } } as never);
+    render(<HistoryTab />);
+    await screen.findByText("First draft");
+    expect(screen.getByText("Not sent").closest("[data-version-id]")?.getAttribute("data-version-id")).toBe("b");
+    expect(screen.getByText("Sent").closest("[data-version-id]")?.getAttribute("data-version-id")).toBe("a");
+  });
+
+  it("shows an Unsaved changes entry with chips that opens the save form", async () => {
+    const openForSave = vi.fn();
+    useChangeSummaryStore.setState({ openForSave } as never);
+    useVersioningStore.setState({ isDirty: true } as never);
+    render(<HistoryTab />);
+    const entry = await screen.findByTestId("history-unsaved-entry");
+    expect(await screen.findByText("1 sketch edited")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Save version" }));
+    expect(openForSave).toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search versions" }), { target: { value: "draft" } });
+    expect(entry.isConnected).toBe(false);
   });
 
   it("lists versions newest first and opens a preview", async () => {
@@ -63,6 +109,14 @@ describe("HistoryTab", () => {
     expect((await screen.findByTestId("graph-view")).textContent).toBe("first-parent");
     fireEvent.click(screen.getByRole("checkbox", { name: "Show merged-in versions" }));
     expect(screen.getByTestId("graph-view").textContent).toBe("expanded");
+  });
+
+  it("shows the Unsaved changes entry before the first version is saved", async () => {
+    loadHistoryGraph.mockResolvedValue({ ...graph, current_version: null, nodes: [] });
+    useVersioningStore.setState({ isDirty: true } as never);
+    render(<HistoryTab />);
+    expect(await screen.findByTestId("history-unsaved-entry")).toBeTruthy();
+    expect(screen.queryByText("No versions yet.")).toBeNull();
   });
 
   it("shows load errors", async () => {

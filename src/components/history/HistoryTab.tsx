@@ -31,6 +31,7 @@ export function HistoryTab() {
   const { graph, loading, error } = useHistoryGraph();
   const openSnapshotPreview = useVersioningStore((s) => s.openSnapshotPreview);
   const hasRemote = useSyncStore((s) => !!s.currentRemote);
+  const isDirty = useVersioningStore((s) => s.isDirty);
   const [view, setView] = useState<HistoryView>("timeline");
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState("");
@@ -49,9 +50,9 @@ export function HistoryTab() {
         </Suspense>
       </ErrorBoundary>
     );
-  } else if (timeline.length === 0) body = <Message>No versions yet.</Message>;
-  else if (visible.length === 0) body = <Message>No versions match “{query}”.</Message>;
-  else body = <div className="flex-1 overflow-y-auto"><HistoryTimeline entries={visible} onPreview={preview} /></div>;
+  } else if (timeline.length === 0 && !isDirty) body = <Message>No versions yet.</Message>;
+  else if (visible.length === 0 && query.trim()) body = <Message>No versions match “{query}”.</Message>;
+  else body = <div className="flex-1 overflow-y-auto"><HistoryTimeline entries={visible} onPreview={preview} showUnsaved={!query.trim()} /></div>;
 
   return (
     <section className="flex min-h-0 flex-1 flex-col" aria-labelledby="history-tab-title" data-testid="history-tab">
