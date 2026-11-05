@@ -92,6 +92,10 @@ const PRISTINE_DIR = join(DRILL_DIR, "pristine");
 const BASELINE_DRAFTLINE_DIR = join(DRILL_DIR, "baseline-draftline");
 // Debug builds keep credentials here instead of the user's vault (CUTREADY_DRILL_VAULT_DIR).
 const DRILL_VAULT_DIR = join(DRILL_DIR, "vault");
+// A throwaway WebView2 profile, so drill `clearStorage` and `cutready:lastProject`
+// never touch the user's localStorage. WEBVIEW2_USER_DATA_FOLDER overrides the
+// folder Tauri passes. Windows only: WKWebView and WebKitGTK have no equivalent.
+const DRILL_WEBVIEW_DIR = join(DRILL_DIR, "webview");
 const COLLABORATOR = { name: "Drill Collaborator", email: "collaborator@drill.test" };
 const SEEDER = { name: "Drill Seed", email: "seed@drill.test" };
 
@@ -166,6 +170,11 @@ function setup(specPath) {
   if (!spec.realVault) {
     mkdirSync(DRILL_VAULT_DIR, { recursive: true });
     appendFileSync(envFile, `CUTREADY_DRILL_VAULT_DIR=${DRILL_VAULT_DIR}\n`);
+  }
+  if (process.platform === "win32") {
+    rmSync(DRILL_WEBVIEW_DIR, { recursive: true, force: true });
+    mkdirSync(DRILL_WEBVIEW_DIR, { recursive: true });
+    appendFileSync(envFile, `WEBVIEW2_USER_DATA_FOLDER=${DRILL_WEBVIEW_DIR}\n`);
   }
   if (state.stores.settingsSeed) {
     backup(state, globalSettingsPath());
@@ -256,6 +265,12 @@ function teardown() {
   rmSync(PRISTINE_DIR, { recursive: true, force: true });
   rmSync(BASELINE_DRAFTLINE_DIR, { recursive: true, force: true });
   rmSync(DRILL_VAULT_DIR, { recursive: true, force: true });
+  try {
+    // WebView2 helper processes can outlive the app for a moment.
+    eventually(() => rmSync(DRILL_WEBVIEW_DIR, { recursive: true, force: true }), 10000);
+  } catch (error) {
+    console.warn(`Could not remove the drill WebView profile: ${error.message}`);
+  }
   if (failed) throw new Error(`restore failed; backups kept in ${BACKUP_DIR}`);
   rmSync(BACKUP_DIR, { recursive: true, force: true });
   rmSync(STATE, { force: true });
