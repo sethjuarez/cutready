@@ -13,6 +13,7 @@ export const DraftlineErrorCode = {
   GitIndexLocked: "git_index_locked",
   VariationOutsideNamespace: "variation_outside_namespace",
   LocalStateChanged: "local_state_changed",
+  RemoteRace: "remote_race",
   PreflightFailed: "preflight_failed",
   SendBaseNotOnRemote: "send_base_not_on_remote",
   FolderIsElsewhere: "folder_is_elsewhere",
@@ -71,6 +72,8 @@ export const FINISH_IN_OTHER_FOLDER: SafeNextAction = "finish_in_other_folder";
 export const GIT_INDEX_LOCKED_MESSAGE = "Git is busy in this project's repository — try again in a moment. Nothing was changed.";
 export const LOCAL_STATE_CHANGED_MESSAGE =
   "The project changed outside CutReady while this was running (for example, a developer committed). Nothing was lost — try again.";
+export const MERGE_UPDATES_CHANGED_MESSAGE =
+  "The updates changed while you were naming the merge. Nothing was merged — get updates and try again.";
 export const VARIATION_OUTSIDE_NAMESPACE_MESSAGE =
   "That branch belongs to the code repository, not to CutReady. CutReady only works on its own branches and the main branch.";
 export const SEND_OUTSIDE_NAMESPACE_MESSAGE =
@@ -242,6 +245,12 @@ function sendBaseFromMessage(error: unknown): string | null {
 }
 
 /** Errors where Draftline refused before changing anything, so retrying is safe. */
+/** Draftline refused a merge token because the project or remote moved after it was issued. */
+export function isStaleMergeTokenError(error: unknown): boolean {
+  const code = draftlineErrorCode(error);
+  return code === DraftlineErrorCode.LocalStateChanged || code === DraftlineErrorCode.RemoteRace;
+}
+
 export function isRetryableDraftlineError(error: unknown): boolean {
   const code = draftlineErrorCode(error);
   return code === DraftlineErrorCode.GitIndexLocked || code === DraftlineErrorCode.LocalStateChanged;
@@ -329,6 +338,7 @@ export function friendlyDraftlineErrorMessage(error: unknown): string | null {
 const GUIDANCE_MESSAGES = [
   GIT_INDEX_LOCKED_MESSAGE,
   LOCAL_STATE_CHANGED_MESSAGE,
+  MERGE_UPDATES_CHANGED_MESSAGE,
   VARIATION_OUTSIDE_NAMESPACE_MESSAGE,
   SEND_OUTSIDE_NAMESPACE_MESSAGE,
   SEND_BASE_UNKNOWN_MESSAGE,

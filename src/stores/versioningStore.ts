@@ -33,6 +33,7 @@ import { useToastStore } from "./toastStore";
 import { useAppStore } from "./appStore";
 import { useSyncStore } from "./syncStore";
 import { activeTimelineLabel, askMergeName } from "../services/mergeName";
+import { isStaleMergeTokenError, MERGE_UPDATES_CHANGED_MESSAGE } from "../services/draftlineErrors";
 import { deleteSetAsideShelf, listSetAsideShelves, restoreSetAsideShelf, setAsideChanges } from "../services/setAsideShelves";
 import { DEFAULT_SET_ASIDE_NAME, type IncomingVersion, type SetAsideShelf } from "../domain/versioning";
 import {
@@ -683,16 +684,33 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
     const base = (draftlineMergeToken as { source?: string | null }).source ?? null;
     const message = await askMergeName(base ?? activeTimelineLabel(get().timelines) ?? draftlineMergeRemote, draftlineMergeIncoming);
     if (!message) return null;
-    const commitId = await mergeDraftlineIncomingWithResolutions(
-      draftlineMergeToken,
-      message,
-      resolutions.map((resolution) => ({
-        path: resolution.path,
-        field_path: null,
-        choice: { kind: "use_content", content: resolution.content },
-      })),
-      draftlineMergeRemote,
-    );
+    let commitId: string;
+    try {
+      commitId = await mergeDraftlineIncomingWithResolutions(
+        draftlineMergeToken,
+        message,
+        resolutions.map((resolution) => ({
+          path: resolution.path,
+          field_path: null,
+          choice: { kind: "use_content", content: resolution.content },
+        })),
+        draftlineMergeRemote,
+      );
+    } catch (err) {
+      if (!isStaleMergeTokenError(err)) throw err;
+      // The token can't be reused; nothing was merged, so end the merge and ask for a fresh start.
+      get().cancelMerge();
+      useToastStore.getState().show(MERGE_UPDATES_CHANGED_MESSAGE, 6000, "error");
+      try {
+        await sync().refreshSyncStatus();
+        await sync().refreshIncomingCommits();
+      } catch {
+        // The stale-token message below matters more than a failed refresh.
+      }
+      // Set after the refresh, which clears syncError on success.
+      useSyncStore.setState({ syncError: MERGE_UPDATES_CHANGED_MESSAGE });
+      return null;
+    }
     set({
       isMerging: false,
       mergeSource: null,
