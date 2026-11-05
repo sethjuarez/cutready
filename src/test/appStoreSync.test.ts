@@ -8,7 +8,7 @@ const mockSendForReview = vi.hoisted(() => vi.fn());
 const mockGetGitHubAuthStatus = vi.hoisted(() => vi.fn());
 const mockGetDraftlineBaseStatus = vi.hoisted(() => vi.fn());
 const mockPreflightDraftlineMergeBase = vi.hoisted(() => vi.fn());
-const mockMergeDraftlineFromBase = vi.hoisted(() => vi.fn());
+const mockMergeWithToken = vi.hoisted(() => vi.fn());
 
 vi.mock("../services/draftlineVersioning", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../services/draftlineVersioning")>();
@@ -21,7 +21,7 @@ vi.mock("../services/draftlineVersioning", async (importOriginal) => {
     sendForReview: (...args: unknown[]) => mockSendForReview(...args),
     getDraftlineBaseStatus: (...args: unknown[]) => mockGetDraftlineBaseStatus(...args),
     preflightDraftlineMergeBase: (...args: unknown[]) => mockPreflightDraftlineMergeBase(...args),
-    mergeDraftlineFromBase: (...args: unknown[]) => mockMergeDraftlineFromBase(...args),
+    mergeDraftlineIncomingWithToken: (...args: unknown[]) => mockMergeWithToken(...args),
   };
 });
 
@@ -46,7 +46,7 @@ describe("appStore remote sync status", () => {
     mockSendForReview.mockReset();
     mockGetDraftlineBaseStatus.mockReset();
     mockPreflightDraftlineMergeBase.mockReset();
-    mockMergeDraftlineFromBase.mockReset();
+    mockMergeWithToken.mockReset();
     useAppStore.setState({
       currentProject: null,
       loadSketches: useAppStore.getInitialState().loadSketches,
@@ -681,7 +681,7 @@ describe("appStore remote sync status", () => {
       await useSyncStore.getState().getUpdatesFromBase();
 
       expect(mockPreflightDraftlineMergeBase).not.toHaveBeenCalled();
-      expect(mockMergeDraftlineFromBase).not.toHaveBeenCalled();
+      expect(mockMergeWithToken).not.toHaveBeenCalled();
     });
 
     it("merges a clean base update and refreshes state", async () => {
@@ -689,7 +689,7 @@ describe("appStore remote sync status", () => {
       mockGetDraftlineSyncStatus.mockResolvedValue({ ahead: 1, behind: 0 });
       mockGetDraftlineBaseStatus.mockResolvedValue({ ahead: 2, behind: 0, base: "main" });
       mockPreflightDraftlineMergeBase.mockResolvedValueOnce(cleanReport);
-      mockMergeDraftlineFromBase.mockResolvedValueOnce("abc123");
+      mockMergeWithToken.mockResolvedValueOnce("abc123");
       useAppStore.setState({
         currentProject: hybridProject,
       });
@@ -702,12 +702,12 @@ describe("appStore remote sync status", () => {
       const update = useSyncStore.getState().getUpdatesFromBase();
       await vi.waitFor(() => expect(useMergeNameStore.getState().pending).not.toBeNull());
       expect(useMergeNameStore.getState().pending).toMatchObject({ source: "main", defaultName: "Merge updates from main" });
-      expect(mockMergeDraftlineFromBase).not.toHaveBeenCalled();
+      expect(mockMergeWithToken).not.toHaveBeenCalled();
       useMergeNameStore.getState().answer("Merge updates from main\n\nPicked up the new intro");
       await update;
 
       expect(mockPreflightDraftlineMergeBase).toHaveBeenCalledWith("origin");
-      expect(mockMergeDraftlineFromBase).toHaveBeenCalledWith("origin", "Merge updates from main\n\nPicked up the new intro");
+      expect(mockMergeWithToken).toHaveBeenCalledWith(cleanReport.token, "Merge updates from main\n\nPicked up the new intro", "origin");
       expect(useToastStore.getState().toasts).toEqual([
         expect.objectContaining({ message: "Updates from main brought in.", type: "success" }),
       ]);
@@ -731,7 +731,7 @@ describe("appStore remote sync status", () => {
       useMergeNameStore.getState().answer(null);
       await update;
 
-      expect(mockMergeDraftlineFromBase).not.toHaveBeenCalled();
+      expect(mockMergeWithToken).not.toHaveBeenCalled();
       expect(useToastStore.getState().toasts).toEqual([]);
       expect(useSyncStore.getState().syncError).toBeNull();
       expect(useSyncStore.getState().isSyncing).toBe(false);
@@ -756,7 +756,7 @@ describe("appStore remote sync status", () => {
 
       await useSyncStore.getState().getUpdatesFromBase();
 
-      expect(mockMergeDraftlineFromBase).not.toHaveBeenCalled();
+      expect(mockMergeWithToken).not.toHaveBeenCalled();
       expect(mockGetDraftlineSyncStatus).toHaveBeenCalled();
       expect(spies.loadTimelines).toHaveBeenCalled();
       expect(spies.loadGraphData).toHaveBeenCalled();
@@ -786,7 +786,7 @@ describe("appStore remote sync status", () => {
 
       await useSyncStore.getState().getUpdatesFromBase();
 
-      expect(mockMergeDraftlineFromBase).not.toHaveBeenCalled();
+      expect(mockMergeWithToken).not.toHaveBeenCalled();
       const state = useVersioningStore.getState();
       expect(state.isMerging).toBe(true);
       expect(state.mergeSource).toBe("main");

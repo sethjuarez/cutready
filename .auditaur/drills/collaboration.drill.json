@@ -105,7 +105,7 @@
         { "name": "try again and approve the name", "click": { "testId": "titlebar-send" } },
         { "expect": { "testId": "merge-name-input" }, "toBeVisible": true, "timeoutMs": 15000 },
         { "click": { "testId": "merge-name-confirm" } },
-        { "expectIpc": "merge_incoming", "status": "ok", "timeoutMs": 30000 },
+        { "expectIpc": "merge_incoming_with_token", "status": "ok", "timeoutMs": 30000 },
         { "name": "the collaborator's edit is in the project", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Collaborator agenda."] },
         { "name": "the local edit is kept", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "agenda.md", "Local item."] },
         { "name": "history has both parents", "run": "git", "cwd": "${CUTREADY_PROJECT}", "args": ["rev-parse", "--verify", "--quiet", "HEAD^2"] },

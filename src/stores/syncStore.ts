@@ -14,8 +14,7 @@ import {
   preflightDraftlineIncoming,
   preflightDraftlineMergeBase,
   preflightDraftlineMergeIncoming,
-  mergeDraftlineFromBase,
-  mergeDraftlineIncoming,
+  mergeDraftlineIncomingWithToken,
   publishDraftlineChanges,
   sendForReview as sendDraftlineForReview,
 } from "../services/draftlineVersioning";
@@ -34,6 +33,7 @@ import {
   errorMessage,
   isMergeNeedsDeveloperError,
   largeFilesSyncError,
+  mergeSyncErrorMessage,
   remoteSyncErrorMessage,
 } from "./workspaceHelpers";
 import type {
@@ -355,7 +355,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
           if (mergeReport.canMergeCleanly && mergeReport.token) {
             const message = await askMergeName(activeTimelineLabel(versioning().timelines) ?? currentRemote.name, mergeReport.incoming);
             if (!message) return;
-            await mergeDraftlineIncoming(currentRemote.name, message);
+            await mergeDraftlineIncomingWithToken(mergeReport.token, message, currentRemote.name);
             await app().loadSketches();
             await app().loadStoryboards();
             await app().loadNotes();
@@ -412,7 +412,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
       await versioning().checkDirty();
       useToastStore.getState().showUpdate("Incoming saves applied.", "success");
     } catch (err) {
-      set({ syncError: remoteSyncErrorMessage(err) });
+      set({ syncError: mergeSyncErrorMessage(err) });
     } finally {
       set({ isSyncing: false });
     }
@@ -437,7 +437,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
       } else if (report.canMergeCleanly && report.token) {
         const message = await askMergeName(base, report.incoming);
         if (message) {
-          await mergeDraftlineFromBase(currentRemote.name, message);
+          await mergeDraftlineIncomingWithToken(report.token, message, currentRemote.name);
           useToastStore.getState().showUpdate(`Updates from ${base} brought in.`, "success");
         }
       } else if (report.conflicts.length > 0 && report.token) {
@@ -459,7 +459,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
     } catch (err) {
       updateError = isMergeNeedsDeveloperError(err)
         ? mergeNeedsDeveloperMessage(base)
-        : remoteSyncErrorMessage(err);
+        : mergeSyncErrorMessage(err);
     } finally {
       // Refresh even on failure: the fetch may have moved the base.
       try {

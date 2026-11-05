@@ -1130,16 +1130,6 @@ pub async fn preflight_merge_incoming(
 }
 
 #[auditaur_command(skip_all)]
-pub async fn merge_incoming(
-    request: contract::MergeIncomingRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<contract::MergeIncomingCommandResult> {
-    let _guard = write_lock::lock(&request.workspace_path).map_err(context_error)?;
-    let mut context = context_for_commit(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::merge_incoming_with_context(&mut context, request))
-}
-
-#[auditaur_command(skip_all)]
 pub async fn merge_incoming_with_resolutions(
     mut request: contract::MergeIncomingWithResolutionsRequest,
     app: AppHandle,

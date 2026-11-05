@@ -411,8 +411,16 @@ export async function preflightDraftlineMergeIncoming(remote: string): Promise<D
   return mergeIncomingReportToDto(await facade().preflightMergeIncoming(remote));
 }
 
-export async function mergeDraftlineIncoming(remote: string, label: string): Promise<string> {
-  const result = await facade().mergeIncoming(label, remote);
+/**
+ * Clean incoming or base merge pinned to the previewed token: refuses with
+ * `local_state_changed` / `remote_race` if either head moved since.
+ */
+export async function mergeDraftlineIncomingWithToken(
+  token: MergeIncomingToken,
+  label: string,
+  remote = token.remote,
+): Promise<string> {
+  const result = await facade().mergeIncomingWithToken(label, token, remote);
   return result.merge.version.id;
 }
 
@@ -459,12 +467,6 @@ export async function getDraftlineBaseStatus(remote: string): Promise<BaseStatus
  */
 export async function preflightDraftlineMergeBase(remote: string): Promise<DraftlineMergeIncomingReport> {
   return mergeIncomingReportToDto(await facade().preflightMergeBase(remote));
-}
-
-/** Merge the latest base into the current branch (clean merges only). */
-export async function mergeDraftlineFromBase(remote: string, label: string): Promise<string> {
-  const result = await facade().mergeBase(label, remote);
-  return result.merge.version.id;
 }
 
 export async function listDraftlineIncomingCommits(remote: string): Promise<IncomingCommit[]> {

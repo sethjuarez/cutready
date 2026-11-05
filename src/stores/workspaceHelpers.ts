@@ -9,6 +9,8 @@ import {
   DraftlineErrorCode,
   draftlineErrorCode,
   friendlyDraftlineErrorMessage,
+  isStaleMergeTokenError,
+  MERGE_UPDATES_CHANGED_MESSAGE,
   mergeNeedsDeveloperMessage,
 } from "../services/draftlineErrors";
 import { getGitHubAuthStatus } from "../services/githubSetup";
@@ -84,6 +86,11 @@ const GITHUB_REMOTE_AUTH_MESSAGE =
   "This project has a GitHub remote. Connect GitHub in Settings > Repository before syncing.";
 const GITHUB_REMOTE_AUTH_FAILED_MESSAGE =
   "GitHub rejected the remote operation. Reconnect GitHub in Settings, then try again.";
+
+/** For flows ending in a token-pinned merge: a moved head means the previewed updates changed. */
+export function mergeSyncErrorMessage(error: unknown): string {
+  return isStaleMergeTokenError(error) ? MERGE_UPDATES_CHANGED_MESSAGE : remoteSyncErrorMessage(error);
+}
 
 export function remoteSyncErrorMessage(error: unknown): string {
   const message = errorMessage(error);

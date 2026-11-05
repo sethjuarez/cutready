@@ -13,7 +13,7 @@
     "crates/harness-prompty/src/runner.rs": 1969,
     "src-tauri/src/commands/agent.rs": 2044,
     "src-tauri/src/commands/diagnostics.rs": 855,
-    "src-tauri/src/commands/draftline.rs": 2188,
+    "src-tauri/src/commands/draftline.rs": 2178,
     "src-tauri/src/commands/feedback.rs": 1240,
     "src-tauri/src/commands/project.rs": 1297,
     "src-tauri/src/commands/recording.rs": 816,

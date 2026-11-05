@@ -9,10 +9,11 @@ vi.mock("../services/draftlineVersioning", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../services/draftlineVersioning")>()),
   preflightDraftlineIncoming: dl.preflightIncoming,
   preflightDraftlineMergeIncoming: dl.preflightMerge,
-  mergeDraftlineIncoming: dl.mergeIncoming,
+  mergeDraftlineIncomingWithToken: dl.mergeIncoming,
 }));
 vi.mock("../services/githubSetup", () => ({ getGitHubAuthStatus: async () => ({ connected: true }) }));
 
+import { MERGE_UPDATES_CHANGED_MESSAGE } from "../services/draftlineErrors";
 import { useAppStore } from "../stores/appStore";
 import { useMergeNameStore } from "../stores/mergeNameStore";
 import { useSyncStore } from "../stores/syncStore";
@@ -20,6 +21,7 @@ import { useVersioningStore } from "../stores/versioningStore";
 import { beginWorkspaceGeneration } from "../stores/workspaceHelpers";
 
 const originals = [useAppStore.getState(), useSyncStore.getState(), useVersioningStore.getState()] as const;
+const TOKEN = { remote: "origin", variation: "main", local_oid: "a1", remote_oid: "b2", merge_base_oid: "c3" };
 
 function startCleanIncomingMerge() {
   const noop = vi.fn(async () => undefined);
@@ -37,7 +39,7 @@ function startCleanIncomingMerge() {
     timelines: [{ name: "main", label: "Keynote", is_active: true, snapshot_count: 3, color_index: 0 }],
   });
   dl.preflightIncoming.mockResolvedValue({ canProceed: false, dirtyFiles: [], syncStatus: { state: "needsMerge", ahead: 1, behind: 1 } });
-  dl.preflightMerge.mockResolvedValue({ canMergeCleanly: true, token: { source: null }, conflicts: [], syncStatus: { ahead: 1, behind: 1 } });
+  dl.preflightMerge.mockResolvedValue({ canMergeCleanly: true, token: TOKEN, conflicts: [], syncStatus: { ahead: 1, behind: 1 } });
   return useSyncStore.getState().pullFromRemote();
 }
 
@@ -56,7 +58,7 @@ describe("pullFromRemote merge naming", () => {
     expect(dl.mergeIncoming).not.toHaveBeenCalled();
     useMergeNameStore.getState().answer("Merge Ana's edits");
     await pull;
-    expect(dl.mergeIncoming).toHaveBeenCalledWith("origin", "Merge Ana's edits");
+    expect(dl.mergeIncoming).toHaveBeenCalledWith(TOKEN, "Merge Ana's edits", "origin");
     expect(useSyncStore.getState().isSyncing).toBe(false);
   });
 
@@ -76,5 +78,15 @@ describe("pullFromRemote merge naming", () => {
     expect(useMergeNameStore.getState().pending).toBeNull();
     await pull;
     expect(dl.mergeIncoming).not.toHaveBeenCalled();
+  });
+
+  it.each(["remote_race", "local_state_changed"])("explains a %s refusal of the previewed merge", async (code) => {
+    dl.mergeIncoming.mockRejectedValueOnce({ code, message: "moved" });
+    const pull = startCleanIncomingMerge();
+    await vi.waitFor(() => expect(useMergeNameStore.getState().pending).not.toBeNull());
+    useMergeNameStore.getState().answer("Merge Ana's edits");
+    await pull;
+    expect(useSyncStore.getState().syncError).toBe(MERGE_UPDATES_CHANGED_MESSAGE);
+    expect(useSyncStore.getState().isSyncing).toBe(false);
   });
 });

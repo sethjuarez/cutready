@@ -1173,7 +1173,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     }
     case "apply_incoming":
       return { applied_count: 0 };
-    case "merge_incoming":
+    case "merge_incoming_with_token":
     case "merge_incoming_with_resolutions":
       return {
         version: {

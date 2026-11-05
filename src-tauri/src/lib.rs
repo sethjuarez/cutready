@@ -698,7 +698,7 @@ pub fn run() {
             commands::draftline::preflight_merge_base,
             commands::draftline::apply_incoming,
             commands::draftline::preflight_merge_incoming,
-            commands::draftline::merge_incoming,
+            commands::draftline_merge::merge_incoming_with_token,
             commands::draftline::merge_incoming_with_resolutions,
             commands::draftline::clone_from_url,
             commands::interaction::detect_browser_profiles,

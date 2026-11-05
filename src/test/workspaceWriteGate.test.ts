@@ -48,6 +48,7 @@ describe("workspaceWriteGate", () => {
 describe("gateWorkspaceWrites", () => {
   it("gates commands that rewrite workspace files and passes reads straight through", async () => {
     expect(isWorkspaceWriteCommand("merge_incoming_with_resolutions")).toBe(true);
+    expect(isWorkspaceWriteCommand("merge_incoming_with_token")).toBe(true);
     expect(isWorkspaceWriteCommand("restore_version_paths_as_new_save")).toBe(true);
     expect(isWorkspaceWriteCommand("diff_version_to_workspace")).toBe(false);
 

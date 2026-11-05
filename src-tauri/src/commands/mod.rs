@@ -6,6 +6,7 @@ pub mod animation;
 pub mod automation;
 pub mod diagnostics;
 pub mod draftline;
+pub mod draftline_merge;
 pub mod export;
 pub mod feedback;
 pub mod github;

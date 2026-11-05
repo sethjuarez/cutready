@@ -163,8 +163,8 @@
     "list_storyboards",
     "list_support_refs",
     "list_variations",
-    "merge_incoming",
     "merge_incoming_with_resolutions",
+    "merge_incoming_with_token",
     "migrate_to_multi_project",
     "move_project_folder",
     "open_capture_window",
@@ -258,6 +258,7 @@
     "write_visual_doc"
   ],
   "unsupported": {
+    "merge_incoming": "Replaced by merge_incoming_with_token (Draftline 0.12): clean merges are pinned to the previewed token.",
     "get_history": "Removed in arch v3 unit 2: no frontend caller; superseded by get_workspace_graph_for_variation and preview_version_file.",
     "get_full_history": "Removed in arch v3 unit 2: no frontend caller; superseded by get_workspace_graph_for_variation and preview_version_file.",
     "get_workspace_graph": "Removed in arch v3 unit 2: no frontend caller; superseded by get_workspace_graph_for_variation and preview_version_file.",

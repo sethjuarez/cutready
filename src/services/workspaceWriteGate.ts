@@ -7,8 +7,8 @@
 const WORKSPACE_WRITE_COMMANDS = new Set([
   "apply_incoming",
   "apply_shelf",
-  "merge_incoming",
   "merge_incoming_with_resolutions",
+  "merge_incoming_with_token",
   "move_project_folder",
   "restore_version_as_new_save",
   "restore_version_as_new_save_to_variation",
