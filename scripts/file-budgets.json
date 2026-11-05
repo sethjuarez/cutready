@@ -5,7 +5,7 @@
     "crates/cutready-core/src/models/sketch.rs": 1400,
     "crates/cutready-core/src/review.rs": 892,
     "crates/cutready-core/src/visual_document.rs": 1142,
-    "crates/cutready-versioning/src/lib.rs": 2223,
+    "crates/cutready-versioning/src/lib.rs": 2220,
     "crates/harness-agentive/src/lib.rs": 922,
     "crates/harness-contract/src/execution.rs": 879,
     "crates/harness-copilot-sdk/src/lib.rs": 974,
